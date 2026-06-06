@@ -8,7 +8,7 @@ from .errors import (
 )
 from .prompts import PromptLoader
 from .providers import LLMProvider, MockProvider, OpenAICompatibleProvider
-from .schemas import EchoResult, MemoryExtractResult
+from .schemas import EchoResult
 from .tracing import TraceLogger
 from .mock import MockLLM
 from .config import LLMConfig, create_gateway
@@ -25,7 +25,6 @@ __all__ = [
     "MockProvider",
     "OpenAICompatibleProvider",
     "EchoResult",
-    "MemoryExtractResult",
     "TraceLogger",
     "MockLLM",
     "LLMConfig",
