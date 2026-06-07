@@ -194,8 +194,16 @@ class LLMGateway:
         return raw_output, latency
 
     def _parse_json(self, raw_output: str) -> Any:
+        cleaned = raw_output.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            if len(lines) > 1:
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
         try:
-            return json.loads(raw_output.strip())
+            return json.loads(cleaned)
         except json.JSONDecodeError as e:
             raise LLMOutputParseError(
                 f"Failed to parse LLM output as JSON: {e}\nOutput: {raw_output[:500]}"

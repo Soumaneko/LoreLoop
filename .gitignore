@@ -5,4 +5,5 @@ __pycache__/
 *.pyo
 .pytest_cache/
 logs/
+data/
 SPEC.md

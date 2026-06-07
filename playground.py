@@ -10,25 +10,24 @@ import json
 import textwrap
 
 from app.core.llm.config import LLMConfig, create_gateway
-from app.domain.memory.extractor import MemoryExtractor
-from app.domain.memory.schemas import Memory, MemoryExtractResult
-from app.domain.memory.self_check import MemorySelfCheck, SelfCheckResult
-from app.domain.memory.llm_check import LLMCheck, LLMCheckResult
-from app.domain.memory.store import MemoryStore
+from app.domain.memory.schemas import Memory
+from app.domain.memory.self_check import SelfCheckResult
+from app.domain.memory.llm_check import LLMCheckResult
+from app.workflows.extract_memory import run_extract_memory_workflow
 
 # ══════════════════════════════════════════════════════════════════
 #  修改下面的文本和上下文即可测试不同场景
 # ══════════════════════════════════════════════════════════════════
 
 SCENE_TEXT = (
-    "旅店里人声鼎沸，空气中混合着烤野猪肉的油脂味、矮人烟斗的辛辣味以及廉价麦酒发酵过度的酸味。对于习惯了暴风城贵族区香薰的你来说，这里的气味简直是对鼻腔的侮辱。你坐在角落的一张圆桌旁，手中虽然拿着那把镶嵌着红宝石的手杖，但那只是为了让你看起来不像个普通的流浪汉。你点了一杯旅店老板法雷的一般货色，仅仅抿了一口就皱起了眉头——这简直是马尿。就在这时，旅店厚重的橡木门被推开了。一阵带着森林清露气息的晚风吹散了些许浑浊的空气。走进来的不是满身臭汗的冒险者，而是一个看起来有些局促不安的年轻女子。她穿着并不华丽，甚至有些朴素——那是典型的北郡农场装束，洗得发白的亚麻长裙，腰间系着围裙。她的怀里紧紧抱着几瓶显然是精心包装过的葡萄酒，脸颊因为赶路（或者是羞涩）而泛着红晕。你认得她，或者说，任何在北郡修道院附近待过的人都应该见过她。 米莉·奥斯沃斯。北郡葡萄园的一朵不起眼的小花。她正试图挤过一群喧闹的矮人，走向吧台。 “法雷先生……”她的声音细若蚊呐，完全被周围的嘈杂声淹没了，“关于这一季的‘北郡红葡萄酒’，我想……”一个喝得醉醺醺的战士（看起来像是刚从狗头人矿洞回来）摇摇晃晃地撞了她一下。 “嘿！小妞！别挡道，我要续杯！”米莉惊呼一声，身体失去平衡，怀里的几瓶葡萄酒眼看就要摔在地上——那可能是她这一季收成的样品，如果碎了，她这一趟就白跑了，甚至可能还要赔上不少钱。"
+    "你轻轻摆了摆手，那把红宝石手杖在指尖转了一个漂亮的弧度，然后稳稳地点在地面上。“报答？那太沉重了，米莉小姐。”你露出了那标志性的、含着三分笑意的神情，“对于一位绅士而言，让美丽的事物免遭破碎，本身就是一种奖赏。”你稍微靠近了一些，并没有触碰她，只是目光落在了她怀中那几瓶幸免于难的葡萄酒瓶颈上。那里系着简单的**淡紫色丝带**，用来装饰这些即将出售的样品。“不过，既然你坚持……”你伸出手，轻轻指了指那条丝带，“这瓶酒是你辛苦劳作的成果，应该去它该去的地方换取金币。但这根丝带……我想，它可以作为我今晚最好的纪念品。每当我看到它，就会想起北郡那甜美的葡萄香气。”米莉愣了一下，随即脸颊烫得像熟透的苹果。她慌乱又小心翼翼地解下那根丝带，双手递到了你的掌心。丝带上还带着微弱的葡萄酒香和少女的体温。当你将丝带优雅地缠绕在手杖柄上时，你转头看了一眼窗外。狮王之傲旅店外，夜色已经彻底笼罩了艾尔文森林，远处的树影在风中摇曳，像极了潜伏的野兽。“说起来，米莉小姐。”你的眉头微微皱起，语气中多了一份真切的关怀，“天已经完全黑了。我听说通往北郡的小径最近不太平，那些贪婪的狗头人最近甚至敢袭击落单的卫兵。你一个人……打算怎么回去？”这句话仿佛戳中了米莉的软肋。她刚才只顾着送货，完全忘了回程的恐惧。此时被你提起，她的脸色瞬间变得有些苍白。“我……我本来想在天黑前赶回去的，但是法雷老板太忙了，我等了很久……”她咬了咬嘴唇，不安地抓着裙角，“或许……或许我可以在马厩里凑合一晚？但我没带够住店的钱，而且明天一早葡萄园还有很多活……”她抬起头，眼神中带着一丝期冀，又有些不敢开口的犹豫。"
 )
 
 SCENE_CONTEXT = {
-    "scene_id": "scene_001",
+    "scene_id": "scene_002",
     "location": "狮王之傲旅店",
-    "time_label": "第1日",
-    "participants": ["主角", "米莉·奥斯沃斯", "法雷", "醉醺醺的战士"],
+    "time_label": "第1日夜晚",
+    "participants": ["主角", "米莉·奥斯沃斯"],
     "viewpoint": "主角",
 }
 
@@ -43,6 +42,8 @@ TYPE_LABEL = {
     "agreement": "约定/暗号", "fact": "稳定事实", "trait": "性格/习惯",
     "relationship": "关系变化", "item": "道具/物品", "event": "重要事件",
 }
+
+DB_PATH = "data/memories.db"
 
 
 def _hdr(title: str) -> None:
@@ -169,51 +170,41 @@ def main():
 
     # MODULE 1: LLM 提取
     _hdr("MODULE 1: MemoryExtractor → LLM 原始输出")
-    print(f"\n  [MODULE 1] MemoryExtractor.extract() — 调用真实 LLM...")
-    extractor = MemoryExtractor(gateway, enable_self_check=False)
-    raw = extractor.extract(SCENE_TEXT, SCENE_CONTEXT)
-    _show_raw_memories(raw.memories)
+    print(f"\n  [MODULE 1] run_extract_memory_workflow() — 调用真实 LLM...")
+
+    wfr = run_extract_memory_workflow(SCENE_TEXT, SCENE_CONTEXT, gateway, DB_PATH)
+
+    _show_raw_memories(wfr.raw_memories)
 
     # MODULE 2: 程序自检
     _hdr("MODULE 2: MemorySelfCheck → 程序自检")
-    print(f"\n  [MODULE 2] MemorySelfCheck.check() — 运行中...")
-    sc = MemorySelfCheck()
-    cleaned, cr = sc.check(raw.memories, SCENE_TEXT, SCENE_CONTEXT)
-    _show_check_result(cr)
+    if wfr.self_check_result:
+        _show_check_result(wfr.self_check_result)
+    else:
+        print(f"\n  [MODULE 2] 跳过（无 memory）")
 
     # MODULE 2.5: LLM 复查
-    if cleaned:
-        _hdr("MODULE 2.5: LLMCheck → LLM 质量复查")
-        print(f"\n  [MODULE 2.5] LLMCheck.check() — 调用真实 LLM 复查...")
-        llm_c = LLMCheck(gateway)
-        checked, llm_cr = llm_c.check(
-            cleaned, SCENE_TEXT, SCENE_CONTEXT,
-            self_check_warnings=cr.warnings,
-        )
-        _show_llm_check_result(llm_cr)
-        cleaned = checked
+    _hdr("MODULE 2.5: LLMCheck → LLM 质量复查")
+    if wfr.llm_check_result:
+        _show_llm_check_result(wfr.llm_check_result)
     else:
-        _hdr("MODULE 2.5: LLMCheck → 跳过（无 memory）")
+        print(f"\n  [MODULE 2.5] 跳过（无 memory）")
 
     # MODULE 3: 存储
     _hdr("MODULE 3: MemoryStore → 入库 / 读取 / 去重")
-    with MemoryStore(":memory:") as store:
-        ids = store.save_many(cleaned)
-        print(f"\n  [MODULE 3] save_many() → 写入 {len(ids)} 条")
-        for rid in ids:  print(f"    {rid}")
-
-        records = store.list_all()
-        print(f"\n  [MODULE 3] list_all() → {len(records)} 条")
-        for i, r in enumerate(records, 1):
-            print(f"    {i}. [{r.type}] {r.subject}")
-
-        if len(cleaned) > 0:
-            ids2 = store.save_many(cleaned)
-            print(f"\n  [MODULE 3] 重复写入 → {len(ids2)} 条 (应为 0)")
+    print(f"\n  [MODULE 3] 数据库: {DB_PATH}")
+    print(f"  [MODULE 3] 存入前: {wfr.store_count_before} 条")
+    print(f"  [MODULE 3] 本次写入: {len(wfr.saved_ids)} 条")
+    for rid in wfr.saved_ids:
+        print(f"    {rid}")
+    duplicate_count = max(0, len(wfr.final_memories) - len(wfr.saved_ids))
+    if duplicate_count > 0:
+        print(f"\n  [MODULE 3] 重复写入忽略: {duplicate_count} 条 (去重生效)")
+    print(f"\n  [MODULE 3] 存入后总数: {wfr.store_total} 条")
 
     # 最终结果
     _hdr("FINAL RESULT")
-    _show_final_memories(cleaned)
+    _show_final_memories(wfr.final_memories)
 
 
 if __name__ == "__main__":
