@@ -28,7 +28,7 @@ class Memory(BaseModel):
     salience: float = Field(ge=0, le=1)
 
     source_scene_id: str | None = None
-    source_text_span: str | None = None
+    source_text_span: list[str] = Field(default_factory=list)
 
 
 class MemoryExtractResult(BaseModel):
@@ -52,6 +52,6 @@ class MemoryRecord(BaseModel):
     salience: float
 
     source_scene_id: str | None = None
-    source_text_span: str | None = None
+    source_text_span: list[str] = Field(default_factory=list)
 
     created_at: str = ""

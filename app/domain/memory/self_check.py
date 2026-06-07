@@ -61,26 +61,41 @@ class MemorySelfCheck:
         scene_text: str,
         result: SelfCheckResult,
     ) -> Memory:
-        span = (memory.source_text_span or "").strip()
+        spans = memory.source_text_span
 
-        if not span:
+        if not spans:
             result.warnings.append(
                 f"Memory #{index} ({memory.subject}) source_text_span is empty"
             )
             return memory
 
-        for sep in ELLIPSIS_CHARS:
-            if sep in span:
-                result.warnings.append(
-                    f"Memory #{index} ({memory.subject}) source_text_span contains '{sep}'"
-                )
-                return memory
+        cleaned_spans: list[str] = []
+        for span in spans:
+            span = (span or "").strip()
+            if not span:
+                continue
 
-        if span not in scene_text:
-            result.warnings.append(
-                f"Memory #{index} ({memory.subject}) source_text_span is not a substring "
-                f"of scene_text (span={span!r})"
-            )
+            has_ellipsis = False
+            for sep in ELLIPSIS_CHARS:
+                if sep in span:
+                    result.warnings.append(
+                        f"Memory #{index} ({memory.subject}) source_text_span contains '{sep}'"
+                    )
+                    has_ellipsis = True
+                    break
+            if has_ellipsis:
+                continue
+
+            if span not in scene_text:
+                result.warnings.append(
+                    f"Memory #{index} ({memory.subject}) source_text_span is not a substring "
+                    f"of scene_text (span={span!r})"
+                )
+
+            cleaned_spans.append(span)
+
+        if cleaned_spans != spans:
+            return memory.model_copy(update={"source_text_span": cleaned_spans})
 
         return memory
 

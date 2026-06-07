@@ -99,7 +99,7 @@ def _show_raw_memories(memories: list[Memory]) -> None:
         if m.tags:           print(f"      tags         : {m.tags}")
         print(f"      certainty    : {m.certainty}  salience: {m.salience}")
         if m.source_text_span:
-            print(f"      source_span  : \"{m.source_text_span}\"")
+            print(f"      source_span  : {m.source_text_span}")
 
 
 def _show_check_result(cr: SelfCheckResult) -> None:
@@ -164,7 +164,7 @@ def _show_final_memories(memories: list[Memory]) -> None:
         if m.visibility:  print(f"      visibility: {m.visibility}")
         if m.tags:         print(f"      tags: {m.tags}")
         if m.source_text_span:
-            print(f"      source_span: \"{m.source_text_span}\"")
+            print(f"      source_span: {m.source_text_span}")
 
 
 def _truncate(v) -> str:
@@ -177,7 +177,7 @@ def _truncate(v) -> str:
 def _assert_stress(memories: list[Memory]) -> None:
     subjects = {m.subject for m in memories}
     all_content = " ".join(m.content for m in memories)
-    all_spans = [m.source_text_span for m in memories if m.source_text_span]
+    all_spans = [span for m in memories if m.source_text_span for span in m.source_text_span]
     all_types = {m.type for m in memories}
 
     # 宽松类型检查

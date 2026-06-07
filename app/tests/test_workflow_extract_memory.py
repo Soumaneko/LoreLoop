@@ -27,7 +27,7 @@ class TestExtractMemoryWorkflow:
                     "certainty": 1.0,
                     "salience": 0.8,
                     "source_scene_id": "scene_002",
-                    "source_text_span": "敲两下桌面",
+                    "source_text_span": ["敲两下桌面"],
                 }
             ])
         ])
@@ -76,7 +76,7 @@ class TestExtractMemoryWorkflow:
                     "certainty": 1.0,
                     "salience": 0.6,
                     "source_scene_id": "scene_001",
-                    "source_text_span": "取剑",
+                    "source_text_span": ["取剑"],
                 },
                 {
                     "type": "fact",
@@ -90,7 +90,7 @@ class TestExtractMemoryWorkflow:
                     "certainty": 0.8,
                     "salience": 0.7,
                     "source_scene_id": "scene_001",
-                    "source_text_span": "认识他父亲",
+                    "source_text_span": ["认识他父亲"],
                 },
             ])
         ])

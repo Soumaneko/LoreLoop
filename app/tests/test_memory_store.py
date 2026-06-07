@@ -17,7 +17,7 @@ def _make_memory(**overrides) -> Memory:
         "certainty": 1.0,
         "salience": 0.5,
         "source_scene_id": "scene_test",
-        "source_text_span": "测试文本",
+        "source_text_span": ["测试文本"],
     }
     defaults.update(overrides)
     return Memory(**defaults)

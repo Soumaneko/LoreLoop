@@ -33,7 +33,7 @@ class TestMemoryExtractorNormal:
                     "certainty": 1.0,
                     "salience": 0.8,
                     "source_scene_id": "scene_002",
-                    "source_text_span": "左手轻敲两下桌面，就表示让她保持沉默",
+                    "source_text_span": ["左手轻敲两下桌面，就表示让她保持沉默"],
                 }
             ])
         ])
@@ -74,7 +74,7 @@ class TestMemoryExtractorNormal:
                     "certainty": 0.9,
                     "salience": 0.7,
                     "source_scene_id": "scene_003",
-                    "source_text_span": "总是先环顾四周，确认没有可疑人物才开口说话",
+                    "source_text_span": ["总是先环顾四周，确认没有可疑人物才开口说话"],
                 }
             ])
         ])
@@ -109,7 +109,7 @@ class TestMemoryExtractorNormal:
                     "certainty": 1.0,
                     "salience": 0.9,
                     "source_scene_id": "scene_001",
-                    "source_text_span": "一枚银色怀表递给主角，背面刻着奇怪的符文",
+                    "source_text_span": ["一枚银色怀表递给主角，背面刻着奇怪的符文"],
                 }
             ])
         ])
@@ -144,7 +144,7 @@ class TestMemoryExtractorNormal:
                     "certainty": 1.0,
                     "salience": 0.9,
                     "source_scene_id": "scene_005",
-                    "source_text_span": "钟楼突然爆炸",
+                    "source_text_span": ["钟楼突然爆炸"],
                 }
             ])
         ])
@@ -197,7 +197,7 @@ class TestMemoryExtractorNormal:
                     "certainty": 1.0,
                     "salience": 0.6,
                     "source_scene_id": "scene_001",
-                    "source_text_span": "定制的宝剑终于完成了",
+                    "source_text_span": ["定制的宝剑终于完成了"],
                 },
                 {
                     "type": "fact",
@@ -211,7 +211,7 @@ class TestMemoryExtractorNormal:
                     "certainty": 0.8,
                     "salience": 0.7,
                     "source_scene_id": "scene_001",
-                    "source_text_span": "我和你父亲以前是战友",
+                    "source_text_span": ["我和你父亲以前是战友"],
                 }
             ])
         ])

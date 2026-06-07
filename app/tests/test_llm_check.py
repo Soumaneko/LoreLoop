@@ -35,7 +35,7 @@ def _make_memory(**overrides) -> Memory:
         "certainty": 1.0,
         "salience": 0.8,
         "source_scene_id": "scene_002",
-        "source_text_span": "用左手轻敲两下桌面，就表示让她保持沉默",
+        "source_text_span": ["用左手轻敲两下桌面，就表示让她保持沉默"],
     }
     defaults.update(overrides)
     return Memory(**defaults)
@@ -185,7 +185,7 @@ class TestApplyChanges:
                 "type": "event", "subject": "新事件", "content": "新增的记忆。",
                 "entities": ["主角"], "certainty": 1.0, "salience": 0.8,
                 "source_scene_id": "scene_001",
-                "source_text_span": "原文片段",
+                "source_text_span": ["原文片段"],
             },
             reason="遗漏了重要事件",
         )]

@@ -80,7 +80,7 @@ def show_memories(memories: list[Memory]) -> None:
             print(f"    tags       : {m.tags}")
         print(f"    certainty  : {m.certainty}   salience: {m.salience}")
         if m.source_text_span:
-            print(f"    source_span: \"{m.source_text_span}\"")
+            print(f"    source_span: {m.source_text_span}")
     print(f"  {C_SEP}")
 
 

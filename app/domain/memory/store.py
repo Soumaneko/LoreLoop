@@ -29,7 +29,7 @@ class MemoryStore:
                 certainty REAL NOT NULL DEFAULT 1.0,
                 salience REAL NOT NULL DEFAULT 0.5,
                 source_scene_id TEXT,
-                source_text_span TEXT,
+                source_text_span_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL
             )
             """
@@ -73,7 +73,7 @@ class MemoryStore:
                     entities_json, location, time_label,
                     visibility_json, tags_json,
                     certainty, salience,
-                    source_scene_id, source_text_span,
+                    source_scene_id, source_text_span_json,
                     created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -90,7 +90,7 @@ class MemoryStore:
                     memory.certainty,
                     memory.salience,
                     memory.source_scene_id,
-                    memory.source_text_span,
+                    json.dumps(memory.source_text_span, ensure_ascii=False),
                     now,
                 ),
             )
@@ -128,7 +128,7 @@ class MemoryStore:
             certainty=row["certainty"],
             salience=row["salience"],
             source_scene_id=row["source_scene_id"],
-            source_text_span=row["source_text_span"],
+            source_text_span=json.loads(row["source_text_span_json"]),
             created_at=row["created_at"],
         )
 

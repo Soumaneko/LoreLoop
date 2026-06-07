@@ -189,7 +189,7 @@ class BasePipelineTest:
             if m.tags:               print(f"      tags         : {m.tags}")
             print(f"      certainty    : {m.certainty}  salience: {m.salience}")
             print(f"      source_scene_id: {m.source_scene_id!r}")
-            if m.source_text_span:   print(f"      source_span  : \"{m.source_text_span}\"")
+            if m.source_text_span:   print(f"      source_span  : {m.source_text_span}")
 
     def _show_check_result(self, cr: SelfCheckResult) -> None:
         dedup_removed = cr.original_count - cr.final_count

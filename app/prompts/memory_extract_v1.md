@@ -45,6 +45,7 @@
 - 如果同一段文本中包含不同用途的信息，可以拆成多条。
 - 避免把同一信息以不同 type 重复抽取。
 - 宁可少抽，也不要把普通叙事细节全部转成 memory。
+- 绝对不允许对content添油加醋或推理
 
 ## type 判定规则
 
@@ -63,8 +64,8 @@
 - visibility 只填写根据文本和场景信息可以确定知晓该信息的角色。
 - 如果是公开发生的重大事件，可使用 "public"。
 - 不要把未在文本中得知该信息的角色加入 visibility。
-- source_text_span 必须覆盖支撑该 memory 的全部关键原文。不要使用省略号、改写或拼接。
-- 不得让 content 中出现 source_text_span 无法支持的信息。
+- source_text_span 以列表形式，包含支撑该 memory 的一个或多个原文精确子串。不要使用省略号、改写或拼接，注意标点符号不能省略。
+- 每个 source_text_span 条目必须为原文中的精确子串，不得让 content 中出现 source_text_span 无法支持的信息。
 - 如果 scene_context 提供了 location/time_label，且 memory 来源于该场景，应默认填入对应字段，除非明显不适用。
 
 certainty：
@@ -97,7 +98,7 @@ salience：
       "certainty": 0.0到1.0之间的置信度,
       "salience": 0.0到1.0之间的重要性,
       "source_scene_id": "来源场景ID",
-      "source_text_span": "原文中的关键句"
+      "source_text_span": ["原文中的关键句"]
     }}
   ]
 }}

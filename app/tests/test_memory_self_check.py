@@ -26,7 +26,7 @@ def _make_memory(**overrides) -> Memory:
         "certainty": 1.0,
         "salience": 0.8,
         "source_scene_id": "scene_002",
-        "source_text_span": "用左手轻敲两下桌面，就表示让她保持沉默",
+        "source_text_span": ["用左手轻敲两下桌面，就表示让她保持沉默"],
     }
     defaults.update(overrides)
     return Memory(**defaults)
@@ -37,44 +37,38 @@ SC = MemorySelfCheck()
 
 class TestSourceTextSpan:
     def test_valid_span_passes(self):
-        m = _make_memory(source_text_span="用左手轻敲两下桌面，就表示让她保持沉默")
+        m = _make_memory(source_text_span=["用左手轻敲两下桌面，就表示让她保持沉默"])
         cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 1
         assert result.warning_count == 0
 
     def test_empty_span_warns(self):
-        m = _make_memory(source_text_span="")
+        m = _make_memory(source_text_span=[])
         cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 1
         assert result.warning_count >= 1
         assert any("empty" in w for w in result.warnings)
 
-    def test_none_span_warns(self):
-        m = _make_memory(source_text_span=None)
-        cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
-        assert len(cleaned) == 1
-        assert result.warning_count >= 1
-
     def test_ellipsis_warns(self):
-        m = _make_memory(source_text_span="用左手...保持沉默")
+        m = _make_memory(source_text_span=["用左手...保持沉默"])
         cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 1
         assert any("..." in w for w in result.warnings)
 
     def test_unicode_ellipsis_warns(self):
-        m = _make_memory(source_text_span="用左手…保持沉默")
+        m = _make_memory(source_text_span=["用左手…保持沉默"])
         cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 1
         assert any("…" in w for w in result.warnings)
 
     def test_not_substring_warns(self):
-        m = _make_memory(source_text_span="这是改写过的文本而非原文")
+        m = _make_memory(source_text_span=["这是改写过的文本而非原文"])
         cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 1
         assert any("substring" in w for w in result.warnings)
 
     def test_span_with_extra_whitespace_trimmed(self):
-        m = _make_memory(source_text_span="  用左手轻敲两下桌面，就表示让她保持沉默  ")
+        m = _make_memory(source_text_span=["  用左手轻敲两下桌面，就表示让她保持沉默  "])
         cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 1
 
@@ -224,7 +218,7 @@ class TestDeduplication:
 class TestSelfCheckResult:
     def test_result_original_and_final_count(self):
         m1 = _make_memory(subject="有效")
-        m2 = _make_memory(subject="无效", source_text_span="不存在原文")
+        m2 = _make_memory(subject="无效", source_text_span=["不存在原文"])
         cleaned, result = SC.check([m1, m2], SCENE_TEXT, SCENE_CONTEXT)
         assert result.original_count == 2
         assert result.final_count == 2  # no deletion, both kept
@@ -266,7 +260,7 @@ class TestIntegrationWithExtractor:
                         "certainty": 1.0,
                         "salience": 0.8,
                         "source_scene_id": "wrong",
-                        "source_text_span": "用左手轻敲两下桌面，就表示让她保持沉默",
+                        "source_text_span": ["用左手轻敲两下桌面，就表示让她保持沉默"],
                     }
                 ]
             }, ensure_ascii=False)
@@ -307,7 +301,7 @@ class TestIntegrationWithExtractor:
                         "certainty": 1.0,
                         "salience": 0.5,
                         "source_scene_id": "wrong",
-                        "source_text_span": "not in original text",
+                        "source_text_span": ["not in original text"],
                     }
                 ]
             }, ensure_ascii=False)
