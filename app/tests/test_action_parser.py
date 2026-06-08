@@ -460,7 +460,10 @@ class TestActionSelfCheck:
             ],
         )
         cleaned = sc.check(result, "观察守卫", SCENE_CONTEXT)
-        assert len(cleaned.anchors) == 1
+        assert len(cleaned.anchors) == 2
+        texts = {a.text for a in cleaned.anchors}
+        assert "守卫" in texts
+        assert "主角" in texts
 
     def test_remove_invalid_action_id(self):
         sc = ActionSelfCheck()
@@ -478,7 +481,7 @@ class TestActionSelfCheck:
             ],
         )
         cleaned = sc.check(result, "观察守卫", SCENE_CONTEXT)
-        assert len(cleaned.anchors) == 1
+        assert len(cleaned.anchors) == 2
         assert cleaned.anchors[0].action_ids == ["A1"]
 
     def test_remove_empty_anchor(self):
@@ -498,8 +501,10 @@ class TestActionSelfCheck:
             ],
         )
         cleaned = sc.check(result, "观察守卫", SCENE_CONTEXT)
-        assert len(cleaned.anchors) == 1
-        assert cleaned.anchors[0].text == "守卫"
+        assert len(cleaned.anchors) == 2
+        texts = {a.text for a in cleaned.anchors}
+        assert "守卫" in texts
+        assert "主角" in texts
 
     def test_duplicate_action_id_fixed(self):
         sc = ActionSelfCheck()

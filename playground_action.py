@@ -1,5 +1,7 @@
 """
-Action Playground: 调整下方 USER_INPUT / SCENE_CONTEXT 后直接运行即可查看解析结果.
+Action + Retrieval Playground: 调整下方 USER_INPUT / SCENE_CONTEXT 后直接运行即可查看解析结果.
+
+流程: ActionParser → ActionSelfCheck → CandidateRetriever
 
 用法:
     python playground_action.py
@@ -13,22 +15,30 @@ from app.core.llm.config import LLMConfig, create_gateway
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult, AtomicAction, Anchor
 from app.domain.action.self_check import ActionSelfCheck
+from app.domain.memory.store import MemoryStore
+from app.domain.retrieval.alias_store import AliasStore
+from app.domain.retrieval.candidate_retriever import CandidateRetriever
+from app.domain.retrieval.schemas import MemoryCandidate
+from app.domain.retrieval.sub_retrievers import build_context
 
 # ══════════════════════════════════════════════════════════════════
 #  修改下面的文本和上下文即可测试不同场景
 # ══════════════════════════════════════════════════════════════════
 
 USER_INPUT = (
-    "我站在街角踌躇，突然想到背包里还有一颗藏尸者制造的防腐过的美女头颅。这玩意可不能随意带到公爵府或暴风要塞，还是先想办法处理掉吧。我决定先去猪和哨声旅店寻找肖尔，汇报一下我维护了夜色镇的治安，帮助了守备官，这也许能让他对我看法改观。并且询问他是否能找到能辨认头颅的人。如果没有，我将去已宰的羔羊找黑暗缚灵者们处理掉头颅，换取一些东西。"
+    "品酒最忌讳心急，人也一样，潇洒的和米莉打个招呼，让她别忘了我把狗头人变成的那只羊，做出下次再来的约定吧。接着，和莎拉简单的聊一聊，这对明天的安排也有帮助。"
 )
 
 SCENE_CONTEXT = {
     "scene_id": "scene_010",
-    "location": "狮王之傲旅店",
-    "time_label": "第1日",
-    "participants": ["主角", "米莉·奥斯沃斯", "醉醺醺的战士"],
+    "location": "北郡修道院",
+    "time_label": "第1日深夜",
+    "participants": ["主角", "米莉·奥斯沃斯", "莎拉·月刃"],
     "viewpoint": "主角",
 }
+
+DB_PATH = "data/memories.db"
+TOP_K = 20
 
 # ══════════════════════════════════════════════════════════════════
 #  显示辅助
@@ -51,6 +61,58 @@ ANCHOR_KIND_LABEL = {
     "past_reference": "旧事引用", "temporal_reference": "时间词",
     "condition": "条件词", "unknown": "未分类",
 }
+
+MEMORY_TYPE_LABEL = {
+    "agreement": "约定/暗号", "fact": "稳定事实", "trait": "性格/习惯",
+    "relationship": "关系变化", "item": "道具/物品", "event": "重要事件",
+}
+
+
+def _show_candidates(candidates: list[MemoryCandidate], total_scanned: int) -> None:
+    n = len(candidates)
+    print(f"\n  [MODULE 3] 扫描 {total_scanned} 条记忆，命中 {n} 条候选:")
+    if n == 0:
+        print(f"  (empty — 没有匹配的记忆)")
+        return
+
+    retriever_labels = [
+        ("entity_score", "entity_rank", "R1 entity"),
+        ("subject_tag_score", "subject_tag_rank", "R2 subj+tag"),
+        ("content_score", "content_rank", "R3 content"),
+        ("type_intent_score", "type_intent_rank", "R4 type"),
+        ("scene_context_score", "scene_context_rank", "R5 ctx"),
+    ]
+
+    for i, c in enumerate(candidates):
+        label = MEMORY_TYPE_LABEL.get(c.memory_type, c.memory_type)
+        content_preview = textwrap.shorten(c.content, width=80, placeholder="…")
+        total_mem = int(c.score_breakdown.get("total_memories", total_scanned))
+        print(f"\n  #{i + 1}  rrf={c.score:.4f}  [{c.memory_type}] {label}")
+        print(f"      subject   : {c.subject}")
+        print(f"      content   : {content_preview}")
+        if c.entities:
+            print(f"      entities  : {c.entities}")
+        if c.tags:
+            print(f"      tags      : {c.tags}")
+        if c.location:
+            print(f"      location  : {c.location}")
+        if c.time_label:
+            print(f"      time_label: {c.time_label}")
+        print(f"      salience={c.salience}  certainty={c.certainty}")
+        n_actions_hit = int(c.score_breakdown.get("num_actions_hit", 0))
+        bonus = c.score_breakdown.get("multi_action_bonus", 0.0)
+        max_rrf = c.score_breakdown.get("max_rrf", c.score)
+        if n_actions_hit > 1:
+            print(f"      actions hit: {n_actions_hit}  max_rrf={max_rrf:.4f}  bonus=+{bonus:.4f}")
+        print(f"      matched_anchors : {c.matched_anchors}")
+        print(f"      matched_actions : {c.matched_actions}")
+        print(f"      scores & ranks (top-scored items / {total_mem} total):")
+        for score_key, rank_key, label in retriever_labels:
+            s = c.score_breakdown.get(score_key, 0.0)
+            r = int(c.score_breakdown.get(rank_key, 0))
+            if s != 0.0 or r != 0:
+                print(f"        {label:>14s} : {s:>7.2f}  (rank {r}/{total_mem})")
+
 
 
 def _hdr(title: str) -> None:
@@ -142,12 +204,31 @@ def _show_final_result(result: ActionParseResult) -> None:
 #  主流程
 # ══════════════════════════════════════════════════════════════════
 
+def _seed_aliases(store: AliasStore) -> None:
+    aliases = [
+        # 米莉
+        ("米莉", "米莉·奥斯沃斯", "character", 1.0),
+        ("米莉·奥斯沃斯", "米莉·奥斯沃斯", "character", 1.0),
+        # 莎拉
+        ("莎拉", "莎拉·月刃", "character", 1.0),
+        ("莎拉·月刃", "莎拉·月刃", "character", 1.0),
+        ("暗夜精灵女性", "莎拉·月刃", "character", 0.8),
+        ("暗夜精灵", "莎拉·月刃", "character", 0.8),
+        # 主角
+        ("主角", "主角", "character", 1.0),
+        ("瓦伦丁", "主角", "character", 1.0),
+        ("瓦伦丁先生", "主角", "character", 0.9),
+        ("人类法师", "主角", "character", 0.8),
+    ]
+    for alias, canonical, kind, confidence in aliases:
+        store.add_alias(alias, canonical, kind, confidence)
+
 def main():
     if not LLMConfig.is_configured():
         print("OPENAI_API_KEY not set. 请在 .env 中配置 OPENAI_API_KEY.")
         return
 
-    _hdr("Action Playground: Parse → SelfCheck")
+    _hdr("Action + Retrieval Playground: Parse → SelfCheck → CandidateRetriever")
     _show_input()
 
     gateway = create_gateway()
@@ -172,6 +253,28 @@ def main():
     _show_actions(cleaned.atomic_actions)
     _show_anchors(cleaned.anchors)
     _show_ambiguities(cleaned.ambiguities)
+
+    # MODULE 3: 记忆候选召回
+    _hdr("MODULE 3: CandidateRetriever → 记忆候选召回")
+    print(f"\n  [MODULE 3] 从 {DB_PATH} 加载记忆库...")
+    alias_store = AliasStore(":memory:")
+    _seed_aliases(alias_store)
+    with MemoryStore(DB_PATH) as store:
+        total = store.count()
+        print(f"  [MODULE 3] 记忆库共有 {total} 条记忆")
+        if total == 0:
+            print(f"  [MODULE 3] 记忆库为空，跳过召回")
+        else:
+            retriever = CandidateRetriever(store, alias_store=alias_store)
+            result = retriever.retrieve(cleaned, top_k=TOP_K)
+            _show_candidates(result.candidates, result.total_scanned)
+
+            ctx = build_context(store.list_all(), cleaned.anchors, cleaned.atomic_actions)
+            if ctx.anchors:
+                print(f"\n  ── Anchor IDF weights ──")
+                for i, a in enumerate(ctx.anchors):
+                    w = ctx.anchor_weights[i]
+                    print(f"    [{a.kind}] \"{a.text}\"  norm=\"{ctx.norm_anchors[i]}\"  weight={w:.3f}")
 
     # 最终结果
     _hdr("FINAL RESULT")

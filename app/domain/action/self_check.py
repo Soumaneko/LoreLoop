@@ -35,6 +35,7 @@ class ActionSelfCheck:
 
         actions = self._check_actions(result.atomic_actions, user_input, scene_context, sc_result)
         anchors = self._check_anchors(result.anchors, actions, sc_result)
+        anchors = self._ensure_viewpoint_anchor(anchors, actions, scene_context, sc_result)
 
         sc_result.final_action_count = len(actions)
         sc_result.final_anchor_count = len(anchors)
@@ -162,6 +163,35 @@ class ActionSelfCheck:
                 fixed_anchors.append(anchor)
 
         return fixed_anchors
+
+    def _ensure_viewpoint_anchor(
+        self,
+        anchors: list[Anchor],
+        actions: list[AtomicAction],
+        scene_context: dict,
+        result: SelfCheckResult,
+    ) -> list[Anchor]:
+        viewpoint = scene_context.get("viewpoint", "")
+        if not viewpoint:
+            return anchors
+
+        existing = {a.text for a in anchors}
+        if viewpoint in existing:
+            return anchors
+
+        action_ids = [a.action_id for a in actions]
+        new_anchor = Anchor(
+            text=viewpoint,
+            normalized=viewpoint,
+            kind="character",
+            source="implicit_from_scene",
+            action_ids=action_ids,
+            confidence=1.0,
+        )
+        result.fixes.append(
+            f"viewpoint '{viewpoint}' added as anchor (implicit_from_scene)"
+        )
+        return anchors + [new_anchor]
 
 
 def _fuzzy_substring(normalized_raw: str, normalized_input: str) -> bool:
