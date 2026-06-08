@@ -18,7 +18,7 @@ def retrieve_candidates_workflow(
     parse_result: ActionParseResult,
     memory_store: MemoryStore,
     *,
-    top_k: int = 20,
+    top_k: int | None = None,
     config: RetrievalConfig | None = None,
 ) -> CandidateRetrievalResult:
     retriever = CandidateRetriever(memory_store, config)

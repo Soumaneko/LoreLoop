@@ -32,9 +32,16 @@ class ActionSelfCheck:
             original_action_count=len(result.atomic_actions),
             original_anchor_count=len(result.anchors),
         )
+        action_id_renames: dict[tuple[str, int], str] = {}
 
-        actions = self._check_actions(result.atomic_actions, user_input, scene_context, sc_result)
-        anchors = self._check_anchors(result.anchors, actions, sc_result)
+        actions = self._check_actions(
+            result.atomic_actions,
+            user_input,
+            scene_context,
+            sc_result,
+            action_id_renames,
+        )
+        anchors = self._check_anchors(result.anchors, actions, sc_result, action_id_renames)
         anchors = self._ensure_viewpoint_anchor(anchors, actions, scene_context, sc_result)
 
         sc_result.final_action_count = len(actions)
@@ -53,6 +60,7 @@ class ActionSelfCheck:
         user_input: str,
         scene_context: dict,
         result: SelfCheckResult,
+        action_id_renames: dict[tuple[str, int], str],
     ) -> list[AtomicAction]:
         if not actions:
             result.warnings.append("atomic_actions is empty")
@@ -71,6 +79,7 @@ class ActionSelfCheck:
                     f"action_id '{action.action_id}' duplicated, renamed to '{new_id}'"
                 )
                 updates["action_id"] = new_id
+                action_id_renames[(action.action_id, i)] = new_id
             seen_ids.add(updates.get("action_id", action.action_id))
 
             expected_seq = len(fixed_actions) + 1
@@ -111,8 +120,12 @@ class ActionSelfCheck:
         anchors: list[Anchor],
         actions: list[AtomicAction],
         result: SelfCheckResult,
+        action_id_renames: dict[tuple[str, int], str],
     ) -> list[Anchor]:
         action_ids = {a.action_id for a in actions}
+        renamed_by_old_id: dict[str, list[str]] = {}
+        for (old_id, _index), new_id in action_id_renames.items():
+            renamed_by_old_id.setdefault(old_id, []).append(new_id)
 
         seen_keys: set[tuple] = set()
         fixed_anchors: list[Anchor] = []
@@ -132,17 +145,33 @@ class ActionSelfCheck:
             seen_ids: set[str] = set()
             valid_ids: list[str] = []
             for aid in anchor.action_ids:
-                if aid not in action_ids:
-                    result.fixes.append(
-                        f"anchor '{anchor.text}' action_id '{aid}' removed (not found)"
-                    )
-                elif aid in seen_ids:
+                if aid in seen_ids:
                     result.fixes.append(
                         f"anchor '{anchor.text}' duplicate action_id '{aid}' removed"
                     )
-                else:
+                    continue
+
+                matched = False
+
+                if aid in action_ids:
                     valid_ids.append(aid)
                     seen_ids.add(aid)
+                    matched = True
+
+                if aid in renamed_by_old_id:
+                    for new_id in renamed_by_old_id[aid]:
+                        if new_id not in seen_ids:
+                            valid_ids.append(new_id)
+                            seen_ids.add(new_id)
+                            result.fixes.append(
+                                f"anchor '{anchor.text}' action_id '{aid}' updated to '{new_id}'"
+                            )
+                    matched = True
+
+                if not matched:
+                    result.fixes.append(
+                        f"anchor '{anchor.text}' action_id '{aid}' removed (not found)"
+                    )
             if valid_ids != anchor.action_ids:
                 updates["action_ids"] = valid_ids
 

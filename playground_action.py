@@ -16,7 +16,6 @@ from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult, AtomicAction, Anchor
 from app.domain.action.self_check import ActionSelfCheck
 from app.domain.memory.store import MemoryStore
-from app.domain.retrieval.alias_store import AliasStore
 from app.domain.retrieval.candidate_retriever import CandidateRetriever
 from app.domain.retrieval.schemas import MemoryCandidate
 from app.domain.retrieval.sub_retrievers import build_context
@@ -204,25 +203,6 @@ def _show_final_result(result: ActionParseResult) -> None:
 #  主流程
 # ══════════════════════════════════════════════════════════════════
 
-def _seed_aliases(store: AliasStore) -> None:
-    aliases = [
-        # 米莉
-        ("米莉", "米莉·奥斯沃斯", "character", 1.0),
-        ("米莉·奥斯沃斯", "米莉·奥斯沃斯", "character", 1.0),
-        # 莎拉
-        ("莎拉", "莎拉·月刃", "character", 1.0),
-        ("莎拉·月刃", "莎拉·月刃", "character", 1.0),
-        ("暗夜精灵女性", "莎拉·月刃", "character", 0.8),
-        ("暗夜精灵", "莎拉·月刃", "character", 0.8),
-        # 主角
-        ("主角", "主角", "character", 1.0),
-        ("瓦伦丁", "主角", "character", 1.0),
-        ("瓦伦丁先生", "主角", "character", 0.9),
-        ("人类法师", "主角", "character", 0.8),
-    ]
-    for alias, canonical, kind, confidence in aliases:
-        store.add_alias(alias, canonical, kind, confidence)
-
 def main():
     if not LLMConfig.is_configured():
         print("OPENAI_API_KEY not set. 请在 .env 中配置 OPENAI_API_KEY.")
@@ -257,15 +237,13 @@ def main():
     # MODULE 3: 记忆候选召回
     _hdr("MODULE 3: CandidateRetriever → 记忆候选召回")
     print(f"\n  [MODULE 3] 从 {DB_PATH} 加载记忆库...")
-    alias_store = AliasStore(":memory:")
-    _seed_aliases(alias_store)
     with MemoryStore(DB_PATH) as store:
         total = store.count()
         print(f"  [MODULE 3] 记忆库共有 {total} 条记忆")
         if total == 0:
             print(f"  [MODULE 3] 记忆库为空，跳过召回")
         else:
-            retriever = CandidateRetriever(store, alias_store=alias_store)
+            retriever = CandidateRetriever(store)
             result = retriever.retrieve(cleaned, top_k=TOP_K)
             _show_candidates(result.candidates, result.total_scanned)
 

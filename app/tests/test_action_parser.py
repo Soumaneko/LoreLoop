@@ -529,6 +529,40 @@ class TestActionSelfCheck:
         ids = {a.action_id for a in cleaned.atomic_actions}
         assert len(ids) == 2  # first keeps "A1", second renamed to "A1_1"
 
+    def test_duplicate_action_id_updates_anchor_refs(self):
+        sc = ActionSelfCheck()
+        result = ActionParseResult(
+            turn_intent="测试",
+            atomic_actions=[
+                AtomicAction_model(
+                    action_id="A1", sequence=1, actor="主角", action_type="move",
+                    raw_text="绕到侧面", verb="绕", target="侧面",
+                    likely_needs_roll=False, confidence=0.9,
+                ),
+                AtomicAction_model(
+                    action_id="A1", sequence=2, actor="主角", action_type="observe",
+                    raw_text="观察四周", verb="观察", target="四周",
+                    likely_needs_roll=True, confidence=0.9,
+                ),
+            ],
+            anchors=[
+                {
+                    "text": "四周",
+                    "normalized": "四周",
+                    "kind": "location",
+                    "source": "explicit",
+                    "action_ids": ["A1"],
+                    "confidence": 1.0,
+                },
+            ],
+        )
+
+        cleaned = sc.check(result, "绕到侧面观察四周", SCENE_CONTEXT)
+        anchor = next(a for a in cleaned.anchors if a.text == "四周")
+
+        assert "A1" in anchor.action_ids
+        assert "A1_1" in anchor.action_ids
+
     def test_empty_actions_warns(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(

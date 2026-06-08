@@ -89,6 +89,26 @@ class TestMemoryStoreDedup:
             assert len(ids2) == 0
             assert store.count() == 1
 
+    def test_duplicate_with_reordered_entities_not_saved(self):
+        with MemoryStore(":memory:") as store:
+            m1 = _make_memory(
+                subject="去重测试",
+                content="重复内容A",
+                entities=["主角", "伊莱娜"],
+            )
+            m2 = _make_memory(
+                subject="去重测试",
+                content="重复内容A",
+                entities=["伊莱娜", "主角"],
+            )
+
+            ids1 = store.save_many([m1])
+            ids2 = store.save_many([m2])
+
+            assert len(ids1) == 1
+            assert len(ids2) == 0
+            assert store.count() == 1
+
     def test_different_type_allows_save(self):
         with MemoryStore(":memory:") as store:
             m1 = _make_memory(type="fact", subject="同主题", content="同内容")

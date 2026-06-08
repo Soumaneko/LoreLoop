@@ -98,6 +98,22 @@ class TestLLMCheckBasic:
         result, cr = checker.check(memories, SCENE_TEXT, SCENE_CONTEXT)
         assert result[0].certainty == 0.7
 
+    def test_change_certainty_coerces_validated_type(self):
+        memories = [_make_memory()]
+        changes = [LLMCheckChange(
+            memory_index=0,
+            field="certainty",
+            old_value=1.0,
+            new_value="0.6",
+            reason="LLM returned a numeric string",
+        )]
+
+        result, applied = _apply_changes(memories, changes)
+
+        assert "error" not in applied[0]
+        assert result[0].certainty == 0.6
+        assert isinstance(result[0].certainty, float)
+
     def test_empty_memories_returns_empty(self):
         gateway = _make_gateway([json.dumps({"changes": []})])
         checker = LLMCheck(gateway)

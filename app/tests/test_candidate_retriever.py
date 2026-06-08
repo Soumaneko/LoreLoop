@@ -821,3 +821,47 @@ class TestTopK:
         assert result.total_scanned == 25
         assert result.total_returned <= 10
         assert len(result.candidates) <= 10
+
+    def test_config_top_k_used_when_argument_omitted(self):
+        store = MemoryStore(":memory:")
+        for i in range(10):
+            store.save_many([
+                _make_memory(
+                    type="fact",
+                    subject=f"记忆{i}",
+                    content=f"伊莱娜在第{i}天做了一件事。",
+                    entities=["伊莱娜"],
+                    tags=[f"tag{i}"],
+                    salience=0.5,
+                    certainty=0.8,
+                ),
+            ])
+
+        action = _make_action(
+            action_id="A1",
+            action_type="observe",
+            raw_text="我观察伊莱娜的行动",
+            verb="观察",
+            target="伊莱娜",
+        )
+        parse_result = _make_parse_result(
+            turn_intent="观察伊莱娜",
+            actions=[action],
+            anchors=[_make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"])],
+        )
+
+        retriever = CandidateRetriever(store, config=RetrievalConfig(top_k=3))
+        result = retriever.retrieve(parse_result)
+
+        assert result.total_returned <= 3
+        assert len(result.candidates) <= 3
+
+
+class TestDefaultAliasStore:
+    def test_default_alias_store_does_not_create_cwd_db(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        store = MemoryStore(":memory:")
+
+        CandidateRetriever(store)
+
+        assert not (tmp_path / "data" / "aliases.db").exists()

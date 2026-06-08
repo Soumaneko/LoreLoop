@@ -256,3 +256,21 @@ class TestMemoryExtractorErrors:
                 scene_context={"scene_id": "s1"},
                 max_retries=0,
             )
+
+
+class TestMemoryExtractorState:
+    def test_check_results_default_to_none(self):
+        extractor = _make_extractor([
+            _build_llm_response([])
+        ])
+
+        assert extractor.last_check_result is None
+        assert extractor.last_llm_check_result is None
+
+        extractor.extract(
+            scene_text="风吹过街道。",
+            scene_context={"scene_id": "scene_empty"},
+        )
+
+        assert extractor.last_check_result is None
+        assert extractor.last_llm_check_result is None

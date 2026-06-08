@@ -82,7 +82,7 @@ class MemoryStore:
                     memory.type,
                     memory.subject,
                     memory.content,
-                    json.dumps(memory.entities, ensure_ascii=False),
+                    json.dumps(sorted(memory.entities), ensure_ascii=False),
                     memory.location,
                     memory.time_label,
                     json.dumps(memory.visibility, ensure_ascii=False),

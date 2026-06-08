@@ -26,63 +26,54 @@
 
   [MODULE 1] ActionParser.parse() — 调用真实 LLM...
 
-  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于羊的事并约定下次，与莎拉闲聊以帮助明天的安排
+  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于狗头人变羊的事并约定下次再来，与莎拉闲聊以帮助明天安排
 
   [MODULE 1] LLM returned 2 atomic action(s):
 
-    [A1] seq=1  [speak] 打招呼
+    [A1] seq=1  [speak] 打招呼并嘱咐
       actor       : 主角
       raw_text    : "潇洒的和米莉打个招呼，让她别忘了我把狗头人变成的那只羊，做出下次再来的约定吧"
-      target      : 米莉·奥斯沃斯
-      method      : 提醒她关于狗头人变成的那只羊，并约定下次再来
+      target      : 米莉
+      method      : 潇洒地打招呼，提醒她别忘记狗头人变成的羊，并约定下次再来
+      goal        : 巩固关系并确保米莉记得转化事件
       needs_roll  : False
       confidence  : 0.95
 
-    [A2] seq=2  [speak] 聊天
+    [A2] seq=2  [speak] 闲聊
       actor       : 主角
       raw_text    : "和莎拉简单的聊一聊"
-      target      : 莎拉·月刃
-      method      : 简单交谈
-      goal        : 对明天的安排有帮助
+      target      : 莎拉
+      method      : 简单聊天
+      goal        : 为明天的安排获取信息或建立关系
       needs_roll  : False
       confidence  : 0.95
 
-  [MODULE 1] 8 anchor(s):
+  [MODULE 1] 6 anchor(s):
 
-    [character] 米莉  →  米莉·奥斯沃斯
+    [character] 米莉  →  米莉
       source      : explicit
       action_ids  : ['A1']
       confidence  : 1.0
 
-    [character] 莎拉  →  莎拉·月刃
+    [character] 莎拉  →  莎拉
       source      : explicit
       action_ids  : ['A2']
       confidence  : 1.0
 
-    [character] 狗头人  →  狗头人
+    [past_reference] 那只羊  →  那只羊
       source      : explicit
       action_ids  : ['A1']
       confidence  : 1.0
 
-    [item] 羊  →  羊
+    [concept] 狗头人  →  狗头人
       source      : explicit
       action_ids  : ['A1']
       confidence  : 1.0
 
-    [past_reference] 那只  →  那个（羊）
+    [concept] 下次再来  →  约定
       source      : explicit
       action_ids  : ['A1']
-      confidence  : 1.0
-
-    [concept] 约定  →  约定
-      source      : explicit
-      action_ids  : ['A1']
-      confidence  : 1.0
-
-    [temporal_reference] 下次  →  下次
-      source      : explicit
-      action_ids  : ['A1']
-      confidence  : 1.0
+      confidence  : 0.9
 
     [temporal_reference] 明天  →  明天
       source      : explicit
@@ -95,63 +86,54 @@
 
   [MODULE 2] ActionSelfCheck.check() — 运行中...
 
-  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于羊的事并约定下次，与莎拉闲聊以帮助明天的安排
+  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于狗头人变羊的事并约定下次再来，与莎拉闲聊以帮助明天安排
 
   [MODULE 1] LLM returned 2 atomic action(s):
 
-    [A1] seq=1  [speak] 打招呼
+    [A1] seq=1  [speak] 打招呼并嘱咐
       actor       : 主角
       raw_text    : "潇洒的和米莉打个招呼，让她别忘了我把狗头人变成的那只羊，做出下次再来的约定吧"
-      target      : 米莉·奥斯沃斯
-      method      : 提醒她关于狗头人变成的那只羊，并约定下次再来
+      target      : 米莉
+      method      : 潇洒地打招呼，提醒她别忘记狗头人变成的羊，并约定下次再来
+      goal        : 巩固关系并确保米莉记得转化事件
       needs_roll  : False
       confidence  : 0.95
 
-    [A2] seq=2  [speak] 聊天
+    [A2] seq=2  [speak] 闲聊
       actor       : 主角
       raw_text    : "和莎拉简单的聊一聊"
-      target      : 莎拉·月刃
-      method      : 简单交谈
-      goal        : 对明天的安排有帮助
+      target      : 莎拉
+      method      : 简单聊天
+      goal        : 为明天的安排获取信息或建立关系
       needs_roll  : False
       confidence  : 0.95
 
-  [MODULE 1] 9 anchor(s):
+  [MODULE 1] 7 anchor(s):
 
-    [character] 米莉  →  米莉·奥斯沃斯
+    [character] 米莉  →  米莉
       source      : explicit
       action_ids  : ['A1']
       confidence  : 1.0
 
-    [character] 莎拉  →  莎拉·月刃
+    [character] 莎拉  →  莎拉
       source      : explicit
       action_ids  : ['A2']
       confidence  : 1.0
 
-    [character] 狗头人  →  狗头人
+    [past_reference] 那只羊  →  那只羊
       source      : explicit
       action_ids  : ['A1']
       confidence  : 1.0
 
-    [item] 羊  →  羊
+    [concept] 狗头人  →  狗头人
       source      : explicit
       action_ids  : ['A1']
       confidence  : 1.0
 
-    [past_reference] 那只  →  那个（羊）
+    [concept] 下次再来  →  约定
       source      : explicit
       action_ids  : ['A1']
-      confidence  : 1.0
-
-    [concept] 约定  →  约定
-      source      : explicit
-      action_ids  : ['A1']
-      confidence  : 1.0
-
-    [temporal_reference] 下次  →  下次
-      source      : explicit
-      action_ids  : ['A1']
-      confidence  : 1.0
+      confidence  : 0.9
 
     [temporal_reference] 明天  →  明天
       source      : explicit
@@ -187,7 +169,7 @@
              R1 entity :    3.87  (rank 3/24)
            R2 subj+tag :    4.58  (rank 1/24)
             R3 content :    1.83  (rank 1/24)
-               R4 type :    6.00  (rank 2/24)
+               R4 type :    3.00  (rank 1/24)
                 R5 ctx :    3.85  (rank 4/24)
 
   #2  rrf=0.0710  [relationship] 关系变化
@@ -205,7 +187,7 @@
              R1 entity :    3.87  (rank 3/24)
            R2 subj+tag :    3.39  (rank 4/24)
             R3 content :    1.83  (rank 1/24)
-               R4 type :    6.00  (rank 2/24)
+               R4 type :    3.00  (rank 1/24)
                 R5 ctx :    4.10  (rank 1/24)
 
   #3  rrf=0.0707  [relationship] 关系变化
@@ -223,7 +205,7 @@
              R1 entity :    4.68  (rank 1/24)
            R2 subj+tag :    3.90  (rank 2/24)
             R3 content :    1.56  (rank 3/24)
-               R4 type :    6.00  (rank 2/24)
+               R4 type :    3.00  (rank 1/24)
                 R5 ctx :    3.00  (rank 7/24)
 
   #4  rrf=0.0704  [event] 重要事件
@@ -238,31 +220,13 @@
       matched_anchors : ['主角', '狗头人', '米莉', '莎拉']
       matched_actions : ['A1', 'A2']
       scores & ranks (top-scored items / 24 total):
-             R1 entity :    7.20  (rank 1/24)
-           R2 subj+tag :    4.00  (rank 1/24)
-            R3 content :    1.60  (rank 2/24)
-               R4 type :    5.00  (rank 11/24)
+             R1 entity :    9.60  (rank 1/24)
+           R2 subj+tag :    6.00  (rank 1/24)
+            R3 content :    2.40  (rank 2/24)
+               R4 type :    1.00  (rank 11/24)
                 R5 ctx :    3.20  (rank 5/24)
 
-  #5  rrf=0.0703  [agreement] 约定/暗号
-      subject   : 米莉·奥斯沃斯的邀请
-      content   : 米莉·奥斯沃斯承诺北郡修道院的大门永远为主角敞开，欢迎主角以后来品尝新酿的葡萄酒。
-      entities  : ['米莉·奥斯沃斯', '主角']
-      tags      : ['邀请', '承诺']
-      location  : 北郡修道院门口
-      time_label: 第1日夜晚
-      salience=0.8  certainty=1.0
-      actions hit: 2  max_rrf=0.0603  bonus=+0.0100
-      matched_anchors : ['主角', '米莉']
-      matched_actions : ['A1', 'A2']
-      scores & ranks (top-scored items / 24 total):
-             R1 entity :    2.40  (rank 3/24)
-           R2 subj+tag :    1.35  (rank 5/24)
-            R3 content :    1.02  (rank 3/24)
-               R4 type :    7.00  (rank 1/24)
-                R5 ctx :    4.10  (rank 1/24)
-
-  #6  rrf=0.0702  [relationship] 关系变化
+  #5  rrf=0.0702  [relationship] 关系变化
       subject   : 主角与暗夜精灵女性初次接触
       content   : 主角（卢西安）主动搭讪暗夜精灵女性，试图以请酒方式建立关系，对方以‘不喝劣质酒精’和‘不陪富家少爷玩过家家’回应，但未拔刀赶人，表明存在进一步交涉的可能性。
       entities  : ['主角', '暗夜精灵女性']
@@ -277,10 +241,10 @@
              R1 entity :    4.68  (rank 1/24)
            R2 subj+tag :    3.90  (rank 2/24)
             R3 content :    1.56  (rank 3/24)
-               R4 type :    6.00  (rank 2/24)
+               R4 type :    3.00  (rank 1/24)
                 R5 ctx :    2.85  (rank 12/24)
 
-  #7  rrf=0.0697  [fact] 稳定事实
+  #6  rrf=0.0701  [fact] 稳定事实
       subject   : 北郡小径的狗头人威胁
       content   : 主角声称通往北郡的小径近期不太平，狗头人甚至敢袭击落单的卫兵，夜间行路有危险。
       entities  : ['北郡小径', '狗头人']
@@ -288,17 +252,35 @@
       location  : 北郡小径
       time_label: 第1日夜晚
       salience=0.8  certainty=0.7
-      actions hit: 2  max_rrf=0.0597  bonus=+0.0100
+      actions hit: 2  max_rrf=0.0601  bonus=+0.0100
       matched_anchors : ['主角', '狗头人']
       matched_actions : ['A1', 'A2']
       scores & ranks (top-scored items / 24 total):
-             R1 entity :    4.80  (rank 2/24)
-           R2 subj+tag :    4.00  (rank 1/24)
-            R3 content :    2.08  (rank 1/24)
-               R4 type :    3.00  (rank 15/24)
+             R1 entity :    7.20  (rank 2/24)
+           R2 subj+tag :    6.00  (rank 1/24)
+            R3 content :    2.88  (rank 1/24)
+               R4 type :    1.00  (rank 11/24)
                 R5 ctx :    2.95  (rank 8/24)
 
-  #8  rrf=0.0693  [relationship] 关系变化
+  #7  rrf=0.0695  [agreement] 约定/暗号
+      subject   : 米莉·奥斯沃斯的邀请
+      content   : 米莉·奥斯沃斯承诺北郡修道院的大门永远为主角敞开，欢迎主角以后来品尝新酿的葡萄酒。
+      entities  : ['米莉·奥斯沃斯', '主角']
+      tags      : ['邀请', '承诺']
+      location  : 北郡修道院门口
+      time_label: 第1日夜晚
+      salience=0.8  certainty=1.0
+      actions hit: 2  max_rrf=0.0595  bonus=+0.0100
+      matched_anchors : ['主角', '米莉']
+      matched_actions : ['A1', 'A2']
+      scores & ranks (top-scored items / 24 total):
+             R1 entity :    2.40  (rank 3/24)
+           R2 subj+tag :    1.35  (rank 5/24)
+            R3 content :    1.02  (rank 3/24)
+               R4 type :    2.00  (rank 7/24)
+                R5 ctx :    4.10  (rank 1/24)
+
+  #8  rrf=0.0694  [relationship] 关系变化
       subject   : 米莉对主角的感激
       content   : 米莉对主角出手相助深表感激，并主动走到主角桌前致谢，但表示自己没有钱作为回报。
       entities  : ['米莉·奥斯沃斯', '主角']
@@ -306,17 +288,17 @@
       location  : 狮王之傲旅店
       time_label: 第1日
       salience=0.6  certainty=1.0
-      actions hit: 2  max_rrf=0.0593  bonus=+0.0100
+      actions hit: 2  max_rrf=0.0594  bonus=+0.0100
       matched_anchors : ['主角', '米莉']
       matched_actions : ['A1', 'A2']
       scores & ranks (top-scored items / 24 total):
              R1 entity :    2.40  (rank 3/24)
            R2 subj+tag :    2.54  (rank 3/24)
             R3 content :    1.02  (rank 3/24)
-               R4 type :    6.00  (rank 2/24)
+               R4 type :    3.00  (rank 1/24)
                 R5 ctx :    2.70  (rank 14/24)
 
-  #9  rrf=0.0688  [relationship] 关系变化
+  #9  rrf=0.0690  [relationship] 关系变化
       subject   : 主角认出米莉·奥斯沃斯
       content   : 主角认得米莉·奥斯沃斯，因为任何在北郡修道院附近待过的人都应该见过她。
       entities  : ['主角', '米莉·奥斯沃斯']
@@ -324,14 +306,14 @@
       location  : 狮王之傲旅店
       time_label: 第1日
       salience=0.4  certainty=1.0
-      actions hit: 2  max_rrf=0.0588  bonus=+0.0100
+      actions hit: 2  max_rrf=0.0590  bonus=+0.0100
       matched_anchors : ['主角', '米莉']
       matched_actions : ['A1', 'A2']
       scores & ranks (top-scored items / 24 total):
              R1 entity :    2.40  (rank 3/24)
            R2 subj+tag :    2.54  (rank 3/24)
             R3 content :    1.02  (rank 3/24)
-               R4 type :    6.00  (rank 2/24)
+               R4 type :    3.00  (rank 1/24)
                 R5 ctx :    1.30  (rank 19/24)
 
   #10  rrf=0.0651  [trait] 性格/习惯
@@ -349,7 +331,7 @@
              R1 entity :    1.43  (rank 8/24)
            R2 subj+tag :    1.19  (rank 11/24)
             R3 content :    0.48  (rank 14/24)
-               R4 type :    5.50  (rank 8/24)
+               R4 type :    2.00  (rank 7/24)
                 R5 ctx :    3.90  (rank 3/24)
 
   #11  rrf=0.0646  [trait] 性格/习惯
@@ -367,7 +349,7 @@
              R1 entity :    1.43  (rank 8/24)
            R2 subj+tag :    1.19  (rank 11/24)
             R3 content :    0.48  (rank 14/24)
-               R4 type :    5.50  (rank 8/24)
+               R4 type :    2.00  (rank 7/24)
                 R5 ctx :    3.10  (rank 6/24)
 
   #12  rrf=0.0643  [trait] 性格/习惯
@@ -385,7 +367,7 @@
              R1 entity :    1.43  (rank 8/24)
            R2 subj+tag :    1.19  (rank 11/24)
             R3 content :    0.48  (rank 14/24)
-               R4 type :    5.50  (rank 8/24)
+               R4 type :    2.00  (rank 7/24)
                 R5 ctx :    2.90  (rank 9/24)
 
   #13  rrf=0.0576  [trait] 性格/习惯
@@ -473,7 +455,7 @@
                R4 type :    1.00  (rank 14/24)
                 R5 ctx :    2.80  (rank 15/24)
 
-  #18  rrf=0.0550  [fact] 稳定事实
+  #18  rrf=0.0553  [fact] 稳定事实
       subject   : 米莉·奥斯沃斯的回程困境
       content   : 米莉·奥斯沃斯因错过天黑且未带够住店钱，打算在马厩凑合一晚，同时担忧回程安全以及明天一早葡萄园的农活。
       entities  : ['米莉·奥斯沃斯', '狮王之傲旅店']
@@ -487,27 +469,10 @@
              R1 entity :    0.97  (rank 14/24)
            R2 subj+tag :    1.35  (rank 5/24)
             R3 content :    0.54  (rank 8/24)
-               R4 type :    3.00  (rank 15/24)
+               R4 type :    1.00  (rank 11/24)
                 R5 ctx :    2.90  (rank 9/24)
 
-  #19  rrf=0.0547  [event] 重要事件
-      subject   : 战士撞倒米莉，葡萄酒样品险摔碎
-      content   : 醉醺醺的战士撞到米莉·奥斯沃斯，导致她失去平衡，怀中抱着的几瓶北郡红葡萄酒样品即将摔在地上。
-      entities  : ['米莉·奥斯沃斯', '醉醺醺的战士', '北郡红葡萄酒']
-      tags      : ['事件', '冲突', '物品危险']
-      location  : 狮王之傲旅店
-      time_label: 第1日
-      salience=0.8  certainty=1.0
-      matched_anchors : ['米莉']
-      matched_actions : ['A1']
-      scores & ranks (top-scored items / 24 total):
-             R1 entity :    0.97  (rank 14/24)
-           R2 subj+tag :    1.35  (rank 5/24)
-            R3 content :    0.54  (rank 8/24)
-               R4 type :    5.00  (rank 11/24)
-                R5 ctx :    2.10  (rank 16/24)
-
-  #20  rrf=0.0546  [fact] 稳定事实
+  #19  rrf=0.0550  [fact] 稳定事实
       subject   : 米莉的背景与困境
       content   : 米莉·奥斯沃斯自称来自北郡葡萄园，她正在给狮王之傲旅店的老板法雷送葡萄酒样品，并称如果样品损坏将无法向修道院支付租金。
       entities  : ['米莉·奥斯沃斯', '北郡葡萄园', '法雷', '狮王之傲旅店', '修道院']
@@ -521,17 +486,32 @@
              R1 entity :    0.97  (rank 14/24)
            R2 subj+tag :    1.35  (rank 5/24)
             R3 content :    0.54  (rank 8/24)
-               R4 type :    3.00  (rank 15/24)
+               R4 type :    1.00  (rank 11/24)
                 R5 ctx :    2.85  (rank 12/24)
 
+  #20  rrf=0.0547  [fact] 稳定事实
+      subject   : 米莉·奥斯沃斯来自北郡葡萄园
+      content   : 米莉·奥斯沃斯与北郡葡萄园有关联，她前来狮王之傲旅店送货，并提到第二天一早还要回葡萄园干活。
+      entities  : ['米莉·奥斯沃斯', '北郡葡萄园']
+      tags      : ['人物背景', '职业', '葡萄园']
+      location  : 北郡
+      time_label: 第1日夜晚
+      salience=0.6  certainty=0.9
+      matched_anchors : ['米莉']
+      matched_actions : ['A1']
+      scores & ranks (top-scored items / 24 total):
+             R1 entity :    0.97  (rank 14/24)
+           R2 subj+tag :    1.35  (rank 5/24)
+            R3 content :    0.54  (rank 8/24)
+               R4 type :    1.00  (rank 11/24)
+                R5 ctx :    2.65  (rank 15/24)
+
   ── Anchor IDF weights ──
-    [character] "米莉"  norm="米莉奥斯沃斯"  weight=0.538
-    [character] "莎拉"  norm="莎拉月刃"  weight=1.356
-    [character] "狗头人"  norm="狗头人"  weight=1.600
-    [item] "羊"  norm="羊"  weight=2.400
-    [past_reference] "那只"  norm="那个羊"  weight=2.400
-    [concept] "约定"  norm="约定"  weight=2.400
-    [temporal_reference] "下次"  norm="下次"  weight=1.000
+    [character] "米莉"  norm="米莉"  weight=0.538
+    [character] "莎拉"  norm="莎拉"  weight=1.356
+    [past_reference] "那只羊"  norm="那只羊"  weight=2.400
+    [concept] "狗头人"  norm="狗头人"  weight=2.400
+    [concept] "下次再来"  norm="约定"  weight=2.400
     [temporal_reference] "明天"  norm="明天"  weight=1.000
     [character] "主角"  norm="主角"  weight=0.477
 
@@ -539,21 +519,19 @@
   FINAL RESULT
 ========================================================================
 
-  [RESULT] 最终 2 actions, 9 anchors
+  [RESULT] 最终 2 actions, 7 anchors
 
-  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于羊的事并约定下次，与莎拉闲聊以帮助明天的安排
+  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于狗头人变羊的事并约定下次再来，与莎拉闲聊以帮助明天安排
 
   ── Actions ──
-    [A1] seq=1  [speak] 主角 打招呼 → 米莉·奥斯沃斯  roll=False
-    [A2] seq=2  [speak] 主角 聊天 → 莎拉·月刃  roll=False
+    [A1] seq=1  [speak] 主角 打招呼并嘱咐 → 米莉  roll=False
+    [A2] seq=2  [speak] 主角 闲聊 → 莎拉  roll=False
 
   ── Anchors ──
-    [角色] 米莉  →  米莉·奥斯沃斯  (actions: ['A1'])
-    [角色] 莎拉  →  莎拉·月刃  (actions: ['A2'])
-    [角色] 狗头人  →  狗头人  (actions: ['A1'])
-    [物品] 羊  →  羊  (actions: ['A1'])
-    [旧事引用] 那只  →  那个（羊）  (actions: ['A1'])
-    [概念] 约定  →  约定  (actions: ['A1'])
-    [时间词] 下次  →  下次  (actions: ['A1'])
+    [角色] 米莉  →  米莉  (actions: ['A1'])
+    [角色] 莎拉  →  莎拉  (actions: ['A2'])
+    [旧事引用] 那只羊  →  那只羊  (actions: ['A1'])
+    [概念] 狗头人  →  狗头人  (actions: ['A1'])
+    [概念] 下次再来  →  约定  (actions: ['A1'])
     [时间词] 明天  →  明天  (actions: ['A2'])
     [角色] 主角  →  主角  (actions: ['A1', 'A2'])

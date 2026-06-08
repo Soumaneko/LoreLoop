@@ -1,8 +1,10 @@
 from collections import defaultdict
+from pathlib import Path
 
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
 from app.domain.memory.schemas import MemoryRecord
 from app.domain.memory.store import MemoryStore
+from app.domain.retrieval.alias_store import AliasStore
 from app.domain.retrieval.config import (
     LOW_WEIGHT_ANCHOR_KINDS,
     RetrievalConfig,
@@ -25,16 +27,32 @@ class CandidateRetriever:
     def __init__(self, memory_store: MemoryStore, config: RetrievalConfig | None = None, alias_store=None):
         self.memory_store = memory_store
         self.config = config or RetrievalConfig()
-        self.alias_store = alias_store
+        if alias_store is not None:
+            self.alias_store = alias_store
+        else:
+            self.alias_store = self._load_default_alias_store()
+
+    @staticmethod
+    def _load_default_alias_store():
+        repo_root = Path(__file__).resolve().parents[3]
+        db_path = repo_root / "data" / "aliases.db"
+        if not db_path.exists():
+            return None
+        try:
+            return AliasStore(str(db_path))
+        except Exception:
+            return None
 
     def retrieve(
         self,
         parse_result: ActionParseResult,
         *,
-        top_k: int = 20,
+        top_k: int | None = None,
     ) -> CandidateRetrievalResult:
         all_memories = self.memory_store.list_all()
         total_memories = len(all_memories)
+        if top_k is None:
+            top_k = self.config.top_k
         top_k = min(max(top_k, 1), 50)
 
         if total_memories == 0:

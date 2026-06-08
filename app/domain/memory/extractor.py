@@ -24,6 +24,8 @@ class MemoryExtractor:
         self._enable_self_check = enable_self_check
         self._llm_check = llm_check or LLMCheck(gateway=llm)
         self._enable_llm_check = enable_llm_check
+        self._last_check_result: SelfCheckResult | None = None
+        self._last_llm_check_result: LLMCheckResult | None = None
 
     @property
     def llm(self) -> LLMGateway:
@@ -45,6 +47,8 @@ class MemoryExtractor:
         trace_id: str | None = None,
         **kwargs,
     ) -> MemoryExtractResult:
+        self._last_check_result = None
+        self._last_llm_check_result = None
         context_text = json.dumps(scene_context, ensure_ascii=False, indent=2)
 
         result = self._llm.run(

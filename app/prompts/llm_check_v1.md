@@ -20,7 +20,7 @@
 2. 如果警告涉及 `entity "X" not found` → 判断 X 是否合理：合理则保留并在 reason 中说明"entity 合理但未匹配"；不合理则从 entities 中移除
 3. 如果警告涉及 `visibility` 为空或含未知角色 → 根据 scene_context.participants 修正 visibility
 4. 对每条警告都必须在 `changes` 中给出处理结果（修正 or 保留并说明原因）
-5. 警告不用删的，也要在 changes 中给出说明（如 `field: "warning_reviewed", reason: "..."`）
+5. 警告不用删的，也要在 changes 中给出说明（如 `field: "__warning_reviewed__", reason: "..."`）
 
 ---
 

@@ -205,9 +205,10 @@ def _apply_changes(
         new_value = ch.new_value
 
         try:
-            updated = memory.model_copy(update={ch.field: new_value})
-            _ = Memory.model_validate(updated.model_dump())
-            working[ch.memory_index] = updated
+            updated_data = memory.model_dump()
+            updated_data[ch.field] = new_value
+            validated = Memory.model_validate(updated_data)
+            working[ch.memory_index] = validated
             applied.append({
                 "memory_index": ch.memory_index,
                 "field": ch.field,
