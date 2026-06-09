@@ -1,7 +1,7 @@
 from app.core.llm import LLMGateway
-from app.domain.memory.extractor import MemoryExtractor
-from app.domain.memory.store import MemoryStore
-from app.domain.memory.schemas import MemoryExtractResult
+from app.domain.recall_memory.extractor import MemoryExtractor
+from app.domain.recall_memory.store import MemoryStore
+from app.domain.recall_memory.schemas import MemoryExtractResult
 
 
 class MemoryService:

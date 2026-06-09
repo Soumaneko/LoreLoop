@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from app.domain.memory.schemas import Memory
+from app.domain.recall_memory.schemas import Memory
 
 ELLIPSIS_CHARS = ("...", "…")
 MAX_TAGS = 8

@@ -1,8 +1,8 @@
 import pytest
 
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
-from app.domain.memory.schemas import Memory
-from app.domain.memory.store import MemoryStore
+from app.domain.recall_memory.schemas import Memory
+from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.alias_store import AliasStore
 from app.domain.retrieval.candidate_retriever import CandidateRetriever
 

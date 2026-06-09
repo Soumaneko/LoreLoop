@@ -7,10 +7,10 @@ import pytest
 
 from app.core.llm.config import LLMConfig, create_gateway
 from app.core.llm.schemas import EchoResult
-from app.domain.memory.schemas import Memory, MemoryExtractResult, MemoryRecord
-from app.domain.memory.extractor import MemoryExtractor
-from app.domain.memory.store import MemoryStore
-from app.domain.memory.self_check import MemorySelfCheck, SelfCheckResult
+from app.domain.recall_memory.schemas import Memory, MemoryExtractResult, MemoryRecord
+from app.domain.recall_memory.extractor import MemoryExtractor
+from app.domain.recall_memory.store import MemoryStore
+from app.domain.recall_memory.self_check import MemorySelfCheck, SelfCheckResult
 
 pytestmark = pytest.mark.skipif(
     not LLMConfig.is_configured(),

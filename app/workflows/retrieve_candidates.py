@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from app.domain.action.schemas import ActionParseResult
-from app.domain.memory.store import MemoryStore
+from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.candidate_retriever import CandidateRetriever
 from app.domain.retrieval.config import RetrievalConfig
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate

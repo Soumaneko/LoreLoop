@@ -3,7 +3,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 
-from app.domain.memory.schemas import Memory, MemoryRecord
+from app.domain.recall_memory.schemas import Memory, MemoryRecord
 
 
 class MemoryStore:

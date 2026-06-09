@@ -117,6 +117,9 @@ normalized 是检索用标准词，不是解释文本。
 - kind: "past_reference"
 - source: "explicit"
 
+旧事引用 anchor 只表示“这里引用了旧事”，不要在 normalized 中解释旧事内容。
+旧事内容中的实体、物品、动作，应另外拆成 concept / item / action_keyword anchors。
+
 ## 输出格式
 
 只输出 JSON，不要任何前缀、后缀或解释。

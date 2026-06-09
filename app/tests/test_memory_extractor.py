@@ -3,8 +3,8 @@ import json
 import pytest
 
 from app.core.llm import LLMOutputValidationError, MockLLM
-from app.domain.memory.extractor import MemoryExtractor
-from app.domain.memory.schemas import Memory, MemoryExtractResult, MemoryType
+from app.domain.recall_memory.extractor import MemoryExtractor
+from app.domain.recall_memory.schemas import Memory, MemoryExtractResult, MemoryType
 
 
 def _build_llm_response(memories: list[dict]) -> str:

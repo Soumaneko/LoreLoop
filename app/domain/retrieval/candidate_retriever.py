@@ -2,8 +2,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
-from app.domain.memory.schemas import MemoryRecord
-from app.domain.memory.store import MemoryStore
+from app.domain.recall_memory.schemas import MemoryRecord
+from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.alias_store import AliasStore
 from app.domain.retrieval.config import (
     LOW_WEIGHT_ANCHOR_KINDS,

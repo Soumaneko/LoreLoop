@@ -10,9 +10,9 @@ import json
 import textwrap
 
 from app.core.llm.config import LLMConfig, create_gateway
-from app.domain.memory.schemas import Memory
-from app.domain.memory.self_check import SelfCheckResult
-from app.domain.memory.llm_check import LLMCheckResult
+from app.domain.recall_memory.schemas import Memory
+from app.domain.recall_memory.self_check import SelfCheckResult
+from app.domain.recall_memory.llm_check import LLMCheckResult
 from app.workflows.extract_memory import run_extract_memory_workflow
 
 # ══════════════════════════════════════════════════════════════════

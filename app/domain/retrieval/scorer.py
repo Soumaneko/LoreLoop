@@ -1,5 +1,5 @@
 from app.domain.action.schemas import Anchor, AtomicAction
-from app.domain.memory.schemas import MemoryRecord
+from app.domain.recall_memory.schemas import MemoryRecord
 from app.domain.retrieval.config import (
     ACTION_TYPE_MEMORY_TYPE_BOOST,
     KIND_FACTOR,

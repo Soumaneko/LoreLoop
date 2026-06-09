@@ -1,8 +1,8 @@
 import json
 
 from app.core.llm import MockLLM
-from app.domain.memory.extractor import MemoryExtractor
-from app.domain.memory.store import MemoryStore
+from app.domain.recall_memory.extractor import MemoryExtractor
+from app.domain.recall_memory.store import MemoryStore
 from app.workflows.extract_memory import extract_memory_workflow
 
 

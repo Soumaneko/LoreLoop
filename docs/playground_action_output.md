@@ -1,6 +1,6 @@
 
 ========================================================================
-  Action + Retrieval Playground: Parse → SelfCheck → CandidateRetriever
+  Action + Retrieval + Roll Playground: Parse → SelfCheck → CandidateRetriever → RollResolver
 ========================================================================
 
   [INPUT] user_input:
@@ -26,29 +26,28 @@
 
   [MODULE 1] ActionParser.parse() — 调用真实 LLM...
 
-  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于狗头人变羊的事并约定下次再来，与莎拉闲聊以帮助明天安排
+  [INTENT] 与米莉打招呼并提醒她关于羊和下次约定，然后与莎拉简单聊天以助于明天安排
 
   [MODULE 1] LLM returned 2 atomic action(s):
 
-    [A1] seq=1  [speak] 打招呼并嘱咐
+    [A1] seq=1  [speak] 打招呼
       actor       : 主角
       raw_text    : "潇洒的和米莉打个招呼，让她别忘了我把狗头人变成的那只羊，做出下次再来的约定吧"
       target      : 米莉
-      method      : 潇洒地打招呼，提醒她别忘记狗头人变成的羊，并约定下次再来
-      goal        : 巩固关系并确保米莉记得转化事件
+      method      : 提醒她别忘了那只羊，并做出下次再来的约定
+      goal        : 延续互动/巩固关系
       needs_roll  : False
       confidence  : 0.95
 
-    [A2] seq=2  [speak] 闲聊
+    [A2] seq=2  [speak] 聊一聊
       actor       : 主角
       raw_text    : "和莎拉简单的聊一聊"
       target      : 莎拉
-      method      : 简单聊天
-      goal        : 为明天的安排获取信息或建立关系
+      goal        : 对明天的安排有帮助
       needs_roll  : False
       confidence  : 0.95
 
-  [MODULE 1] 6 anchor(s):
+  [MODULE 1] 9 anchor(s):
 
     [character] 米莉  →  米莉
       source      : explicit
@@ -60,7 +59,7 @@
       action_ids  : ['A2']
       confidence  : 1.0
 
-    [past_reference] 那只羊  →  那只羊
+    [item] 那只羊  →  羊
       source      : explicit
       action_ids  : ['A1']
       confidence  : 1.0
@@ -70,12 +69,27 @@
       action_ids  : ['A1']
       confidence  : 1.0
 
-    [concept] 下次再来  →  约定
+    [concept] 下次再来  →  下次再来
       source      : explicit
       action_ids  : ['A1']
-      confidence  : 0.9
+      confidence  : 1.0
+
+    [past_reference] 那只  →  那只
+      source      : explicit
+      action_ids  : ['A1']
+      confidence  : 1.0
 
     [temporal_reference] 明天  →  明天
+      source      : explicit
+      action_ids  : ['A2']
+      confidence  : 1.0
+
+    [action_keyword] 打招呼  →  打招呼
+      source      : explicit
+      action_ids  : ['A1']
+      confidence  : 1.0
+
+    [action_keyword] 聊一聊  →  聊一聊
       source      : explicit
       action_ids  : ['A2']
       confidence  : 1.0
@@ -86,29 +100,28 @@
 
   [MODULE 2] ActionSelfCheck.check() — 运行中...
 
-  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于狗头人变羊的事并约定下次再来，与莎拉闲聊以帮助明天安排
+  [INTENT] 与米莉打招呼并提醒她关于羊和下次约定，然后与莎拉简单聊天以助于明天安排
 
   [MODULE 1] LLM returned 2 atomic action(s):
 
-    [A1] seq=1  [speak] 打招呼并嘱咐
+    [A1] seq=1  [speak] 打招呼
       actor       : 主角
       raw_text    : "潇洒的和米莉打个招呼，让她别忘了我把狗头人变成的那只羊，做出下次再来的约定吧"
       target      : 米莉
-      method      : 潇洒地打招呼，提醒她别忘记狗头人变成的羊，并约定下次再来
-      goal        : 巩固关系并确保米莉记得转化事件
+      method      : 提醒她别忘了那只羊，并做出下次再来的约定
+      goal        : 延续互动/巩固关系
       needs_roll  : False
       confidence  : 0.95
 
-    [A2] seq=2  [speak] 闲聊
+    [A2] seq=2  [speak] 聊一聊
       actor       : 主角
       raw_text    : "和莎拉简单的聊一聊"
       target      : 莎拉
-      method      : 简单聊天
-      goal        : 为明天的安排获取信息或建立关系
+      goal        : 对明天的安排有帮助
       needs_roll  : False
       confidence  : 0.95
 
-  [MODULE 1] 7 anchor(s):
+  [MODULE 1] 10 anchor(s):
 
     [character] 米莉  →  米莉
       source      : explicit
@@ -120,7 +133,7 @@
       action_ids  : ['A2']
       confidence  : 1.0
 
-    [past_reference] 那只羊  →  那只羊
+    [item] 那只羊  →  羊
       source      : explicit
       action_ids  : ['A1']
       confidence  : 1.0
@@ -130,12 +143,27 @@
       action_ids  : ['A1']
       confidence  : 1.0
 
-    [concept] 下次再来  →  约定
+    [concept] 下次再来  →  下次再来
       source      : explicit
       action_ids  : ['A1']
-      confidence  : 0.9
+      confidence  : 1.0
+
+    [past_reference] 那只  →  那只
+      source      : explicit
+      action_ids  : ['A1']
+      confidence  : 1.0
 
     [temporal_reference] 明天  →  明天
+      source      : explicit
+      action_ids  : ['A2']
+      confidence  : 1.0
+
+    [action_keyword] 打招呼  →  打招呼
+      source      : explicit
+      action_ids  : ['A1']
+      confidence  : 1.0
+
+    [action_keyword] 聊一聊  →  聊一聊
       source      : explicit
       action_ids  : ['A2']
       confidence  : 1.0
@@ -509,29 +537,48 @@
   ── Anchor IDF weights ──
     [character] "米莉"  norm="米莉"  weight=0.538
     [character] "莎拉"  norm="莎拉"  weight=1.356
-    [past_reference] "那只羊"  norm="那只羊"  weight=2.400
+    [item] "那只羊"  norm="羊"  weight=2.400
     [concept] "狗头人"  norm="狗头人"  weight=2.400
-    [concept] "下次再来"  norm="约定"  weight=2.400
+    [concept] "下次再来"  norm="下次再来"  weight=2.400
+    [past_reference] "那只"  norm="那只"  weight=2.400
     [temporal_reference] "明天"  norm="明天"  weight=1.000
+    [action_keyword] "打招呼"  norm="打招呼"  weight=1.600
+    [action_keyword] "聊一聊"  norm="聊一聊"  weight=1.600
     [character] "主角"  norm="主角"  weight=0.477
+
+========================================================================
+  MODULE 4: RollResolver → NdM 骰点
+========================================================================
+
+  [MODULE 4] Roll Pipeline — NdM Roll Resolver
+  [MODULE 4] 2 total actions, 0 need roll, min_rolls=2
+  [MODULE 4] dice_formula: 2d20  (dice_sides=20)
+  [MODULE 4] 2 action(s) forced to roll (补充至 min_rolls)
+    [A1] seq=1  主角  [speak] 对话 [forced]
+      roll: 1d20 = 9
+    [A2] seq=2  主角  [speak] 对话 [forced]
+      roll: 1d20 = 8
 
 ========================================================================
   FINAL RESULT
 ========================================================================
 
-  [RESULT] 最终 2 actions, 7 anchors
+  [RESULT] 最终 2 actions, 10 anchors
 
-  [INTENT] 与米莉和莎拉分别交谈，提醒米莉关于狗头人变羊的事并约定下次再来，与莎拉闲聊以帮助明天安排
+  [INTENT] 与米莉打招呼并提醒她关于羊和下次约定，然后与莎拉简单聊天以助于明天安排
 
   ── Actions ──
-    [A1] seq=1  [speak] 主角 打招呼并嘱咐 → 米莉  roll=False
-    [A2] seq=2  [speak] 主角 闲聊 → 莎拉  roll=False
+    [A1] seq=1  [speak] 主角 打招呼 → 米莉  roll=False
+    [A2] seq=2  [speak] 主角 聊一聊 → 莎拉  roll=False
 
   ── Anchors ──
     [角色] 米莉  →  米莉  (actions: ['A1'])
     [角色] 莎拉  →  莎拉  (actions: ['A2'])
-    [旧事引用] 那只羊  →  那只羊  (actions: ['A1'])
+    [物品] 那只羊  →  羊  (actions: ['A1'])
     [概念] 狗头人  →  狗头人  (actions: ['A1'])
-    [概念] 下次再来  →  约定  (actions: ['A1'])
+    [概念] 下次再来  →  下次再来  (actions: ['A1'])
+    [旧事引用] 那只  →  那只  (actions: ['A1'])
     [时间词] 明天  →  明天  (actions: ['A2'])
+    [动作关键词] 打招呼  →  打招呼  (actions: ['A1'])
+    [动作关键词] 聊一聊  →  聊一聊  (actions: ['A2'])
     [角色] 主角  →  主角  (actions: ['A1', 'A2'])

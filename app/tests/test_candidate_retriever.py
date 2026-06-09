@@ -5,8 +5,8 @@ from app.domain.action.schemas import (
     Anchor,
     AtomicAction,
 )
-from app.domain.memory.schemas import Memory, MemoryRecord
-from app.domain.memory.store import MemoryStore
+from app.domain.recall_memory.schemas import Memory, MemoryRecord
+from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.candidate_retriever import CandidateRetriever
 from app.domain.retrieval.config import RetrievalConfig
 

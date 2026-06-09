@@ -20,11 +20,11 @@ from typing import Callable, Optional
 import pytest
 
 from app.core.llm.config import LLMConfig, create_gateway
-from app.domain.memory.extractor import MemoryExtractor
-from app.domain.memory.schemas import Memory, MemoryExtractResult
-from app.domain.memory.self_check import MemorySelfCheck, SelfCheckResult
-from app.domain.memory.store import MemoryStore
-from app.domain.memory.llm_check import LLMCheck, LLMCheckResult
+from app.domain.recall_memory.extractor import MemoryExtractor
+from app.domain.recall_memory.schemas import Memory, MemoryExtractResult
+from app.domain.recall_memory.self_check import MemorySelfCheck, SelfCheckResult
+from app.domain.recall_memory.store import MemoryStore
+from app.domain.recall_memory.llm_check import LLMCheck, LLMCheckResult
 
 pytestmark = pytest.mark.skipif(
     not LLMConfig.is_configured(),

@@ -5,8 +5,8 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from app.core.llm import LLMGateway
-from app.domain.memory.schemas import Memory, MemoryExtractResult
-from app.domain.memory.self_check import SelfCheckResult
+from app.domain.recall_memory.schemas import Memory, MemoryExtractResult
+from app.domain.recall_memory.self_check import SelfCheckResult
 
 
 # ── LLM 输出 schema ─────────────────────────────────────────────

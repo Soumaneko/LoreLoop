@@ -1,7 +1,7 @@
 import pytest
 
-from app.domain.memory.schemas import Memory, MemoryRecord
-from app.domain.memory.store import MemoryStore
+from app.domain.recall_memory.schemas import Memory, MemoryRecord
+from app.domain.recall_memory.store import MemoryStore
 
 
 def _make_memory(**overrides) -> Memory:

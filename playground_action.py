@@ -1,7 +1,7 @@
 """
-Action + Retrieval Playground: 调整下方 USER_INPUT / SCENE_CONTEXT 后直接运行即可查看解析结果.
+Action + Retrieval + Roll Playground: 调整下方 USER_INPUT / SCENE_CONTEXT 后直接运行即可查看解析结果.
 
-流程: ActionParser → ActionSelfCheck → CandidateRetriever
+流程: ActionParser → ActionSelfCheck → CandidateRetriever → RollResolver
 
 用法:
     python playground_action.py
@@ -15,10 +15,12 @@ from app.core.llm.config import LLMConfig, create_gateway
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult, AtomicAction, Anchor
 from app.domain.action.self_check import ActionSelfCheck
-from app.domain.memory.store import MemoryStore
+from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.candidate_retriever import CandidateRetriever
 from app.domain.retrieval.schemas import MemoryCandidate
 from app.domain.retrieval.sub_retrievers import build_context
+from app.domain.roll.resolver import RollResolver
+from app.domain.roll.schemas import RollConfig, RollResultBatch
 
 # ══════════════════════════════════════════════════════════════════
 #  修改下面的文本和上下文即可测试不同场景
@@ -199,6 +201,27 @@ def _show_final_result(result: ActionParseResult) -> None:
             print(f"    [{kind_label}] {a.text}  →  {a.normalized}  (actions: {a.action_ids})")
 
 
+def _show_rolls(batch: RollResultBatch, actions: list[AtomicAction], config: RollConfig) -> None:
+    total = len(actions)
+    needs_count = sum(1 for a in actions if a.likely_needs_roll)
+    needs_map = {a.action_id: a.likely_needs_roll for a in actions}
+    forced_count = sum(1 for r in batch.results if not needs_map.get(r.action_id, False))
+    print(f"\n  [MODULE 4] Roll Pipeline — NdM Roll Resolver")
+    print(f"  [MODULE 4] {total} total actions, {needs_count} need roll, min_rolls={config.min_rolls}")
+    print(f"  [MODULE 4] dice_formula: {batch.dice_formula}  (dice_sides={batch.dice_sides})")
+    if forced_count > 0:
+        print(f"  [MODULE 4] {forced_count} action(s) forced to roll (补充至 min_rolls)")
+    if batch.total_rolls == 0:
+        print(f"  [MODULE 4] (no rolls needed)")
+        return
+    for r in batch.results:
+        label = ACTION_TYPE_LABEL.get(r.action_type, r.action_type)
+        hint = f"  hint={r.roll_hint}" if r.roll_hint else ""
+        forced_mark = " [forced]" if not needs_map.get(r.action_id, True) else ""
+        print(f"    [{r.action_id}] seq={r.sequence}  {r.actor}  [{r.action_type}] {label}{forced_mark}")
+        print(f"      roll: {r.dice} = {r.value}{hint}")
+
+
 # ══════════════════════════════════════════════════════════════════
 #  主流程
 # ══════════════════════════════════════════════════════════════════
@@ -208,7 +231,7 @@ def main():
         print("OPENAI_API_KEY not set. 请在 .env 中配置 OPENAI_API_KEY.")
         return
 
-    _hdr("Action + Retrieval Playground: Parse → SelfCheck → CandidateRetriever")
+    _hdr("Action + Retrieval + Roll Playground: Parse → SelfCheck → CandidateRetriever → RollResolver")
     _show_input()
 
     gateway = create_gateway()
@@ -253,6 +276,13 @@ def main():
                 for i, a in enumerate(ctx.anchors):
                     w = ctx.anchor_weights[i]
                     print(f"    [{a.kind}] \"{a.text}\"  norm=\"{ctx.norm_anchors[i]}\"  weight={w:.3f}")
+
+    # MODULE 4: Roll Pipeline
+    _hdr("MODULE 4: RollResolver → NdM 骰点")
+    roll_config = RollConfig(seed=42)
+    resolver = RollResolver(roll_config)
+    roll_batch = resolver.resolve(cleaned)
+    _show_rolls(roll_batch, cleaned.atomic_actions, roll_config)
 
     # 最终结果
     _hdr("FINAL RESULT")

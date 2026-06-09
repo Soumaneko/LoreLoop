@@ -1,7 +1,7 @@
 import pytest
 
-from app.domain.memory.schemas import Memory
-from app.domain.memory.self_check import MemorySelfCheck, MAX_TAGS
+from app.domain.recall_memory.schemas import Memory
+from app.domain.recall_memory.self_check import MemorySelfCheck, MAX_TAGS
 
 SCENE_TEXT = "在灰鹭旅店二楼，主角告诉伊莱娜，如果他用左手轻敲两下桌面，就表示让她保持沉默。伊莱娜点头答应。"
 SCENE_CONTEXT = {
@@ -241,7 +241,7 @@ class TestSelfCheckResult:
 class TestIntegrationWithExtractor:
     def test_self_check_enabled_in_extractor(self):
         from app.core.llm import MockLLM
-        from app.domain.memory.extractor import MemoryExtractor
+        from app.domain.recall_memory.extractor import MemoryExtractor
         import json
 
         mock = MockLLM()
@@ -282,7 +282,7 @@ class TestIntegrationWithExtractor:
 
     def test_self_check_can_be_disabled(self):
         from app.core.llm import MockLLM
-        from app.domain.memory.extractor import MemoryExtractor
+        from app.domain.recall_memory.extractor import MemoryExtractor
         import json
 
         mock = MockLLM()

@@ -2,9 +2,9 @@ import json
 from logging import getLogger
 
 from app.core.llm import LLMGateway
-from app.domain.memory.schemas import MemoryExtractResult
-from app.domain.memory.self_check import MemorySelfCheck, SelfCheckResult
-from app.domain.memory.llm_check import LLMCheck, LLMCheckResult
+from app.domain.recall_memory.schemas import MemoryExtractResult
+from app.domain.recall_memory.self_check import MemorySelfCheck, SelfCheckResult
+from app.domain.recall_memory.llm_check import LLMCheck, LLMCheckResult
 
 logger = getLogger(__name__)
 
