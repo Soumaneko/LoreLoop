@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
+from app.domain.current_state.schemas import CurrentState
 
 
 @dataclass
@@ -26,7 +27,7 @@ class ActionSelfCheck:
         self,
         result: ActionParseResult,
         user_input: str,
-        scene_context: dict,
+        current_state: CurrentState,
     ) -> ActionParseResult:
         sc_result = SelfCheckResult(
             original_action_count=len(result.atomic_actions),
@@ -37,12 +38,12 @@ class ActionSelfCheck:
         actions = self._check_actions(
             result.atomic_actions,
             user_input,
-            scene_context,
+            current_state,
             sc_result,
             action_id_renames,
         )
         anchors = self._check_anchors(result.anchors, actions, sc_result, action_id_renames)
-        anchors = self._ensure_viewpoint_anchor(anchors, actions, scene_context, sc_result)
+        anchors = self._ensure_viewpoint_anchor(anchors, actions, current_state, sc_result)
 
         sc_result.final_action_count = len(actions)
         sc_result.final_anchor_count = len(anchors)
@@ -58,7 +59,7 @@ class ActionSelfCheck:
         self,
         actions: list[AtomicAction],
         user_input: str,
-        scene_context: dict,
+        current_state: CurrentState,
         result: SelfCheckResult,
         action_id_renames: dict[tuple[str, int], str],
     ) -> list[AtomicAction]:
@@ -68,7 +69,7 @@ class ActionSelfCheck:
 
         seen_ids: set[str] = set()
         fixed_actions: list[AtomicAction] = []
-        viewpoint = scene_context.get("viewpoint", "")
+        viewpoint = current_state.player.name or ""
 
         for i, action in enumerate(actions):
             updates: dict = {}
@@ -197,10 +198,10 @@ class ActionSelfCheck:
         self,
         anchors: list[Anchor],
         actions: list[AtomicAction],
-        scene_context: dict,
+        current_state: CurrentState,
         result: SelfCheckResult,
     ) -> list[Anchor]:
-        viewpoint = scene_context.get("viewpoint", "")
+        viewpoint = current_state.player.name or ""
         if not viewpoint:
             return anchors
 

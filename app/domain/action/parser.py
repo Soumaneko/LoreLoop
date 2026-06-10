@@ -2,6 +2,7 @@ import json
 
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult
+from app.domain.current_state.schemas import CurrentState
 
 
 class ActionParser:
@@ -11,7 +12,7 @@ class ActionParser:
     def parse(
         self,
         user_input: str,
-        scene_context: dict,
+        current_state: CurrentState,
         *,
         trace_id: str | None = None,
     ) -> ActionParseResult:
@@ -19,7 +20,7 @@ class ActionParser:
             task="action_parse",
             input_data={
                 "user_input": user_input,
-                "scene_context": json.dumps(scene_context, ensure_ascii=False, indent=2),
+                "current_state_json": current_state.model_dump_json(indent=2),
             },
             output_schema=ActionParseResult,
             trace_id=trace_id,
