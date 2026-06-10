@@ -1,7 +1,7 @@
 """
-Action + Retrieval + Roll Playground: 调整下方 USER_INPUT / SCENE_CONTEXT 后直接运行即可查看解析结果.
+Action + Retrieval + Roll + Context Playground: 调整下方 USER_INPUT / SCENE_CONTEXT 后直接运行.
 
-流程: ActionParser → ActionSelfCheck → CandidateRetriever → RollResolver
+流程: ActionParser → ActionSelfCheck → CandidateRetriever → RollResolver → ContextAssembler
 
 用法:
     python playground_action.py
@@ -15,12 +15,16 @@ from app.core.llm.config import LLMConfig, create_gateway
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult, AtomicAction, Anchor
 from app.domain.action.self_check import ActionSelfCheck
+from app.domain.core_memory.schemas import CoreMemory, create_default_core_memory
+from app.domain.current_state.store import CurrentStateStore, make_default_state
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.candidate_retriever import CandidateRetriever
-from app.domain.retrieval.schemas import MemoryCandidate
+from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.retrieval.sub_retrievers import build_context
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig, RollResultBatch
+from app.domain.short_term_memory.schemas import ShortTermMemory
+from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 
 # ══════════════════════════════════════════════════════════════════
 #  修改下面的文本和上下文即可测试不同场景
@@ -39,6 +43,7 @@ SCENE_CONTEXT = {
 }
 
 DB_PATH = "data/memories.db"
+STATE_DB_PATH = "data/current_state.db"
 TOP_K = 20
 
 # ══════════════════════════════════════════════════════════════════
@@ -222,6 +227,44 @@ def _show_rolls(batch: RollResultBatch, actions: list[AtomicAction], config: Rol
         print(f"      roll: {r.dice} = {r.value}{hint}")
 
 
+def _show_context(ctx: PlotOutlineContext) -> None:
+    cs = ctx.current_state
+    actions = ctx.action_parse_result.atomic_actions
+    rolls = ctx.roll_results
+    cm = ctx.core_memory
+    stm = ctx.short_term_memory
+    rm = ctx.retrieved_memories
+
+    print(f"\n  [MODULE 5] ContextAssembler → PlotOutlineContext 组装完成")
+    print(f"  [MODULE 5] user_input: {textwrap.shorten(ctx.user_input, width=60, placeholder='…')}")
+    print(f"  [MODULE 5]")
+    print(f"  [MODULE 5] ── current_state ──")
+    print(f"  [MODULE 5]   scene  : {cs.scene.scene_id}  [{cs.scene.location}] {cs.scene.time_label}")
+    print(f"  [MODULE 5]            participants: {cs.scene.participants}")
+    print(f"  [MODULE 5]   player : {cs.player.name}  pos={cs.player.position}  intent={cs.player.intent}")
+    if cs.player.condition:
+        print(f"  [MODULE 5]            condition: {cs.player.condition}")
+    if cs.npcs:
+        print(f"  [MODULE 5]   npcs   : {len(cs.npcs)} present")
+    print(f"  [MODULE 5]   resources: money={cs.resources.money}  inventory={cs.resources.inventory}")
+    print(f"  [MODULE 5]")
+    print(f"  [MODULE 5] ── action_parse_result ──")
+    print(f"  [MODULE 5]   turn_intent: {ctx.action_parse_result.turn_intent}")
+    print(f"  [MODULE 5]   actions: {len(actions)}  anchors: {len(ctx.action_parse_result.anchors)}  ambiguities: {len(ctx.action_parse_result.ambiguities)}")
+    print(f"  [MODULE 5]")
+    print(f"  [MODULE 5] ── roll_results ──")
+    print(f"  [MODULE 5]   formula: {rolls.dice_formula}  total: {rolls.total_rolls}")
+    print(f"  [MODULE 5]")
+    print(f"  [MODULE 5] ── core_memory ──")
+    print(f"  [MODULE 5]   {len(cm.items)} items: {[(i.id, i.category) for i in cm.items]}")
+    print(f"  [MODULE 5]")
+    print(f"  [MODULE 5] ── short_term_memory ──")
+    print(f"  [MODULE 5]   {len(stm.recent_scenes)} recent scenes (max {stm.max_items})")
+    print(f"  [MODULE 5]")
+    print(f"  [MODULE 5] ── retrieved_memories ──")
+    print(f"  [MODULE 5]   candidates: {rm.total_returned} / scanned: {rm.total_scanned}")
+
+
 # ══════════════════════════════════════════════════════════════════
 #  主流程
 # ══════════════════════════════════════════════════════════════════
@@ -231,7 +274,7 @@ def main():
         print("OPENAI_API_KEY not set. 请在 .env 中配置 OPENAI_API_KEY.")
         return
 
-    _hdr("Action + Retrieval + Roll Playground: Parse → SelfCheck → CandidateRetriever → RollResolver")
+    _hdr("Action + Retrieval + Roll + Context Playground: Parse → SelfCheck → Retriever → Roll → Context")
     _show_input()
 
     gateway = create_gateway()
@@ -240,17 +283,17 @@ def main():
     _hdr("MODULE 1: ActionParser → LLM 原始输出")
     print(f"\n  [MODULE 1] ActionParser.parse() — 调用真实 LLM...")
     parser = ActionParser(gateway)
-    result = parser.parse(USER_INPUT, SCENE_CONTEXT)
-    _show_turn_intent(result.turn_intent)
-    _show_actions(result.atomic_actions)
-    _show_anchors(result.anchors)
-    _show_ambiguities(result.ambiguities)
+    raw = parser.parse(USER_INPUT, SCENE_CONTEXT)
+    _show_turn_intent(raw.turn_intent)
+    _show_actions(raw.atomic_actions)
+    _show_anchors(raw.anchors)
+    _show_ambiguities(raw.ambiguities)
 
     # MODULE 2: 程序自检
     _hdr("MODULE 2: ActionSelfCheck → 程序自检")
     print(f"\n  [MODULE 2] ActionSelfCheck.check() — 运行中...")
     sc = ActionSelfCheck()
-    cleaned = sc.check(result, USER_INPUT, SCENE_CONTEXT)
+    cleaned = sc.check(raw, USER_INPUT, SCENE_CONTEXT)
 
     _show_turn_intent(cleaned.turn_intent)
     _show_actions(cleaned.atomic_actions)
@@ -258,6 +301,7 @@ def main():
     _show_ambiguities(cleaned.ambiguities)
 
     # MODULE 3: 记忆候选召回
+    retrieval_result: CandidateRetrievalResult | None = None
     _hdr("MODULE 3: CandidateRetriever → 记忆候选召回")
     print(f"\n  [MODULE 3] 从 {DB_PATH} 加载记忆库...")
     with MemoryStore(DB_PATH) as store:
@@ -267,8 +311,8 @@ def main():
             print(f"  [MODULE 3] 记忆库为空，跳过召回")
         else:
             retriever = CandidateRetriever(store)
-            result = retriever.retrieve(cleaned, top_k=TOP_K)
-            _show_candidates(result.candidates, result.total_scanned)
+            retrieval_result = retriever.retrieve(cleaned, top_k=TOP_K)
+            _show_candidates(retrieval_result.candidates, retrieval_result.total_scanned)
 
             ctx = build_context(store.list_all(), cleaned.anchors, cleaned.atomic_actions)
             if ctx.anchors:
@@ -283,6 +327,26 @@ def main():
     resolver = RollResolver(roll_config)
     roll_batch = resolver.resolve(cleaned)
     _show_rolls(roll_batch, cleaned.atomic_actions, roll_config)
+
+    # MODULE 5: Context Assembler
+    _hdr("MODULE 5: ContextAssembler → 组装全流程上下文")
+    with CurrentStateStore(STATE_DB_PATH) as state_store:
+        current_state = state_store.load_or_default()
+    if retrieval_result is None:
+        retrieval_result = CandidateRetrievalResult(candidates=[], total_scanned=0, total_returned=0)
+    core_memory = create_default_core_memory()
+    short_term_memory = ShortTermMemory(recent_scenes=[], max_items=5)
+
+    assembled = assemble_context(
+        user_input=USER_INPUT,
+        current_state=current_state,
+        action_parse_result=cleaned,
+        roll_results=roll_batch,
+        core_memory=core_memory,
+        short_term_memory=short_term_memory,
+        retrieved_memories=retrieval_result,
+    )
+    _show_context(assembled)
 
     # 最终结果
     _hdr("FINAL RESULT")
