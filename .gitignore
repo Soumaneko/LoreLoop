@@ -8,4 +8,5 @@ logs/
 data/
 docs/
 playground*.py
+debug_server.py
 SPEC.md

@@ -2,7 +2,7 @@
 
 ## 场景信息
 
-{scene_context}
+{current_state_json}
 
 ## 剧情文本
 
@@ -18,7 +18,7 @@
 
 1. 如果警告涉及 `source_text_span` 为空/非原文子串/含省略号 → 在原句中提取正确的子串列表，修正该记忆的 `source_text_span`
 2. 如果警告涉及 `entity "X" not found` → 判断 X 是否合理：合理则保留并在 reason 中说明"entity 合理但未匹配"；不合理则从 entities 中移除
-3. 如果警告涉及 `visibility` 为空或含未知角色 → 根据 scene_context.participants 修正 visibility
+3. 如果警告涉及 `visibility` 为空或含未知角色 → 根据 current_state.participants 修正 visibility
 4. 对每条警告都必须在 `changes` 中给出处理结果（修正 or 保留并说明原因）
 5. 警告不用删的，也要在 changes 中给出说明（如 `field: "__warning_reviewed__", reason: "..."`）
 
@@ -54,7 +54,7 @@ content 必须保留信息来源或不确定性。
 entities 只包含 memory 内容直接涉及的核心实体。
 visibility 表示哪些角色知道该信息。
 不要因为角色在场听到了信息，就把他们加入 entities。
-如果 entity 未在原文或 scene_context 中出现，只能保留为 tag 或 content 中的“不确定线索”，不得作为确定实体，除非原文明确指向该实体。
+如果 entity 未在原文或 current_state 中出现，只能保留为 tag 或 content 中的“不确定线索”，不得作为确定实体，除非原文明确指向该实体。
 
 4. 不同 type 内容需要拆分
 一条 memory 只能表达一种主要记忆类型。不同 type 的信息必须拆成多条 memory，不能合并在同一条 content 中。

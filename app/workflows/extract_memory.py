@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from app.core.llm import LLMGateway
+from app.domain.current_state.schemas import CurrentState
 from app.domain.recall_memory.extractor import MemoryExtractor
 from app.domain.recall_memory.schemas import Memory, MemoryExtractResult
 from app.domain.recall_memory.self_check import MemorySelfCheck, SelfCheckResult
@@ -22,23 +23,23 @@ class ExtractMemoryWorkflowResult:
 
 def run_extract_memory_workflow(
     scene_text: str,
-    scene_context: dict,
+    current_state: CurrentState,
     gateway: LLMGateway,
     db_path: str = "data/memories.db",
 ) -> ExtractMemoryWorkflowResult:
     extractor = MemoryExtractor(gateway, enable_self_check=False)
 
-    raw = extractor.extract(scene_text, scene_context)
+    raw = extractor.extract(scene_text, current_state)
     wfr = ExtractMemoryWorkflowResult(raw_memories=raw.memories)
 
     sc = MemorySelfCheck()
-    cleaned, sc_result = sc.check(raw.memories, scene_text, scene_context)
+    cleaned, sc_result = sc.check(raw.memories, scene_text, current_state)
     wfr.self_check_result = sc_result
 
     if cleaned:
         llm_c = LLMCheck(gateway)
         cleaned, llm_result = llm_c.check(
-            cleaned, scene_text, scene_context,
+            cleaned, scene_text, current_state,
             self_check_warnings=sc_result.warnings,
         )
         wfr.llm_check_result = llm_result
@@ -56,10 +57,10 @@ def run_extract_memory_workflow(
 
 def extract_memory_workflow(
     scene_text: str,
-    scene_context: dict,
+    current_state: CurrentState,
     extractor: MemoryExtractor,
     store: MemoryStore,
 ) -> list[str]:
-    result = extractor.extract(scene_text, scene_context)
+    result = extractor.extract(scene_text, current_state)
     ids = store.save_many(result.memories)
     return ids

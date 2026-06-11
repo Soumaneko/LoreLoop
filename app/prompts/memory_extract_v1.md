@@ -2,7 +2,7 @@
 
 ## 场景信息
 
-{scene_context}
+{current_state_json}
 
 ## 剧情文本
 
@@ -66,7 +66,7 @@
 - 不要把未在文本中得知该信息的角色加入 visibility。
 - source_text_span 以列表形式，包含支撑该 memory 的一个或多个原文精确子串。不要使用省略号、改写或拼接，注意标点符号不能省略。
 - 每个 source_text_span 条目必须为原文中的精确子串，不得让 content 中出现 source_text_span 无法支持的信息。
-- 如果 scene_context 提供了 location/time_label，且 memory 来源于该场景，应默认填入对应字段，除非明显不适用。
+- 如果 current_state 提供了 location/time_label，且 memory 来源于该场景，应默认填入对应字段，除非明显不适用。
 
 certainty：
 - 1.0：文本明确陈述。

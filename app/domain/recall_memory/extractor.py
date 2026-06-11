@@ -2,6 +2,7 @@ import json
 from logging import getLogger
 
 from app.core.llm import LLMGateway
+from app.domain.current_state.schemas import CurrentState
 from app.domain.recall_memory.schemas import MemoryExtractResult
 from app.domain.recall_memory.self_check import MemorySelfCheck, SelfCheckResult
 from app.domain.recall_memory.llm_check import LLMCheck, LLMCheckResult
@@ -42,20 +43,19 @@ class MemoryExtractor:
     def extract(
         self,
         scene_text: str,
-        scene_context: dict,
+        current_state: CurrentState,
         *,
         trace_id: str | None = None,
         **kwargs,
     ) -> MemoryExtractResult:
         self._last_check_result = None
         self._last_llm_check_result = None
-        context_text = json.dumps(scene_context, ensure_ascii=False, indent=2)
 
         result = self._llm.run(
             task="memory_extract",
             input_data={
                 "scene_text": scene_text,
-                "scene_context": context_text,
+                "current_state_json": current_state.model_dump_json(indent=2),
             },
             output_schema=MemoryExtractResult,
             trace_id=trace_id,
@@ -64,7 +64,7 @@ class MemoryExtractor:
 
         if self._enable_self_check and result.memories:
             cleaned, check_result = self._self_check.check(
-                result.memories, scene_text, scene_context
+                result.memories, scene_text, current_state
             )
             self._last_check_result = check_result
 
@@ -81,7 +81,7 @@ class MemoryExtractor:
             cleaned, llm_result = self._llm_check.check(
                 result.memories,
                 scene_text,
-                scene_context,
+                current_state,
                 self_check_warnings=(
                     self._last_check_result.warnings
                     if self._last_check_result

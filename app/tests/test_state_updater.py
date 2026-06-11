@@ -63,6 +63,15 @@ def _build_updated_state_json(overrides: dict | None = None) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+def _build_updated_state_json_without_scene_id(overrides: dict | None = None) -> str:
+    state = _make_state()
+    data = json.loads(state.model_dump_json())
+    data["scene"].pop("scene_id", None)
+    if overrides:
+        _deep_update(data, overrides)
+    return json.dumps(data, ensure_ascii=False)
+
+
 def _deep_update(target: dict, source: dict) -> None:
     for key, value in source.items():
         if isinstance(value, dict) and isinstance(target.get(key), dict):
@@ -321,6 +330,20 @@ class TestStateUpdaterConsistency:
 
 
 class TestSceneIdAutoIncrement:
+    def test_accepts_llm_output_without_scene_id(self):
+        state = _make_state()
+        updated_json = _build_updated_state_json_without_scene_id({
+            "scene": {"atmosphere": "疏离"}
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        updater = StateUpdater(mock.build_gateway())
+        result = updater.update(state, "酒馆里的交谈变得冷淡，气氛疏离。")
+
+        assert result.scene.scene_id == "scene_001"
+        assert result.scene.atmosphere == "疏离"
+
     def test_increments_on_location_change(self):
         state = _make_state()
         updated_json = _build_updated_state_json({

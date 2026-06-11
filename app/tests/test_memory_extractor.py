@@ -5,6 +5,15 @@ import pytest
 from app.core.llm import LLMOutputValidationError, MockLLM
 from app.domain.recall_memory.extractor import MemoryExtractor
 from app.domain.recall_memory.schemas import Memory, MemoryExtractResult, MemoryType
+from app.domain.current_state import CurrentState, SceneState, PlayerState, ResourcesState
+
+def _cs(scene_id="test", location="", time_label="", participants=None, viewpoint="主角"):
+    return CurrentState(
+        scene=SceneState(scene_id=scene_id, location=location, time_label=time_label, participants=participants or []),
+        player=PlayerState(name=viewpoint),
+        resources=ResourcesState(),
+    )
+
 
 
 def _build_llm_response(memories: list[dict]) -> str:
@@ -40,13 +49,7 @@ class TestMemoryExtractorNormal:
 
         result = extractor.extract(
             scene_text="主角告诉伊莱娜，如果他用左手轻敲两下桌面，就表示让她保持沉默。伊莱娜点头答应。",
-            scene_context={
-                "scene_id": "scene_002",
-                "location": "灰鹭旅店二楼",
-                "time_label": "第2日夜晚",
-                "participants": ["主角", "伊莱娜"],
-                "viewpoint": "主角",
-            },
+            current_state=_cs(scene_id="scene_002", location="灰鹭旅店二楼", time_label="第2日夜晚", viewpoint="主角", participants=["主角", "伊莱娜"]),
         )
 
         assert isinstance(result, MemoryExtractResult)
@@ -81,13 +84,7 @@ class TestMemoryExtractorNormal:
 
         result = extractor.extract(
             scene_text="伊莱娜在进入房间前总是先环顾四周，确认没有可疑人物才开口说话。",
-            scene_context={
-                "scene_id": "scene_003",
-                "location": "灰鹭旅店一楼",
-                "time_label": "第3日清晨",
-                "participants": ["主角", "伊莱娜"],
-                "viewpoint": "主角",
-            },
+            current_state=_cs(scene_id="scene_003", location="灰鹭旅店一楼", time_label="第3日清晨", viewpoint="主角", participants=["主角", "伊莱娜"]),
         )
 
         assert len(result.memories) == 1
@@ -116,13 +113,7 @@ class TestMemoryExtractorNormal:
 
         result = extractor.extract(
             scene_text="老者从柜台下取出一枚银色怀表递给主角，背面刻着奇怪的符文。",
-            scene_context={
-                "scene_id": "scene_001",
-                "location": "钟表店",
-                "time_label": "第1日午后",
-                "participants": ["主角", "老者"],
-                "viewpoint": "主角",
-            },
+            current_state=_cs(scene_id="scene_001", location="钟表店", time_label="第1日午后", viewpoint="主角", participants=["主角", "老者"]),
         )
 
         assert len(result.memories) == 1
@@ -151,13 +142,7 @@ class TestMemoryExtractorNormal:
 
         result = extractor.extract(
             scene_text="一声巨响，城市中心的钟楼突然爆炸。守卫队迅速封锁了周边区域。",
-            scene_context={
-                "scene_id": "scene_005",
-                "location": "城市中心",
-                "time_label": "第2日黄昏",
-                "participants": ["主角", "市民"],
-                "viewpoint": "主角",
-            },
+            current_state=_cs(scene_id="scene_005", location="城市中心", time_label="第2日黄昏", viewpoint="主角", participants=["主角", "市民"]),
         )
 
         assert len(result.memories) == 1
@@ -170,13 +155,7 @@ class TestMemoryExtractorNormal:
 
         result = extractor.extract(
             scene_text="风吹过街道，树叶沙沙作响。远处传来隐约的鸟鸣。",
-            scene_context={
-                "scene_id": "scene_010",
-                "location": "街道",
-                "time_label": "清晨",
-                "participants": [],
-                "viewpoint": "主角",
-            },
+            current_state=_cs(scene_id="scene_010", location="街道", time_label="清晨", viewpoint="主角", participants=[]),
         )
 
         assert isinstance(result, MemoryExtractResult)
@@ -218,13 +197,7 @@ class TestMemoryExtractorNormal:
 
         result = extractor.extract(
             scene_text="主角到铁匠铺取剑。铁匠老王说：\"定制的宝剑终于完成了。其实我和你父亲以前是战友。\"",
-            scene_context={
-                "scene_id": "scene_001",
-                "location": "铁匠铺",
-                "time_label": "第1日正午",
-                "participants": ["主角", "铁匠老王"],
-                "viewpoint": "主角",
-            },
+            current_state=_cs(scene_id="scene_001", location="铁匠铺", time_label="第1日正午", viewpoint="主角", participants=["主角", "铁匠老王"]),
         )
 
         assert len(result.memories) == 2
@@ -243,7 +216,7 @@ class TestMemoryExtractorErrors:
         with pytest.raises(LLMOutputValidationError):
             extractor.extract(
                 scene_text="some text",
-                scene_context={"scene_id": "s1"},
+                current_state=_cs(scene_id="s1"),
                 max_retries=1,
             )
 
@@ -253,7 +226,7 @@ class TestMemoryExtractorErrors:
         with pytest.raises(LLMOutputValidationError):
             extractor.extract(
                 scene_text="some text",
-                scene_context={"scene_id": "s1"},
+                current_state=_cs(scene_id="s1"),
                 max_retries=0,
             )
 
@@ -269,7 +242,7 @@ class TestMemoryExtractorState:
 
         extractor.extract(
             scene_text="风吹过街道。",
-            scene_context={"scene_id": "scene_empty"},
+            current_state=_cs(scene_id="scene_empty"),
         )
 
         assert extractor.last_check_result is None

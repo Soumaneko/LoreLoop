@@ -11,15 +11,18 @@ from app.domain.recall_memory.llm_check import (
 )
 from app.domain.recall_memory.schemas import Memory
 from app.core.llm.gateway import LLMGateway
+from app.domain.current_state import CurrentState, SceneState, PlayerState, ResourcesState
+
+def _cs(scene_id="test", location="", time_label="", participants=None, viewpoint="主角"):
+    return CurrentState(
+        scene=SceneState(scene_id=scene_id, location=location, time_label=time_label, participants=participants or []),
+        player=PlayerState(name=viewpoint),
+        resources=ResourcesState(),
+    )
+
 
 SCENE_TEXT = "在灰鹭旅店二楼，主角告诉伊莱娜，如果他用左手轻敲两下桌面，就表示让她保持沉默。伊莱娜点头答应。"
-SCENE_CONTEXT = {
-    "scene_id": "scene_002",
-    "location": "灰鹭旅店二楼",
-    "time_label": "第2日夜晚",
-    "participants": ["主角", "伊莱娜"],
-    "viewpoint": "主角",
-}
+SCENE_CONTEXT = _cs(scene_id="scene_002", location="灰鹭旅店二楼", time_label="第2日夜晚", viewpoint="主角", participants=["主角", "伊莱娜"])
 
 
 def _make_memory(**overrides) -> Memory:

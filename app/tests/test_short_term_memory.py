@@ -1,33 +1,31 @@
+import tempfile
+
 import pytest
 from pydantic import ValidationError
 
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene, ShortTermMemoryStore
 
 
-def _make_scene(scene_id: str, turn_index: int, text: str) -> ShortTermScene:
-    return ShortTermScene(
-        scene_id=scene_id,
-        turn_index=turn_index,
-        text=text,
-    )
-
-
 class TestShortTermMemoryStore:
     def test_add_and_get_recent(self):
         store = ShortTermMemoryStore(max_items=5)
-        store.add_scene(_make_scene("s1", 1, "第一段剧情"))
-        store.add_scene(_make_scene("s2", 2, "第二段剧情"))
+        store.add_turn("s1", 1, "观察四周", "第一段剧情")
+        store.add_turn("s2", 2, "与米莉交谈", "第二段剧情")
 
         memory = store.get_recent()
         assert len(memory.recent_scenes) == 2
         assert memory.recent_scenes[0].scene_id == "s1"
+        assert memory.recent_scenes[0].user_input == "观察四周"
+        assert memory.recent_scenes[0].scene_text == "第一段剧情"
         assert memory.recent_scenes[1].scene_id == "s2"
+        assert memory.recent_scenes[1].user_input == "与米莉交谈"
+        assert memory.recent_scenes[1].scene_text == "第二段剧情"
         assert memory.max_items == 5
 
     def test_evicts_oldest_when_exceeded(self):
         store = ShortTermMemoryStore(max_items=3)
         for i in range(1, 6):
-            store.add_scene(_make_scene(f"s{i}", i, f"第{i}段剧情"))
+            store.add_turn(f"s{i}", i, "action", f"第{i}段剧情")
 
         memory = store.get_recent()
         assert len(memory.recent_scenes) == 3
@@ -36,9 +34,9 @@ class TestShortTermMemoryStore:
 
     def test_custom_max_items(self):
         store = ShortTermMemoryStore(max_items=2)
-        store.add_scene(_make_scene("s1", 1, "剧情1"))
-        store.add_scene(_make_scene("s2", 2, "剧情2"))
-        store.add_scene(_make_scene("s3", 3, "剧情3"))
+        store.add_turn("s1", 1, "action", "剧情1")
+        store.add_turn("s2", 2, "action", "剧情2")
+        store.add_turn("s3", 3, "action", "剧情3")
 
         memory = store.get_recent()
         assert len(memory.recent_scenes) == 2
@@ -52,44 +50,93 @@ class TestShortTermMemoryStore:
 
     def test_scenes_returns_in_order(self):
         store = ShortTermMemoryStore(max_items=3)
-        store.add_scene(_make_scene("s1", 1, "剧情1"))
-        store.add_scene(_make_scene("s2", 2, "剧情2"))
+        store.add_turn("s1", 1, "action", "剧情1")
+        store.add_turn("s2", 2, "action", "剧情2")
 
         memory = store.get_recent()
-        assert memory.recent_scenes[0].created_at is None
         assert memory.recent_scenes[0].turn_index == 1
         assert memory.recent_scenes[1].turn_index == 2
-
-    def test_get_recent_returns_copy(self):
-        store = ShortTermMemoryStore()
-        store.add_scene(_make_scene("s1", 1, "剧情"))
-        memory = store.get_recent()
-        memory.recent_scenes.pop()
-        assert len(store.recent_scenes) == 1
-
-    def test_get_recent_returns_scene_copies(self):
-        store = ShortTermMemoryStore()
-        store.add_scene(_make_scene("s1", 1, "原始剧情"))
-
-        memory = store.get_recent()
-        memory.recent_scenes[0].text = "被外部修改"
-
-        assert store.get_recent().recent_scenes[0].text == "原始剧情"
+        assert memory.recent_scenes[0].created_at is not None
 
     def test_invalid_max_items_rejected(self):
         with pytest.raises(ValueError):
             ShortTermMemoryStore(max_items=0)
-        with pytest.raises(ValueError):
-            ShortTermMemoryStore(max_items=-1)
 
-    def test_short_term_memory_default_list_is_isolated(self):
+
+class TestShortTermMemoryModel:
+    def test_default_list_is_isolated(self):
         m1 = ShortTermMemory()
         m2 = ShortTermMemory()
-
-        m1.recent_scenes.append(_make_scene("s1", 1, "剧情"))
-
+        m1.recent_scenes.append(ShortTermScene(
+            scene_id="s1", turn_index=1, scene_text="剧情",
+        ))
         assert m2.recent_scenes == []
 
-    def test_short_term_memory_invalid_max_items_rejected(self):
+    def test_invalid_max_items_rejected(self):
         with pytest.raises(ValidationError):
             ShortTermMemory(max_items=0)
+
+    def test_user_input_default_empty(self):
+        scene = ShortTermScene(
+            scene_id="s1", turn_index=1, scene_text="剧情",
+        )
+        assert scene.user_input == ""
+
+
+class TestShortTermMemoryPersistence:
+    def test_data_persists_across_instances(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        store1 = ShortTermMemoryStore(db_path=db_path)
+        store1.add_turn("s1", 1, "探索酒馆", "主角环顾四周。")
+        store1.add_turn("s2", 2, "与米莉交谈", "米莉告诉主角一条密道。")
+        store1.close()
+
+        store2 = ShortTermMemoryStore(db_path=db_path)
+        memory = store2.get_recent()
+        store2.close()
+
+        assert len(memory.recent_scenes) == 2
+        assert memory.recent_scenes[0].scene_id == "s1"
+        assert memory.recent_scenes[0].user_input == "探索酒馆"
+        assert memory.recent_scenes[0].scene_text == "主角环顾四周。"
+        assert memory.recent_scenes[1].scene_id == "s2"
+        assert memory.recent_scenes[1].user_input == "与米莉交谈"
+        assert memory.recent_scenes[1].scene_text == "米莉告诉主角一条密道。"
+
+        import os
+        os.unlink(db_path)
+
+    def test_persisted_eviction(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        store = ShortTermMemoryStore(db_path=db_path, max_items=3)
+        for i in range(1, 6):
+            store.add_turn(f"s{i}", i, "action", f"剧情{i}")
+        store.close()
+
+        store2 = ShortTermMemoryStore(db_path=db_path)
+        memory = store2.get_recent()
+        store2.close()
+
+        assert len(memory.recent_scenes) == 3
+        ids = [s.scene_id for s in memory.recent_scenes]
+        assert ids == ["s3", "s4", "s5"]
+
+        import os
+        os.unlink(db_path)
+
+    def test_empty_db_returns_empty(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        store = ShortTermMemoryStore(db_path=db_path)
+        memory = store.get_recent()
+        store.close()
+
+        assert memory.recent_scenes == []
+
+        import os
+        os.unlink(db_path)

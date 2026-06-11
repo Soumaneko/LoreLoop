@@ -107,7 +107,7 @@ def _make_context() -> PlotOutlineContext:
                 ShortTermScene(
                     scene_id="scene_001",
                     turn_index=1,
-                    text="主角推开修道院厚重的木门，走进酒馆大厅。",
+                    scene_text="主角推开修道院厚重的木门，走进酒馆大厅。",
                 ),
             ],
             max_items=5,

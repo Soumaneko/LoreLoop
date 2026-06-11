@@ -18,19 +18,19 @@ def create_default_core_memory() -> CoreMemory:
             CoreMemoryItem(
                 id="core_player_identity",
                 category="player",
-                content="主角是卢西安，一名偏好控制法术、善于用话术和局势控制解决问题的人类法师。",
+                content="主角是卢西安，一名风流的人类法师。",
                 priority=100,
             ),
             CoreMemoryItem(
                 id="core_tone",
                 category="tone",
-                content="剧情风格应保持文字冒险 DM 口吻，重视行动后果、人物反应和世界连续性。",
+                content="剧情风格应保持文字冒险剧情风格，重视行动后果、人物反应和世界连续性。",
                 priority=100,
             ),
             CoreMemoryItem(
                 id="core_world_rule",
                 category="world",
-                content="世界反应应符合当前世界观，不应随意引入与已有设定冲突的新规则。",
+                content="当前世界是经典旧世时代的艾泽拉斯，不应该出现违背世界设定的情节。",
                 priority=100,
             ),
         ]

@@ -107,7 +107,7 @@ def _make_short_term_memory() -> ShortTermMemory:
             ShortTermScene(
                 scene_id="scene_001",
                 turn_index=1,
-                text="主角进入了北郡修道院。",
+                scene_text="主角进入了北郡修道院。",
             ),
         ],
         max_items=5,

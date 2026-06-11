@@ -4,6 +4,15 @@ from app.core.llm import MockLLM
 from app.domain.recall_memory.extractor import MemoryExtractor
 from app.domain.recall_memory.store import MemoryStore
 from app.workflows.extract_memory import extract_memory_workflow
+from app.domain.current_state import CurrentState, SceneState, PlayerState, ResourcesState
+
+def _cs(scene_id="test", location="", time_label="", participants=None, viewpoint="主角"):
+    return CurrentState(
+        scene=SceneState(scene_id=scene_id, location=location, time_label=time_label, participants=participants or []),
+        player=PlayerState(name=viewpoint),
+        resources=ResourcesState(),
+    )
+
 
 
 def _build_llm_response(memories: list[dict]) -> str:
@@ -36,7 +45,7 @@ class TestExtractMemoryWorkflow:
         with MemoryStore(":memory:") as store:
             ids = extract_memory_workflow(
                 scene_text="主角轻敲两下桌面。",
-                scene_context={"scene_id": "scene_002", "location": "旅店", "participants": ["主角", "伊莱娜"]},
+                current_state=_cs(scene_id="scene_002", location="旅店", participants=["主角", "伊莱娜"]),
                 extractor=extractor,
                 store=store,
             )
@@ -52,7 +61,7 @@ class TestExtractMemoryWorkflow:
         with MemoryStore(":memory:") as store:
             ids = extract_memory_workflow(
                 scene_text="风吹过街道。",
-                scene_context={"scene_id": "scene_099"},
+                current_state=_cs(scene_id="scene_099"),
                 extractor=extractor,
                 store=store,
             )
@@ -99,7 +108,7 @@ class TestExtractMemoryWorkflow:
         with MemoryStore(":memory:") as store:
             ids = extract_memory_workflow(
                 scene_text="主角取剑，铁匠说认识他父亲。",
-                scene_context={"scene_id": "scene_001", "location": "铁匠铺", "participants": ["主角", "铁匠"]},
+                current_state=_cs(scene_id="scene_001", location="铁匠铺", participants=["主角", "铁匠"]),
                 extractor=extractor,
                 store=store,
             )

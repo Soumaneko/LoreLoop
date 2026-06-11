@@ -23,6 +23,9 @@ ALLOWED_ACTION_TYPES = {
 
 
 class ActionSelfCheck:
+    def __init__(self):
+        self.last_result: SelfCheckResult | None = None
+
     def check(
         self,
         result: ActionParseResult,
@@ -47,6 +50,7 @@ class ActionSelfCheck:
 
         sc_result.final_action_count = len(actions)
         sc_result.final_anchor_count = len(anchors)
+        self.last_result = sc_result
 
         return ActionParseResult(
             turn_intent=result.turn_intent,

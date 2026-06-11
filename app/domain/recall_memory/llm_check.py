@@ -5,6 +5,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from app.core.llm import LLMGateway
+from app.domain.current_state.schemas import CurrentState
 from app.domain.recall_memory.schemas import Memory, MemoryExtractResult
 from app.domain.recall_memory.self_check import SelfCheckResult
 
@@ -71,7 +72,7 @@ class LLMCheck:
         self,
         memories: list[Memory],
         scene_text: str,
-        scene_context: dict,
+        current_state: CurrentState,
         *,
         self_check_warnings: Optional[list[str]] = None,
     ) -> tuple[list[Memory], LLMCheckResult]:
@@ -82,13 +83,12 @@ class LLMCheck:
 
         memories_json = _memories_to_check_json(memories)
         warnings_text = _format_warnings(self_check_warnings, memories)
-        context_text = json.dumps(scene_context, ensure_ascii=False, indent=2)
 
         response = self.gateway.run(
             task="llm_check",
             input_data={
                 "scene_text": scene_text,
-                "scene_context": context_text,
+                "current_state_json": current_state.model_dump_json(indent=2),
                 "memories_json": memories_json,
                 "self_check_warnings": warnings_text,
             },

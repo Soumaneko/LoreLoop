@@ -1,4 +1,5 @@
 from app.core.llm import LLMGateway
+from app.domain.current_state.schemas import CurrentState
 from app.domain.recall_memory.extractor import MemoryExtractor
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.recall_memory.schemas import MemoryExtractResult
@@ -24,13 +25,13 @@ class MemoryService:
     def process_scene(
         self,
         scene_text: str,
-        scene_context: dict,
+        current_state: CurrentState,
         *,
         trace_id: str | None = None,
     ) -> list[str]:
         result = self._extractor.extract(
             scene_text=scene_text,
-            scene_context=scene_context,
+            current_state=current_state,
             trace_id=trace_id,
         )
         return self._store.save_many(result.memories)

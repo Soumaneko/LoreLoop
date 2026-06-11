@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+from app.domain.current_state.schemas import CurrentState
 from app.domain.recall_memory.schemas import Memory
 
 ELLIPSIS_CHARS = ("...", "…")
@@ -32,21 +33,21 @@ class MemorySelfCheck:
         self,
         memories: list[Memory],
         scene_text: str,
-        scene_context: dict,
+        current_state: CurrentState,
     ) -> tuple[list[Memory], SelfCheckResult]:
         result = SelfCheckResult(original_count=len(memories))
         cleaned: list[Memory] = []
 
-        participants: list[str] = scene_context.get("participants", [])
+        participants: list[str] = current_state.scene.participants
         allowed_visibility = set(participants) | {PUBLIC_VISIBILITY}
         scene_text_normalized = scene_text.strip()
-        scene_context_values = _flatten_strings(scene_context)
+        state_values = _flatten_strings(current_state.model_dump())
 
         for i, memory in enumerate(memories):
             memory = self._check_source_text_span(memory, i, scene_text_normalized, result)
-            memory = self._fix_scene_context(memory, scene_context, result)
+            memory = self._fix_source_from_current_state(memory, current_state, result)
             memory = self._check_and_clean_visibility(memory, i, allowed_visibility, result)
-            memory = self._check_and_clean_entities(memory, i, scene_text_normalized, scene_context_values, result)
+            memory = self._check_and_clean_entities(memory, i, scene_text_normalized, state_values, result)
             memory = self._clean_tags(memory)
             cleaned.append(memory)
 
@@ -99,34 +100,36 @@ class MemorySelfCheck:
 
         return memory
 
-    def _fix_scene_context(
+    def _fix_source_from_current_state(
         self,
         memory: Memory,
-        scene_context: dict,
+        current_state: CurrentState,
         result: SelfCheckResult,
     ) -> Memory:
-        scene_id = scene_context.get("scene_id")
+        scene_id = current_state.scene.scene_id
         updates: dict = {}
 
-        if scene_id is not None and memory.source_scene_id != scene_id:
+        if memory.source_scene_id != scene_id:
             updates["source_scene_id"] = scene_id
             result.fixes.append(
                 f"Memory '{memory.subject}' source_scene_id corrected: "
                 f"{memory.source_scene_id!r} → {scene_id!r}"
             )
 
-        if memory.location is None and scene_context.get("location"):
-            updates["location"] = scene_context["location"]
+        location = current_state.scene.location
+        if memory.location is None and location:
+            updates["location"] = location
             result.fixes.append(
-                f"Memory '{memory.subject}' location filled from scene_context: "
-                f"{scene_context['location']!r}"
+                f"Memory '{memory.subject}' location filled from current_state: "
+                f"{location!r}"
             )
 
-        if memory.time_label is None and scene_context.get("time_label"):
-            updates["time_label"] = scene_context["time_label"]
+        time_label = current_state.scene.time_label
+        if memory.time_label is None and time_label:
+            updates["time_label"] = time_label
             result.fixes.append(
-                f"Memory '{memory.subject}' time_label filled from scene_context: "
-                f"{scene_context['time_label']!r}"
+                f"Memory '{memory.subject}' time_label filled from current_state: "
+                f"{time_label!r}"
             )
 
         if updates:
@@ -183,7 +186,7 @@ class MemorySelfCheck:
             if not _entity_appears(entity, scene_text, context_values):
                 result.warnings.append(
                     f"Memory '{memory.subject}' entity {entity!r} not found in "
-                    f"scene_text or scene_context"
+                    f"scene_text or CurrentState"
                 )
 
             cleaned.append(entity)

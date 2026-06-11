@@ -1,9 +1,28 @@
 import json
 import re
-from typing import cast
 
 from app.core.llm import LLMGateway
-from app.domain.current_state.schemas import CurrentState
+from app.domain.current_state.schemas import (
+    CurrentState,
+    NPCState,
+    PlayerState,
+    ResourcesState,
+)
+from pydantic import BaseModel, Field
+
+
+class _SceneStateUpdate(BaseModel):
+    location: str
+    time_label: str
+    participants: list[str] = Field(default_factory=list)
+    atmosphere: str | None = None
+
+
+class _CurrentStateUpdate(BaseModel):
+    scene: _SceneStateUpdate
+    player: PlayerState
+    npcs: list[NPCState] = Field(default_factory=list)
+    resources: ResourcesState = Field(default_factory=ResourcesState)
 
 
 def _increment_scene_id(scene_id: str) -> str:
@@ -30,29 +49,30 @@ class StateUpdater:
         state_data = state_for_llm.model_dump()
         state_data["scene"].pop("scene_id", None)
 
-        schema = CurrentState.model_json_schema()
-        scene_def = schema["$defs"]["SceneState"]
-        scene_def["properties"].pop("scene_id", None)
-        if "scene_id" in scene_def.get("required", []):
-            scene_def["required"].remove("scene_id")
+        schema = _CurrentStateUpdate.model_json_schema()
 
-        result = cast(
-            CurrentState,
-            self.llm.run(
-                task="state_update",
-                input_data={
-                    "current_state_json": json.dumps(state_data, ensure_ascii=False, indent=2),
-                    "scene_text": scene_text,
-                    "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
-                },
-                output_schema=CurrentState,
-                trace_id=trace_id,
-            ),
+        llm_result = self.llm.run(
+            task="state_update",
+            input_data={
+                "current_state_json": json.dumps(state_data, ensure_ascii=False, indent=2),
+                "scene_text": scene_text,
+                "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
+            },
+            output_schema=_CurrentStateUpdate,
+            trace_id=trace_id,
         )
 
-        if result.scene.location != current_state.scene.location:
-            result.scene.scene_id = _increment_scene_id(current_state.scene.scene_id)
+        if llm_result.scene.location != current_state.scene.location:
+            scene_id = _increment_scene_id(current_state.scene.scene_id)
         else:
-            result.scene.scene_id = current_state.scene.scene_id
+            scene_id = current_state.scene.scene_id
 
-        return result
+        return CurrentState(
+            scene={
+                **llm_result.scene.model_dump(),
+                "scene_id": scene_id,
+            },
+            player=llm_result.player,
+            npcs=llm_result.npcs,
+            resources=llm_result.resources,
+        )
