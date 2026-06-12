@@ -8,7 +8,7 @@ from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandida
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
-from app.workflows.generate_scene import generate_scene_workflow
+from app.workflows.generate_scene import generate_scene_workflow, select_required_memories
 
 
 def _make_state() -> CurrentState:
@@ -205,6 +205,61 @@ class TestSceneWriterWorkflow:
         )
 
         assert isinstance(result, SceneWriterResult)
+
+    def test_select_required_memories_resolves_subject_refs(self):
+        outline = PlotOutlineResult(
+            outline_summary="测试",
+            beats=[
+                PlotBeat(
+                    beat_id="b1",
+                    summary="测试节拍",
+                    required_memories=["米莉的邀请", "精细奥术魔法控制"],
+                )
+            ],
+        )
+        retrieved = CandidateRetrievalResult(
+            candidates=[
+                MemoryCandidate(
+                    memory_id="mem_001",
+                    memory_type="event",
+                    subject="米莉的邀请",
+                    content="米莉邀请卢西安下次再来北郡。",
+                    entities=["米莉"],
+                    tags=["邀请"],
+                    salience=0.8,
+                    certainty=0.9,
+                    score=0.2,
+                ),
+                MemoryCandidate(
+                    memory_id="mem_002",
+                    memory_type="trait",
+                    subject="卢西安的施法风格",
+                    content="卢西安擅长精细奥术魔法控制。",
+                    entities=["卢西安"],
+                    tags=["奥术"],
+                    salience=0.7,
+                    certainty=0.8,
+                    score=0.15,
+                ),
+                MemoryCandidate(
+                    memory_id="mem_999",
+                    memory_type="fact",
+                    subject="无关记忆",
+                    content="不应被选择。",
+                    entities=[],
+                    tags=[],
+                    salience=0.1,
+                    certainty=0.9,
+                    score=0.01,
+                ),
+            ],
+            total_scanned=3,
+            total_returned=3,
+        )
+
+        selected = select_required_memories(outline, retrieved)
+
+        assert [memory.memory_id for memory in selected] == ["mem_001", "mem_002"]
 
     def test_workflow_with_short_term_memory(self):
         mock = MockLLM()

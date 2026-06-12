@@ -10,6 +10,7 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
+from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.roll.schemas import RollConfig, RollResult, RollResultBatch
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
@@ -88,6 +89,26 @@ def _make_roll_results() -> RollResultBatch:
     )
 
 
+def _make_outcome_resolution() -> OutcomeResolutionResult:
+    return OutcomeResolutionResult(
+        outcomes=[
+            OutcomeFrame(
+                action_id="a1",
+                sequence=1,
+                actor="主角",
+                action_type="observe",
+                dice="1d20",
+                roll_value=15,
+                dice_sides=20,
+                outcome_band="success",
+                required_consequence="The action should succeed in a clear but grounded way.",
+                information_policy="clear_answer_allowed",
+            ),
+        ],
+        total_outcomes=1,
+    )
+
+
 def _make_core_memory() -> CoreMemory:
     return CoreMemory(
         items=[
@@ -142,6 +163,7 @@ class TestAssembleContext:
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
+            outcome_resolution=_make_outcome_resolution(),
             core_memory=_make_core_memory(),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
@@ -151,6 +173,7 @@ class TestAssembleContext:
         assert ctx.current_state.scene.scene_id == "scene_001"
         assert ctx.action_parse_result.turn_intent == "探索修道院"
         assert ctx.roll_results.dice_formula == "1d20"
+        assert ctx.outcome_resolution.total_outcomes == 1
         assert len(ctx.core_memory.items) == 1
         assert len(ctx.short_term_memory.recent_scenes) == 1
         assert ctx.retrieved_memories.total_returned == 1
@@ -161,6 +184,7 @@ class TestAssembleContext:
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
+            outcome_resolution=_make_outcome_resolution(),
             core_memory=CoreMemory(items=[]),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
@@ -173,6 +197,7 @@ class TestAssembleContext:
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
+            outcome_resolution=_make_outcome_resolution(),
             core_memory=_make_core_memory(),
             short_term_memory=ShortTermMemory(recent_scenes=[]),
             retrieved_memories=_make_retrieved_memories(),
@@ -185,6 +210,7 @@ class TestAssembleContext:
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
+            outcome_resolution=_make_outcome_resolution(),
             core_memory=_make_core_memory(),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=CandidateRetrievalResult(
@@ -202,6 +228,7 @@ class TestAssembleContext:
             roll_results=RollResultBatch(
                 dice_formula="0d20", dice_sides=20, total_rolls=0, results=[]
             ),
+            outcome_resolution=OutcomeResolutionResult(outcomes=[], total_outcomes=0),
             core_memory=_make_core_memory(),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
@@ -215,6 +242,7 @@ class TestAssembleContext:
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
+            outcome_resolution=_make_outcome_resolution(),
             core_memory=_make_core_memory(),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
@@ -227,6 +255,7 @@ class TestAssembleContext:
         assert restored.current_state.scene.scene_id == ctx.current_state.scene.scene_id
         assert restored.core_memory.items[0].id == ctx.core_memory.items[0].id
         assert restored.roll_results.results[0].value == ctx.roll_results.results[0].value
+        assert restored.outcome_resolution.outcomes[0].outcome_band == "success"
 
     def test_type_validation_rejects_wrong_type(self):
         with pytest.raises(ValidationError):
@@ -235,6 +264,7 @@ class TestAssembleContext:
                 current_state="not_a_state",  # type: ignore[arg-type]
                 action_parse_result=_make_action_parse_result(),
                 roll_results=_make_roll_results(),
+                outcome_resolution=_make_outcome_resolution(),
                 core_memory=_make_core_memory(),
                 short_term_memory=_make_short_term_memory(),
                 retrieved_memories=_make_retrieved_memories(),

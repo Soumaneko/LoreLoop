@@ -1,5 +1,6 @@
 import pytest
 from pydantic import ValidationError
+from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.action.schemas import ActionParseResult, AtomicAction
@@ -11,6 +12,7 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
+from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
@@ -86,6 +88,23 @@ def _make_context() -> PlotOutlineContext:
                 ),
             ],
         ),
+        outcome_resolution=OutcomeResolutionResult(
+            outcomes=[
+                OutcomeFrame(
+                    action_id="a1",
+                    sequence=1,
+                    actor="主角",
+                    action_type="observe",
+                    dice="1d20",
+                    roll_value=18,
+                    dice_sides=20,
+                    outcome_band="success",
+                    required_consequence="The action should succeed in a clear but grounded way.",
+                    information_policy="clear_answer_allowed",
+                )
+            ],
+            total_outcomes=1,
+        ),
         core_memory=CoreMemory(
             items=[
                 CoreMemoryItem(
@@ -149,6 +168,8 @@ def _build_outline_response(
                 "summary": "主角环顾酒馆，注意到角落里的可疑人物",
                 "linked_action_ids": ["a1"],
                 "linked_roll_ids": ["a1"],
+                "linked_outcome_ids": ["a1"],
+                "required_outcomes": ["The action should succeed in a clear but grounded way."],
                 "required_memories": ["mem_001"],
                 "state_implications": ["主角发现可疑线索"],
                 "tone_notes": ["保持悬疑氛围"],
@@ -171,6 +192,18 @@ class TestPlotOutlineAgent:
         assert isinstance(result, PlotOutlineResult)
         assert result.outline_summary == "主角观察酒馆客人，注意到可疑行为"
 
+    def test_prompt_contains_outcome_following_requirements(self):
+        prompt = Path("app/prompts/plot_outline_v1.md").read_text(encoding="utf-8")
+
+        assert "OutcomeResolutionResult" in prompt
+        assert "required_consequence" in prompt
+        assert "information_policy" in prompt
+        assert "ambiguous_hint_only" in prompt
+        assert "clear_answer_with_advantage" in prompt
+        assert "linked_outcome_ids" in prompt
+        assert "failure 或 critical_failure" in prompt
+        assert "partial_success" in prompt
+
     def test_beats_have_required_fields(self):
         context = _make_context()
         mock = MockLLM()
@@ -185,6 +218,8 @@ class TestPlotOutlineAgent:
         assert len(beat.summary) > 0
         assert isinstance(beat.linked_action_ids, list)
         assert isinstance(beat.linked_roll_ids, list)
+        assert isinstance(beat.linked_outcome_ids, list)
+        assert isinstance(beat.required_outcomes, list)
 
     def test_outline_has_constraints_and_risks(self):
         context = _make_context()

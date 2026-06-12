@@ -24,7 +24,19 @@ def create_default_core_memory() -> CoreMemory:
             CoreMemoryItem(
                 id="core_tone",
                 category="tone",
-                content="剧情风格应保持文字冒险剧情风格，重视行动后果、人物反应和世界连续性。",
+                content="叙事风格：充满戏剧张力、黑色幽默、贵族式的咏叹调，但底层逻辑必须残酷、真实，符合原著设定。",
+                priority=100,
+            ),
+            CoreMemoryItem(
+                id="core_world_rule",
+                category="core_tone",
+                content="世界反馈：拒绝“龙傲天”式的无脑爽文，并增加低Roll的惩罚权重，玩家的每一个愚蠢决定都必须付出代价（扣血、丢失物品、关系破裂）",
+                priority=100,
+            ),
+            CoreMemoryItem(
+                id="core_tone",
+                category="tone",
+                content="剧情推进：不要过快，注重细节描写（环境、气味、微表情）。",
                 priority=100,
             ),
             CoreMemoryItem(
@@ -33,5 +45,6 @@ def create_default_core_memory() -> CoreMemory:
                 content="当前世界是经典旧世时代的艾泽拉斯，不应该出现违背世界设定的情节。",
                 priority=100,
             ),
+            
         ]
     )
