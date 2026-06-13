@@ -4,6 +4,7 @@ from app.domain.current_state import (
     PlayerState,
     ResourcesState,
     SceneState,
+    WorldClock,
 )
 
 
@@ -18,6 +19,18 @@ class TestSceneState:
 
         assert state.atmosphere is None
         assert state.participants == ["主角", "米莉"]
+        assert not hasattr(state, "time_label")
+
+
+class TestWorldClock:
+    def test_label_and_phase_advance(self):
+        clock = WorldClock(day=1, phase="深夜")
+        advanced = clock.advance_phase()
+
+        assert clock.label == "第1日深夜"
+        assert advanced.day == 2
+        assert advanced.phase == "凌晨"
+        assert advanced.label == "第2日凌晨"
 
 
 class TestPlayerState:
@@ -74,6 +87,7 @@ class TestCurrentState:
                 participants=["卢西安", "米莉", "莎拉"],
                 atmosphere="紧张但暂时安全",
             ),
+            world_clock=WorldClock(day=1, phase="上午"),
             player=PlayerState(
                 name="卢西安",
                 condition=["疲惫"],
@@ -92,6 +106,7 @@ class TestCurrentState:
         )
 
         assert state.scene.scene_id == "scene_001"
+        assert state.world_clock.phase == "上午"
         assert state.player.name == "卢西安"
         assert state.npcs[0].name == "莎拉"
         assert state.resources.key_items == ["鹰徽章"]

@@ -10,6 +10,7 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
+from app.domain.narrative_pacer import NarrativePacingResult
 from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.roll.schemas import RollConfig, RollResult, RollResultBatch
@@ -109,6 +110,15 @@ def _make_outcome_resolution() -> OutcomeResolutionResult:
     )
 
 
+def _make_narrative_pacing() -> NarrativePacingResult:
+    return NarrativePacingResult(
+        available_types=["advance", "relationship_shift"],
+        selected_type="advance",
+        narrative_goal="回应当前行动，并推动当前目标向前。",
+        previous_types=[],
+    )
+
+
 def _make_core_memory() -> CoreMemory:
     return CoreMemory(
         items=[
@@ -164,6 +174,7 @@ class TestAssembleContext:
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
+            narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
@@ -174,6 +185,7 @@ class TestAssembleContext:
         assert ctx.action_parse_result.turn_intent == "探索修道院"
         assert ctx.roll_results.dice_formula == "1d20"
         assert ctx.outcome_resolution.total_outcomes == 1
+        assert ctx.narrative_pacing.selected_type == "advance"
         assert len(ctx.core_memory.items) == 1
         assert len(ctx.short_term_memory.recent_scenes) == 1
         assert ctx.retrieved_memories.total_returned == 1
@@ -185,6 +197,7 @@ class TestAssembleContext:
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
+            narrative_pacing=_make_narrative_pacing(),
             core_memory=CoreMemory(items=[]),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
@@ -198,6 +211,7 @@ class TestAssembleContext:
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
+            narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
             short_term_memory=ShortTermMemory(recent_scenes=[]),
             retrieved_memories=_make_retrieved_memories(),
@@ -211,6 +225,7 @@ class TestAssembleContext:
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
+            narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=CandidateRetrievalResult(
@@ -229,6 +244,7 @@ class TestAssembleContext:
                 dice_formula="0d20", dice_sides=20, total_rolls=0, results=[]
             ),
             outcome_resolution=OutcomeResolutionResult(outcomes=[], total_outcomes=0),
+            narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
@@ -243,6 +259,7 @@ class TestAssembleContext:
             action_parse_result=_make_action_parse_result(),
             roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
+            narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
             short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
@@ -256,6 +273,7 @@ class TestAssembleContext:
         assert restored.core_memory.items[0].id == ctx.core_memory.items[0].id
         assert restored.roll_results.results[0].value == ctx.roll_results.results[0].value
         assert restored.outcome_resolution.outcomes[0].outcome_band == "success"
+        assert restored.narrative_pacing.selected_type == "advance"
 
     def test_type_validation_rejects_wrong_type(self):
         with pytest.raises(ValidationError):
@@ -265,6 +283,7 @@ class TestAssembleContext:
                 action_parse_result=_make_action_parse_result(),
                 roll_results=_make_roll_results(),
                 outcome_resolution=_make_outcome_resolution(),
+                narrative_pacing=_make_narrative_pacing(),
                 core_memory=_make_core_memory(),
                 short_term_memory=_make_short_term_memory(),
                 retrieved_memories=_make_retrieved_memories(),

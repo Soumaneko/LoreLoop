@@ -12,6 +12,7 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
+from app.domain.narrative_pacer import NarrativePacingResult
 from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.plot_outline.agent import PlotOutlineAgent
@@ -105,6 +106,12 @@ def _make_context() -> PlotOutlineContext:
             ],
             total_outcomes=1,
         ),
+        narrative_pacing=NarrativePacingResult(
+            available_types=["advance", "relationship_shift"],
+            selected_type="advance",
+            narrative_goal="回应当前观察行动，并推动调查目标向前。",
+            previous_types=[],
+        ),
         core_memory=CoreMemory(
             items=[
                 CoreMemoryItem(
@@ -196,6 +203,8 @@ class TestPlotOutlineAgent:
         prompt = Path("app/prompts/plot_outline_v1.md").read_text(encoding="utf-8")
 
         assert "OutcomeResolutionResult" in prompt
+        assert "NarrativePacingResult" in prompt
+        assert "narrative_goal" in prompt
         assert "required_consequence" in prompt
         assert "information_policy" in prompt
         assert "ambiguous_hint_only" in prompt

@@ -124,7 +124,7 @@ class MemorySelfCheck:
                 f"{location!r}"
             )
 
-        time_label = current_state.scene.time_label
+        time_label = current_state.world_clock.label
         if memory.time_label is None and time_label:
             updates["time_label"] = time_label
             result.fixes.append(

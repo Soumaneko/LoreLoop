@@ -2,11 +2,15 @@ import pytest
 
 from app.domain.recall_memory.schemas import Memory
 from app.domain.recall_memory.self_check import MemorySelfCheck, MAX_TAGS
-from app.domain.current_state import CurrentState, SceneState, PlayerState, ResourcesState
+from app.domain.current_state import CurrentState, SceneState, PlayerState, ResourcesState, WorldClock
 
 def _cs(scene_id="test", location="", time_label="", participants=None, viewpoint="主角"):
+    world_clock = WorldClock(day=1, phase="上午")
+    if "第2日" in time_label:
+        world_clock = WorldClock(day=2, phase="晚上" if "夜" in time_label else "上午")
     return CurrentState(
         scene=SceneState(scene_id=scene_id, location=location, time_label=time_label, participants=participants or []),
+        world_clock=world_clock,
         player=PlayerState(name=viewpoint),
         resources=ResourcesState(),
     )
@@ -93,7 +97,7 @@ class TestSceneContextFix:
     def test_time_label_filled_from_context(self):
         m = _make_memory(time_label=None)
         cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
-        assert cleaned[0].time_label == "第2日夜晚"
+        assert cleaned[0].time_label == "第2日晚上"
         assert any("time_label" in f for f in result.fixes)
 
     def test_existing_values_not_overwritten(self):
@@ -276,7 +280,7 @@ class TestIntegrationWithExtractor:
         m = result.memories[0]
         assert m.source_scene_id == "scene_002"
         assert m.location == "灰鹭旅店二楼"
-        assert m.time_label == "第2日夜晚"
+        assert m.time_label == "第2日晚上"
         assert m.tags == ["暗号"]
 
         check_result = extractor.last_check_result

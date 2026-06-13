@@ -13,13 +13,18 @@ from pydantic import BaseModel, Field
 
 class _SceneStateUpdate(BaseModel):
     location: str
-    time_label: str
     participants: list[str] = Field(default_factory=list)
     atmosphere: str | None = None
 
 
+class _WorldClockSuggestion(BaseModel):
+    advance_phases: int = Field(default=0, ge=0, le=24)
+    reason: str | None = None
+
+
 class _CurrentStateUpdate(BaseModel):
     scene: _SceneStateUpdate
+    world_clock_suggestion: _WorldClockSuggestion = Field(default_factory=_WorldClockSuggestion)
     player: PlayerState
     npcs: list[NPCState] = Field(default_factory=list)
     resources: ResourcesState = Field(default_factory=ResourcesState)
@@ -48,6 +53,7 @@ class StateUpdater:
         state_for_llm = current_state.model_copy(deep=True)
         state_data = state_for_llm.model_dump()
         state_data["scene"].pop("scene_id", None)
+        state_data.pop("world_clock", None)
 
         schema = _CurrentStateUpdate.model_json_schema()
 
@@ -66,12 +72,16 @@ class StateUpdater:
             scene_id = _increment_scene_id(current_state.scene.scene_id)
         else:
             scene_id = current_state.scene.scene_id
+        world_clock = current_state.world_clock.advance_phase(
+            llm_result.world_clock_suggestion.advance_phases
+        )
 
         return CurrentState(
             scene={
                 **llm_result.scene.model_dump(),
                 "scene_id": scene_id,
             },
+            world_clock=world_clock,
             player=llm_result.player,
             npcs=llm_result.npcs,
             resources=llm_result.resources,

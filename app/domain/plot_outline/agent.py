@@ -29,6 +29,7 @@ class PlotOutlineAgent:
                     "action_parse_result_json": context.action_parse_result.model_dump_json(indent=2),
                     "roll_results_json": context.roll_results.model_dump_json(indent=2),
                     "outcome_resolution_json": context.outcome_resolution.model_dump_json(indent=2),
+                    "narrative_pacing_json": context.narrative_pacing.model_dump_json(indent=2),
                     "short_term_memory_json": context.short_term_memory.model_dump_json(indent=2),
                     "retrieved_memories_json": context.retrieved_memories.model_dump_json(indent=2),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),

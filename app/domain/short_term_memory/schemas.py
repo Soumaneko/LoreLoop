@@ -9,6 +9,7 @@ class ShortTermScene(BaseModel):
     turn_index: int
     user_input: str = ""
     scene_text: str
+    narrative_type: str | None = None
     created_at: str | None = None
 
 
@@ -36,10 +37,19 @@ class ShortTermMemoryStore:
                 turn_index INTEGER NOT NULL,
                 user_input TEXT NOT NULL DEFAULT '',
                 scene_text TEXT NOT NULL,
+                narrative_type TEXT,
                 created_at TEXT NOT NULL
             )
             """
         )
+        columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(short_term_scenes)").fetchall()
+        }
+        if "narrative_type" not in columns:
+            self._conn.execute(
+                "ALTER TABLE short_term_scenes ADD COLUMN narrative_type TEXT"
+            )
         self._conn.commit()
 
     def add_turn(
@@ -48,14 +58,17 @@ class ShortTermMemoryStore:
         turn_index: int,
         user_input: str,
         scene_text: str,
+        narrative_type: str | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         self._conn.execute(
             """
-            INSERT INTO short_term_scenes (scene_id, turn_index, user_input, scene_text, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO short_term_scenes (
+                scene_id, turn_index, user_input, scene_text, narrative_type, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (scene_id, turn_index, user_input, scene_text, now),
+            (scene_id, turn_index, user_input, scene_text, narrative_type, now),
         )
         self._conn.commit()
         self._trim()
@@ -85,6 +98,7 @@ class ShortTermMemoryStore:
                     turn_index=row["turn_index"],
                     user_input=row["user_input"],
                     scene_text=row["scene_text"],
+                    narrative_type=row["narrative_type"],
                     created_at=row["created_at"],
                 )
                 for row in rows

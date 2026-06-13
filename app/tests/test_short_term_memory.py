@@ -17,10 +17,25 @@ class TestShortTermMemoryStore:
         assert memory.recent_scenes[0].scene_id == "s1"
         assert memory.recent_scenes[0].user_input == "观察四周"
         assert memory.recent_scenes[0].scene_text == "第一段剧情"
+        assert memory.recent_scenes[0].narrative_type is None
         assert memory.recent_scenes[1].scene_id == "s2"
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "第二段剧情"
         assert memory.max_items == 5
+
+    def test_add_and_get_recent_with_narrative_type(self):
+        store = ShortTermMemoryStore(max_items=5)
+        store.add_turn(
+            "s1",
+            1,
+            "观察四周",
+            "第一段剧情",
+            narrative_type="advance",
+        )
+
+        memory = store.get_recent()
+
+        assert memory.recent_scenes[0].narrative_type == "advance"
 
     def test_evicts_oldest_when_exceeded(self):
         store = ShortTermMemoryStore(max_items=3)
@@ -81,6 +96,7 @@ class TestShortTermMemoryModel:
             scene_id="s1", turn_index=1, scene_text="剧情",
         )
         assert scene.user_input == ""
+        assert scene.narrative_type is None
 
 
 class TestShortTermMemoryPersistence:
@@ -104,6 +120,47 @@ class TestShortTermMemoryPersistence:
         assert memory.recent_scenes[1].scene_id == "s2"
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "米莉告诉主角一条密道。"
+
+        import os
+        os.unlink(db_path)
+
+    def test_existing_db_without_narrative_type_is_migrated(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        import sqlite3
+        con = sqlite3.connect(db_path)
+        con.execute(
+            """
+            CREATE TABLE short_term_scenes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scene_id TEXT NOT NULL,
+                turn_index INTEGER NOT NULL,
+                user_input TEXT NOT NULL DEFAULT '',
+                scene_text TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO short_term_scenes (
+                scene_id, turn_index, user_input, scene_text, created_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            ("s1", 1, "观察", "旧剧情", "2026-01-01T00:00:00+00:00"),
+        )
+        con.commit()
+        con.close()
+
+        store = ShortTermMemoryStore(db_path=db_path)
+        memory = store.get_recent()
+        store.add_turn("s2", 2, "继续", "新剧情", narrative_type="advance")
+        updated = store.get_recent()
+        store.close()
+
+        assert memory.recent_scenes[0].narrative_type is None
+        assert updated.recent_scenes[1].narrative_type == "advance"
 
         import os
         os.unlink(db_path)

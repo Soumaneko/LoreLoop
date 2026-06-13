@@ -8,6 +8,7 @@ from app.domain.current_state.schemas import (
     PlayerState,
     ResourcesState,
     SceneState,
+    WorldClock,
 )
 
 
@@ -16,10 +17,10 @@ def make_default_state(scene_id: str = "scene_001") -> CurrentState:
         scene=SceneState(
             scene_id=scene_id,
             location="",
-            time_label="",
             participants=[],
             atmosphere=None,
         ),
+        world_clock=WorldClock(day=1, phase="上午"),
         player=PlayerState(
             name="",
             condition=[],

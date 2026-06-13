@@ -8,6 +8,7 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
     StateUpdater,
+    WorldClock,
 )
 
 
@@ -20,6 +21,7 @@ def _make_state() -> CurrentState:
             participants=["主角", "米莉", "莎拉"],
             atmosphere="宁静",
         ),
+        world_clock=WorldClock(day=1, phase="深夜"),
         player=PlayerState(
             name="主角",
             condition=[],
@@ -105,6 +107,24 @@ class TestStateUpdaterNoChange:
         assert result.scene.atmosphere == "紧张"
         assert result.scene.location == "北郡修道院"
         assert result.scene.scene_id == "scene_001"
+        assert result.world_clock == state.world_clock
+
+    def test_world_clock_advances_from_program_suggestion(self):
+        state = _make_state()
+        updated_json = _build_updated_state_json_without_scene_id({
+            "world_clock_suggestion": {
+                "advance_phases": 1,
+                "reason": "剧情明确进入下一时间段",
+            }
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        updater = StateUpdater(mock.build_gateway())
+        result = updater.update(state, "谈话持续到天色更深。")
+
+        assert result.world_clock.day == 2
+        assert result.world_clock.phase == "凌晨"
 
 
 class TestStateUpdaterPlayerChange:
