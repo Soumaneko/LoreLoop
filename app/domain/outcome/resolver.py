@@ -14,7 +14,7 @@ from app.domain.roll.schemas import RollResultBatch
 CONSEQUENCE_BY_BAND: dict[OutcomeBand, str] = {
     "critical_failure": "The action must fail and introduce a serious complication.",
     "failure": "The action must fail or produce an unfavorable consequence.",
-    "partial_success": "The action may partly succeed, but must include a cost, risk, delay, or complication.",
+    "partial_success": "The action must partly succeed, and may include a cost, risk, delay, or complication.",
     "success": "The action should succeed in a clear but grounded way.",
     "critical_success": "The action should succeed strongly and may create an additional advantage.",
 }
@@ -72,8 +72,8 @@ def build_permissions(band: OutcomeBand) -> list[str]:
         ]
     if band == "partial_success":
         return [
-            "The outline may grant part of the intended goal.",
-            "The outline must attach a cost, risk, delay, or complication.",
+            "The outline must grant part of the intended goal.",
+            "The outline may attach a cost, risk, delay, or complication.",
         ]
     if band == "success":
         return [
@@ -93,8 +93,8 @@ def build_constraints(band: OutcomeBand) -> list[str]:
         ]
     if band == "partial_success":
         return [
-            "Do not frame this action as a clean success.",
-            "Include an explicit cost, risk, delay, or complication.",
+            "Do not frame this action as a clean failure.",
+            "Part of the intended goal must be achieved.",
         ]
     if band == "success":
         return [

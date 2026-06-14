@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from app.domain.action.schemas import Anchor, AtomicAction
 from app.domain.recall_memory.schemas import MemoryRecord
 from app.domain.retrieval.config import (
+    ACTION_TYPE_LAYER_BOOST,
     ACTION_TYPE_MEMORY_TYPE_BOOST,
+    ACTION_TYPE_SUBTYPE_BOOST,
     IDF_CLAMP_MAX,
     IDF_CLAMP_MIN,
     KIND_FACTOR,
@@ -206,6 +208,40 @@ def content_keyword_retrieve(ctx: RetrievalContext, config: RetrievalConfig | No
                 if term in norm_content:
                     score += 1.0 * weight * term_conf
                     break
+        scores[mem.id] = score
+    return scores
+
+
+def layer_intent_retrieve(
+    ctx: RetrievalContext,
+    entity_scores: dict[str, float],
+    subject_tag_scores: dict[str, float],
+    content_scores: dict[str, float],
+    config: RetrievalConfig | None = None,
+) -> dict[str, float]:
+    scores: dict[str, float] = {}
+    for mem in ctx.memories:
+        has_match = (
+            entity_scores.get(mem.id, 0.0) > 0
+            or subject_tag_scores.get(mem.id, 0.0) > 0
+            or content_scores.get(mem.id, 0.0) > 0
+        )
+        if not has_match:
+            scores[mem.id] = 0.0
+            continue
+
+        score = 0.0
+        for action in ctx.atomic_actions:
+            score += ACTION_TYPE_LAYER_BOOST.get(action.action_type, {}).get(mem.layer, 0.0)
+            score += ACTION_TYPE_SUBTYPE_BOOST.get(action.action_type, {}).get(mem.subtype, 0.0)
+
+        confidence = getattr(mem, "confidence", None)
+        if confidence is None:
+            confidence = getattr(mem, "certainty", 1.0)
+        salience = getattr(mem, "salience", 0.5)
+
+        score *= 0.75 + float(confidence) * 0.25
+        score *= 0.75 + float(salience) * 0.25
         scores[mem.id] = score
     return scores
 

@@ -109,7 +109,14 @@ class MemorySelfCheck:
         scene_id = current_state.scene.scene_id
         updates: dict = {}
 
-        if memory.source_scene_id != scene_id:
+        preserves_pending_sources = bool(getattr(memory, "source_pending_ids", []))
+        if memory.source_scene_id is None:
+            updates["source_scene_id"] = scene_id
+            result.fixes.append(
+                f"Memory '{memory.subject}' source_scene_id filled from current_state: "
+                f"{scene_id!r}"
+            )
+        elif memory.source_scene_id != scene_id and not preserves_pending_sources:
             updates["source_scene_id"] = scene_id
             result.fixes.append(
                 f"Memory '{memory.subject}' source_scene_id corrected: "

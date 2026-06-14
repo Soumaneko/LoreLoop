@@ -86,6 +86,128 @@ def _make_parse_result(
     )
 
 
+class TestMemoryCandidateShape:
+    def test_candidate_exposes_layer_fields_for_llm(self):
+        store = MemoryStore(":memory:")
+        store.save_many([
+            _make_memory(
+                layer="claim",
+                subtype="testimony",
+                subject="守卫证词",
+                content="守卫声称艾琳娜在钟楼附近见过黑衣人。",
+                entities=["守卫", "艾琳娜", "钟楼"],
+                visibility=["主角"],
+                owner="守卫",
+                confidence=0.7,
+                certainty=None,
+                salience=0.8,
+                source_scene_id="scene_007",
+                source_text_span=["守卫声称艾琳娜在钟楼附近见过黑衣人。"],
+                source_pending_ids=["pending_1"],
+            )
+        ])
+
+        action = _make_action(
+            action_id="A1",
+            action_type="speak",
+            raw_text="我询问守卫艾琳娜的事",
+            target="守卫",
+        )
+        anchors = [_make_anchor("守卫", "守卫", kind="character", action_ids=["A1"])]
+
+        result = CandidateRetriever(store).retrieve(
+            _make_parse_result(actions=[action], anchors=anchors)
+        )
+
+        assert len(result.candidates) == 1
+        candidate = result.candidates[0]
+        assert candidate.memory_type == "fact"
+        assert candidate.layer == "claim"
+        assert candidate.subtype == "testimony"
+        assert candidate.owner == "守卫"
+        assert candidate.visibility == ["主角"]
+        assert candidate.confidence == pytest.approx(0.7)
+        assert candidate.certainty == pytest.approx(0.7)
+        assert candidate.source_scene_id == "scene_007"
+        assert candidate.source_text_span == ["守卫声称艾琳娜在钟楼附近见过黑衣人。"]
+        assert candidate.source_pending_ids == ["pending_1"]
+        assert "layer_intent_score" in candidate.score_breakdown
+        assert "layer_intent_rank" in candidate.score_breakdown
+
+
+class TestLayerIntentRetrieval:
+    def test_speak_action_prefers_claim_over_truth_when_anchor_match_ties(self):
+        store = MemoryStore(":memory:")
+        store.save_many([
+            _make_memory(
+                layer="truth",
+                subtype="fact",
+                subject="艾琳娜事实",
+                content="艾琳娜常在钟楼附近巡逻。",
+                entities=["艾琳娜"],
+                tags=["钟楼"],
+                salience=0.7,
+                certainty=0.9,
+            ),
+            _make_memory(
+                layer="claim",
+                subtype="testimony",
+                subject="艾琳娜证词",
+                content="酒馆老板声称艾琳娜昨夜去了钟楼。",
+                entities=["艾琳娜"],
+                tags=["钟楼"],
+                salience=0.7,
+                certainty=0.9,
+            ),
+        ])
+
+        action = _make_action(
+            action_id="A1",
+            action_type="speak",
+            raw_text="我向酒馆老板打听艾琳娜",
+            target="酒馆老板",
+        )
+        anchors = [_make_anchor("艾琳娜", "艾琳娜", kind="character", action_ids=["A1"])]
+
+        result = CandidateRetriever(store).retrieve(
+            _make_parse_result(actions=[action], anchors=anchors)
+        )
+
+        assert [candidate.subject for candidate in result.candidates] == [
+            "艾琳娜证词",
+            "艾琳娜事实",
+        ]
+        assert result.candidates[0].score_breakdown["layer_intent_score"] > result.candidates[1].score_breakdown["layer_intent_score"]
+
+    def test_layer_intent_does_not_retrieve_without_anchor_match(self):
+        store = MemoryStore(":memory:")
+        store.save_many([
+            _make_memory(
+                layer="claim",
+                subtype="testimony",
+                subject="无关证词",
+                content="酒馆老板声称码头昨夜有争执。",
+                entities=["酒馆老板", "码头"],
+                tags=["证词"],
+                salience=1.0,
+                certainty=1.0,
+            )
+        ])
+
+        action = _make_action(
+            action_id="A1",
+            action_type="speak",
+            raw_text="我打听艾琳娜",
+        )
+        anchors = [_make_anchor("艾琳娜", "艾琳娜", kind="character", action_ids=["A1"])]
+
+        result = CandidateRetriever(store).retrieve(
+            _make_parse_result(actions=[action], anchors=anchors)
+        )
+
+        assert result.candidates == []
+
+
 # ══════════════════════════════════════════════════════════════════
 #  Test: 暗号召回 (Secret Signal Recall)
 # ══════════════════════════════════════════════════════════════════

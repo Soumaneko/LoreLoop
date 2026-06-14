@@ -22,6 +22,7 @@ class RetrievalConfig(BaseModel):
     rrf_content_keyword_weight: float = 0.8
     rrf_type_intent_weight: float = 0.5
     rrf_scene_context_weight: float = 0.5
+    rrf_layer_intent_weight: float = 0.6
 
     multi_action_bonus: float = 0.01
 
@@ -107,6 +108,106 @@ ACTION_TYPE_MEMORY_TYPE_BOOST: dict[str, dict[str, float]] = {
         "agreement": 0.5,
         "trait": 0.5,
         "relationship": 0.5,
+    },
+}
+
+
+ACTION_TYPE_LAYER_BOOST: dict[str, dict[str, float]] = {
+    "observe": {"truth": 1.2, "claim": 0.8, "belief": 0.5, "profile": 0.4},
+    "inspect_object": {"truth": 1.2, "claim": 0.6, "belief": 0.4, "profile": 0.4},
+    "interact_object": {"truth": 1.0, "claim": 0.6, "belief": 0.4, "profile": 0.5},
+    "speak": {"claim": 1.2, "belief": 1.0, "profile": 0.8, "truth": 0.7},
+    "signal_ally": {"belief": 1.1, "profile": 1.0, "claim": 0.8, "truth": 0.7},
+    "instruct_ally": {"belief": 1.1, "profile": 1.0, "claim": 0.8, "truth": 0.7},
+    "hide_or_stealth": {"truth": 1.0, "profile": 0.8, "belief": 0.6, "claim": 0.5},
+    "attack": {"truth": 1.0, "profile": 0.8, "belief": 0.4, "claim": 0.3},
+    "defend": {"truth": 1.0, "profile": 0.8, "belief": 0.5, "claim": 0.4},
+    "cast_or_use_power": {"truth": 1.0, "profile": 0.7, "claim": 0.5, "belief": 0.4},
+    "move": {"truth": 1.1, "claim": 0.6, "belief": 0.4, "profile": 0.4},
+    "plan": {"truth": 1.0, "claim": 0.9, "belief": 0.8, "profile": 0.8},
+    "wait": {"truth": 0.8, "claim": 0.6, "belief": 0.5, "profile": 0.5},
+    "other": {"truth": 0.8, "claim": 0.7, "belief": 0.6, "profile": 0.6},
+}
+
+
+ACTION_TYPE_SUBTYPE_BOOST: dict[str, dict[str, float]] = {
+    "observe": {
+        "fact": 0.5,
+        "event": 0.4,
+        "location_state": 0.5,
+        "item": 0.3,
+        "secret": 0.3,
+    },
+    "inspect_object": {
+        "item": 0.6,
+        "resource": 0.5,
+        "fact": 0.4,
+        "location_state": 0.4,
+        "secret": 0.3,
+    },
+    "interact_object": {
+        "item": 0.6,
+        "resource": 0.5,
+        "agreement": 0.3,
+        "location_state": 0.3,
+    },
+    "speak": {
+        "testimony": 0.6,
+        "rumor": 0.5,
+        "belief": 0.5,
+        "misunderstanding": 0.4,
+        "relationship": 0.4,
+        "agreement": 0.4,
+    },
+    "signal_ally": {
+        "relationship": 0.5,
+        "agreement": 0.5,
+        "belief": 0.4,
+        "trait": 0.4,
+        "goal": 0.4,
+    },
+    "instruct_ally": {
+        "relationship": 0.5,
+        "agreement": 0.5,
+        "belief": 0.4,
+        "trait": 0.4,
+        "goal": 0.4,
+    },
+    "hide_or_stealth": {
+        "location_state": 0.5,
+        "trait": 0.4,
+        "event": 0.3,
+        "secret": 0.3,
+    },
+    "attack": {
+        "trait": 0.5,
+        "event": 0.4,
+        "fact": 0.3,
+        "item": 0.3,
+    },
+    "defend": {
+        "trait": 0.5,
+        "event": 0.4,
+        "fact": 0.3,
+        "item": 0.3,
+    },
+    "cast_or_use_power": {
+        "fact": 0.4,
+        "trait": 0.4,
+        "item": 0.3,
+        "secret": 0.3,
+    },
+    "move": {
+        "location_state": 0.6,
+        "event": 0.4,
+        "fact": 0.3,
+    },
+    "plan": {
+        "goal": 0.5,
+        "agreement": 0.4,
+        "fact": 0.3,
+        "event": 0.3,
+        "testimony": 0.3,
     },
 }
 
