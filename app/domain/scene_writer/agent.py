@@ -23,6 +23,7 @@ class SceneWriterAgent:
         user_input: str,
         selected_memories: list[MemoryCandidate],
         recent_scene: ShortTermScene | None,
+        turn_index: int = 1,
         trace_id: str | None = None,
     ) -> SceneWriterResult:
         schema = SceneWriterResult.model_json_schema()
@@ -32,6 +33,7 @@ class SceneWriterAgent:
             self.llm.run(
                 task="scene_write",
                 input_data={
+                    "turn_index": turn_index,
                     "outline_json": outline.model_dump_json(indent=2),
                     "current_state_json": current_state.model_dump_json(indent=2),
                     "core_memory_json": core_memory.model_dump_json(indent=2),

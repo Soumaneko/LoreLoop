@@ -75,6 +75,7 @@ def generate_scene_workflow(
     retrieved_memories: CandidateRetrievalResult,
     short_term_memory: ShortTermMemory,
     gateway: LLMGateway,
+    turn_index: int,
     trace_id: str | None = None,
 ) -> SceneWriterResult:
     selected_memories = select_required_memories(outline, retrieved_memories)
@@ -89,5 +90,6 @@ def generate_scene_workflow(
         user_input=user_input,
         selected_memories=selected_memories,
         recent_scene=recent_scene,
+        turn_index=turn_index,
         trace_id=trace_id,
     )

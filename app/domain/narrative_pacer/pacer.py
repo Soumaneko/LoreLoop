@@ -38,7 +38,7 @@ def roll_filter_types(
     has_critical_success = "critical_success" in bands
     has_critical_failure = "critical_failure" in bands
     success_like = bool(bands & {"success", "critical_success", "partial_success"})
-    failure_like = bool(bands & {"failure", "critical_failure", "partial_success"})
+    failure_like = bool(bands & {"failure", "critical_failure"})
 
     if has_critical_success and has_critical_failure:
         notes.append("critical_success and critical_failure both present; roll filter keeps all narrative types.")

@@ -65,12 +65,10 @@ def _make_outline() -> PlotOutlineResult:
 
 def _build_response(
     scene_text: str = "主角推开酒馆沉重的木门，夜风卷起几片落叶随着他一同进入温暖的室内。米莉正在吧台后面擦拭酒杯，看到主角后露出微笑。",
-    turn_index: int = 2,
     changes: list[str] | None = None,
 ) -> str:
     return json.dumps({
         "scene_text": scene_text,
-        "turn_index": turn_index,
         "changes_summary": changes or ["主角进入了酒馆", "与米莉进行了交谈"],
     }, ensure_ascii=False)
 
@@ -111,7 +109,6 @@ class TestSceneWriterAgent:
 
         assert isinstance(result, SceneWriterResult)
         assert len(result.scene_text) > 0
-        assert result.turn_index == 2
         assert len(result.changes_summary) >= 1
 
     def test_handles_no_recent_scene(self):
@@ -202,6 +199,7 @@ class TestSceneWriterWorkflow:
             ),
             short_term_memory=ShortTermMemory(recent_scenes=[], max_items=5),
             gateway=mock.build_gateway(),
+            turn_index=1,
         )
 
         assert isinstance(result, SceneWriterResult)
@@ -287,6 +285,7 @@ class TestSceneWriterWorkflow:
                 max_items=5,
             ),
             gateway=mock.build_gateway(),
+            turn_index=1,
         )
 
         assert isinstance(result, SceneWriterResult)

@@ -88,7 +88,7 @@ NarrativePacingResult 是章节层面的节奏方向。
 6. 本章节必须围绕 NarrativePacingResult.selected_type 和 NarrativePacingResult.narrative_goal 组织。
 7. 不得切换到 NarrativePacingResult 之外的叙事类型。
 8. failure 或 critical_failure 不能被写成干净成功。
-9. partial_success 必须包含代价、延迟、风险或复杂化后果。
+9. partial_success 必须实现部分预期目标，可以附带代价、延迟、风险或复杂化后果。
 10. critical_success 可以给予额外优势，但必须与 CurrentState 和 CoreMemory 保持一致。
 11. 每个 OutcomeFrame 对应的 action_id，必须至少出现在一个 PlotBeat.linked_action_ids 和一个 PlotBeat.linked_outcome_ids 中。
 13. 每个 OutcomeFrame 的 required_consequence 必须体现在该beat的 summary、required_outcomes 或 state_implications 中。
@@ -131,6 +131,19 @@ PlotBeat.required_memories 只能包含 Retrieved Memories 中真实存在的 me
 不得在 required_memories 中放入记忆主题、标签、实体、概念或原始记忆文本。
 如果某个节拍不需要 retrieved memory，则使用空列表。
 
+## Memory Usage Policy
+
+Retrieved Memories 中可能同时包含 classified memories 和 pending_notes。
+
+必须遵守：
+
+1. truth：可以作为已确认的世界事实使用。
+2. claim：只能作为传闻、情报、证词、报告、线索或某人的说法使用，不能直接当作世界真相。
+3. belief：只能影响 owner 的行为、台词、误解和态度，不能当作世界事实。
+4. profile：只能作为长期倾向，不能覆盖 CurrentState。
+5. confidence 表示该 layer 内的可靠度：claim 的 confidence 表示“这个说法存在”的可靠度，不表示说法为真；belief 的 confidence 表示 owner 持有该信念的可靠度，不表示信念为真。
+6. pending_notes：只能作为近期上下文参考，不是已确认长期记忆，不能覆盖 CurrentState。
+
 ## Internal Checklist
 
 在回答前，静默确认：
@@ -141,11 +154,10 @@ PlotBeat.required_memories 只能包含 Retrieved Memories 中真实存在的 me
 4. 信息相关行动是否遵守 information_policy？
 5. none 和 ambiguous_hint_only 是否避免透露关键答案？
 6. 是否避免将 failure 或 critical_failure 写成干净成功？
-7. 每个 partial_success 是否都包含代价、延迟、风险或复杂化后果？
+7. 每个 partial_success 是否都实现了部分预期目标？
 8. 是否避免违背 CoreMemory 和 CurrentState？
 9. 是否避免使用无关的 recalled memories？
 10. Beat 是否避免了骰子术语、GM 评论、最终正文和第二人称称呼？
-11. 最后一个 Beat 是否允许主角自然继续行动，而不需要凭空制造无关的新事件、冲突、任务或线索？
 
 如果任何一项不通过，先修正大纲再输出。
 
