@@ -137,6 +137,8 @@ class MemoryRecord(BaseModel):
     source_pending_ids: list[str] = Field(default_factory=list)
 
     created_at: str = ""
+    active: bool = True
+    merged_into: str | None = None
 
 
 class PendingMemoryItem(BaseModel):

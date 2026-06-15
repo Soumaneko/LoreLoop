@@ -38,6 +38,14 @@ class PendingMemoryStore:
             ON pending_memory_items(classified, discarded, turn_index, created_at)
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pending_memory_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
         self._conn.commit()
 
     def save_many(self, items: list[PendingMemoryItem]) -> list[str]:
@@ -132,6 +140,44 @@ class PendingMemoryStore:
 
     def should_trigger_batch(self, *, turn_threshold: int = 5) -> bool:
         return self.unclassified_turn_count() >= turn_threshold
+
+    def batch_classify_count(self) -> int:
+        row = self._conn.execute(
+            "SELECT value FROM pending_memory_meta WHERE key = ?",
+            ("batch_classify_count",),
+        ).fetchone()
+        if row is None:
+            return 0
+        try:
+            return int(row["value"])
+        except (TypeError, ValueError):
+            return 0
+
+    def record_batch_classified(self) -> int:
+        count = self.batch_classify_count() + 1
+        self._conn.execute(
+            """
+            INSERT INTO pending_memory_meta(key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            ("batch_classify_count", str(count)),
+        )
+        self._conn.commit()
+        return count
+
+    def should_trigger_consolidation(self, *, every: int = 3) -> bool:
+        if every < 1:
+            raise ValueError("every must be >= 1")
+        count = self.batch_classify_count()
+        return count > 0 and count % every == 0
+
+    def reset_batch_classify_count(self) -> None:
+        self._conn.execute(
+            "DELETE FROM pending_memory_meta WHERE key = ?",
+            ("batch_classify_count",),
+        )
+        self._conn.commit()
 
     def count(self) -> int:
         row = self._conn.execute("SELECT COUNT(*) FROM pending_memory_items").fetchone()

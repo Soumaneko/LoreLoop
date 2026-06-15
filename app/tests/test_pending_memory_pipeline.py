@@ -103,6 +103,22 @@ class TestPendingMemoryStore:
                 "侍者也说钥匙在钟楼。",
             ]
 
+    def test_batch_classify_count_persists_and_triggers_consolidation(self, tmp_path):
+        db_path = str(tmp_path / "pending.db")
+
+        with PendingMemoryStore(db_path) as store:
+            assert store.batch_classify_count() == 0
+            assert store.should_trigger_consolidation(every=3) is False
+            assert store.record_batch_classified() == 1
+            assert store.record_batch_classified() == 2
+            assert store.should_trigger_consolidation(every=3) is False
+            assert store.record_batch_classified() == 3
+            assert store.should_trigger_consolidation(every=3) is True
+
+        with PendingMemoryStore(db_path) as store:
+            assert store.batch_classify_count() == 3
+            assert store.should_trigger_consolidation(every=3) is True
+
 
 class TestMemoryDraftExtractor:
     def test_extracts_pending_items_and_fills_scene_metadata(self):
@@ -241,6 +257,8 @@ class TestBatchClassifyPendingMemories:
             assert result.triggered is True
             assert len(result.saved_ids) == 1
             assert pending_store.unclassified_turn_count() == 0
+            assert result.batch_classify_count == 1
+            assert result.should_consolidate is False
 
             memory = memory_store.list_all()[0]
             assert memory.layer == "claim"

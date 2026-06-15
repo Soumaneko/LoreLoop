@@ -93,6 +93,7 @@ NarrativePacingResult 是章节层面的节奏方向。
 11. 每个 OutcomeFrame 对应的 action_id，必须至少出现在一个 PlotBeat.linked_action_ids 和一个 PlotBeat.linked_outcome_ids 中。
 13. 每个 OutcomeFrame 的 required_consequence 必须体现在该beat的 summary、required_outcomes 或 state_implications 中。
 14. 如果某个行动没有匹配的 OutcomeFrame，应保守处理，不得凭空发明戏剧性结果。
+15. 所有节拍必须描述确定发生的剧情推进，不得以开放问题、玩家面向的选择或决策点收尾。严禁将节拍结构写成"玩家必须在A和B之间做出选择"、"是继续X还是转向Y"等形式。当前行动必须在场景内完整收束，选择生成由独立模块处理。
 
 ## Information Policy
 
@@ -119,10 +120,11 @@ PlotBeat.summary 必须是清晰的叙事规划节点。
 
 不要写最终正文。
 不要提及骰子、掷骰、模型推理、提示词或系统指令。
-不要用“你”称呼玩家。
+不要用"你"称呼玩家。
 不要使用 GM 评论。
 不要包含感官描写、隐喻、环境描写、心理描写或文学修饰。
 只保留场景写作所需的剧情推进内容。
+Beat summary 不得呈现玩家面向的选择（如"是A还是B"、"面临X或Y的选择"、"可以选择……也可以……"）。只描述确定发生的剧情推进，不描述玩家的决策过程。
 
 ## Memory Linking
 
@@ -158,6 +160,7 @@ Retrieved Memories 中可能同时包含 classified memories 和 pending_notes�
 8. 是否避免违背 CoreMemory 和 CurrentState？
 9. 是否避免使用无关的 recalled memories？
 10. Beat 是否避免了骰子术语、GM 评论、最终正文和第二人称称呼？
+11. 是否所有 beat 都描述了确定发生的剧情、未使用玩家面向的选择或决策点收尾？
 
 如果任何一项不通过，先修正大纲再输出。
 

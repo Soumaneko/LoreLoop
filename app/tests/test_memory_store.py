@@ -42,6 +42,8 @@ class TestMemoryStoreSaveAndRead:
             assert r.certainty == 1.0
             assert isinstance(r.id, str) and len(r.id) == 32
             assert r.created_at != ""
+            assert r.active is True
+            assert r.merged_into is None
 
     def test_save_multiple_memories(self):
         with MemoryStore(":memory:") as store:
@@ -116,7 +118,47 @@ class TestMemoryStoreDedup:
 
             ids = store.save_many([m1, m2])
             assert len(ids) == 2
-            assert store.count() == 2
+
+
+class TestMemoryStoreActiveRecords:
+    def test_list_active_excludes_deactivated_memory(self):
+        with MemoryStore(":memory:") as store:
+            ids = store.save_many([
+                _make_memory(subject="旧记忆", content="旧内容"),
+                _make_memory(subject="新记忆", content="新内容"),
+            ])
+
+            store.deactivate(ids[0], merged_into=ids[1])
+
+            active = store.list_active()
+            assert [memory.id for memory in active] == [ids[1]]
+
+            old = store.get_by_id(ids[0])
+            assert old is not None
+            assert old.active is False
+            assert old.merged_into == ids[1]
+
+    def test_save_one_returning_id_returns_existing_duplicate_id(self):
+        with MemoryStore(":memory:") as store:
+            memory = _make_memory(subject="重复", content="同内容")
+            first_id = store.save_one_returning_id(memory)
+            second_id = store.save_one_returning_id(_make_memory(subject="重复", content="同内容"))
+
+            assert second_id == first_id
+            assert store.count() == 1
+
+    def test_save_one_returning_id_reactivates_existing_duplicate(self):
+        with MemoryStore(":memory:") as store:
+            first_id = store.save_one_returning_id(_make_memory(subject="重复", content="同内容"))
+            replacement_id = store.save_one_returning_id(_make_memory(subject="替代", content="新内容"))
+            store.deactivate(first_id, merged_into=replacement_id)
+
+            returned_id = store.save_one_returning_id(_make_memory(subject="重复", content="同内容"))
+
+            assert returned_id == first_id
+            record = store.get_by_id(first_id)
+            assert record.active is True
+            assert record.merged_into is None
 
     def test_different_subject_allows_save(self):
         with MemoryStore(":memory:") as store:

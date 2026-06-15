@@ -46,6 +46,8 @@ class BatchClassifyPendingMemoryWorkflowResult:
     self_check_result: SelfCheckResult | None = None
     saved_ids: list[str] = field(default_factory=list)
     classified_pending_ids: list[str] = field(default_factory=list)
+    batch_classify_count: int = 0
+    should_consolidate: bool = False
 
 
 def fill_pending_memory_scene_metadata(
@@ -172,6 +174,8 @@ def batch_classify_pending_memories_workflow(
 
     pending_store.mark_classified(sorted(classified_ids))
     wfr.classified_pending_ids = sorted(classified_ids)
+    wfr.batch_classify_count = pending_store.record_batch_classified()
+    wfr.should_consolidate = pending_store.should_trigger_consolidation(every=3)
     return wfr
 
 

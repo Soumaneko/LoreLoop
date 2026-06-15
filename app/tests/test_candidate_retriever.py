@@ -135,6 +135,43 @@ class TestMemoryCandidateShape:
         assert "layer_intent_rank" in candidate.score_breakdown
 
 
+class TestActiveMemoryFiltering:
+    def test_inactive_memories_are_not_retrieved(self):
+        store = MemoryStore(":memory:")
+        ids = store.save_many([
+            _make_memory(
+                subject="旧钥匙传闻",
+                content="老板声称旧钥匙在钟楼。",
+                entities=["旧钥匙", "钟楼"],
+                tags=["钥匙"],
+                salience=0.9,
+                certainty=0.9,
+            ),
+            _make_memory(
+                subject="新钥匙传闻",
+                content="老板和侍者都声称旧钥匙在钟楼。",
+                entities=["旧钥匙", "钟楼"],
+                tags=["钥匙"],
+                salience=0.9,
+                certainty=0.9,
+            ),
+        ])
+        store.deactivate(ids[0], merged_into=ids[1])
+
+        action = _make_action(
+            action_id="A1",
+            action_type="speak",
+            raw_text="我询问旧钥匙的传闻",
+        )
+        anchors = [_make_anchor("旧钥匙", "旧钥匙", kind="item", action_ids=["A1"])]
+
+        result = CandidateRetriever(store).retrieve(
+            _make_parse_result(actions=[action], anchors=anchors)
+        )
+
+        assert [candidate.memory_id for candidate in result.candidates] == [ids[1]]
+
+
 class TestLayerIntentRetrieval:
     def test_speak_action_prefers_claim_over_truth_when_anchor_match_ties(self):
         store = MemoryStore(":memory:")

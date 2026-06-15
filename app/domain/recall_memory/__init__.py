@@ -21,6 +21,13 @@ from .draft_extractor import MemoryDraftExtractor
 from .extractor import MemoryExtractor
 from .pending_store import PendingMemoryStore
 from .store import MemoryStore
+from .consolidator import (
+    ConsolidationProposal,
+    MemoryConsolidationApplyResult,
+    MemoryConsolidationBatch,
+    MemoryConsolidationGroup,
+    MemoryConsolidator,
+)
 from .repository import MemoryRepository
 from .service import MemoryService
 from .self_check import MemorySelfCheck, SelfCheckResult
@@ -46,6 +53,11 @@ __all__ = [
     "SimilarMemoryPreMerger",
     "MemoryExtractor",
     "MemoryStore",
+    "ConsolidationProposal",
+    "MemoryConsolidationApplyResult",
+    "MemoryConsolidationBatch",
+    "MemoryConsolidationGroup",
+    "MemoryConsolidator",
     "MemoryRepository",
     "MemoryService",
     "MemorySelfCheck",

@@ -22,6 +22,12 @@ def create_default_core_memory() -> CoreMemory:
                 priority=100,
             ),
             CoreMemoryItem(
+                id="core_player_ability",
+                category="player",
+                content="旁观者之瞳：主角对魔兽世界正史不知情，剧情依旧按照正史大方向发展。当主角试图强行改变重大历史时，给予厄运惩罚；当顺应历史并在私生活层面微调时，给予运势加成。",
+                priority=100,
+            ),
+            CoreMemoryItem(
                 id="core_tone",
                 category="tone",
                 content="叙事风格：充满戏剧张力、黑色幽默、贵族式的咏叹调，但底层逻辑必须残酷、真实，符合原著设定。",

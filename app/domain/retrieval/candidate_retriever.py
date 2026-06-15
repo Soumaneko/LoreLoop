@@ -70,7 +70,7 @@ class CandidateRetriever:
         *,
         top_k: int | None = None,
     ) -> CandidateRetrievalResult:
-        all_memories = self.memory_store.list_all()
+        all_memories = self.memory_store.list_active()
         pending_notes = self._retrieve_pending_notes(parse_result, top_k=top_k or self.config.top_k)
         total_memories = len(all_memories)
         if top_k is None:
