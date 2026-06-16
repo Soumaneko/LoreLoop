@@ -102,6 +102,7 @@ SceneSummaries 是长期叙事连续性摘要，只能用于理解长期剧情�
 13. 每个 OutcomeFrame 的 required_consequence 必须体现在该beat的 summary、required_outcomes 或 state_implications 中。
 14. 如果某个行动没有匹配的 OutcomeFrame，应保守处理，不得凭空发明戏剧性结果。
 15. 所有节拍必须描述确定发生的剧情推进，不得以开放问题、玩家面向的选择或决策点收尾。严禁将节拍结构写成"玩家必须在A和B之间做出选择"、"是继续X还是转向Y"等形式。当前行动必须在场景内完整收束，选择生成由独立模块处理。
+16. **不得通过歪曲 NPC 性格或态度来强行制造冲突**：NPC 的任何反应必须符合 CurrentState 中已建立的 attitude_to_player 和已知性格。不得为了让剧情"更有张力"而让 NPC 做出与其设定矛盾的举动（如让信赖/亲近玩家的 NPC 突然无理由疏远、让冷静克制的 NPC 失控发怒等）。
 
 ## Information Policy
 
@@ -180,6 +181,7 @@ SceneSummaries 可能包含多个 level 的长期叙事摘要。
 9. 是否避免使用无关的 recalled memories？
 10. Beat 是否避免了骰子术语、GM 评论、最终正文和第二人称称呼？
 11. 是否所有 beat 都描述了确定发生的剧情、未使用玩家面向的选择或决策点收尾？
+12. 是否任何 NPC 的行为都符合 CurrentState 中已建立的 attitude_to_player 和已知性格，未因制造冲突而歪曲其设定？
 
 如果任何一项不通过，先修正大纲再输出。
 

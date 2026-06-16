@@ -4,6 +4,7 @@ from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
 from app.domain.outcome import OutcomeResolver, build_information_policy, map_roll_to_band
 from app.domain.roll.schemas import RollResult, RollResultBatch
+from app.domain.roll_modifier.schemas import RollModifier
 from app.workflows.resolve_outcomes import resolve_outcomes_workflow
 
 
@@ -46,6 +47,33 @@ def _make_roll(value: int = 10, action_id: str = "a1") -> RollResult:
         value=value,
         dice_sides=20,
         roll_hint="perception",
+    )
+
+
+def _make_modified_roll(
+    *,
+    raw_value: int,
+    modifier_value: int,
+    action_id: str = "a1",
+) -> RollResult:
+    return RollResult(
+        action_id=action_id,
+        sequence=1,
+        actor="主角",
+        action_type="observe",
+        dice="1d20",
+        value=raw_value + modifier_value,
+        dice_sides=20,
+        roll_hint="perception",
+        raw_value=raw_value,
+        modifiers=[
+            RollModifier(
+                action_id=action_id,
+                label="清晰视野",
+                reason="环境提供明确观察优势。",
+                value=modifier_value,
+            )
+        ],
     )
 
 
@@ -181,3 +209,15 @@ class TestOutcomeResolver:
 
         assert result.total_outcomes == 1
         assert result.outcomes[0].outcome_band == "critical_success"
+
+    def test_uses_adjusted_value_for_outcome_band(self):
+        result = OutcomeResolver().resolve(
+            parse_result=_make_parse_result(),
+            roll_results=_make_roll_batch(
+                _make_modified_roll(raw_value=9, modifier_value=5)
+            ),
+            current_state=_make_state(),
+        )
+
+        assert result.outcomes[0].roll_value == 14
+        assert result.outcomes[0].outcome_band == "partial_success"

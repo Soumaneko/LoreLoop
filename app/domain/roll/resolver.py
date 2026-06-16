@@ -1,6 +1,7 @@
 import random
 
-from app.domain.action.schemas import ActionParseResult
+from app.domain.action.schemas import ActionParseResult, AtomicAction
+from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.roll.schemas import RollConfig, RollResult, RollResultBatch
 
 
@@ -8,7 +9,7 @@ class RollResolver:
     def __init__(self, config: RollConfig | None = None):
         self.config = config or RollConfig()
 
-    def resolve(self, parse_result: ActionParseResult) -> RollResultBatch:
+    def select_roll_actions(self, parse_result: ActionParseResult) -> list[AtomicAction]:
         actions = parse_result.atomic_actions
         rng = random.Random(self.config.seed)
 
@@ -25,10 +26,29 @@ class RollResolver:
                 actions = need_actions + forced
                 actions.sort(key=lambda a: a.sequence)
 
+        return list(actions)
+
+    def resolve(
+        self,
+        parse_result: ActionParseResult,
+        *,
+        modifier_batch: RollModifierBatch | None = None,
+        roll_actions: list[AtomicAction] | None = None,
+    ) -> RollResultBatch:
+        actions = roll_actions if roll_actions is not None else self.select_roll_actions(parse_result)
+        rng = random.Random(self.config.seed)
+        mods_by_action = {}
+        if modifier_batch is not None:
+            for modifier in modifier_batch.modifiers:
+                mods_by_action.setdefault(modifier.action_id, []).append(modifier)
+
         results: list[RollResult] = []
 
         for action in actions:
-            value = rng.randint(1, self.config.dice_sides)
+            raw_value = rng.randint(1, self.config.dice_sides)
+            modifiers = mods_by_action.get(action.action_id, [])
+            total_modifier = sum(modifier.value for modifier in modifiers)
+            value = max(1, min(self.config.dice_sides, raw_value + total_modifier))
 
             results.append(
                 RollResult(
@@ -40,6 +60,8 @@ class RollResolver:
                     value=value,
                     dice_sides=self.config.dice_sides,
                     roll_hint=action.roll_hint,
+                    raw_value=raw_value,
+                    modifiers=modifiers,
                 )
             )
 

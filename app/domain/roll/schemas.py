@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.domain.roll_modifier.schemas import RollModifier
 
 
 class RollConfig(BaseModel):
@@ -25,6 +27,14 @@ class RollResult(BaseModel):
     value: int
     dice_sides: int
     roll_hint: str | None = None
+    raw_value: int | None = None
+    modifiers: list[RollModifier] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _fill_raw_value(self):
+        if self.raw_value is None:
+            self.raw_value = self.value
+        return self
 
 
 class RollResultBatch(BaseModel):

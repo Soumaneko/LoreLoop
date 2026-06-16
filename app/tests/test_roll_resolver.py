@@ -3,6 +3,7 @@ import pytest
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
+from app.domain.roll_modifier.schemas import RollModifier, RollModifierBatch
 
 
 def _make_action(
@@ -256,6 +257,123 @@ class TestResultFields:
 
         assert result.dice_formula == "0d6"
         assert result.total_rolls == 0
+
+
+class TestRollModifiers:
+    def test_modifier_adjusts_value_and_records_raw_value(self):
+        parse_result = ActionParseResult(
+            turn_intent="观察",
+            atomic_actions=[_make_action("a1", 1, True)],
+            anchors=[],
+            ambiguities=[],
+        )
+        modifier_batch = RollModifierBatch(
+            modifiers=[
+                RollModifier(
+                    action_id="a1",
+                    label="有利地形",
+                    reason="当前位置提供清晰视野。",
+                    value=3,
+                )
+            ]
+        )
+
+        resolver = RollResolver(RollConfig(seed=1, min_rolls=0))
+        result = resolver.resolve(parse_result, modifier_batch=modifier_batch)
+
+        assert result.results[0].raw_value == 5
+        assert result.results[0].value == 8
+        assert result.results[0].modifiers == modifier_batch.modifiers
+
+    def test_modifier_clamps_upper_bound(self):
+        parse_result = ActionParseResult(
+            turn_intent="观察",
+            atomic_actions=[_make_action("a1", 1, True)],
+            anchors=[],
+            ambiguities=[],
+        )
+        modifier_batch = RollModifierBatch(
+            modifiers=[
+                RollModifier(
+                    action_id="a1",
+                    label="强力支援",
+                    reason="盟友提供明确支援。",
+                    value=5,
+                )
+            ]
+        )
+
+        resolver = RollResolver(RollConfig(seed=1, min_rolls=0))
+        result = resolver.resolve(
+            parse_result,
+            modifier_batch=modifier_batch,
+            roll_actions=[
+                _make_action("skip", 1, True),
+                _make_action("a1", 2, True),
+            ],
+        )
+
+        assert result.results[1].raw_value == 19
+        assert result.results[1].value == 20
+
+    def test_modifier_clamps_lower_bound(self):
+        parse_result = ActionParseResult(
+            turn_intent="观察",
+            atomic_actions=[_make_action("a1", 1, True)],
+            anchors=[],
+            ambiguities=[],
+        )
+        modifier_batch = RollModifierBatch(
+            modifiers=[
+                RollModifier(
+                    action_id="a1",
+                    label="严重干扰",
+                    reason="目标环境明显不利。",
+                    value=-5,
+                )
+            ]
+        )
+
+        resolver = RollResolver(RollConfig(seed=2, min_rolls=0))
+        result = resolver.resolve(parse_result, modifier_batch=modifier_batch)
+
+        assert result.results[0].raw_value == 2
+        assert result.results[0].value == 1
+
+    def test_no_modifier_keeps_existing_value_behavior(self):
+        parse_result = ActionParseResult(
+            turn_intent="观察",
+            atomic_actions=[_make_action("a1", 1, True)],
+            anchors=[],
+            ambiguities=[],
+        )
+
+        resolver = RollResolver(RollConfig(seed=1, min_rolls=0))
+        result = resolver.resolve(parse_result)
+
+        assert result.results[0].raw_value == 5
+        assert result.results[0].value == 5
+        assert result.results[0].modifiers == []
+
+    def test_select_roll_actions_can_be_reused_for_modifier_evaluation(self):
+        parse_result = ActionParseResult(
+            turn_intent="观察",
+            atomic_actions=[
+                _make_action("a1", 1, True),
+                _make_action("a2", 2, False),
+                _make_action("a3", 3, False),
+            ],
+            anchors=[],
+            ambiguities=[],
+        )
+
+        resolver = RollResolver(RollConfig(min_rolls=2, seed=42))
+        roll_actions = resolver.select_roll_actions(parse_result)
+        result = resolver.resolve(parse_result, roll_actions=roll_actions)
+
+        assert [action.action_id for action in roll_actions] == [
+            roll.action_id for roll in result.results
+        ]
 
 
 class TestConfigValidation:

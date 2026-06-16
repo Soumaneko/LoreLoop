@@ -62,6 +62,7 @@
 6. narrative_goal 只写 1-2 句中文，描述本章叙事目标。
 7. 如果 OutcomeResolutionResult 限制信息披露，narrative_goal 必须遵守 information_policy。
 8. 如果同时存在 critical_success 和 critical_failure，narrative_goal 必须同时体现大成功收益和大失败代价。
+9. **不得通过歪曲 NPC 性格或态度来强行制造冲突**：NPC 的反应必须符合 CurrentState 中已建立的 attitude_to_player 和已知性格，不得为了让剧情"更有戏剧性"而让 NPC 做出与其设定矛盾的举动（如让信赖玩家的 NPC 突然疏远、让冷静的 NPC 情绪失控等）。
 
 ## 输出格式
 

@@ -97,6 +97,7 @@ CurrentState 可能包含与场景相关的：玩家的背包（inventory）、�
 3. 不得要求玩家做无法从当前位置自然执行的行动，除非该行动本身是移动、等待或计划。
 4. 不得透露隐藏真相、幕后答案或系统推理。
 5. 不得输出解释文本、Markdown 或 JSON 之外的任何内容。
+6. 不得臆测 CurrentState 中的物品或资源来源：temporary_assets 中的物品（如便条、钱袋）如果 scene_text 或 ShortTermMemory 中没有明确写出给予者，禁止在 preview 的 label/description 中自行指定来源角色。
 
 ## Anchor Kind 指南
 
