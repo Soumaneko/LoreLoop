@@ -60,6 +60,7 @@ class TestSimpleSingleAction:
                         "condition": None,
                         "likely_needs_roll": True,
                         "roll_hint": "perception",
+                        "risk_level": "medium",
                         "confidence": 0.95,
                     }
                 ],
@@ -76,6 +77,7 @@ class TestSimpleSingleAction:
         a = result.atomic_actions[0]
         assert a.action_type == "observe"
         assert a.likely_needs_roll is True
+        assert a.risk_level == "medium"
         assert a.target == "仓库门口"
         assert len(result.anchors) >= 2
         anchor_texts = {anchor.text for anchor in result.anchors}

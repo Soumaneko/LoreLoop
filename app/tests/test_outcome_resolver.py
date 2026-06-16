@@ -7,7 +7,11 @@ from app.domain.roll.schemas import RollResult, RollResultBatch
 from app.workflows.resolve_outcomes import resolve_outcomes_workflow
 
 
-def _make_action(action_id: str = "a1", action_type: str = "observe") -> AtomicAction:
+def _make_action(
+    action_id: str = "a1",
+    action_type: str = "observe",
+    risk_level: str | None = None,
+) -> AtomicAction:
     return AtomicAction(
         action_id=action_id,
         sequence=1,
@@ -18,6 +22,7 @@ def _make_action(action_id: str = "a1", action_type: str = "observe") -> AtomicA
         target="四周",
         likely_needs_roll=True,
         roll_hint="perception",
+        risk_level=risk_level,
         confidence=0.9,
     )
 
@@ -143,6 +148,29 @@ class TestOutcomeResolver:
         )
 
         assert result.outcomes[0].risk_level == "high"
+
+    def test_uses_llm_risk_level_before_type_fallback(self):
+        action = _make_action(action_type="observe", risk_level="high")
+
+        result = OutcomeResolver().resolve(
+            parse_result=_make_parse_result(action),
+            roll_results=_make_roll_batch(_make_roll(20)),
+            current_state=_make_state(),
+        )
+
+        assert result.outcomes[0].risk_level == "high"
+
+    def test_failure_band_raises_llm_low_risk_to_medium(self):
+        action = _make_action(action_type="observe", risk_level="low")
+
+        result = OutcomeResolver().resolve(
+            parse_result=_make_parse_result(action),
+            roll_results=_make_roll_batch(_make_roll(5)),
+            current_state=_make_state(),
+        )
+
+        assert result.outcomes[0].outcome_band == "failure"
+        assert result.outcomes[0].risk_level == "medium"
 
     def test_workflow_returns_valid_outcome_resolution(self):
         result = resolve_outcomes_workflow(

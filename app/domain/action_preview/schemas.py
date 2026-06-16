@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.domain.action.schemas import ActionType, AnchorKind
+from app.domain.action.schemas import ActionRiskLevel, ActionType, AnchorKind
 
 ActionPreviewLevel = Literal["冒险举动", "保守举动", "信息获取", "奇招"]
 
@@ -35,6 +35,7 @@ class ActionPreview(BaseModel):
     method: str | None = None
     goal: str | None = None
     likely_needs_roll: bool
+    risk_level: ActionRiskLevel
     anchors: list[ActionPreviewAnchor] = Field(default_factory=list)
 
 

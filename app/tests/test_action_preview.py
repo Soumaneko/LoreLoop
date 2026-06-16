@@ -90,6 +90,7 @@ def _build_response() -> str:
                 "method": "保持警惕",
                 "goal": "发现异常动静",
                 "likely_needs_roll": False,
+                "risk_level": "low",
                 "anchors": [
                     {"text": "酒馆", "normalized": "酒馆", "kind": "location", "confidence": 0.9}
                 ],
@@ -107,6 +108,7 @@ def _build_response() -> str:
                 "method": "追问细节",
                 "goal": "确认仓库区位置",
                 "likely_needs_roll": False,
+                "risk_level": "low",
                 "anchors": [
                     {"text": "米莉", "normalized": "米莉", "kind": "character", "confidence": 0.95},
                     {"text": "仓库区", "normalized": "仓库区", "kind": "location", "confidence": 0.9},
@@ -125,6 +127,7 @@ def _build_response() -> str:
                 "method": None,
                 "goal": "查看情况",
                 "likely_needs_roll": False,
+                "risk_level": "medium",
                 "anchors": [
                     {"text": "仓库区外围", "normalized": "仓库区外围", "kind": "location", "confidence": 0.9}
                 ],
@@ -142,6 +145,7 @@ def _build_response() -> str:
                 "method": "对照旧地图",
                 "goal": "制定路线",
                 "likely_needs_roll": False,
+                "risk_level": "low",
                 "anchors": [
                     {"text": "旧地图", "normalized": "旧地图", "kind": "item", "confidence": 0.95},
                     {"text": "路线", "normalized": "路线", "kind": "concept", "confidence": 0.8},
@@ -199,6 +203,7 @@ class TestBuildActionParseFromPreview:
         assert result.atomic_actions[0].action_type == "speak"
         assert result.atomic_actions[0].raw_text == preview.label
         assert result.atomic_actions[0].target == "米莉"
+        assert result.atomic_actions[0].risk_level == preview.risk_level
         assert {anchor.text for anchor in result.anchors} >= {"米莉", "仓库区", "卢西安"}
         assert checker.last_result is not None
         assert checker.last_result.final_action_count == 1

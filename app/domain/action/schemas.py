@@ -19,6 +19,8 @@ ActionType = Literal[
     "other",
 ]
 
+ActionRiskLevel = Literal["low", "medium", "high"]
+
 AnchorKind = Literal[
     "character",
     "location",
@@ -49,6 +51,7 @@ class AtomicAction(BaseModel):
 
     likely_needs_roll: bool
     roll_hint: str | None = None
+    risk_level: ActionRiskLevel | None = None
 
     confidence: float = Field(ge=0, le=1)
 

@@ -18,6 +18,7 @@ from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.roll.schemas import RollResult, RollResultBatch
+from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
 from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 from app.workflows.generate_plot_outline import generate_plot_outline_workflow
@@ -156,6 +157,16 @@ def _make_context() -> PlotOutlineContext:
             total_scanned=50,
             total_returned=1,
         ),
+        scene_summaries=[
+            SceneSummary(
+                level=2,
+                content="此前几回合中，卢西安在北郡调查陌生人。",
+                scene_ids=["scene_001", "scene_002"],
+                source_ids=[],
+                turn_start=1,
+                turn_end=2,
+            )
+        ],
     )
 
 
@@ -212,6 +223,8 @@ class TestPlotOutlineAgent:
         assert "linked_outcome_ids" in prompt
         assert "failure 或 critical_failure" in prompt
         assert "partial_success" in prompt
+        assert "SceneSummaries" in prompt
+        assert "scene_summaries_json" in prompt
 
     def test_beats_have_required_fields(self):
         context = _make_context()

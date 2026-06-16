@@ -51,12 +51,23 @@ def build_information_policy(band: OutcomeBand) -> InformationPolicy:
     return "clear_answer_with_advantage"
 
 
-def infer_risk_level(action: AtomicAction) -> RiskLevel:
-    if action.action_type in {"attack", "defend", "cast_or_use_power", "hide_or_stealth"}:
-        return "high"
-    if action.action_type in {"speak", "observe", "inspect_object", "plan", "wait"}:
-        return "low"
-    return "medium"
+def infer_risk_level(action: AtomicAction, band: OutcomeBand) -> RiskLevel:
+    base: RiskLevel
+    if action.risk_level is not None:
+        base = action.risk_level
+    elif action.action_type in {"attack", "defend", "cast_or_use_power", "hide_or_stealth"}:
+        base = "high"
+    elif action.action_type in {"speak", "observe", "inspect_object", "plan", "wait"}:
+        base = "low"
+    else:
+        base = "medium"
+
+    if band in {"critical_failure", "failure"}:
+        if base == "low":
+            return "medium"
+        if base == "medium":
+            return "high"
+    return base
 
 
 def build_permissions(band: OutcomeBand) -> list[str]:
@@ -147,7 +158,7 @@ class OutcomeResolver:
                     outcome_band=band,
                     required_consequence=CONSEQUENCE_BY_BAND[band],
                     information_policy=build_information_policy(band),
-                    risk_level=infer_risk_level(action),
+                    risk_level=infer_risk_level(action, band),
                     narrative_permission=build_permissions(band),
                     narrative_constraints=build_constraints(band),
                 )

@@ -60,6 +60,12 @@
 {retrieved_memories_json}
 ```
 
+## SceneSummaries
+
+```json
+{scene_summaries_json}
+```
+
 ## Priority Order
 
 当信息来源之间发生冲突时，遵循以下顺序：
@@ -72,11 +78,13 @@
 6. RollResultBatch
 7. ShortTermMemory
 8. Retrieved Memories
-9. General narrative common sense
+9. SceneSummaries
+10. General narrative common sense
 
 RollResultBatch 是原始事实。
 OutcomeResolutionResult 是叙事约束。
 NarrativePacingResult 是章节层面的节奏方向。
+SceneSummaries 是长期叙事连续性摘要，只能用于理解长期剧情脉络，不得覆盖 CurrentState、ShortTermMemory 或更具体的 Retrieved Memories。
 
 ## Requirements
 
@@ -145,6 +153,17 @@ Retrieved Memories 中可能同时包含 classified memories 和 pending_notes�
 4. profile：只能作为长期倾向，不能覆盖 CurrentState。
 5. confidence 表示该 layer 内的可靠度：claim 的 confidence 表示“这个说法存在”的可靠度，不表示说法为真；belief 的 confidence 表示 owner 持有该信念的可靠度，不表示信念为真。
 6. pending_notes：只能作为近期上下文参考，不是已确认长期记忆，不能覆盖 CurrentState。
+
+## Scene Summary Usage Policy
+
+SceneSummaries 可能包含多个 level 的长期叙事摘要。
+
+必须遵守：
+
+1. 只用于长期连续性、任务线和关系线的背景理解。
+2. 不得把 SceneSummaries 当作比 CurrentState、ShortTermMemory 或 Retrieved Memories 更精确的事实来源。
+3. 不得从 SceneSummaries 中发明精确地点、物品、NPC 当前状态或隐藏真相。
+4. 如果 SceneSummaries 与更具体的当前信息冲突，忽略 SceneSummaries。
 
 ## Internal Checklist
 

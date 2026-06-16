@@ -14,6 +14,7 @@ from app.domain.narrative_pacer import NarrativePacingResult
 from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.roll.schemas import RollConfig, RollResult, RollResultBatch
+from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
 from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 
@@ -189,6 +190,7 @@ class TestAssembleContext:
         assert len(ctx.core_memory.items) == 1
         assert len(ctx.short_term_memory.recent_scenes) == 1
         assert ctx.retrieved_memories.total_returned == 1
+        assert ctx.scene_summaries == []
 
     def test_empty_core_memory(self):
         ctx = assemble_context(
@@ -217,6 +219,30 @@ class TestAssembleContext:
             retrieved_memories=_make_retrieved_memories(),
         )
         assert ctx.short_term_memory.recent_scenes == []
+
+    def test_scene_summaries_are_optional_context(self):
+        summary = SceneSummary(
+            level=2,
+            content="卢西安在旧旅店的调查逐渐指向钟楼。",
+            scene_ids=["scene_001", "scene_002"],
+            source_ids=["sum_1", "sum_2"],
+            turn_start=1,
+            turn_end=2,
+        )
+        ctx = assemble_context(
+            user_input="测试",
+            current_state=_make_current_state(),
+            action_parse_result=_make_action_parse_result(),
+            roll_results=_make_roll_results(),
+            outcome_resolution=_make_outcome_resolution(),
+            narrative_pacing=_make_narrative_pacing(),
+            core_memory=_make_core_memory(),
+            short_term_memory=_make_short_term_memory(),
+            retrieved_memories=_make_retrieved_memories(),
+            scene_summaries=[summary],
+        )
+
+        assert ctx.scene_summaries == [summary]
 
     def test_empty_retrieved_memories(self):
         ctx = assemble_context(

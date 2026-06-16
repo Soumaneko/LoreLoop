@@ -12,6 +12,20 @@
 {current_state_json}
 ```
 
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
+## Recent Scene Summaries
+
+最近剧情摘要，L1 最详细，较高 level 是更长期的冷凝摘要。
+
+```json
+{recent_summaries_json}
+```
+
 ## 用户输入
 
 {user_input}
@@ -43,6 +57,24 @@
 - 涉及潜行、躲避注意、观察隐藏信息、识别物品、欺骗、说服、威胁、开锁、攻击、防御、追踪、施法、危险移动时，设为 true。
 - 简单移动、已知暗号使用、普通交谈、明确交付物品、纯计划陈述，通常设为 false。
 - 如果不确定是否需要 roll，倾向于 true，但不要判断成功失败。
+
+## risk_level 规则
+
+每个 atomic_action 必须包含 risk_level，值只能是 `low`、`medium`、`high`。
+
+- low：安全环境、友善/中性目标、无欺骗/威胁、失败后果轻微。
+- medium：有一定不确定性、涉及说服/轻度欺骗、对抗性对话、中等后果。
+- high：目标具有攻击性或远超主角实力、严重欺骗、战斗、潜行、威胁、危险施法或强制突破。
+
+判断依据按以下优先级：
+
+1. 目标的实力与态度，例如对龙说话不同于对朋友说话。
+2. 场景氛围与位置，例如私密对峙不同于公共宴会厅。
+3. 行动类型，attack、hide_or_stealth、cast_or_use_power、defend 的基准偏高。
+4. 最近剧情摘要中的事件，例如刚逃离生命危险不同于刚完成普通对话。
+5. CoreMemory 中的世界反馈规则。
+
+如果信息不足，使用 action_type 和当前场景做保守估计；不要为了制造戏剧性而夸大风险。
 
 ## anchor 抽取规则
 
@@ -143,6 +175,7 @@ normalized 是检索用标准词，不是解释文本。
       "condition": "条件或null",
       "likely_needs_roll": false,
       "roll_hint": null,
+      "risk_level": "medium",
       "confidence": 0.95
     }}
   ],
