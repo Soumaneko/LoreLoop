@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 
 from app.core.llm import LLMGateway
 from app.domain.current_state.schemas import CurrentState
+from app.domain.entity.linker import EntityMemoryLinker
+from app.domain.entity.store import EntityStore
 from app.domain.recall_memory.batch_classifier import (
     MemoryBatchClassifier,
     MemoryBatchClassifierResult,
@@ -48,6 +50,7 @@ class BatchClassifyPendingMemoryWorkflowResult:
     classified_pending_ids: list[str] = field(default_factory=list)
     batch_classify_count: int = 0
     should_consolidate: bool = False
+    entity_links_created: int = 0
 
 
 def fill_pending_memory_scene_metadata(
@@ -126,6 +129,7 @@ def batch_classify_pending_memories_workflow(
     classifier: MemoryBatchClassifier,
     pending_store: PendingMemoryStore,
     memory_store: MemoryStore,
+    entity_store: EntityStore | None = None,
     turn_threshold: int = 5,
     force: bool = False,
     trace_id: str | None = None,
@@ -155,6 +159,14 @@ def batch_classify_pending_memories_workflow(
 
     if result.kept_memories:
         wfr.saved_ids = memory_store.save_many(result.kept_memories)
+        if entity_store is not None and wfr.saved_ids:
+            records = [
+                record
+                for memory_id in wfr.saved_ids
+                if (record := memory_store.get_by_id(memory_id)) is not None
+            ]
+            links = EntityMemoryLinker(entity_store).link_records(records)
+            wfr.entity_links_created = len(links)
 
     classified_ids = set()
     discarded_ids: list[str] = []

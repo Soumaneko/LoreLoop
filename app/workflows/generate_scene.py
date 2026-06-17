@@ -1,6 +1,7 @@
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.scene_writer.agent import SceneWriterAgent
@@ -76,6 +77,7 @@ def generate_scene_workflow(
     short_term_memory: ShortTermMemory,
     gateway: LLMGateway,
     turn_index: int,
+    entity_profiles: list[EntityProfileUpdateInput] | None = None,
     trace_id: str | None = None,
 ) -> SceneWriterResult:
     selected_memories = select_required_memories(outline, retrieved_memories)
@@ -89,6 +91,7 @@ def generate_scene_workflow(
         core_memory=core_memory,
         user_input=user_input,
         selected_memories=selected_memories,
+        entity_profiles=entity_profiles or [],
         recent_scene=recent_scene,
         turn_index=turn_index,
         trace_id=trace_id,

@@ -66,6 +66,22 @@
 {scene_summaries_json}
 ```
 
+## Entity Profiles
+
+```json
+{entity_profiles_json}
+```
+
+Entity Profiles 是系统积累的相关实体档案，包含 NPC 性格/能力、物品特性、地点特征和组织描述。
+
+使用规则：
+
+1. 用于保持角色塑造、地点特征、物品特性和组织描述的一致性。
+2. 不得将 Entity Profiles 当作比 CurrentState 更精确的当前事实来源。
+3. 不得将 Entity Profiles 当作比 Retrieved Memories 更优先的事件/证据来源。
+4. Entity Profiles 的优先级低于 CurrentState、ActionParseResult、OutcomeResolutionResult 和 Retrieved Memories。
+5. 不得从 Entity Profiles 中发明当前不存在的物品、能力或关系。
+
 ## Priority Order
 
 当信息来源之间发生冲突时，遵循以下顺序：
@@ -78,13 +94,15 @@
 6. RollResultBatch
 7. ShortTermMemory
 8. Retrieved Memories
-9. SceneSummaries
-10. General narrative common sense
+9. Entity Profiles
+10. SceneSummaries
+11. General narrative common sense
 
 RollResultBatch 是原始事实。
 OutcomeResolutionResult 是叙事约束。
 NarrativePacingResult 是章节层面的节奏方向。
 SceneSummaries 是长期叙事连续性摘要，只能用于理解长期剧情脉络，不得覆盖 CurrentState、ShortTermMemory 或更具体的 Retrieved Memories。
+Entity Profiles 是实体档案，只能用于维持实体表现一致性，不得覆盖 CurrentState、OutcomeResolutionResult 或 Retrieved Memories。
 
 ## Requirements
 

@@ -4,6 +4,7 @@ from typing import cast
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.retrieval.schemas import MemoryCandidate
 from app.domain.scene_writer.schemas import SceneWriterResult
@@ -23,6 +24,7 @@ class SceneWriterAgent:
         user_input: str,
         selected_memories: list[MemoryCandidate],
         recent_scene: ShortTermScene | None,
+        entity_profiles: list[EntityProfileUpdateInput] | None = None,
         turn_index: int = 1,
         trace_id: str | None = None,
     ) -> SceneWriterResult:
@@ -41,6 +43,11 @@ class SceneWriterAgent:
                     "selected_memories_json": json.dumps(
                         [m.model_dump() for m in selected_memories],
                         ensure_ascii=False, indent=2,
+                    ),
+                    "entity_profiles_json": json.dumps(
+                        [profile.model_dump(mode="json") for profile in (entity_profiles or [])],
+                        ensure_ascii=False,
+                        indent=2,
                     ),
                     "recent_scene_json": recent_scene.model_dump_json(indent=2) if recent_scene else "null",
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),

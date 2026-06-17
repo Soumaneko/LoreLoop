@@ -37,6 +37,11 @@ class PlotOutlineAgent:
                         ensure_ascii=False,
                         indent=2,
                     ),
+                    "entity_profiles_json": json.dumps(
+                        [profile.model_dump(mode="json") for profile in context.entity_profiles],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=PlotOutlineResult,
