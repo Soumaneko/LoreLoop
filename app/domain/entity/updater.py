@@ -7,6 +7,7 @@ from app.domain.entity.schemas import (
     EntityProfile,
     EntityProfileUpdateBatch,
     EntityProfileUpdateInput,
+    RetrievedEntity,
     profile_from_semantic,
     utc_now,
 )
@@ -20,7 +21,8 @@ class EntityProfileUpdater:
         self,
         scene_text: str,
         current_state: CurrentState,
-        existing_profiles: list[EntityProfile],
+        relevant_profiles: list[EntityProfile],
+        new_entity_hints: list[RetrievedEntity] | None = None,
         *,
         trace_id: str | None = None,
     ) -> list[EntityProfile]:
@@ -38,10 +40,18 @@ class EntityProfileUpdater:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "existing_profiles_json": json.dumps(
+                    "relevant_profiles_json": json.dumps(
                         [
                             profile.semantic_view().model_dump(mode="json")
-                            for profile in existing_profiles
+                            for profile in relevant_profiles
+                        ],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    "new_entity_hints_json": json.dumps(
+                        [
+                            hint.model_dump(mode="json")
+                            for hint in (new_entity_hints or [])
                         ],
                         ensure_ascii=False,
                         indent=2,
@@ -56,7 +66,7 @@ class EntityProfileUpdater:
                 trace_id=trace_id,
             ),
         )
-        return self._merge(existing_profiles, result.entities, current_state.scene.scene_id)
+        return self._merge(relevant_profiles, result.entities, current_state.scene.scene_id)
 
     def _merge(
         self,
@@ -70,7 +80,7 @@ class EntityProfileUpdater:
             existing = _find_existing(update, old_profiles)
             if existing is not None:
                 merged = existing.model_copy(deep=True)
-                self._apply_semantic_update(merged, update)
+                apply_semantic_update(merged, update)
                 if scene_id not in merged.source_scene_ids:
                     merged.source_scene_ids.append(scene_id)
                 merged.confidence = min(1.0, merged.confidence + 0.05)
@@ -87,36 +97,6 @@ class EntityProfileUpdater:
                 )
         return result
 
-    def _apply_semantic_update(
-        self,
-        target: EntityProfile,
-        source: EntityProfileUpdateInput,
-    ) -> None:
-        target.entity_type = source.entity_type
-        if source.name.strip():
-            target.name = source.name
-        target.aliases = _merge_unique([*target.aliases, *source.aliases])
-        if source.summary is not None:
-            target.summary = source.summary
-        if source.role is not None:
-            target.role = source.role
-        if source.personality_traits:
-            target.personality_traits = source.personality_traits
-        if source.known_abilities:
-            target.known_abilities = source.known_abilities
-        if source.faction is not None:
-            target.faction = source.faction
-        if source.item_type is not None:
-            target.item_type = source.item_type
-        if source.location_type is not None:
-            target.location_type = source.location_type
-        if source.features:
-            target.features = source.features
-        if source.parent_location is not None:
-            target.parent_location = source.parent_location
-        if source.description is not None:
-            target.description = source.description
-
 
 def _find_existing(
     update: EntityProfileUpdateInput,
@@ -130,6 +110,38 @@ def _find_existing(
         if update_names & profile_names:
             return profile
     return None
+
+
+def apply_semantic_update(
+    target: EntityProfile,
+    source: EntityProfileUpdateInput,
+) -> None:
+    target.entity_type = source.entity_type
+    if source.name.strip():
+        target.name = source.name
+    target.aliases = _merge_unique([*target.aliases, *source.aliases])
+    if source.summary is not None:
+        target.summary = source.summary
+    if source.role is not None:
+        target.role = source.role
+    if source.personality_traits:
+        target.personality_traits = source.personality_traits
+    if source.known_abilities:
+        target.known_abilities = source.known_abilities
+    if source.faction is not None:
+        target.faction = source.faction
+    if source.item_type is not None:
+        target.item_type = source.item_type
+    if source.item_source is not None:
+        target.item_source = source.item_source
+    if source.location_type is not None:
+        target.location_type = source.location_type
+    if source.features:
+        target.features = source.features
+    if source.parent_location is not None:
+        target.parent_location = source.parent_location
+    if source.description is not None:
+        target.description = source.description
 
 
 def _merge_unique(values: list[str]) -> list[str]:

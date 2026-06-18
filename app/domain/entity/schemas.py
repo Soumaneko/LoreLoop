@@ -29,6 +29,7 @@ class EntityProfileUpdateInput(BaseModel):
     faction: str | None = None
 
     item_type: str | None = None
+    item_source: str | None = None
 
     location_type: str | None = None
     features: list[str] = Field(default_factory=list)
@@ -39,6 +40,28 @@ class EntityProfileUpdateInput(BaseModel):
 
 class EntityProfileUpdateBatch(BaseModel):
     entities: list[EntityProfileUpdateInput] = Field(default_factory=list)
+
+
+class EntityAliasMatch(BaseModel):
+    extracted_text: str
+    matched_entity_id: str | None = None
+    matched_entity_name: str
+    matched_entity_type: EntityType
+    new_alias: str | None = None
+
+
+class RetrievedEntity(BaseModel):
+    name: str
+    entity_type: EntityType
+    source: Literal["exact_match", "alias_match", "new"]
+    matched_entity_id: str | None = None
+    matched_entity_name: str | None = None
+    context_span: str | None = None
+
+
+class EntityExtractionResult(BaseModel):
+    alias_matches: list[EntityAliasMatch] = Field(default_factory=list)
+    retrieved_entities: list[RetrievedEntity] = Field(default_factory=list)
 
 
 class EntityProfile(BaseModel):
@@ -55,6 +78,7 @@ class EntityProfile(BaseModel):
     faction: str | None = None
 
     item_type: str | None = None
+    item_source: str | None = None
 
     location_type: str | None = None
     features: list[str] = Field(default_factory=list)
@@ -79,6 +103,7 @@ class EntityProfile(BaseModel):
             known_abilities=list(self.known_abilities),
             faction=self.faction,
             item_type=self.item_type,
+            item_source=self.item_source,
             location_type=self.location_type,
             features=list(self.features),
             parent_location=self.parent_location,
@@ -107,6 +132,7 @@ def profile_from_semantic(
         known_abilities=list(profile.known_abilities),
         faction=profile.faction,
         item_type=profile.item_type,
+        item_source=profile.item_source,
         location_type=profile.location_type,
         features=list(profile.features),
         parent_location=profile.parent_location,

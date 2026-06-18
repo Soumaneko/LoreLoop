@@ -191,6 +191,19 @@ class EntityStore:
         profile.updated_at = utc_now()
         self.upsert(profile)
 
+    def append_alias(self, entity_id: str, alias: str) -> bool:
+        profile = self.get_by_id(entity_id)
+        clean = str(alias).strip()
+        if profile is None or not clean:
+            return False
+        alias_keys = {existing.casefold() for existing in profile.aliases}
+        if clean.casefold() in alias_keys or clean.casefold() == profile.name.casefold():
+            return False
+        profile.aliases.append(clean)
+        profile.updated_at = utc_now()
+        self.upsert(profile)
+        return True
+
     def close(self) -> None:
         self._db.close()
 
