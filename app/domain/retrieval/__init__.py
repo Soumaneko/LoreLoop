@@ -14,7 +14,7 @@ from .sub_retrievers import (
     entity_retrieve,
     scene_context_retrieve,
     subject_tag_retrieve,
-    type_intent_retrieve,
+    subtype_intent_retrieve,
 )
 from .rrf import rrf_fusion
 from .candidate_retriever import CandidateRetriever
@@ -35,5 +35,5 @@ __all__ = [
     "rrf_fusion",
     "scene_context_retrieve",
     "subject_tag_retrieve",
-    "type_intent_retrieve",
+    "subtype_intent_retrieve",
 ]

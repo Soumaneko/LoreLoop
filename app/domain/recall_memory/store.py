@@ -14,11 +14,22 @@ class MemoryStore:
         self._init_table()
 
     def _init_table(self) -> None:
+        self._create_table()
+        self._migrate_table()
+        self._conn.execute("DROP INDEX IF EXISTS idx_memories_dedup")
+        self._conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_dedup
+            ON memories(layer, subtype, IFNULL(owner, ''), subject, entities_json, content)
+            """
+        )
+        self._conn.commit()
+
+    def _create_table(self) -> None:
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY,
-                type TEXT NOT NULL,
                 layer TEXT NOT NULL DEFAULT 'truth',
                 subtype TEXT NOT NULL DEFAULT 'fact',
                 subject TEXT NOT NULL,
@@ -29,7 +40,6 @@ class MemoryStore:
                 visibility_json TEXT NOT NULL DEFAULT '[]',
                 tags_json TEXT NOT NULL DEFAULT '[]',
                 confidence REAL NOT NULL DEFAULT 1.0,
-                certainty REAL NOT NULL DEFAULT 1.0,
                 salience REAL NOT NULL DEFAULT 0.5,
                 owner TEXT,
                 source_scene_id TEXT,
@@ -41,20 +51,18 @@ class MemoryStore:
             )
             """
         )
-        self._migrate_table()
-        self._conn.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_dedup
-            ON memories(type, subject, entities_json, content)
-            """
-        )
-        self._conn.commit()
 
     def _migrate_table(self) -> None:
         existing = {
             row["name"]
             for row in self._conn.execute("PRAGMA table_info(memories)").fetchall()
         }
+        if "type" in existing or "certainty" in existing:
+            self._rebuild_without_legacy_columns()
+            existing = {
+                row["name"]
+                for row in self._conn.execute("PRAGMA table_info(memories)").fetchall()
+            }
         migrations = {
             "layer": "ALTER TABLE memories ADD COLUMN layer TEXT NOT NULL DEFAULT 'truth'",
             "subtype": "ALTER TABLE memories ADD COLUMN subtype TEXT NOT NULL DEFAULT 'fact'",
@@ -68,9 +76,51 @@ class MemoryStore:
             if column not in existing:
                 self._conn.execute(statement)
 
+    def _rebuild_without_legacy_columns(self) -> None:
+        legacy_table = "memories_legacy"
+        self._conn.execute("DROP TABLE IF EXISTS memories_legacy")
+        self._conn.execute("ALTER TABLE memories RENAME TO memories_legacy")
+        self._create_table()
+        self._conn.execute(
+            """
+            INSERT OR IGNORE INTO memories (
+                id, layer, subtype, subject, content,
+                entities_json, location, time_label,
+                visibility_json, tags_json,
+                confidence, salience, owner,
+                source_scene_id, source_text_span_json, source_pending_ids_json,
+                active, merged_into, created_at
+            )
+            SELECT
+                id,
+                COALESCE(layer, 'truth'),
+                COALESCE(subtype, type, 'fact'),
+                subject,
+                content,
+                entities_json,
+                location,
+                time_label,
+                visibility_json,
+                tags_json,
+                COALESCE(confidence, certainty, 1.0),
+                salience,
+                owner,
+                source_scene_id,
+                source_text_span_json,
+                source_pending_ids_json,
+                active,
+                merged_into,
+                created_at
+            FROM memories_legacy
+            """
+        )
+        self._conn.execute(f"DROP TABLE {legacy_table}")
+
     def _make_dedup_key(self, memory: Memory) -> tuple:
         return (
-            memory.type,
+            memory.layer,
+            memory.subtype,
+            memory.owner or "",
             memory.subject,
             json.dumps(sorted(memory.entities), ensure_ascii=False),
             memory.content,
@@ -83,7 +133,12 @@ class MemoryStore:
         row = self._conn.execute(
             """
             SELECT id FROM memories
-            WHERE type = ? AND subject = ? AND entities_json = ? AND content = ?
+            WHERE layer = ?
+              AND subtype = ?
+              AND IFNULL(owner, '') = ?
+              AND subject = ?
+              AND entities_json = ?
+              AND content = ?
             """,
             self._make_dedup_key(memory),
         ).fetchone()
@@ -106,17 +161,16 @@ class MemoryStore:
         cursor = self._conn.execute(
             """
             INSERT OR IGNORE INTO memories (
-                id, type, layer, subtype, subject, content,
+                id, layer, subtype, subject, content,
                 entities_json, location, time_label,
                 visibility_json, tags_json,
-                confidence, certainty, salience, owner,
+                confidence, salience, owner,
                 source_scene_id, source_text_span_json, source_pending_ids_json,
                 active, merged_into, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 memory_id,
-                memory.type,
                 memory.layer,
                 memory.subtype,
                 memory.subject,
@@ -127,7 +181,6 @@ class MemoryStore:
                 json.dumps(memory.visibility, ensure_ascii=False),
                 json.dumps(memory.tags, ensure_ascii=False),
                 memory.confidence,
-                memory.certainty,
                 memory.salience,
                 memory.owner,
                 memory.source_scene_id,
@@ -182,7 +235,6 @@ class MemoryStore:
     def _row_to_record(self, row: sqlite3.Row) -> MemoryRecord:
         return MemoryRecord(
             id=row["id"],
-            type=row["type"],
             layer=row["layer"],
             subtype=row["subtype"],
             subject=row["subject"],
@@ -193,7 +245,6 @@ class MemoryStore:
             visibility=json.loads(row["visibility_json"]),
             tags=json.loads(row["tags_json"]),
             confidence=row["confidence"],
-            certainty=row["certainty"],
             salience=row["salience"],
             owner=row["owner"],
             source_scene_id=row["source_scene_id"],

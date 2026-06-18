@@ -27,16 +27,10 @@
 {core_memory_json}
 ```
 
-## NarrativePacingResult
+## 近期场景摘要
 
 ```json
-{narrative_pacing_json}
-```
-
-## ShortTermMemory
-
-```json
-{short_term_memory_json}
+{recent_summaries_json}
 ```
 
 ## 生成目标
@@ -46,7 +40,7 @@ scene_text 是最新的剧情文本。
 CurrentState 可能包含与场景相关的：玩家的背包（inventory）、关键物品（key_items）、NPC 态度等信息。
 如果某物品与当前场景的 NPC 或事件有明显关联，必须生成使用或涉及该物品的行动。
 
-其余输入用来帮助你理解过去的剧情背景。
+近期场景摘要用于帮助你理解过去的剧情背景和叙事走向。
 
 先在内部构思 6-8 条可能行动，再只输出其中最适合当前场景的 4 条。
 
@@ -97,7 +91,7 @@ CurrentState 可能包含与场景相关的：玩家的背包（inventory）、�
 3. 不得要求玩家做无法从当前位置自然执行的行动，除非该行动本身是移动、等待或计划。
 4. 不得透露隐藏真相、幕后答案或系统推理。
 5. 不得输出解释文本、Markdown 或 JSON 之外的任何内容。
-6. 不得臆测 CurrentState 中的物品或资源来源：temporary_assets 中的物品（如便条、钱袋）如果 scene_text 或 ShortTermMemory 中没有明确写出给予者，禁止在 preview 的 label/description 中自行指定来源角色。
+6. 不得臆测 CurrentState 中的物品或资源来源：temporary_assets 中的物品（如便条、钱袋）如果 scene_text 或近期场景摘要中没有明确写出给予者，禁止在 preview 的 label/description 中自行指定来源角色。
 
 ## Anchor Kind 指南
 

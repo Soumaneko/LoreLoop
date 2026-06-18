@@ -10,7 +10,7 @@ class RetrievalConfig(BaseModel):
     content_weight: float = 1.0
 
     salience_weight: float = 2.0
-    certainty_weight: float = 0.5
+    confidence_weight: float = 0.5
 
     low_overlap_penalty: float = 2.0
     generic_content_penalty: float = 1.5
@@ -20,7 +20,7 @@ class RetrievalConfig(BaseModel):
     rrf_entity_weight: float = 0.8
     rrf_subject_tag_weight: float = 1.2
     rrf_content_keyword_weight: float = 0.8
-    rrf_type_intent_weight: float = 0.5
+    rrf_subtype_intent_weight: float = 0.5
     rrf_scene_context_weight: float = 0.5
     rrf_layer_intent_weight: float = 0.6
 
@@ -44,7 +44,7 @@ IDF_CLAMP_MIN = 0.5
 IDF_CLAMP_MAX = 2.0
 
 
-ACTION_TYPE_MEMORY_TYPE_BOOST: dict[str, dict[str, float]] = {
+ACTION_TYPE_SUBTYPE_INTENT_BOOST: dict[str, dict[str, float]] = {
     "signal_ally": {
         "agreement": 5.0,
         "trait": 1.5,
@@ -217,7 +217,7 @@ PAST_REF_KEYWORDS = [
 ]
 
 
-PAST_REF_MEMORY_TYPE_BOOST: dict[str, float] = {
+PAST_REF_SUBTYPE_BOOST: dict[str, float] = {
     "agreement": 3.0,
     "event": 2.0,
     "item": 2.0,

@@ -18,10 +18,6 @@
 {core_memory_json}
 ```
 
-## 用户原始行动
-
-{user_input}
-
 ## 参考资料（被大纲引用的召回记忆）
 
 ```json

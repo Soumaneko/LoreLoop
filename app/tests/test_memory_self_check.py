@@ -22,7 +22,7 @@ SCENE_CONTEXT = _cs(scene_id="scene_002", location="灰鹭旅店二楼", time_la
 
 def _make_memory(**overrides) -> Memory:
     defaults = {
-        "type": "agreement",
+        "subtype": "agreement",
         "subject": "沉默暗号",
         "content": "主角和伊莱娜约定：左手轻敲两下桌面表示保持沉默。",
         "entities": ["主角", "伊莱娜"],
@@ -30,7 +30,7 @@ def _make_memory(**overrides) -> Memory:
         "time_label": "第2日夜晚",
         "visibility": ["主角", "伊莱娜"],
         "tags": ["暗号", "沉默"],
-        "certainty": 1.0,
+        "confidence": 1.0,
         "salience": 0.8,
         "source_scene_id": "scene_002",
         "source_text_span": ["用左手轻敲两下桌面，就表示让她保持沉默"],
@@ -215,9 +215,9 @@ class TestDeduplication:
         cleaned, result = SC.check([m1, m2], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 2
 
-    def test_different_type_not_deduped(self):
-        m1 = _make_memory(type="agreement", subject="同主题", content="同内容", entities=["主角"])
-        m2 = _make_memory(type="fact", subject="同主题", content="同内容", entities=["主角"])
+    def test_different_subtype_not_deduped(self):
+        m1 = _make_memory(subtype="agreement", subject="同主题", content="同内容", entities=["主角"])
+        m2 = _make_memory(subtype="fact", subject="同主题", content="同内容", entities=["主角"])
         cleaned, result = SC.check([m1, m2], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 2
 
@@ -243,80 +243,3 @@ class TestSelfCheckResult:
         assert result.ok  # still ok — warnings don't cause removal
         assert result.warning_count >= 1
         assert result.final_count == 1
-
-
-class TestIntegrationWithExtractor:
-    def test_self_check_enabled_in_extractor(self):
-        from app.core.llm import MockLLM
-        from app.domain.recall_memory.extractor import MemoryExtractor
-        import json
-
-        mock = MockLLM()
-        mock.set_responses([
-            json.dumps({
-                "memories": [
-                    {
-                        "type": "agreement",
-                        "subject": "沉默暗号",
-                        "content": "主角和伊莱娜约定暗号。",
-                        "entities": ["主角", "伊莱娜"],
-                        "location": None,
-                        "time_label": None,
-                        "visibility": ["主角", "伊莱娜"],
-                        "tags": ["暗号", "暗号", ""],
-                        "certainty": 1.0,
-                        "salience": 0.8,
-                        "source_scene_id": "wrong",
-                        "source_text_span": ["用左手轻敲两下桌面，就表示让她保持沉默"],
-                    }
-                ]
-            }, ensure_ascii=False)
-        ])
-        extractor = MemoryExtractor(mock.build_gateway(), enable_self_check=True)
-
-        result = extractor.extract(SCENE_TEXT, SCENE_CONTEXT)
-
-        assert len(result.memories) == 1
-        m = result.memories[0]
-        assert m.source_scene_id == "scene_002"
-        assert m.location == "灰鹭旅店二楼"
-        assert m.time_label == "第2日晚上"
-        assert m.tags == ["暗号"]
-
-        check_result = extractor.last_check_result
-        assert check_result is not None
-        assert len(check_result.fixes) >= 3
-
-    def test_self_check_can_be_disabled(self):
-        from app.core.llm import MockLLM
-        from app.domain.recall_memory.extractor import MemoryExtractor
-        import json
-
-        mock = MockLLM()
-        mock.set_responses([
-            json.dumps({
-                "memories": [
-                    {
-                        "type": "agreement",
-                        "subject": "test",
-                        "content": "test content",
-                        "entities": [],
-                        "location": "wrong",
-                        "time_label": None,
-                        "visibility": [],
-                        "tags": [],
-                        "certainty": 1.0,
-                        "salience": 0.5,
-                        "source_scene_id": "wrong",
-                        "source_text_span": ["not in original text"],
-                    }
-                ]
-            }, ensure_ascii=False)
-        ])
-        extractor = MemoryExtractor(mock.build_gateway(), enable_self_check=False)
-
-        result = extractor.extract("irrelevant text", _cs(scene_id="s1"))
-
-        assert len(result.memories) == 1
-        assert result.memories[0].source_scene_id == "wrong"
-        assert result.memories[0].visibility == []

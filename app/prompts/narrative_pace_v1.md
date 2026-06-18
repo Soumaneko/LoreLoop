@@ -40,16 +40,10 @@
 {outcome_resolution_json}
 ```
 
-## 近期剧情
+## 近期场景摘要
 
 ```json
-{short_term_memory_json}
-```
-
-## 召回记忆
-
-```json
-{retrieved_memories_json}
+{recent_summaries_json}
 ```
 
 ## 规则

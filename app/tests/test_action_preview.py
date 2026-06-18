@@ -9,8 +9,7 @@ from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.action_preview.schemas import ActionPreview, ActionPreviewResult
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, NPCState, PlayerState, ResourcesState, SceneState
-from app.domain.narrative_pacer.schemas import NarrativePacingResult
-from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
+from app.domain.scene_summary.schemas import SceneSummary
 from app.workflows.build_action_parse_from_preview import build_parse_from_preview
 from app.workflows.generate_action_preview import generate_action_preview_workflow
 
@@ -51,26 +50,8 @@ def _make_core_memory() -> CoreMemory:
     ])
 
 
-def _make_pacing() -> NarrativePacingResult:
-    return NarrativePacingResult(
-        available_types=["advance", "reveal_information", "relationship_shift"],
-        selected_type="reveal_information",
-        narrative_goal="让玩家围绕米莉给出的线索决定下一步。",
-    )
-
-
-def _make_short_term() -> ShortTermMemory:
-    return ShortTermMemory(
-        recent_scenes=[
-            ShortTermScene(
-                scene_id="scene_001",
-                turn_index=1,
-                user_input="我向米莉打听消息。",
-                scene_text="米莉压低声音，提到仓库区最近有人夜里出没。",
-                narrative_type="reveal_information",
-            )
-        ]
-    )
+def _make_recent_summaries() -> list[SceneSummary]:
+    return []
 
 
 def _build_response() -> str:
@@ -164,8 +145,7 @@ class TestActionPreviewAgent:
             scene_text="米莉压低声音，提到仓库区最近有人夜里出没。",
             current_state=_make_state(),
             core_memory=_make_core_memory(),
-            narrative_pacing=_make_pacing(),
-            short_term_memory=_make_short_term(),
+            recent_summaries=_make_recent_summaries(),
         )
 
         assert isinstance(result, ActionPreviewResult)
@@ -181,8 +161,7 @@ class TestActionPreviewAgent:
             scene_text="米莉压低声音，提到仓库区最近有人夜里出没。",
             current_state=_make_state(),
             core_memory=_make_core_memory(),
-            narrative_pacing=_make_pacing(),
-            short_term_memory=_make_short_term(),
+            recent_summaries=_make_recent_summaries(),
             gateway=mock.build_gateway(),
         )
 

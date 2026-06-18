@@ -12,8 +12,7 @@ from app.domain.narrative_pacer import (
     roll_filter_types,
 )
 from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
-from app.domain.retrieval.schemas import CandidateRetrievalResult
-from app.domain.short_term_memory import ShortTermMemory
+from app.domain.scene_summary.schemas import SceneSummary
 from app.workflows.pace_narrative import pace_narrative_workflow
 
 
@@ -34,10 +33,14 @@ def _outcome(action_id: str, band: str) -> OutcomeFrame:
 
 def _state() -> CurrentState:
     return CurrentState(
-        scene=SceneState(scene_id="scene_001", location="北郡", time_label="清晨"),
+        scene=SceneState(scene_id="scene_001", location="北郡"),
         player=PlayerState(name="卢西安"),
         resources=ResourcesState(),
     )
+
+
+def _recent_summaries() -> list[SceneSummary]:
+    return []
 
 
 def _parse_result() -> ActionParseResult:
@@ -71,7 +74,7 @@ def _pace_response(selected_type: str = "advance") -> str:
 
 
 class TestNarrativePacerFilters:
-    def test_critical_success_and_failure_keeps_all_types(self):
+    def test_critical_success_and_failure_keeps_all_subtypes(self):
         result = OutcomeResolutionResult(
             outcomes=[_outcome("a1", "critical_success"), _outcome("a2", "critical_failure")],
             total_outcomes=2,
@@ -115,7 +118,7 @@ class TestNarrativePacerFilters:
         assert "reveal_information" not in available
         assert "transition" not in available
 
-    def test_cannot_repeat_previous_type_except_advance(self):
+    def test_cannot_repeat_previous_subtype_except_advance(self):
         available, _ = cooldown_filter_types(
             ["advance", "relationship_shift", "complication"],
             ["relationship_shift"],
@@ -143,7 +146,7 @@ class TestNarrativePacerFilters:
 
 
 class TestNarrativePacerLLM:
-    def test_pacer_selects_available_type(self):
+    def test_pacer_selects_available_subtype(self):
         mock = MockLLM()
         mock.set_responses([_pace_response("advance")])
 
@@ -156,8 +159,7 @@ class TestNarrativePacerLLM:
                 total_outcomes=1,
             ),
             core_memory=CoreMemory(items=[]),
-            short_term_memory=ShortTermMemory(recent_scenes=[]),
-            retrieved_memories=CandidateRetrievalResult(candidates=[], total_scanned=0, total_returned=0),
+            recent_summaries=_recent_summaries(),
         )
 
         assert result.selected_type == "advance"
@@ -178,8 +180,7 @@ class TestNarrativePacerLLM:
                     total_outcomes=1,
                 ),
                 core_memory=CoreMemory(items=[]),
-                short_term_memory=ShortTermMemory(recent_scenes=[]),
-                retrieved_memories=CandidateRetrievalResult(candidates=[], total_scanned=0, total_returned=0),
+                recent_summaries=_recent_summaries(),
             )
 
     def test_workflow_returns_valid_result(self):
@@ -195,8 +196,7 @@ class TestNarrativePacerLLM:
                 total_outcomes=1,
             ),
             core_memory=CoreMemory(items=[]),
-            short_term_memory=ShortTermMemory(recent_scenes=[]),
-            retrieved_memories=CandidateRetrievalResult(candidates=[], total_scanned=0, total_returned=0),
+            recent_summaries=_recent_summaries(),
             gateway=mock.build_gateway(),
         )
 

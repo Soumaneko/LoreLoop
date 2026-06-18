@@ -3,8 +3,7 @@ from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.narrative_pacer.schemas import NarrativePacingResult
-from app.domain.short_term_memory.schemas import ShortTermMemory
+from app.domain.scene_summary.schemas import SceneSummary
 
 
 def generate_action_preview_workflow(
@@ -12,8 +11,7 @@ def generate_action_preview_workflow(
     scene_text: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
-    narrative_pacing: NarrativePacingResult,
-    short_term_memory: ShortTermMemory,
+    recent_summaries: list[SceneSummary],
     gateway: LLMGateway,
     trace_id: str | None = None,
 ) -> ActionPreviewResult:
@@ -22,7 +20,6 @@ def generate_action_preview_workflow(
         scene_text=scene_text,
         current_state=current_state,
         core_memory=core_memory,
-        narrative_pacing=narrative_pacing,
-        short_term_memory=short_term_memory,
+        recent_summaries=recent_summaries,
         trace_id=trace_id,
     )

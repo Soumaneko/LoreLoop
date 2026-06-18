@@ -1,11 +1,11 @@
 from app.domain.action.schemas import Anchor, AtomicAction
 from app.domain.recall_memory.schemas import MemoryRecord
 from app.domain.retrieval.config import (
-    ACTION_TYPE_MEMORY_TYPE_BOOST,
+    ACTION_TYPE_SUBTYPE_INTENT_BOOST,
     KIND_FACTOR,
     LOW_WEIGHT_ANCHOR_KINDS,
     PAST_REF_KEYWORDS,
-    PAST_REF_MEMORY_TYPE_BOOST,
+    PAST_REF_SUBTYPE_BOOST,
     RetrievalConfig,
 )
 from app.domain.retrieval.normalizer import normalize_text
@@ -87,12 +87,12 @@ class MemoryScorer:
 
         has_match = any(breakdown[k] > 0 for k in ["entity_score", "tag_score", "subject_score", "content_score"])
 
-        type_boost = 0.0
+        subtype_boost = 0.0
         if has_match:
             for action in atomic_actions:
-                boost_map = ACTION_TYPE_MEMORY_TYPE_BOOST.get(action.action_type, {})
-                type_boost += boost_map.get(memory.type, 0.0)
-        breakdown["type_boost"] = type_boost
+                boost_map = ACTION_TYPE_SUBTYPE_INTENT_BOOST.get(action.action_type, {})
+                subtype_boost += boost_map.get(memory.subtype, 0.0)
+        breakdown["subtype_boost"] = subtype_boost
 
         past_ref_boost = 0.0
         if has_match:
@@ -103,11 +103,11 @@ class MemoryScorer:
 
         if has_match:
             breakdown["salience_boost"] = memory.salience * self.config.salience_weight
-            breakdown["certainty_boost"] = memory.certainty * self.config.certainty_weight
+            breakdown["confidence_boost"] = memory.confidence * self.config.confidence_weight
             breakdown["recency_boost"] = self._compute_recency_boost(memory_index, total_memories)
         else:
             breakdown["salience_boost"] = 0.0
-            breakdown["certainty_boost"] = 0.0
+            breakdown["confidence_boost"] = 0.0
             breakdown["recency_boost"] = 0.0
 
         action_prox_boost = 0.0
@@ -156,7 +156,7 @@ class MemoryScorer:
         if not has_past_ref:
             return 0.0
 
-        boost = PAST_REF_MEMORY_TYPE_BOOST.get(memory.type, 0.0)
+        boost = PAST_REF_SUBTYPE_BOOST.get(memory.subtype, 0.0)
 
         if boost > 0 and matched_anchor_texts:
             entity_anchor_matched = any(

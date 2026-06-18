@@ -4,8 +4,7 @@ from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.narrative_pacer import NarrativePacer, NarrativePacingResult, NarrativeType
 from app.domain.outcome.schemas import OutcomeResolutionResult
-from app.domain.retrieval.schemas import CandidateRetrievalResult
-from app.domain.short_term_memory.schemas import ShortTermMemory
+from app.domain.scene_summary.schemas import SceneSummary
 
 
 def pace_narrative_workflow(
@@ -15,8 +14,7 @@ def pace_narrative_workflow(
     action_parse_result: ActionParseResult,
     outcome_resolution: OutcomeResolutionResult,
     core_memory: CoreMemory,
-    short_term_memory: ShortTermMemory,
-    retrieved_memories: CandidateRetrievalResult,
+    recent_summaries: list[SceneSummary],
     gateway: LLMGateway,
     previous_types: list[NarrativeType] | None = None,
     pacer: NarrativePacer | None = None,
@@ -29,8 +27,7 @@ def pace_narrative_workflow(
         action_parse_result=action_parse_result,
         outcome_resolution=outcome_resolution,
         core_memory=core_memory,
-        short_term_memory=short_term_memory,
-        retrieved_memories=retrieved_memories,
+        recent_summaries=recent_summaries,
         previous_types=previous_types,
         trace_id=trace_id,
     )

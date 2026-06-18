@@ -28,8 +28,8 @@ def _make_anchor(text, normalized=None, kind="character", action_ids=None, **ove
 
 def _make_mem(**overrides):
     defaults = {
-        "type": "trait", "subject": "测试", "content": "测试内容",
-        "entities": ["主角"], "certainty": 1.0, "salience": 0.5,
+        "subtype": "trait", "subject": "测试", "content": "测试内容",
+        "entities": ["主角"], "confidence": 1.0, "salience": 0.5,
     }
     defaults.update(overrides)
     return Memory(**defaults)
@@ -67,12 +67,12 @@ class TestAliasRetrieval:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_mem(
-                type="trait", subject="暗夜精灵女性", content="暗夜精灵女性擅长近战",
-                entities=["暗夜精灵女性"], tags=["战斗"], salience=0.5, certainty=0.8,
+                subtype="trait", subject="暗夜精灵女性", content="暗夜精灵女性擅长近战",
+                entities=["暗夜精灵女性"], tags=["战斗"], salience=0.5, confidence=0.8,
             ),
             _make_mem(
-                type="fact", subject="无关记忆", content="今天天气很好",
-                entities=["主角"], tags=["天气"], salience=0.3, certainty=1.0,
+                subtype="fact", subject="无关记忆", content="今天天气很好",
+                entities=["主角"], tags=["天气"], salience=0.3, confidence=1.0,
             ),
         ])
 
@@ -97,12 +97,12 @@ class TestAliasRetrieval:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_mem(
-                type="trait", subject="莎拉·月刃技能", content="莎拉·月刃是近战专家",
-                entities=["莎拉·月刃"], tags=["战斗"], salience=0.6, certainty=0.9,
+                subtype="trait", subject="莎拉·月刃技能", content="莎拉·月刃是近战专家",
+                entities=["莎拉·月刃"], tags=["战斗"], salience=0.6, confidence=0.9,
             ),
             _make_mem(
-                type="trait", subject="暗夜精灵女性", content="暗夜精灵女性擅长近战",
-                entities=["暗夜精灵女性"], tags=["战斗"], salience=0.5, certainty=0.8,
+                subtype="trait", subject="暗夜精灵女性", content="暗夜精灵女性擅长近战",
+                entities=["暗夜精灵女性"], tags=["战斗"], salience=0.5, confidence=0.8,
             ),
         ])
 
@@ -130,8 +130,8 @@ class TestAliasRetrieval:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_mem(
-                type="trait", subject="狗头人特征", content="狗头人身材矮小",
-                entities=["狗头人"], tags=["种族"], salience=0.5, certainty=0.9,
+                subtype="trait", subject="狗头人特征", content="狗头人身材矮小",
+                entities=["狗头人"], tags=["种族"], salience=0.5, confidence=0.9,
             ),
         ])
 

@@ -12,8 +12,7 @@ from app.domain.narrative_pacer.schemas import (
     NarrativeType,
 )
 from app.domain.outcome.schemas import OutcomeResolutionResult
-from app.domain.retrieval.schemas import CandidateRetrievalResult
-from app.domain.short_term_memory.schemas import ShortTermMemory
+from app.domain.scene_summary.schemas import SceneSummary
 
 
 ALL_NARRATIVE_TYPES: list[NarrativeType] = [
@@ -109,8 +108,7 @@ class NarrativePacer:
         action_parse_result: ActionParseResult,
         outcome_resolution: OutcomeResolutionResult,
         core_memory: CoreMemory,
-        short_term_memory: ShortTermMemory,
-        retrieved_memories: CandidateRetrievalResult,
+        recent_summaries: list[SceneSummary],
         previous_types: list[NarrativeType] | None = None,
         trace_id: str | None = None,
     ) -> NarrativePacingResult:
@@ -137,8 +135,11 @@ class NarrativePacer:
                     "user_input": user_input,
                     "action_parse_result_json": action_parse_result.model_dump_json(indent=2),
                     "outcome_resolution_json": outcome_resolution.model_dump_json(indent=2),
-                    "short_term_memory_json": short_term_memory.model_dump_json(indent=2),
-                    "retrieved_memories_json": retrieved_memories.model_dump_json(indent=2),
+                    "recent_summaries_json": json.dumps(
+                        [s.model_dump(mode="json") for s in recent_summaries],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "output_schema_json": json.dumps(
                         NarrativePacingDecision.model_json_schema(),
                         ensure_ascii=False,

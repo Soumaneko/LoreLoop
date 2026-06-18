@@ -327,7 +327,7 @@ class TestInstructAlly:
 # ══════════════════════════════════════════════════════════════════
 
 class TestComplexAction:
-    def test_multi_type_actions_with_past_reference(self):
+    def test_multi_subtype_actions_with_past_reference(self):
         parser = _make_parser([
             _build_response(
                 actions=[
@@ -393,10 +393,10 @@ class TestComplexAction:
         scene_text = "我假装没看见守卫，低头整理斗篷，从码头边绕过去。靠近仓库后，我观察门口有没有黑帆帮的人，再看看门锁是不是和旧城区见过的那种一样。"
         result = parser.parse(scene_text, _make_current_state())
         assert len(result.atomic_actions) >= 3
-        types = {a.action_type for a in result.atomic_actions}
-        assert "hide_or_stealth" in types
-        assert "observe" in types
-        assert "inspect_object" in types
+        subtypes = {a.action_type for a in result.atomic_actions}
+        assert "hide_or_stealth" in subtypes
+        assert "observe" in subtypes
+        assert "inspect_object" in subtypes
 
         anchor_texts = {a.text for a in result.anchors}
         assert "守卫" in anchor_texts

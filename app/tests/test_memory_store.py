@@ -6,7 +6,7 @@ from app.domain.recall_memory.store import MemoryStore
 
 def _make_memory(**overrides) -> Memory:
     defaults = {
-        "type": "fact",
+        "subtype": "fact",
         "subject": "测试记忆",
         "content": "这是一条测试记忆内容。",
         "entities": ["主角"],
@@ -14,7 +14,7 @@ def _make_memory(**overrides) -> Memory:
         "time_label": "第1日",
         "visibility": ["主角"],
         "tags": ["测试"],
-        "certainty": 1.0,
+        "confidence": 1.0,
         "salience": 0.5,
         "source_scene_id": "scene_test",
         "source_text_span": ["测试文本"],
@@ -34,12 +34,12 @@ class TestMemoryStoreSaveAndRead:
             records = store.list_all()
             assert len(records) == 1
             r = records[0]
-            assert r.type == "fact"
+            assert r.subtype == "fact"
             assert r.subject == "测试记忆"
             assert r.content == "这是一条测试记忆内容。"
             assert r.entities == ["主角"]
             assert r.location == "测试地点"
-            assert r.certainty == 1.0
+            assert r.confidence == 1.0
             assert isinstance(r.id, str) and len(r.id) == 32
             assert r.created_at != ""
             assert r.active is True
@@ -111,10 +111,10 @@ class TestMemoryStoreDedup:
             assert len(ids2) == 0
             assert store.count() == 1
 
-    def test_different_type_allows_save(self):
+    def test_different_subtype_allows_save(self):
         with MemoryStore(":memory:") as store:
-            m1 = _make_memory(type="fact", subject="同主题", content="同内容")
-            m2 = _make_memory(type="event", subject="同主题", content="同内容")
+            m1 = _make_memory(subtype="fact", subject="同主题", content="同内容")
+            m2 = _make_memory(subtype="event", subject="同主题", content="同内容")
 
             ids = store.save_many([m1, m2])
             assert len(ids) == 2

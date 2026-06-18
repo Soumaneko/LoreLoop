@@ -6,7 +6,6 @@ from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll_modifier.schemas import (
     LLMRollModifierBatch,
     RollModifier,
@@ -23,7 +22,6 @@ class RollModifierEvaluator:
         parse_result: ActionParseResult,
         current_state: CurrentState,
         core_memory: CoreMemory,
-        retrieved_memories: CandidateRetrievalResult | None = None,
         *,
         roll_actions: list[AtomicAction] | None = None,
         trace_id: str | None = None,
@@ -47,11 +45,6 @@ class RollModifierEvaluator:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_json": current_state.model_dump_json(indent=2),
                     "action_parse_result_json": roll_parse_result.model_dump_json(indent=2),
-                    "retrieved_memories_json": (
-                        retrieved_memories.model_dump_json(indent=2)
-                        if retrieved_memories is not None
-                        else "{}"
-                    ),
                     "output_schema_json": json.dumps(
                         LLMRollModifierBatch.model_json_schema(),
                         ensure_ascii=False,

@@ -2,16 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-
-MemoryType = Literal[
-    "agreement",
-    "fact",
-    "trait",
-    "relationship",
-    "item",
-    "event",
-]
+from pydantic import BaseModel, Field, field_validator
 
 MemoryLayer = Literal["truth", "claim", "belief", "profile"]
 
@@ -56,22 +47,7 @@ def _new_id() -> str:
     return uuid.uuid4().hex
 
 
-def _legacy_type_from_subtype(subtype: str | None, layer: str | None) -> MemoryType:
-    if subtype in {"agreement"}:
-        return "agreement"
-    if subtype in {"item", "resource"}:
-        return "item"
-    if subtype in {"relationship", "impression"}:
-        return "relationship"
-    if subtype in {"trait"} or layer == "profile":
-        return "trait"
-    if subtype in {"event"}:
-        return "event"
-    return "fact"
-
-
 class Memory(BaseModel):
-    type: MemoryType | None = None
     layer: MemoryLayer = "truth"
     subtype: MemorySubtype = "fact"
     subject: str
@@ -84,8 +60,7 @@ class Memory(BaseModel):
     visibility: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
-    confidence: float | None = Field(default=None, ge=0, le=1)
-    certainty: float | None = Field(default=None, ge=0, le=1)
+    confidence: float = Field(default=1.0, ge=0, le=1)
     salience: float = Field(ge=0, le=1)
     owner: str | None = None
 
@@ -93,28 +68,9 @@ class Memory(BaseModel):
     source_text_span: list[str] = Field(default_factory=list)
     source_pending_ids: list[str] = Field(default_factory=list)
 
-    @model_validator(mode="after")
-    def _fill_compat_fields(self):
-        if self.type is None:
-            self.type = _legacy_type_from_subtype(self.subtype, self.layer)
-        if self.confidence is None and self.certainty is not None:
-            self.confidence = self.certainty
-        if self.certainty is None and self.confidence is not None:
-            self.certainty = self.confidence
-        if self.confidence is None:
-            self.confidence = 1.0
-        if self.certainty is None:
-            self.certainty = self.confidence
-        return self
-
-
-class MemoryExtractResult(BaseModel):
-    memories: list[Memory] = Field(default_factory=list)
-
 
 class MemoryRecord(BaseModel):
     id: str
-    type: MemoryType
     layer: MemoryLayer = "truth"
     subtype: MemorySubtype = "fact"
     subject: str
@@ -128,7 +84,6 @@ class MemoryRecord(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
     confidence: float = Field(ge=0, le=1)
-    certainty: float
     salience: float
     owner: str | None = None
 
@@ -192,7 +147,6 @@ class ClassifiedMemoryCandidate(BaseModel):
 
     def to_memory(self) -> Memory:
         return Memory(
-            type=_legacy_type_from_subtype(self.subtype, self.layer),
             layer=self.layer,
             subtype=self.subtype,
             subject=self.subject,
@@ -204,7 +158,6 @@ class ClassifiedMemoryCandidate(BaseModel):
             visibility=self.visibility,
             tags=self.tags,
             confidence=self.confidence,
-            certainty=self.confidence,
             salience=self.salience,
             source_scene_id=self.source_scene_id,
             source_text_span=self.source_text_span,

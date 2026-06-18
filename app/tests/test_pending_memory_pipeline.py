@@ -263,7 +263,6 @@ class TestBatchClassifyPendingMemories:
             memory = memory_store.list_all()[0]
             assert memory.layer == "claim"
             assert memory.subtype == "rumor"
-            assert memory.type == "fact"
             assert memory.confidence == 0.9
             assert memory.source_pending_ids == ["pending_a", "pending_b"]
             assert len(memory.source_text_span) == 2

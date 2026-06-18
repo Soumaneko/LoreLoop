@@ -273,7 +273,6 @@ def _build_memory_from_proposal(
         visibility=_unique([name for source in sources for name in source.visibility]),
         tags=_unique([*proposal.tags, *[tag for source in sources for tag in source.tags]]),
         confidence=max(source.confidence for source in sources),
-        certainty=max(source.certainty for source in sources),
         salience=max(source.salience for source in sources),
         owner=proposal.owner,
         source_scene_id=source_scene_id,

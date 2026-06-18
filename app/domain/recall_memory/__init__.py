@@ -5,11 +5,9 @@ from .schemas import (
     Memory,
     MemoryBatchClassificationResult,
     MemoryDraftExtractResult,
-    MemoryExtractResult,
     MemoryLayer,
     MemoryRecord,
     MemorySubtype,
-    MemoryType,
     PendingMemoryItem,
 )
 from .batch_classifier import (
@@ -18,7 +16,6 @@ from .batch_classifier import (
     SimilarMemoryPreMerger,
 )
 from .draft_extractor import MemoryDraftExtractor
-from .extractor import MemoryExtractor
 from .pending_store import PendingMemoryStore
 from .store import MemoryStore
 from .consolidator import (
@@ -29,21 +26,17 @@ from .consolidator import (
     MemoryConsolidator,
 )
 from .repository import MemoryRepository
-from .service import MemoryService
 from .self_check import MemorySelfCheck, SelfCheckResult
-from .llm_check import LLMCheck, LLMCheckChange, LLMCheckResponse, LLMCheckResult
 
 __all__ = [
     "Memory",
     "MemoryLayer",
     "MemorySubtype",
-    "MemoryExtractResult",
     "MemoryDraftExtractResult",
     "MemoryBatchClassificationResult",
     "MemoryBatchClassifier",
     "MemoryBatchClassifierResult",
     "MemoryRecord",
-    "MemoryType",
     "PendingMemoryItem",
     "PendingMemoryStore",
     "ClassifiedMemoryCandidate",
@@ -51,7 +44,6 @@ __all__ = [
     "ImportanceHint",
     "MemoryDraftExtractor",
     "SimilarMemoryPreMerger",
-    "MemoryExtractor",
     "MemoryStore",
     "ConsolidationProposal",
     "MemoryConsolidationApplyResult",
@@ -59,11 +51,6 @@ __all__ = [
     "MemoryConsolidationGroup",
     "MemoryConsolidator",
     "MemoryRepository",
-    "MemoryService",
     "MemorySelfCheck",
     "SelfCheckResult",
-    "LLMCheck",
-    "LLMCheckChange",
-    "LLMCheckResponse",
-    "LLMCheckResult",
 ]

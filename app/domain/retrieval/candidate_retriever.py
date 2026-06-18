@@ -24,14 +24,14 @@ from app.domain.retrieval.sub_retrievers import (
     layer_intent_retrieve,
     scene_context_retrieve,
     subject_tag_retrieve,
-    type_intent_retrieve,
+    subtype_intent_retrieve,
 )
 
 RRF_WEIGHTS = [
     "rrf_entity_weight",
     "rrf_subject_tag_weight",
     "rrf_content_keyword_weight",
-    "rrf_type_intent_weight",
+    "rrf_subtype_intent_weight",
     "rrf_scene_context_weight",
     "rrf_layer_intent_weight",
 ]
@@ -207,7 +207,7 @@ class CandidateRetriever:
         entity_scores = entity_retrieve(ctx, self.config)
         subject_tag_scores = subject_tag_retrieve(ctx, self.config)
         content_scores = content_keyword_retrieve(ctx, self.config)
-        type_intent_scores = type_intent_retrieve(
+        subtype_intent_scores = subtype_intent_retrieve(
             ctx, entity_scores, subject_tag_scores, content_scores, self.config
         )
         scene_context_scores = scene_context_retrieve(
@@ -222,7 +222,7 @@ class CandidateRetriever:
                 entity_scores,
                 subject_tag_scores,
                 content_scores,
-                type_intent_scores,
+                subtype_intent_scores,
                 scene_context_scores,
                 layer_intent_scores,
             ],
@@ -230,7 +230,7 @@ class CandidateRetriever:
                 self.config.rrf_entity_weight,
                 self.config.rrf_subject_tag_weight,
                 self.config.rrf_content_keyword_weight,
-                self.config.rrf_type_intent_weight,
+                self.config.rrf_subtype_intent_weight,
                 self.config.rrf_scene_context_weight,
                 self.config.rrf_layer_intent_weight,
             ],
@@ -241,14 +241,14 @@ class CandidateRetriever:
             "entity_scores": entity_scores,
             "subject_tag_scores": subject_tag_scores,
             "content_scores": content_scores,
-            "type_intent_scores": type_intent_scores,
+            "subtype_intent_scores": subtype_intent_scores,
             "scene_context_scores": scene_context_scores,
             "layer_intent_scores": layer_intent_scores,
             "rrf_scores": rrf_scores,
             "entity_ranks": self._compute_ranks(entity_scores),
             "subject_tag_ranks": self._compute_ranks(subject_tag_scores),
             "content_ranks": self._compute_ranks(content_scores),
-            "type_intent_ranks": self._compute_ranks(type_intent_scores),
+            "subtype_intent_ranks": self._compute_ranks(subtype_intent_scores),
             "scene_context_ranks": self._compute_ranks(scene_context_scores),
             "layer_intent_ranks": self._compute_ranks(layer_intent_scores),
             "match_info": self._compute_match_info(ctx),
@@ -282,7 +282,7 @@ class CandidateRetriever:
                         "max_entity_score": 0.0, "max_entity_rank": 0,
                         "max_subject_tag_score": 0.0, "max_subject_tag_rank": 0,
                         "max_content_score": 0.0, "max_content_rank": 0,
-                        "max_type_intent_score": 0.0, "max_type_intent_rank": 0,
+                        "max_subtype_intent_score": 0.0, "max_subtype_intent_rank": 0,
                         "max_scene_context_score": 0.0, "max_scene_context_rank": 0,
                         "max_layer_intent_score": 0.0, "max_layer_intent_rank": 0,
                         "max_rrf": 0.0,
@@ -299,7 +299,7 @@ class CandidateRetriever:
                     ("max_entity_score", "entity_scores", "entity_ranks"),
                     ("max_subject_tag_score", "subject_tag_scores", "subject_tag_ranks"),
                     ("max_content_score", "content_scores", "content_ranks"),
-                    ("max_type_intent_score", "type_intent_scores", "type_intent_ranks"),
+                    ("max_subtype_intent_score", "subtype_intent_scores", "subtype_intent_ranks"),
                     ("max_scene_context_score", "scene_context_scores", "scene_context_ranks"),
                     ("max_layer_intent_score", "layer_intent_scores", "layer_intent_ranks"),
                 ]:
@@ -335,22 +335,21 @@ class CandidateRetriever:
                 "subject_tag_rank": ms["max_subject_tag_rank"],
                 "content_score": ms["max_content_score"],
                 "content_rank": ms["max_content_rank"],
-                "type_intent_score": ms["max_type_intent_score"],
-                "type_intent_rank": ms["max_type_intent_rank"],
+                "subtype_intent_score": ms["max_subtype_intent_score"],
+                "subtype_intent_rank": ms["max_subtype_intent_rank"],
                 "scene_context_score": ms["max_scene_context_score"],
                 "scene_context_rank": ms["max_scene_context_rank"],
                 "layer_intent_score": ms["max_layer_intent_score"],
                 "layer_intent_rank": ms["max_layer_intent_rank"],
                 "rrf_score": ms["max_rrf"],
                 "max_rrf": ms["max_rrf"],
-                "multi_action_bonus": final_score - ms["max_rrf"],
+                "multi_action_bonus": bonus,
                 "num_actions_hit": n_actions,
                 "total_memories": total_memories,
             }
             results.append(
                 MemoryCandidate(
                     memory_id=mem.id,
-                    memory_type=mem.type,
                     layer=mem.layer,
                     subtype=mem.subtype,
                     subject=mem.subject,
@@ -363,7 +362,6 @@ class CandidateRetriever:
                     owner=mem.owner,
                     confidence=mem.confidence,
                     salience=mem.salience,
-                    certainty=mem.certainty,
                     source_scene_id=mem.source_scene_id,
                     source_text_span=list(mem.source_text_span),
                     source_pending_ids=list(mem.source_pending_ids),

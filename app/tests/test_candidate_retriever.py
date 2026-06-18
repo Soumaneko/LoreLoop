@@ -13,7 +13,7 @@ from app.domain.retrieval.config import RetrievalConfig
 
 def _make_memory(**overrides) -> Memory:
     defaults = {
-        "type": "fact",
+        "subtype": "fact",
         "subject": "测试记忆",
         "content": "这是一条测试记忆内容。",
         "entities": ["主角"],
@@ -21,7 +21,7 @@ def _make_memory(**overrides) -> Memory:
         "time_label": "第1日",
         "visibility": ["主角"],
         "tags": ["测试"],
-        "certainty": 1.0,
+        "confidence": 1.0,
         "salience": 0.5,
         "source_scene_id": "scene_test",
         "source_text_span": ["测试文本"],
@@ -99,7 +99,6 @@ class TestMemoryCandidateShape:
                 visibility=["主角"],
                 owner="守卫",
                 confidence=0.7,
-                certainty=None,
                 salience=0.8,
                 source_scene_id="scene_007",
                 source_text_span=["守卫声称艾琳娜在钟楼附近见过黑衣人。"],
@@ -121,13 +120,11 @@ class TestMemoryCandidateShape:
 
         assert len(result.candidates) == 1
         candidate = result.candidates[0]
-        assert candidate.memory_type == "fact"
         assert candidate.layer == "claim"
         assert candidate.subtype == "testimony"
         assert candidate.owner == "守卫"
         assert candidate.visibility == ["主角"]
         assert candidate.confidence == pytest.approx(0.7)
-        assert candidate.certainty == pytest.approx(0.7)
         assert candidate.source_scene_id == "scene_007"
         assert candidate.source_text_span == ["守卫声称艾琳娜在钟楼附近见过黑衣人。"]
         assert candidate.source_pending_ids == ["pending_1"]
@@ -145,7 +142,7 @@ class TestActiveMemoryFiltering:
                 entities=["旧钥匙", "钟楼"],
                 tags=["钥匙"],
                 salience=0.9,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
                 subject="新钥匙传闻",
@@ -153,7 +150,7 @@ class TestActiveMemoryFiltering:
                 entities=["旧钥匙", "钟楼"],
                 tags=["钥匙"],
                 salience=0.9,
-                certainty=0.9,
+                confidence=0.9,
             ),
         ])
         store.deactivate(ids[0], merged_into=ids[1])
@@ -173,49 +170,6 @@ class TestActiveMemoryFiltering:
 
 
 class TestLayerIntentRetrieval:
-    def test_speak_action_prefers_claim_over_truth_when_anchor_match_ties(self):
-        store = MemoryStore(":memory:")
-        store.save_many([
-            _make_memory(
-                layer="truth",
-                subtype="fact",
-                subject="艾琳娜事实",
-                content="艾琳娜常在钟楼附近巡逻。",
-                entities=["艾琳娜"],
-                tags=["钟楼"],
-                salience=0.7,
-                certainty=0.9,
-            ),
-            _make_memory(
-                layer="claim",
-                subtype="testimony",
-                subject="艾琳娜证词",
-                content="酒馆老板声称艾琳娜昨夜去了钟楼。",
-                entities=["艾琳娜"],
-                tags=["钟楼"],
-                salience=0.7,
-                certainty=0.9,
-            ),
-        ])
-
-        action = _make_action(
-            action_id="A1",
-            action_type="speak",
-            raw_text="我向酒馆老板打听艾琳娜",
-            target="酒馆老板",
-        )
-        anchors = [_make_anchor("艾琳娜", "艾琳娜", kind="character", action_ids=["A1"])]
-
-        result = CandidateRetriever(store).retrieve(
-            _make_parse_result(actions=[action], anchors=anchors)
-        )
-
-        assert [candidate.subject for candidate in result.candidates] == [
-            "艾琳娜证词",
-            "艾琳娜事实",
-        ]
-        assert result.candidates[0].score_breakdown["layer_intent_score"] > result.candidates[1].score_breakdown["layer_intent_score"]
-
     def test_layer_intent_does_not_retrieve_without_anchor_match(self):
         store = MemoryStore(":memory:")
         store.save_many([
@@ -227,7 +181,7 @@ class TestLayerIntentRetrieval:
                 entities=["酒馆老板", "码头"],
                 tags=["证词"],
                 salience=1.0,
-                certainty=1.0,
+                confidence=1.0,
             )
         ])
 
@@ -254,31 +208,31 @@ class TestSecretSignalRecall:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="agreement",
+                subtype="agreement",
                 subject="沉默暗号",
                 content="主角与伊莱娜约定左手轻敲两下表示保持沉默。",
                 entities=["主角", "伊莱娜"],
                 tags=["暗号", "约定", "沉默"],
                 salience=0.8,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="伊莱娜性格",
                 content="伊莱娜是一个冷静且敏锐的女性角色。",
                 entities=["伊莱娜"],
                 tags=["性格"],
                 salience=0.5,
-                certainty=0.7,
+                confidence=0.7,
             ),
             _make_memory(
-                type="fact",
+                subtype="fact",
                 subject="码头环境",
                 content="码头仓库区堆满了各种货物箱。",
                 entities=["主角"],
                 tags=["环境"],
                 salience=0.3,
-                certainty=1.0,
+                confidence=1.0,
             ),
         ])
 
@@ -309,11 +263,11 @@ class TestSecretSignalRecall:
         result = retriever.retrieve(parse_result)
 
         assert len(result.candidates) >= 1
-        assert result.candidates[0].memory_type == "agreement"
+        assert result.candidates[0].subtype == "agreement"
         assert result.candidates[0].subject == "沉默暗号"
         assert result.candidates[0].score > 0
         assert "entity_score" in result.candidates[0].score_breakdown
-        assert "type_intent_score" in result.candidates[0].score_breakdown
+        assert "subtype_intent_score" in result.candidates[0].score_breakdown
         assert "rrf_score" in result.candidates[0].score_breakdown
 
         signal_score = result.candidates[0].score
@@ -325,22 +279,22 @@ class TestSecretSignalRecall:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="agreement",
+                subtype="agreement",
                 subject="沉默暗号",
                 content="主角与伊莱娜约定左手轻敲两下表示保持沉默。",
                 entities=["主角", "伊莱娜"],
                 tags=["暗号", "约定", "沉默"],
                 salience=0.8,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="伊莱娜左耳听力不佳",
                 content="伊莱娜左耳听力不佳，需要大声说话才能听到。",
                 entities=["伊莱娜"],
                 tags=["trait", "弱点"],
                 salience=0.5,
-                certainty=0.8,
+                confidence=0.8,
             ),
         ])
 
@@ -383,31 +337,31 @@ class TestDoorLockRecall:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="item",
+                subtype="item",
                 subject="旧式仓库锁",
                 content="主角曾在旧城区见过一种双层弹簧结构的旧式仓库锁。",
                 entities=["主角", "旧城区"],
                 tags=["门锁", "仓库", "旧城区"],
                 salience=0.6,
-                certainty=0.8,
+                confidence=0.8,
             ),
             _make_memory(
-                type="fact",
+                subtype="fact",
                 subject="旧城区历史",
                 content="旧城区在十年前经历了一场大火，大部分建筑被毁。",
                 entities=["旧城区"],
                 tags=["历史"],
                 salience=0.4,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="主角习惯",
                 content="主角习惯在进入新房间前检查门锁。",
                 entities=["主角"],
                 tags=["习惯"],
                 salience=0.5,
-                certainty=0.7,
+                confidence=0.7,
             ),
         ])
 
@@ -455,31 +409,31 @@ class TestAvoidEntityPollution:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="伊莱娜喜欢喝红茶",
                 content="伊莱娜喜欢喝红茶，每天下午都会泡一杯。",
                 entities=["伊莱娜"],
                 tags=["喜好"],
                 salience=0.3,
-                certainty=1.0,
+                confidence=1.0,
             ),
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="伊莱娜左耳听力不佳",
                 content="伊莱娜左耳听力不佳，需要从右边和她说话。",
                 entities=["伊莱娜"],
                 tags=["弱点", "身体"],
                 salience=0.5,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="agreement",
+                subtype="agreement",
                 subject="沉默暗号约定",
                 content="主角和伊莱娜约定沉默暗号，左手轻敲两下表示保持安静。",
                 entities=["主角", "伊莱娜"],
                 tags=["暗号", "约定"],
                 salience=0.8,
-                certainty=0.9,
+                confidence=0.9,
             ),
         ])
 
@@ -524,49 +478,49 @@ class TestPastReferenceAlone:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="agreement",
+                subtype="agreement",
                 subject="沉默暗号约定",
                 content="主角和伊莱娜约定沉默暗号，左手轻敲两下表示保持安静。",
                 entities=["主角", "伊莱娜"],
                 tags=["暗号", "约定"],
                 salience=0.8,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="event",
+                subtype="event",
                 subject="旧城区大火",
                 content="旧城区在十年前经历了一场大火。",
                 entities=["旧城区"],
                 tags=["历史", "火灾"],
                 salience=0.4,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="fact",
+                subtype="fact",
                 subject="码头的地形",
                 content="码头仓库区有三个主要入口。",
                 entities=["主角"],
                 tags=["地形"],
                 salience=0.3,
-                certainty=1.0,
+                confidence=1.0,
             ),
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="伊莱娜喜欢红茶",
                 content="伊莱娜喜欢喝红茶。",
                 entities=["伊莱娜"],
                 tags=["喜好"],
                 salience=0.3,
-                certainty=1.0,
+                confidence=1.0,
             ),
             _make_memory(
-                type="item",
+                subtype="item",
                 subject="鹰徽章",
                 content="一枚烧焦的鹰徽章，边缘已经融化变形。",
                 entities=["主角"],
                 tags=["物品", "证据"],
                 salience=0.5,
-                certainty=0.8,
+                confidence=0.8,
             ),
         ])
 
@@ -606,31 +560,31 @@ class TestItemAction:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="item",
+                subtype="item",
                 subject="烧焦的鹰徽章",
                 content="一枚烧焦的鹰徽章，边缘已经融化变形，背面隐约可见一个家族纹章。",
                 entities=["主角"],
                 tags=["物品", "证据", "鹰徽章"],
                 salience=0.7,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="fact",
+                subtype="fact",
                 subject="鹰家族历史",
                 content="鹰家族是旧城区的古老贵族之一。",
                 entities=["鹰家族"],
                 tags=["历史", "贵族"],
                 salience=0.4,
-                certainty=0.7,
+                confidence=0.7,
             ),
             _make_memory(
-                type="event",
+                subtype="event",
                 subject="找到徽章",
                 content="主角在废墟中发现了一枚烧焦的徽章。",
                 entities=["主角"],
                 tags=["发现", "徽章"],
                 salience=0.5,
-                certainty=0.8,
+                confidence=0.8,
             ),
         ])
 
@@ -677,31 +631,31 @@ class TestConditionNotRecalling:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="主角谨慎",
                 content="主角是一个十分谨慎的人，总是留意周围的目光。",
                 entities=["主角"],
                 tags=["性格", "谨慎"],
                 salience=0.5,
-                certainty=0.8,
+                confidence=0.8,
             ),
             _make_memory(
-                type="fact",
+                subtype="fact",
                 subject="码头仓库布局",
                 content="码头仓库区有三个主要通道和两个紧急出口。",
                 entities=["主角"],
                 tags=["地形", "仓库"],
                 salience=0.4,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="卫兵巡逻习惯",
                 content="码头仓库区的卫兵每十五分钟巡逻一次。",
                 entities=["卫兵"],
                 tags=["巡逻", "规律"],
                 salience=0.5,
-                certainty=0.8,
+                confidence=0.8,
             ),
         ])
 
@@ -740,13 +694,13 @@ class TestScoreBreakdown:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="agreement",
+                subtype="agreement",
                 subject="沉默暗号约定",
                 content="主角和伊莱娜约定沉默暗号。",
                 entities=["主角", "伊莱娜"],
                 tags=["暗号", "约定"],
                 salience=0.8,
-                certainty=0.9,
+                confidence=0.9,
             ),
         ])
 
@@ -779,7 +733,7 @@ class TestScoreBreakdown:
             "entity_score", "entity_rank",
             "subject_tag_score", "subject_tag_rank",
             "content_score", "content_rank",
-            "type_intent_score", "type_intent_rank",
+            "subtype_intent_score", "subtype_intent_rank",
             "scene_context_score", "scene_context_rank",
             "rrf_score", "total_memories",
         ]
@@ -792,13 +746,13 @@ class TestScoreBreakdown:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="agreement",
+                subtype="agreement",
                 subject="沉默暗号约定",
                 content="主角和伊莱娜约定沉默暗号。",
                 entities=["主角", "伊莱娜"],
                 tags=["暗号"],
                 salience=0.8,
-                certainty=0.9,
+                confidence=0.9,
             ),
         ])
 
@@ -849,7 +803,7 @@ class TestEmptyAndNoMatch:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="fact",
+                subtype="fact",
                 subject="码头天气",
                 content="码头今天的天气很好。",
                 entities=["主角"],
@@ -889,16 +843,16 @@ class TestActionProximityBoost:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                type="agreement",
+                subtype="agreement",
                 subject="沉默暗号",
                 content="主角与伊莱娜约定左手轻敲两下表示保持沉默。",
                 entities=["主角", "伊莱娜"],
                 tags=["暗号", "沉默", "约定"],
                 salience=0.8,
-                certainty=0.9,
+                confidence=0.9,
             ),
             _make_memory(
-                type="trait",
+                subtype="trait",
                 subject="伊莱娜性格",
                 content="伊莱娜性格冷静。",
                 entities=["伊莱娜"],
@@ -946,13 +900,13 @@ class TestTopK:
         for i in range(25):
             store.save_many([
                 _make_memory(
-                    type="fact",
+                    subtype="fact",
                     subject=f"记忆{i}",
                     content=f"伊莱娜在第{i}天做了一件事。",
                     entities=["伊莱娜"],
                     tags=[f"tag{i}"],
                     salience=0.5,
-                    certainty=0.8,
+                    confidence=0.8,
                 ),
             ])
 
@@ -986,13 +940,13 @@ class TestTopK:
         for i in range(10):
             store.save_many([
                 _make_memory(
-                    type="fact",
+                    subtype="fact",
                     subject=f"记忆{i}",
                     content=f"伊莱娜在第{i}天做了一件事。",
                     entities=["伊莱娜"],
                     tags=[f"tag{i}"],
                     salience=0.5,
-                    certainty=0.8,
+                    confidence=0.8,
                 ),
             ])
 

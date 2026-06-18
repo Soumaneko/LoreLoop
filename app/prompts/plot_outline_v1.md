@@ -30,12 +30,6 @@
 {action_parse_result_json}
 ```
 
-## RollResultBatch
-
-```json
-{roll_results_json}
-```
-
 ## OutcomeResolutionResult
 
 ```json
@@ -46,12 +40,6 @@
 
 ```json
 {narrative_pacing_json}
-```
-
-## ShortTermMemory
-
-```json
-{short_term_memory_json}
 ```
 
 ## Retrieved Memories
@@ -91,17 +79,14 @@ Entity Profiles 是系统积累的相关实体档案，包含 NPC 性格/能力�
 3. ActionParseResult
 4. OutcomeResolutionResult
 5. NarrativePacingResult
-6. RollResultBatch
-7. ShortTermMemory
-8. Retrieved Memories
-9. Entity Profiles
-10. SceneSummaries
-11. General narrative common sense
+6. Retrieved Memories
+7. Entity Profiles
+8. SceneSummaries
+9. General narrative common sense
 
-RollResultBatch 是原始事实。
 OutcomeResolutionResult 是叙事约束。
 NarrativePacingResult 是章节层面的节奏方向。
-SceneSummaries 是长期叙事连续性摘要，只能用于理解长期剧情脉络，不得覆盖 CurrentState、ShortTermMemory 或更具体的 Retrieved Memories。
+SceneSummaries 是长期叙事连续性摘要，只能用于理解长期剧情脉络，不得覆盖 CurrentState 或更具体的 Retrieved Memories。
 Entity Profiles 是实体档案，只能用于维持实体表现一致性，不得覆盖 CurrentState、OutcomeResolutionResult 或 Retrieved Memories。
 
 ## Requirements
@@ -109,7 +94,7 @@ Entity Profiles 是实体档案，只能用于维持实体表现一致性，不�
 1. 只生成剧情大纲，不写最终场景正文。
 2. 大纲必须基于 ActionParseResult 中解析出的行动。
 3. 必须遵循 OutcomeResolutionResult。
-4. 不得重新解释、忽略、重掷或违背 RollResultBatch 中的骰值。
+4. 不得重新解释、忽略或违背 OutcomeResolutionResult 中的叙事约束。
 5. 不得违背 CoreMemory 或 CurrentState。
 6. 本章节必须围绕 NarrativePacingResult.selected_type 和 NarrativePacingResult.narrative_goal 组织。
 7. 不得切换到 NarrativePacingResult 之外的叙事类型。
@@ -170,7 +155,7 @@ Retrieved Memories 中可能同时包含 classified memories 和 pending_notes�
 2. claim：只能作为传闻、情报、证词、报告、线索或某人的说法使用，不能直接当作世界真相。
 3. belief：只能影响 owner 的行为、台词、误解和态度，不能当作世界事实。
 4. profile：只能作为长期倾向，不能覆盖 CurrentState。
-5. confidence 表示该 layer 内的可靠度：claim 的 confidence 表示“这个说法存在”的可靠度，不表示说法为真；belief 的 confidence 表示 owner 持有该信念的可靠度，不表示信念为真。
+5. confidence 表示该 layer 内的可靠度：claim 的 confidence 表示"这个说法存在"的可靠度，不表示说法为真；belief 的 confidence 表示 owner 持有该信念的可靠度，不表示信念为真。
 6. pending_notes：只能作为近期上下文参考，不是已确认长期记忆，不能覆盖 CurrentState。
 
 ## Scene Summary Usage Policy
@@ -180,7 +165,7 @@ SceneSummaries 可能包含多个 level 的长期叙事摘要。
 必须遵守：
 
 1. 只用于长期连续性、任务线和关系线的背景理解。
-2. 不得把 SceneSummaries 当作比 CurrentState、ShortTermMemory 或 Retrieved Memories 更精确的事实来源。
+2. 不得把 SceneSummaries 当作比 CurrentState 或 Retrieved Memories 更精确的事实来源。
 3. 不得从 SceneSummaries 中发明精确地点、物品、NPC 当前状态或隐藏真相。
 4. 如果 SceneSummaries 与更具体的当前信息冲突，忽略 SceneSummaries。
 

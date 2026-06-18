@@ -323,4 +323,5 @@ class TestPromptLoader:
         loader = PromptLoader()
         tasks = loader.list_tasks()
         assert "echo_structured_test" in tasks
-        assert "memory_extract" in tasks
+        assert "memory_draft_extract" in tasks
+        assert "memory_batch_classify" in tasks

@@ -21,7 +21,6 @@ class SceneWriterAgent:
         outline: PlotOutlineResult,
         current_state: CurrentState,
         core_memory: CoreMemory,
-        user_input: str,
         selected_memories: list[MemoryCandidate],
         recent_scene: ShortTermScene | None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
@@ -39,7 +38,6 @@ class SceneWriterAgent:
                     "outline_json": outline.model_dump_json(indent=2),
                     "current_state_json": current_state.model_dump_json(indent=2),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "user_input": user_input,
                     "selected_memories_json": json.dumps(
                         [m.model_dump() for m in selected_memories],
                         ensure_ascii=False, indent=2,

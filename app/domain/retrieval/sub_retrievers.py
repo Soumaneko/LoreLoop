@@ -5,13 +5,13 @@ from app.domain.action.schemas import Anchor, AtomicAction
 from app.domain.recall_memory.schemas import MemoryRecord
 from app.domain.retrieval.config import (
     ACTION_TYPE_LAYER_BOOST,
-    ACTION_TYPE_MEMORY_TYPE_BOOST,
+    ACTION_TYPE_SUBTYPE_INTENT_BOOST,
     ACTION_TYPE_SUBTYPE_BOOST,
     IDF_CLAMP_MAX,
     IDF_CLAMP_MIN,
     KIND_FACTOR,
     PAST_REF_KEYWORDS,
-    PAST_REF_MEMORY_TYPE_BOOST,
+    PAST_REF_SUBTYPE_BOOST,
     RetrievalConfig,
 )
 from app.domain.retrieval.normalizer import normalize_text
@@ -235,18 +235,15 @@ def layer_intent_retrieve(
             score += ACTION_TYPE_LAYER_BOOST.get(action.action_type, {}).get(mem.layer, 0.0)
             score += ACTION_TYPE_SUBTYPE_BOOST.get(action.action_type, {}).get(mem.subtype, 0.0)
 
-        confidence = getattr(mem, "confidence", None)
-        if confidence is None:
-            confidence = getattr(mem, "certainty", 1.0)
         salience = getattr(mem, "salience", 0.5)
 
-        score *= 0.75 + float(confidence) * 0.25
+        score *= 0.75 + float(mem.confidence) * 0.25
         score *= 0.75 + float(salience) * 0.25
         scores[mem.id] = score
     return scores
 
 
-def type_intent_retrieve(
+def subtype_intent_retrieve(
     ctx: RetrievalContext,
     entity_scores: dict[str, float],
     subject_tag_scores: dict[str, float],
@@ -285,11 +282,11 @@ def type_intent_retrieve(
             continue
 
         for action in ctx.atomic_actions:
-            boost_map = ACTION_TYPE_MEMORY_TYPE_BOOST.get(action.action_type, {})
-            score += boost_map.get(mem.type, 0.0)
+            boost_map = ACTION_TYPE_SUBTYPE_INTENT_BOOST.get(action.action_type, {})
+            score += boost_map.get(mem.subtype, 0.0)
 
         if has_past_ref:
-            score += PAST_REF_MEMORY_TYPE_BOOST.get(mem.type, 0.0)
+            score += PAST_REF_SUBTYPE_BOOST.get(mem.subtype, 0.0)
             if entity_scores.get(mem.id, 0.0) > 0 and any(
                 a.kind in entity_anchor_kinds for a in ctx.anchors
             ):
@@ -320,7 +317,7 @@ def scene_context_retrieve(
             continue
 
         score += mem.salience * cfg.salience_weight
-        score += mem.certainty * cfg.certainty_weight
+        score += mem.confidence * cfg.confidence_weight
 
         if idx < 5:
             score += 2.0

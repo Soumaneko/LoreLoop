@@ -13,9 +13,7 @@ from app.domain.current_state import (
 from app.domain.narrative_pacer import NarrativePacingResult
 from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
-from app.domain.roll.schemas import RollConfig, RollResult, RollResultBatch
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
 from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 
 
@@ -71,26 +69,6 @@ def _make_action_parse_result() -> ActionParseResult:
     )
 
 
-def _make_roll_results() -> RollResultBatch:
-    return RollResultBatch(
-        dice_formula="1d20",
-        dice_sides=20,
-        total_rolls=1,
-        results=[
-            RollResult(
-                action_id="a1",
-                sequence=1,
-                actor="主角",
-                action_type="observe",
-                dice="1d20",
-                value=15,
-                dice_sides=20,
-                roll_hint="perception",
-            ),
-        ],
-    )
-
-
 def _make_outcome_resolution() -> OutcomeResolutionResult:
     return OutcomeResolutionResult(
         outcomes=[
@@ -133,31 +111,18 @@ def _make_core_memory() -> CoreMemory:
     )
 
 
-def _make_short_term_memory() -> ShortTermMemory:
-    return ShortTermMemory(
-        recent_scenes=[
-            ShortTermScene(
-                scene_id="scene_001",
-                turn_index=1,
-                scene_text="主角进入了北郡修道院。",
-            ),
-        ],
-        max_items=5,
-    )
-
-
 def _make_retrieved_memories() -> CandidateRetrievalResult:
     return CandidateRetrievalResult(
         candidates=[
             MemoryCandidate(
                 memory_id="mem_001",
-                memory_type="fact",
+                subtype="fact",
                 subject="修道院历史",
                 content="北郡修道院曾是大战时期的据点。",
                 entities=["北郡修道院"],
                 tags=["历史"],
                 salience=0.8,
-                certainty=0.9,
+                confidence=0.9,
                 score=0.15,
                 score_breakdown={"rrf_score": 0.15},
             ),
@@ -173,22 +138,18 @@ class TestAssembleContext:
             user_input="环顾四周观察环境。",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
             narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
-            short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
         )
 
         assert ctx.user_input == "环顾四周观察环境。"
         assert ctx.current_state.scene.scene_id == "scene_001"
         assert ctx.action_parse_result.turn_intent == "探索修道院"
-        assert ctx.roll_results.dice_formula == "1d20"
         assert ctx.outcome_resolution.total_outcomes == 1
         assert ctx.narrative_pacing.selected_type == "advance"
         assert len(ctx.core_memory.items) == 1
-        assert len(ctx.short_term_memory.recent_scenes) == 1
         assert ctx.retrieved_memories.total_returned == 1
         assert ctx.scene_summaries == []
 
@@ -197,28 +158,12 @@ class TestAssembleContext:
             user_input="测试",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
             narrative_pacing=_make_narrative_pacing(),
             core_memory=CoreMemory(items=[]),
-            short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
         )
         assert ctx.core_memory.items == []
-
-    def test_empty_short_term_memory(self):
-        ctx = assemble_context(
-            user_input="测试",
-            current_state=_make_current_state(),
-            action_parse_result=_make_action_parse_result(),
-            roll_results=_make_roll_results(),
-            outcome_resolution=_make_outcome_resolution(),
-            narrative_pacing=_make_narrative_pacing(),
-            core_memory=_make_core_memory(),
-            short_term_memory=ShortTermMemory(recent_scenes=[]),
-            retrieved_memories=_make_retrieved_memories(),
-        )
-        assert ctx.short_term_memory.recent_scenes == []
 
     def test_scene_summaries_are_optional_context(self):
         summary = SceneSummary(
@@ -233,11 +178,9 @@ class TestAssembleContext:
             user_input="测试",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
             narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
-            short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
             scene_summaries=[summary],
         )
@@ -249,11 +192,9 @@ class TestAssembleContext:
             user_input="测试",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
             narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
-            short_term_memory=_make_short_term_memory(),
             retrieved_memories=CandidateRetrievalResult(
                 candidates=[], total_scanned=0, total_returned=0
             ),
@@ -261,33 +202,14 @@ class TestAssembleContext:
         assert ctx.retrieved_memories.candidates == []
         assert ctx.retrieved_memories.total_scanned == 0
 
-    def test_zero_roll_results(self):
-        ctx = assemble_context(
-            user_input="测试",
-            current_state=_make_current_state(),
-            action_parse_result=_make_action_parse_result(),
-            roll_results=RollResultBatch(
-                dice_formula="0d20", dice_sides=20, total_rolls=0, results=[]
-            ),
-            outcome_resolution=OutcomeResolutionResult(outcomes=[], total_outcomes=0),
-            narrative_pacing=_make_narrative_pacing(),
-            core_memory=_make_core_memory(),
-            short_term_memory=_make_short_term_memory(),
-            retrieved_memories=_make_retrieved_memories(),
-        )
-        assert ctx.roll_results.total_rolls == 0
-        assert ctx.roll_results.results == []
-
     def test_serialization_roundtrip(self):
         ctx = assemble_context(
             user_input="测试",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            roll_results=_make_roll_results(),
             outcome_resolution=_make_outcome_resolution(),
             narrative_pacing=_make_narrative_pacing(),
             core_memory=_make_core_memory(),
-            short_term_memory=_make_short_term_memory(),
             retrieved_memories=_make_retrieved_memories(),
         )
 
@@ -297,20 +219,17 @@ class TestAssembleContext:
         assert restored.user_input == ctx.user_input
         assert restored.current_state.scene.scene_id == ctx.current_state.scene.scene_id
         assert restored.core_memory.items[0].id == ctx.core_memory.items[0].id
-        assert restored.roll_results.results[0].value == ctx.roll_results.results[0].value
         assert restored.outcome_resolution.outcomes[0].outcome_band == "success"
         assert restored.narrative_pacing.selected_type == "advance"
 
-    def test_type_validation_rejects_wrong_type(self):
+    def test_subtype_validation_rejects_wrong_subtype(self):
         with pytest.raises(ValidationError):
             PlotOutlineContext(
                 user_input="测试",
-                current_state="not_a_state",  # type: ignore[arg-type]
+                current_state="not_a_state",  # subtype: ignore[arg-subtype]
                 action_parse_result=_make_action_parse_result(),
-                roll_results=_make_roll_results(),
                 outcome_resolution=_make_outcome_resolution(),
                 narrative_pacing=_make_narrative_pacing(),
                 core_memory=_make_core_memory(),
-                short_term_memory=_make_short_term_memory(),
                 retrieved_memories=_make_retrieved_memories(),
             )

@@ -177,7 +177,7 @@ class TestOutcomeResolver:
 
         assert result.outcomes[0].risk_level == "high"
 
-    def test_uses_llm_risk_level_before_type_fallback(self):
+    def test_uses_llm_risk_level_before_subtype_fallback(self):
         action = _make_action(action_type="observe", risk_level="high")
 
         result = OutcomeResolver().resolve(

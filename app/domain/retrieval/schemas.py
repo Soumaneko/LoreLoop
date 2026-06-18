@@ -12,7 +12,6 @@ class CandidateRetrievalInput(BaseModel):
 
 class MemoryCandidate(BaseModel):
     memory_id: str
-    memory_type: str
     layer: str = "truth"
     subtype: str = "fact"
     subject: str
@@ -25,7 +24,6 @@ class MemoryCandidate(BaseModel):
     owner: str | None = None
     confidence: float = 1.0
     salience: float
-    certainty: float
     source_scene_id: str | None = None
     source_text_span: list[str] = Field(default_factory=list)
     source_pending_ids: list[str] = Field(default_factory=list)

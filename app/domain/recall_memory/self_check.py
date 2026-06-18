@@ -235,7 +235,7 @@ class MemorySelfCheck:
             key = _dedup_key(memory)
             if key in seen:
                 result.fixes.append(
-                    f"Duplicate memory removed: {memory.type}/{memory.subject}"
+                    f"Duplicate memory removed: {memory.layer}/{memory.subtype}/{memory.subject}"
                 )
                 continue
             seen.add(key)
@@ -246,7 +246,9 @@ class MemorySelfCheck:
 
 def _dedup_key(memory: Memory) -> tuple:
     return (
-        memory.type,
+        memory.layer,
+        memory.subtype,
+        memory.owner,
         memory.subject,
         tuple(sorted(memory.entities)),
         memory.content,
