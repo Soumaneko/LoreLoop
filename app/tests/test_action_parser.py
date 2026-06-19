@@ -6,6 +6,7 @@ from app.core.llm import MockLLM
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
+from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, NPCState, PlayerState, ResourcesState, SceneState
 from app.workflows.parse_action import parse_action_workflow
 
@@ -21,6 +22,10 @@ def _make_current_state() -> CurrentState:
         player=PlayerState(name="主角"),
         resources=ResourcesState(),
     )
+
+
+def _core_memory() -> CoreMemory:
+    return CoreMemory(items=[])
 
 
 def _make_parser(responses: list[str]) -> ActionParser:
@@ -84,7 +89,7 @@ class TestSimpleSingleAction:
             )
         ])
 
-        result = parser.parse("我仔细观察仓库门口有没有守卫。", _make_current_state())
+        result = parser.parse("我仔细观察仓库门口有没有守卫。", _make_current_state(), core_memory=_core_memory())
         assert isinstance(result, ActionParseResult)
         assert len(result.atomic_actions) == 1
         a = result.atomic_actions[0]
@@ -145,7 +150,7 @@ class TestMultiAction:
             )
         ])
 
-        result = parser.parse("我先绕到仓库侧面，再检查窗户有没有锁。", _make_current_state())
+        result = parser.parse("我先绕到仓库侧面，再检查窗户有没有锁。", _make_current_state(), core_memory=_core_memory())
         assert len(result.atomic_actions) == 2
         assert result.atomic_actions[0].action_type == "move"
         assert result.atomic_actions[0].sequence == 1
@@ -187,7 +192,7 @@ class TestPastReference:
             )
         ])
 
-        result = parser.parse("我用之前和伊莱娜约好的暗号提醒她别说话。", _make_current_state())
+        result = parser.parse("我用之前和伊莱娜约好的暗号提醒她别说话。", _make_current_state(), core_memory=_core_memory())
         assert len(result.atomic_actions) == 1
         assert result.atomic_actions[0].action_type == "signal_ally"
 
@@ -226,7 +231,7 @@ class TestPastReference:
             )
         ])
 
-        result = parser.parse("我用之前和伊莱娜约好的暗号提醒她别说话。", _make_current_state())
+        result = parser.parse("我用之前和伊莱娜约好的暗号提醒她别说话。", _make_current_state(), core_memory=_core_memory())
         dumped = result.model_dump_json()
         assert "memory_need" not in dumped
 
@@ -278,7 +283,7 @@ class TestConditionalAction:
             )
         ])
 
-        result = parser.parse("如果守卫靠近，我就假装喝醉；如果没人注意，我继续往仓库门口走。", _make_current_state())
+        result = parser.parse("如果守卫靠近，我就假装喝醉；如果没人注意，我继续往仓库门口走。", _make_current_state(), core_memory=_core_memory())
         assert len(result.atomic_actions) == 2
         assert result.atomic_actions[0].condition == "守卫靠近"
         assert result.atomic_actions[1].condition == "没人注意"
@@ -322,7 +327,7 @@ class TestInstructAlly:
             )
         ])
 
-        result = parser.parse("我让马洛守在巷口，如果看到黑帆帮的人就吹哨。", _make_current_state())
+        result = parser.parse("我让马洛守在巷口，如果看到黑帆帮的人就吹哨。", _make_current_state(), core_memory=_core_memory())
         assert len(result.atomic_actions) == 1
         a = result.atomic_actions[0]
         assert a.action_type == "instruct_ally"
@@ -404,7 +409,7 @@ class TestComplexAction:
         ])
 
         scene_text = "我假装没看见守卫，低头整理斗篷，从码头边绕过去。靠近仓库后，我观察门口有没有黑帆帮的人，再看看门锁是不是和旧城区见过的那种一样。"
-        result = parser.parse(scene_text, _make_current_state())
+        result = parser.parse(scene_text, _make_current_state(), core_memory=_core_memory())
         assert len(result.atomic_actions) >= 3
         subtypes = {a.action_type for a in result.atomic_actions}
         assert "hide_or_stealth" in subtypes
@@ -629,7 +634,7 @@ class TestActionWorkflow:
         parser = ActionParser(mock.build_gateway())
         sc = ActionSelfCheck()
         result = parse_action_workflow(
-            "我仔细观察仓库门口。", _make_current_state(), parser, sc
+            "我仔细观察仓库门口。", _make_current_state(), parser, sc, core_memory=_core_memory()
         )
 
         assert len(result.atomic_actions) == 1

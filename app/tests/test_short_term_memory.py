@@ -63,6 +63,15 @@ class TestShortTermMemoryStore:
         assert memory.recent_scenes == []
         assert memory.max_items == 5
 
+    def test_clear_removes_existing_scenes(self):
+        store = ShortTermMemoryStore(max_items=5)
+        store.add_turn("s1", 1, "观察四周", "第一段剧情")
+        store.add_turn("s2", 2, "继续前进", "第二段剧情")
+
+        store.clear()
+
+        assert store.get_recent().recent_scenes == []
+
     def test_scenes_returns_in_order(self):
         store = ShortTermMemoryStore(max_items=3)
         store.add_turn("s1", 1, "action", "剧情1")

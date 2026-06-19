@@ -4,7 +4,6 @@ from app.domain.action.schemas import (
     ActionParseResult,
     AnchorExtractionResult,
 )
-from app.domain.core_memory import create_default_core_memory
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
@@ -26,12 +25,11 @@ class ActionParser:
         user_input: str,
         current_state: CurrentState,
         *,
-        core_memory: CoreMemory | None = None,
+        core_memory: CoreMemory,
         recent_summaries: list[SceneSummary] | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         trace_id: str | None = None,
     ) -> ActionParseResult:
-        core_memory = core_memory or create_default_core_memory()
         anchor_result = self.extract_anchors(
             user_input=user_input,
             current_state=current_state,
@@ -63,10 +61,9 @@ class ActionParser:
         *,
         user_input: str,
         current_state: CurrentState,
-        core_memory: CoreMemory | None = None,
+        core_memory: CoreMemory,
         trace_id: str | None = None,
     ) -> AnchorExtractionResult:
-        core_memory = core_memory or create_default_core_memory()
         return self.anchor_llm.run(
             task="anchor_extract",
             input_data={
@@ -83,12 +80,11 @@ class ActionParser:
         *,
         user_input: str,
         current_state: CurrentState,
-        core_memory: CoreMemory | None = None,
+        core_memory: CoreMemory,
         recent_summaries: list[SceneSummary] | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         trace_id: str | None = None,
     ) -> ActionExtractionResult:
-        core_memory = core_memory or create_default_core_memory()
         return self.action_llm.run(
             task="action_extract",
             input_data={

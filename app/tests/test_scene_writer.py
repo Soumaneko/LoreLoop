@@ -6,8 +6,10 @@ from app.domain.current_state import CurrentState, PlayerState, ResourcesState, 
 from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_writer.agent import SceneWriterAgent
+from app.domain.scene_writer.opening import OpeningSceneAgent
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
+from app.domain.core_memory import InitConfig, build_core_memory, build_initial_current_state
 from app.workflows.generate_scene import generate_scene_workflow, select_required_memories
 
 
@@ -107,6 +109,7 @@ class TestSceneWriterAgent:
         )
 
         assert isinstance(result, SceneWriterResult)
+
         assert len(result.scene_text) > 0
         assert len(result.changes_summary) >= 1
 
@@ -332,3 +335,31 @@ class TestSceneWriterWorkflow:
         )
 
         assert isinstance(result, SceneWriterResult)
+
+
+class TestOpeningSceneAgent:
+    def test_generates_opening_scene(self):
+        config = InitConfig(
+            fanfic=True,
+            work_name="魔兽世界",
+            birth_location="北郡修道院",
+            story_era="经典旧世",
+            protagonist_name="卢西安",
+        )
+        core_memory = build_core_memory(config)
+        current_state = build_initial_current_state(config)
+        mock = MockLLM()
+        mock.set_responses([_build_response(
+            scene_text="清晨的北郡修道院钟声响起，卢西安站在熟悉的石阶前。",
+            changes=["卢西安从北郡修道院开始旅程"],
+        )])
+
+        result = OpeningSceneAgent(mock.build_gateway()).generate(
+            config=config,
+            current_state=current_state,
+            core_memory=core_memory,
+        )
+
+        assert isinstance(result, SceneWriterResult)
+        assert "卢西安" in result.scene_text
+        assert result.changes_summary == ["卢西安从北郡修道院开始旅程"]
