@@ -4,7 +4,7 @@ from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
 from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
+from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
@@ -38,7 +38,7 @@ def _make_outline() -> PlotOutlineResult:
                 summary="主角走向吧台与米莉打招呼",
                 linked_action_ids=["a1"],
                 linked_roll_ids=["a1"],
-                required_memories=["mem_001"],
+                required_memory_indices=[0],
                 state_implications=["米莉对主角的态度更加友善"],
                 tone_notes=["轻松", "友好"],
             ),
@@ -47,7 +47,7 @@ def _make_outline() -> PlotOutlineResult:
                 summary="米莉告诉主角关于暴风城的消息",
                 linked_action_ids=["a2"],
                 linked_roll_ids=["a2"],
-                required_memories=[],
+                required_memory_indices=[],
                 state_implications=["主角获得了新的情报"],
                 tone_notes=["神秘", "暗示"],
             ),
@@ -138,7 +138,7 @@ class TestSceneWriterAgent:
                     summary="测试节拍",
                     linked_action_ids=[],
                     linked_roll_ids=[],
-                    required_memories=[],
+                    required_memory_indices=[],
                     state_implications=[],
                     tone_notes=["紧张"],
                 )],
@@ -200,14 +200,14 @@ class TestSceneWriterWorkflow:
 
         assert isinstance(result, SceneWriterResult)
 
-    def test_select_required_memories_resolves_subject_refs(self):
+    def test_select_required_memories_uses_input_indices(self):
         outline = PlotOutlineResult(
             outline_summary="测试",
             beats=[
                 PlotBeat(
                     beat_id="b1",
                     summary="测试节拍",
-                    required_memories=["米莉的邀请", "精细奥术魔法控制"],
+                    required_memory_indices=[0, 1, 999],
                 )
             ],
         )
@@ -254,6 +254,54 @@ class TestSceneWriterWorkflow:
         selected = select_required_memories(outline, retrieved)
 
         assert [memory.memory_id for memory in selected] == ["mem_001", "mem_002"]
+
+    def test_select_required_memories_can_select_pending_notes(self):
+        outline = PlotOutlineResult(
+            outline_summary="测试",
+            beats=[
+                PlotBeat(
+                    beat_id="b1",
+                    summary="测试节拍",
+                    required_memory_indices=[1],
+                )
+            ],
+        )
+        retrieved = CandidateRetrievalResult(
+            candidates=[
+                MemoryCandidate(
+                    memory_id="mem_001",
+                    subtype="event",
+                    subject="正式记忆",
+                    content="这条正式记忆不应被选中。",
+                    entities=[],
+                    tags=[],
+                    salience=0.8,
+                    confidence=0.9,
+                    score=0.2,
+                ),
+            ],
+            pending_notes=[
+                PendingMemoryNote(
+                    pending_id="pending_001",
+                    scene_id="scene_001",
+                    turn_index=3,
+                    raw_text="米莉刚刚提到暴风城调查团有异常动向。",
+                    entities=["米莉", "暴风城调查团"],
+                    extractor_hint="claim",
+                    score=0.14,
+                ),
+            ],
+            total_scanned=2,
+            total_returned=2,
+        )
+
+        selected = select_required_memories(outline, retrieved)
+
+        assert len(selected) == 1
+        assert selected[0].memory_id == "pending:pending_001"
+        assert selected[0].layer == "pending"
+        assert selected[0].content == "米莉刚刚提到暴风城调查团有异常动向。"
+        assert selected[0].source_pending_ids == ["pending_001"]
 
     def test_workflow_with_short_term_memory(self):
         mock = MockLLM()

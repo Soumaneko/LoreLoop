@@ -29,10 +29,13 @@ class EntityExtractor:
                 input_data={
                     "scene_text": scene_text,
                     "existing_profiles_json": json.dumps(
-                        [_profile_for_extraction(profile) for profile in existing_profiles],
+                        [
+                            _profile_for_extraction(index, profile)
+                            for index, profile in enumerate(existing_profiles)
+                        ],
                         ensure_ascii=False,
                         indent=2,
-                    ),
+                    ) if existing_profiles else "null",
                     "output_schema_json": json.dumps(
                         EntityExtractionResult.model_json_schema(),
                         ensure_ascii=False,
@@ -45,7 +48,7 @@ class EntityExtractor:
         )
 
 
-def _profile_for_extraction(profile: EntityProfile) -> dict:
+def _profile_for_extraction(index: int, profile: EntityProfile) -> dict:
     data = profile.semantic_view().model_dump(mode="json")
-    data["entity_id"] = profile.entity_id
+    data["entity_index"] = index
     return data

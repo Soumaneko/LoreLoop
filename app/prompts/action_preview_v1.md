@@ -71,10 +71,10 @@ CurrentState 可能包含与场景相关的：玩家的背包（inventory）、�
 5. good_result 用一句话笼统描述成功时的正面结果，不得涉及具体情节。
 6. risk 用一句话统描述失败时的风险、代价或暴露，不得涉及具体情节。
 7. action_type 必须是合法 ActionType：
-   `move`, `observe`, `inspect_object`, `interact_object`, `speak`, `signal_ally`, `instruct_ally`, `hide_or_stealth`, `attack`, `defend`, `cast_or_use_power`, `wait`, `plan`, `other`
+   `move`, `observe`, `inspect_object`, `interact_object`, `speak`, `signal_ally`, `instruct_ally`, `hide_or_stealth`, `attack`, `defend`, `cast_or_use_power`, `wait`, `other`
 8. likely_needs_roll 默认规则：
    - attack, defend, cast_or_use_power, hide_or_stealth 通常为 true。
-   - observe, speak, plan, wait 通常为 false。
+   - observe, speak, wait 通常为 false。
    - 如果行动有明显风险、对抗、隐藏、强制、施法或危险环境，可以设为 true。
 9. anchors 必须包含 target、NPC、地点、物品、组织或关键概念中的重要项。每个 anchor 使用当前场景中真实存在或明确提到的文本。
 10. risk_level 必须使用 `low`、`medium`、`high`，并遵守与 action_parse 相同的规则：

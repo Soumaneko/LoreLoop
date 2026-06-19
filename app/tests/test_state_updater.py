@@ -10,6 +10,7 @@ from app.domain.current_state import (
     StateUpdater,
     WorldClock,
 )
+from app.domain.views import project_current_state
 
 
 def _make_state() -> CurrentState:
@@ -60,6 +61,7 @@ def _make_state() -> CurrentState:
 def _build_updated_state_json(overrides: dict | None = None) -> str:
     state = _make_state()
     data = json.loads(state.model_dump_json())
+    data["mentioned_npcs"] = [npc["name"] for npc in data.get("npcs", [])]
     if overrides:
         _deep_update(data, overrides)
     return json.dumps(data, ensure_ascii=False)
@@ -69,6 +71,7 @@ def _build_updated_state_json_without_scene_id(overrides: dict | None = None) ->
     state = _make_state()
     data = json.loads(state.model_dump_json())
     data["scene"].pop("scene_id", None)
+    data["mentioned_npcs"] = [npc["name"] for npc in data.get("npcs", [])]
     if overrides:
         _deep_update(data, overrides)
     return json.dumps(data, ensure_ascii=False)
@@ -86,7 +89,7 @@ class TestStateUpdaterNoChange:
     def test_unchanged_state_returns_same(self):
         state = _make_state()
         mock = MockLLM()
-        mock.set_responses([state.model_dump_json()])
+        mock.set_responses([_build_updated_state_json()])
 
         updater = StateUpdater(mock.build_gateway())
         result = updater.update(state, "主角环顾四周，一切如常。")
@@ -331,7 +334,7 @@ class TestStateUpdaterConsistency:
     def test_player_name_unchanged(self):
         state = _make_state()
         mock = MockLLM()
-        mock.set_responses([state.model_dump_json()])
+        mock.set_responses([_build_updated_state_json()])
 
         updater = StateUpdater(mock.build_gateway())
         result = updater.update(state, "一段无关的剧情。")
@@ -341,12 +344,131 @@ class TestStateUpdaterConsistency:
     def test_scene_id_preserved_when_location_same(self):
         state = _make_state()
         mock = MockLLM()
-        mock.set_responses([state.model_dump_json()])
+        mock.set_responses([_build_updated_state_json()])
 
         updater = StateUpdater(mock.build_gateway())
         result = updater.update(state, "一段无关的剧情。")
 
         assert result.scene.scene_id == "scene_001"
+
+
+class TestStateUpdaterNPCAbsentTurns:
+    def test_unmentioned_npc_absent_turns_increment(self):
+        state = _make_state()
+        updated_json = _build_updated_state_json({
+            "mentioned_npcs": ["米莉"],
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        result = StateUpdater(mock.build_gateway()).update(
+            state,
+            "米莉向主角点头致意，莎拉仍在角落但没有参与对话。",
+        )
+
+        milly = next(n for n in result.npcs if n.name == "米莉")
+        sarah = next(n for n in result.npcs if n.name == "莎拉")
+        assert milly.absent_turns == 0
+        assert sarah.absent_turns == 1
+
+    def test_npc_removed_after_three_absent_turns(self):
+        state = _make_state()
+        state.npcs[1] = state.npcs[1].model_copy(update={"absent_turns": 2})
+        updated_json = _build_updated_state_json({
+            "mentioned_npcs": ["米莉"],
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        result = StateUpdater(mock.build_gateway()).update(
+            state,
+            "米莉继续和主角讨论修道院的线索。",
+        )
+
+        assert [npc.name for npc in result.npcs] == ["米莉"]
+
+    def test_mentioned_npc_absent_turns_reset(self):
+        state = _make_state()
+        state.npcs[1] = state.npcs[1].model_copy(update={"absent_turns": 2})
+        updated_json = _build_updated_state_json({
+            "mentioned_npcs": ["米莉", "莎拉"],
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        result = StateUpdater(mock.build_gateway()).update(
+            state,
+            "莎拉从角落抬头，接过米莉的话。",
+        )
+
+        sarah = next(n for n in result.npcs if n.name == "莎拉")
+        assert sarah.absent_turns == 0
+
+    def test_new_npc_absent_turns_starts_at_zero(self):
+        state = _make_state()
+        updated_json = _build_updated_state_json({
+            "npcs": [
+                {
+                    "name": "米莉",
+                    "role": "酒馆老板",
+                    "location": "酒馆吧台",
+                    "condition": [],
+                    "attitude_to_player": "友好",
+                    "current_intent": "招待客人",
+                },
+                {
+                    "name": "莎拉",
+                    "role": "冒险者",
+                    "location": "酒馆角落",
+                    "condition": [],
+                    "attitude_to_player": "好奇",
+                    "current_intent": "观察主角",
+                },
+                {
+                    "name": "艾伦",
+                    "role": "信使",
+                    "location": "酒馆门口",
+                    "condition": [],
+                    "attitude_to_player": None,
+                    "current_intent": "送信",
+                },
+            ],
+            "mentioned_npcs": ["艾伦"],
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        result = StateUpdater(mock.build_gateway()).update(
+            state,
+            "一个名叫艾伦的信使走进酒馆。",
+        )
+
+        allen = next(n for n in result.npcs if n.name == "艾伦")
+        assert allen.absent_turns == 0
+
+    def test_project_current_state_hides_absent_turns(self):
+        state = _make_state()
+        state.npcs[0] = state.npcs[0].model_copy(update={"absent_turns": 2})
+
+        projected = project_current_state(state)
+
+        assert "absent_turns" not in projected
+
+    def test_state_updater_prompt_hides_absent_turns(self):
+        state = _make_state()
+        state.npcs[0] = state.npcs[0].model_copy(update={"absent_turns": 2})
+        mock = MockLLM()
+        captured = {}
+
+        def generate(prompt: str, *, model: str = "", temperature: float = 0.2) -> str:
+            captured["prompt"] = prompt
+            return _build_updated_state_json({"mentioned_npcs": ["米莉", "莎拉"]})
+
+        mock.provider.generate = generate
+
+        StateUpdater(mock.build_gateway()).update(state, "米莉和莎拉都留在酒馆。")
+
+        assert "absent_turns" not in captured["prompt"]
 
 
 class TestSceneIdAutoIncrement:

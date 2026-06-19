@@ -57,7 +57,7 @@ def infer_risk_level(action: AtomicAction, band: OutcomeBand) -> RiskLevel:
         base = action.risk_level
     elif action.action_type in {"attack", "defend", "cast_or_use_power", "hide_or_stealth"}:
         base = "high"
-    elif action.action_type in {"speak", "observe", "inspect_object", "plan", "wait"}:
+    elif action.action_type in {"speak", "observe", "inspect_object", "wait"}:
         base = "low"
     else:
         base = "medium"

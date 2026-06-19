@@ -48,6 +48,7 @@ class NPCState(BaseModel):
     condition: list[str] = Field(default_factory=list)
     attitude_to_player: str | None = None
     current_intent: str | None = None
+    absent_turns: int = Field(default=0, ge=0)
 
 
 class ResourcesState(BaseModel):

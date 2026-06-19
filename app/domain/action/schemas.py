@@ -15,7 +15,6 @@ ActionType = Literal[
     "defend",
     "cast_or_use_power",
     "wait",
-    "plan",
     "other",
 ]
 

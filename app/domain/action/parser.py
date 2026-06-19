@@ -1,11 +1,10 @@
-import json
-
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult
 from app.domain.core_memory import create_default_core_memory
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.views import project_current_state, project_scene_summaries
 
 
 class ActionParser:
@@ -26,13 +25,9 @@ class ActionParser:
             task="action_parse",
             input_data={
                 "user_input": user_input,
-                "current_state_json": current_state.model_dump_json(indent=2),
+                "current_state_json": project_current_state(current_state),
                 "core_memory_json": core_memory.model_dump_json(indent=2),
-                "recent_summaries_json": json.dumps(
-                    [summary.model_dump(mode="json") for summary in (recent_summaries or [])],
-                    ensure_ascii=False,
-                    indent=2,
-                ),
+                "recent_summaries_json": project_scene_summaries(recent_summaries or []),
             },
             output_schema=ActionParseResult,
             trace_id=trace_id,

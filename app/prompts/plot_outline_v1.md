@@ -79,33 +79,33 @@ Entity Profiles 是系统积累的相关实体档案，包含 NPC 性格/能力�
 3. ActionParseResult
 4. OutcomeResolutionResult
 5. NarrativePacingResult
-6. Retrieved Memories
+6. SceneSummaries
 7. Entity Profiles
-8. SceneSummaries
+8. Retrieved Memories
 9. General narrative common sense
 
 OutcomeResolutionResult 是叙事约束。
 NarrativePacingResult 是章节层面的节奏方向。
-SceneSummaries 是长期叙事连续性摘要，只能用于理解长期剧情脉络，不得覆盖 CurrentState 或更具体的 Retrieved Memories。
-Entity Profiles 是实体档案，只能用于维持实体表现一致性，不得覆盖 CurrentState、OutcomeResolutionResult 或 Retrieved Memories。
+SceneSummaries 是长期叙事连续性摘要，只能用于理解长期剧情脉络，不得覆盖 CurrentState。
+Entity Profiles 是实体档案，只能用于维持实体表现一致性，不得覆盖 CurrentState、OutcomeResolutionResult。
 
 ## Requirements
 
 1. 只生成剧情大纲，不写最终场景正文。
-2. 大纲必须基于 ActionParseResult 中解析出的行动。
-3. 必须遵循 OutcomeResolutionResult。
-4. 不得重新解释、忽略或违背 OutcomeResolutionResult 中的叙事约束。
-5. 不得违背 CoreMemory 或 CurrentState。
-6. 本章节必须围绕 NarrativePacingResult.selected_type 和 NarrativePacingResult.narrative_goal 组织。
-7. 不得切换到 NarrativePacingResult 之外的叙事类型。
-8. failure 或 critical_failure 不能被写成干净成功。
-9. partial_success 必须实现部分预期目标，可以附带代价、延迟、风险或复杂化后果。
-10. critical_success 可以给予额外优势，但必须与 CurrentState 和 CoreMemory 保持一致。
-11. 每个 OutcomeFrame 对应的 action_id，必须至少出现在一个 PlotBeat.linked_action_ids 和一个 PlotBeat.linked_outcome_ids 中。
-13. 每个 OutcomeFrame 的 required_consequence 必须体现在该beat的 summary、required_outcomes 或 state_implications 中。
-14. 如果某个行动没有匹配的 OutcomeFrame，应保守处理，不得凭空发明戏剧性结果。
-15. 所有节拍必须描述确定发生的剧情推进，不得以开放问题、玩家面向的选择或决策点收尾。严禁将节拍结构写成"玩家必须在A和B之间做出选择"、"是继续X还是转向Y"等形式。当前行动必须在场景内完整收束，选择生成由独立模块处理。
-16. **不得通过歪曲 NPC 性格或态度来强行制造冲突**：NPC 的任何反应必须符合 CurrentState 中已建立的 attitude_to_player 和已知性格。不得为了让剧情"更有张力"而让 NPC 做出与其设定矛盾的举动（如让信赖/亲近玩家的 NPC 突然无理由疏远、让冷静克制的 NPC 失控发怒等）。
+2. 不得违背 CoreMemory 或 CurrentState。
+3. 本章节必须围绕 NarrativePacingResult.selected_type 和 NarrativePacingResult.narrative_goal 组织。
+4. 不得切换到 NarrativePacingResult 之外的叙事类型。
+5. 大纲必须基于 ActionParseResult 中解析出的行动。结果必须遵循 OutcomeResolutionResult，不得重新解释、忽略或违背叙事约束。
+6. failure 或 critical_failure 不能被写成干净成功。
+7. partial_success 必须实现部分预期目标，可以附带代价、延迟、风险或复杂化后果。
+8. critical_success 可以给予额外优势，但必须与 CurrentState 和 CoreMemory 保持一致。
+9. 每个 OutcomeFrame 对应的 action_id，必须至少出现一次。
+10. PlotBeat.linked_outcome_ids 必须填写被该 beat 体现的 OutcomeFrame.action_id。
+11. 每个 OutcomeFrame 的 required_consequence 必须体现在该beat的 summary、required_outcomes 或 state_implications 中。
+12. 如果某个行动没有匹配的 OutcomeFrame，不得凭空发明戏剧性结果。每个 atomic_action 都必须有 beat。
+13. 所有 Beat 必须描述确定发生的剧情推进，严禁以开放问题、玩家面向的选择或决策点收尾，严禁故弄玄虚或以模糊的现状结尾。
+14. **不得通过歪曲 NPC 性格或态度来强行制造冲突**：NPC 的任何反应必须符合已知性格。不得为了让剧情"更有张力"而让 NPC 做出与其设定矛盾的举动（如让信赖/亲近玩家的 NPC 突然无理由疏远、让冷静克制的 NPC 失控发怒等）。
+15. Beat数量不能超过3个
 
 ## Information Policy
 
@@ -132,22 +132,34 @@ PlotBeat.summary 必须是清晰的叙事规划节点。
 
 不要写最终正文。
 不要提及骰子、掷骰、模型推理、提示词或系统指令。
-不要用"你"称呼玩家。
-不要使用 GM 评论。
+不要用"你"称呼玩家。不要使用 GM 评论。
 不要包含感官描写、隐喻、环境描写、心理描写或文学修饰。
 只保留场景写作所需的剧情推进内容。
-Beat summary 不得呈现玩家面向的选择（如"是A还是B"、"面临X或Y的选择"、"可以选择……也可以……"）。只描述确定发生的剧情推进，不描述玩家的决策过程。
+Beat 内容必须符合当前世界/场景逻辑，不能为了成功/失败而违背设定。
+Beat summary 不得包含任何选择（如"是A还是B"、"面临X或Y的选择"、"可以选择……也可以……"）。只描述确定发生的剧情推进，不描述主角的决策。
+
+## Related Entities
+
+PlotBeat.related_entities 必须列出该节拍中涉及的所有重要实体名称（NPC、物品、地点、组织等）。
+
+1. 只列出该 beat 的 summary、required_outcomes 或 state_implications 中实际涉及或提及的实体。
+2. 使用实体的标准名称（与 CurrentState、Entity Profiles 中一致的名称）。
+3. 不得列出未在该 beat 中涉及的实体。
+4. 玩家自身不需要列入。
 
 ## Memory Linking
 
-PlotBeat.required_memories 只能包含 Retrieved Memories 中真实存在的 memory_id。
+Retrieved Memories 中的每条可用记忆都有 memory_index。
 
-不得在 required_memories 中放入记忆主题、标签、实体、概念或原始记忆文本。
+PlotBeat.required_memory_indices 只能包含 Retrieved Memories.memories 中真实存在的 memory_index。
+
+不得在 required_memory_indices 中放入 memory_id、pending_id、记忆主题、标签、实体、概念或原始记忆文本。
+如果某个节拍需要 pending_notes，也必须填写对应的 memory_index。
 如果某个节拍不需要 retrieved memory，则使用空列表。
 
 ## Memory Usage Policy
 
-Retrieved Memories 中可能同时包含 classified memories 和 pending_notes。
+Retrieved Memories 中可能同时包含 classified memories 和 source=pending 的近期笔记。
 
 必须遵守：
 
@@ -156,7 +168,7 @@ Retrieved Memories 中可能同时包含 classified memories 和 pending_notes�
 3. belief：只能影响 owner 的行为、台词、误解和态度，不能当作世界事实。
 4. profile：只能作为长期倾向，不能覆盖 CurrentState。
 5. confidence 表示该 layer 内的可靠度：claim 的 confidence 表示"这个说法存在"的可靠度，不表示说法为真；belief 的 confidence 表示 owner 持有该信念的可靠度，不表示信念为真。
-6. pending_notes：只能作为近期上下文参考，不是已确认长期记忆，不能覆盖 CurrentState。
+6. source=pending 的条目：只能作为近期上下文参考，不是已确认长期记忆，不能覆盖 CurrentState。
 
 ## Scene Summary Usage Policy
 
@@ -181,10 +193,9 @@ SceneSummaries 可能包含多个 level 的长期叙事摘要。
 6. 是否避免将 failure 或 critical_failure 写成干净成功？
 7. 每个 partial_success 是否都实现了部分预期目标？
 8. 是否避免违背 CoreMemory 和 CurrentState？
-9. 是否避免使用无关的 recalled memories？
-10. Beat 是否避免了骰子术语、GM 评论、最终正文和第二人称称呼？
-11. 是否所有 beat 都描述了确定发生的剧情、未使用玩家面向的选择或决策点收尾？
-12. 是否任何 NPC 的行为都符合 CurrentState 中已建立的 attitude_to_player 和已知性格，未因制造冲突而歪曲其设定？
+9. Beat 是否避免了骰子术语、GM 评论、最终正文和第二人称称呼？
+10. 是否所有 beat 都描述了确定发生的剧情、未使用玩家面向的选择或决策点收尾？
+11. 是否任何 NPC 的行为都符合已知性格，未因制造冲突而歪曲其设定？
 
 如果任何一项不通过，先修正大纲再输出。
 

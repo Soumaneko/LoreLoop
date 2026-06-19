@@ -124,7 +124,6 @@ ACTION_TYPE_LAYER_BOOST: dict[str, dict[str, float]] = {
     "defend": {"truth": 1.0, "profile": 0.8, "belief": 0.5, "claim": 0.4},
     "cast_or_use_power": {"truth": 1.0, "profile": 0.7, "claim": 0.5, "belief": 0.4},
     "move": {"truth": 1.1, "claim": 0.6, "belief": 0.4, "profile": 0.4},
-    "plan": {"truth": 1.0, "claim": 0.9, "belief": 0.8, "profile": 0.8},
     "wait": {"truth": 0.8, "claim": 0.6, "belief": 0.5, "profile": 0.5},
     "other": {"truth": 0.8, "claim": 0.7, "belief": 0.6, "profile": 0.6},
 }
@@ -201,13 +200,6 @@ ACTION_TYPE_SUBTYPE_BOOST: dict[str, dict[str, float]] = {
         "location_state": 0.6,
         "event": 0.4,
         "fact": 0.3,
-    },
-    "plan": {
-        "goal": 0.5,
-        "agreement": 0.4,
-        "fact": 0.3,
-        "event": 0.3,
-        "testimony": 0.3,
     },
 }
 

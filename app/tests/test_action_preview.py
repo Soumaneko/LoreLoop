@@ -120,7 +120,7 @@ def _build_response() -> str:
                 "description": "你在行动前把线索和资源对应起来。",
                 "good_result": "你能制定更稳妥的前往路线。",
                 "risk": "拖延可能让线索随时间变冷。",
-                "action_type": "plan",
+                "action_type": "interact_object",
                 "verb": "整理",
                 "target": "线索",
                 "method": "对照旧地图",

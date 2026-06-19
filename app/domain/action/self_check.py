@@ -18,7 +18,7 @@ class SelfCheckResult:
 ALLOWED_ACTION_TYPES = {
     "move", "observe", "inspect_object", "interact_object",
     "speak", "signal_ally", "instruct_ally", "hide_or_stealth",
-    "attack", "defend", "cast_or_use_power", "wait", "plan", "other",
+    "attack", "defend", "cast_or_use_power", "wait", "other",
 }
 
 

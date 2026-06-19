@@ -2,14 +2,6 @@
 
 你只做轻量摘录，不做最终长期记忆分类，不判断 truth/claim/belief/profile，不做相似合并。
 
-## scene_id
-
-{scene_id}
-
-## turn_index
-
-{turn_index}
-
 ## CurrentState
 
 ```json

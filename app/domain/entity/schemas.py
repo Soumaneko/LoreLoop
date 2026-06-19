@@ -44,7 +44,7 @@ class EntityProfileUpdateBatch(BaseModel):
 
 class EntityAliasMatch(BaseModel):
     extracted_text: str
-    matched_entity_id: str | None = None
+    matched_entity_index: int | None = None
     matched_entity_name: str
     matched_entity_type: EntityType
     new_alias: str | None = None
@@ -54,7 +54,7 @@ class RetrievedEntity(BaseModel):
     name: str
     entity_type: EntityType
     source: Literal["exact_match", "alias_match", "new"]
-    matched_entity_id: str | None = None
+    matched_entity_index: int | None = None
     matched_entity_name: str | None = None
     context_span: str | None = None
 

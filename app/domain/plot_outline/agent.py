@@ -3,6 +3,17 @@ from typing import cast
 
 from app.core.llm import LLMGateway
 from app.domain.plot_outline.schemas import PlotOutlineResult
+from app.domain.plot_outline.views import (
+    project_narrative_pacing,
+    project_retrieved_memories,
+)
+from app.domain.views import (
+    project_action_parse,
+    project_current_state,
+    project_entity_profiles,
+    project_outcome_resolution,
+    project_scene_summaries,
+)
 from app.workflows.context_assembler import PlotOutlineContext
 
 
@@ -24,22 +35,14 @@ class PlotOutlineAgent:
                 task="plot_outline",
                 input_data={
                     "core_memory_json": context.core_memory.model_dump_json(indent=2),
-                    "current_state_json": context.current_state.model_dump_json(indent=2),
+                    "current_state_json": project_current_state(context.current_state),
                     "user_input": context.user_input,
-                    "action_parse_result_json": context.action_parse_result.model_dump_json(indent=2),
-                    "outcome_resolution_json": context.outcome_resolution.model_dump_json(indent=2),
-                    "narrative_pacing_json": context.narrative_pacing.model_dump_json(indent=2),
-                    "retrieved_memories_json": context.retrieved_memories.model_dump_json(indent=2),
-                    "scene_summaries_json": json.dumps(
-                        [summary.model_dump(mode="json") for summary in context.scene_summaries],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    "entity_profiles_json": json.dumps(
-                        [profile.model_dump(mode="json") for profile in context.entity_profiles],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "action_parse_result_json": project_action_parse(context.action_parse_result),
+                    "outcome_resolution_json": project_outcome_resolution(context.outcome_resolution),
+                    "narrative_pacing_json": project_narrative_pacing(context.narrative_pacing),
+                    "retrieved_memories_json": project_retrieved_memories(context.retrieved_memories),
+                    "scene_summaries_json": project_scene_summaries(context.scene_summaries),
+                    "entity_profiles_json": project_entity_profiles(context.entity_profiles),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=PlotOutlineResult,

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from app.core.llm import MockLLM
+from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.scene_summary import SceneSummarizer
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.store import SceneSummaryStore
@@ -9,6 +10,13 @@ from app.workflows.scene_summaries import run_scene_summary_maintenance
 
 
 PROMPT_DIR = Path(__file__).resolve().parents[1] / "prompts"
+
+
+def _state() -> CurrentState:
+    return CurrentState(
+        scene=SceneState(scene_id="scene_010", location="旧旅店", participants=["卢西安"]),
+        player=PlayerState(name="卢西安"),
+    )
 
 
 def _summary(**overrides) -> SceneSummary:
@@ -67,6 +75,7 @@ class TestSceneSummarizer:
 
         summary = SceneSummarizer(mock.build_gateway()).summarize_turn(
             scene_text="老板娘把黄铜钥匙推给卢西安，说这只能开酒窖门。",
+            current_state=_state(),
             scene_id="scene_010",
             turn_index=10,
         )
@@ -114,6 +123,7 @@ class TestSceneSummaryMaintenance:
 
             result = run_scene_summary_maintenance(
                 scene_text="第2回合正文。",
+                current_state=_state(),
                 scene_id="scene_002",
                 turn_index=2,
                 summarizer=SceneSummarizer(mock.build_gateway()),

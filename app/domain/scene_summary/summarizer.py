@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary, SceneSummaryDraft
 
 
@@ -13,10 +14,13 @@ class SceneSummarizer:
         self,
         *,
         scene_text: str,
+        current_state: CurrentState,
         scene_id: str,
         turn_index: int,
         trace_id: str | None = None,
     ) -> SceneSummary:
+        from app.domain.views import project_current_state
+
         draft = cast(
             SceneSummaryDraft,
             self._llm.run(
@@ -24,12 +28,7 @@ class SceneSummarizer:
                 input_data={
                     "scene_text": scene_text,
                     "scene_id": scene_id,
-                    "turn_index": turn_index,
-                    "output_schema_json": json.dumps(
-                        SceneSummaryDraft.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "current_state_json": project_current_state(current_state),
                 },
                 output_schema=SceneSummaryDraft,
                 trace_id=trace_id,

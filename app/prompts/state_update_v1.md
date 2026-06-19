@@ -17,7 +17,8 @@
    - **scene**：location、participants、atmosphere 是否因剧情推进而改变
    - **world_clock_suggestion**：只建议时间推进多少个 phase，不要自由生成时间文本
    - **player**：position、condition、visible_status、intent 是否有变化；如有新增物品/资源请更新 resources
-   - **npcs**：每个 NPC 的 location、condition、attitude_to_player、current_intent 是否发生变化；如有新增 NPC，添加到 npcs 列表；如有 NPC 离开，从 npcs 中移除
+   - **npcs**：每个 NPC 的 location、condition、attitude_to_player、current_intent 是否发生变化；如有新增 NPC，添加到 npcs 列表；如有 NPC 在剧情原文中明确离开、告别、消失、被遣散或不再跟随玩家，从 npcs 中移除
+   - **mentioned_npcs**：列出本回合剧情原文中被提及或涉及的所有 NPC 名字
    - **resources**：inventory、money、key_items 是否有增减
 3. 只能修改在剧情中被明确提及，确认为事实的字段。
 4. 如果一个 NPC 在剧情中首次出现，必须将其加入 npcs 列表。不确定的字段保持 null。
@@ -29,6 +30,9 @@
    - 1：明确跨过一个时间段，如从下午到黄昏、晚上到深夜。
    - 2+：剧情明确经过多个时间段或一整段旅程。
    - 如果不确定，填 0。
+9. npcs 只存储当前场景在场且有交互意义的角色，不是通讯录。
+10. 场景地点变更时，只保留在新地点明确出现或明确跟随玩家的 NPC；其余 NPC 必须从 npcs 移除。
+11. mentioned_npcs 是本回合剧情原文中被提及或涉及的所有 NPC 名字列表，包括对话、被观察、行动、被点名提到的 NPC；包含在内心独白或背景联想中一笔带过的 NPC。
 
 ## 输出格式
 

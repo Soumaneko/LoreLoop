@@ -6,6 +6,7 @@ from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.views import project_current_state, project_scene_summaries
 
 
 class ActionPreviewAgent:
@@ -29,13 +30,9 @@ class ActionPreviewAgent:
                 task="action_preview",
                 input_data={
                     "scene_text": scene_text,
-                    "current_state_json": current_state.model_dump_json(indent=2),
+                    "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "recent_summaries_json": json.dumps(
-                        [s.model_dump(mode="json") for s in recent_summaries],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "recent_summaries_json": project_scene_summaries(recent_summaries),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=ActionPreviewResult,

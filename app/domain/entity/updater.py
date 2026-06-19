@@ -29,17 +29,15 @@ class EntityProfileUpdater:
         if not scene_text.strip():
             return []
 
+        from app.domain.views import project_current_state
+
         result = cast(
             EntityProfileUpdateBatch,
             self._gateway.run(
                 task="entity_profile_update",
                 input_data={
                     "scene_text": scene_text,
-                    "current_state_summary_json": json.dumps(
-                        _summarize_current_state(current_state),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "current_state_summary_json": project_current_state(current_state),
                     "relevant_profiles_json": json.dumps(
                         [
                             profile.semantic_view().model_dump(mode="json")
@@ -158,13 +156,3 @@ def _merge_unique(values: list[str]) -> list[str]:
 
 def _norm(value: str) -> str:
     return str(value).strip().casefold()
-
-
-def _summarize_current_state(current_state: CurrentState) -> dict:
-    return {
-        "scene": current_state.scene.model_dump(mode="json"),
-        "world_clock": current_state.world_clock.model_dump(mode="json"),
-        "player": current_state.player.model_dump(mode="json"),
-        "npcs": [npc.model_dump(mode="json") for npc in current_state.npcs],
-        "resources": current_state.resources.model_dump(mode="json"),
-    }

@@ -11,6 +11,7 @@ from app.domain.roll_modifier.schemas import (
     RollModifier,
     RollModifierBatch,
 )
+from app.domain.views import project_action_parse, project_current_state
 
 
 class RollModifierEvaluator:
@@ -43,8 +44,8 @@ class RollModifierEvaluator:
                 task="roll_modifier",
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "current_state_json": current_state.model_dump_json(indent=2),
-                    "action_parse_result_json": roll_parse_result.model_dump_json(indent=2),
+                    "current_state_json": project_current_state(current_state),
+                    "action_parse_result_json": project_action_parse(roll_parse_result),
                     "output_schema_json": json.dumps(
                         LLMRollModifierBatch.model_json_schema(),
                         ensure_ascii=False,

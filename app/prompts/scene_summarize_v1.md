@@ -9,10 +9,10 @@
 {scene_id}
 ```
 
-## Turn Index
+## CurrentState
 
-```text
-{turn_index}
+```json
+{current_state_json}
 ```
 
 ## Scene Text
@@ -40,8 +40,10 @@
 
 ## Output
 
-只返回符合以下 schema 的有效 JSON：
+只返回 JSON，不要解释。
 
 ```json
-{output_schema_json}
+{{
+  "content": "摘要文本"
+}}
 ```

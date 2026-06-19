@@ -56,12 +56,17 @@ def update_entity_profiles_from_extraction(
     extraction: EntityExtractionResult,
     trace_id: str | None = None,
 ) -> UpdateEntityProfilesResult:
+    extraction = _normalize_extraction_matches(extraction, existing_profiles)
     _apply_alias_matches(entity_store, extraction.alias_matches)
 
-    matched_ids = {
-        entity.matched_entity_id
+    profiles_by_index = {
+        index: profile
+        for index, profile in enumerate(existing_profiles)
+    }
+    matched_indices = {
+        entity.matched_entity_index
         for entity in extraction.retrieved_entities
-        if entity.source != "new" and entity.matched_entity_id
+        if entity.source != "new" and entity.matched_entity_index is not None
     }
     matched_names = {
         entity.matched_entity_name
@@ -70,8 +75,8 @@ def update_entity_profiles_from_extraction(
     }
     relevant_profiles = [
         profile
-        for profile in existing_profiles
-        if profile.entity_id in matched_ids or profile.name in matched_names
+        for index, profile in profiles_by_index.items()
+        if index in matched_indices or profile.name in matched_names
     ]
     new_entity_hints = [
         entity
@@ -92,6 +97,135 @@ def update_entity_profiles_from_extraction(
     for profile in updated:
         saved_ids.append(_upsert_with_exact_duplicate_guard(entity_store, profile))
     return UpdateEntityProfilesResult(extraction=extraction, saved_ids=saved_ids)
+
+
+def _normalize_extraction_matches(
+    extraction: EntityExtractionResult,
+    existing_profiles: list[EntityProfile],
+) -> EntityExtractionResult:
+    return EntityExtractionResult(
+        alias_matches=[
+            normalized
+            for match in extraction.alias_matches
+            if (normalized := _normalize_alias_match(match, existing_profiles)) is not None
+        ],
+        retrieved_entities=[
+            _normalize_retrieved_entity(entity, existing_profiles)
+            for entity in extraction.retrieved_entities
+        ],
+    )
+
+
+def _normalize_alias_match(match, existing_profiles: list[EntityProfile]):
+    profile_index = _resolve_matched_profile_index(
+        requested_index=match.matched_entity_index,
+        matched_name=match.matched_entity_name,
+        extracted_text=match.extracted_text,
+        entity_type=match.matched_entity_type,
+        existing_profiles=existing_profiles,
+    )
+    if profile_index is None:
+        return None
+
+    profile = existing_profiles[profile_index]
+    return match.model_copy(update={
+        "matched_entity_index": profile_index,
+        "matched_entity_name": profile.name,
+        "matched_entity_type": profile.entity_type,
+    })
+
+
+def _normalize_retrieved_entity(
+    entity,
+    existing_profiles: list[EntityProfile],
+):
+    if entity.source == "new":
+        return entity.model_copy(update={
+            "matched_entity_index": None,
+            "matched_entity_name": None,
+        })
+
+    profile_index = _resolve_matched_profile_index(
+        requested_index=entity.matched_entity_index,
+        matched_name=entity.matched_entity_name,
+        extracted_text=entity.name,
+        entity_type=entity.entity_type,
+        existing_profiles=existing_profiles,
+    )
+    if profile_index is None:
+        return entity.model_copy(update={
+            "source": "new",
+            "matched_entity_index": None,
+            "matched_entity_name": None,
+        })
+
+    profile = existing_profiles[profile_index]
+    return entity.model_copy(update={
+        "name": profile.name,
+        "entity_type": profile.entity_type,
+        "matched_entity_index": profile_index,
+        "matched_entity_name": profile.name,
+    })
+
+
+def _resolve_matched_profile_index(
+    *,
+    requested_index: int | None,
+    matched_name: str | None,
+    extracted_text: str | None,
+    entity_type: str | None,
+    existing_profiles: list[EntityProfile],
+) -> int | None:
+    if requested_index is not None and 0 <= requested_index < len(existing_profiles):
+        profile = existing_profiles[requested_index]
+        if _matches_profile_name_or_alias(matched_name, profile):
+            return requested_index
+
+    for candidate in [matched_name, extracted_text]:
+        profile_index = _find_profile_index_by_name_or_alias(
+            candidate,
+            entity_type=entity_type,
+            existing_profiles=existing_profiles,
+        )
+        if profile_index is not None:
+            return profile_index
+
+    return None
+
+
+def _find_profile_index_by_name_or_alias(
+    value: str | None,
+    *,
+    entity_type: str | None,
+    existing_profiles: list[EntityProfile],
+) -> int | None:
+    key = _normalize_key(value)
+    if not key:
+        return None
+    for index, profile in enumerate(existing_profiles):
+        if profile.entity_type == entity_type and key in _profile_name_alias_keys(profile):
+            return index
+    for index, profile in enumerate(existing_profiles):
+        if key in _profile_name_alias_keys(profile):
+            return index
+    return None
+
+
+def _matches_profile_name_or_alias(value: str | None, profile: EntityProfile) -> bool:
+    key = _normalize_key(value)
+    return bool(key and key in _profile_name_alias_keys(profile))
+
+
+def _profile_name_alias_keys(profile: EntityProfile) -> set[str]:
+    return {
+        key
+        for value in [profile.name, *profile.aliases]
+        if (key := _normalize_key(value))
+    }
+
+
+def _normalize_key(value: str | None) -> str:
+    return str(value or "").strip().casefold()
 
 
 def _upsert_with_exact_duplicate_guard(
@@ -130,9 +264,6 @@ def _find_exact_existing_in_store(
 def _apply_alias_matches(entity_store: EntityStore, alias_matches) -> None:
     for match in alias_matches:
         if not match.new_alias:
-            continue
-        if match.matched_entity_id:
-            entity_store.append_alias(match.matched_entity_id, match.new_alias)
             continue
         profile = entity_store.get_by_name(match.matched_entity_name)
         if profile is not None:

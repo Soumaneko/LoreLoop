@@ -4,11 +4,12 @@ from pydantic import BaseModel, Field
 class PlotBeat(BaseModel):
     beat_id: str
     summary: str
+    related_entities: list[str] = Field(default_factory=list)
     linked_action_ids: list[str] = Field(default_factory=list)
     linked_roll_ids: list[str] = Field(default_factory=list)
     linked_outcome_ids: list[str] = Field(default_factory=list)
     required_outcomes: list[str] = Field(default_factory=list)
-    required_memories: list[str] = Field(default_factory=list)
+    required_memory_indices: list[int] = Field(default_factory=list)
     state_implications: list[str] = Field(default_factory=list)
     tone_notes: list[str] = Field(default_factory=list)
 

@@ -16,14 +16,14 @@ class MemoryDraftExtractor:
         scene_id: str | None = None,
         trace_id: str | None = None,
     ) -> MemoryDraftExtractResult:
+        from app.domain.views import project_current_state
+
         scene_id = scene_id or current_state.scene.scene_id
         result = self._llm.run(
             task="memory_draft_extract",
             input_data={
                 "scene_text": scene_text,
-                "current_state_json": current_state.model_dump_json(indent=2),
-                "turn_index": turn_index,
-                "scene_id": scene_id,
+                "current_state_json": project_current_state(current_state),
             },
             output_schema=MemoryDraftExtractResult,
             trace_id=trace_id,

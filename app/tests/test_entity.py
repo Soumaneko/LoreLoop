@@ -116,7 +116,7 @@ class TestEntityExtractor:
                     "alias_matches": [
                         {
                             "extracted_text": "红发女侍者",
-                            "matched_entity_id": "ent_milly",
+                            "matched_entity_index": 99,
                             "matched_entity_name": "米莉",
                             "matched_entity_type": "npc",
                             "new_alias": "红发女侍者",
@@ -127,7 +127,7 @@ class TestEntityExtractor:
                             "name": "米莉",
                             "entity_type": "npc",
                             "source": "alias_match",
-                            "matched_entity_id": "ent_milly",
+                            "matched_entity_index": 0,
                             "matched_entity_name": "米莉",
                         },
                         {
@@ -315,7 +315,7 @@ class TestUpdateEntityProfilesWorkflow:
                     "alias_matches": [
                         {
                             "extracted_text": "红发女侍者",
-                            "matched_entity_id": existing_id,
+                            "matched_entity_index": 0,
                             "matched_entity_name": "米莉",
                             "matched_entity_type": "npc",
                             "new_alias": "红发女侍者",
@@ -326,7 +326,7 @@ class TestUpdateEntityProfilesWorkflow:
                             "name": "米莉",
                             "entity_type": "npc",
                             "source": "alias_match",
-                            "matched_entity_id": existing_id,
+                            "matched_entity_index": 0,
                             "matched_entity_name": "米莉",
                         },
                         {
@@ -418,3 +418,108 @@ class TestUpdateEntityProfilesWorkflow:
         assert saved.saved_ids == [existing_id]
         assert store.count() == 1
         assert store.get_by_id(existing_id).summary == "米莉是北郡酒馆的侍者。"
+
+    def test_workflow_recovers_when_extractor_uses_wrong_entity_index(self):
+        store = EntityStore(":memory:")
+        store.upsert(EntityProfile(entity_type="npc", name="莎拉"))
+        milly_id = store.upsert(EntityProfile(entity_type="npc", name="米莉", aliases=["酒馆侍者"]))
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps(
+                {
+                    "alias_matches": [
+                        {
+                            "extracted_text": "红发女侍者",
+                            "matched_entity_index": 0,
+                            "matched_entity_name": "米莉",
+                            "matched_entity_type": "npc",
+                            "new_alias": "红发女侍者",
+                        }
+                    ],
+                    "retrieved_entities": [
+                        {
+                            "name": "米莉",
+                            "entity_type": "npc",
+                            "source": "alias_match",
+                            "matched_entity_index": 99,
+                            "matched_entity_name": "米莉",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps(
+                {
+                    "entities": [
+                        {
+                            "entity_type": "npc",
+                            "name": "米莉",
+                            "aliases": ["红发女侍者"],
+                            "summary": "米莉是北郡酒馆的侍者。",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+        ])
+
+        saved = update_entity_profiles_workflow(
+            "红发女侍者递来一张旧地图。",
+            _make_state(),
+            mock.build_gateway(),
+            store,
+        )
+
+        assert saved.extraction.alias_matches[0].matched_entity_index != 99
+        assert saved.extraction.alias_matches[0].matched_entity_name == "米莉"
+        assert saved.extraction.retrieved_entities[0].matched_entity_index != 99
+        assert saved.extraction.retrieved_entities[0].matched_entity_name == "米莉"
+        assert saved.saved_ids == [milly_id]
+        assert "红发女侍者" in store.get_by_id(milly_id).aliases
+
+    def test_workflow_downgrades_bad_existing_match_to_new(self):
+        store = EntityStore(":memory:")
+        store.upsert(EntityProfile(entity_type="npc", name="米莉"))
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps(
+                {
+                    "alias_matches": [],
+                    "retrieved_entities": [
+                        {
+                            "name": "黑石信使",
+                            "entity_type": "npc",
+                            "source": "exact_match",
+                            "matched_entity_index": 99,
+                            "matched_entity_name": "不存在的人",
+                            "context_span": "黑石信使把密封信交到吧台。",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps(
+                {
+                    "entities": [
+                        {
+                            "entity_type": "npc",
+                            "name": "黑石信使",
+                            "aliases": [],
+                            "summary": "黑石信使带来一封密封信。",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+        ])
+
+        saved = update_entity_profiles_workflow(
+            "黑石信使把密封信交到吧台。",
+            _make_state(),
+            mock.build_gateway(),
+            store,
+        )
+
+        assert saved.extraction.retrieved_entities[0].source == "new"
+        assert saved.extraction.retrieved_entities[0].matched_entity_index is None
+        assert store.count() == 2

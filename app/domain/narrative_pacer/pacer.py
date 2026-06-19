@@ -13,6 +13,12 @@ from app.domain.narrative_pacer.schemas import (
 )
 from app.domain.outcome.schemas import OutcomeResolutionResult
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.views import (
+    project_action_parse,
+    project_current_state,
+    project_outcome_resolution,
+    project_scene_summaries,
+)
 
 
 ALL_NARRATIVE_TYPES: list[NarrativeType] = [
@@ -131,15 +137,11 @@ class NarrativePacer:
                     ),
                     "previous_types_json": json.dumps(previous_types[-2:], ensure_ascii=False, indent=2),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "current_state_json": current_state.model_dump_json(indent=2),
+                    "current_state_json": project_current_state(current_state),
                     "user_input": user_input,
-                    "action_parse_result_json": action_parse_result.model_dump_json(indent=2),
-                    "outcome_resolution_json": outcome_resolution.model_dump_json(indent=2),
-                    "recent_summaries_json": json.dumps(
-                        [s.model_dump(mode="json") for s in recent_summaries],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "action_parse_result_json": project_action_parse(action_parse_result),
+                    "outcome_resolution_json": project_outcome_resolution(outcome_resolution),
+                    "recent_summaries_json": project_scene_summaries(recent_summaries),
                     "output_schema_json": json.dumps(
                         NarrativePacingDecision.model_json_schema(),
                         ensure_ascii=False,

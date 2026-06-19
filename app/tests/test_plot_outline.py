@@ -1,5 +1,6 @@
 import pytest
 from pathlib import Path
+import json
 
 from app.core.llm import MockLLM
 from app.domain.action.schemas import ActionParseResult, AtomicAction
@@ -15,7 +16,8 @@ from app.domain.narrative_pacer import NarrativePacingResult
 from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.plot_outline.agent import PlotOutlineAgent
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
+from app.domain.plot_outline.views import project_retrieved_memories
+from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_summary.schemas import SceneSummary
 from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 from app.workflows.generate_plot_outline import generate_plot_outline_workflow
@@ -157,7 +159,7 @@ def _build_outline_response(
                 "linked_action_ids": ["a1"],
                 "linked_outcome_ids": ["a1"],
                 "required_outcomes": ["The action should succeed in a clear but grounded way."],
-                "required_memories": ["mem_001"],
+                "required_memory_indices": [0],
                 "state_implications": ["主角发现可疑线索"],
                 "tone_notes": ["保持悬疑氛围"],
             },
@@ -210,6 +212,46 @@ class TestPlotOutlineAgent:
         assert isinstance(beat.linked_action_ids, list)
         assert isinstance(beat.linked_outcome_ids, list)
         assert isinstance(beat.required_outcomes, list)
+        assert isinstance(beat.required_memory_indices, list)
+
+    def test_retrieved_memory_projection_uses_unified_indices(self):
+        projected = project_retrieved_memories(
+            CandidateRetrievalResult(
+                candidates=[
+                    MemoryCandidate(
+                        memory_id="mem_001",
+                        subtype="fact",
+                        subject="正式记忆",
+                        content="北郡修道院最近来了一些陌生人。",
+                        entities=["北郡修道院"],
+                        tags=["情报"],
+                        salience=0.8,
+                        confidence=0.7,
+                        score=0.12,
+                    ),
+                ],
+                pending_notes=[
+                    PendingMemoryNote(
+                        pending_id="pending_001",
+                        scene_id="scene_001",
+                        turn_index=1,
+                        raw_text="米莉刚刚提到调查团异常。",
+                        entities=["米莉", "调查团"],
+                    ),
+                ],
+                total_scanned=2,
+                total_returned=2,
+            )
+        )
+
+        data = json.loads(projected)
+
+        assert list(data.keys()) == ["memories", "total_scanned", "total_returned"]
+        assert data["memories"][0]["memory_index"] == 0
+        assert data["memories"][0]["source"] == "classified"
+        assert data["memories"][1]["memory_index"] == 1
+        assert data["memories"][1]["source"] == "pending"
+        assert data["memories"][1]["pending_id"] == "pending_001"
 
     def test_outline_has_constraints_and_risks(self):
         context = _make_context()
@@ -237,7 +279,7 @@ class TestPlotOutlineAgent:
                     "beat_id": "b1",
                     "summary": "主角观察但没发现异常",
                     "linked_action_ids": ["a1"],
-                    "required_memories": [],
+                    "required_memory_indices": [],
                     "state_implications": [],
                     "tone_notes": [],
                 },
@@ -258,7 +300,7 @@ class TestPlotOutlineAgent:
                     "beat_id": "b1",
                     "summary": "第一步",
                     "linked_action_ids": ["a1"],
-                    "required_memories": [],
+                    "required_memory_indices": [],
                     "state_implications": [],
                     "tone_notes": [],
                 },
@@ -266,7 +308,7 @@ class TestPlotOutlineAgent:
                     "beat_id": "b2",
                     "summary": "第二步",
                     "linked_action_ids": [],
-                    "required_memories": [],
+                    "required_memory_indices": [],
                     "state_implications": [],
                     "tone_notes": [],
                 },

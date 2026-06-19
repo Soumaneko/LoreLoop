@@ -55,6 +55,7 @@ class TestNPCState:
 
         assert state.location is None
         assert state.condition == ["疲惫"]
+        assert state.absent_turns == 0
 
 
 class TestResourcesState:

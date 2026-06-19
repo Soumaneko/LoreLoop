@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from threading import Lock
 
+from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.scene_summary.summarizer import SceneSummarizer
@@ -19,6 +20,7 @@ class SceneSummaryMaintenanceResult:
 def run_scene_summary_maintenance(
     *,
     scene_text: str,
+    current_state: CurrentState,
     scene_id: str,
     turn_index: int,
     summarizer: SceneSummarizer,
@@ -29,6 +31,7 @@ def run_scene_summary_maintenance(
     result = SceneSummaryMaintenanceResult()
     l1 = summarizer.summarize_turn(
         scene_text=scene_text,
+        current_state=current_state,
         scene_id=scene_id,
         turn_index=turn_index,
         trace_id=trace_id,
