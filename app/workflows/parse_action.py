@@ -4,6 +4,7 @@ from app.domain.action.self_check import ActionSelfCheck
 from app.domain.core_memory import create_default_core_memory
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.scene_summary.schemas import SceneSummary
 
 
@@ -15,6 +16,7 @@ def parse_action_workflow(
     *,
     core_memory: CoreMemory | None = None,
     recent_summaries: list[SceneSummary] | None = None,
+    entity_profiles: list[EntityProfileUpdateInput] | None = None,
 ) -> ActionParseResult:
     core_memory = core_memory or create_default_core_memory()
     result = parser.parse(
@@ -22,6 +24,7 @@ def parse_action_workflow(
         current_state,
         core_memory=core_memory,
         recent_summaries=recent_summaries,
+        entity_profiles=entity_profiles or [],
     )
     cleaned = self_check.check(result, user_input, current_state)
     return cleaned

@@ -35,7 +35,6 @@ class RetrievalContext:
     anchor_expansions: list[list[tuple[str, float]]] = field(default_factory=list)
 
     atomic_actions: list[AtomicAction] = field(default_factory=list)
-    action_ids_set: set[str] = field(default_factory=set)
 
 
 def build_context(
@@ -97,7 +96,6 @@ def build_context(
         anchor_kinds=anchor_kinds,
         anchor_expansions=anchor_expansions,
         atomic_actions=atomic_actions,
-        action_ids_set={a.action_id for a in atomic_actions},
     )
 
 

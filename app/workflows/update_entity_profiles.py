@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from app.core.llm import LLMGateway
-from app.domain.action.schemas import ActionParseResult
+from app.domain.action.schemas import Anchor
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import (
     EntityExtractionResult,
@@ -10,7 +10,6 @@ from app.domain.entity.schemas import (
 from app.domain.entity.extractor import EntityExtractor
 from app.domain.entity.store import EntityStore
 from app.domain.entity.updater import EntityProfileUpdater, apply_semantic_update
-from app.domain.retrieval.schemas import CandidateRetrievalResult
 
 
 @dataclass
@@ -270,24 +269,22 @@ def _apply_alias_matches(entity_store: EntityStore, alias_matches) -> None:
             entity_store.append_alias(profile.entity_id, match.new_alias)
 
 
-def gather_relevant_entity_profiles_for_turn(
+def gather_entity_profiles_from_state_and_anchors(
     *,
     current_state: CurrentState,
-    action_parse_result: ActionParseResult,
-    retrieved_memories: CandidateRetrievalResult,
+    anchors: list[Anchor],
     entity_store: EntityStore,
     limit: int = 20,
 ) -> list[EntityProfile]:
-    names = _gather_names(current_state, action_parse_result, retrieved_memories)
+    names = _gather_names(current_state, anchors)
     selected: list[EntityProfile] = []
     seen: set[str] = set()
     for name in names:
-        for profile in entity_store.find_by_name_fuzzy(name):
-            if profile.entity_id in seen:
-                continue
-            selected.append(profile)
-            seen.add(profile.entity_id)
-            break
+        profile = entity_store.get_by_name(name)
+        if profile is None or profile.entity_id in seen:
+            continue
+        selected.append(profile)
+        seen.add(profile.entity_id)
         if len(selected) >= limit:
             break
     return selected
@@ -295,8 +292,7 @@ def gather_relevant_entity_profiles_for_turn(
 
 def _gather_names(
     current_state: CurrentState,
-    action_parse_result: ActionParseResult,
-    retrieved_memories: CandidateRetrievalResult,
+    anchors: list[Anchor],
 ) -> list[str]:
     names: list[str] = []
     names.append(current_state.scene.location)
@@ -317,16 +313,10 @@ def _gather_names(
         for item in collection:
             names.append(_resource_name(item))
 
-    for anchor in action_parse_result.anchors:
+    for anchor in anchors:
         if anchor.kind in {"character", "location", "item", "organization"}:
             names.append(anchor.normalized or anchor.text)
             names.append(anchor.text)
-
-    for candidate in retrieved_memories.candidates:
-        names.append(candidate.subject)
-        names.extend(candidate.entities)
-    for note in retrieved_memories.pending_notes:
-        names.extend(note.entities)
 
     return _unique_nonempty(names)
 

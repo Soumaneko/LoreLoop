@@ -27,9 +27,6 @@ AnchorKind = Literal[
     "organization",
     "concept",
     "action_keyword",
-    "past_reference",
-    "temporal_reference",
-    "condition",
     "unknown",
 ]
 
@@ -60,11 +57,23 @@ class Anchor(BaseModel):
     normalized: str
     kind: AnchorKind
     source: Literal["explicit", "implicit_from_scene"]
-    action_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0, le=1)
 
 
+class ActionExtractionResult(BaseModel):
+    analysis: str = ""
+    turn_intent: str
+    atomic_actions: list[AtomicAction] = Field(default_factory=list)
+    ambiguities: list[str] = Field(default_factory=list)
+
+
+class AnchorExtractionResult(BaseModel):
+    anchors: list[Anchor] = Field(default_factory=list)
+    ambiguities: list[str] = Field(default_factory=list)
+
+
 class ActionParseResult(BaseModel):
+    analysis: str = ""
     turn_intent: str
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
     anchors: list[Anchor] = Field(default_factory=list)

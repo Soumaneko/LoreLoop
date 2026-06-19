@@ -32,7 +32,6 @@ def build_parse_from_preview(
             normalized=anchor.normalized or anchor.text,
             kind=anchor.kind,
             source="explicit",
-            action_ids=["A1"],
             confidence=anchor.confidence,
         )
         for anchor in preview.anchors

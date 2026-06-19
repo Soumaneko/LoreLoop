@@ -24,8 +24,6 @@ class RetrievalConfig(BaseModel):
     rrf_scene_context_weight: float = 0.5
     rrf_layer_intent_weight: float = 0.6
 
-    multi_action_bonus: float = 0.01
-
 
 KIND_FACTOR: dict[str, float] = {
     "character": 0.8,
@@ -34,9 +32,6 @@ KIND_FACTOR: dict[str, float] = {
     "item": 1.2,
     "concept": 1.2,
     "action_keyword": 0.8,
-    "past_reference": 1.2,
-    "temporal_reference": 0.5,
-    "condition": 0.4,
     "unknown": 0.5,
 }
 
@@ -218,4 +213,4 @@ PAST_REF_SUBTYPE_BOOST: dict[str, float] = {
 }
 
 
-LOW_WEIGHT_ANCHOR_KINDS = {"condition", "temporal_reference", "unknown"}
+LOW_WEIGHT_ANCHOR_KINDS = {"unknown"}

@@ -19,14 +19,8 @@ def retrieve_memories_by_entities(
     *,
     max_results: int = 10,
 ) -> list[MemoryCandidate]:
-    entity_names: set[str] = set()
-    for beat in outline.beats:
-        for name in beat.related_entities:
-            stripped = name.strip()
-            if stripped:
-                entity_names.add(stripped)
-
-    if not entity_names:
+    anchors = build_entity_retrieval_anchors(outline)
+    if not anchors:
         return []
 
     synthetic_action = AtomicAction(
@@ -39,18 +33,6 @@ def retrieve_memories_by_entities(
         likely_needs_roll=False,
         confidence=1.0,
     )
-
-    anchors = [
-        Anchor(
-            text=name,
-            normalized=name,
-            kind="character",
-            source="explicit",
-            action_ids=["_entity_retrieval"],
-            confidence=0.8,
-        )
-        for name in entity_names
-    ]
 
     synthetic_parse = ActionParseResult(
         turn_intent="entity retrieval",
@@ -68,6 +50,29 @@ def retrieve_memories_by_entities(
     retriever = CandidateRetriever(memory_store, config)
     result = retriever.retrieve(synthetic_parse, top_k=max_results)
     return result.candidates
+
+
+def build_entity_retrieval_anchors(outline: PlotOutlineResult) -> list[Anchor]:
+    entity_names: list[str] = []
+    seen: set[str] = set()
+    for beat in outline.beats:
+        for name in beat.related_entities:
+            stripped = name.strip()
+            key = stripped.casefold()
+            if stripped and key not in seen:
+                entity_names.append(stripped)
+                seen.add(key)
+
+    return [
+        Anchor(
+            text=name,
+            normalized=name,
+            kind="character",
+            source="explicit",
+            confidence=0.8,
+        )
+        for name in entity_names
+    ]
 
 
 def select_required_memories(

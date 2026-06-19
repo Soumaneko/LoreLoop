@@ -13,7 +13,11 @@ from app.domain.entity.schemas import (
 )
 from app.domain.entity.store import EntityStore
 from app.domain.entity.updater import EntityProfileUpdater
-from app.workflows.update_entity_profiles import update_entity_profiles_workflow
+from app.domain.action.schemas import Anchor
+from app.workflows.update_entity_profiles import (
+    gather_entity_profiles_from_state_and_anchors,
+    update_entity_profiles_workflow,
+)
 
 
 def _make_state() -> CurrentState:
@@ -184,6 +188,60 @@ class TestEntityMemoryLinker:
         ])
 
         assert links == []
+
+
+class TestEntityProfileGathering:
+    def test_gathers_from_current_state_and_anchor_name_alias_only(self):
+        store = EntityStore(":memory:")
+        milly_id = store.upsert(EntityProfile(entity_type="npc", name="米莉", aliases=["酒馆侍者"]))
+        map_id = store.upsert(EntityProfile(entity_type="item", name="旧地图", aliases=["破旧地图"]))
+        store.upsert(EntityProfile(entity_type="npc", name="无关记忆人物"))
+
+        profiles = gather_entity_profiles_from_state_and_anchors(
+            current_state=_make_state(),
+            anchors=[
+                Anchor(
+                    text="破旧地图",
+                    normalized="破旧地图",
+                    kind="item",
+                    source="explicit",
+                    confidence=0.9,
+                ),
+                Anchor(
+                    text="无关记忆人物传闻",
+                    normalized="无关记忆人物传闻",
+                    kind="concept",
+                    source="explicit",
+                    confidence=0.9,
+                ),
+            ],
+            entity_store=store,
+        )
+
+        assert [profile.entity_id for profile in profiles] == [milly_id, map_id]
+
+    def test_gather_does_not_use_fuzzy_substring(self):
+        store = EntityStore(":memory:")
+        store.upsert(EntityProfile(entity_type="location", name="暴风城王宫"))
+
+        profiles = gather_entity_profiles_from_state_and_anchors(
+            current_state=CurrentState(
+                scene=SceneState(scene_id="scene_x", location="别处", participants=[]),
+                player=PlayerState(name="卢西安"),
+            ),
+            anchors=[
+                Anchor(
+                    text="王宫",
+                    normalized="王宫",
+                    kind="location",
+                    source="explicit",
+                    confidence=0.9,
+                )
+            ],
+            entity_store=store,
+        )
+
+        assert profiles == []
 
 
 class TestEntityProfileUpdater:

@@ -51,7 +51,6 @@ def _action_parse() -> ActionParseResult:
                 normalized="钥匙",
                 kind="item",
                 source="explicit",
-                action_ids=["act_1"],
                 confidence=0.9,
             )
         ],

@@ -17,10 +17,10 @@ def _make_action(action_id="A1", action_type="observe", raw_text="测试", **ove
     return AtomicAction(**defaults)
 
 
-def _make_anchor(text, normalized=None, kind="character", action_ids=None, **overrides):
+def _make_anchor(text, normalized=None, kind="character", **overrides):
     defaults = {
         "text": text, "normalized": normalized or text, "kind": kind,
-        "source": "explicit", "action_ids": action_ids or ["A1"], "confidence": 0.9,
+        "source": "explicit", "confidence": 0.9,
     }
     defaults.update(overrides)
     return Anchor(**defaults)

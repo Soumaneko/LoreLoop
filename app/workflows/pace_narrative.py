@@ -2,6 +2,7 @@ from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.narrative_pacer import NarrativePacer, NarrativePacingResult, NarrativeType
 from app.domain.outcome.schemas import OutcomeResolutionResult
 from app.domain.scene_summary.schemas import SceneSummary
@@ -15,6 +16,7 @@ def pace_narrative_workflow(
     outcome_resolution: OutcomeResolutionResult,
     core_memory: CoreMemory,
     recent_summaries: list[SceneSummary],
+    entity_profiles: list[EntityProfileUpdateInput] | None = None,
     gateway: LLMGateway,
     previous_types: list[NarrativeType] | None = None,
     pacer: NarrativePacer | None = None,
@@ -28,6 +30,7 @@ def pace_narrative_workflow(
         outcome_resolution=outcome_resolution,
         core_memory=core_memory,
         recent_summaries=recent_summaries,
+        entity_profiles=entity_profiles or [],
         previous_types=previous_types,
         trace_id=trace_id,
     )

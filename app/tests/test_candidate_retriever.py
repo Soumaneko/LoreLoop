@@ -59,7 +59,6 @@ def _make_anchor(
     text: str,
     normalized: str | None = None,
     kind: str = "character",
-    action_ids: list[str] | None = None,
     **overrides,
 ) -> Anchor:
     defaults = {
@@ -67,7 +66,6 @@ def _make_anchor(
         "normalized": normalized or text,
         "kind": kind,
         "source": "explicit",
-        "action_ids": action_ids or ["A1"],
         "confidence": 0.9,
     }
     defaults.update(overrides)
@@ -112,7 +110,7 @@ class TestMemoryCandidateShape:
             raw_text="我询问守卫艾琳娜的事",
             target="守卫",
         )
-        anchors = [_make_anchor("守卫", "守卫", kind="character", action_ids=["A1"])]
+        anchors = [_make_anchor("守卫", "守卫", kind="character")]
 
         result = CandidateRetriever(store).retrieve(
             _make_parse_result(actions=[action], anchors=anchors)
@@ -160,7 +158,7 @@ class TestActiveMemoryFiltering:
             action_type="speak",
             raw_text="我询问旧钥匙的传闻",
         )
-        anchors = [_make_anchor("旧钥匙", "旧钥匙", kind="item", action_ids=["A1"])]
+        anchors = [_make_anchor("旧钥匙", "旧钥匙", kind="item")]
 
         result = CandidateRetriever(store).retrieve(
             _make_parse_result(actions=[action], anchors=anchors)
@@ -190,7 +188,7 @@ class TestLayerIntentRetrieval:
             action_type="speak",
             raw_text="我打听艾琳娜",
         )
-        anchors = [_make_anchor("艾琳娜", "艾琳娜", kind="character", action_ids=["A1"])]
+        anchors = [_make_anchor("艾琳娜", "艾琳娜", kind="character")]
 
         result = CandidateRetriever(store).retrieve(
             _make_parse_result(actions=[action], anchors=anchors)
@@ -247,10 +245,10 @@ class TestSecretSignalRecall:
         )
 
         anchors = [
-            _make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"]),
-            _make_anchor("暗号", "暗号", kind="concept", action_ids=["A1"]),
-            _make_anchor("之前", "之前", kind="past_reference", action_ids=["A1"]),
-            _make_anchor("别说话", "别说话", kind="action_keyword", action_ids=["A1"]),
+            _make_anchor("伊莱娜", "伊莱娜", kind="character"),
+            _make_anchor("暗号", "暗号", kind="concept"),
+            _make_anchor("之前", "之前", kind="concept"),
+            _make_anchor("别说话", "别说话", kind="action_keyword"),
         ]
 
         parse_result = _make_parse_result(
@@ -308,9 +306,9 @@ class TestSecretSignalRecall:
         )
 
         anchors = [
-            _make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"]),
-            _make_anchor("暗号", "暗号", kind="concept", action_ids=["A1"]),
-            _make_anchor("之前", "之前", kind="past_reference", action_ids=["A1"]),
+            _make_anchor("伊莱娜", "伊莱娜", kind="character"),
+            _make_anchor("暗号", "暗号", kind="concept"),
+            _make_anchor("之前", "之前", kind="concept"),
         ]
 
         parse_result = _make_parse_result(
@@ -376,9 +374,9 @@ class TestDoorLockRecall:
         )
 
         anchors = [
-            _make_anchor("门锁", "门锁", kind="item", action_ids=["A1"]),
-            _make_anchor("旧城区", "旧城区", kind="location", action_ids=["A1"]),
-            _make_anchor("见过", "见过的", kind="past_reference", action_ids=["A1"]),
+            _make_anchor("门锁", "门锁", kind="item"),
+            _make_anchor("旧城区", "旧城区", kind="location"),
+            _make_anchor("见过", "见过的", kind="concept"),
         ]
 
         parse_result = _make_parse_result(
@@ -447,9 +445,9 @@ class TestAvoidEntityPollution:
         )
 
         anchors = [
-            _make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"]),
-            _make_anchor("暗号", "暗号", kind="concept", action_ids=["A1"]),
-            _make_anchor("约好的", "约定的", kind="past_reference", action_ids=["A1"]),
+            _make_anchor("伊莱娜", "伊莱娜", kind="character"),
+            _make_anchor("暗号", "暗号", kind="concept"),
+            _make_anchor("约好的", "约定的", kind="concept"),
         ]
 
         parse_result = _make_parse_result(
@@ -534,7 +532,7 @@ class TestPastReferenceAlone:
         )
 
         anchors = [
-            _make_anchor("老办法", "老办法", kind="past_reference", action_ids=["A1"]),
+            _make_anchor("老办法", "老办法", kind="concept"),
         ]
 
         parse_result = _make_parse_result(
@@ -599,8 +597,8 @@ class TestItemAction:
         )
 
         anchors = [
-            _make_anchor("鹰徽章", "鹰徽章", kind="item", action_ids=["A1"]),
-            _make_anchor("烧焦", "烧焦", kind="concept", action_ids=["A1"]),
+            _make_anchor("鹰徽章", "鹰徽章", kind="item"),
+            _make_anchor("烧焦", "烧焦", kind="concept"),
         ]
 
         parse_result = _make_parse_result(
@@ -669,8 +667,8 @@ class TestConditionNotRecalling:
         )
 
         anchors = [
-            _make_anchor("没人注意", "没人注意", kind="condition", action_ids=["A1"]),
-            _make_anchor("继续往前走", "继续往前走", kind="action_keyword", action_ids=["A1"]),
+            _make_anchor("没人注意", "没人注意", kind="unknown"),
+            _make_anchor("继续往前走", "继续往前走", kind="action_keyword"),
         ]
 
         parse_result = _make_parse_result(
@@ -712,9 +710,9 @@ class TestScoreBreakdown:
         )
 
         anchors = [
-            _make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"]),
-            _make_anchor("暗号", "暗号", kind="concept", action_ids=["A1"]),
-            _make_anchor("之前", "之前", kind="past_reference", action_ids=["A1"]),
+            _make_anchor("伊莱娜", "伊莱娜", kind="character"),
+            _make_anchor("暗号", "暗号", kind="concept"),
+            _make_anchor("之前", "之前", kind="concept"),
         ]
 
         parse_result = _make_parse_result(
@@ -764,8 +762,8 @@ class TestScoreBreakdown:
         )
 
         anchors = [
-            _make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"]),
-            _make_anchor("暗号", "暗号", kind="concept", action_ids=["A1"]),
+            _make_anchor("伊莱娜", "伊莱娜", kind="character"),
+            _make_anchor("暗号", "暗号", kind="concept"),
         ]
 
         parse_result = _make_parse_result(
@@ -819,7 +817,7 @@ class TestEmptyAndNoMatch:
         )
 
         anchors = [
-            _make_anchor("向前走", "向前走", kind="action_keyword", action_ids=["A1"]),
+            _make_anchor("向前走", "向前走", kind="action_keyword"),
         ]
 
         parse_result = _make_parse_result(
@@ -869,9 +867,9 @@ class TestActionProximityBoost:
         )
 
         anchors = [
-            _make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"]),
-            _make_anchor("暗号", "暗号", kind="concept", action_ids=["A1"]),
-            _make_anchor("沉默", "沉默", kind="action_keyword", action_ids=["A1"]),
+            _make_anchor("伊莱娜", "伊莱娜", kind="character"),
+            _make_anchor("暗号", "暗号", kind="concept"),
+            _make_anchor("沉默", "沉默", kind="action_keyword"),
         ]
 
         parse_result = _make_parse_result(
@@ -919,7 +917,7 @@ class TestTopK:
         )
 
         anchors = [
-            _make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"]),
+            _make_anchor("伊莱娜", "伊莱娜", kind="character"),
         ]
 
         parse_result = _make_parse_result(
@@ -960,7 +958,7 @@ class TestTopK:
         parse_result = _make_parse_result(
             turn_intent="观察伊莱娜",
             actions=[action],
-            anchors=[_make_anchor("伊莱娜", "伊莱娜", kind="character", action_ids=["A1"])],
+            anchors=[_make_anchor("伊莱娜", "伊莱娜", kind="character")],
         )
 
         retriever = CandidateRetriever(store, config=RetrievalConfig(top_k=3))

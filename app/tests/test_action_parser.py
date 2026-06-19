@@ -25,7 +25,20 @@ def _make_current_state() -> CurrentState:
 
 def _make_parser(responses: list[str]) -> ActionParser:
     mock = MockLLM()
-    mock.set_responses(responses)
+    split_responses: list[str] = []
+    for response in responses:
+        data = json.loads(response)
+        split_responses.append(json.dumps({
+            "anchors": data.get("anchors", []),
+            "ambiguities": data.get("ambiguities", []),
+        }, ensure_ascii=False))
+        split_responses.append(json.dumps({
+            "analysis": data.get("analysis", ""),
+            "turn_intent": data.get("turn_intent", ""),
+            "atomic_actions": data.get("atomic_actions", []),
+            "ambiguities": data.get("ambiguities", []),
+        }, ensure_ascii=False))
+    mock.set_responses(split_responses)
     return ActionParser(mock.build_gateway())
 
 
@@ -166,7 +179,7 @@ class TestPastReference:
                     }
                 ],
                 anchors=[
-                    {"text": "之前", "normalized": "past_reference", "kind": "past_reference", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
+                    {"text": "之前", "normalized": "past_reference", "kind": "concept", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
                     {"text": "伊莱娜", "normalized": "伊莱娜", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
                     {"text": "暗号", "normalized": "暗号", "kind": "concept", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
                     {"text": "别说话", "normalized": "保持沉默", "kind": "action_keyword", "source": "explicit", "action_ids": ["A1"], "confidence": 0.95},
@@ -179,7 +192,7 @@ class TestPastReference:
         assert result.atomic_actions[0].action_type == "signal_ally"
 
         kinds = {a.kind for a in result.anchors}
-        assert "past_reference" in kinds
+        assert "concept" in kinds
         assert "character" in kinds
         assert "concept" in kinds
 
@@ -208,7 +221,7 @@ class TestPastReference:
                     }
                 ],
                 anchors=[
-                    {"text": "之前", "normalized": "past_reference", "kind": "past_reference", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
+                    {"text": "之前", "normalized": "past_reference", "kind": "concept", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
                 ],
             )
         ])
@@ -385,7 +398,7 @@ class TestComplexAction:
                     {"text": "黑帆帮", "normalized": "黑帆帮", "kind": "organization", "source": "explicit", "action_ids": ["A2"], "confidence": 1.0},
                     {"text": "门锁", "normalized": "门锁", "kind": "item", "source": "explicit", "action_ids": ["A3"], "confidence": 1.0},
                     {"text": "旧城区", "normalized": "旧城区", "kind": "location", "source": "explicit", "action_ids": ["A3"], "confidence": 1.0},
-                    {"text": "见过的那种", "normalized": "past_seen_similar_object", "kind": "past_reference", "source": "explicit", "action_ids": ["A3"], "confidence": 0.95},
+                    {"text": "见过的那种", "normalized": "past_seen_similar_object", "kind": "concept", "source": "explicit", "action_ids": ["A3"], "confidence": 0.95},
                 ],
             )
         ])
@@ -490,7 +503,7 @@ class TestActionSelfCheck:
         )
         cleaned = sc.check(result, "观察守卫", _make_current_state())
         assert len(cleaned.anchors) == 2
-        assert cleaned.anchors[0].action_ids == ["A1"]
+        assert cleaned.anchors[0].text == "守卫"
 
     def test_remove_empty_anchor(self):
         sc = ActionSelfCheck()
@@ -537,7 +550,7 @@ class TestActionSelfCheck:
         ids = {a.action_id for a in cleaned.atomic_actions}
         assert len(ids) == 2  # first keeps "A1", second renamed to "A1_1"
 
-    def test_duplicate_action_id_updates_anchor_refs(self):
+    def test_duplicate_action_id_keeps_turn_level_anchors(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
             turn_intent="测试",
@@ -568,8 +581,7 @@ class TestActionSelfCheck:
         cleaned = sc.check(result, "绕到侧面观察四周", _make_current_state())
         anchor = next(a for a in cleaned.anchors if a.text == "四周")
 
-        assert "A1" in anchor.action_ids
-        assert "A1_1" in anchor.action_ids
+        assert anchor.normalized == "四周"
 
     def test_empty_actions_warns(self):
         sc = ActionSelfCheck()

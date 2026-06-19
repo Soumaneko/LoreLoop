@@ -1,4 +1,3 @@
-from collections import defaultdict
 from pathlib import Path
 
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
@@ -85,8 +84,8 @@ class CandidateRetriever:
                 total_returned=len(pending_notes),
             )
 
-        actions = parse_result.atomic_actions
-        if not actions:
+        anchors = parse_result.anchors
+        if not anchors:
             return CandidateRetrievalResult(
                 candidates=[],
                 pending_notes=pending_notes,
@@ -94,27 +93,17 @@ class CandidateRetriever:
                 total_returned=len(pending_notes),
             )
 
-        action_anchors_map = self._group_anchors_by_action(parse_result.anchors, actions)
-
-        per_action_results: dict[str, dict] = {}
-        for action in actions:
-            action_anchors = action_anchors_map.get(action.action_id, [])
-            if not action_anchors:
-                continue
-            per_action_results[action.action_id] = self._run_action_pipeline(
-                all_memories, action_anchors, [action]
-            )
-
-        if not per_action_results:
-            return CandidateRetrievalResult(
-                candidates=[],
-                pending_notes=pending_notes,
-                total_scanned=total_memories + len(pending_notes),
-                total_returned=len(pending_notes),
-            )
-
-        candidates = self._merge_and_build_candidates(
-            all_memories, total_memories, per_action_results, top_k
+        retrieval_result = self._run_turn_pipeline(
+            all_memories,
+            anchors,
+            parse_result.atomic_actions,
+        )
+        candidates = self._build_candidates(
+            all_memories,
+            total_memories,
+            retrieval_result,
+            parse_result.atomic_actions,
+            top_k,
         )
 
         return CandidateRetrievalResult(
@@ -132,15 +121,12 @@ class CandidateRetriever:
     ) -> list[PendingMemoryNote]:
         if self.pending_memory_store is None:
             return []
-        actions = parse_result.atomic_actions
-        if not actions:
-            return []
-
         pending_items = self.pending_memory_store.list_recent_unclassified(limit=50)
         if not pending_items:
             return []
 
         anchors = parse_result.anchors
+        action_ids = [action.action_id for action in parse_result.atomic_actions]
         scored: list[tuple[float, PendingMemoryNote]] = []
         for item in pending_items:
             norm_text = normalize_text(
@@ -153,7 +139,6 @@ class CandidateRetriever:
                 )
             )
             matched_anchors: set[str] = set()
-            matched_actions: set[str] = set()
             score = 0.0
 
             for anchor in anchors:
@@ -162,7 +147,6 @@ class CandidateRetriever:
                     continue
                 if term in norm_text:
                     matched_anchors.add(anchor.text)
-                    matched_actions.update(anchor.action_ids)
                     score += 1.0
 
             if score <= 0:
@@ -189,11 +173,7 @@ class CandidateRetriever:
                         importance_hint=item.importance_hint,
                         score=score,
                         matched_anchors=sorted(matched_anchors),
-                        matched_actions=sorted(
-                            aid
-                            for aid in matched_actions
-                            if any(action.action_id == aid for action in actions)
-                        ),
+                        matched_actions=action_ids,
                     ),
                 )
             )
@@ -201,7 +181,7 @@ class CandidateRetriever:
         scored.sort(key=lambda item: item[0], reverse=True)
         return [note for _score, note in scored[: min(max(top_k, 1), 20)]]
 
-    def _run_action_pipeline(self, all_memories, anchors, actions) -> dict:
+    def _run_turn_pipeline(self, all_memories, anchors, actions) -> dict:
         ctx = build_context(all_memories, anchors, actions, self.alias_store)
 
         entity_scores = entity_retrieve(ctx, self.config)
@@ -254,99 +234,50 @@ class CandidateRetriever:
             "match_info": self._compute_match_info(ctx),
         }
 
-    def _merge_and_build_candidates(
-        self, all_memories, total_memories, per_action_results, top_k
+    def _build_candidates(
+        self, all_memories, total_memories, result, actions, top_k
     ) -> list[MemoryCandidate]:
-        mid_action_hits: dict[str, list[str]] = defaultdict(list)
-        mid_scores: dict[str, dict] = {}
-
-        for action_id, result in per_action_results.items():
-            for mem in all_memories:
-                mid = mem.id
-                rrf = result["rrf_scores"].get(mid, 0.0)
-                mi = result["match_info"].get(mid, {})
-                matched_anchors = mi.get("matched_anchor_texts", set())
-                matched_kinds = mi.get("matched_anchor_kinds", [])
-
-                if not matched_anchors:
-                    continue
-                if rrf <= 0:
-                    continue
-                if all(k in LOW_WEIGHT_ANCHOR_KINDS for k in matched_kinds):
-                    continue
-
-                mid_action_hits[mid].append(action_id)
-
-                if mid not in mid_scores:
-                    mid_scores[mid] = {
-                        "max_entity_score": 0.0, "max_entity_rank": 0,
-                        "max_subject_tag_score": 0.0, "max_subject_tag_rank": 0,
-                        "max_content_score": 0.0, "max_content_rank": 0,
-                        "max_subtype_intent_score": 0.0, "max_subtype_intent_rank": 0,
-                        "max_scene_context_score": 0.0, "max_scene_context_rank": 0,
-                        "max_layer_intent_score": 0.0, "max_layer_intent_rank": 0,
-                        "max_rrf": 0.0,
-                        "all_matched_anchors": set(),
-                        "all_matched_actions": set(),
-                    }
-
-                ms = mid_scores[mid]
-                ms["max_rrf"] = max(ms["max_rrf"], rrf)
-                ms["all_matched_anchors"].update(matched_anchors)
-                ms["all_matched_actions"].add(action_id)
-
-                for field, score_key, rank_key in [
-                    ("max_entity_score", "entity_scores", "entity_ranks"),
-                    ("max_subject_tag_score", "subject_tag_scores", "subject_tag_ranks"),
-                    ("max_content_score", "content_scores", "content_ranks"),
-                    ("max_subtype_intent_score", "subtype_intent_scores", "subtype_intent_ranks"),
-                    ("max_scene_context_score", "scene_context_scores", "scene_context_ranks"),
-                    ("max_layer_intent_score", "layer_intent_scores", "layer_intent_ranks"),
-                ]:
-                    s = result[score_key].get(mid, 0.0)
-                    r = result[rank_key].get(mid, 0)
-                    if s > ms[field]:
-                        ms[field] = s
-                        ms[field.replace("_score", "_rank")] = r
-
         candidates: list = []
+        action_ids = [action.action_id for action in actions]
         for mem in all_memories:
             mid = mem.id
-            if mid not in mid_action_hits:
+            rrf = result["rrf_scores"].get(mid, 0.0)
+            mi = result["match_info"].get(mid, {})
+            matched_anchors = mi.get("matched_anchor_texts", set())
+            matched_kinds = mi.get("matched_anchor_kinds", [])
+
+            if not matched_anchors:
+                continue
+            if rrf <= 0:
+                continue
+            if all(k in LOW_WEIGHT_ANCHOR_KINDS for k in matched_kinds):
                 continue
 
-            ms = mid_scores[mid]
-            n_actions = len(mid_action_hits[mid])
-            bonus = (n_actions - 1) * self.config.multi_action_bonus
-            final_score = ms["max_rrf"] + bonus
+            score_data = {
+                "entity_score": result["entity_scores"].get(mid, 0.0),
+                "entity_rank": result["entity_ranks"].get(mid, 0),
+                "subject_tag_score": result["subject_tag_scores"].get(mid, 0.0),
+                "subject_tag_rank": result["subject_tag_ranks"].get(mid, 0),
+                "content_score": result["content_scores"].get(mid, 0.0),
+                "content_rank": result["content_ranks"].get(mid, 0),
+                "subtype_intent_score": result["subtype_intent_scores"].get(mid, 0.0),
+                "subtype_intent_rank": result["subtype_intent_ranks"].get(mid, 0),
+                "scene_context_score": result["scene_context_scores"].get(mid, 0.0),
+                "scene_context_rank": result["scene_context_ranks"].get(mid, 0),
+                "layer_intent_score": result["layer_intent_scores"].get(mid, 0.0),
+                "layer_intent_rank": result["layer_intent_ranks"].get(mid, 0),
+                "rrf_score": rrf,
+                "total_memories": total_memories,
+            }
 
-            candidates.append((final_score, mem, ms, n_actions, mid_action_hits[mid]))
+            candidates.append((rrf, mem, score_data, matched_anchors, action_ids))
 
         candidates.sort(key=lambda x: x[0], reverse=True)
         if len(candidates) > top_k:
             candidates = candidates[:top_k]
 
         results: list[MemoryCandidate] = []
-        for final_score, mem, ms, n_actions, action_ids in candidates:
-            breakdown = {
-                "entity_score": ms["max_entity_score"],
-                "entity_rank": ms["max_entity_rank"],
-                "subject_tag_score": ms["max_subject_tag_score"],
-                "subject_tag_rank": ms["max_subject_tag_rank"],
-                "content_score": ms["max_content_score"],
-                "content_rank": ms["max_content_rank"],
-                "subtype_intent_score": ms["max_subtype_intent_score"],
-                "subtype_intent_rank": ms["max_subtype_intent_rank"],
-                "scene_context_score": ms["max_scene_context_score"],
-                "scene_context_rank": ms["max_scene_context_rank"],
-                "layer_intent_score": ms["max_layer_intent_score"],
-                "layer_intent_rank": ms["max_layer_intent_rank"],
-                "rrf_score": ms["max_rrf"],
-                "max_rrf": ms["max_rrf"],
-                "multi_action_bonus": bonus,
-                "num_actions_hit": n_actions,
-                "total_memories": total_memories,
-            }
+        for final_score, mem, breakdown, matched_anchors, action_ids in candidates:
             results.append(
                 MemoryCandidate(
                     memory_id=mem.id,
@@ -367,21 +298,11 @@ class CandidateRetriever:
                     source_pending_ids=list(mem.source_pending_ids),
                     score=final_score,
                     score_breakdown=breakdown,
-                    matched_anchors=sorted(ms["all_matched_anchors"]),
-                    matched_actions=sorted(ms["all_matched_actions"]),
+                    matched_anchors=sorted(matched_anchors),
+                    matched_actions=action_ids,
                 )
             )
         return results
-
-    @staticmethod
-    def _group_anchors_by_action(anchors: list[Anchor], actions: list[AtomicAction]) -> dict[str, list[Anchor]]:
-        action_ids = {a.action_id for a in actions}
-        grouped: dict[str, list[Anchor]] = defaultdict(list)
-        for anchor in anchors:
-            for aid in anchor.action_ids:
-                if aid in action_ids:
-                    grouped[aid].append(anchor)
-        return dict(grouped)
 
     @staticmethod
     def _compute_ranks(scores: dict[str, float]) -> dict[str, int]:
@@ -412,8 +333,6 @@ class CandidateRetriever:
             mid = mem.id
             matched_texts: set[str] = set()
             matched_kinds: list[str] = []
-            matched_actions: set[str] = set()
-            per_action_hits: dict[str, int] = {}
 
             entities = ctx.norm_entities.get(mid, [])
             tags = ctx.norm_tags.get(mid, [])
@@ -452,16 +371,10 @@ class CandidateRetriever:
                 if matched:
                     matched_texts.add(anchor.text)
                     matched_kinds.append(anchor.kind)
-                    for aid in anchor.action_ids:
-                        if aid in ctx.action_ids_set:
-                            matched_actions.add(aid)
-                            per_action_hits[aid] = per_action_hits.get(aid, 0) + 1
 
             info[mid] = {
                 "matched_anchor_texts": matched_texts,
                 "matched_anchor_kinds": matched_kinds,
-                "matched_action_ids": matched_actions,
-                "per_action_hits": per_action_hits,
             }
 
         return info

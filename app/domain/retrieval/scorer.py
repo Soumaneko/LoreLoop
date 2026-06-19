@@ -25,15 +25,12 @@ class MemoryScorer:
     ) -> tuple[float, dict[str, float], list[str], list[str]]:
         breakdown: dict[str, float] = {}
         matched_anchor_texts: set[str] = set()
-        matched_action_ids: set[str] = set()
-        per_action_anchor_hits: dict[str, int] = {}
 
         norm_entities = [normalize_text(e) for e in memory.entities]
         norm_tags = [normalize_text(t) for t in memory.tags]
         norm_subject = normalize_text(memory.subject)
         norm_content = normalize_text(memory.content)
 
-        action_ids_set: set[str] = {a.action_id for a in atomic_actions}
         matched_anchor_kinds: list[str] = []
 
         for anchor in anchors:
@@ -75,10 +72,6 @@ class MemoryScorer:
             if anchor_matched:
                 matched_anchor_texts.add(anchor.text)
                 matched_anchor_kinds.append(anchor.kind)
-                for aid in anchor.action_ids:
-                    if aid in action_ids_set:
-                        matched_action_ids.add(aid)
-                        per_action_anchor_hits[aid] = per_action_anchor_hits.get(aid, 0) + 1
 
         breakdown.setdefault("entity_score", 0.0)
         breakdown.setdefault("tag_score", 0.0)
@@ -110,24 +103,13 @@ class MemoryScorer:
             breakdown["confidence_boost"] = 0.0
             breakdown["recency_boost"] = 0.0
 
-        action_prox_boost = 0.0
-        if has_match:
-            max_hits = max(per_action_anchor_hits.values()) if per_action_anchor_hits else 0
-            if max_hits >= 4:
-                action_prox_boost = 3.0
-            elif max_hits >= 3:
-                action_prox_boost = 2.0
-            elif max_hits >= 2:
-                action_prox_boost = 1.0
-        breakdown["action_proximity_boost"] = action_prox_boost
-
         penalty = self._compute_penalty(
             breakdown, matched_anchor_kinds, memory
         )
         breakdown["penalty"] = -penalty
 
         total = sum(breakdown.values())
-        return total, breakdown, list(matched_anchor_texts), list(matched_action_ids)
+        return total, breakdown, list(matched_anchor_texts), [a.action_id for a in atomic_actions]
 
     def _compute_past_ref_boost(
         self,

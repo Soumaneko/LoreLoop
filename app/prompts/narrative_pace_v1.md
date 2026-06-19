@@ -22,6 +22,15 @@
 
 ```json
 {current_state_json}
+`
+
+## 本回合锚点命中的实体档案
+
+以下实体由 anchor extract 从本回合用户输入和当前场景中提取后，与实体库 name/aliases 精确匹配得到。
+选择 narrative_goal 时必须将这些档案作为实体约束，不要把用户提到的实体改写成另一个相似实体。
+
+`json
+{entity_profiles_json}
 ```
 
 ## 玩家行动

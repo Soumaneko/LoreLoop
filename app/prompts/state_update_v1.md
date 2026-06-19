@@ -16,7 +16,7 @@
 2. 仔细阅读剧情原文，根据剧情全部发生完后的状态，判断以下各类状态是否明确发生了变化：
    - **scene**：location、participants、atmosphere 是否因剧情推进而改变
    - **world_clock_suggestion**：只建议时间推进多少个 phase，不要自由生成时间文本
-   - **player**：position、condition、visible_status、intent 是否有变化；如有新增物品/资源请更新 resources
+   - **player**：position、condition、visible_status、intent 是否有变化；如有明确获得或失去物品/资源，按规则 12 更新 resources
    - **npcs**：每个 NPC 的 location、condition、attitude_to_player、current_intent 是否发生变化；如有新增 NPC，添加到 npcs 列表；如有 NPC 在剧情原文中明确离开、告别、消失、被遣散或不再跟随玩家，从 npcs 中移除
    - **mentioned_npcs**：列出本回合剧情原文中被提及或涉及的所有 NPC 名字
    - **resources**：inventory、money、key_items 是否有增减
@@ -25,7 +25,7 @@
 5. 不要根据剧情"推测"未发生的变化。例如角色说"我打算去某地"但没有实际移动，不要改变 position。
 6. npcs 列表中的每个 NPC 必须只用 name 字段来识别。不要改变已有 NPC 的 name。
 7. 如果 condition 从旧状态中移除了某个状态（如不再受伤），直接在 condition 列表中移除该项即可。不要添加"不再XXX"的冗余条目。
-8. 世界时间由程序维护。你不能输出 day、phase 或 time_label；只能在 `world_clock_suggestion.advance_phases` 中填写 0-24 的整数：
+8. 你不能输出 day、phase 或 time_label；只能在 `world_clock_suggestion.advance_phases` 中填写 0-2 的整数，只有剧情原文中明确描写了时间流逝（如'天色渐暗'、'几个小时后'、'夜幕降临'）才填非零值：
    - 0：剧情没有明确时间流逝，或只是很短的对话/动作。
    - 1：明确跨过一个时间段，如从下午到黄昏、晚上到深夜。
    - 2+：剧情明确经过多个时间段或一整段旅程。
@@ -33,6 +33,14 @@
 9. npcs 只存储当前场景在场且有交互意义的角色，不是通讯录。
 10. 场景地点变更时，只保留在新地点明确出现或明确跟随玩家的 NPC；其余 NPC 必须从 npcs 移除。
 11. mentioned_npcs 是本回合剧情原文中被提及或涉及的所有 NPC 名字列表，包括对话、被观察、行动、被点名提到的 NPC；包含在内心独白或背景联想中一笔带过的 NPC。
+12. **resources 增减约束（关键）**：
+    - 只有当剧情原文描述了明确的**获得动作**（收到、拾取、购买、缴获、制作、被赠予等），才能向 inventory 或 key_items 添加物品。
+    - 如果物品只是在剧情中**被提及、被使用、被展示、被佩戴或被暗示拥有**，但没有新的获得动作，**不得添加**。
+    - 当物品被明确**消耗、赠出、丢弃、损毁、交出或遗失**时，必须从对应列表中移除。
+    - 已在 resources 中的物品若未被剧情影响，必须保持原值。
+    - 禁止例：剧情写"你用钥匙打开了自家大门"→ 不添加"钥匙"（使用≠获得）。
+    - 允许例：剧情写"老板递给你一把黄铜钥匙"→ 添加"黄铜钥匙"（明确获得）。
+    - 允许例：剧情写"你把金币塞给了卫兵"→ money 减少（明确支出）。
 
 ## 输出格式
 

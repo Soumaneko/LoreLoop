@@ -5,6 +5,7 @@ from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.narrative_pacer.schemas import (
     NARRATIVE_TYPE_LABELS,
     NarrativePacingDecision,
@@ -16,6 +17,7 @@ from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.views import (
     project_action_parse,
     project_current_state,
+    project_entity_profiles,
     project_outcome_resolution,
     project_scene_summaries,
 )
@@ -115,6 +117,7 @@ class NarrativePacer:
         outcome_resolution: OutcomeResolutionResult,
         core_memory: CoreMemory,
         recent_summaries: list[SceneSummary],
+        entity_profiles: list[EntityProfileUpdateInput] | None = None,
         previous_types: list[NarrativeType] | None = None,
         trace_id: str | None = None,
     ) -> NarrativePacingResult:
@@ -142,6 +145,7 @@ class NarrativePacer:
                     "action_parse_result_json": project_action_parse(action_parse_result),
                     "outcome_resolution_json": project_outcome_resolution(outcome_resolution),
                     "recent_summaries_json": project_scene_summaries(recent_summaries),
+                    "entity_profiles_json": project_entity_profiles(entity_profiles or []),
                     "output_schema_json": json.dumps(
                         NarrativePacingDecision.model_json_schema(),
                         ensure_ascii=False,
