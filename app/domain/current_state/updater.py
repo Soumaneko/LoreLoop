@@ -66,7 +66,6 @@ class StateUpdater:
         state_for_llm = current_state.model_copy(deep=True)
         state_data = state_for_llm.model_dump()
         state_data["scene"].pop("scene_id", None)
-        state_data.pop("world_clock", None)
         for npc in state_data.get("npcs", []):
             npc.pop("absent_turns", None)
 

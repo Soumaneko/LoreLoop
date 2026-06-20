@@ -47,6 +47,10 @@ class TestShortTermMemoryStore:
         ids = [s.scene_id for s in memory.recent_scenes]
         assert ids == ["s3", "s4", "s5"]
 
+        all_scenes = store.list_all()
+        assert len(all_scenes) == 5
+        assert [s.scene_id for s in all_scenes] == ["s1", "s2", "s3", "s4", "s5"]
+
     def test_custom_max_items(self):
         store = ShortTermMemoryStore(max_items=2)
         store.add_turn("s1", 1, "action", "剧情1")
@@ -56,6 +60,9 @@ class TestShortTermMemoryStore:
         memory = store.get_recent()
         assert len(memory.recent_scenes) == 2
         assert [s.scene_id for s in memory.recent_scenes] == ["s2", "s3"]
+
+        all_scenes = store.list_all()
+        assert len(all_scenes) == 3
 
     def test_empty_store_returns_empty(self):
         store = ShortTermMemoryStore()
@@ -71,6 +78,7 @@ class TestShortTermMemoryStore:
         store.clear()
 
         assert store.get_recent().recent_scenes == []
+        assert store.list_all() == []
 
     def test_scenes_returns_in_order(self):
         store = ShortTermMemoryStore(max_items=3)
@@ -183,13 +191,16 @@ class TestShortTermMemoryPersistence:
             store.add_turn(f"s{i}", i, "action", f"剧情{i}")
         store.close()
 
-        store2 = ShortTermMemoryStore(db_path=db_path)
+        store2 = ShortTermMemoryStore(db_path=db_path, max_items=3)
         memory = store2.get_recent()
+        all_scenes = store2.list_all()
         store2.close()
 
         assert len(memory.recent_scenes) == 3
-        ids = [s.scene_id for s in memory.recent_scenes]
-        assert ids == ["s3", "s4", "s5"]
+        assert [s.scene_id for s in memory.recent_scenes] == ["s3", "s4", "s5"]
+
+        assert len(all_scenes) == 5
+        assert [s.scene_id for s in all_scenes] == ["s1", "s2", "s3", "s4", "s5"]
 
         import os
         os.unlink(db_path)
@@ -206,3 +217,36 @@ class TestShortTermMemoryPersistence:
 
         import os
         os.unlink(db_path)
+
+
+class TestListAll:
+    def test_list_all_returns_all_in_order(self):
+        store = ShortTermMemoryStore(max_items=2)
+        for i in range(1, 8):
+            store.add_turn(f"s{i}", i, f"action{i}", f"剧情{i}")
+
+        all_scenes = store.list_all()
+        assert len(all_scenes) == 7
+        assert [s.turn_index for s in all_scenes] == [1, 2, 3, 4, 5, 6, 7]
+
+        memory = store.get_recent()
+        assert len(memory.recent_scenes) == 2
+        assert [s.scene_id for s in memory.recent_scenes] == ["s6", "s7"]
+
+    def test_list_all_empty_store(self):
+        store = ShortTermMemoryStore()
+        assert store.list_all() == []
+
+    def test_list_all_returns_short_term_scene_objects(self):
+        store = ShortTermMemoryStore(max_items=5)
+        store.add_turn("s1", 1, "观察", "剧情", narrative_type="advance")
+
+        all_scenes = store.list_all()
+        assert len(all_scenes) == 1
+        scene = all_scenes[0]
+        assert isinstance(scene, ShortTermScene)
+        assert scene.scene_id == "s1"
+        assert scene.user_input == "观察"
+        assert scene.scene_text == "剧情"
+        assert scene.narrative_type == "advance"
+        assert scene.created_at is not None

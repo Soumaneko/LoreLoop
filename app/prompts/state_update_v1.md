@@ -14,21 +14,24 @@
 
 1. **只更新受剧情原文影响的字段**。未受影响的字段必须保持原值，不要凭空修改。
 2. 仔细阅读剧情原文，根据剧情全部发生完后的状态，判断以下各类状态是否明确发生了变化：
-   - **scene**：location、participants、atmosphere 是否因剧情推进而改变
+   - **scene**：location、participants、atmosphere 是否因剧情推进而改变。atmosphere 只用简短词汇概括氛围基调（如"紧张"、"温暖嘈杂"、"肃杀压抑"），不要写成描写性长句
    - **world_clock_suggestion**：只建议时间推进多少个 phase，不要自由生成时间文本
-   - **player**：position、condition、visible_status、intent 是否有变化；如有明确获得或失去物品/资源，按规则 12 更新 resources
+   - **player**：position、condition、visible_status 是否有变化；如有明确获得或失去物品/资源，按规则 12 更新 resources
    - **npcs**：每个 NPC 的 location、condition、attitude_to_player、current_intent 是否发生变化；如有新增 NPC，添加到 npcs 列表；如有 NPC 在剧情原文中明确离开、告别、消失、被遣散或不再跟随玩家，从 npcs 中移除
    - **mentioned_npcs**：列出本回合剧情原文中被提及或涉及的所有 NPC 名字
    - **resources**：inventory、money、key_items 是否有增减
 3. 只能修改在剧情中被明确提及，确认为事实的字段。
 4. 如果一个 NPC 在剧情中首次出现，必须将其加入 npcs 列表。不确定的字段保持 null。
-5. 不要根据剧情"推测"未发生的变化。例如角色说"我打算去某地"但没有实际移动，不要改变 position。
+5. 不要根据剧情"推测"未发生的变化。例如角色说"我打算去某地"但没有实际移动，不要改变 position。但如果剧情描写了实际移动、到达或经过某处，即使角色尚未抵达最终目的地，也必须将 scene.location 和 player.position 更新为剧情结束时角色实际所在的位置。不要保留已过时的旧位置描述。
 6. npcs 列表中的每个 NPC 必须只用 name 字段来识别。不要改变已有 NPC 的 name。
 7. 如果 condition 从旧状态中移除了某个状态（如不再受伤），直接在 condition 列表中移除该项即可。不要添加"不再XXX"的冗余条目。
-8. 你不能输出 day、phase 或 time_label；只能在 `world_clock_suggestion.advance_phases` 中填写 0-2 的整数，只有剧情原文中明确描写了时间流逝（如'天色渐暗'、'几个小时后'、'夜幕降临'）才填非零值：
-   - 0：剧情没有明确时间流逝，或只是很短的对话/动作。
-   - 1：明确跨过一个时间段，如从下午到黄昏、晚上到深夜。
-   - 2+：剧情明确经过多个时间段或一整段旅程。
+8. 一天有 6 个 phase，按顺序循环：凌晨 → 上午 → 下午 → 黄昏 → 晚上 → 深夜。每经过 6 个 phase，day 加 1。当前状态中的 `world_clock` 给出了当前的 day 和 phase。你不能直接输出 day 或 phase；只能在 `world_clock_suggestion.advance_phases` 中填写需要推进多少个 phase（0-6 的整数）：
+   - 0：剧情没有明确时间流逝，或只是很短的对话/动作（几分钟内）。
+   - 1：跨过一个时间段，如从上午到下午、从晚上到深夜。
+   - 2：跨过两个时间段，如从上午到黄昏、从深夜到上午（跨日）。
+   - 3-4：跨过半天或更长，如从深夜到下午（跨日+半天）、一整个白天的旅程。
+   - 5-6：接近或超过一整天。
+   - 参考当前 `world_clock` 中的 phase，结合剧情原文描述的起止时间来计算。例如当前是"深夜"，剧情描述"破晓前出发，走到正午"，则从深夜经过 凌晨→上午→下午 = 3 个 phase。
    - 如果不确定，填 0。
 9. npcs 只存储当前场景在场且有交互意义的角色，不是通讯录。
 10. 场景地点变更时，只保留在新地点明确出现或明确跟随玩家的 NPC；其余 NPC 必须从 npcs 移除。

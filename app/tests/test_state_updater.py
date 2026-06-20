@@ -28,7 +28,6 @@ def _make_state() -> CurrentState:
             condition=[],
             position="修道院大厅",
             visible_status="正常",
-            intent="了解当前局势",
         ),
         npcs=[
             NPCState(
@@ -159,19 +158,6 @@ class TestStateUpdaterPlayerChange:
 
         assert "轻伤" in result.player.condition
         assert "治疗药水" in result.resources.inventory
-
-    def test_player_intent_updates(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "player": {"intent": "调查失踪事件"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角决定先调查修道院附近的失踪事件。")
-
-        assert result.player.intent == "调查失踪事件"
 
 
 class TestStateUpdaterNPCChange:

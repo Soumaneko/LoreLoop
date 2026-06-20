@@ -71,39 +71,38 @@ class ShortTermMemoryStore:
             (scene_id, turn_index, user_input, scene_text, narrative_type, now),
         )
         self._conn.commit()
-        self._trim()
-
-    def _trim(self) -> None:
-        row = self._conn.execute("SELECT COUNT(*) FROM short_term_scenes").fetchone()
-        if row[0] > self.max_items:
-            excess = row[0] - self.max_items
-            self._conn.execute(
-                """
-                DELETE FROM short_term_scenes WHERE id IN (
-                    SELECT id FROM short_term_scenes ORDER BY id ASC LIMIT ?
-                )
-                """,
-                (excess,),
-            )
-            self._conn.commit()
 
     def get_recent(self) -> ShortTermMemory:
         rows = self._conn.execute(
-            "SELECT * FROM short_term_scenes ORDER BY id ASC"
+            """
+            SELECT * FROM (
+                SELECT * FROM short_term_scenes ORDER BY id DESC LIMIT ?
+            ) ORDER BY id ASC
+            """,
+            (self.max_items,),
         ).fetchall()
         return ShortTermMemory(
             recent_scenes=[
-                ShortTermScene(
-                    scene_id=row["scene_id"],
-                    turn_index=row["turn_index"],
-                    user_input=row["user_input"],
-                    scene_text=row["scene_text"],
-                    narrative_type=row["narrative_type"],
-                    created_at=row["created_at"],
-                )
-                for row in rows
+                self._row_to_scene(row) for row in rows
             ],
             max_items=self.max_items,
+        )
+
+    def list_all(self) -> list[ShortTermScene]:
+        rows = self._conn.execute(
+            "SELECT * FROM short_term_scenes ORDER BY id ASC"
+        ).fetchall()
+        return [self._row_to_scene(row) for row in rows]
+
+    @staticmethod
+    def _row_to_scene(row: sqlite3.Row) -> ShortTermScene:
+        return ShortTermScene(
+            scene_id=row["scene_id"],
+            turn_index=row["turn_index"],
+            user_input=row["user_input"],
+            scene_text=row["scene_text"],
+            narrative_type=row["narrative_type"],
+            created_at=row["created_at"],
         )
 
     def clear(self) -> None:

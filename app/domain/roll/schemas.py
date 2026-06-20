@@ -1,6 +1,16 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 from app.domain.roll_modifier.schemas import RollModifier
+
+Difficulty = Literal["简单", "普通", "困难"]
+
+DIFFICULTY_DICE_COUNT: dict[Difficulty, int] = {
+    "困难": 1,
+    "普通": 2,
+    "简单": 3,
+}
 
 
 class RollConfig(BaseModel):
@@ -8,6 +18,7 @@ class RollConfig(BaseModel):
     roll_only_when_needed: bool = True
     min_rolls: int = Field(default=2, ge=0)
     seed: int | None = None
+    difficulty: Difficulty = "困难"
 
 
 class RollRequest(BaseModel):
@@ -28,6 +39,7 @@ class RollResult(BaseModel):
     dice_sides: int
     roll_hint: str | None = None
     raw_value: int | None = None
+    all_raw_values: list[int] = Field(default_factory=list)
     modifiers: list[RollModifier] = Field(default_factory=list)
 
     @model_validator(mode="after")

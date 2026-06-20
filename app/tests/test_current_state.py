@@ -40,7 +40,6 @@ class TestPlayerState:
         assert state.condition == []
         assert state.position is None
         assert state.visible_status is None
-        assert state.intent is None
 
 
 class TestNPCState:
@@ -94,7 +93,6 @@ class TestCurrentState:
                 condition=["疲惫"],
                 position="修道院门口",
                 visible_status="衣袍沾着泥水",
-                intent="安顿米莉并和莎拉确认明日安排",
             ),
             npcs=[
                 NPCState(

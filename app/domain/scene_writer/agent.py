@@ -31,6 +31,7 @@ class SceneWriterAgent:
         recent_scene: ShortTermScene | None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         turn_index: int = 1,
+        max_chars: int = 1500,
         trace_id: str | None = None,
     ) -> SceneWriterResult:
         schema = SceneWriterResult.model_json_schema()
@@ -41,6 +42,7 @@ class SceneWriterAgent:
                 task="scene_write",
                 input_data={
                     "turn_index": turn_index,
+                    "max_chars": max_chars,
                     "outline_json": project_outline(outline),
                     "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),

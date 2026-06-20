@@ -79,6 +79,14 @@ New Entity Hints 是 EntityExtractor 在场景中发现、且未匹配到已有�
    - 禁止："卢西安在本回合用徽章吓唬了卫兵"——这是事件。
    - 允许："一枚代表皇家顾问身份的狮头徽章"——这是物品属性。
 
+## NPC 更新规则
+
+- summary 更新需要压缩描述，不要无限增长。
+- personality_traits 只收稳定性格标签（反复体现或明确描述），不收临时情绪/反应
+- known_abilities 只收明确展示的能力；
+- personality_traits 和 known_abilities 数量都不能超过 5 条
+- 输出的必须是裁剪后的最终列表，主动移除过时/矛盾/临时的条目
+
 ## 输出
 
 只返回符合以下 schema 的有效 JSON：

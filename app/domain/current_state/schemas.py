@@ -38,7 +38,6 @@ class PlayerState(BaseModel):
     condition: list[str] = Field(default_factory=list)
     position: str | None = None
     visible_status: str | None = None
-    intent: str | None = None
 
 
 class NPCState(BaseModel):

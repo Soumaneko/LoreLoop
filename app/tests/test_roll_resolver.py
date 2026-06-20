@@ -527,3 +527,150 @@ class TestMinRolls:
 
         sequences = [r.sequence for r in result.results]
         assert sequences == sorted(sequences)
+
+
+class TestDifficulty:
+    def _single_parse(self):
+        return ActionParseResult(
+            turn_intent="观察",
+            atomic_actions=[_make_action("a1", 1, True)],
+            anchors=[],
+            ambiguities=[],
+        )
+
+    def _multi_parse(self):
+        return ActionParseResult(
+            turn_intent="观察",
+            atomic_actions=[
+                _make_action("a1", 1, True),
+                _make_action("a2", 2, True),
+            ],
+            anchors=[],
+            ambiguities=[],
+        )
+
+    def test_default_difficulty_is_hard(self):
+        cfg = RollConfig()
+        assert cfg.difficulty == "困难"
+
+    def test_hard_rolls_1d20(self):
+        resolver = RollResolver(RollConfig(difficulty="困难", seed=1, min_rolls=0))
+        result = resolver.resolve(self._single_parse())
+
+        assert result.results[0].dice == "1d20"
+        assert len(result.results[0].all_raw_values) == 1
+        assert result.results[0].raw_value == result.results[0].all_raw_values[0]
+        assert result.dice_formula == "1d20"
+
+    def test_normal_rolls_2d20kh(self):
+        resolver = RollResolver(RollConfig(difficulty="普通", seed=1, min_rolls=0))
+        result = resolver.resolve(self._single_parse())
+
+        assert result.results[0].dice == "2d20kh"
+        assert len(result.results[0].all_raw_values) == 2
+        assert result.results[0].raw_value == max(result.results[0].all_raw_values)
+        assert result.dice_formula == "1×2d20kh"
+
+    def test_easy_rolls_3d20kh(self):
+        resolver = RollResolver(RollConfig(difficulty="简单", seed=1, min_rolls=0))
+        result = resolver.resolve(self._single_parse())
+
+        assert result.results[0].dice == "3d20kh"
+        assert len(result.results[0].all_raw_values) == 3
+        assert result.results[0].raw_value == max(result.results[0].all_raw_values)
+        assert result.dice_formula == "1×3d20kh"
+
+    def test_normal_raw_value_is_max_of_two(self):
+        parse = self._multi_parse()
+        resolver = RollResolver(RollConfig(difficulty="普通", seed=42, min_rolls=0))
+        result = resolver.resolve(parse)
+
+        for r in result.results:
+            assert len(r.all_raw_values) == 2
+            assert r.raw_value == max(r.all_raw_values)
+
+    def test_easy_raw_value_is_max_of_three(self):
+        parse = self._multi_parse()
+        resolver = RollResolver(RollConfig(difficulty="简单", seed=42, min_rolls=0))
+        result = resolver.resolve(parse)
+
+        for r in result.results:
+            assert len(r.all_raw_values) == 3
+            assert r.raw_value == max(r.all_raw_values)
+
+    def test_seeded_normal_is_reproducible(self):
+        parse = self._multi_parse()
+        r1 = RollResolver(RollConfig(difficulty="普通", seed=99, min_rolls=0))
+        r2 = RollResolver(RollConfig(difficulty="普通", seed=99, min_rolls=0))
+
+        res1 = r1.resolve(parse)
+        res2 = r2.resolve(parse)
+
+        assert [r.value for r in res1.results] == [r.value for r in res2.results]
+        assert [r.all_raw_values for r in res1.results] == [r.all_raw_values for r in res2.results]
+
+    def test_seeded_easy_is_reproducible(self):
+        parse = self._multi_parse()
+        r1 = RollResolver(RollConfig(difficulty="简单", seed=99, min_rolls=0))
+        r2 = RollResolver(RollConfig(difficulty="简单", seed=99, min_rolls=0))
+
+        res1 = r1.resolve(parse)
+        res2 = r2.resolve(parse)
+
+        assert [r.value for r in res1.results] == [r.value for r in res2.results]
+        assert [r.all_raw_values for r in res1.results] == [r.all_raw_values for r in res2.results]
+
+    def test_modifiers_apply_after_keep_highest(self):
+        parse = self._single_parse()
+        modifier_batch = RollModifierBatch(
+            modifiers=[
+                RollModifier(
+                    action_id="a1",
+                    label="有利地形",
+                    reason="当前位置提供清晰视野。",
+                    value=3,
+                )
+            ]
+        )
+
+        resolver = RollResolver(RollConfig(difficulty="普通", seed=1, min_rolls=0))
+        result = resolver.resolve(parse, modifier_batch=modifier_batch)
+
+        raw = result.results[0].raw_value
+        assert raw is not None
+        assert raw == max(result.results[0].all_raw_values)
+        assert result.results[0].value == min(20, raw + 3)
+
+    def test_empty_actions_normal(self):
+        parse = ActionParseResult(
+            turn_intent="无行动",
+            atomic_actions=[],
+            anchors=[],
+            ambiguities=[],
+        )
+
+        resolver = RollResolver(RollConfig(difficulty="普通", min_rolls=0))
+        result = resolver.resolve(parse)
+
+        assert result.dice_formula == "0×2d20kh"
+        assert result.total_rolls == 0
+
+    def test_custom_dice_sides_with_difficulty(self):
+        parse = self._single_parse()
+
+        resolver = RollResolver(RollConfig(difficulty="简单", dice_sides=6, seed=1, min_rolls=0))
+        result = resolver.resolve(parse)
+
+        assert result.results[0].dice == "3d6kh"
+        assert result.dice_formula == "1×3d6kh"
+        assert result.dice_sides == 6
+        for v in result.results[0].all_raw_values:
+            assert 1 <= v <= 6
+        assert result.results[0].raw_value == max(result.results[0].all_raw_values)
+
+    def test_all_raw_values_present_for_hard(self):
+        parse = self._single_parse()
+        resolver = RollResolver(RollConfig(difficulty="困难", seed=1, min_rolls=0))
+        result = resolver.resolve(parse)
+
+        assert result.results[0].all_raw_values == [result.results[0].raw_value]

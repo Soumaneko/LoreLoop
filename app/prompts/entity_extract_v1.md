@@ -28,7 +28,7 @@ Existing Entity Profiles 不为 null 时，包含已有实体的 `entity_index`�
    - `matched_entity_index` 必须填写 Existing Entity Profiles 中对应实体的 `entity_index`。
    - `matched_entity_name`、`matched_entity_type` 指向已有实体。
    - 如果 `extracted_text` 尚未存在于该实体的 `name` 或 `aliases`，且适合作为别名，设置 `new_alias=extracted_text`；否则 `new_alias=null`。
-   - 例：场景中“红发女侍者”明确指向已有 `name="米莉"`，且 aliases 中没有该称呼，则输出一条 alias match。
+   - 例：场景中“米莉·奥斯沃斯”明确指向已有 `name="米莉"`，且 aliases 中没有该称呼，则输出一条 alias match。
 
 2. `retrieved_entities`
    - 提取场景文本中所有有意义的实体：有名字的 NPC、独特物品、有名称的地点、被明确命名的组织。
@@ -49,6 +49,11 @@ Existing Entity Profiles 不为 null 时，包含已有实体的 `entity_index`�
 - `retrieved_entities` 中同一个已有实体只输出一次，取最准确的 `source`。
 - 不要把普通物品、普通地点、普通职业称呼输出为新实体。
 - 只返回 JSON，不要解释。
+
+## 地点粒度约束
+
+- 地点实体应在"独立可寻址场所"级别：城镇、区域、建筑、地标、洞窟。
+- 建筑/区域内部的子位置（房间、楼层、角落、吧台等）不作为独立地点实体提取。
 
 ## 别名约束（关键）
 

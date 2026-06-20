@@ -88,7 +88,6 @@ def build_initial_current_state(
             condition=[],
             position=location,
             visible_status="，".join(visible_parts),
-            intent=None,
         ),
         npcs=[],
         resources=ResourcesState(

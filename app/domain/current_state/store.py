@@ -26,7 +26,6 @@ def make_default_state(scene_id: str = "scene_001") -> CurrentState:
             condition=[],
             position=None,
             visible_status=None,
-            intent=None,
         ),
         npcs=[],
         resources=ResourcesState(

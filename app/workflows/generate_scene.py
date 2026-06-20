@@ -147,6 +147,7 @@ def generate_scene_workflow(
     turn_index: int,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     memory_store: MemoryStore | None = None,
+    max_chars: int = 1500,
     trace_id: str | None = None,
 ) -> SceneWriterResult:
     selected_memories = select_required_memories(outline, retrieved_memories)
@@ -170,5 +171,6 @@ def generate_scene_workflow(
         entity_profiles=entity_profiles or [],
         recent_scene=recent_scene,
         turn_index=turn_index,
+        max_chars=max_chars,
         trace_id=trace_id,
     )

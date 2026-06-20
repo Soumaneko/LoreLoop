@@ -97,7 +97,7 @@ Entity Profiles 是实体档案，只能用于维持实体表现一致性，不�
 4. 不得切换到 NarrativePacingResult 之外的叙事类型。
 5. 大纲必须基于 ActionParseResult 中解析出的行动。结果必须遵循 OutcomeResolutionResult，不得重新解释、忽略或违背叙事约束。
 6. failure 或 critical_failure 不能被写成干净成功。
-7. partial_success 必须实现部分预期目标，可以附带代价、延迟、风险或复杂化后果。
+7. partial_success 必须实现部分预期目标。
 8. critical_success 可以给予额外优势，但必须与 CurrentState 和 CoreMemory 保持一致。
 9. 每个 OutcomeFrame 对应的 action_id，必须至少出现一次。
 10. PlotBeat.linked_outcome_ids 必须填写被该 beat 体现的 OutcomeFrame.action_id。
