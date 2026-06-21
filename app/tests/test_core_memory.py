@@ -11,7 +11,7 @@ from app.domain.core_memory import (
     build_core_memory,
     build_initial_current_state,
 )
-from app.debug_server import _preview_core_memory
+from app.engine.core_memory import preview_core_memory
 
 
 class TestCoreMemoryItem:
@@ -209,7 +209,7 @@ class TestCoreMemoryStore:
 
 class TestDebugCoreMemoryPreview:
     def test_preview_incomplete_config_returns_validation_errors(self):
-        result = _preview_core_memory(
+        result = preview_core_memory(
             {
                 "version": 1,
                 "fanfic": True,
