@@ -5,8 +5,10 @@ from app.core.llm import LLMGateway
 from app.domain.current_state.schemas import (
     CurrentState,
     NPCState,
+    PHASE_ORDER,
     PlayerState,
     ResourcesState,
+    WorldClock,
 )
 from pydantic import BaseModel, Field
 
@@ -20,8 +22,9 @@ class _SceneStateUpdate(BaseModel):
     atmosphere: str | None = None
 
 
-class _WorldClockSuggestion(BaseModel):
-    advance_phases: int = Field(default=0, ge=0, le=24)
+class _WorldClockUpdate(BaseModel):
+    day: int = Field(default=1, ge=1)
+    phase_index: int = Field(default=1, ge=0, le=5)
     reason: str | None = None
 
 
@@ -36,7 +39,7 @@ class _NPCStateUpdate(BaseModel):
 
 class _CurrentStateUpdate(BaseModel):
     scene: _SceneStateUpdate
-    world_clock_suggestion: _WorldClockSuggestion = Field(default_factory=_WorldClockSuggestion)
+    world_clock: _WorldClockUpdate
     player: PlayerState
     npcs: list[_NPCStateUpdate] = Field(default_factory=list)
     resources: ResourcesState = Field(default_factory=ResourcesState)
@@ -86,9 +89,7 @@ class StateUpdater:
             scene_id = _increment_scene_id(current_state.scene.scene_id)
         else:
             scene_id = current_state.scene.scene_id
-        world_clock = current_state.world_clock.advance_phase(
-            llm_result.world_clock_suggestion.advance_phases
-        )
+        world_clock = _apply_world_clock_update(current_state.world_clock, llm_result.world_clock)
         npcs = _apply_absent_turns(
             current_npcs=current_state.npcs,
             updated_npcs=llm_result.npcs,
@@ -136,3 +137,17 @@ def _apply_absent_turns(
         if updated.absent_turns < _STALE_NPC_THRESHOLD:
             cleaned.append(updated)
     return cleaned
+
+
+def _apply_world_clock_update(
+    current_clock: WorldClock,
+    update: _WorldClockUpdate,
+) -> WorldClock:
+    proposed = WorldClock(day=update.day, phase=PHASE_ORDER[update.phase_index])
+    if _clock_index(proposed) < _clock_index(current_clock):
+        return current_clock
+    return proposed
+
+
+def _clock_index(clock: WorldClock) -> int:
+    return (clock.day - 1) * len(PHASE_ORDER) + PHASE_ORDER.index(clock.phase)

@@ -9,5 +9,6 @@ data/
 docs/
 debug_py/
 tools/
+saves/
 debug_server.py
 SPEC.md

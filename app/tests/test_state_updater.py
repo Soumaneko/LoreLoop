@@ -111,11 +111,12 @@ class TestStateUpdaterNoChange:
         assert result.scene.scene_id == "scene_001"
         assert result.world_clock == state.world_clock
 
-    def test_world_clock_advances_from_program_suggestion(self):
+    def test_world_clock_uses_final_llm_time(self):
         state = _make_state()
         updated_json = _build_updated_state_json_without_scene_id({
-            "world_clock_suggestion": {
-                "advance_phases": 1,
+            "world_clock": {
+                "day": 2,
+                "phase_index": 0,
                 "reason": "剧情明确进入下一时间段",
             }
         })
@@ -127,6 +128,23 @@ class TestStateUpdaterNoChange:
 
         assert result.world_clock.day == 2
         assert result.world_clock.phase == "凌晨"
+
+    def test_world_clock_does_not_move_backward(self):
+        state = _make_state()
+        updated_json = _build_updated_state_json_without_scene_id({
+            "world_clock": {
+                "day": 1,
+                "phase_index": 1,
+                "reason": "LLM accidentally returned an earlier time",
+            }
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        updater = StateUpdater(mock.build_gateway())
+        result = updater.update(state, "回忆起上午发生的事。")
+
+        assert result.world_clock == state.world_clock
 
 
 class TestStateUpdaterPlayerChange:
@@ -157,7 +175,7 @@ class TestStateUpdaterPlayerChange:
         result = updater.update(state, "主角在一次冒险中受了些轻伤，但找到了治疗药水。")
 
         assert "轻伤" in result.player.condition
-        assert "治疗药水" in result.resources.inventory
+        assert any(item.name == "治疗药水" for item in result.resources.inventory)
 
 
 class TestStateUpdaterNPCChange:
@@ -292,15 +310,37 @@ class TestStateUpdaterResourcesChange:
     def test_item_added_to_inventory(self):
         state = _make_state()
         updated_json = _build_updated_state_json({
-            "resources": {"inventory": ["旧地图", "干粮"]}
+            "resources": {"inventory": [
+                {"name": "旧地图", "quantity": 1},
+                {"name": "干粮", "quantity": 1},
+                {"name": "箭矢", "quantity": 3},
+            ]}
         })
         mock = MockLLM()
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角吃掉了干粮。")
+        result = updater.update(state, "主角拾起了三支箭。")
 
-        assert len(result.resources.inventory) == 2
+        arrows = next(item for item in result.resources.inventory if item.name == "箭矢")
+        assert arrows.quantity == 3
+
+    def test_item_quantity_decreases(self):
+        state = _make_state()
+        updated_json = _build_updated_state_json({
+            "resources": {"inventory": [
+                {"name": "旧地图", "quantity": 1},
+                {"name": "干粮", "quantity": 1},
+            ]}
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        updater = StateUpdater(mock.build_gateway())
+        result = updater.update(state, "主角吃掉了一份干粮。")
+
+        food = next(item for item in result.resources.inventory if item.name == "干粮")
+        assert food.quantity == 1
 
     def test_money_changes(self):
         state = _make_state()
@@ -314,6 +354,20 @@ class TestStateUpdaterResourcesChange:
         result = updater.update(state, "主角付了20枚金币买了些补给。")
 
         assert result.resources.money == 30
+
+    def test_money_unknown_cost_can_use_small_deduction(self):
+        state = _make_state()
+        updated_json = _build_updated_state_json({
+            "resources": {"money": 48, "money_unit": "金币"}
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        updater = StateUpdater(mock.build_gateway())
+        result = updater.update(state, "主角付了些金币买了一杯热茶。")
+
+        assert result.resources.money == 48
+        assert result.resources.money_unit == "金币"
 
 
 class TestStateUpdaterConsistency:

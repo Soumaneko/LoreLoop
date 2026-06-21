@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 WorldPhase = Literal["凌晨", "上午", "下午", "黄昏", "晚上", "深夜"]
@@ -50,12 +50,34 @@ class NPCState(BaseModel):
     absent_turns: int = Field(default=0, ge=0)
 
 
+class InventoryItem(BaseModel):
+    name: str = Field(min_length=1)
+    quantity: int = Field(default=1, ge=1)
+
+
 class ResourcesState(BaseModel):
-    inventory: list[str] = Field(default_factory=list)
+    inventory: list[InventoryItem] = Field(default_factory=list)
     money: int | None = None
+    money_unit: str = "金币"
     key_items: list[str] = Field(default_factory=list)
     fixed_assets: list[str] = Field(default_factory=list)
     temporary_assets: list[str] = Field(default_factory=list)
+
+    @field_validator("inventory", mode="before")
+    @classmethod
+    def _coerce_legacy_inventory(cls, value):
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            return value
+        converted = []
+        for item in value:
+            if isinstance(item, str):
+                if item.strip():
+                    converted.append({"name": item.strip(), "quantity": 1})
+            else:
+                converted.append(item)
+        return converted
 
 
 class CurrentState(BaseModel):

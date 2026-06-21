@@ -1,5 +1,6 @@
 from app.domain.current_state import (
     CurrentState,
+    InventoryItem,
     NPCState,
     PlayerState,
     ResourcesState,
@@ -62,7 +63,7 @@ class TestResourcesState:
         r1 = ResourcesState()
         r2 = ResourcesState()
 
-        r1.inventory.append("匕首")
+        r1.inventory.append(InventoryItem(name="匕首", quantity=1))
         r1.key_items.append("鹰徽章")
         r1.fixed_assets.append("葡萄园")
         r1.temporary_assets.append("临时通行证")
@@ -75,6 +76,21 @@ class TestResourcesState:
     def test_money_can_be_none_or_int(self):
         assert ResourcesState().money is None
         assert ResourcesState(money=12).money == 12
+        assert ResourcesState(money=12).money_unit == "金币"
+
+    def test_legacy_inventory_strings_are_migrated_to_items(self):
+        resources = ResourcesState(inventory=["匕首", "干粮"])
+
+        assert resources.inventory == [
+            InventoryItem(name="匕首", quantity=1),
+            InventoryItem(name="干粮", quantity=1),
+        ]
+
+    def test_inventory_item_quantity(self):
+        item = InventoryItem(name="箭矢", quantity=12)
+
+        assert item.name == "箭矢"
+        assert item.quantity == 12
 
 
 class TestCurrentState:
