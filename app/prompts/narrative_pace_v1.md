@@ -6,12 +6,6 @@
 {available_types_json}
 ```
 
-## 前两章叙事类型
-
-```json
-{previous_types_json}
-```
-
 ## 核心设定
 
 ```json
@@ -22,7 +16,7 @@
 
 ```json
 {current_state_json}
-`
+```
 
 ## 本回合锚点命中的实体档案
 
@@ -55,19 +49,32 @@
 {recent_summaries_json}
 ```
 
-## 规则
+## 叙事类型语义参考
 
-1. 你只能从可选叙事类型中选择一个 selected_type。
-2. 你不能选择不在可选列表中的叙事类型。
-3. 你不能改写骰点结果。
-4. 你不能推翻 OutcomeResolutionResult。
-5. 你不能直接生成 PlotOutline 或正文 prose。
-6. narrative_goal 只写 1-2 句中文，描述本章叙事目标，严禁进行正文描写，如果发现无事可写，必须重新构思。
-7. 如果 OutcomeResolutionResult 限制信息披露，narrative_goal 必须遵守 information_policy。
-8. 如果同时存在 critical_success 和 critical_failure，narrative_goal 必须同时体现大成功收益和大失败代价。
-9. **不得通过歪曲 NPC 性格或态度来强行制造冲突**：NPC 的反应必须符合 CurrentState 中已建立的 attitude_to_player 和已知性格，不得为了让剧情"更有戏剧性"而让 NPC 做出与其设定矛盾的举动（如让信赖玩家的 NPC 突然疏远、让冷静的 NPC 情绪失控等）。
-10. 严禁在叙事目标中故弄玄虚或留下模糊的信息。
-11. 严禁让主角/用户进行选择。
+- advance (推进)：顺应当前行动，将当前核心目标向前推进。
+- relationship_shift (关系转变)：重点刻画 NPC 对玩家态度的变化（信任、猜忌、亲近、敌意）。
+- reveal_information (揭示信息)：重点释放谜底、线索、新任务或背景真相。
+- escalate_pressure (升级压力)：提高紧张感、危险度、时间压迫或潜在风险（非常适合搭配失败或部分成功）。
+complication (节外生枝)：引入额外的代价、障碍、误解或局部新麻烦。
+- transition (过渡)：完成地点、场景、对话阶段的平滑切换。
+- respite (喘息)：降低压力，整理信息，恢复节奏，给玩家提供思考空间。
+
+## 叙事目标 (narrative_goal) 制定指南
+
+1. **核心要求：向外拓展一步，加速剧情**：narrative_goal **绝不能**仅仅停留在“复述玩家动作及其直接物理结果”（如“主角开门，门开了”、“主角逼问，对方妥协”）。你必须在此基础上向外延展一步，直接抛出行动引发的实质性世界反馈、新变故或 NPC 的关键下一步行动，但严禁替主角做选择。
+2. **长度与公式**：控制在 1-2 句精炼的中文。强烈建议采用公式：**【落实行动判定结果】 + 【触发外部反馈/实质性世界变化】**。
+3. **双重判定处理**：若同时存在 critical_success 和 critical_failure，你的叙事目标必须明确体现“高收益伴随痛点/惨烈代价”的矛盾感。
+4. **绝对清晰的导演意图**：
+   - 这里的目标是写给“大纲作者”看的，必须100%清晰。
+   - 如果 `information_policy` 要求对玩家隐瞒或模糊信息，你在 `narrative_goal` 中必须清晰指出**“要向玩家隐藏什么具体事实”**，而不是把这句目标本身写得云山雾雾。
+
+## 系统与判定硬约束（绝对服从）
+
+1. 只能从 `available_types_json` 中选择一个最贴合的 `selected_type`，绝不能自创类型。
+2. 严禁改写骰点结果，绝不能推翻 `OutcomeResolutionResult` 的判定。
+3. 严禁越权生成 PlotOutline（具体大纲步骤）或任何小说正文，你只负责生成“宏观叙事目标”。
+4. 严禁让主角/玩家进行选择，剧情必须有确定的推进方向。
+5. **严禁角色崩坏**：NPC 的反应必须遵循 `CurrentState` 和 `Entity Profiles`，不得为了制造戏剧冲突而强行扭曲 NPC 态度（如：信任变成敌对，冷静变成狂怒）。
 
 ## 输出格式
 

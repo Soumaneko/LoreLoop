@@ -125,6 +125,10 @@ class NarrativePacer:
         roll_available, roll_notes = roll_filter_types(outcome_resolution)
         final_available, cooldown_notes = cooldown_filter_types(roll_available, previous_types)
 
+        schema = NarrativePacingDecision.model_json_schema()
+        if "properties" in schema and "selected_type" in schema["properties"]:
+            schema["properties"]["selected_type"]["enum"] = list(final_available)
+
         decision = cast(
             NarrativePacingDecision,
             self.llm.run(
@@ -138,7 +142,6 @@ class NarrativePacer:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "previous_types_json": json.dumps(previous_types[-2:], ensure_ascii=False, indent=2),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(current_state),
                     "user_input": user_input,
@@ -147,7 +150,7 @@ class NarrativePacer:
                     "recent_summaries_json": project_scene_summaries(recent_summaries),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),
                     "output_schema_json": json.dumps(
-                        NarrativePacingDecision.model_json_schema(),
+                        schema,
                         ensure_ascii=False,
                         indent=2,
                     ),

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from app.domain.action.schemas import ActionParseResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.director_event.schemas import DirectorEvent
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.narrative_pacer.schemas import NarrativePacingResult
 from app.domain.outcome.schemas import OutcomeResolutionResult
@@ -20,6 +21,7 @@ class PlotOutlineContext(BaseModel):
     retrieved_memories: CandidateRetrievalResult
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
+    director_event: DirectorEvent | None = None
 
 
 def assemble_context(
@@ -33,6 +35,7 @@ def assemble_context(
     retrieved_memories: CandidateRetrievalResult,
     scene_summaries: list[SceneSummary] | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
+    director_event: DirectorEvent | None = None,
 ) -> PlotOutlineContext:
     return PlotOutlineContext(
         user_input=user_input,
@@ -44,4 +47,5 @@ def assemble_context(
         retrieved_memories=retrieved_memories,
         scene_summaries=scene_summaries or [],
         entity_profiles=entity_profiles or [],
+        director_event=director_event,
     )

@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.domain.director_event.views import project_director_event
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.plot_outline.views import (
     project_narrative_pacing,
@@ -43,6 +44,7 @@ class PlotOutlineAgent:
                     "retrieved_memories_json": project_retrieved_memories(context.retrieved_memories),
                     "scene_summaries_json": project_scene_summaries(context.scene_summaries),
                     "entity_profiles_json": project_entity_profiles(context.entity_profiles),
+                    "director_event_json": project_director_event(context.director_event),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=PlotOutlineResult,

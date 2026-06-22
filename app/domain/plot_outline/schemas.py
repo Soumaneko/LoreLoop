@@ -19,3 +19,4 @@ class PlotOutlineResult(BaseModel):
     beats: list[PlotBeat] = Field(default_factory=list)
     constraints_for_scene_writer: list[str] = Field(default_factory=list)
     risks_to_avoid: list[str] = Field(default_factory=list)
+    director_event_note: str | None = None

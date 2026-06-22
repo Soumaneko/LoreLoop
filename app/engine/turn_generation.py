@@ -25,6 +25,7 @@ from .session import PENDING_TURNS, PendingTurn
 from .stores import (
     core_memory_store,
     current_state_store,
+    director_event_store,
     entity_store,
     memory_store,
     pending_memory_store,
@@ -60,6 +61,9 @@ def generate_turn_stream(
         scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)
 
+    with director_event_store() as director_store:
+        active_director_event = director_store.get_active()
+
     yield {
         "step": "state_loaded",
         "data": {
@@ -69,6 +73,7 @@ def generate_turn_stream(
             "short_term_memory": model_data(short_term_memory),
             "scene_summaries": model_data(scene_summaries),
             "recent_summaries": model_data(recent_summaries),
+            "active_director_event": model_data(active_director_event),
         },
     }
 
@@ -225,6 +230,7 @@ def generate_turn_stream(
         retrieved_memories=retrieved_memories,
         scene_summaries=scene_summaries,
         entity_profiles=action_entity_profile_views,
+        director_event=active_director_event,
     )
 
     yield {

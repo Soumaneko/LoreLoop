@@ -4,6 +4,7 @@ from .settings import load_settings
 from .stores import (
     core_memory_store,
     current_state_store,
+    director_event_store,
     entity_store,
     memory_store,
     pending_memory_store,
@@ -38,6 +39,11 @@ def load_debug_state() -> dict:
     with entity_store() as ent_store:
         entity_profiles = ent_store.list_all()
 
+    with director_event_store() as director_store:
+        active_director_event = director_store.get_active()
+        suspended_director_events = director_store.list_suspended()
+        archived_director_events = director_store.list_archived()
+
     settings = load_settings()
     core_memory = core_memory_store().load()
     return {
@@ -55,6 +61,9 @@ def load_debug_state() -> dict:
         "scene_summaries": model_data(scene_summaries),
         "recent_summaries": model_data(recent_summaries),
         "entity_profiles": model_data(entity_profiles),
+        "active_director_event": model_data(active_director_event),
+        "suspended_director_events": model_data(suspended_director_events),
+        "archived_director_event_count": len(archived_director_events),
         "chat_history": model_data(chat_history),
         "difficulty": settings.get("difficulty", "困难"),
         "max_chars": int(settings.get("max_chars", 1500)),

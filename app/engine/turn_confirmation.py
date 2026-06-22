@@ -3,12 +3,15 @@ import uuid
 
 from app.core.llm.config import create_gateway
 from app.domain.current_state import StateUpdater
+from app.domain.director_event.reviewer import DirectorEventReviewer
+from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.entity.extractor import EntityExtractor
 from app.domain.narrative_pacer import NARRATIVE_TYPE_LABELS
 from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.workflows.extract_memory import fill_pending_memory_scene_metadata
 from app.workflows.generate_action_preview import generate_action_preview_workflow
 from app.workflows.update_entity_profiles import update_entity_profiles_from_extraction
+from app.workflows.update_director_event import update_director_event_workflow
 
 from .maintenance import run_memory_batch_maintenance, run_scene_summary_maintenance
 from .serialization import model_data
@@ -16,6 +19,7 @@ from .session import BACKGROUND_EXECUTOR, PENDING_OPENINGS, PENDING_TURNS
 from .stores import (
     core_memory_store,
     current_state_store,
+    director_event_store,
     entity_store,
     memory_store,
     pending_memory_store,
@@ -156,6 +160,7 @@ def confirm_turn_stream(
     }
 
     with scene_summary_store() as summary_store:
+        scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)
 
     def _do_action_preview():
@@ -169,8 +174,23 @@ def confirm_turn_stream(
         )
 
     updated_entity_ids: list[str] = []
+    director_event_result = None
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         action_preview_fu = pool.submit(_do_action_preview)
+        if write_db and pending.turn_index >= 1:
+            with director_event_store() as director_store:
+                director_event_result = update_director_event_workflow(
+                    user_input=pending.user_input,
+                    scene_text=effective_scene_text,
+                    current_state=updated_state,
+                    core_memory=core_memory_store().load_required(),
+                    scene_summaries=scene_summaries,
+                    turn_index=pending.turn_index,
+                    store=director_store,
+                    reviewer=DirectorEventReviewer(create_gateway()),
+                    selector=DirectorEventSelector(create_gateway()),
+                    trace_id=trace_id,
+                )
         if write_db and entity_extraction is not None:
             with entity_store() as ent_store:
                 entity_result = update_entity_profiles_from_extraction(
@@ -187,6 +207,7 @@ def confirm_turn_stream(
             "step": "entity_profiles_updated",
             "data": {
                 "updated_entity_ids": updated_entity_ids,
+                "director_event_result": model_data(director_event_result),
             },
         }
         action_preview = action_preview_fu.result()
@@ -285,6 +306,7 @@ def confirm_turn_stream(
             "short_term_memory_after": model_data(short_term_after),
             "memory_extraction": memory_data,
             "updated_entity_ids": updated_entity_ids,
+            "director_event_result": model_data(director_event_result),
             "status": "committed" if write_db else "dry_run",
         },
     }

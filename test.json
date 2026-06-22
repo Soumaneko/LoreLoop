@@ -1,85 +1,178 @@
+你是一个文字冒险游戏的剧情作家。你的任务是根据剧情大纲、当前状态、核心设定和参考资料，撰写本回合的正式剧情文本。
+
+
+## 剧情大纲
+
+```json
 {
-    "trace_id": "39b77764-42b6-446f-93ff-b738e4f09f65",
-    "task": "entity_extract",
-    "model": "deepseek-v4-flash",
-    "prompt_version": "v1",
-    "input_data": {
-        "scene_text": "暴风城的法师区总是充斥着奥术的嗡嗡声。 你有些狼狈地从法师塔里走出来，手里拿着一根轻飘飘的白色羽毛——这是施放**【缓落术】**的施法材料。\n\n“好吧，”你自我安慰道，整理着衣袖，“虽然没学会怎么瞬移逃跑，但至少下次如果那条母龙想把我从要塞的露台上扔下去，我能像一片优雅的叶子一样落地，而不是一坨肉泥。”\n\n这个法术虽然不能杀敌，但在某些极端地形或逃生场景中，或许有奇效。\n\n下午 2:00，大教堂广场。 阳光刺眼。你并没有走进广场中心，而是站在城市大厅的阴影回廊下，远远地观察。\n\n那里站着五个人。 哪怕隔着这么远，你也能感受到他们身上那股令人不安的气息。他们身上的装备五花八门，甚至有些发光。他们对着大教堂的主教指指点点，似乎在索要什么任务物品。\n\n你的直觉是对的。这是一群为了经验值和装备可以干翻古神的“怪物”。 奥妮克希亚让你“误导”他们。 但如果你直接走过去撒谎，万一被他们的圣骑士用【侦测谎言】或者牧师的【心灵视界】看穿，你会立刻变成红名怪，然后被五个大火球糊脸。\n\n**“不能接触，只能诱导。”** 你在心里默念。\n\n你注意到，这群冒险者似乎正在询问关于**“西部荒野”**和**“迪菲亚兄弟会”**的线索。他们在寻找失踪的使节（瓦里安国王）。",
-        "existing_profiles_json": "[\n  {\n    \"entity_type\": \"organization\",\n    \"name\": \"军情七处\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": \"暴风城的情报与间谍机构，负责国王的安全与秘密行动。领袖为马迪亚斯·肖尔。\",\n    \"entity_id\": \"4d3eeccb68d047a1a0a7a5a1caca8f7a\"\n  },\n  {\n    \"entity_type\": \"npc\",\n    \"name\": \"卡特拉娜·普瑞斯托\",\n    \"aliases\": [\n      \"普瑞斯托女伯爵\",\n      \"奥妮克希亚\"\n    ],\n    \"summary\": \"黑龙公主奥妮克希亚的人类伪装身份，暴风城女伯爵，通过精神控制等手段操纵暴风城政治，是迪菲亚兄弟会腐败链条的幕后黑手。\",\n    \"role\": \"女伯爵/黑龙公主\",\n    \"personality_traits\": [\n      \"精明\",\n      \"善于伪装\",\n      \"冷酷\"\n    ],\n    \"known_abilities\": [\n      \"精神控制\",\n      \"火焰操控\"\n    ],\n    \"faction\": \"黑龙军团\",\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"282b2346fccb46839d58711ebcfb14a8\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"大教堂广场\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"广场\",\n    \"features\": [\n      \"位于暴风城\",\n      \"暴风城大教堂前的广场\"\n    ],\n    \"parent_location\": \"暴风城\",\n    \"description\": null,\n    \"entity_id\": \"8f4913ff023c4181b95d311d22ad3df8\"\n  },\n  {\n    \"entity_type\": \"organization\",\n    \"name\": \"失踪使节调查团\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": \"一群正在暴风城调查瓦里安国王失踪真相的冒险者，常在旧城区或大教堂广场活动。\",\n    \"entity_id\": \"0bc705595aea484687f788edd351231e\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"旧城区\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"城市区域\",\n    \"features\": [\n      \"暴风城的古老区域\",\n      \"猪和哨声旅店所在地\"\n    ],\n    \"parent_location\": \"暴风城\",\n    \"description\": null,\n    \"entity_id\": \"5ae0d7e09f404427aed8e3a3e96ecccd\"\n  },\n  {\n    \"entity_type\": \"npc\",\n    \"name\": \"温德索尔\",\n    \"aliases\": [\n      \"温德索尔元帅\"\n    ],\n    \"summary\": \"一位被囚禁在黑石深渊的暴风城军官，知晓瓦里安国王失踪真相的关键人物。\",\n    \"role\": \"暴风城军官\",\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": \"暴风城\",\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"ce364b5370714c48a94753fa506f5f3b\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"猪和哨声旅店\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"旅店\",\n    \"features\": [\n      \"位于暴风城旧城区\"\n    ],\n    \"parent_location\": \"旧城区\",\n    \"description\": null,\n    \"entity_id\": \"966d4a12b4b44dde8c1ef1443c66de9d\"\n  },\n  {\n    \"entity_type\": \"npc\",\n    \"name\": \"瓦里安\",\n    \"aliases\": [\n      \"瓦里安·乌瑞恩\"\n    ],\n    \"summary\": \"暴风城的国王，目前处于失踪状态，其失踪真相被黑龙公主奥妮克希亚暗中掩盖。\",\n    \"role\": \"暴风城国王\",\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": \"暴风城\",\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"25ef19b5fbe346ce9f720e4071460771\"\n  },\n  {\n    \"entity_type\": \"item\",\n    \"name\": \"皇家顾问徽章\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": \"徽章\",\n    \"item_source\": \"奥妮克希亚授予\",\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": \"一枚精致的狮头徽章，代表临时的暴风城皇家顾问身份，可在暴风城大部分官方场合畅通无阻，允许调阅非机密档案。\",\n    \"entity_id\": \"3a0b90714171424d8496effe4e54e5d3\"\n  },\n  {\n    \"entity_type\": \"npc\",\n    \"name\": \"马迪亚斯·肖尔\",\n    \"aliases\": [\n      \"肖尔\"\n    ],\n    \"summary\": \"军情七处的领袖，暴风城最顶尖的特工，目前正忙于西部荒野经费不足和内部矛盾等事务。\",\n    \"role\": \"军情七处领袖\",\n    \"personality_traits\": [\n      \"老练\",\n      \"谨慎\"\n    ],\n    \"known_abilities\": [],\n    \"faction\": \"军情七处\",\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"2302323bbde44c5488ff71624e1a6740\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"黑曜石休息室\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"休息室/会客厅\",\n    \"features\": [\n      \"位于暴风要塞内\",\n      \"奥妮克希亚的私人会客室\"\n    ],\n    \"parent_location\": \"暴风要塞\",\n    \"description\": null,\n    \"entity_id\": \"f42498ce2ad34da5bd511ab5d7e800ea\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"黑石深渊\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"地下城/副本\",\n    \"features\": [\n      \"黑石山内的巨大监狱要塞\",\n      \"囚禁着温德索尔元帅\"\n    ],\n    \"parent_location\": \"黑石山\",\n    \"description\": null,\n    \"entity_id\": \"dc3b6ae79735439aac5d9a81d13d7788\"\n  },\n  {\n    \"entity_type\": \"npc\",\n    \"name\": \"安娜贝拉·莱斯科瓦\",\n    \"aliases\": [\n      \"安娜贝拉\"\n    ],\n    \"summary\": \"莱斯科瓦公爵之女，天真活泼，对卢西安充满好感与信任，曾通过卢西安获得普瑞斯托女伯爵的内庭通行证。\",\n    \"role\": \"公爵之女\",\n    \"personality_traits\": [\n      \"快乐\",\n      \"仰慕卢西安\"\n    ],\n    \"known_abilities\": [],\n    \"faction\": \"暴风城贵族\",\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"236a0571f8f34fb58cae09ef78f4071c\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"大漩涡\",\n    \"aliases\": [],\n    \"summary\": \"无尽之海上的巨大漩涡，大灾变预言中可能受到影响的区域。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"海洋漩涡\",\n    \"features\": [],\n    \"parent_location\": \"艾泽拉斯\",\n    \"description\": null,\n    \"entity_id\": \"e5fe9833abe74fab98a961e2bf44a14a\"\n  },\n  {\n    \"entity_type\": \"npc\",\n    \"name\": \"安娜丝塔丽\",\n    \"aliases\": [],\n    \"summary\": \"蓝色隐士酒馆的高级侍应生，曾是肯瑞托成员，擅长魔法和预言研究，对卢西安提供情报支持，担忧地脉震动和大灾变预言。\",\n    \"role\": \"酒馆高级侍应生/前肯瑞托成员\",\n    \"personality_traits\": [\n      \"博学\",\n      \"谨慎\",\n      \"友善\",\n      \"担忧\"\n    ],\n    \"known_abilities\": [\n      \"魔法研究\",\n      \"预知感\"\n    ],\n    \"faction\": \"前肯瑞托\",\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"69c45e1427514e19ac25504edceac819\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"暴风城\",\n    \"aliases\": [],\n    \"summary\": \"人类联盟的核心城市，暴风王国的首都，目前政治腐败，高层被黑龙公主渗透。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"城市\",\n    \"features\": [\n      \"人类王国首都\",\n      \"有法师区、旧城区等区域\"\n    ],\n    \"parent_location\": \"艾泽拉斯\",\n    \"description\": null,\n    \"entity_id\": \"5b400b34bc944684afbc18819ead505b\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"暴风要塞\",\n    \"aliases\": [],\n    \"summary\": \"暴风城内的核心要塞，女伯爵卡特拉娜·普瑞斯托（黑龙公主）的居所。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"城堡/要塞\",\n    \"features\": [\n      \"暴风城核心建筑\",\n      \"奥妮克希亚的居所\"\n    ],\n    \"parent_location\": \"暴风城\",\n    \"description\": null,\n    \"entity_id\": \"a4a16e99bb234b0da773790da8931239\"\n  },\n  {\n    \"entity_type\": \"npc\",\n    \"name\": \"格雷森·沙姆·莱斯科瓦公爵\",\n    \"aliases\": [],\n    \"summary\": \"暴风城贵族，表面风光但实际已被黑龙公主奥妮克希亚精神控制，成为迪菲亚兄弟会与暴风城腐败高层之间的资金中间人。\",\n    \"role\": \"莱斯科瓦公爵\",\n    \"personality_traits\": [\n      \"憔悴\",\n      \"恐惧\",\n      \"被精神控制\"\n    ],\n    \"known_abilities\": [],\n    \"faction\": \"暴风城贵族/被奥妮克希亚控制\",\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"9ad20be256694084a69e0a5b52cc02bf\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"法师区\",\n    \"aliases\": [],\n    \"summary\": \"暴风城的魔法区域，蓝色隐士酒馆和众多魔法店铺所在地。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"城市区域\",\n    \"features\": [\n      \"暴风城魔法区\",\n      \"设有蓝色隐士酒馆\"\n    ],\n    \"parent_location\": \"暴风城\",\n    \"description\": null,\n    \"entity_id\": \"4ab1443f541b46c2a3cc4ee77aad8c78\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"深岩之洲\",\n    \"aliases\": [],\n    \"summary\": \"位于艾泽拉斯深处的元素位面，地脉异常涉及的区域，与大灾变预言有关。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"元素位面\",\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"67b0cc461069424ba74952e119e6620a\"\n  },\n  {\n    \"entity_type\": \"organization\",\n    \"name\": \"石工兄弟会\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": \"暴风城历史上的石匠工会，后因欠薪引发叛乱，部分成员演变为迪菲亚兄弟会。莱斯科瓦公爵提及的石工兄弟会欠款可能与迪菲亚资金有关。\",\n    \"entity_id\": \"8f5a15d49014474d88b596c49ea0a731\"\n  },\n  {\n    \"entity_type\": \"organization\",\n    \"name\": \"肯瑞托\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": \"高等精灵和人类组成的魔法组织，总部位于达拉然。安娜丝塔丽曾是其中成员，致力于研究和保护魔法秘密。\",\n    \"entity_id\": \"74736154e30c4fafa3ac099f1840a782\"\n  },\n  {\n    \"entity_type\": \"npc\",\n    \"name\": \"莎拉·月刃\",\n    \"aliases\": [],\n    \"summary\": \"来自泰达希尔的暗夜精灵哨兵，因梦魇和伊兰尼库斯之死逃离家园，目前依附于卢西安并在蓝色隐士休息。已被黑龙公主奥妮克希亚注意到并指名要求见面。\",\n    \"role\": \"卡多雷哨兵/游侠\",\n    \"personality_traits\": [\n      \"冷酷外表\",\n      \"内心脆弱\",\n      \"依赖卢西安\",\n      \"离家万里的女孩\"\n    ],\n    \"known_abilities\": [],\n    \"faction\": \"卡多雷哨兵部队\",\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": null,\n    \"entity_id\": \"f7565a98f38a4fd4911cde14f48290ac\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"莱斯科瓦公爵府\",\n    \"aliases\": [],\n    \"summary\": \"莱斯科瓦公爵在暴风城的府邸，装饰奢华，是公爵家族居所。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"贵族府邸\",\n    \"features\": [\n      \"极尽奢华\",\n      \"拥有水晶吊灯和进口挂毯\"\n    ],\n    \"parent_location\": \"暴风城\",\n    \"description\": null,\n    \"entity_id\": \"c8a948f2b51146a6a69373f22db839c8\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"蓝色隐士\",\n    \"aliases\": [],\n    \"summary\": \"位于暴风城法师区的酒馆，是暗夜精灵莎拉和安娜丝塔丽的落脚点，安娜丝塔丽在二楼拥有私人密室。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"酒馆\",\n    \"features\": [\n      \"位于暴风城法师区\",\n      \"安娜丝塔丽的据点\",\n      \"二楼有私人密室\"\n    ],\n    \"parent_location\": \"法师区\",\n    \"description\": null,\n    \"entity_id\": \"92d14e75d283408d89774f025ca12864\"\n  },\n  {\n    \"entity_type\": \"organization\",\n    \"name\": \"迪菲亚兄弟会\",\n    \"aliases\": [],\n    \"summary\": null,\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": \"暴风城地区的盗匪组织，与石工兄弟会有关联，目前通过莱斯科瓦公爵从暴风城腐败高层获得资金和物资支持，幕后操纵者为黑龙公主奥妮克希亚。\",\n    \"entity_id\": \"07ec99f2e04641f1ae7b2d5ac1b9fa4b\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"泰达希尔\",\n    \"aliases\": [],\n    \"summary\": \"暗夜精灵的家园，一棵巨大的世界之树，位于卡利姆多。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"世界之树/城市\",\n    \"features\": [\n      \"巨大树木\",\n      \"树叶怀抱\",\n      \"风声穿过树冠\"\n    ],\n    \"parent_location\": \"卡利姆多\",\n    \"description\": null,\n    \"entity_id\": \"1744a254444d4e03883602746c319ec0\"\n  },\n  {\n    \"entity_type\": \"item\",\n    \"name\": \"军情七处的伪造报告\",\n    \"aliases\": [\n      \"伪造报告\"\n    ],\n    \"summary\": \"一份冒充军情七处内部文件的伪造报告，卢西安计划用它欺骗卡特拉娜·普瑞斯托。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": \"文书\",\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": \"一份精心伪造的军情七处内部报告，内容涉及情报评估或任务记录，旨在误导黑龙公主卡特拉娜。\",\n    \"entity_id\": \"71864e3d063f491d96917c503883a77f\"\n  },\n  {\n    \"entity_type\": \"location\",\n    \"name\": \"暴风港\",\n    \"aliases\": [],\n    \"summary\": \"暴风城的港口区域，停泊着巨大战舰，是卢西安和莎拉交谈的地点。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": null,\n    \"item_source\": null,\n    \"location_type\": \"港口\",\n    \"features\": [\n      \"栈桥\",\n      \"巨大战舰\",\n      \"海风\",\n      \"血红色夕阳\"\n    ],\n    \"parent_location\": \"暴风城\",\n    \"description\": null,\n    \"entity_id\": \"9631dab6eac54cd99962912ef606c30e\"\n  },\n  {\n    \"entity_type\": \"item\",\n    \"name\": \"月火之箭\",\n    \"aliases\": [],\n    \"summary\": \"一支卡多雷风格的箭矢，似乎带有月火魔法。\",\n    \"role\": null,\n    \"personality_traits\": [],\n    \"known_abilities\": [],\n    \"faction\": null,\n    \"item_type\": \"特殊箭矢\",\n    \"item_source\": null,\n    \"location_type\": null,\n    \"features\": [],\n    \"parent_location\": null,\n    \"description\": \"一支精致的箭矢，带有月火魔法能量，是卡多雷游侠常用的武器。\",\n    \"entity_id\": \"2b7c50c0bb1149b5b4ac1cda5230f30d\"\n  }\n]",
-        "output_schema_json": "{\n  \"$defs\": {\n    \"EntityAliasMatch\": {\n      \"properties\": {\n        \"extracted_text\": {\n          \"title\": \"Extracted Text\",\n          \"type\": \"string\"\n        },\n        \"matched_entity_id\": {\n          \"anyOf\": [\n            {\n              \"type\": \"string\"\n            },\n            {\n              \"type\": \"null\"\n            }\n          ],\n          \"default\": null,\n          \"title\": \"Matched Entity Id\"\n        },\n        \"matched_entity_name\": {\n          \"title\": \"Matched Entity Name\",\n          \"type\": \"string\"\n        },\n        \"matched_entity_type\": {\n          \"enum\": [\n            \"npc\",\n            \"item\",\n            \"location\",\n            \"organization\"\n          ],\n          \"title\": \"Matched Entity Type\",\n          \"type\": \"string\"\n        },\n        \"new_alias\": {\n          \"anyOf\": [\n            {\n              \"type\": \"string\"\n            },\n            {\n              \"type\": \"null\"\n            }\n          ],\n          \"default\": null,\n          \"title\": \"New Alias\"\n        }\n      },\n      \"required\": [\n        \"extracted_text\",\n        \"matched_entity_name\",\n        \"matched_entity_type\"\n      ],\n      \"title\": \"EntityAliasMatch\",\n      \"type\": \"object\"\n    },\n    \"RetrievedEntity\": {\n      \"properties\": {\n        \"name\": {\n          \"title\": \"Name\",\n          \"type\": \"string\"\n        },\n        \"entity_type\": {\n          \"enum\": [\n            \"npc\",\n            \"item\",\n            \"location\",\n            \"organization\"\n          ],\n          \"title\": \"Entity Type\",\n          \"type\": \"string\"\n        },\n        \"source\": {\n          \"enum\": [\n            \"exact_match\",\n            \"alias_match\",\n            \"new\"\n          ],\n          \"title\": \"Source\",\n          \"type\": \"string\"\n        },\n        \"matched_entity_id\": {\n          \"anyOf\": [\n            {\n              \"type\": \"string\"\n            },\n            {\n              \"type\": \"null\"\n            }\n          ],\n          \"default\": null,\n          \"title\": \"Matched Entity Id\"\n        },\n        \"matched_entity_name\": {\n          \"anyOf\": [\n            {\n              \"type\": \"string\"\n            },\n            {\n              \"type\": \"null\"\n            }\n          ],\n          \"default\": null,\n          \"title\": \"Matched Entity Name\"\n        },\n        \"context_span\": {\n          \"anyOf\": [\n            {\n              \"type\": \"string\"\n            },\n            {\n              \"type\": \"null\"\n            }\n          ],\n          \"default\": null,\n          \"title\": \"Context Span\"\n        }\n      },\n      \"required\": [\n        \"name\",\n        \"entity_type\",\n        \"source\"\n      ],\n      \"title\": \"RetrievedEntity\",\n      \"type\": \"object\"\n    }\n  },\n  \"properties\": {\n    \"alias_matches\": {\n      \"items\": {\n        \"$ref\": \"#/$defs/EntityAliasMatch\"\n      },\n      \"title\": \"Alias Matches\",\n      \"type\": \"array\"\n    },\n    \"retrieved_entities\": {\n      \"items\": {\n        \"$ref\": \"#/$defs/RetrievedEntity\"\n      },\n      \"title\": \"Retrieved Entities\",\n      \"type\": \"array\"\n    }\n  },\n  \"title\": \"EntityExtractionResult\",\n  \"type\": \"object\"\n}"
+  "outline_summary": "凯茜娅招募精灵猎人时碰壁，对方以冷淡态度拒绝；主角询问女法师时遭遇隐晦的警告式回应，暗示酒馆中不止她一人对主角感兴趣。两人行动均未达成预期目标，且酒馆内的氛围转向微妙的不安。",
+  "beats": [
+    {
+      "beat_id": "beat_012_01",
+      "summary": "凯茜娅走到精灵猎人桌前，低声交谈片刻，但对方只是抬了抬眼皮，简短回应几句后便转回身去继续喝酒，显然无意加入。凯茜娅面色不快地退回主角身边，表示对方没兴趣，且言语间透露出对此地不宜久留的暗示。",
+      "related_entities": ["凯茜娅", "精灵猎人"],
+      "required_outcomes": ["招募意图未能达成，精灵猎人拒绝，且态度冷淡"],
+      "required_memory_indices": [22],
+      "state_implications": ["精灵猎人不会加入队伍", "凯茜娅对酒馆环境产生警惕"],
+      "tone_notes": ["保持务实氛围，不渲染性暗示"]
     },
-    "raw_output": "{\n  \"alias_matches\": [\n    {\n      \"extracted_text\": \"母龙\",\n      \"matched_entity_id\": \"282b2346fccb46839d58711ebcfb14a8\",\n      \"matched_entity_name\": \"卡特拉娜·普瑞斯托\",\n      \"matched_entity_type\": \"npc\",\n      \"new_alias\": \"母龙\"\n    }\n  ],\n  \"retrieved_entities\": [\n    {\n      \"name\": \"暴风城\",\n      \"entity_type\": \"location\",\n      \"source\": \"exact_match\",\n      \"matched_entity_id\": \"5b400b34bc944684afbc18819ead505b\",\n      \"matched_entity_name\": \"暴风城\",\n      \"context_span\": null\n    },\n    {\n      \"name\": \"法师区\",\n      \"entity_type\": \"location\",\n      \"source\": \"exact_match\",\n      \"matched_entity_id\": \"4ab1443f541b46c2a3cc4ee77aad8c78\",\n      \"matched_entity_name\": \"法师区\",\n      \"context_span\": null\n    },\n    {\n      \"name\": \"大教堂广场\",\n      \"entity_type\": \"location\",\n      \"source\": \"exact_match\",\n      \"matched_entity_id\": \"8f4913ff023c4181b95d311d22ad3df8\",\n      \"matched_entity_name\": \"大教堂广场\",\n      \"context_span\": null\n    },\n    {\n      \"name\": \"卡特拉娜·普瑞斯托\",\n      \"entity_type\": \"npc\",\n      \"source\": \"exact_match\",\n      \"matched_entity_id\": \"282b2346fccb46839d58711ebcfb14a8\",\n      \"matched_entity_name\": \"卡特拉娜·普瑞斯托\",\n      \"context_span\": null\n    },\n    {\n      \"name\": \"迪菲亚兄弟会\",\n      \"entity_type\": \"organization\",\n      \"source\": \"exact_match\",\n      \"matched_entity_id\": \"07ec99f2e04641f1ae7b2d5ac1b9fa4b\",\n      \"matched_entity_name\": \"迪菲亚兄弟会\",\n      \"context_span\": null\n    },\n    {\n      \"name\": \"瓦里安\",\n      \"entity_type\": \"npc\",\n      \"source\": \"exact_match\",\n      \"matched_entity_id\": \"25ef19b5fbe346ce9f720e4071460771\",\n      \"matched_entity_name\": \"瓦里安\",\n      \"context_span\": null\n    },\n    {\n      \"name\": \"西部荒野\",\n      \"entity_type\": \"location\",\n      \"source\": \"new\",\n      \"matched_entity_id\": null,\n      \"matched_entity_name\": null,\n      \"context_span\": \"这群冒险者似乎正在询问关于**\\\"西部荒野\\\"**和**\\\"迪菲亚兄弟会\\\"**的线索。\"\n    }\n  ]\n}",
-    "parsed_output": {
-        "alias_matches": [
-            {
-                "extracted_text": "母龙",
-                "matched_entity_id": "282b2346fccb46839d58711ebcfb14a8",
-                "matched_entity_name": "卡特拉娜·普瑞斯托",
-                "matched_entity_type": "npc",
-                "new_alias": "母龙"
-            }
-        ],
-        "retrieved_entities": [
-            {
-                "name": "暴风城",
-                "entity_type": "location",
-                "source": "exact_match",
-                "matched_entity_id": "5b400b34bc944684afbc18819ead505b",
-                "matched_entity_name": "暴风城",
-                "context_span": null
-            },
-            {
-                "name": "法师区",
-                "entity_type": "location",
-                "source": "exact_match",
-                "matched_entity_id": "4ab1443f541b46c2a3cc4ee77aad8c78",
-                "matched_entity_name": "法师区",
-                "context_span": null
-            },
-            {
-                "name": "大教堂广场",
-                "entity_type": "location",
-                "source": "exact_match",
-                "matched_entity_id": "8f4913ff023c4181b95d311d22ad3df8",
-                "matched_entity_name": "大教堂广场",
-                "context_span": null
-            },
-            {
-                "name": "卡特拉娜·普瑞斯托",
-                "entity_type": "npc",
-                "source": "exact_match",
-                "matched_entity_id": "282b2346fccb46839d58711ebcfb14a8",
-                "matched_entity_name": "卡特拉娜·普瑞斯托",
-                "context_span": null
-            },
-            {
-                "name": "迪菲亚兄弟会",
-                "entity_type": "organization",
-                "source": "exact_match",
-                "matched_entity_id": "07ec99f2e04641f1ae7b2d5ac1b9fa4b",
-                "matched_entity_name": "迪菲亚兄弟会",
-                "context_span": null
-            },
-            {
-                "name": "瓦里安",
-                "entity_type": "npc",
-                "source": "exact_match",
-                "matched_entity_id": "25ef19b5fbe346ce9f720e4071460771",
-                "matched_entity_name": "瓦里安",
-                "context_span": null
-            },
-            {
-                "name": "西部荒野",
-                "entity_type": "location",
-                "source": "new",
-                "matched_entity_id": null,
-                "matched_entity_name": null,
-                "context_span": "这群冒险者似乎正在询问关于**\"西部荒野\"**和**\"迪菲亚兄弟会\"**的线索。"
-            }
-        ]
-    },
-    "schema_valid": true,
-    "latency_ms": 22244.353,
-    "error": null,
-    "timestamp": 1781837772.8310232
+    {
+      "beat_id": "beat_012_02",
+      "summary": "主角走到女法师桌前直接询问她的打量意图，女法师并未直接回答，而是以平静语气反问主角是否带了不该带的眼光进来，随后合上书本起身离开座位，未再给主角追问的机会。她的反应既未解释动机，也未否认对主角的关注，留下模糊的威胁感。",
+      "related_entities": ["年轻女法师"],
+      "required_outcomes": ["女法师未解释意图", "主角未能获得明确信息", "对话以女方主动结束，留下不安氛围"],
+      "required_memory_indices": [21],
+      "state_implications": ["女法师对主角产生警觉", "主角意识到酒馆内存在未知势力的注意"],
+      "tone_notes": []
+    }
+  ],
 }
+```
+
+## 当前状态
+
+```json
+{
+  "scene": {
+    "scene_id": "scene_012",
+    "location": "暴风城，法师区，蓝色隐士酒馆",
+    "participants": ["克林·瓦伦", "凯茜娅"],
+    "atmosphere": "安静"
+  },
+  "world_clock": {"day": 3, "phase": "上午"},
+  "player": {"name": "克林·瓦伦", "position": "暴风城，法师区，蓝色隐士酒馆", "visible_status": "男性"},
+  "npcs": [{"name": "凯茜娅", "role": "佣兵", "location": "暴风城，法师区，蓝色隐士酒馆", "condition": ["右臂伤口已包扎"], "attitude_to_player": "深度信任与依赖", "current_intent": "陪同玩家返回地面"}],
+  "resources": {"inventory": [{"name": "飞刀", "quantity": 2}, {"name": "烟雾弹", "quantity": 2}, {"name": "信号弩", "quantity": 1}, {"name": "治疗药水", "quantity": 1}, {"name": "力量药剂", "quantity": 1}, {"name": "解毒药水", "quantity": 1}, {"name": "提神药水", "quantity": 1}, {"name": "奥术水晶匕首", "quantity": 1}], "money": 299493, "money_unit": "金币", "fixed_assets": ["暴风城郊区的庄园"]}
+}
+```
+
+## 核心设定
+
+```json
+{
+  "items": [
+    {"id": "core_world_identity", "category": "world", "content": "当前世界是同人世界，原作《魔兽世界》。故事出生点为暴风城，发生在经典旧世时代。\n所有剧情必须严格遵循原作世界观、人物性格和历史事件，不得违背原作设定。", "priority": 100},
+    {"id": "core_player_identity", "category": "player", "content": "主角是克林·瓦伦，男性。\n背景：暴风城小贵族，父母双亡，小有家产", "priority": 100},
+    {"id": "core_player_abilities", "category": "player", "content": "主角的特殊能力：\n- 真名呼唤：当主角喊出女性的真名，会让女性强制到达高潮临界状态", "priority": 100},
+    {"id": "core_tone", "category": "tone", "content": "色情冒险。色情剧情中，描写露骨且用词粗俗", "priority": 100}
+  ]
+}
+```
+
+## 参考资料（被大纲引用的召回记忆）
+
+```json
+[
+  {
+    "memory_id": "pending:9a8924cc33e44fe6ae5dd0d63a6c3a85",
+    "layer": "pending",
+    "subtype": "reported_info",
+    "subject": "pending memory",
+    "content": "凯茜娅认出酒馆内的精灵女性是一名猎人，她曾接过几次佣兵团的活，不算生手。",
+    "location": "暴风城，法师区，蓝色隐士酒馆门口",
+    "time_label": "第3日上午",
+    "source_text_span": ["凯茜娅用眼角给你指了一下，嘴唇几乎没动，压低声音说了一句：\"那个精灵，我认得——猎人。接过几次佣兵团的活，不算生手。\""]
+  },
+  {
+    "memory_id": "pending:7151b788dfab48aa8405893a67f70918",
+    "layer": "pending",
+    "subtype": "confirmed_event",
+    "subject": "pending memory",
+    "content": "一名窗边的年轻女法师警觉地察觉了克林的观察，并直白地审视了他片刻。",
+    "location": "暴风城，法师区，蓝色隐士酒馆门口",
+    "time_label": "第3日上午",
+    "source_text_span": ["她忽然合上书，转过头来。那动作不快，但准确，像是早就知道有人在看她。", "但她心里清楚——被发现了。"]
+  }
+]
+```
+
+## Entity Profiles
+
+```json
+[
+  {
+    "entity_type": "npc",
+    "name": "克林·瓦伦",
+    "aliases": ["克林"],
+    "summary": "暴风城的小贵族，父母双亡。",
+    "role": "小贵族",
+    "personality_traits": ["主导", "策略性"],
+    "known_abilities": ["喊出女性真名使其陷入情欲"]
+  },
+  {
+    "entity_type": "npc",
+    "name": "凯茜娅",
+    "summary": "女性佣兵，暗红色短发，使用短戟。性格粗犷直率且警惕务实。",
+    "role": "佣兵",
+    "personality_traits": ["粗犷", "直率", "警惕", "务实"],
+    "known_abilities": ["短戟战斗", "装备鉴别及议价", "人员识别"]
+  },
+  {
+    "entity_type": "item",
+    "name": "奥术水晶匕首",
+    "summary": "银钢打造、奥术水晶碎末熔淬的匕首，刃口泛蓝光，可抽取法力。",
+    "item_type": "武器/匕首"
+  }
+]
+```
+
+## 写作规则
+
+1. 你必须按照大纲中的 beats 顺序推进剧情，必须使用第二人称，主角绝对不能沦为沉默的旁观者或被动的听众。
+2. 每个 beat 的 summary 描述了你应该写什么，必须覆盖到，必须覆盖每一个beat。
+5. 核心设定是最高优先级，如果和大纲冲突，以核心设定为准。
+6. 参考资料中的记忆可以丰富剧情，但不是必须全部引用。不相关的记忆不要强行塞入。
+7. 近期剧情片段用于参考行文风格、语气和人物说话方式，保持一致性。
+8. 如果大纲中使用了 `state_implications` 预测状态变化，你的剧情应该为这些变化提供合理的叙事基础。
+9. 写出的剧情应该自然流畅，不应该机械地逐条执行 beat。
+10. 在 changes_summary 中用 2-5 条简短中文总结本轮剧情发生了什么变化（如"主角与米莉约定了下次见面"）。
+11. 记忆 layer 的使用规则必须遵守：truth 可作为事实；claim 只能作为传闻、情报、证词、线索或某人的说法；belief 只能影响 owner 的行为、台词、误解和态度；profile 只能作为长期倾向，不能覆盖当前状态。
+12. confidence 表示该 layer 内的可靠度：claim 的 confidence 不表示说法为真，belief 的 confidence 不表示信念为真。
+13. scene_text 必须是纯粹的小说文本。严格禁止以下内容出现在 scene_text 中：
+    - 幕次、章节、段落标题（如"第一幕"、"Act 1"、"——场景一——"）
+    - 分隔线（如 `---`、`***`、`===`）
+    - 游戏化状态标注（如"获得：xxx"、"消耗：xxx"、"确认：xxx"、"获得情报：xxx"、"发现线索：xxx"、"隐患：xxx"、"当前策略：xxx"）
+    - 任务更新块（如"任务更新：【xxx】"、列表式的目标/条件/处境说明）
+    所有状态变化、物品获得、情报发现必须自然融入叙事正文中，不得以结构化标注形式呈现。
+14. 你只负责生成剧情正文，绝对不得生成任何形式的玩家下一步行动建议、选项列表或选择引导。具体禁止：
+    - 不得在正文末尾或中间添加类似"你接下来要……"的提问或引导
+    - 不得输出任何选项列表（如"1. 攻击 2. 逃跑 3. 交谈"）
+    - 不得用"你可以选择……"或"你决定……"作为正文结尾
+    - 正文应以叙事场景自然收束结束，选择生成由独立模块处理
+15. NPC 的反应必须符合 CurrentState 中已建立的 attitude_to_player 和已知性格，不得为制造戏剧冲突而歪曲 NPC 的态度或行为。
+16. 必须尊重 CurrentState 中的资源，严禁凭空出现物品和超额金钱。
+17. **金钱交易必须写出具体数字（硬约束）**：
+    - 任何涉及金钱支出或收入的场景（购买、打赏、贿赂、雇佣、出售等），正文中**必须出现明确的数字金额**。
+    - **禁止**用模糊措辞替代具体数字。禁止例："她报了个数"、"价格不菲"、"你付了全款"、"一笔不小的数目"、"远高于市场价"——这些都不合格，因为下游状态更新无法从中推断出扣减金额。
+    - **必须**在对话或叙述中直接写出数字。允许例："五百金币"、"她开价三百，你没还价"、"你数出八十枚金币"。
+    - 如果大纲中没有指定具体金额，你必须根据物品价值、交易场景和世界观自行确定一个合理的具体数字。确保金额既不荒谬地高也不荒谬地低。
+18. scene_text 正文长度必须控制在 {max_chars} 个中文字符以内。在此上限内自然地覆盖所有 beat，不要为凑字数而填充无意义的描写，也不要为缩减篇幅而省略关键行动或对话。
+19. **场景结尾约束（关键）**：
+    - scene_text 只是冒险小说的一部分，不需要遵守章节结构，严禁强行生成一个"漂亮的收尾"。
+    - **禁止添加大纲中不存在的离场/转场动作**：如果大纲的最后一个 beat 没有要求角色离开当前地点，则 scene_text 必须在最后一个 beat 的事件自然结束后收束，角色仍然留在原地。不得自行添加"走出门外""离开酒馆""沿路返回"等离场描写。
+    - **禁止用环境描写伪装收尾**：不得在最后一个 beat 结束后追加"阳光洒在石板路上""夜色笼罩了街道"等与 beat 无关的氛围段落来制造结束感。
+    - **正确做法**：最后一个 beat 的核心事件写完即停。如果最后一个 beat 是一段对话，那么对话结束、角色做出即时反应后就是场景的自然终点。玩家的下一步行动由玩家决定，不由你代替。
+
+## 文风要求
+
+- 不要故弄玄虚，不要使用过多松散的细节描写，需要符合冒险小说的紧凑剧情风格。
+- 不要逐帧描写每个微小动作。将多个相关动作自然合并，用一两句话带过，而非每个手势、眼神、指尖移动都独立成句。
+- 感官细节和环境描写必须服务于当前beat的情节推进或氛围营造，无助于推进或营造的细节应省略。
+- 对话和行动是叙事的主驱动力。在对话密集的场景中，优先保持对话节奏的流畅，减少插入的动作微描写。
+- 手语、暗号等非语言交流只需传达意思，不要逐步拆解手指动作。
+
+## 输出格式
+
+返回 SceneWriterResult JSON，不要有前缀后缀或解释。
+
+```json
+{
+  "properties": {
+    "scene_text": {"title": "Scene Text", "type": "string"},
+    "changes_summary": {"items": {"type": "string"}, "title": "Changes Summary", "type": "array"}
+  },
+  "required": ["scene_text"],
+  "title": "SceneWriterResult",
+  "type": "object"
+}
+```
