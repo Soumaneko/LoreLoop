@@ -2,7 +2,7 @@ import json
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
-from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
+from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
 from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_writer.agent import SceneWriterAgent
@@ -27,7 +27,7 @@ def _make_state() -> CurrentState:
             condition=[],
             position="酒馆吧台",
         ),
-        resources=ResourcesState(inventory=["旧地图"], money=50),
+        resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
     )
 
 

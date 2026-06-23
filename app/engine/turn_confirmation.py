@@ -6,7 +6,7 @@ from app.domain.current_state import StateUpdater
 from app.domain.director_event.reviewer import DirectorEventReviewer
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.entity.extractor import EntityExtractor
-from app.domain.narrative_pacer import NARRATIVE_TYPE_LABELS
+from app.domain.turn_resolution import NARRATIVE_TYPE_LABELS
 from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.workflows.extract_memory import fill_pending_memory_scene_metadata
 from app.workflows.generate_action_preview import generate_action_preview_workflow
@@ -62,7 +62,7 @@ def confirm_turn_stream(
 
     trace_id = str(uuid.uuid4())
     effective_scene_text = scene_text if scene_text is not None else pending.scene_result.scene_text
-    effective_narrative_type = narrative_type or pending.context.narrative_pacing.selected_type
+    effective_narrative_type = narrative_type or pending.context.turn_resolution.selected_type
     if effective_narrative_type not in NARRATIVE_TYPE_LABELS:
         raise ValueError(f"Invalid narrative_type: {effective_narrative_type}")
 

@@ -3,6 +3,7 @@ import json
 from app.core.llm import MockLLM
 from app.domain.current_state import (
     CurrentState,
+    InventoryItem,
     NPCState,
     PlayerState,
     ResourcesState,
@@ -48,7 +49,7 @@ def _make_state() -> CurrentState:
             ),
         ],
         resources=ResourcesState(
-            inventory=["旧地图", "干粮"],
+            inventory=[InventoryItem(name="旧地图"), InventoryItem(name="干粮")],
             money=50,
             key_items=[],
             fixed_assets=[],
@@ -166,7 +167,13 @@ class TestStateUpdaterPlayerChange:
         state = _make_state()
         updated_json = _build_updated_state_json({
             "player": {"condition": ["轻伤"]},
-            "resources": {"inventory": ["旧地图", "干粮", "治疗药水"]},
+            "resources": {
+                "inventory": [
+                    {"name": "旧地图", "quantity": 1},
+                    {"name": "干粮", "quantity": 1},
+                    {"name": "治疗药水", "quantity": 1},
+                ]
+            },
         })
         mock = MockLLM()
         mock.set_responses([updated_json])

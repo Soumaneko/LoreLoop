@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field
 
 
 WorldPhase = Literal["凌晨", "上午", "下午", "黄昏", "晚上", "深夜"]
@@ -63,22 +63,6 @@ class ResourcesState(BaseModel):
     fixed_assets: list[str] = Field(default_factory=list)
     temporary_assets: list[str] = Field(default_factory=list)
 
-    @field_validator("inventory", mode="before")
-    @classmethod
-    def _coerce_legacy_inventory(cls, value):
-        if value is None:
-            return []
-        if not isinstance(value, list):
-            return value
-        converted = []
-        for item in value:
-            if isinstance(item, str):
-                if item.strip():
-                    converted.append({"name": item.strip(), "quantity": 1})
-            else:
-                converted.append(item)
-        return converted
-
 
 class CurrentState(BaseModel):
     scene: SceneState
@@ -86,40 +70,3 @@ class CurrentState(BaseModel):
     player: PlayerState
     npcs: list[NPCState] = Field(default_factory=list)
     resources: ResourcesState = Field(default_factory=ResourcesState)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_legacy_time_label(cls, data):
-        if not isinstance(data, dict):
-            return data
-        if data.get("world_clock") is None:
-            scene = data.get("scene")
-            time_label = scene.get("time_label") if isinstance(scene, dict) else None
-            data["world_clock"] = _world_clock_from_legacy_label(time_label)
-        scene = data.get("scene")
-        if isinstance(scene, dict):
-            scene.pop("time_label", None)
-        return data
-
-
-def _world_clock_from_legacy_label(time_label: str | None) -> dict:
-    if not time_label:
-        return {"day": 1, "phase": "上午"}
-
-    day = 1
-    import re
-
-    match = re.search(r"第\s*(\d+)\s*日", time_label)
-    if match:
-        day = max(1, int(match.group(1)))
-
-    for phase in PHASE_ORDER:
-        if phase in time_label:
-            return {"day": day, "phase": phase}
-    if "清晨" in time_label or "早晨" in time_label:
-        return {"day": day, "phase": "上午"}
-    if "傍晚" in time_label:
-        return {"day": day, "phase": "黄昏"}
-    if "夜" in time_label:
-        return {"day": day, "phase": "晚上"}
-    return {"day": day, "phase": "上午"}

@@ -48,6 +48,13 @@ def update_director_event_workflow(
             trace_id=trace_id,
         )
         changed_event_id = active.event_id
+        store.update_dynamic_fields(
+            active.event_id,
+            exposure_phase_update=review.exposure_phase_update,
+            known_to_player_updates=review.known_to_player_updates,
+            hidden_development_updates=review.hidden_development_updates,
+            turn_index=turn_index,
+        )
         if review.decision == "archive_active":
             store.archive_active(active.event_id, turn_index=turn_index)
         elif review.decision == "suspend_active":

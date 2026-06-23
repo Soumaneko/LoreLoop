@@ -1,6 +1,7 @@
 from .reviewer import DirectorEventReviewer
 from .schemas import (
     DirectorEvent,
+    DirectorEventExposurePhase,
     DirectorEventDraft,
     DirectorEventReviewResult,
     DirectorEventSelectionResult,
@@ -11,6 +12,7 @@ from .store import DirectorEventStore
 
 __all__ = [
     "DirectorEvent",
+    "DirectorEventExposurePhase",
     "DirectorEventDraft",
     "DirectorEventReviewResult",
     "DirectorEventReviewer",

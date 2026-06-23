@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 
 from app.core.llm import MockLLM
-from app.domain.current_state import CurrentState, NPCState, PlayerState, ResourcesState, SceneState
+from app.domain.current_state import CurrentState, InventoryItem, NPCState, PlayerState, ResourcesState, SceneState
 from app.domain.entity.linker import EntityMemoryLinker
 from app.domain.entity.extractor import EntityExtractor
 from app.domain.entity.schemas import (
@@ -29,7 +29,7 @@ def _make_state() -> CurrentState:
         ),
         player=PlayerState(name="卢西安"),
         npcs=[NPCState(name="米莉", role="酒馆侍者")],
-        resources=ResourcesState(inventory=["旧地图"]),
+        resources=ResourcesState(inventory=[InventoryItem(name="旧地图")]),
     )
 
 

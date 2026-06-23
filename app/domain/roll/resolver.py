@@ -5,12 +5,16 @@ from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.roll.schemas import DIFFICULTY_DICE_COUNT, RollConfig, RollResult, RollResultBatch
 
 
+def _never_rolls(action: AtomicAction) -> bool:
+    return action.action_type == "move" and action.risk_level == "low"
+
+
 class RollResolver:
     def __init__(self, config: RollConfig | None = None):
         self.config = config or RollConfig()
 
     def select_roll_actions(self, parse_result: ActionParseResult) -> list[AtomicAction]:
-        actions = parse_result.atomic_actions
+        actions = [a for a in parse_result.atomic_actions if not _never_rolls(a)]
         rng = random.Random(self.config.seed)
 
         if self.config.roll_only_when_needed:
@@ -36,6 +40,7 @@ class RollResolver:
         roll_actions: list[AtomicAction] | None = None,
     ) -> RollResultBatch:
         actions = roll_actions if roll_actions is not None else self.select_roll_actions(parse_result)
+        actions = [a for a in actions if not _never_rolls(a)]
         rng = random.Random(self.config.seed)
         mods_by_action = {}
         if modifier_batch is not None:

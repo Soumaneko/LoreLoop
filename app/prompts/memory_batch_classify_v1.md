@@ -37,7 +37,7 @@ salience 低于 0.5 的候选默认丢弃。
 3. 对于不构成事件链的单个 item，逐条判断是否值得长期记忆化。默认 discard。
 4. 丢弃低价值、临时性、CurrentState 已覆盖、只影响当前对话气氛的候选。
 5. 对剩余候选判断 layer、subtype、visibility、owner、confidence、salience。
-6. 只在 layer、subject、subtype、owner 均兼容时合并。
+6. 只在 layer、subject、subtype、owner 均一致时合并。
 7. 输出最终 candidates。所有未进入 keep=true 的 item 必须作为 keep=false 条目输出并附 discard_reason。
 
 不要先分类再决定是否丢弃。

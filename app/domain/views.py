@@ -4,8 +4,7 @@ from typing import Any
 from app.domain.action.schemas import ActionParseResult
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
-from app.domain.outcome.schemas import OutcomeResolutionResult
-from app.domain.retrieval.schemas import MemoryCandidate
+from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.scene_summary.schemas import SceneSummary
 
 
@@ -80,12 +79,26 @@ def project_action_parse(result: ActionParseResult) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
-def project_outcome_resolution(result: OutcomeResolutionResult) -> str:
+def project_retrieved_memories(result: CandidateRetrievalResult) -> str:
+    pending_exclude = {"score", "matched_anchors", "matched_actions"}
+    memories = []
+
+    for index, candidate in enumerate(result.candidates):
+        data = candidate.model_dump(mode="json", exclude=MEMORY_CANDIDATE_EXCLUDE)
+        data["memory_index"] = index
+        data["source"] = "classified"
+        memories.append(strip_empty(data))
+
+    offset = len(memories)
+    for pending_offset, note in enumerate(result.pending_notes):
+        data = note.model_dump(mode="json", exclude=pending_exclude)
+        data["memory_index"] = offset + pending_offset
+        data["source"] = "pending"
+        memories.append(strip_empty(data))
+
     data = {
-        "outcomes": [
-            o.model_dump(mode="json", exclude={"dice", "roll_value", "dice_sides"})
-            for o in result.outcomes
-        ],
-        "total_outcomes": result.total_outcomes,
+        "memories": memories,
+        "total_scanned": result.total_scanned,
+        "total_returned": len(memories),
     }
     return json.dumps(data, ensure_ascii=False, indent=2)

@@ -78,14 +78,6 @@ class TestResourcesState:
         assert ResourcesState(money=12).money == 12
         assert ResourcesState(money=12).money_unit == "金币"
 
-    def test_legacy_inventory_strings_are_migrated_to_items(self):
-        resources = ResourcesState(inventory=["匕首", "干粮"])
-
-        assert resources.inventory == [
-            InventoryItem(name="匕首", quantity=1),
-            InventoryItem(name="干粮", quantity=1),
-        ]
-
     def test_inventory_item_quantity(self):
         item = InventoryItem(name="箭矢", quantity=12)
 

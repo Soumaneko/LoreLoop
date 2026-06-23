@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 DirectorEventStatus = Literal["active", "suspended", "archived"]
+DirectorEventExposurePhase = Literal["hidden", "engaged"]
+DirectorEventExposurePhaseUpdate = Literal["engaged"]
 ReviewDecision = Literal["keep_active", "archive_active", "suspend_active"]
 SelectionAction = Literal["activate_suspended", "create_new"]
 
@@ -22,9 +24,12 @@ class DirectorEvent(BaseModel):
     event_id: str = Field(default_factory=_new_id)
     title: str = Field(min_length=1)
     status: DirectorEventStatus = "active"
+    exposure_phase: DirectorEventExposurePhase
     description: str = Field(min_length=1)
     related_npcs: list[str] = Field(default_factory=list)
     location_constraints: list[str] = Field(default_factory=list)
+    known_to_player: list[str] | None
+    hidden_developments: list[str] | None
     suspended_reason: str | None = None
     created_turn: int = Field(ge=0)
     updated_turn: int | None = Field(default=None, ge=0)
@@ -35,9 +40,12 @@ class DirectorEvent(BaseModel):
         return {
             "event_id": self.event_id,
             "title": self.title,
+            "exposure_phase": self.exposure_phase,
             "description": self.description,
             "related_npcs": self.related_npcs,
             "location_constraints": self.location_constraints,
+            "known_to_player": self.known_to_player,
+            "hidden_developments": self.hidden_developments,
         }
 
 
@@ -52,9 +60,12 @@ class DirectorEventDraft(BaseModel):
         return DirectorEvent(
             title=self.title,
             status=status,
+            exposure_phase="hidden",
             description=self.description,
             related_npcs=self.related_npcs,
             location_constraints=self.location_constraints,
+            known_to_player=None,
+            hidden_developments=None,
             created_turn=turn_index,
             updated_turn=turn_index,
             created_at=now,
@@ -67,6 +78,9 @@ class DirectorEventReviewResult(BaseModel):
     decision: ReviewDecision
     evidence: list[str] = Field(default_factory=list)
     suspended_reason: str | None = None
+    exposure_phase_update: DirectorEventExposurePhaseUpdate | None
+    known_to_player_updates: list[str] | None
+    hidden_development_updates: list[str] | None
 
     @model_validator(mode="after")
     def _validate_suspended_reason(self):

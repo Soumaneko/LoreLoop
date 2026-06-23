@@ -8,7 +8,7 @@ from app.domain.action.self_check import ActionSelfCheck
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.action_preview.schemas import ActionPreview, ActionPreviewResult
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
-from app.domain.current_state import CurrentState, NPCState, PlayerState, ResourcesState, SceneState
+from app.domain.current_state import CurrentState, InventoryItem, NPCState, PlayerState, ResourcesState, SceneState
 from app.domain.scene_summary.schemas import SceneSummary
 from app.workflows.build_action_parse_from_preview import build_parse_from_preview
 from app.workflows.generate_action_preview import generate_action_preview_workflow
@@ -35,7 +35,7 @@ def _make_state() -> CurrentState:
                 attitude_to_player="谨慎友善",
             )
         ],
-        resources=ResourcesState(inventory=["旧地图"], money=50),
+        resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
     )
 
 

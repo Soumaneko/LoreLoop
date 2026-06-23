@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from .schemas import DirectorEvent, utc_now
+from .schemas import DirectorEvent, DirectorEventExposurePhase, utc_now
 
 
 class DirectorEventStore:
@@ -92,6 +92,7 @@ class DirectorEventStore:
         updated = event.model_copy(
             update={
                 "status": "suspended",
+                "exposure_phase": "hidden",
                 "suspended_reason": reason,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
@@ -108,6 +109,43 @@ class DirectorEventStore:
             update={
                 "status": "archived",
                 "suspended_reason": None,
+                "updated_turn": turn_index,
+                "updated_at": utc_now(),
+            }
+        )
+        self.save(updated)
+        return True
+
+    def update_dynamic_fields(
+        self,
+        event_id: str,
+        *,
+        exposure_phase_update: DirectorEventExposurePhase | None = None,
+        known_to_player_updates: list[str] | None = None,
+        hidden_development_updates: list[str] | None = None,
+        turn_index: int,
+    ) -> bool:
+        event = self.get_by_id(event_id)
+        if event is None:
+            return False
+
+        known_to_player = _merge_unique(
+            event.known_to_player,
+            known_to_player_updates,
+        )
+        hidden_developments = _merge_unique(
+            event.hidden_developments,
+            hidden_development_updates,
+        )
+        exposure_phase = event.exposure_phase
+        if exposure_phase_update == "engaged":
+            exposure_phase = "engaged"
+
+        updated = event.model_copy(
+            update={
+                "exposure_phase": exposure_phase,
+                "known_to_player": known_to_player,
+                "hidden_developments": hidden_developments,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
             }
@@ -157,6 +195,7 @@ class DirectorEventStore:
         updated = active.model_copy(
             update={
                 "status": "suspended",
+                "exposure_phase": "hidden",
                 "suspended_reason": "被新的导演事件替换",
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
@@ -188,3 +227,15 @@ class DirectorEventStore:
     def _event_from_row(row) -> DirectorEvent:
         data = json.loads(row["event_json"])
         return DirectorEvent.model_validate(data)
+
+
+def _merge_unique(existing: list[str] | None, updates: list[str] | None) -> list[str] | None:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in [*(existing or []), *(updates or [])]:
+        cleaned = item.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        merged.append(cleaned)
+        seen.add(cleaned)
+    return merged or None

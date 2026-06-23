@@ -36,6 +36,7 @@ class ActionPreviewAgent:
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=ActionPreviewResult,
+                temperature=0.8,
                 trace_id=trace_id,
             ),
         )

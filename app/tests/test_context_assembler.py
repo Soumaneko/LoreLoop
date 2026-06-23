@@ -5,15 +5,15 @@ from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
+    InventoryItem,
     NPCState,
     PlayerState,
     ResourcesState,
     SceneState,
 )
-from app.domain.narrative_pacer import NarrativePacingResult
-from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
 from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 
 
@@ -43,7 +43,7 @@ def _make_current_state() -> CurrentState:
                 current_intent="招待客人",
             ),
         ],
-        resources=ResourcesState(inventory=["旧地图"], money=50),
+        resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
     )
 
 
@@ -69,32 +69,20 @@ def _make_action_parse_result() -> ActionParseResult:
     )
 
 
-def _make_outcome_resolution() -> OutcomeResolutionResult:
-    return OutcomeResolutionResult(
-        outcomes=[
-            OutcomeFrame(
+def _make_turn_resolution() -> TurnResolutionResult:
+    return TurnResolutionResult(
+        available_types=["advance", "relationship_shift"],
+        selected_type="advance",
+        action_resolutions=[
+            ActionResolutionFrame(
                 action_id="a1",
                 sequence=1,
                 actor="主角",
                 action_type="observe",
-                dice="1d20",
-                roll_value=15,
-                dice_sides=20,
                 outcome_band="success",
-                required_consequence="The action should succeed in a clear but grounded way.",
-                information_policy="clear_answer_allowed",
+                resolved_effect="主角清楚发现修道院大厅中的关键异常。",
             ),
         ],
-        total_outcomes=1,
-    )
-
-
-def _make_narrative_pacing() -> NarrativePacingResult:
-    return NarrativePacingResult(
-        available_types=["advance", "relationship_shift"],
-        selected_type="advance",
-        narrative_goal="回应当前行动，并推动当前目标向前。",
-        previous_types=[],
     )
 
 
@@ -138,8 +126,7 @@ class TestAssembleContext:
             user_input="环顾四周观察环境。",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            outcome_resolution=_make_outcome_resolution(),
-            narrative_pacing=_make_narrative_pacing(),
+            turn_resolution=_make_turn_resolution(),
             core_memory=_make_core_memory(),
             retrieved_memories=_make_retrieved_memories(),
         )
@@ -147,8 +134,8 @@ class TestAssembleContext:
         assert ctx.user_input == "环顾四周观察环境。"
         assert ctx.current_state.scene.scene_id == "scene_001"
         assert ctx.action_parse_result.turn_intent == "探索修道院"
-        assert ctx.outcome_resolution.total_outcomes == 1
-        assert ctx.narrative_pacing.selected_type == "advance"
+        assert ctx.turn_resolution.total_resolutions == 1
+        assert ctx.turn_resolution.selected_type == "advance"
         assert len(ctx.core_memory.items) == 1
         assert ctx.retrieved_memories.total_returned == 1
         assert ctx.scene_summaries == []
@@ -158,8 +145,7 @@ class TestAssembleContext:
             user_input="测试",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            outcome_resolution=_make_outcome_resolution(),
-            narrative_pacing=_make_narrative_pacing(),
+            turn_resolution=_make_turn_resolution(),
             core_memory=CoreMemory(items=[]),
             retrieved_memories=_make_retrieved_memories(),
         )
@@ -178,8 +164,7 @@ class TestAssembleContext:
             user_input="测试",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            outcome_resolution=_make_outcome_resolution(),
-            narrative_pacing=_make_narrative_pacing(),
+            turn_resolution=_make_turn_resolution(),
             core_memory=_make_core_memory(),
             retrieved_memories=_make_retrieved_memories(),
             scene_summaries=[summary],
@@ -192,8 +177,7 @@ class TestAssembleContext:
             user_input="测试",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            outcome_resolution=_make_outcome_resolution(),
-            narrative_pacing=_make_narrative_pacing(),
+            turn_resolution=_make_turn_resolution(),
             core_memory=_make_core_memory(),
             retrieved_memories=CandidateRetrievalResult(
                 candidates=[], total_scanned=0, total_returned=0
@@ -207,8 +191,7 @@ class TestAssembleContext:
             user_input="测试",
             current_state=_make_current_state(),
             action_parse_result=_make_action_parse_result(),
-            outcome_resolution=_make_outcome_resolution(),
-            narrative_pacing=_make_narrative_pacing(),
+            turn_resolution=_make_turn_resolution(),
             core_memory=_make_core_memory(),
             retrieved_memories=_make_retrieved_memories(),
         )
@@ -219,8 +202,8 @@ class TestAssembleContext:
         assert restored.user_input == ctx.user_input
         assert restored.current_state.scene.scene_id == ctx.current_state.scene.scene_id
         assert restored.core_memory.items[0].id == ctx.core_memory.items[0].id
-        assert restored.outcome_resolution.outcomes[0].outcome_band == "success"
-        assert restored.narrative_pacing.selected_type == "advance"
+        assert restored.turn_resolution.action_resolutions[0].outcome_band == "success"
+        assert restored.turn_resolution.selected_type == "advance"
 
     def test_subtype_validation_rejects_wrong_subtype(self):
         with pytest.raises(ValidationError):
@@ -228,8 +211,7 @@ class TestAssembleContext:
                 user_input="测试",
                 current_state="not_a_state",  # subtype: ignore[arg-subtype]
                 action_parse_result=_make_action_parse_result(),
-                outcome_resolution=_make_outcome_resolution(),
-                narrative_pacing=_make_narrative_pacing(),
+                turn_resolution=_make_turn_resolution(),
                 core_memory=_make_core_memory(),
                 retrieved_memories=_make_retrieved_memories(),
             )

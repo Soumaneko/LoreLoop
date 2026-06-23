@@ -5,7 +5,7 @@ import pytest
 from app.core.llm import MockLLM
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
-from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
+from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
 from app.workflows.evaluate_roll_modifiers import evaluate_roll_modifiers_workflow
 
@@ -40,7 +40,7 @@ def _make_state() -> CurrentState:
     return CurrentState(
         scene=SceneState(scene_id="scene_001", location="北郡庭院"),
         player=PlayerState(name="卢西安"),
-        resources=ResourcesState(inventory=["旧地图"]),
+        resources=ResourcesState(inventory=[InventoryItem(name="旧地图")]),
     )
 
 

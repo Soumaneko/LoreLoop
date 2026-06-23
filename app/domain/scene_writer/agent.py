@@ -52,6 +52,7 @@ class SceneWriterAgent:
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=SceneWriterResult,
+                temperature=0.9,
                 trace_id=trace_id,
             ),
         )

@@ -14,9 +14,8 @@ from app.workflows.generate_scene import (
     generate_scene_workflow,
     select_required_memories,
 )
-from app.workflows.pace_narrative import pace_narrative_workflow
-from app.workflows.resolve_outcomes import resolve_outcomes_workflow
 from app.workflows.resolve_rolls import resolve_rolls_workflow
+from app.workflows.resolve_turn import resolve_turn_workflow
 from app.workflows.retrieve_candidates import retrieve_candidates_workflow
 from app.workflows.update_entity_profiles import gather_entity_profiles_from_state_and_anchors
 
@@ -186,37 +185,25 @@ def generate_turn_stream(
         },
     }
 
-    outcome_resolution = resolve_outcomes_workflow(
-        action_parse_result,
-        roll_results,
-        current_state,
-        retrieved_memories=retrieved_memories,
-    )
-
-    yield {
-        "step": "outcomes_done",
-        "data": {
-            "outcome_resolution": model_data(outcome_resolution),
-        },
-    }
-
-    narrative_pacing = pace_narrative_workflow(
+    turn_resolution = resolve_turn_workflow(
         user_input=user_input,
         current_state=current_state,
         action_parse_result=action_parse_result,
-        outcome_resolution=outcome_resolution,
+        roll_results=roll_results,
         core_memory=core_memory,
-        recent_summaries=recent_summaries,
+        retrieved_memories=retrieved_memories,
+        scene_summaries=scene_summaries,
         entity_profiles=action_entity_profile_views,
+        director_event=active_director_event,
         gateway=gateway,
         previous_types=recent_narrative_types(short_term_memory),
         trace_id=trace_id,
     )
 
     yield {
-        "step": "pacing_done",
+        "step": "turn_resolution_done",
         "data": {
-            "narrative_pacing": model_data(narrative_pacing),
+            "turn_resolution": model_data(turn_resolution),
         },
     }
 
@@ -224,8 +211,7 @@ def generate_turn_stream(
         user_input=user_input,
         current_state=current_state,
         action_parse_result=action_parse_result,
-        outcome_resolution=outcome_resolution,
-        narrative_pacing=narrative_pacing,
+        turn_resolution=turn_resolution,
         core_memory=core_memory,
         retrieved_memories=retrieved_memories,
         scene_summaries=scene_summaries,

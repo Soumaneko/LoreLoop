@@ -15,7 +15,6 @@ class MemoryStore:
 
     def _init_table(self) -> None:
         self._create_table()
-        self._migrate_table()
         self._conn.execute("DROP INDEX IF EXISTS idx_memories_dedup")
         self._conn.execute(
             """
@@ -51,70 +50,6 @@ class MemoryStore:
             )
             """
         )
-
-    def _migrate_table(self) -> None:
-        existing = {
-            row["name"]
-            for row in self._conn.execute("PRAGMA table_info(memories)").fetchall()
-        }
-        if "type" in existing or "certainty" in existing:
-            self._rebuild_without_legacy_columns()
-            existing = {
-                row["name"]
-                for row in self._conn.execute("PRAGMA table_info(memories)").fetchall()
-            }
-        migrations = {
-            "layer": "ALTER TABLE memories ADD COLUMN layer TEXT NOT NULL DEFAULT 'truth'",
-            "subtype": "ALTER TABLE memories ADD COLUMN subtype TEXT NOT NULL DEFAULT 'fact'",
-            "confidence": "ALTER TABLE memories ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0",
-            "owner": "ALTER TABLE memories ADD COLUMN owner TEXT",
-            "source_pending_ids_json": "ALTER TABLE memories ADD COLUMN source_pending_ids_json TEXT NOT NULL DEFAULT '[]'",
-            "active": "ALTER TABLE memories ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
-            "merged_into": "ALTER TABLE memories ADD COLUMN merged_into TEXT",
-        }
-        for column, statement in migrations.items():
-            if column not in existing:
-                self._conn.execute(statement)
-
-    def _rebuild_without_legacy_columns(self) -> None:
-        legacy_table = "memories_legacy"
-        self._conn.execute("DROP TABLE IF EXISTS memories_legacy")
-        self._conn.execute("ALTER TABLE memories RENAME TO memories_legacy")
-        self._create_table()
-        self._conn.execute(
-            """
-            INSERT OR IGNORE INTO memories (
-                id, layer, subtype, subject, content,
-                entities_json, location, time_label,
-                visibility_json, tags_json,
-                confidence, salience, owner,
-                source_scene_id, source_text_span_json, source_pending_ids_json,
-                active, merged_into, created_at
-            )
-            SELECT
-                id,
-                COALESCE(layer, 'truth'),
-                COALESCE(subtype, type, 'fact'),
-                subject,
-                content,
-                entities_json,
-                location,
-                time_label,
-                visibility_json,
-                tags_json,
-                COALESCE(confidence, certainty, 1.0),
-                salience,
-                owner,
-                source_scene_id,
-                source_text_span_json,
-                source_pending_ids_json,
-                active,
-                merged_into,
-                created_at
-            FROM memories_legacy
-            """
-        )
-        self._conn.execute(f"DROP TABLE {legacy_table}")
 
     def _make_dedup_key(self, memory: Memory) -> tuple:
         return (

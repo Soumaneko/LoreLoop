@@ -7,18 +7,18 @@ from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
+    InventoryItem,
     NPCState,
     PlayerState,
     ResourcesState,
     SceneState,
 )
-from app.domain.narrative_pacer import NarrativePacingResult
-from app.domain.outcome import OutcomeFrame, OutcomeResolutionResult
 from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.plot_outline.views import project_retrieved_memories
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
 from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 from app.workflows.generate_plot_outline import generate_plot_outline_workflow
 
@@ -51,7 +51,7 @@ def _make_context() -> PlotOutlineContext:
                     current_intent="招待客人",
                 ),
             ],
-            resources=ResourcesState(inventory=["旧地图"], money=50),
+            resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
         ),
         action_parse_result=ActionParseResult(
             turn_intent="观察酒馆里的客人",
@@ -72,28 +72,19 @@ def _make_context() -> PlotOutlineContext:
             anchors=[],
             ambiguities=[],
         ),
-        outcome_resolution=OutcomeResolutionResult(
-            outcomes=[
-                OutcomeFrame(
+        turn_resolution=TurnResolutionResult(
+            available_types=["advance", "relationship_shift"],
+            selected_type="advance",
+            action_resolutions=[
+                ActionResolutionFrame(
                     action_id="a1",
                     sequence=1,
                     actor="主角",
                     action_type="observe",
-                    dice="1d20",
-                    roll_value=18,
-                    dice_sides=20,
                     outcome_band="success",
-                    required_consequence="The action should succeed in a clear but grounded way.",
-                    information_policy="clear_answer_allowed",
+                    resolved_effect="主角清楚发现酒馆客人中的可疑行为。",
                 )
             ],
-            total_outcomes=1,
-        ),
-        narrative_pacing=NarrativePacingResult(
-            available_types=["advance", "relationship_shift"],
-            selected_type="advance",
-            narrative_goal="回应当前观察行动，并推动调查目标向前。",
-            previous_types=[],
         ),
         core_memory=CoreMemory(
             items=[
@@ -158,7 +149,7 @@ def _build_outline_response(
                 "summary": "主角环顾酒馆，注意到角落里的可疑人物",
                 "linked_action_ids": ["a1"],
                 "linked_outcome_ids": ["a1"],
-                "required_outcomes": ["The action should succeed in a clear but grounded way."],
+                "required_outcomes": ["主角清楚发现酒馆客人中的可疑行为。"],
                 "required_memory_indices": [0],
                 "state_implications": ["主角发现可疑线索"],
                 "tone_notes": ["保持悬疑氛围"],
@@ -184,13 +175,12 @@ class TestPlotOutlineAgent:
     def test_prompt_contains_outcome_following_requirements(self):
         prompt = Path("app/prompts/plot_outline_v1.md").read_text(encoding="utf-8")
 
-        assert "OutcomeResolutionResult" in prompt
-        assert "NarrativePacingResult" in prompt
-        assert "narrative_goal" in prompt
-        assert "required_consequence" in prompt
-        assert "information_policy" in prompt
-        assert "ambiguous_hint_only" in prompt
-        assert "clear_answer_with_advantage" in prompt
+        assert "TurnResolutionResult" in prompt
+        assert "narrative_goal" not in prompt
+        assert "resolved_effect" in prompt
+        assert "information_policy" not in prompt
+        assert "ambiguous_hint_only" not in prompt
+        assert "clear_answer_with_advantage" not in prompt
         assert "linked_outcome_ids" in prompt
         assert "failure 或 critical_failure" in prompt
         assert "partial_success" in prompt
