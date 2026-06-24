@@ -4,7 +4,13 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.core.llm.config import create_gateway
-from app.domain.core_memory import InitConfig, build_core_memory, build_initial_current_state
+from app.domain.core_memory import (
+    CoreMemory,
+    InitConfig,
+    StoryDirectionAgent,
+    build_core_memory,
+    build_initial_current_state,
+)
 from app.domain.scene_writer.opening import OpeningSceneAgent
 
 from .serialization import model_data
@@ -39,11 +45,23 @@ def preview_core_memory(payload: dict[str, Any]) -> dict[str, Any]:
 def apply_core_memory_init(payload: dict[str, Any]) -> dict[str, Any]:
     config, core_memory = build_core_memory_from_payload(payload)
     current_state = build_initial_current_state(config)
-    opening_scene = OpeningSceneAgent(create_gateway()).generate(
+    trace_id = str(uuid.uuid4())
+    gateway = create_gateway()
+    if (config.story_expectation or "").strip():
+        story_direction = StoryDirectionAgent(gateway).generate(
+            config=config,
+            base_core_memory=core_memory,
+            trace_id=trace_id,
+        )
+        core_memory = CoreMemory(
+            items=[*core_memory.items, story_direction.to_core_memory_item()]
+        )
+
+    opening_scene = OpeningSceneAgent(gateway).generate(
         config=config,
         current_state=current_state,
         core_memory=core_memory,
-        trace_id=str(uuid.uuid4()),
+        trace_id=trace_id,
     )
 
     core_memory_store().save(core_memory)

@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from .schemas import DirectorEvent, DirectorEventExposurePhase, utc_now
+from .schemas import DirectorEvent, utc_now
 
 
 class DirectorEventStore:
@@ -92,7 +92,6 @@ class DirectorEventStore:
         updated = event.model_copy(
             update={
                 "status": "suspended",
-                "exposure_phase": "hidden",
                 "suspended_reason": reason,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
@@ -120,7 +119,6 @@ class DirectorEventStore:
         self,
         event_id: str,
         *,
-        exposure_phase_update: DirectorEventExposurePhase | None = None,
         known_to_player_updates: list[str] | None = None,
         hidden_development_updates: list[str] | None = None,
         turn_index: int,
@@ -137,15 +135,50 @@ class DirectorEventStore:
             event.hidden_developments,
             hidden_development_updates,
         )
-        exposure_phase = event.exposure_phase
-        if exposure_phase_update == "engaged":
-            exposure_phase = "engaged"
-
         updated = event.model_copy(
             update={
-                "exposure_phase": exposure_phase,
                 "known_to_player": known_to_player,
                 "hidden_developments": hidden_developments,
+                "updated_turn": turn_index,
+                "updated_at": utc_now(),
+            }
+        )
+        self.save(updated)
+        return True
+
+    def advance_active_phase(
+        self,
+        event_id: str,
+        *,
+        turn_index: int,
+    ) -> bool:
+        event = self.get_by_id(event_id)
+        if event is None or event.status != "active" or event.phase == "crisis":
+            return False
+        next_phase = "manifesting" if event.phase == "latent" else "crisis"
+        updated = event.model_copy(
+            update={
+                "phase": next_phase,
+                "phase_turns_elapsed": 0,
+                "updated_turn": turn_index,
+                "updated_at": utc_now(),
+            }
+        )
+        self.save(updated)
+        return True
+
+    def increment_active_phase_turn(
+        self,
+        event_id: str,
+        *,
+        turn_index: int,
+    ) -> bool:
+        event = self.get_by_id(event_id)
+        if event is None or event.status != "active":
+            return False
+        updated = event.model_copy(
+            update={
+                "phase_turns_elapsed": event.phase_turns_elapsed + 1,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
             }
@@ -195,7 +228,6 @@ class DirectorEventStore:
         updated = active.model_copy(
             update={
                 "status": "suspended",
-                "exposure_phase": "hidden",
                 "suspended_reason": "被新的导演事件替换",
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),

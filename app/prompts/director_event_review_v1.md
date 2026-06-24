@@ -3,7 +3,7 @@
 你的任务是评估当前 active 导演事件在本轮确认剧情之后是否仍应保持 active。
 你不写剧情正文，不创建新事件，不更新 CurrentState。
 你还需要根据本轮确认剧情，抽取 active 事件的动态信息增量。
-你还需要判断 active 事件的 exposure_phase 是否需要更新。
+你还需要在极严格条件下，判断是否应建议程序提前推进事件阶段。
 
 ## CoreMemory
 
@@ -41,6 +41,8 @@
 {active_event_json}
 ```
 
+这里只提供当前阶段的 `current_description`。未提供的后续阶段尚未发生，不得猜测、补写或提前引用。
+
 ## 判断目标
 
 只能输出三种 decision 之一：
@@ -75,18 +77,24 @@
 ## 动态信息更新
 
 除 decision 外，还需要填写动态增量字段：
-0. exposure_phase_update：
-   - 当前事件处于 hidden 阶段时，如果本轮剧情显示主角已经明确接触到事件线索、主动追查事件相关对象、或把多条相关信息串联成可行动方向，填 "engaged"。
-   - 当前事件已经是 engaged 时，填 null；
-   - 事件被 archive_active 或 suspend_active 时，填 null。
+1. phase_advance_recommended：
+   - 程序会按 active 回合数自动推进阶段，你通常应填 false。
+   - latent 提前进入 manifesting：只有事件已经造成公开且持续的影响、秘密行动主体明确暴露，或玩家行动迫使事件无法继续维持潜伏时，才填 true。
+   - manifesting 提前进入 crisis：只有核心行动已经开始、重大后果已经发生、直接冲突不可逆启动，或继续停留在显现阶段会与确认剧情矛盾时，才填 true。
+   - 主角只获得一条线索、听到传闻、开始调查、靠近地点，或“推进后更有趣”，都不构成提前推进依据。
+   - crisis 阶段、archive_active 或 suspend_active 时必须填 false。
+   - true 时 phase_advance_reason 必须指出本轮发生的不可逆变化，evidence 必须包含明确剧情证据；否则 phase_advance_reason 填 null。
 
-1. known_to_player_updates：
+2. known_to_player_updates：
    - 只填写本轮 scene_text 中主角已经看见、听见、推断到的 active 事件相关信息。
    - 用于防止后续消费重复呈现同一线索。
    - 如果本轮没有新增主角已知相关信息，填 null。
-2. hidden_development_updates：
+3. hidden_development_updates：
    - 填写本轮剧情中，因为玩家行动、NPC 行动或时间推移，导致 active 事件幕后实际发生的新发展。
-   - 这些信息可以是玩家不知道的，但必须能从 scene_text、玩家行动和 active 事件设定合理推出。
+   - 这些信息可以是玩家不知道的，但必须由 scene_text 明确建立，或是本轮已发生行动能够直接确定的结果。
+   - 不得仅凭 current_description，把其中尚未在本轮发生的完整事件进展抄入 hidden_development_updates。
+   - 不得从一个局部征兆补全其原因、规模和后果。例如 scene_text 只有远处巨响时，只能记录“相关方向出现巨响”，不能据此断言某个设施已被摧毁、道路已被封锁或某种物质已开始扩散。
+   - current_description 是当前阶段的背景范围，不是要求你宣告其中每个细节都已在本轮具体发生。
    - 如果本轮没有新增隐藏发展，填 null。
 
 
@@ -95,7 +103,8 @@
 reason 要简短对输出内容进行解释，即为何这样判断，为何动态信息更新。
 evidence 必须列出 scene_text 中支持判断的具体短句或摘要。
 suspended_reason 仅在 decision=suspend_active 时填写；否则为 null。
-exposure_phase_update 仅在需要改变阶段时填写；否则为 null。
+phase_advance_recommended 只是严格条件下的提前推进建议，最终阶段由程序决定。
+phase_advance_reason 仅在 phase_advance_recommended=true 时填写；否则为 null。
 known_to_player_updates 和 hidden_development_updates 只记录本轮新增项；没有新增时填 null。
 
 只输出符合以下 schema 的 JSON，不要有任何解释：

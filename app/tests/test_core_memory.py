@@ -3,15 +3,20 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from app.core.llm import MockLLM
 from app.domain.core_memory import (
     CoreMemory,
     CoreMemoryItem,
     CoreMemoryStore,
     InitConfig,
+    StoryDirectionAgent,
+    StoryDirectionResult,
     build_core_memory,
     build_initial_current_state,
 )
+from app.domain.current_state import CurrentStateStore
 from app.engine.core_memory import preview_core_memory
+from app.engine.session import PENDING_OPENINGS
 
 
 class TestCoreMemoryItem:
@@ -149,9 +154,81 @@ class TestBuildCoreMemory:
         assert next(item for item in cm.items if item.id == "core_tone").content == "冷峻写实"
         assert cm.items[-1] == extra
 
+    def test_story_expectation_is_not_added_without_llm_summary(self):
+        cm = build_core_memory(InitConfig(
+            fanfic=False,
+            world_name="好莱坞",
+            world_style="1990年代娱乐业",
+            magic_level="普通",
+            protagonist_name="莱尔",
+            story_expectation="经营经纪公司，发掘演员并建立事业与浪漫关系。",
+        ))
+
+        assert all(item.id != "core_story_direction" for item in cm.items)
+
     def test_empty_core_memory_still_valid(self):
         cm = CoreMemory(items=[])
         assert cm.items == []
+
+
+class TestStoryDirectionAgent:
+    def test_generates_single_positive_core_memory_item(self):
+        config = InitConfig(
+            fanfic=False,
+            world_name="好莱坞",
+            world_style="1990年代娱乐业",
+            magic_level="普通",
+            protagonist_name="莱尔",
+            protagonist_background="穿越者，准备经营一家小型经纪公司。",
+            story_expectation="经营经纪公司，发掘演员，体验事业成长和浪漫关系。",
+        )
+        base_core_memory = build_core_memory(config)
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps({
+                "content": (
+                    "剧情围绕1990年代好莱坞的小型经纪公司经营展开，持续关注演员发掘、"
+                    "项目争取、行业人脉、事业扩张，以及事业合作中逐步发展的浪漫关系。"
+                )
+            }, ensure_ascii=False)
+        ])
+
+        result = StoryDirectionAgent(mock.build_gateway()).generate(
+            config=config,
+            base_core_memory=base_core_memory,
+        )
+        item = result.to_core_memory_item()
+
+        assert isinstance(result, StoryDirectionResult)
+        assert item.id == "core_story_direction"
+        assert item.category == "story"
+        assert item.priority == 100
+        assert "经纪公司经营" in item.content
+
+    def test_rejects_empty_story_expectation(self):
+        config = InitConfig(
+            fanfic=False,
+            world_name="艾兰",
+            world_style="西幻",
+            magic_level="普通",
+            protagonist_name="卢西安",
+        )
+
+        with pytest.raises(ValueError, match="story_expectation"):
+            StoryDirectionAgent(MockLLM().build_gateway()).generate(
+                config=config,
+                base_core_memory=build_core_memory(config),
+            )
+
+    def test_core_memory_item_shape_is_fixed(self):
+        result = StoryDirectionResult(content="剧情聚焦冒险、成长与关系发展。")
+
+        assert result.to_core_memory_item() == CoreMemoryItem(
+            id="core_story_direction",
+            category="story",
+            content="剧情聚焦冒险、成长与关系发展。",
+            priority=100,
+        )
 
 
 class TestBuildInitialCurrentState:
@@ -223,3 +300,66 @@ class TestDebugCoreMemoryPreview:
         assert result["valid"] is False
         assert result["core_memory"] is None
         assert result["validation_errors"]
+
+    def test_apply_generates_story_direction_before_opening(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        import app.engine.core_memory as core_memory_engine
+
+        calls = []
+
+        class RecordingGateway:
+            def run(self, task, input_data, output_schema, **kwargs):
+                calls.append((task, input_data))
+                if task == "story_direction":
+                    return output_schema.model_validate({
+                        "content": "剧情聚焦好莱坞经纪公司的经营成长、演员发掘、行业合作与浪漫关系。"
+                    })
+                if task == "opening_scene":
+                    return output_schema.model_validate({
+                        "scene_text": "清晨，你站在刚租下的经纪公司办公室里。",
+                        "changes_summary": ["经纪公司正式开始营业"],
+                    })
+                raise AssertionError(f"unexpected task: {task}")
+
+        core_store = CoreMemoryStore(tmp_path / "core_memory.json")
+        state_path = tmp_path / "current_state.db"
+        monkeypatch.setattr(
+            core_memory_engine,
+            "create_gateway",
+            lambda: RecordingGateway(),
+        )
+        monkeypatch.setattr(
+            core_memory_engine,
+            "core_memory_store",
+            lambda: core_store,
+        )
+        monkeypatch.setattr(
+            core_memory_engine,
+            "current_state_store",
+            lambda: CurrentStateStore(str(state_path)),
+        )
+
+        result = core_memory_engine.apply_core_memory_init({
+            "version": 1,
+            "fanfic": False,
+            "magic_level": "普通",
+            "world_name": "好莱坞",
+            "world_style": "1990年代娱乐业",
+            "protagonist_name": "莱尔",
+            "story_expectation": "经营经纪公司，发掘演员并发展事业与浪漫关系。",
+            "extra_core_memory_items": [],
+        })
+
+        try:
+            assert [task for task, _ in calls] == ["story_direction", "opening_scene"]
+            opening_core = json.loads(calls[1][1]["core_memory_json"])
+            assert any(
+                item["id"] == "core_story_direction"
+                for item in opening_core["items"]
+            )
+            assert core_store.load() == CoreMemory.model_validate(result["core_memory"])
+        finally:
+            PENDING_OPENINGS.pop(result["turn_id"], None)

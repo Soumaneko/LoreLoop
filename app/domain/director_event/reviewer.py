@@ -30,7 +30,16 @@ class DirectorEventReviewer:
             self.llm.run(
                 task="director_event_review",
                 input_data={
-                    "active_event_json": active_event.model_dump_json(indent=2),
+                    "active_event_json": json.dumps(
+                        {
+                            **active_event.semantic_view(),
+                            "status": active_event.status,
+                            "created_turn": active_event.created_turn,
+                            "updated_turn": active_event.updated_turn,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "user_input": user_input,
                     "scene_text": scene_text,
                     "current_state_json": project_current_state(current_state),

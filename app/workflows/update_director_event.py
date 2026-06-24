@@ -13,6 +13,12 @@ from app.domain.director_event.store import DirectorEventStore
 from app.domain.scene_summary.schemas import SceneSummary
 
 
+PHASE_MAX_ACTIVE_TURNS = {
+    "latent": 4,
+    "manifesting": 3,
+}
+
+
 class DirectorEventWorkflowResult(BaseModel):
     mode: str
     active_before: DirectorEvent | None = None
@@ -50,7 +56,6 @@ def update_director_event_workflow(
         changed_event_id = active.event_id
         store.update_dynamic_fields(
             active.event_id,
-            exposure_phase_update=review.exposure_phase_update,
             known_to_player_updates=review.known_to_player_updates,
             hidden_development_updates=review.hidden_development_updates,
             turn_index=turn_index,
@@ -64,15 +69,44 @@ def update_director_event_workflow(
                 turn_index=turn_index,
             )
         else:
-            store.touch(active.event_id, turn_index=turn_index)
+            store.increment_active_phase_turn(
+                active.event_id,
+                turn_index=turn_index,
+            )
+            updated_active = store.get_by_id(active.event_id)
+            max_turns = PHASE_MAX_ACTIVE_TURNS.get(updated_active.phase)
+            deadline_reached = (
+                max_turns is not None
+                and updated_active.phase_turns_elapsed >= max_turns
+            )
+            if (
+                updated_active.phase != "crisis"
+                and (review.phase_advance_recommended or deadline_reached)
+            ):
+                store.advance_active_phase(
+                    active.event_id,
+                    turn_index=turn_index,
+                )
 
+        active_after = store.get_active()
+        notes = ["reviewed_existing_active_event"]
+        if (
+            review.decision == "keep_active"
+            and active_after is not None
+            and active_after.phase != active.phase
+        ):
+            notes.append(
+                "phase_advanced_by_reviewer"
+                if review.phase_advance_recommended
+                else "phase_advanced_by_turn_limit"
+            )
         return DirectorEventWorkflowResult(
             mode="review_active",
             active_before=active,
-            active_after=store.get_active(),
+            active_after=active_after,
             review_result=review,
             changed_event_id=changed_event_id,
-            notes=["reviewed_existing_active_event"],
+            notes=notes,
         )
 
     suspended = store.list_suspended()

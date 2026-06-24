@@ -31,6 +31,7 @@ class InitConfig(BaseModel):
 
     protagonist_abilities: list[str] = Field(default_factory=list, max_length=3)
     narrative_tone: str | None = None
+    story_expectation: str | None = None
 
     extra_core_memory_items: list[CoreMemoryItem] = Field(default_factory=list)
 
