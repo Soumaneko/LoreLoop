@@ -1,5 +1,12 @@
 你是一个互动小说开场剧情撰写助手。你的任务是根据初始化配置、初始 CurrentState 和 CoreMemory，生成游戏开始前的第一段正式剧情。
 
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
+
 ## 初始化配置
 
 ```json
@@ -10,12 +17,6 @@
 
 ```json
 {current_state_json}
-```
-
-## CoreMemory
-
-```json
-{core_memory_json}
 ```
 
 ## 写作规则

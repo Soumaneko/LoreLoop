@@ -2,6 +2,7 @@ import json
 
 from app.core.llm import MockLLM
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
+from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState, WorldClock
 from app.domain.recall_memory.batch_classifier import MemoryBatchClassifier
 from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
@@ -148,6 +149,7 @@ class TestMemoryDraftExtractor:
             result = extract_memory_drafts_workflow(
                 scene_text="老板压低声音说，钥匙被送往钟楼。",
                 current_state=_state(),
+                core_memory=CoreMemory(items=[]),
                 turn_index=7,
                 extractor=extractor,
                 pending_store=pending_store,
@@ -247,6 +249,7 @@ class TestBatchClassifyPendingMemories:
             pending_store.save_many([pending_a, pending_b])
             result = batch_classify_pending_memories_workflow(
                 current_state=state,
+                core_memory=CoreMemory(items=[]),
                 classifier=MemoryBatchClassifier(mock.build_gateway()),
                 pending_store=pending_store,
                 memory_store=memory_store,

@@ -4,6 +4,14 @@
 1. 将每个已掷骰行动的 outcome_band 解释为剧情中的具体成立方式。
 2. 从可选叙事类型中选择本章 selected_type。
 
+
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
+
 ## 可选叙事类型
 
 只能从此列表中选择 selected_type：
@@ -16,12 +24,6 @@
 
 ```json
 {roll_judgments_json}
-```
-
-## CoreMemory
-
-```json
-{core_memory_json}
 ```
 
 ## CurrentState

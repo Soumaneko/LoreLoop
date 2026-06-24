@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import Anchor
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import (
     EntityExtractionResult,
@@ -21,6 +22,7 @@ class UpdateEntityProfilesResult:
 def update_entity_profiles_workflow(
     scene_text: str,
     current_state: CurrentState,
+    core_memory: CoreMemory,
     gateway: LLMGateway,
     entity_store: EntityStore,
     *,
@@ -31,12 +33,14 @@ def update_entity_profiles_workflow(
     extraction = extractor.extract(
         scene_text=scene_text,
         existing_profiles=existing,
+        core_memory=core_memory,
         trace_id=trace_id,
     )
 
     return update_entity_profiles_from_extraction(
         scene_text=scene_text,
         current_state=current_state,
+        core_memory=core_memory,
         gateway=gateway,
         entity_store=entity_store,
         existing_profiles=existing,
@@ -49,6 +53,7 @@ def update_entity_profiles_from_extraction(
     *,
     scene_text: str,
     current_state: CurrentState,
+    core_memory: CoreMemory,
     gateway: LLMGateway,
     entity_store: EntityStore,
     existing_profiles: list[EntityProfile],
@@ -89,6 +94,7 @@ def update_entity_profiles_from_extraction(
         current_state=current_state,
         relevant_profiles=relevant_profiles,
         new_entity_hints=new_entity_hints,
+        core_memory=core_memory,
         trace_id=trace_id,
     )
 

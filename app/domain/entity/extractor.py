@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.entity.schemas import (
     EntityExtractionResult,
     EntityProfile,
@@ -15,6 +16,7 @@ class EntityExtractor:
     def extract(
         self,
         *,
+        core_memory: CoreMemory,
         scene_text: str,
         existing_profiles: list[EntityProfile],
         trace_id: str | None = None,
@@ -27,6 +29,7 @@ class EntityExtractor:
             self._gateway.run(
                 task="entity_extract",
                 input_data={
+                    "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_text": scene_text,
                     "existing_profiles_json": json.dumps(
                         [

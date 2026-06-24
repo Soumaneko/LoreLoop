@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import (
     EntityProfile,
@@ -24,6 +25,7 @@ class EntityProfileUpdater:
         relevant_profiles: list[EntityProfile],
         new_entity_hints: list[RetrievedEntity] | None = None,
         *,
+        core_memory: CoreMemory,
         trace_id: str | None = None,
     ) -> list[EntityProfile]:
         if not scene_text.strip():
@@ -36,6 +38,7 @@ class EntityProfileUpdater:
             self._gateway.run(
                 task="entity_profile_update",
                 input_data={
+                    "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_text": scene_text,
                     "current_state_summary_json": project_current_state(current_state),
                     "relevant_profiles_json": json.dumps(

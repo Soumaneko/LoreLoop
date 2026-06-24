@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.recall_memory.schemas import (
     Memory,
     MemoryLayer,
@@ -139,11 +140,13 @@ class MemoryConsolidator:
         self,
         group: MemoryConsolidationGroup,
         *,
+        core_memory: CoreMemory,
         trace_id: str | None = None,
     ) -> MemoryConsolidationBatch:
         return self._llm.run(
             task="memory_consolidate",
             input_data={
+                "core_memory_json": core_memory.model_dump_json(indent=2),
                 "group_id": group.group_id,
                 "group_json": json.dumps(
                     [memory.model_dump(mode="json") for memory in group.memories],

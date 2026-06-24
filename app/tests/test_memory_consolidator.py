@@ -1,6 +1,7 @@
 import json
 
 from app.core.llm import MockLLM
+from app.domain.core_memory import CoreMemory
 from app.domain.recall_memory.consolidator import MemoryConsolidator
 from app.domain.recall_memory.schemas import Memory
 from app.domain.recall_memory.store import MemoryStore
@@ -116,6 +117,7 @@ class TestConsolidateMemoriesWorkflow:
             result = consolidate_memories_workflow(
                 store=store,
                 consolidator=MemoryConsolidator(mock.build_gateway()),
+                core_memory=CoreMemory(items=[]),
             )
 
             assert result.merged_count == 1

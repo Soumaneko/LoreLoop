@@ -82,17 +82,12 @@ Beat summary 的核心职责是为 SceneWriter 提供明确的叙事路标与导
 - 不写什么（留白）：绝对禁止代写具体的对话台词正文（不要出现引号包裹的句子）、禁止发明角色的具体微表情和微动作。
 - 长度：每个 beat summary 应在 2-4 句话之间，精炼且直击核心。
 
-## 行动结果解释
-
-ActionResolutionFrame 中的 resolved_effect 是本次判定在剧情里成立的方式。它不是大纲，也不是后续任务安排。
-- Plot beat 必须吸收 resolved_effect 的核心事实。
-- 可以围绕 resolved_effect 补充场景反应、NPC 反应和必要过渡。
-
 ## 字段填写
 
 - related_entities：该 beat 涉及的实体标准名称，不含玩家自身。
 - required_memory_indices：只填 Retrieved Memories 中真实存在的 memory_index，不需要时用空列表。
 - linked_outcome_ids：填该 beat 体现的 ActionResolutionFrame.action_id。
+- constraints_for_scene_writer 和 risks_to_avoid 只能描述本回合特有的剧情事实、角色动机、信息可见性和连续性边界。禁止填入任何通用写作规则，包括：对话格式、引号、第二人称、篇幅、文风、JSON 格式、Beat 写法等。
 
 ## 记忆使用
 

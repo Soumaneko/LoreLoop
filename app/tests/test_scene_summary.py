@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from app.core.llm import MockLLM
+from app.domain.core_memory import CoreMemory
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.scene_summary import SceneSummarizer
 from app.domain.scene_summary.schemas import SceneSummary
@@ -74,6 +75,7 @@ class TestSceneSummarizer:
         mock.set_responses([json.dumps({"content": "卢西安确认酒窖钥匙只能打开酒窖门。"}, ensure_ascii=False)])
 
         summary = SceneSummarizer(mock.build_gateway()).summarize_turn(
+            core_memory=CoreMemory(items=[]),
             scene_text="老板娘把黄铜钥匙推给卢西安，说这只能开酒窖门。",
             current_state=_state(),
             scene_id="scene_010",
@@ -96,6 +98,7 @@ class TestSceneSummarizer:
             _summary(id="s2", scene_ids=["scene_002"], turn_start=2, turn_end=2),
         ]
         summary = SceneSummarizer(mock.build_gateway()).condense(
+            core_memory=CoreMemory(items=[]),
             source_summaries=sources,
             target_level=2,
         )
@@ -124,6 +127,7 @@ class TestSceneSummaryMaintenance:
             result = run_scene_summary_maintenance(
                 scene_text="第2回合正文。",
                 current_state=_state(),
+                core_memory=CoreMemory(items=[]),
                 scene_id="scene_002",
                 turn_index=2,
                 summarizer=SceneSummarizer(mock.build_gateway()),

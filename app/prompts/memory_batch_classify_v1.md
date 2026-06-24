@@ -7,6 +7,12 @@
 不得使用外部知识。
 不得发明 source_text_span 中没有依据的信息。
 
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
 ## PendingMemoryItems
 
 ```json

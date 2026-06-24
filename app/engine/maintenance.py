@@ -2,6 +2,7 @@ import traceback
 import uuid
 
 from app.core.llm.config import create_gateway
+from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState
 from app.domain.recall_memory.batch_classifier import MemoryBatchClassifier
 from app.domain.recall_memory.consolidator import MemoryConsolidator
@@ -12,6 +13,7 @@ from app.workflows.scene_summaries import run_scene_summary_maintenance as run_s
 
 from .serialization import model_data
 from .stores import (
+    core_memory_store,
     current_state_store,
     entity_store,
     memory_store,
@@ -26,6 +28,8 @@ def run_scene_summary_maintenance(
     scene_id: str,
     turn_index: int,
     trace_id: str,
+    *,
+    core_memory: CoreMemory,
 ) -> None:
     try:
         gateway = create_gateway()
@@ -34,6 +38,7 @@ def run_scene_summary_maintenance(
             result = run_scene_summary_maintenance_workflow(
                 scene_text=scene_text,
                 current_state=current_state,
+                core_memory=core_memory,
                 scene_id=scene_id,
                 turn_index=turn_index,
                 summarizer=summarizer,
@@ -50,7 +55,7 @@ def run_scene_summary_maintenance(
         traceback.print_exc()
 
 
-def run_memory_batch_maintenance(current_state: CurrentState, trace_id: str) -> None:
+def run_memory_batch_maintenance(current_state: CurrentState, trace_id: str, *, core_memory: CoreMemory) -> None:
     try:
         gateway = create_gateway()
         classifier = MemoryBatchClassifier(gateway)
@@ -61,6 +66,7 @@ def run_memory_batch_maintenance(current_state: CurrentState, trace_id: str) -> 
         ):
             result = batch_classify_pending_memories_workflow(
                 current_state=current_state,
+                core_memory=core_memory,
                 classifier=classifier,
                 pending_store=pending_store,
                 memory_store=mem_store,
@@ -73,6 +79,7 @@ def run_memory_batch_maintenance(current_state: CurrentState, trace_id: str) -> 
                 consolidation_result = consolidate_memories_workflow(
                     store=mem_store,
                     consolidator=MemoryConsolidator(gateway),
+                    core_memory=core_memory,
                     max_group_size=5,
                     trace_id=trace_id,
                 )
@@ -100,6 +107,8 @@ def batch_classify_stream():
 
     with current_state_store() as state_store:
         current_state = state_store.load_or_default()
+
+    core_memory = core_memory_store().load_required()
 
     with pending_memory_store() as pending_store:
         pending_items = pending_store.list_unclassified()
@@ -131,6 +140,7 @@ def batch_classify_stream():
     ):
         result = batch_classify_pending_memories_workflow(
             current_state=current_state,
+            core_memory=core_memory,
             classifier=classifier,
             pending_store=bpstore,
             memory_store=bmstore,
@@ -144,6 +154,7 @@ def batch_classify_stream():
             consolidation_result = consolidate_memories_workflow(
                 store=bmstore,
                 consolidator=MemoryConsolidator(gateway),
+                core_memory=core_memory,
                 max_group_size=5,
                 trace_id=trace_id,
             )
@@ -179,6 +190,8 @@ def batch_classify_stream():
 def consolidate_stream():
     trace_id = str(uuid.uuid4())
 
+    core_memory = core_memory_store().load_required()
+
     with memory_store() as mem_store:
         active_count = len(mem_store.list_active())
         total_count = mem_store.count()
@@ -197,6 +210,7 @@ def consolidate_stream():
         result = consolidate_memories_workflow(
             store=mem_store,
             consolidator=consolidator,
+            core_memory=core_memory,
             max_group_size=5,
             trace_id=trace_id,
         )

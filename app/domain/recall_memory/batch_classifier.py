@@ -2,6 +2,7 @@ import json
 from dataclasses import dataclass, field
 
 from app.core.llm import LLMGateway
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.recall_memory.schemas import (
     ClassifiedMemoryCandidate,
@@ -44,6 +45,7 @@ class MemoryBatchClassifier:
         pending_items: list[PendingMemoryItem],
         current_state: CurrentState,
         *,
+        core_memory: CoreMemory,
         trace_id: str | None = None,
     ) -> MemoryBatchClassifierResult:
         if not pending_items:
@@ -52,6 +54,7 @@ class MemoryBatchClassifier:
         llm_result = self._llm.run(
             task="memory_batch_classify",
             input_data={
+                "core_memory_json": core_memory.model_dump_json(indent=2),
                 "pending_items_json": json.dumps(
                     [item.model_dump(mode="json") for item in pending_items],
                     ensure_ascii=False,

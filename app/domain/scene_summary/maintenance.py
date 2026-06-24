@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 
 from app.domain.current_state.schemas import CurrentState
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.scene_summary.summarizer import SceneSummarizer
@@ -21,6 +22,7 @@ def run_scene_summary_maintenance(
     *,
     scene_text: str,
     current_state: CurrentState,
+    core_memory: CoreMemory,
     scene_id: str,
     turn_index: int,
     summarizer: SceneSummarizer,
@@ -32,6 +34,7 @@ def run_scene_summary_maintenance(
     l1 = summarizer.summarize_turn(
         scene_text=scene_text,
         current_state=current_state,
+        core_memory=core_memory,
         scene_id=scene_id,
         turn_index=turn_index,
         trace_id=trace_id,
@@ -48,6 +51,7 @@ def run_scene_summary_maintenance(
             condensed = summarizer.condense(
                 source_summaries=sources,
                 target_level=level + 1,
+                core_memory=core_memory,
                 trace_id=trace_id,
             )
             condensed_id = store.save_one(condensed)

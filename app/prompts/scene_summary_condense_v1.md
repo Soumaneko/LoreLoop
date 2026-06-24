@@ -3,6 +3,12 @@
 你的任务是把若干同 level 的 scene summaries 冷凝成一条更高 level 的叙事摘要。
 你只负责写 content，所有元数据由程序填写。
 
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
 ## Target Level
 
 ```text

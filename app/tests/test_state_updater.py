@@ -1,6 +1,7 @@
 import json
 
 from app.core.llm import MockLLM
+from app.domain.core_memory import CoreMemory
 from app.domain.current_state import (
     CurrentState,
     InventoryItem,
@@ -92,7 +93,7 @@ class TestStateUpdaterNoChange:
         mock.set_responses([_build_updated_state_json()])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角环顾四周，一切如常。")
+        result = updater.update(state, "主角环顾四周，一切如常。", core_memory=CoreMemory(items=[]))
 
         assert result == state
 
@@ -105,7 +106,7 @@ class TestStateUpdaterNoChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "酒馆气氛突然变得紧张。")
+        result = updater.update(state, "酒馆气氛突然变得紧张。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.atmosphere == "紧张"
         assert result.scene.location == "北郡修道院"
@@ -125,7 +126,7 @@ class TestStateUpdaterNoChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "谈话持续到天色更深。")
+        result = updater.update(state, "谈话持续到天色更深。", core_memory=CoreMemory(items=[]))
 
         assert result.world_clock.day == 2
         assert result.world_clock.phase == "凌晨"
@@ -143,7 +144,7 @@ class TestStateUpdaterNoChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "回忆起上午发生的事。")
+        result = updater.update(state, "回忆起上午发生的事。", core_memory=CoreMemory(items=[]))
 
         assert result.world_clock == state.world_clock
 
@@ -158,7 +159,7 @@ class TestStateUpdaterPlayerChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角推开大门，走出了修道院。")
+        result = updater.update(state, "主角推开大门，走出了修道院。", core_memory=CoreMemory(items=[]))
 
         assert result.player.position == "修道院门口"
         assert result.scene.location == state.scene.location
@@ -179,7 +180,7 @@ class TestStateUpdaterPlayerChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角在一次冒险中受了些轻伤，但找到了治疗药水。")
+        result = updater.update(state, "主角在一次冒险中受了些轻伤，但找到了治疗药水。", core_memory=CoreMemory(items=[]))
 
         assert "轻伤" in result.player.condition
         assert any(item.name == "治疗药水" for item in result.resources.inventory)
@@ -212,7 +213,7 @@ class TestStateUpdaterNPCChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角帮米莉赶走了闹事的醉汉，米莉感激地表示要准备报酬。")
+        result = updater.update(state, "主角帮米莉赶走了闹事的醉汉，米莉感激地表示要准备报酬。", core_memory=CoreMemory(items=[]))
 
         milly = next(n for n in result.npcs if n.name == "米莉")
         assert milly.attitude_to_player == "感激"
@@ -253,7 +254,7 @@ class TestStateUpdaterNPCChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "一个浑身酒气的壮汉摇摇晃晃地走向主角。")
+        result = updater.update(state, "一个浑身酒气的壮汉摇摇晃晃地走向主角。", core_memory=CoreMemory(items=[]))
 
         assert len(result.npcs) == 3
         drunk = next(n for n in result.npcs if n.name == "醉汉")
@@ -278,7 +279,7 @@ class TestStateUpdaterNPCChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "莎拉站起身来，默默离开了酒馆。")
+        result = updater.update(state, "莎拉站起身来，默默离开了酒馆。", core_memory=CoreMemory(items=[]))
 
         assert len(result.npcs) == 1
         assert result.npcs[0].name == "米莉"
@@ -294,7 +295,7 @@ class TestStateUpdaterSceneChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角离开了修道院，进入了北郡森林。")
+        result = updater.update(state, "主角离开了修道院，进入了北郡森林。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.location == "北郡森林"
         assert result.scene.scene_id == "scene_002"
@@ -308,7 +309,7 @@ class TestStateUpdaterSceneChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "突然传来一声尖叫，酒馆的客人们都紧张起来。")
+        result = updater.update(state, "突然传来一声尖叫，酒馆的客人们都紧张起来。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.atmosphere == "紧张"
 
@@ -327,7 +328,7 @@ class TestStateUpdaterResourcesChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角拾起了三支箭。")
+        result = updater.update(state, "主角拾起了三支箭。", core_memory=CoreMemory(items=[]))
 
         arrows = next(item for item in result.resources.inventory if item.name == "箭矢")
         assert arrows.quantity == 3
@@ -344,7 +345,7 @@ class TestStateUpdaterResourcesChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角吃掉了一份干粮。")
+        result = updater.update(state, "主角吃掉了一份干粮。", core_memory=CoreMemory(items=[]))
 
         food = next(item for item in result.resources.inventory if item.name == "干粮")
         assert food.quantity == 1
@@ -358,7 +359,7 @@ class TestStateUpdaterResourcesChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角付了20枚金币买了些补给。")
+        result = updater.update(state, "主角付了20枚金币买了些补给。", core_memory=CoreMemory(items=[]))
 
         assert result.resources.money == 30
 
@@ -371,7 +372,7 @@ class TestStateUpdaterResourcesChange:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角付了些金币买了一杯热茶。")
+        result = updater.update(state, "主角付了些金币买了一杯热茶。", core_memory=CoreMemory(items=[]))
 
         assert result.resources.money == 48
         assert result.resources.money_unit == "金币"
@@ -384,7 +385,7 @@ class TestStateUpdaterConsistency:
         mock.set_responses([_build_updated_state_json()])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "一段无关的剧情。")
+        result = updater.update(state, "一段无关的剧情。", core_memory=CoreMemory(items=[]))
 
         assert result.player.name == "主角"
 
@@ -394,7 +395,7 @@ class TestStateUpdaterConsistency:
         mock.set_responses([_build_updated_state_json()])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "一段无关的剧情。")
+        result = updater.update(state, "一段无关的剧情。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.scene_id == "scene_001"
 
@@ -411,6 +412,7 @@ class TestStateUpdaterNPCAbsentTurns:
         result = StateUpdater(mock.build_gateway()).update(
             state,
             "米莉向主角点头致意，莎拉仍在角落但没有参与对话。",
+            core_memory=CoreMemory(items=[]),
         )
 
         milly = next(n for n in result.npcs if n.name == "米莉")
@@ -430,6 +432,7 @@ class TestStateUpdaterNPCAbsentTurns:
         result = StateUpdater(mock.build_gateway()).update(
             state,
             "米莉继续和主角讨论修道院的线索。",
+            core_memory=CoreMemory(items=[]),
         )
 
         assert [npc.name for npc in result.npcs] == ["米莉"]
@@ -446,6 +449,7 @@ class TestStateUpdaterNPCAbsentTurns:
         result = StateUpdater(mock.build_gateway()).update(
             state,
             "莎拉从角落抬头，接过米莉的话。",
+            core_memory=CoreMemory(items=[]),
         )
 
         sarah = next(n for n in result.npcs if n.name == "莎拉")
@@ -488,6 +492,7 @@ class TestStateUpdaterNPCAbsentTurns:
         result = StateUpdater(mock.build_gateway()).update(
             state,
             "一个名叫艾伦的信使走进酒馆。",
+            core_memory=CoreMemory(items=[]),
         )
 
         allen = next(n for n in result.npcs if n.name == "艾伦")
@@ -513,7 +518,7 @@ class TestStateUpdaterNPCAbsentTurns:
 
         mock.provider.generate = generate
 
-        StateUpdater(mock.build_gateway()).update(state, "米莉和莎拉都留在酒馆。")
+        StateUpdater(mock.build_gateway()).update(state, "米莉和莎拉都留在酒馆。", core_memory=CoreMemory(items=[]))
 
         assert "absent_turns" not in captured["prompt"]
 
@@ -528,7 +533,7 @@ class TestSceneIdAutoIncrement:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "酒馆里的交谈变得冷淡，气氛疏离。")
+        result = updater.update(state, "酒馆里的交谈变得冷淡，气氛疏离。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.scene_id == "scene_001"
         assert result.scene.atmosphere == "疏离"
@@ -542,7 +547,7 @@ class TestSceneIdAutoIncrement:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角走进了北郡森林。")
+        result = updater.update(state, "主角走进了北郡森林。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.scene_id == "scene_002"
 
@@ -555,7 +560,7 @@ class TestSceneIdAutoIncrement:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角走到酒馆门口。")
+        result = updater.update(state, "主角走到酒馆门口。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.scene_id == "scene_001"
 
@@ -568,7 +573,7 @@ class TestSceneIdAutoIncrement:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "酒馆里一切如常。")
+        result = updater.update(state, "酒馆里一切如常。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.scene_id == "scene_001"
 
@@ -582,6 +587,6 @@ class TestSceneIdAutoIncrement:
         mock.set_responses([updated_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角离开修道院。")
+        result = updater.update(state, "主角离开修道院。", core_memory=CoreMemory(items=[]))
 
         assert result.scene.scene_id == "scene_010"

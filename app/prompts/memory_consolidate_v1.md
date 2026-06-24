@@ -4,6 +4,12 @@
 你只输出合并建议 batch，不输出完整 Memory。
 程序会根据你的建议合并 confidence、salience、entities、visibility、source_pending_ids、source_text_span，并执行入库和旧记忆失活。
 
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
 ## Group ID
 
 ```text

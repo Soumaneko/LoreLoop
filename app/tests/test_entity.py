@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 
 from app.core.llm import MockLLM
+from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, InventoryItem, NPCState, PlayerState, ResourcesState, SceneState
 from app.domain.entity.linker import EntityMemoryLinker
 from app.domain.entity.extractor import EntityExtractor
@@ -147,6 +148,7 @@ class TestEntityExtractor:
         ])
 
         result = EntityExtractor(mock.build_gateway()).extract(
+            core_memory=CoreMemory(items=[]),
             scene_text="红发女侍者递来一张旧地图。",
             existing_profiles=[existing],
         )
@@ -275,6 +277,7 @@ class TestEntityProfileUpdater:
             "米莉压低声音提供线索。",
             _make_state(),
             relevant_profiles=[existing],
+            core_memory=CoreMemory(items=[]),
         )
 
         assert len(result) == 1
@@ -315,6 +318,7 @@ class TestEntityProfileUpdater:
             "米莉从围裙口袋掏出一张旧地图递给卢西安。",
             _make_state(),
             relevant_profiles=[existing],
+            core_memory=CoreMemory(items=[]),
         )
 
         assert len(result) == 1
@@ -354,6 +358,7 @@ class TestEntityProfileUpdater:
                     context_span="北郡修道院的钟声响起。",
                 )
             ],
+            core_memory=CoreMemory(items=[]),
         )
 
         assert len(result) == 1
@@ -422,6 +427,7 @@ class TestUpdateEntityProfilesWorkflow:
         saved = update_entity_profiles_workflow(
             "红发女侍者递来一张旧地图。",
             _make_state(),
+            CoreMemory(items=[]),
             mock.build_gateway(),
             store,
         )
@@ -469,6 +475,7 @@ class TestUpdateEntityProfilesWorkflow:
         saved = update_entity_profiles_workflow(
             "米莉递来一张旧地图。",
             _make_state(),
+            CoreMemory(items=[]),
             mock.build_gateway(),
             store,
         )
@@ -524,6 +531,7 @@ class TestUpdateEntityProfilesWorkflow:
         saved = update_entity_profiles_workflow(
             "红发女侍者递来一张旧地图。",
             _make_state(),
+            CoreMemory(items=[]),
             mock.build_gateway(),
             store,
         )
@@ -574,6 +582,7 @@ class TestUpdateEntityProfilesWorkflow:
         saved = update_entity_profiles_workflow(
             "黑石信使把密封信交到吧台。",
             _make_state(),
+            CoreMemory(items=[]),
             mock.build_gateway(),
             store,
         )

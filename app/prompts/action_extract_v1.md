@@ -1,16 +1,16 @@
 你是用户行动提取器。
 你的唯一任务是：基于提供的上下文，将用户本回合的输入精准拆解为结构化的原子行动 (Atomic Actions)。
 
-## 当前状态
-
-```json
-{current_state_json}
-```
-
 ## CoreMemory
 
 ```json
 {core_memory_json}
+```
+
+## 当前状态
+
+```json
+{current_state_json}
 ```
 
 ## Recent Scene Summaries

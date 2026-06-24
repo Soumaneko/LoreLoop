@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from app.domain.current_state.schemas import CurrentState
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.entity.linker import EntityMemoryLinker
 from app.domain.entity.store import EntityStore
 from app.domain.recall_memory.batch_classifier import (
@@ -74,6 +75,7 @@ def extract_memory_drafts_workflow(
     *,
     scene_text: str,
     current_state: CurrentState,
+    core_memory: CoreMemory,
     turn_index: int,
     extractor: MemoryDraftExtractor,
     pending_store: PendingMemoryStore | None = None,
@@ -83,6 +85,7 @@ def extract_memory_drafts_workflow(
     result: MemoryDraftExtractResult = extractor.extract(
         scene_text,
         current_state,
+        core_memory=core_memory,
         turn_index=turn_index,
         scene_id=scene_id,
         trace_id=trace_id,
@@ -98,6 +101,7 @@ def extract_memory_drafts_workflow(
 def batch_classify_pending_memories_workflow(
     *,
     current_state: CurrentState,
+    core_memory: CoreMemory,
     classifier: MemoryBatchClassifier,
     pending_store: PendingMemoryStore,
     memory_store: MemoryStore,
@@ -122,6 +126,7 @@ def batch_classify_pending_memories_workflow(
     result: MemoryBatchClassifierResult = classifier.classify(
         pending_items,
         current_state,
+        core_memory=core_memory,
         trace_id=trace_id,
     )
     wfr.raw_candidates = result.raw_candidates
@@ -167,6 +172,7 @@ def consolidate_memories_workflow(
     *,
     store: MemoryStore,
     consolidator: MemoryConsolidator,
+    core_memory: CoreMemory,
     max_group_size: int = 5,
     trace_id: str | None = None,
 ) -> ConsolidateMemoriesWorkflowResult:
@@ -182,7 +188,7 @@ def consolidate_memories_workflow(
 
     group_sources = {group.group_id: group.memories for group in groups}
     for group in groups:
-        batch = consolidator.decide_group(group, trace_id=trace_id)
+        batch = consolidator.decide_group(group, core_memory=core_memory, trace_id=trace_id)
         result.proposals.extend(batch.proposals)
         for proposal in batch.proposals:
             sources = group_sources.get(proposal.group_id, group.memories)

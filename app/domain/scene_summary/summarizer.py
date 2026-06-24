@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary, SceneSummaryDraft
 
@@ -13,6 +14,7 @@ class SceneSummarizer:
     def summarize_turn(
         self,
         *,
+        core_memory: CoreMemory,
         scene_text: str,
         current_state: CurrentState,
         scene_id: str,
@@ -26,6 +28,7 @@ class SceneSummarizer:
             self._llm.run(
                 task="scene_summarize",
                 input_data={
+                    "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_text": scene_text,
                     "scene_id": scene_id,
                     "current_state_json": project_current_state(current_state),
@@ -46,6 +49,7 @@ class SceneSummarizer:
     def condense(
         self,
         *,
+        core_memory: CoreMemory,
         source_summaries: list[SceneSummary],
         target_level: int,
         trace_id: str | None = None,
@@ -57,6 +61,7 @@ class SceneSummarizer:
             self._llm.run(
                 task="scene_summary_condense",
                 input_data={
+                    "core_memory_json": core_memory.model_dump_json(indent=2),
                     "target_level": target_level,
                     "source_summaries_json": json.dumps(
                         [summary.model_dump(mode="json") for summary in source_summaries],

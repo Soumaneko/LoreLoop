@@ -2,6 +2,7 @@ import json
 import re
 
 from app.core.llm import LLMGateway
+from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import (
     CurrentState,
     NPCState,
@@ -64,6 +65,7 @@ class StateUpdater:
         current_state: CurrentState,
         scene_text: str,
         *,
+        core_memory: CoreMemory,
         trace_id: str | None = None,
     ) -> CurrentState:
         state_for_llm = current_state.model_copy(deep=True)
@@ -77,6 +79,7 @@ class StateUpdater:
         llm_result = self.llm.run(
             task="state_update",
             input_data={
+                "core_memory_json": core_memory.model_dump_json(indent=2),
                 "current_state_json": json.dumps(state_data, ensure_ascii=False, indent=2),
                 "scene_text": scene_text,
                 "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),

@@ -82,11 +82,14 @@ def confirm_turn_stream(
         with entity_store() as ent_store:
             existing_entity_profiles = ent_store.list_all()
 
+    core_memory = core_memory_store().load_required()
+
     def _do_state_update():
         updater = StateUpdater(gateway1)
         return updater.update(
             pending.state_before,
             effective_scene_text,
+            core_memory=core_memory,
             trace_id=trace_id,
         )
 
@@ -95,6 +98,7 @@ def confirm_turn_stream(
         return extractor.extract(
             effective_scene_text,
             pending.state_before,
+            core_memory=core_memory,
             turn_index=pending.turn_index,
             scene_id=pending.state_before.scene.scene_id,
             trace_id=trace_id,
@@ -103,6 +107,7 @@ def confirm_turn_stream(
     def _do_entity_extract():
         extractor = EntityExtractor(gateway3)
         return extractor.extract(
+            core_memory=core_memory,
             scene_text=effective_scene_text,
             existing_profiles=existing_entity_profiles,
             trace_id=trace_id,
@@ -196,6 +201,7 @@ def confirm_turn_stream(
                 entity_result = update_entity_profiles_from_extraction(
                     scene_text=effective_scene_text,
                     current_state=updated_state,
+                    core_memory=core_memory,
                     gateway=create_gateway(),
                     entity_store=ent_store,
                     existing_profiles=existing_entity_profiles,
@@ -255,6 +261,7 @@ def confirm_turn_stream(
                 run_memory_batch_maintenance,
                 updated_state,
                 trace_id,
+                core_memory=core_memory,
             )
         BACKGROUND_EXECUTOR.submit(
             run_scene_summary_maintenance,
@@ -263,6 +270,7 @@ def confirm_turn_stream(
             updated_state.scene.scene_id,
             pending.turn_index,
             trace_id,
+            core_memory=core_memory,
         )
     else:
         with short_term_memory_store() as short_store:
@@ -345,11 +353,14 @@ def confirm_opening_stream(
         with entity_store() as ent_store:
             existing_entity_profiles = ent_store.list_all()
 
+    core_memory = core_memory_store().load_required()
+
     def _do_state_update():
         updater = StateUpdater(gateway1)
         return updater.update(
             pending.current_state,
             effective_scene_text,
+            core_memory=core_memory,
             trace_id=trace_id,
         )
 
@@ -358,6 +369,7 @@ def confirm_opening_stream(
         return extractor.extract(
             effective_scene_text,
             pending.current_state,
+            core_memory=core_memory,
             turn_index=0,
             scene_id=pending.current_state.scene.scene_id,
             trace_id=trace_id,
@@ -366,6 +378,7 @@ def confirm_opening_stream(
     def _do_entity_extract():
         extractor = EntityExtractor(gateway3)
         return extractor.extract(
+            core_memory=core_memory,
             scene_text=effective_scene_text,
             existing_profiles=existing_entity_profiles,
             trace_id=trace_id,
@@ -443,6 +456,7 @@ def confirm_opening_stream(
                 entity_result = update_entity_profiles_from_extraction(
                     scene_text=effective_scene_text,
                     current_state=updated_state,
+                    core_memory=core_memory,
                     gateway=create_gateway(),
                     entity_store=ent_store,
                     existing_profiles=existing_entity_profiles,
@@ -502,6 +516,7 @@ def confirm_opening_stream(
                 run_memory_batch_maintenance,
                 updated_state,
                 trace_id,
+                core_memory=core_memory,
             )
         BACKGROUND_EXECUTOR.submit(
             run_scene_summary_maintenance,
@@ -510,6 +525,7 @@ def confirm_opening_stream(
             updated_state.scene.scene_id,
             0,
             trace_id,
+            core_memory=core_memory,
         )
     else:
         with short_term_memory_store() as short_store:
