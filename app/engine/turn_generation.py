@@ -56,6 +56,13 @@ def generate_turn_stream(
     with short_term_memory_store() as short_store:
         short_term_memory = short_store.get_recent()
 
+    turn_index = (
+        (short_term_memory.recent_scenes[-1].turn_index + 1)
+        if short_term_memory.recent_scenes
+        else 1
+    )
+    gateway.set_trace_context(turn_index=turn_index, session_type="generation")
+
     with scene_summary_store() as summary_store:
         scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)

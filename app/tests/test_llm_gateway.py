@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,10 +13,15 @@ from app.core.llm.errors import (
 )
 from app.core.llm.gateway import LLMGateway
 from app.core.llm.mock import MockLLM
-from app.core.llm.providers import MockProvider
+from app.core.llm.providers import (
+    MockProvider,
+    ProviderResult,
+    _extract_usage,
+)
 from app.core.llm.prompts import PromptLoader
 from app.core.llm.schemas import EchoResult
 from app.core.llm.tracing import TraceLogger
+from app.debug_prompt_runner import FilePromptProvider
 
 
 def _make_gateway(mock_llm: MockLLM) -> LLMGateway:
@@ -325,6 +331,32 @@ class TestMockProviderFeatures:
                 output_schema=EchoResult,
                 max_retries=0,
             )
+
+
+class TestProviderCompatibility:
+    def test_file_prompt_provider_returns_provider_result(self):
+        class _Exchange:
+            def request(self, **_kwargs):
+                return '{"text": "manual", "length": 6}'
+
+        provider = FilePromptProvider(_Exchange())
+        result = provider.generate(
+            "prompt",
+            model="manual-web",
+            temperature=0.2,
+        )
+
+        assert isinstance(result, ProviderResult)
+        assert result.content == '{"text": "manual", "length": 6}'
+        assert result.usage is None
+
+    def test_usage_extraction_accepts_partial_compatible_response(self):
+        usage = _extract_usage(SimpleNamespace(total_tokens=12))
+
+        assert usage == {"total_tokens": 12}
+
+    def test_usage_extraction_returns_none_when_fields_are_missing(self):
+        assert _extract_usage(SimpleNamespace()) is None
 
 
 class TestPromptLoader:

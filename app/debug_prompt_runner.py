@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.llm import LLMGateway, LLMProvider, PromptLoader, TraceLogger
+from app.core.llm.providers import ProviderResult
 
 
 class FilePromptExchange:
@@ -144,15 +145,17 @@ class FilePromptProvider(LLMProvider):
         *,
         model: str,
         temperature: float,
-    ) -> str:
+    ) -> ProviderResult:
         self.attempt += 1
-        return self.exchange.request(
-            task=self.task,
-            attempt=self.attempt,
-            trace_id=self.trace_id,
-            prompt=prompt,
-            model=model,
-            temperature=temperature,
+        return ProviderResult(
+            content=self.exchange.request(
+                task=self.task,
+                attempt=self.attempt,
+                trace_id=self.trace_id,
+                prompt=prompt,
+                model=model,
+                temperature=temperature,
+            )
         )
 
 

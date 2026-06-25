@@ -119,7 +119,9 @@ def _confirm_turn_stream_locked(
     core_memory = core_memory_store().load_required()
 
     def _do_state_update():
-        updater = StateUpdater(create_gateway())
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=pending.turn_index, session_type="confirmation")
+        updater = StateUpdater(gateway)
         result = updater.update(
             pending.state_before,
             effective_scene_text,
@@ -130,7 +132,9 @@ def _confirm_turn_stream_locked(
         return result
 
     def _do_memory_draft_extract():
-        extractor = MemoryDraftExtractor(create_gateway())
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=pending.turn_index, session_type="confirmation")
+        extractor = MemoryDraftExtractor(gateway)
         result = extractor.extract(
             effective_scene_text,
             pending.state_before,
@@ -143,7 +147,9 @@ def _confirm_turn_stream_locked(
         return result
 
     def _do_entity_extract():
-        extractor = EntityExtractor(create_gateway())
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=pending.turn_index, session_type="confirmation")
+        extractor = EntityExtractor(gateway)
         result = extractor.extract(
             core_memory=core_memory,
             scene_text=effective_scene_text,
@@ -221,12 +227,14 @@ def _confirm_turn_stream_locked(
         recent_summaries = summary_store.get_recent(5)
 
     def _do_action_preview():
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=pending.turn_index, session_type="confirmation")
         return generate_action_preview_workflow(
             scene_text=effective_scene_text,
             current_state=updated_state,
             core_memory=core_memory_store().load_required(),
             recent_summaries=recent_summaries,
-            gateway=create_gateway(),
+            gateway=gateway,
             trace_id=trace_id,
         )
 
@@ -246,6 +254,10 @@ def _confirm_turn_stream_locked(
     if write_db:
         if pending.turn_index >= 1 and "director_event_result" not in cache:
             with director_event_store() as director_store:
+                reviewer_gateway = create_gateway()
+                reviewer_gateway.set_trace_context(turn_index=pending.turn_index, session_type="confirmation")
+                selector_gateway = create_gateway()
+                selector_gateway.set_trace_context(turn_index=pending.turn_index, session_type="confirmation")
                 director_event_result = update_director_event_workflow(
                     user_input=pending.user_input,
                     scene_text=effective_scene_text,
@@ -254,18 +266,20 @@ def _confirm_turn_stream_locked(
                     scene_summaries=scene_summaries,
                     turn_index=pending.turn_index,
                     store=director_store,
-                    reviewer=DirectorEventReviewer(create_gateway()),
-                    selector=DirectorEventSelector(create_gateway()),
+                    reviewer=DirectorEventReviewer(reviewer_gateway),
+                    selector=DirectorEventSelector(selector_gateway),
                     trace_id=trace_id,
                 )
             cache["director_event_result"] = director_event_result
         if entity_extraction is not None and "updated_entity_ids" not in cache:
             with entity_store() as ent_store:
+                gateway = create_gateway()
+                gateway.set_trace_context(turn_index=pending.turn_index, session_type="confirmation")
                 entity_result = update_entity_profiles_from_extraction(
                     scene_text=effective_scene_text,
                     current_state=updated_state,
                     core_memory=core_memory,
-                    gateway=create_gateway(),
+                    gateway=gateway,
                     entity_store=ent_store,
                     existing_profiles=existing_entity_profiles,
                     extraction=entity_extraction,
@@ -326,6 +340,7 @@ def _confirm_turn_stream_locked(
                 run_memory_batch_maintenance,
                 updated_state,
                 trace_id,
+                pending.turn_index,
                 core_memory=core_memory,
             )
             cache["memory_batch_scheduled"] = batch_queued
@@ -453,7 +468,9 @@ def _confirm_opening_stream_locked(
     core_memory = core_memory_store().load_required()
 
     def _do_state_update():
-        updater = StateUpdater(create_gateway())
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=0, session_type="confirmation")
+        updater = StateUpdater(gateway)
         result = updater.update(
             pending.current_state,
             effective_scene_text,
@@ -464,7 +481,9 @@ def _confirm_opening_stream_locked(
         return result
 
     def _do_memory_draft_extract():
-        extractor = MemoryDraftExtractor(create_gateway())
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=0, session_type="confirmation")
+        extractor = MemoryDraftExtractor(gateway)
         result = extractor.extract(
             effective_scene_text,
             pending.current_state,
@@ -477,7 +496,9 @@ def _confirm_opening_stream_locked(
         return result
 
     def _do_entity_extract():
-        extractor = EntityExtractor(create_gateway())
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=0, session_type="confirmation")
+        extractor = EntityExtractor(gateway)
         result = extractor.extract(
             core_memory=core_memory,
             scene_text=effective_scene_text,
@@ -554,12 +575,14 @@ def _confirm_opening_stream_locked(
         recent_summaries = summary_store.get_recent(5)
 
     def _do_action_preview():
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=0, session_type="confirmation")
         return generate_action_preview_workflow(
             scene_text=effective_scene_text,
             current_state=updated_state,
             core_memory=core_memory_store().load_required(),
             recent_summaries=recent_summaries,
-            gateway=create_gateway(),
+            gateway=gateway,
             trace_id=trace_id,
         )
 
@@ -577,11 +600,13 @@ def _confirm_opening_stream_locked(
     updated_entity_ids: list[str] = cache.get("updated_entity_ids", [])
     if write_db and entity_extraction is not None and "updated_entity_ids" not in cache:
         with entity_store() as ent_store:
+            gateway = create_gateway()
+            gateway.set_trace_context(turn_index=0, session_type="confirmation")
             entity_result = update_entity_profiles_from_extraction(
                 scene_text=effective_scene_text,
                 current_state=updated_state,
                 core_memory=core_memory,
-                gateway=create_gateway(),
+                gateway=gateway,
                 entity_store=ent_store,
                 existing_profiles=existing_entity_profiles,
                 extraction=entity_extraction,
@@ -642,6 +667,7 @@ def _confirm_opening_stream_locked(
                 run_memory_batch_maintenance,
                 updated_state,
                 trace_id,
+                0,
                 core_memory=core_memory,
             )
             cache["memory_batch_scheduled"] = batch_queued

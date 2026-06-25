@@ -47,6 +47,7 @@ def apply_core_memory_init(payload: dict[str, Any]) -> dict[str, Any]:
     current_state = build_initial_current_state(config)
     trace_id = str(uuid.uuid4())
     gateway = create_gateway()
+    gateway.set_trace_context(session_type="init")
     if (config.story_expectation or "").strip():
         story_direction = StoryDirectionAgent(gateway).generate(
             config=config,

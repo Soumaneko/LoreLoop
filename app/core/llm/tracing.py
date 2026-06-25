@@ -31,6 +31,11 @@ class TraceLogger:
         schema_valid: bool,
         latency_ms: float,
         error: str | None,
+        *,
+        attempt: int | None = None,
+        token_usage: dict | None = None,
+        turn_index: int | None = None,
+        session_type: str | None = None,
     ) -> None:
         entry = {
             "trace_id": trace_id,
@@ -45,6 +50,14 @@ class TraceLogger:
             "error": error,
             "timestamp": time.time(),
         }
+        if attempt is not None:
+            entry["attempt"] = attempt
+        if token_usage is not None:
+            entry["token_usage"] = token_usage
+        if turn_index is not None:
+            entry["turn_index"] = turn_index
+        if session_type is not None:
+            entry["session_type"] = session_type
 
         with self._lock:
             with open(self._log_path, "a", encoding="utf-8") as f:

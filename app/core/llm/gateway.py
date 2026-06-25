@@ -12,7 +12,7 @@ from .errors import (
     LLMProviderError,
 )
 from .prompts import PromptLoader
-from .providers import LLMProvider
+from .providers import LLMProvider, ProviderResult
 from .tracing import TraceLogger
 
 
@@ -28,6 +28,7 @@ class LLMGateway:
         self._prompt_loader = prompt_loader
         self._tracer = tracer or TraceLogger()
         self._default_model = default_model
+        self._trace_context: dict[str, Any] = {}
 
     @property
     def provider(self) -> LLMProvider:
@@ -40,6 +41,9 @@ class LLMGateway:
     @property
     def tracer(self) -> TraceLogger:
         return self._tracer
+
+    def set_trace_context(self, **kwargs: Any) -> None:
+        self._trace_context.update(kwargs)
 
     def run(
         self,
@@ -59,11 +63,12 @@ class LLMGateway:
         current_prompt = self._build_prompt(prompt_template, input_data)
         last_raw_output = ""
         last_error: str | None = None
-        total_start = time.time()
+        token_usage: dict | None = None
 
-        for attempt in range(max_retries + 1):
+        for attempt in range(1, max_retries + 2):
+            latency_ms = 0.0
             try:
-                raw_output, latency_ms = self._call_provider(
+                raw_output, latency_ms, token_usage = self._call_provider(
                     current_prompt, model=model, temperature=temperature
                 )
                 last_raw_output = raw_output
@@ -72,7 +77,6 @@ class LLMGateway:
 
                 validated = self._validate_schema(parsed, output_schema)
 
-                total_latency = (time.time() - total_start) * 1000
                 self._tracer.log(
                     trace_id=trace_id,
                     task=task,
@@ -82,84 +86,83 @@ class LLMGateway:
                     raw_output=raw_output,
                     parsed_output=parsed,
                     schema_valid=True,
-                    latency_ms=total_latency,
+                    latency_ms=latency_ms,
                     error=None,
+                    attempt=attempt,
+                    token_usage=token_usage,
+                    turn_index=self._trace_context.get("turn_index"),
+                    session_type=self._trace_context.get("session_type"),
                 )
                 return validated
 
             except (LLMOutputParseError, LLMOutputValidationError) as e:
                 last_error = str(e)
-                if attempt < max_retries:
+                self._tracer.log(
+                    trace_id=trace_id,
+                    task=task,
+                    model=model,
+                    prompt_version=prompt_version,
+                    input_data=input_data,
+                    raw_output=last_raw_output,
+                    parsed_output=None,
+                    schema_valid=False,
+                    latency_ms=latency_ms,
+                    error=last_error,
+                    attempt=attempt,
+                    token_usage=token_usage,
+                    turn_index=self._trace_context.get("turn_index"),
+                    session_type=self._trace_context.get("session_type"),
+                )
+                if attempt <= max_retries:
                     current_prompt = self._build_retry_prompt(
                         prompt_template, input_data, last_raw_output, last_error
                     )
                     continue
-                self._log_failure(
-                    trace_id=trace_id,
-                    task=task,
-                    model=model,
-                    prompt_version=prompt_version,
-                    input_data=input_data,
-                    raw_output=last_raw_output,
-                    total_start=total_start,
-                    error=last_error,
-                )
                 raise
+
             except LLMProviderError as e:
                 last_error = str(e)
-                if attempt < max_retries:
-                    continue
-                self._log_failure(
+                self._tracer.log(
                     trace_id=trace_id,
                     task=task,
                     model=model,
                     prompt_version=prompt_version,
                     input_data=input_data,
-                    raw_output=last_raw_output,
-                    total_start=total_start,
+                    raw_output="",
+                    parsed_output=None,
+                    schema_valid=False,
+                    latency_ms=0,
                     error=last_error,
+                    attempt=attempt,
+                    token_usage=None,
+                    turn_index=self._trace_context.get("turn_index"),
+                    session_type=self._trace_context.get("session_type"),
                 )
+                if attempt <= max_retries:
+                    continue
                 raise
+
             except Exception as e:
                 last_error = str(e)
-                self._log_failure(
+                self._tracer.log(
                     trace_id=trace_id,
                     task=task,
                     model=model,
                     prompt_version=prompt_version,
                     input_data=input_data,
-                    raw_output=last_raw_output,
-                    total_start=total_start,
+                    raw_output="",
+                    parsed_output=None,
+                    schema_valid=False,
+                    latency_ms=0,
                     error=last_error,
+                    attempt=attempt,
+                    token_usage=None,
+                    turn_index=self._trace_context.get("turn_index"),
+                    session_type=self._trace_context.get("session_type"),
                 )
                 raise
 
         raise RuntimeError("unreachable LLM retry state")
-
-    def _log_failure(
-        self,
-        *,
-        trace_id: str,
-        task: str,
-        model: str,
-        prompt_version: str,
-        input_data: dict[str, Any],
-        raw_output: str,
-        total_start: float,
-        error: str,
-    ) -> None:
-        self._tracer.log(
-            trace_id=trace_id,
-            task=task,
-            model=model,
-            prompt_version=prompt_version,
-            input_data=input_data,
-            raw_output=raw_output,
-            parsed_output=None,
-            schema_valid=False,
-            latency_ms=(time.time() - total_start) * 1000,
-            error=error,
-        )
 
     def _build_prompt(
         self, template: str, input_data: dict[str, Any]
@@ -189,10 +192,10 @@ class LLMGateway:
         *,
         model: str,
         temperature: float,
-    ) -> tuple[str, float]:
+    ) -> tuple[str, float, dict | None]:
         start = time.time()
         try:
-            raw_output = self._provider.generate(
+            result = self._provider.generate(
                 prompt,
                 model=model,
                 temperature=temperature,
@@ -202,7 +205,7 @@ class LLMGateway:
         except Exception as e:
             raise LLMProviderError(f"Provider call failed: {e}") from e
         latency = (time.time() - start) * 1000
-        return raw_output, latency
+        return result.content, latency, result.usage
 
     def _parse_json(self, raw_output: str) -> Any:
         cleaned = raw_output.strip()

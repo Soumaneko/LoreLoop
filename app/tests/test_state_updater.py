@@ -512,9 +512,10 @@ class TestStateUpdaterNPCAbsentTurns:
         mock = MockLLM()
         captured = {}
 
-        def generate(prompt: str, *, model: str = "", temperature: float = 0.2) -> str:
+        def generate(prompt: str, *, model: str = "", temperature: float = 0.2) -> "ProviderResult":
+            from app.core.llm.providers import ProviderResult
             captured["prompt"] = prompt
-            return _build_updated_state_json({"mentioned_npcs": ["米莉", "莎拉"]})
+            return ProviderResult(content=_build_updated_state_json({"mentioned_npcs": ["米莉", "莎拉"]}))
 
         mock.provider.generate = generate
 

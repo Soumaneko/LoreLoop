@@ -324,6 +324,9 @@ class TestDebugCoreMemoryPreview:
                     })
                 raise AssertionError(f"unexpected task: {task}")
 
+            def set_trace_context(self, **kwargs):
+                pass
+
         core_store = CoreMemoryStore(tmp_path / "core_memory.json")
         state_path = tmp_path / "current_state.db"
         monkeypatch.setattr(

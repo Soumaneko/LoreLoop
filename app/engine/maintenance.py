@@ -33,6 +33,10 @@ def run_scene_summary_maintenance(
 ) -> None:
     try:
         gateway = create_gateway()
+        gateway.set_trace_context(
+            turn_index=turn_index,
+            session_type="maintenance",
+        )
         summarizer = SceneSummarizer(gateway)
         with scene_summary_store() as summary_store:
             result = run_scene_summary_maintenance_workflow(
@@ -55,9 +59,19 @@ def run_scene_summary_maintenance(
         traceback.print_exc()
 
 
-def run_memory_batch_maintenance(current_state: CurrentState, trace_id: str, *, core_memory: CoreMemory) -> None:
+def run_memory_batch_maintenance(
+    current_state: CurrentState,
+    trace_id: str,
+    turn_index: int,
+    *,
+    core_memory: CoreMemory,
+) -> None:
     try:
         gateway = create_gateway()
+        gateway.set_trace_context(
+            turn_index=turn_index,
+            session_type="maintenance",
+        )
         classifier = MemoryBatchClassifier(gateway)
         with (
             pending_memory_store() as pending_store,
@@ -132,6 +146,13 @@ def batch_classify_stream():
     yield {"step": "batch_classifying", "data": {}}
 
     gateway = create_gateway()
+    gateway.set_trace_context(
+        turn_index=max(
+            (item.turn_index for item in pending_items),
+            default=0,
+        ),
+        session_type="maintenance",
+    )
     classifier = MemoryBatchClassifier(gateway)
     with (
         pending_memory_store() as bpstore,
@@ -195,7 +216,9 @@ def consolidate_stream():
     with memory_store() as mem_store:
         active_count = len(mem_store.list_active())
         total_count = mem_store.count()
-        consolidator = MemoryConsolidator(create_gateway())
+        gateway = create_gateway()
+        gateway.set_trace_context(session_type="maintenance")
+        consolidator = MemoryConsolidator(gateway)
 
         yield {
             "step": "consolidate_started",

@@ -1,5 +1,12 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass
+class ProviderResult:
+    content: str
+    usage: dict | None = None
 
 
 class LLMProvider(ABC):
@@ -10,7 +17,7 @@ class LLMProvider(ABC):
         *,
         model: str,
         temperature: float,
-    ) -> str:
+    ) -> ProviderResult:
         pass
 
 
@@ -37,7 +44,7 @@ class MockProvider(LLMProvider):
         *,
         model: str = "",
         temperature: float = 0.2,
-    ) -> str:
+    ) -> ProviderResult:
         if self._should_timeout:
             raise TimeoutError("Mock provider timeout")
 
@@ -47,11 +54,11 @@ class MockProvider(LLMProvider):
             raise LLMProviderError("Mock provider error")
 
         if not self._responses:
-            return '{"echo": "default"}'
+            return ProviderResult(content='{"echo": "default"}')
 
         response = self._responses[self._index % len(self._responses)]
         self._index += 1
-        return response
+        return ProviderResult(content=response)
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -83,7 +90,7 @@ class OpenAICompatibleProvider(LLMProvider):
         *,
         model: str = "",
         temperature: float = 0.2,
-    ) -> str:
+    ) -> ProviderResult:
         from .errors import LLMProviderError
 
         try:
@@ -98,4 +105,19 @@ class OpenAICompatibleProvider(LLMProvider):
         content = response.choices[0].message.content
         if content is None:
             raise LLMProviderError("Provider returned empty response")
-        return content
+
+        usage = _extract_usage(getattr(response, "usage", None))
+
+        return ProviderResult(content=content, usage=usage)
+
+
+def _extract_usage(usage_obj: Any) -> dict | None:
+    if not usage_obj:
+        return None
+
+    usage = {
+        key: value
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+        if (value := getattr(usage_obj, key, None)) is not None
+    }
+    return usage or None

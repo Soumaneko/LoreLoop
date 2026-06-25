@@ -77,7 +77,11 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(monkeypat
             raise RuntimeError("preview failed")
         return {"previews": ["ok"]}
 
-    monkeypatch.setattr(turn_confirmation, "create_gateway", lambda: object())
+    class _FakeGateway:
+        def set_trace_context(self, **kwargs):
+            pass
+
+    monkeypatch.setattr(turn_confirmation, "create_gateway", lambda: _FakeGateway())
     monkeypatch.setattr(turn_confirmation, "StateUpdater", _StateUpdater)
     monkeypatch.setattr(
         turn_confirmation,
