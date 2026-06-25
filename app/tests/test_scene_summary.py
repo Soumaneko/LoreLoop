@@ -110,6 +110,38 @@ class TestSceneSummarizer:
         assert summary.turn_start == 1
         assert summary.turn_end == 2
 
+    def test_summarize_turn_retries_when_content_exceeds_hard_limit(self):
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps({"content": "长" * 221}, ensure_ascii=False),
+            json.dumps({"content": "合规摘要。"}, ensure_ascii=False),
+        ])
+
+        summary = SceneSummarizer(mock.build_gateway()).summarize_turn(
+            core_memory=CoreMemory(items=[]),
+            scene_text="正文。",
+            current_state=_state(),
+            scene_id="scene_010",
+            turn_index=10,
+        )
+
+        assert summary.content == "合规摘要。"
+
+    def test_condense_retries_when_content_exceeds_hard_limit(self):
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps({"content": "长" * 321}, ensure_ascii=False),
+            json.dumps({"content": "合规汇总。"}, ensure_ascii=False),
+        ])
+
+        summary = SceneSummarizer(mock.build_gateway()).condense(
+            core_memory=CoreMemory(items=[]),
+            source_summaries=[_summary(id="s1"), _summary(id="s2")],
+            target_level=2,
+        )
+
+        assert summary.content == "合规汇总。"
+
 
 class TestSceneSummaryMaintenance:
     def test_maintenance_condenses_up_multiple_levels(self):

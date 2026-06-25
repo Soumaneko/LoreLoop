@@ -343,6 +343,30 @@ class TestDirectorEventWorkflow:
 
         assert store.get_active().event_id == suspended.event_id
 
+    def test_rejects_unknown_suspended_event_id(self):
+        store = DirectorEventStore()
+        gateway = _SpyGateway(
+            {
+                "action": "activate_suspended",
+                "reason": "错误引用。",
+                "activate_event_id": "missing_event",
+                "new_event": None,
+            }
+        )
+
+        with pytest.raises(ValueError, match="not suspended"):
+            update_director_event_workflow(
+                user_input="继续。",
+                scene_text="卢西安继续前进。",
+                current_state=_state(),
+                core_memory=_core(),
+                scene_summaries=[],
+                turn_index=3,
+                store=store,
+                reviewer=DirectorEventReviewer(gateway),
+                selector=DirectorEventSelector(gateway),
+            )
+
     def test_creates_new_three_stage_event_when_no_active(self):
         store = DirectorEventStore()
         gateway = _SpyGateway(

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
@@ -8,6 +9,7 @@ from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandida
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.opening import OpeningSceneAgent
 from app.domain.scene_writer.schemas import SceneWriterResult
+from app.domain.scene_writer.views import project_outline
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
 from app.domain.core_memory import InitConfig, build_core_memory, build_initial_current_state
 from app.workflows.generate_scene import generate_scene_workflow, select_required_memories
@@ -38,6 +40,8 @@ def _make_outline() -> PlotOutlineResult:
             PlotBeat(
                 beat_id="b1",
                 summary="主角走向吧台与米莉打招呼",
+                user_action_execution="主角走向吧台，主动向米莉打招呼。",
+                protagonist_response_guidance="主角自然回应米莉的招呼，并以轻松语气开启话题。",
                 linked_action_ids=["a1"],
                 linked_roll_ids=["a1"],
                 required_memory_indices=[0],
@@ -47,6 +51,8 @@ def _make_outline() -> PlotOutlineResult:
             PlotBeat(
                 beat_id="b2",
                 summary="米莉告诉主角关于暴风城的消息",
+                user_action_execution="主角继续询问暴风城的近况。",
+                protagonist_response_guidance="主角对消息表现出警觉，简短追问与自己当前处境最相关的部分。",
                 linked_action_ids=["a2"],
                 linked_roll_ids=["a2"],
                 required_memory_indices=[],
@@ -76,6 +82,25 @@ def _build_response(
 
 
 class TestSceneWriterAgent:
+    def test_outline_projection_keeps_protagonist_response_guidance(self):
+        projected = json.loads(project_outline(_make_outline()))
+
+        assert projected["beats"][0]["protagonist_response_guidance"] == (
+            "主角自然回应米莉的招呼，并以轻松语气开启话题。"
+        )
+        assert projected["beats"][0]["user_action_execution"] == (
+            "主角走向吧台，主动向米莉打招呼。"
+        )
+
+    def test_prompt_allows_natural_reactions_but_protects_major_decisions(self):
+        prompt = Path("app/prompts/scene_write_v1.md").read_text(encoding="utf-8")
+
+        assert "不得替主角接受或拒绝任务" in prompt
+        assert "不得把多条 guidance 合并成开头的一次反应" in prompt
+        assert "必须先完整演出 `user_action_execution`" in prompt
+        assert "不得从“行动已经完成以后”开始" in prompt
+        assert "不是用户原始行动的替代品" in prompt
+
     def test_generates_scene_text(self):
         mock = MockLLM()
         mock.set_responses([_build_response()])
@@ -113,6 +138,24 @@ class TestSceneWriterAgent:
         assert len(result.scene_text) > 0
         assert len(result.changes_summary) >= 1
 
+    def test_retries_when_scene_exceeds_max_chars(self):
+        mock = MockLLM()
+        mock.set_responses([
+            _build_response(scene_text="过" * 11),
+            _build_response(scene_text="合规正文"),
+        ])
+
+        result = SceneWriterAgent(mock.build_gateway()).write(
+            outline=_make_outline(),
+            current_state=_make_state(),
+            core_memory=CoreMemory(items=[]),
+            selected_memories=[],
+            recent_scene=None,
+            max_chars=10,
+        )
+
+        assert result.scene_text == "合规正文"
+
     def test_handles_no_recent_scene(self):
         mock = MockLLM()
         mock.set_responses([_build_response()])
@@ -139,6 +182,7 @@ class TestSceneWriterAgent:
                 beats=[PlotBeat(
                     beat_id="b1",
                     summary="测试节拍",
+                    protagonist_response_guidance="主角以紧张的观察和简短回应参与当前场面。",
                     linked_action_ids=[],
                     linked_roll_ids=[],
                     required_memory_indices=[],
@@ -210,6 +254,7 @@ class TestSceneWriterWorkflow:
                 PlotBeat(
                     beat_id="b1",
                     summary="测试节拍",
+                    protagonist_response_guidance="主角确认自己理解了当前信息，但不作新的重大决定。",
                     required_memory_indices=[0, 1, 999],
                 )
             ],
@@ -265,6 +310,7 @@ class TestSceneWriterWorkflow:
                 PlotBeat(
                     beat_id="b1",
                     summary="测试节拍",
+                    protagonist_response_guidance="主角对刚出现的情报作简短追问。",
                     required_memory_indices=[1],
                 )
             ],

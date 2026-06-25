@@ -1,6 +1,8 @@
 import json
 from typing import cast
 
+from pydantic import Field, create_model
+
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -34,7 +36,14 @@ class SceneWriterAgent:
         max_chars: int = 1500,
         trace_id: str | None = None,
     ) -> SceneWriterResult:
-        schema = SceneWriterResult.model_json_schema()
+        if max_chars < 1:
+            raise ValueError("max_chars must be >= 1")
+        runtime_schema = create_model(
+            "RuntimeSceneWriterResult",
+            __base__=SceneWriterResult,
+            scene_text=(str, Field(min_length=1, max_length=max_chars)),
+        )
+        schema = runtime_schema.model_json_schema()
 
         result = cast(
             SceneWriterResult,
@@ -51,9 +60,9 @@ class SceneWriterAgent:
                     "recent_scene_json": recent_scene.model_dump_json(indent=2) if recent_scene else "null",
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
-                output_schema=SceneWriterResult,
+                output_schema=runtime_schema,
                 temperature=0.9,
                 trace_id=trace_id,
             ),
         )
-        return result
+        return SceneWriterResult.model_validate(result.model_dump())

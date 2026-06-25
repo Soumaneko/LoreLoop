@@ -87,67 +87,78 @@ class LLMGateway:
                 )
                 return validated
 
-            except LLMOutputParseError as e:
+            except (LLMOutputParseError, LLMOutputValidationError) as e:
                 last_error = str(e)
                 if attempt < max_retries:
                     current_prompt = self._build_retry_prompt(
                         prompt_template, input_data, last_raw_output, last_error
                     )
                     continue
-            except LLMOutputValidationError as e:
-                last_error = str(e)
-                if attempt < max_retries:
-                    current_prompt = self._build_retry_prompt(
-                        prompt_template, input_data, last_raw_output, last_error
-                    )
-                    continue
+                self._log_failure(
+                    trace_id=trace_id,
+                    task=task,
+                    model=model,
+                    prompt_version=prompt_version,
+                    input_data=input_data,
+                    raw_output=last_raw_output,
+                    total_start=total_start,
+                    error=last_error,
+                )
+                raise
             except LLMProviderError as e:
                 last_error = str(e)
                 if attempt < max_retries:
                     continue
+                self._log_failure(
+                    trace_id=trace_id,
+                    task=task,
+                    model=model,
+                    prompt_version=prompt_version,
+                    input_data=input_data,
+                    raw_output=last_raw_output,
+                    total_start=total_start,
+                    error=last_error,
+                )
+                raise
             except Exception as e:
                 last_error = str(e)
-                if attempt < max_retries:
-                    continue
+                self._log_failure(
+                    trace_id=trace_id,
+                    task=task,
+                    model=model,
+                    prompt_version=prompt_version,
+                    input_data=input_data,
+                    raw_output=last_raw_output,
+                    total_start=total_start,
+                    error=last_error,
+                )
+                raise
 
-            total_latency = (time.time() - total_start) * 1000
-            self._tracer.log(
-                trace_id=trace_id,
-                task=task,
-                model=model,
-                prompt_version=prompt_version,
-                input_data=input_data,
-                raw_output=last_raw_output,
-                parsed_output=None,
-                schema_valid=False,
-                latency_ms=total_latency,
-                error=last_error,
-            )
+        raise RuntimeError("unreachable LLM retry state")
 
-            if isinstance(last_error, str):
-                if attempt >= max_retries:
-                    raise LLMOutputValidationError(
-                        f"Task '{task}' failed after {max_retries + 1} attempts: {last_error}"
-                    )
-            raise LLMOutputValidationError(
-                f"Task '{task}' failed after {max_retries + 1} attempts: {last_error}"
-            )
-
-        total_latency = (time.time() - total_start) * 1000
+    def _log_failure(
+        self,
+        *,
+        trace_id: str,
+        task: str,
+        model: str,
+        prompt_version: str,
+        input_data: dict[str, Any],
+        raw_output: str,
+        total_start: float,
+        error: str,
+    ) -> None:
         self._tracer.log(
             trace_id=trace_id,
             task=task,
             model=model,
             prompt_version=prompt_version,
             input_data=input_data,
-            raw_output=last_raw_output,
+            raw_output=raw_output,
             parsed_output=None,
             schema_valid=False,
-            latency_ms=total_latency,
-            error=last_error,
-        )
-        raise LLMOutputValidationError(
-            f"Task '{task}' failed after {max_retries + 1} attempts: {last_error}"
+            latency_ms=(time.time() - total_start) * 1000,
+            error=error,
         )
 
     def _build_prompt(

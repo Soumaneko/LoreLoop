@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from threading import Lock
 
 from app.domain.current_state.schemas import CurrentState
 from app.domain.core_memory.schemas import CoreMemory
@@ -19,6 +20,8 @@ from app.domain.recall_memory.pending_store import PendingMemoryStore
 from app.domain.recall_memory.schemas import Memory, MemoryDraftExtractResult, PendingMemoryItem
 from app.domain.recall_memory.self_check import SelfCheckResult
 from app.domain.recall_memory.store import MemoryStore
+
+_MEMORY_BATCH_LOCK = Lock()
 
 
 @dataclass
@@ -99,6 +102,32 @@ def extract_memory_drafts_workflow(
 
 
 def batch_classify_pending_memories_workflow(
+    *,
+    current_state: CurrentState,
+    core_memory: CoreMemory,
+    classifier: MemoryBatchClassifier,
+    pending_store: PendingMemoryStore,
+    memory_store: MemoryStore,
+    entity_store: EntityStore | None = None,
+    turn_threshold: int = 5,
+    force: bool = False,
+    trace_id: str | None = None,
+) -> BatchClassifyPendingMemoryWorkflowResult:
+    with _MEMORY_BATCH_LOCK:
+        return _batch_classify_pending_memories_locked(
+            current_state=current_state,
+            core_memory=core_memory,
+            classifier=classifier,
+            pending_store=pending_store,
+            memory_store=memory_store,
+            entity_store=entity_store,
+            turn_threshold=turn_threshold,
+            force=force,
+            trace_id=trace_id,
+        )
+
+
+def _batch_classify_pending_memories_locked(
     *,
     current_state: CurrentState,
     core_memory: CoreMemory,

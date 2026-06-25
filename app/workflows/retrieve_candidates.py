@@ -23,9 +23,9 @@ def retrieve_candidates_workflow(
     top_k: int | None = None,
     config: RetrievalConfig | None = None,
 ) -> CandidateRetrievalResult:
-    retriever = CandidateRetriever(
+    with CandidateRetriever(
         memory_store,
         config,
         pending_memory_store=pending_memory_store,
-    )
-    return retriever.retrieve(parse_result, top_k=top_k)
+    ) as retriever:
+        return retriever.retrieve(parse_result, top_k=top_k)

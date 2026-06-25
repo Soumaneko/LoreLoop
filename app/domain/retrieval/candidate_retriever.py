@@ -49,8 +49,10 @@ class CandidateRetriever:
         self.config = config or RetrievalConfig()
         if alias_store is not None:
             self.alias_store = alias_store
+            self._owns_alias_store = False
         else:
             self.alias_store = self._load_default_alias_store()
+            self._owns_alias_store = self.alias_store is not None
 
     @staticmethod
     def _load_default_alias_store():
@@ -112,6 +114,18 @@ class CandidateRetriever:
             total_scanned=total_memories + len(pending_notes),
             total_returned=len(candidates) + len(pending_notes),
         )
+
+    def close(self) -> None:
+        if self._owns_alias_store and self.alias_store is not None:
+            self.alias_store.close()
+            self.alias_store = None
+            self._owns_alias_store = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
     def _retrieve_pending_notes(
         self,

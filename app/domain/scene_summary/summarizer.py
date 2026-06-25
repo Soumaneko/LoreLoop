@@ -1,6 +1,8 @@
 import json
 from typing import cast
 
+from pydantic import Field, create_model
+
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -23,6 +25,7 @@ class SceneSummarizer:
     ) -> SceneSummary:
         from app.domain.views import project_current_state
 
+        runtime_schema = _summary_draft_schema(max_length=220)
         draft = cast(
             SceneSummaryDraft,
             self._llm.run(
@@ -33,7 +36,7 @@ class SceneSummarizer:
                     "scene_id": scene_id,
                     "current_state_json": project_current_state(current_state),
                 },
-                output_schema=SceneSummaryDraft,
+                output_schema=runtime_schema,
                 trace_id=trace_id,
             ),
         )
@@ -56,6 +59,7 @@ class SceneSummarizer:
     ) -> SceneSummary:
         if not source_summaries:
             raise ValueError("source_summaries is required")
+        runtime_schema = _summary_draft_schema(max_length=320)
         draft = cast(
             SceneSummaryDraft,
             self._llm.run(
@@ -69,12 +73,12 @@ class SceneSummarizer:
                         indent=2,
                     ),
                     "output_schema_json": json.dumps(
-                        SceneSummaryDraft.model_json_schema(),
+                        runtime_schema.model_json_schema(),
                         ensure_ascii=False,
                         indent=2,
                     ),
                 },
-                output_schema=SceneSummaryDraft,
+                output_schema=runtime_schema,
                 trace_id=trace_id,
             ),
         )
@@ -101,3 +105,11 @@ def _unique(values) -> list[str]:
             seen.add(value)
             result.append(value)
     return result
+
+
+def _summary_draft_schema(*, max_length: int):
+    return create_model(
+        f"RuntimeSceneSummaryDraft{max_length}",
+        __base__=SceneSummaryDraft,
+        content=(str, Field(min_length=1, max_length=max_length)),
+    )

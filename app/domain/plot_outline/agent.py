@@ -1,6 +1,8 @@
 import json
 from typing import cast
 
+from pydantic import model_validator
+
 from app.core.llm import LLMGateway
 from app.domain.director_event.views import (
     plot_outline_director_event_instructions,
@@ -30,7 +32,51 @@ class PlotOutlineAgent:
         *,
         trace_id: str | None = None,
     ) -> PlotOutlineResult:
-        schema = PlotOutlineResult.model_json_schema()
+        expected_action_ids = [
+            action.action_id
+            for action in context.action_parse_result.atomic_actions
+        ]
+
+        class RuntimePlotOutlineResult(PlotOutlineResult):
+            @model_validator(mode="after")
+            def _require_all_user_actions(self):
+                linked_in_order: list[str] = []
+                for beat in self.beats:
+                    for action_id in beat.linked_action_ids:
+                        if action_id not in linked_in_order:
+                            linked_in_order.append(action_id)
+
+                linked_ids = set(linked_in_order)
+                expected_ids = set(expected_action_ids)
+                unknown = [
+                    action_id
+                    for action_id in linked_in_order
+                    if action_id not in expected_ids
+                ]
+                if unknown:
+                    raise ValueError(
+                        f"plot beats reference unknown linked_action_ids: {unknown}"
+                    )
+
+                missing = [
+                    action_id
+                    for action_id in expected_action_ids
+                    if action_id not in linked_ids
+                ]
+                if missing:
+                    raise ValueError(
+                        "all user actions must be enacted in plot beats; "
+                        f"missing linked_action_ids: {missing}"
+                    )
+
+                if linked_in_order != expected_action_ids:
+                    raise ValueError(
+                        "user actions must be enacted in atomic action sequence; "
+                        f"expected {expected_action_ids}, got {linked_in_order}"
+                    )
+                return self
+
+        schema = RuntimePlotOutlineResult.model_json_schema()
 
         result = cast(
             PlotOutlineResult,
@@ -51,9 +97,9 @@ class PlotOutlineAgent:
                     ),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
-                output_schema=PlotOutlineResult,
+                output_schema=RuntimePlotOutlineResult,
                 temperature=0.8,
                 trace_id=trace_id,
             ),
         )
-        return result
+        return PlotOutlineResult.model_validate(result.model_dump())

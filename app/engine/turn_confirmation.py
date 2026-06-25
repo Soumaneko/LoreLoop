@@ -15,7 +15,14 @@ from app.workflows.update_director_event import update_director_event_workflow
 
 from .maintenance import run_memory_batch_maintenance, run_scene_summary_maintenance
 from .serialization import model_data
-from .session import BACKGROUND_EXECUTOR, PENDING_OPENINGS, PENDING_TURNS
+from .session import (
+    BACKGROUND_EXECUTOR,
+    PENDING_OPENINGS,
+    PENDING_TURNS,
+    confirmation_lock,
+    release_confirmation_lock,
+    submit_memory_batch_once,
+)
 from .stores import (
     core_memory_store,
     current_state_store,
@@ -56,6 +63,22 @@ def confirm_turn_stream(
     scene_text: str | None = None,
     narrative_type: str | None = None,
 ):
+    lock = confirmation_lock(turn_id)
+    with lock:
+        yield from _confirm_turn_stream_locked(
+            turn_id,
+            write_db=write_db,
+            scene_text=scene_text,
+            narrative_type=narrative_type,
+        )
+
+
+def _confirm_turn_stream_locked(
+    turn_id: str,
+    write_db: bool = True,
+    scene_text: str | None = None,
+    narrative_type: str | None = None,
+):
     pending = PENDING_TURNS.get(turn_id)
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before confirming.")
@@ -65,6 +88,19 @@ def confirm_turn_stream(
     effective_narrative_type = narrative_type or pending.context.turn_resolution.selected_type
     if effective_narrative_type not in NARRATIVE_TYPE_LABELS:
         raise ValueError(f"Invalid narrative_type: {effective_narrative_type}")
+    cache_key = (effective_scene_text, effective_narrative_type)
+    cache = pending.confirmation_cache
+    if cache.get("key") != cache_key:
+        cache.clear()
+        cache["key"] = cache_key
+    if write_db and not cache.get("state_saved"):
+        with current_state_store() as state_store:
+            persisted_state = state_store.load_or_default()
+        if persisted_state != pending.state_before:
+            raise ValueError(
+                "Pending turn is stale because CurrentState changed after generation. "
+                "Generate the turn again before confirming."
+            )
 
     yield {
         "step": "confirm_started",
@@ -74,28 +110,28 @@ def confirm_turn_stream(
         },
     }
 
-    gateway1 = create_gateway()
-    gateway2 = create_gateway()
-    gateway3 = create_gateway()
-    existing_entity_profiles = []
-    if write_db:
+    existing_entity_profiles = cache.get("existing_entity_profiles", [])
+    if write_db and "existing_entity_profiles" not in cache:
         with entity_store() as ent_store:
             existing_entity_profiles = ent_store.list_all()
+        cache["existing_entity_profiles"] = existing_entity_profiles
 
     core_memory = core_memory_store().load_required()
 
     def _do_state_update():
-        updater = StateUpdater(gateway1)
-        return updater.update(
+        updater = StateUpdater(create_gateway())
+        result = updater.update(
             pending.state_before,
             effective_scene_text,
             core_memory=core_memory,
             trace_id=trace_id,
         )
+        cache["updated_state"] = result
+        return result
 
     def _do_memory_draft_extract():
-        extractor = MemoryDraftExtractor(gateway2)
-        return extractor.extract(
+        extractor = MemoryDraftExtractor(create_gateway())
+        result = extractor.extract(
             effective_scene_text,
             pending.state_before,
             core_memory=core_memory,
@@ -103,28 +139,41 @@ def confirm_turn_stream(
             scene_id=pending.state_before.scene.scene_id,
             trace_id=trace_id,
         )
+        cache["pending_memory_result"] = result
+        return result
 
     def _do_entity_extract():
-        extractor = EntityExtractor(gateway3)
-        return extractor.extract(
+        extractor = EntityExtractor(create_gateway())
+        result = extractor.extract(
             core_memory=core_memory,
             scene_text=effective_scene_text,
             existing_profiles=existing_entity_profiles,
             trace_id=trace_id,
         )
+        cache["entity_extraction"] = result
+        return result
 
+    updated_state = cache.get("updated_state")
+    pending_memory_result = cache.get("pending_memory_result")
+    entity_extraction = cache.get("entity_extraction")
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-        state_fu = pool.submit(_do_state_update)
-        extract_fu = pool.submit(_do_memory_draft_extract)
-        entity_extract_fu = pool.submit(_do_entity_extract) if write_db else None
+        state_fu = pool.submit(_do_state_update) if updated_state is None else None
+        extract_fu = (
+            pool.submit(_do_memory_draft_extract)
+            if pending_memory_result is None
+            else None
+        )
+        entity_extract_fu = (
+            pool.submit(_do_entity_extract)
+            if write_db and entity_extraction is None
+            else None
+        )
 
-        updated_state = None
-        pending_memory_result = None
-        entity_extraction = None
-
-        first_wave = [state_fu, extract_fu]
-        if entity_extract_fu is not None:
-            first_wave.append(entity_extract_fu)
+        first_wave = [
+            future
+            for future in (state_fu, extract_fu, entity_extract_fu)
+            if future is not None
+        ]
 
         for future in concurrent.futures.as_completed(first_wave):
             if future == state_fu:
@@ -148,13 +197,16 @@ def confirm_turn_stream(
                     },
                 }
 
-    pending_memory_items = fill_pending_memory_scene_metadata(
-        pending_memory_result.items,
-        updated_state,
-    )
-    pending_memory_result = pending_memory_result.model_copy(
-        update={"items": pending_memory_items}
-    )
+    if not cache.get("pending_memory_metadata_filled"):
+        pending_memory_items = fill_pending_memory_scene_metadata(
+            pending_memory_result.items,
+            updated_state,
+        )
+        pending_memory_result = pending_memory_result.model_copy(
+            update={"items": pending_memory_items}
+        )
+        cache["pending_memory_result"] = pending_memory_result
+        cache["pending_memory_metadata_filled"] = True
     yield {
         "step": "memory_draft_metadata_filled",
         "data": {
@@ -178,11 +230,21 @@ def confirm_turn_stream(
             trace_id=trace_id,
         )
 
-    updated_entity_ids: list[str] = []
-    director_event_result = None
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        action_preview_fu = pool.submit(_do_action_preview)
-        if write_db and pending.turn_index >= 1:
+    action_preview = cache.get("action_preview")
+    if action_preview is None:
+        action_preview = _do_action_preview()
+        cache["action_preview"] = action_preview
+    yield {
+        "step": "action_preview_done",
+        "data": {
+            "action_preview": model_data(action_preview),
+        },
+    }
+
+    updated_entity_ids: list[str] = cache.get("updated_entity_ids", [])
+    director_event_result = cache.get("director_event_result")
+    if write_db:
+        if pending.turn_index >= 1 and "director_event_result" not in cache:
             with director_event_store() as director_store:
                 director_event_result = update_director_event_workflow(
                     user_input=pending.user_input,
@@ -196,7 +258,8 @@ def confirm_turn_stream(
                     selector=DirectorEventSelector(create_gateway()),
                     trace_id=trace_id,
                 )
-        if write_db and entity_extraction is not None:
+            cache["director_event_result"] = director_event_result
+        if entity_extraction is not None and "updated_entity_ids" not in cache:
             with entity_store() as ent_store:
                 entity_result = update_entity_profiles_from_extraction(
                     scene_text=effective_scene_text,
@@ -209,18 +272,12 @@ def confirm_turn_stream(
                     trace_id=trace_id,
                 )
                 updated_entity_ids = entity_result.saved_ids
-        yield {
-            "step": "entity_profiles_updated",
-            "data": {
-                "updated_entity_ids": updated_entity_ids,
-                "director_event_result": model_data(director_event_result),
-            },
-        }
-        action_preview = action_preview_fu.result()
+            cache["updated_entity_ids"] = updated_entity_ids
     yield {
-        "step": "action_preview_done",
+        "step": "entity_profiles_updated",
         "data": {
-            "action_preview": model_data(action_preview),
+            "updated_entity_ids": updated_entity_ids,
+            "director_event_result": model_data(director_event_result),
         },
     }
 
@@ -229,24 +286,33 @@ def confirm_turn_stream(
     store_count_after = 0
     store_total = 0
     pending_count_after = 0
-    batch_queued = False
+    batch_queued = bool(cache.get("memory_batch_scheduled"))
 
     if write_db:
-        with current_state_store() as state_store:
-            state_store.save(updated_state)
+        if not cache.get("state_saved"):
+            with current_state_store() as state_store:
+                state_store.save(updated_state)
+            cache["state_saved"] = True
 
         with short_term_memory_store() as short_store:
-            short_store.add_turn(
-                scene_id=updated_state.scene.scene_id,
-                turn_index=pending.turn_index,
-                user_input=pending.user_input,
-                scene_text=effective_scene_text,
-                narrative_type=effective_narrative_type,
-            )
+            if not cache.get("short_term_saved"):
+                short_store.add_turn(
+                    scene_id=updated_state.scene.scene_id,
+                    turn_index=pending.turn_index,
+                    user_input=pending.user_input,
+                    scene_text=effective_scene_text,
+                    narrative_type=effective_narrative_type,
+                )
+                cache["short_term_saved"] = True
             short_term_after = short_store.get_recent()
 
         with pending_memory_store() as pending_store:
-            saved_pending_ids = pending_store.save_many(pending_memory_result.items)
+            if not cache.get("pending_memories_saved"):
+                saved_pending_ids = pending_store.save_many(pending_memory_result.items)
+                cache["saved_pending_ids"] = saved_pending_ids
+                cache["pending_memories_saved"] = True
+            else:
+                saved_pending_ids = cache.get("saved_pending_ids", [])
             pending_count_after = pending_store.count()
             should_batch = pending_store.should_trigger_batch(turn_threshold=5)
 
@@ -255,23 +321,25 @@ def confirm_turn_stream(
             store_count_after = store_count_before
             store_total = len(mem_store.list_all())
 
-        if should_batch:
-            batch_queued = True
-            BACKGROUND_EXECUTOR.submit(
+        if should_batch and not cache.get("memory_batch_scheduled"):
+            batch_queued = submit_memory_batch_once(
                 run_memory_batch_maintenance,
                 updated_state,
                 trace_id,
                 core_memory=core_memory,
             )
-        BACKGROUND_EXECUTOR.submit(
-            run_scene_summary_maintenance,
-            effective_scene_text,
-            updated_state,
-            updated_state.scene.scene_id,
-            pending.turn_index,
-            trace_id,
-            core_memory=core_memory,
-        )
+            cache["memory_batch_scheduled"] = batch_queued
+        if not cache.get("scene_summary_scheduled"):
+            BACKGROUND_EXECUTOR.submit(
+                run_scene_summary_maintenance,
+                effective_scene_text,
+                updated_state,
+                updated_state.scene.scene_id,
+                pending.turn_index,
+                trace_id,
+                core_memory=core_memory,
+            )
+            cache["scene_summary_scheduled"] = True
     else:
         with short_term_memory_store() as short_store:
             short_term_after = short_store.get_recent()
@@ -279,7 +347,9 @@ def confirm_turn_stream(
         with memory_store() as mem_store:
             store_total = mem_store.count()
 
-    PENDING_TURNS.pop(turn_id, None)
+    if write_db:
+        PENDING_TURNS.pop(turn_id, None)
+        release_confirmation_lock(turn_id)
 
     memory_data: dict = {
         "pending_items": model_data(pending_memory_result.items),
@@ -326,6 +396,22 @@ def confirm_opening_stream(
     scene_text: str | None = None,
     narrative_type: str | None = None,
 ):
+    lock = confirmation_lock(turn_id)
+    with lock:
+        yield from _confirm_opening_stream_locked(
+            turn_id,
+            write_db=write_db,
+            scene_text=scene_text,
+            narrative_type=narrative_type,
+        )
+
+
+def _confirm_opening_stream_locked(
+    turn_id: str,
+    write_db: bool = True,
+    scene_text: str | None = None,
+    narrative_type: str | None = None,
+):
     pending = PENDING_OPENINGS.get(turn_id)
     if pending is None:
         raise ValueError("Pending opening not found. Initialize again before confirming.")
@@ -335,6 +421,19 @@ def confirm_opening_stream(
     effective_narrative_type = narrative_type or "transition"
     if effective_narrative_type not in NARRATIVE_TYPE_LABELS:
         effective_narrative_type = "transition"
+    cache_key = (effective_scene_text, effective_narrative_type)
+    cache = pending.confirmation_cache
+    if cache.get("key") != cache_key:
+        cache.clear()
+        cache["key"] = cache_key
+    if write_db and not cache.get("state_saved"):
+        with current_state_store() as state_store:
+            persisted_state = state_store.load_or_default()
+        if persisted_state != pending.current_state:
+            raise ValueError(
+                "Pending opening is stale because initialization state changed. "
+                "Initialize again before confirming."
+            )
 
     yield {
         "step": "confirm_started",
@@ -345,28 +444,28 @@ def confirm_opening_stream(
         },
     }
 
-    gateway1 = create_gateway()
-    gateway2 = create_gateway()
-    gateway3 = create_gateway()
-    existing_entity_profiles = []
-    if write_db:
+    existing_entity_profiles = cache.get("existing_entity_profiles", [])
+    if write_db and "existing_entity_profiles" not in cache:
         with entity_store() as ent_store:
             existing_entity_profiles = ent_store.list_all()
+        cache["existing_entity_profiles"] = existing_entity_profiles
 
     core_memory = core_memory_store().load_required()
 
     def _do_state_update():
-        updater = StateUpdater(gateway1)
-        return updater.update(
+        updater = StateUpdater(create_gateway())
+        result = updater.update(
             pending.current_state,
             effective_scene_text,
             core_memory=core_memory,
             trace_id=trace_id,
         )
+        cache["updated_state"] = result
+        return result
 
     def _do_memory_draft_extract():
-        extractor = MemoryDraftExtractor(gateway2)
-        return extractor.extract(
+        extractor = MemoryDraftExtractor(create_gateway())
+        result = extractor.extract(
             effective_scene_text,
             pending.current_state,
             core_memory=core_memory,
@@ -374,28 +473,41 @@ def confirm_opening_stream(
             scene_id=pending.current_state.scene.scene_id,
             trace_id=trace_id,
         )
+        cache["pending_memory_result"] = result
+        return result
 
     def _do_entity_extract():
-        extractor = EntityExtractor(gateway3)
-        return extractor.extract(
+        extractor = EntityExtractor(create_gateway())
+        result = extractor.extract(
             core_memory=core_memory,
             scene_text=effective_scene_text,
             existing_profiles=existing_entity_profiles,
             trace_id=trace_id,
         )
+        cache["entity_extraction"] = result
+        return result
 
+    updated_state = cache.get("updated_state")
+    pending_memory_result = cache.get("pending_memory_result")
+    entity_extraction = cache.get("entity_extraction")
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-        state_fu = pool.submit(_do_state_update)
-        extract_fu = pool.submit(_do_memory_draft_extract)
-        entity_extract_fu = pool.submit(_do_entity_extract) if write_db else None
+        state_fu = pool.submit(_do_state_update) if updated_state is None else None
+        extract_fu = (
+            pool.submit(_do_memory_draft_extract)
+            if pending_memory_result is None
+            else None
+        )
+        entity_extract_fu = (
+            pool.submit(_do_entity_extract)
+            if write_db and entity_extraction is None
+            else None
+        )
 
-        updated_state = None
-        pending_memory_result = None
-        entity_extraction = None
-
-        first_wave = [state_fu, extract_fu]
-        if entity_extract_fu is not None:
-            first_wave.append(entity_extract_fu)
+        first_wave = [
+            future
+            for future in (state_fu, extract_fu, entity_extract_fu)
+            if future is not None
+        ]
 
         for future in concurrent.futures.as_completed(first_wave):
             if future == state_fu:
@@ -419,13 +531,16 @@ def confirm_opening_stream(
                     },
                 }
 
-    pending_memory_items = fill_pending_memory_scene_metadata(
-        pending_memory_result.items,
-        updated_state,
-    )
-    pending_memory_result = pending_memory_result.model_copy(
-        update={"items": pending_memory_items}
-    )
+    if not cache.get("pending_memory_metadata_filled"):
+        pending_memory_items = fill_pending_memory_scene_metadata(
+            pending_memory_result.items,
+            updated_state,
+        )
+        pending_memory_result = pending_memory_result.model_copy(
+            update={"items": pending_memory_items}
+        )
+        cache["pending_memory_result"] = pending_memory_result
+        cache["pending_memory_metadata_filled"] = True
     yield {
         "step": "memory_draft_metadata_filled",
         "data": {
@@ -448,29 +563,10 @@ def confirm_opening_stream(
             trace_id=trace_id,
         )
 
-    updated_entity_ids: list[str] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        action_preview_fu = pool.submit(_do_action_preview)
-        if write_db and entity_extraction is not None:
-            with entity_store() as ent_store:
-                entity_result = update_entity_profiles_from_extraction(
-                    scene_text=effective_scene_text,
-                    current_state=updated_state,
-                    core_memory=core_memory,
-                    gateway=create_gateway(),
-                    entity_store=ent_store,
-                    existing_profiles=existing_entity_profiles,
-                    extraction=entity_extraction,
-                    trace_id=trace_id,
-                )
-                updated_entity_ids = entity_result.saved_ids
-        yield {
-            "step": "entity_profiles_updated",
-            "data": {
-                "updated_entity_ids": updated_entity_ids,
-            },
-        }
-        action_preview = action_preview_fu.result()
+    action_preview = cache.get("action_preview")
+    if action_preview is None:
+        action_preview = _do_action_preview()
+        cache["action_preview"] = action_preview
     yield {
         "step": "action_preview_done",
         "data": {
@@ -478,30 +574,61 @@ def confirm_opening_stream(
         },
     }
 
+    updated_entity_ids: list[str] = cache.get("updated_entity_ids", [])
+    if write_db and entity_extraction is not None and "updated_entity_ids" not in cache:
+        with entity_store() as ent_store:
+            entity_result = update_entity_profiles_from_extraction(
+                scene_text=effective_scene_text,
+                current_state=updated_state,
+                core_memory=core_memory,
+                gateway=create_gateway(),
+                entity_store=ent_store,
+                existing_profiles=existing_entity_profiles,
+                extraction=entity_extraction,
+                trace_id=trace_id,
+            )
+            updated_entity_ids = entity_result.saved_ids
+        cache["updated_entity_ids"] = updated_entity_ids
+    yield {
+        "step": "entity_profiles_updated",
+        "data": {
+            "updated_entity_ids": updated_entity_ids,
+        },
+    }
+
     saved_pending_ids: list[str] = []
     pending_count_after = 0
-    batch_queued = False
+    batch_queued = bool(cache.get("memory_batch_scheduled"))
     store_count_before = 0
     store_count_after = 0
     store_total = 0
 
     if write_db:
-        with current_state_store() as state_store:
-            state_store.save(updated_state)
+        if not cache.get("state_saved"):
+            with current_state_store() as state_store:
+                state_store.save(updated_state)
+            cache["state_saved"] = True
 
         with short_term_memory_store() as short_store:
-            short_store.clear()
-            short_store.add_turn(
-                scene_id=updated_state.scene.scene_id,
-                turn_index=0,
-                user_input="",
-                scene_text=effective_scene_text,
-                narrative_type=effective_narrative_type,
-            )
+            if not cache.get("short_term_saved"):
+                short_store.clear()
+                short_store.add_turn(
+                    scene_id=updated_state.scene.scene_id,
+                    turn_index=0,
+                    user_input="",
+                    scene_text=effective_scene_text,
+                    narrative_type=effective_narrative_type,
+                )
+                cache["short_term_saved"] = True
             short_term_after = short_store.get_recent()
 
         with pending_memory_store() as pending_store:
-            saved_pending_ids = pending_store.save_many(pending_memory_result.items)
+            if not cache.get("pending_memories_saved"):
+                saved_pending_ids = pending_store.save_many(pending_memory_result.items)
+                cache["saved_pending_ids"] = saved_pending_ids
+                cache["pending_memories_saved"] = True
+            else:
+                saved_pending_ids = cache.get("saved_pending_ids", [])
             pending_count_after = pending_store.count()
             should_batch = pending_store.should_trigger_batch(turn_threshold=5)
 
@@ -510,30 +637,34 @@ def confirm_opening_stream(
             store_count_after = store_count_before
             store_total = len(mem_store.list_all())
 
-        if should_batch:
-            batch_queued = True
-            BACKGROUND_EXECUTOR.submit(
+        if should_batch and not cache.get("memory_batch_scheduled"):
+            batch_queued = submit_memory_batch_once(
                 run_memory_batch_maintenance,
                 updated_state,
                 trace_id,
                 core_memory=core_memory,
             )
-        BACKGROUND_EXECUTOR.submit(
-            run_scene_summary_maintenance,
-            effective_scene_text,
-            updated_state,
-            updated_state.scene.scene_id,
-            0,
-            trace_id,
-            core_memory=core_memory,
-        )
+            cache["memory_batch_scheduled"] = batch_queued
+        if not cache.get("scene_summary_scheduled"):
+            BACKGROUND_EXECUTOR.submit(
+                run_scene_summary_maintenance,
+                effective_scene_text,
+                updated_state,
+                updated_state.scene.scene_id,
+                0,
+                trace_id,
+                core_memory=core_memory,
+            )
+            cache["scene_summary_scheduled"] = True
     else:
         with short_term_memory_store() as short_store:
             short_term_after = short_store.get_recent()
         with memory_store() as mem_store:
             store_total = mem_store.count()
 
-    PENDING_OPENINGS.pop(turn_id, None)
+    if write_db:
+        PENDING_OPENINGS.pop(turn_id, None)
+        release_confirmation_lock(turn_id)
 
     memory_data: dict = {
         "pending_items": model_data(pending_memory_result.items),

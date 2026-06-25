@@ -97,7 +97,7 @@ class TestLLMGatewayRetryFlow:
         mock.set_responses(["not json", "also not json", "still bad"])
         gateway = _make_gateway(mock)
 
-        with pytest.raises(LLMOutputValidationError):
+        with pytest.raises(LLMOutputParseError):
             gateway.run(
                 task="echo_structured_test",
                 input_data={"text": "hello"},
@@ -118,6 +118,29 @@ class TestLLMGatewayRetryFlow:
         )
 
         assert result.text == "hello"
+
+    def test_unexpected_programming_error_is_not_retried_or_retyped(self, monkeypatch):
+        mock = MockLLM()
+        mock.set_responses(['{"text": "hello", "length": 5}'])
+        gateway = _make_gateway(mock)
+        calls = 0
+
+        def _raise(_raw_output):
+            nonlocal calls
+            calls += 1
+            raise RuntimeError("programming bug")
+
+        monkeypatch.setattr(gateway, "_parse_json", _raise)
+
+        with pytest.raises(RuntimeError, match="programming bug"):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                max_retries=2,
+            )
+
+        assert calls == 1
 
 
 class TestTraceLogging:
@@ -169,7 +192,7 @@ class TestTraceLogging:
                 tracer=tracer,
             )
 
-            with pytest.raises(LLMOutputValidationError):
+            with pytest.raises(LLMOutputParseError):
                 gateway.run(
                     task="echo_structured_test",
                     input_data={"text": "hello"},
@@ -254,7 +277,7 @@ class TestMockProviderFeatures:
         mock.set_timeout(True)
         gateway = _make_gateway(mock)
 
-        with pytest.raises(LLMOutputValidationError):
+        with pytest.raises(LLMProviderError):
             gateway.run(
                 task="echo_structured_test",
                 input_data={"text": "hello"},
@@ -267,7 +290,7 @@ class TestMockProviderFeatures:
         mock.set_fail_provider(True)
         gateway = _make_gateway(mock)
 
-        with pytest.raises(LLMOutputValidationError):
+        with pytest.raises(LLMProviderError):
             gateway.run(
                 task="echo_structured_test",
                 input_data={"text": "hello"},

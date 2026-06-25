@@ -62,6 +62,10 @@ class ShortTermMemoryStore:
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         self._conn.execute(
+            "DELETE FROM short_term_scenes WHERE turn_index = ?",
+            (turn_index,),
+        )
+        self._conn.execute(
             """
             INSERT INTO short_term_scenes (
                 scene_id, turn_index, user_input, scene_text, narrative_type, created_at

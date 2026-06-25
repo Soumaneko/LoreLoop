@@ -123,8 +123,17 @@ def update_director_event_workflow(
 
     changed_event_id = None
     if selection.action == "activate_suspended":
+        suspended_ids = {event.event_id for event in suspended}
+        if selection.activate_event_id not in suspended_ids:
+            raise ValueError(
+                "DirectorEventSelector selected an event that is not suspended: "
+                f"{selection.activate_event_id}"
+            )
+        if not store.activate(selection.activate_event_id, turn_index=turn_index):
+            raise RuntimeError(
+                f"Failed to activate suspended director event: {selection.activate_event_id}"
+            )
         changed_event_id = selection.activate_event_id
-        store.activate(selection.activate_event_id, turn_index=turn_index)
     else:
         event = selection.new_event.to_event(turn_index=turn_index)
         changed_event_id = store.save(event)

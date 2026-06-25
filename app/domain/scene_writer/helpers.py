@@ -40,8 +40,8 @@ def retrieve_memories_by_entities(
         rrf_layer_intent_weight=0.0,
     )
 
-    retriever = CandidateRetriever(memory_store, config)
-    result = retriever.retrieve(synthetic_parse, top_k=max_results)
+    with CandidateRetriever(memory_store, config) as retriever:
+        result = retriever.retrieve(synthetic_parse, top_k=max_results)
     return result.candidates
 
 
