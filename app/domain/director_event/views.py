@@ -6,7 +6,10 @@ from .schemas import DirectorEvent
 def project_director_event(event: DirectorEvent | None) -> str:
     if event is None:
         return "null"
-    return json.dumps(event.semantic_view(), ensure_ascii=False, indent=2)
+    data = event.semantic_view()
+    if event.phase == "crisis":
+        data.pop("known_to_player", None)
+    return json.dumps(data, ensure_ascii=False, indent=2)
 
 
 def plot_outline_director_event_instructions(event: DirectorEvent | None) -> str:
@@ -14,8 +17,11 @@ def plot_outline_director_event_instructions(event: DirectorEvent | None) -> str
         return ""
     common = (
         "DirectorEvent 是玩家不可见的幕后事件，不得原文暴露、写成任务目标或替玩家决定回应。"
-        "不得重复 known_to_player 中已有的信息。\n"
     )
+    if event.phase != "crisis":
+        common += "不得重复 known_to_player 中已有的信息。\n"
+    else:
+        common += "\n"
     if event.phase == "latent":
         return common + (
             "当前为潜伏阶段。只有当前行动、地点、NPC 或结果与事件存在自然交点时，"
@@ -42,8 +48,10 @@ def turn_resolution_director_event_instructions(event: DirectorEvent | None) -> 
         return ""
     common = (
         "DirectorEvent 是玩家不可见的幕后事件，不得原文暴露、写成任务目标、改变程序判定的"
-        " outcome_band，或重复 known_to_player 中已有信息。"
+        " outcome_band。"
     )
+    if event.phase != "crisis":
+        common += "不得重复 known_to_player 中已有信息。"
     if event.phase == "latent":
         return common + (
             "当前为潜伏阶段。仅当玩家行动或判定结果与事件存在直接而自然的因果交点时，"

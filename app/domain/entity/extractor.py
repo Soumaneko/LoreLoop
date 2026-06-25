@@ -52,6 +52,9 @@ class EntityExtractor:
 
 
 def _profile_for_extraction(index: int, profile: EntityProfile) -> dict:
-    data = profile.semantic_view().model_dump(mode="json")
-    data["entity_index"] = index
-    return data
+    return {
+        "entity_index": index,
+        "entity_type": profile.entity_type,
+        "name": profile.name,
+        "aliases": profile.aliases,
+    }

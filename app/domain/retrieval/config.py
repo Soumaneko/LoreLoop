@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class RetrievalConfig(BaseModel):
-    top_k: int = 20
+    top_k: int = 8
 
     entity_weight: float = 3.0
     tag_weight: float = 2.0

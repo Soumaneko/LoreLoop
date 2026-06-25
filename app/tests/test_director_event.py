@@ -211,6 +211,27 @@ class TestDirectorEventViews:
         assert projected["current_description"] == _stages().latent
         assert "stages" not in projected
 
+    def test_crisis_projection_omits_known_to_player(self):
+        event = _event().model_copy(update={
+            "phase": "crisis",
+            "known_to_player": ["主角已经知道的旧线索"],
+        })
+
+        projected = json.loads(project_director_event(event))
+
+        assert "known_to_player" not in projected
+        assert projected["current_description"] == _stages().crisis
+
+    def test_pre_crisis_projection_keeps_known_to_player(self):
+        event = _event().model_copy(update={
+            "phase": "manifesting",
+            "known_to_player": ["主角已经知道的旧线索"],
+        })
+
+        projected = json.loads(project_director_event(event))
+
+        assert projected["known_to_player"] == ["主角已经知道的旧线索"]
+
     def test_latent_instructions_are_optional_and_relevance_based(self):
         plot = plot_outline_director_event_instructions(_event())
         resolution = turn_resolution_director_event_instructions(_event())

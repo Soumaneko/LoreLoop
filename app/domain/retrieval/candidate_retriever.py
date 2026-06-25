@@ -71,14 +71,16 @@ class CandidateRetriever:
         *,
         top_k: int | None = None,
     ) -> CandidateRetrievalResult:
-        all_memories = self.memory_store.list_active()
-        pending_notes = self._retrieve_pending_notes(parse_result, top_k=top_k or self.config.top_k)
-        total_memories = len(all_memories)
         if top_k is None:
             top_k = self.config.top_k
         top_k = min(max(top_k, 1), 50)
 
+        all_memories = self.memory_store.list_active()
+        pending_notes = self._retrieve_pending_notes(parse_result, top_k=top_k)
+        total_memories = len(all_memories)
+
         if total_memories == 0:
+            pending_notes = pending_notes[:top_k]
             return CandidateRetrievalResult(
                 candidates=[],
                 pending_notes=pending_notes,
@@ -88,6 +90,7 @@ class CandidateRetriever:
 
         anchors = parse_result.anchors
         if not anchors:
+            pending_notes = pending_notes[:top_k]
             return CandidateRetrievalResult(
                 candidates=[],
                 pending_notes=pending_notes,
@@ -106,6 +109,11 @@ class CandidateRetriever:
             retrieval_result,
             parse_result.atomic_actions,
             top_k,
+        )
+        candidates, pending_notes = _limit_combined_results(
+            candidates,
+            pending_notes,
+            top_k=top_k,
         )
 
         return CandidateRetrievalResult(
@@ -392,3 +400,33 @@ class CandidateRetriever:
             }
 
         return info
+
+
+def _limit_combined_results(
+    candidates: list[MemoryCandidate],
+    pending_notes: list[PendingMemoryNote],
+    *,
+    top_k: int,
+) -> tuple[list[MemoryCandidate], list[PendingMemoryNote]]:
+    selected_candidates: list[MemoryCandidate] = []
+    selected_pending: list[PendingMemoryNote] = []
+    candidate_index = 0
+    pending_index = 0
+
+    while len(selected_candidates) + len(selected_pending) < top_k:
+        added = False
+        if candidate_index < len(candidates):
+            selected_candidates.append(candidates[candidate_index])
+            candidate_index += 1
+            added = True
+        if (
+            len(selected_candidates) + len(selected_pending) < top_k
+            and pending_index < len(pending_notes)
+        ):
+            selected_pending.append(pending_notes[pending_index])
+            pending_index += 1
+            added = True
+        if not added:
+            break
+
+    return selected_candidates, selected_pending

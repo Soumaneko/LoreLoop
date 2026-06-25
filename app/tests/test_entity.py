@@ -5,7 +5,7 @@ from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, InventoryItem, NPCState, PlayerState, ResourcesState, SceneState
 from app.domain.entity.linker import EntityMemoryLinker
-from app.domain.entity.extractor import EntityExtractor
+from app.domain.entity.extractor import EntityExtractor, _profile_for_extraction
 from app.domain.entity.schemas import (
     EntityExtractionResult,
     EntityProfile,
@@ -107,6 +107,28 @@ class TestEntityStore:
 
 
 class TestEntityExtractor:
+    def test_existing_profile_prompt_only_contains_identity_fields(self):
+        existing = EntityProfile(
+            entity_id="ent_milly",
+            entity_type="npc",
+            name="米莉",
+            aliases=["酒馆侍者"],
+            summary="不应传给实体提取器的完整档案。",
+            role="酒馆侍者",
+            personality_traits=["机敏"],
+            known_abilities=["调酒"],
+            confidence=0.9,
+        )
+
+        projected = _profile_for_extraction(0, existing)
+
+        assert projected == {
+            "entity_index": 0,
+            "entity_type": "npc",
+            "name": "米莉",
+            "aliases": ["酒馆侍者"],
+        }
+
     def test_extracts_alias_matches_and_retrieved_entities(self):
         existing = EntityProfile(
             entity_id="ent_milly",

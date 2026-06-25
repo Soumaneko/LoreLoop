@@ -7,7 +7,10 @@ from app.domain.action.schemas import (
 )
 from app.domain.recall_memory.schemas import Memory, MemoryRecord
 from app.domain.recall_memory.store import MemoryStore
-from app.domain.retrieval.candidate_retriever import CandidateRetriever
+from app.domain.retrieval.candidate_retriever import (
+    CandidateRetriever,
+    _limit_combined_results,
+)
 from app.domain.retrieval.config import RetrievalConfig
 
 
@@ -893,6 +896,23 @@ class TestActionProximityBoost:
 # ══════════════════════════════════════════════════════════════════
 
 class TestTopK:
+    def test_default_top_k_is_eight(self):
+        assert RetrievalConfig().top_k == 8
+
+    def test_top_k_limits_classified_and_pending_combined(self):
+        candidates = [object() for _ in range(10)]
+        pending_notes = [object() for _ in range(10)]
+
+        selected_candidates, selected_pending = _limit_combined_results(
+            candidates,
+            pending_notes,
+            top_k=8,
+        )
+
+        assert len(selected_candidates) == 4
+        assert len(selected_pending) == 4
+        assert len(selected_candidates) + len(selected_pending) == 8
+
     def test_top_k_limits_results(self):
         store = MemoryStore(":memory:")
         for i in range(25):
