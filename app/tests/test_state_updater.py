@@ -455,6 +455,27 @@ class TestStateUpdaterNPCAbsentTurns:
         sarah = next(n for n in result.npcs if n.name == "莎拉")
         assert sarah.absent_turns == 0
 
+    def test_alias_mentioned_npc_absent_turns_reset(self):
+        state = _make_state()
+        state.npcs[0] = state.npcs[0].model_copy(update={"absent_turns": 2})
+        updated_json = _build_updated_state_json({
+            "mentioned_npcs": ["米莉·奥斯沃斯"],
+        })
+        mock = MockLLM()
+        mock.set_responses([updated_json])
+
+        result = StateUpdater(mock.build_gateway()).update(
+            state,
+            "米莉·奥斯沃斯向主角点头致意，莎拉并未出现。",
+            core_memory=CoreMemory(items=[]),
+            npc_aliases={"米莉": ["米莉·奥斯沃斯"]},
+        )
+
+        milly = next(n for n in result.npcs if n.name == "米莉")
+        sarah = next(n for n in result.npcs if n.name == "莎拉")
+        assert milly.absent_turns == 0
+        assert sarah.absent_turns == 1
+
     def test_new_npc_absent_turns_starts_at_zero(self):
         state = _make_state()
         updated_json = _build_updated_state_json({

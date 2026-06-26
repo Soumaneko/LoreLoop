@@ -113,7 +113,7 @@ class TestSceneSummarizer:
     def test_summarize_turn_retries_when_content_exceeds_hard_limit(self):
         mock = MockLLM()
         mock.set_responses([
-            json.dumps({"content": "长" * 221}, ensure_ascii=False),
+            json.dumps({"content": "长" * 301}, ensure_ascii=False),
             json.dumps({"content": "合规摘要。"}, ensure_ascii=False),
         ])
 
@@ -130,7 +130,7 @@ class TestSceneSummarizer:
     def test_condense_retries_when_content_exceeds_hard_limit(self):
         mock = MockLLM()
         mock.set_responses([
-            json.dumps({"content": "长" * 321}, ensure_ascii=False),
+            json.dumps({"content": "长" * 401}, ensure_ascii=False),
             json.dumps({"content": "合规汇总。"}, ensure_ascii=False),
         ])
 
@@ -182,6 +182,6 @@ class TestSceneSummaryPrompts:
         summarize_prompt = (PROMPT_DIR / "scene_summarize_v1.md").read_text(encoding="utf-8")
         condense_prompt = (PROMPT_DIR / "scene_summary_condense_v1.md").read_text(encoding="utf-8")
 
-        assert "硬性上限 220" in summarize_prompt
-        assert "硬性上限 320" in condense_prompt
+        assert "硬性上限 300" in summarize_prompt
+        assert "硬性上限 400" in condense_prompt
         assert "不得随 source summaries 数量线性增长" in condense_prompt

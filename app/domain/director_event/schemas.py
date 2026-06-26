@@ -34,9 +34,14 @@ class DirectorEvent(BaseModel):
     stages: DirectorEventStages
     related_npcs: list[str] = Field(default_factory=list)
     location_constraints: list[str] = Field(default_factory=list)
+    manifesting_prevention_hooks: list[str] = Field(default_factory=list)
+    crisis_resolution_hooks: list[str] = Field(default_factory=list)
     known_to_player: list[str] | None
     hidden_developments: list[str] | None
     suspended_reason: str | None = None
+    resolved_by_hook: str | None = None
+    resolved_reason: str | None = None
+    resolved_turn: int | None = Field(default=None, ge=0)
     created_turn: int = Field(ge=0)
     updated_turn: int | None = Field(default=None, ge=0)
     created_at: str = Field(default_factory=utc_now)
@@ -51,6 +56,8 @@ class DirectorEvent(BaseModel):
             "current_description": getattr(self.stages, self.phase),
             "related_npcs": self.related_npcs,
             "location_constraints": self.location_constraints,
+            "manifesting_prevention_hooks": self.manifesting_prevention_hooks,
+            "crisis_resolution_hooks": self.crisis_resolution_hooks,
             "known_to_player": self.known_to_player,
             "hidden_developments": self.hidden_developments,
         }
@@ -61,6 +68,8 @@ class DirectorEventDraft(BaseModel):
     stages: DirectorEventStages
     related_npcs: list[str] = Field(default_factory=list)
     location_constraints: list[str] = Field(default_factory=list)
+    manifesting_prevention_hooks: list[str] = Field(min_length=3, max_length=3)
+    crisis_resolution_hooks: list[str] = Field(min_length=3, max_length=3)
 
     def to_event(self, *, turn_index: int, status: DirectorEventStatus = "active") -> DirectorEvent:
         now = utc_now()
@@ -72,6 +81,8 @@ class DirectorEventDraft(BaseModel):
             stages=self.stages,
             related_npcs=self.related_npcs,
             location_constraints=self.location_constraints,
+            manifesting_prevention_hooks=self.manifesting_prevention_hooks,
+            crisis_resolution_hooks=self.crisis_resolution_hooks,
             known_to_player=None,
             hidden_developments=None,
             created_turn=turn_index,
@@ -90,6 +101,8 @@ class DirectorEventReviewResult(BaseModel):
     phase_advance_reason: str | None
     known_to_player_updates: list[str] | None
     hidden_development_updates: list[str] | None
+    matched_manifesting_prevention_hook: str | None = None
+    matched_crisis_resolution_hook: str | None = None
 
     @model_validator(mode="after")
     def _validate_suspended_reason(self):
@@ -110,10 +123,17 @@ class DirectorEventReviewResult(BaseModel):
             raise ValueError(
                 "phase_advance_reason must be null when phase advance is not recommended"
             )
+        if self.matched_manifesting_prevention_hook and self.matched_crisis_resolution_hook:
+            raise ValueError(
+                "only one director event hook can be matched in a single review"
+            )
         return self
 
 
 class DirectorEventSelectionResult(BaseModel):
+    suspension_evaluation: str = Field(min_length=1)
+    backstage_undercurrent: str | None = None
+    player_connection: str | None = None
     action: SelectionAction
     reason: str = Field(min_length=1)
     activate_event_id: str | None = None
@@ -123,6 +143,11 @@ class DirectorEventSelectionResult(BaseModel):
     def _validate_action_payload(self):
         if self.action == "activate_suspended" and not self.activate_event_id:
             raise ValueError("activate_event_id is required when action is activate_suspended")
-        if self.action == "create_new" and self.new_event is None:
-            raise ValueError("new_event is required when action is create_new")
+        if self.action == "create_new":
+            if self.new_event is None:
+                raise ValueError("new_event is required when action is create_new")
+            if not (self.backstage_undercurrent or "").strip():
+                raise ValueError("backstage_undercurrent is required when action is create_new")
+            if not (self.player_connection or "").strip():
+                raise ValueError("player_connection is required when action is create_new")
         return self

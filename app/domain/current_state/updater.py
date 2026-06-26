@@ -1,5 +1,6 @@
 import json
 import re
+from typing import cast
 
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
@@ -9,6 +10,7 @@ from app.domain.current_state.schemas import (
     PHASE_ORDER,
     PlayerState,
     ResourcesState,
+    SceneState,
     WorldClock,
 )
 from pydantic import BaseModel, Field
@@ -66,6 +68,7 @@ class StateUpdater:
         scene_text: str,
         *,
         core_memory: CoreMemory,
+        npc_aliases: dict[str, list[str]] | None = None,
         trace_id: str | None = None,
     ) -> CurrentState:
         state_for_llm = current_state.model_copy(deep=True)
@@ -76,16 +79,19 @@ class StateUpdater:
 
         schema = _CurrentStateUpdate.model_json_schema()
 
-        llm_result = self.llm.run(
-            task="state_update",
-            input_data={
-                "core_memory_json": core_memory.model_dump_json(indent=2),
-                "current_state_json": json.dumps(state_data, ensure_ascii=False, indent=2),
-                "scene_text": scene_text,
-                "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
-            },
-            output_schema=_CurrentStateUpdate,
-            trace_id=trace_id,
+        llm_result = cast(
+            _CurrentStateUpdate,
+            self.llm.run(
+                task="state_update",
+                input_data={
+                    "core_memory_json": core_memory.model_dump_json(indent=2),
+                    "current_state_json": json.dumps(state_data, ensure_ascii=False, indent=2),
+                    "scene_text": scene_text,
+                    "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
+                },
+                output_schema=_CurrentStateUpdate,
+                trace_id=trace_id,
+            ),
         )
 
         if llm_result.scene.location != current_state.scene.location:
@@ -97,13 +103,16 @@ class StateUpdater:
             current_npcs=current_state.npcs,
             updated_npcs=llm_result.npcs,
             mentioned_npcs=llm_result.mentioned_npcs,
+            npc_aliases=npc_aliases,
         )
 
         return CurrentState(
-            scene={
-                **llm_result.scene.model_dump(),
-                "scene_id": scene_id,
-            },
+            scene=SceneState(
+                scene_id=scene_id,
+                location=llm_result.scene.location,
+                participants=llm_result.scene.participants,
+                atmosphere=llm_result.scene.atmosphere,
+            ),
             world_clock=world_clock,
             player=llm_result.player,
             npcs=npcs,
@@ -116,22 +125,28 @@ def _apply_absent_turns(
     current_npcs: list[NPCState],
     updated_npcs: list[_NPCStateUpdate],
     mentioned_npcs: list[str],
+    npc_aliases: dict[str, list[str]] | None = None,
 ) -> list[NPCState]:
     old_absent = {
         npc.name: npc.absent_turns
         for npc in current_npcs
     }
+    variant_map = _build_alias_variant_map(npc_aliases or {})
     mentioned = {
-        name.strip()
+        _norm_name(name)
         for name in mentioned_npcs
-        if name.strip()
+        if name and name.strip()
     }
 
     cleaned: list[NPCState] = []
     for npc in updated_npcs:
+        norm_name = _norm_name(npc.name)
+        variants = variant_map.get(norm_name, {norm_name})
+        is_mentioned = bool(variants & mentioned)
+
         if npc.name not in old_absent:
             absent_turns = 0
-        elif npc.name in mentioned:
+        elif is_mentioned:
             absent_turns = 0
         else:
             absent_turns = old_absent.get(npc.name, 0) + 1
@@ -140,6 +155,25 @@ def _apply_absent_turns(
         if updated.absent_turns < _STALE_NPC_THRESHOLD:
             cleaned.append(updated)
     return cleaned
+
+
+def _norm_name(value: str) -> str:
+    return str(value).strip().casefold()
+
+
+def _build_alias_variant_map(
+    npc_aliases: dict[str, list[str]],
+) -> dict[str, set[str]]:
+    variant_map: dict[str, set[str]] = {}
+    for name, aliases in npc_aliases.items():
+        variants = {_norm_name(name)}
+        for alias in aliases or []:
+            if alias and str(alias).strip():
+                variants.add(_norm_name(alias))
+        variants.discard("")
+        for variant in variants:
+            variant_map.setdefault(variant, set()).update(variants)
+    return variant_map
 
 
 def _apply_world_clock_update(

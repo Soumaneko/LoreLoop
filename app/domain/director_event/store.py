@@ -63,6 +63,39 @@ class DirectorEventStore:
     def list_archived(self) -> list[DirectorEvent]:
         return self._list_by_status("archived")
 
+    def get_latest_inactive(self) -> DirectorEvent | None:
+        row = self._conn.execute(
+            """
+            SELECT event_json FROM director_events
+            WHERE status IN ('archived', 'suspended')
+            ORDER BY COALESCE(updated_turn, created_turn) DESC, updated_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        return self._event_from_row(row) if row else None
+
+    def get_recent_archived(
+        self,
+        *,
+        turn_index: int,
+        cooldown_turns: int,
+    ) -> DirectorEvent | None:
+        row = self._conn.execute(
+            """
+            SELECT event_json FROM director_events
+            WHERE status = 'archived'
+            ORDER BY COALESCE(updated_turn, created_turn) DESC, updated_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if row is None:
+            return None
+        event = self._event_from_row(row)
+        resolved_turn = event.resolved_turn or event.updated_turn
+        if resolved_turn is None or turn_index > resolved_turn + cooldown_turns:
+            return None
+        return event
+
     def list_all(self) -> list[DirectorEvent]:
         rows = self._conn.execute(
             "SELECT event_json FROM director_events ORDER BY created_turn ASC, created_at ASC"
@@ -100,7 +133,14 @@ class DirectorEventStore:
         self.save(updated)
         return True
 
-    def archive_active(self, event_id: str, *, turn_index: int) -> bool:
+    def archive_active(
+        self,
+        event_id: str,
+        *,
+        turn_index: int,
+        resolved_by_hook: str | None = None,
+        resolved_reason: str | None = None,
+    ) -> bool:
         event = self.get_by_id(event_id)
         if event is None or event.status != "active":
             return False
@@ -108,6 +148,9 @@ class DirectorEventStore:
             update={
                 "status": "archived",
                 "suspended_reason": None,
+                "resolved_by_hook": resolved_by_hook or event.resolved_by_hook,
+                "resolved_reason": resolved_reason or event.resolved_reason,
+                "resolved_turn": turn_index if resolved_by_hook else event.resolved_turn,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
             }

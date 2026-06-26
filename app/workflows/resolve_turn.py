@@ -21,6 +21,7 @@ def resolve_turn_workflow(
     scene_summaries: list[SceneSummary],
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     director_event: DirectorEvent | None = None,
+    recent_archived_director_event: DirectorEvent | None = None,
     gateway: LLMGateway,
     previous_types: list[NarrativeType] | None = None,
     resolver: TurnResolutionAgent | None = None,
@@ -37,6 +38,7 @@ def resolve_turn_workflow(
         scene_summaries=scene_summaries,
         entity_profiles=entity_profiles or [],
         director_event=director_event,
+        recent_archived_director_event=recent_archived_director_event,
         previous_types=previous_types,
         trace_id=trace_id,
     )

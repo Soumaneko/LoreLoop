@@ -25,7 +25,7 @@ class SceneSummarizer:
     ) -> SceneSummary:
         from app.domain.views import project_current_state
 
-        runtime_schema = _summary_draft_schema(max_length=220)
+        runtime_schema = _summary_draft_schema(max_length=300)
         draft = cast(
             SceneSummaryDraft,
             self._llm.run(
@@ -35,6 +35,11 @@ class SceneSummarizer:
                     "scene_text": scene_text,
                     "scene_id": scene_id,
                     "current_state_json": project_current_state(current_state),
+                    "output_schema_json": json.dumps(
+                        runtime_schema.model_json_schema(),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                 },
                 output_schema=runtime_schema,
                 trace_id=trace_id,
@@ -59,7 +64,7 @@ class SceneSummarizer:
     ) -> SceneSummary:
         if not source_summaries:
             raise ValueError("source_summaries is required")
-        runtime_schema = _summary_draft_schema(max_length=320)
+        runtime_schema = _summary_draft_schema(max_length=400)
         draft = cast(
             SceneSummaryDraft,
             self._llm.run(

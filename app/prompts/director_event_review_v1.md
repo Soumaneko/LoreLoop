@@ -4,6 +4,7 @@
 你不写剧情正文，不创建新事件，不更新 CurrentState。
 你还需要根据本轮确认剧情，抽取 active 事件的动态信息增量。
 你还需要在极严格条件下，判断是否应建议程序提前推进事件阶段。
+如果事件处于 manifesting 或 crisis，你还需要判断本轮玩家行动是否已经命中当前事件的抓手条件。
 
 ## CoreMemory
 
@@ -92,10 +93,26 @@
 3. hidden_development_updates：
    - 填写本轮剧情中，因为玩家行动、NPC 行动或时间推移，导致 active 事件幕后实际发生的新发展。
    - 这些信息可以是玩家不知道的，但必须由 scene_text 明确建立，或是本轮已发生行动能够直接确定的结果。
+   - 此字段不等于“负面升级”。它可以记录危机缓解、敌方受阻、资源被消耗、弱点暴露、盟友介入、误会解开、局势转向或事件进入可收束状态。
+   - 当玩家行动实际削弱、延缓、转移或解决 active 事件时，必须优先记录这种缓解性发展，不要强行补写新的负面推进。
    - 不得仅凭 current_description，把其中尚未在本轮发生的完整事件进展抄入 hidden_development_updates。
    - 不得从一个局部征兆补全其原因、规模和后果。例如 scene_text 只有远处巨响时，只能记录“相关方向出现巨响”，不能据此断言某个设施已被摧毁、道路已被封锁或某种物质已开始扩散。
    - current_description 是当前阶段的背景范围，不是要求你宣告其中每个细节都已在本轮具体发生。
    - 如果本轮没有新增隐藏发展，填 null。
+
+4. matched_manifesting_prevention_hook：
+   - 仅当 active_event_json.phase = "manifesting" 时可以填写；其他阶段必须填 null。
+   - 如果本轮玩家行动的明确结果已经满足 manifesting_prevention_hooks 中某一条，使事件不应再进入 crisis，填写被满足的那条原文或等价短句。
+   - 必须基于 scene_text 的明确结果；“准备去做”“打算调查”“获得一点线索”“可能有帮助”都不算满足。
+   - 仅当玩家行动直接终结、摧毁或中止了事件的引擎（源头、驱动或升级机制）才算满足；只是保护受害者、降低损害或拖延波及（如疏散、护城、阻断风向）不算满足，因为事件引擎仍会推动其进入 crisis。
+   - 未满足则填 null。
+
+5. matched_crisis_resolution_hook：
+   - 仅当 active_event_json.phase = "crisis" 时可以填写；其他阶段必须填 null。
+   - 如果本轮玩家行动的明确结果已经满足 crisis_resolution_hooks 中某一条，使危机已经收束、失败、转向或失去继续 active 的叙事意义，填写被满足的那条原文或等价短句。
+   - 必须基于 scene_text 的明确结果；“开始反击”“找到方向”“拖延了一下”通常不算满足，除非抓手条件本身就是拖延并且 scene_text 明确达成。
+   - 仅当玩家行动直接终结、摧毁或中止了危机的引擎（活化体本体、源头、控制者或其关键维持资源）才算满足；只是保护受害者或降低附带损害（疏散平民、加固防线、阻断风向）不算满足，因为事件本体仍在泛滥、仍 active。
+   - 未满足则填 null。
 
 
 ## 输出要求
@@ -106,6 +123,7 @@ suspended_reason 仅在 decision=suspend_active 时填写；否则为 null。
 phase_advance_recommended 只是严格条件下的提前推进建议，最终阶段由程序决定。
 phase_advance_reason 仅在 phase_advance_recommended=true 时填写；否则为 null。
 known_to_player_updates 和 hidden_development_updates 只记录本轮新增项；没有新增时填 null。
+matched_manifesting_prevention_hook 和 matched_crisis_resolution_hook 只允许填写当前阶段实际命中的抓手；不能猜测未来可能命中。
 
 只输出符合以下 schema 的 JSON，不要有任何解释：
 

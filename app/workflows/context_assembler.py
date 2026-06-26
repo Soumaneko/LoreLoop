@@ -20,6 +20,7 @@ class PlotOutlineContext(BaseModel):
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     director_event: DirectorEvent | None = None
+    recent_archived_director_event: DirectorEvent | None = None
 
 
 def assemble_context(
@@ -33,6 +34,7 @@ def assemble_context(
     scene_summaries: list[SceneSummary] | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     director_event: DirectorEvent | None = None,
+    recent_archived_director_event: DirectorEvent | None = None,
 ) -> PlotOutlineContext:
     return PlotOutlineContext(
         user_input=user_input,
@@ -44,4 +46,5 @@ def assemble_context(
         scene_summaries=scene_summaries or [],
         entity_profiles=entity_profiles or [],
         director_event=director_event,
+        recent_archived_director_event=recent_archived_director_event,
     )

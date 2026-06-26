@@ -40,6 +40,22 @@ def _stages() -> DirectorEventStages:
     )
 
 
+def _manifesting_hooks() -> list[str]:
+    return [
+        "找到并公开被截获信件的藏匿点",
+        "说服旧磨坊看守交出绑架者路线",
+        "切断绑架者继续截获信件的道路暗哨",
+    ]
+
+
+def _crisis_hooks() -> list[str]:
+    return [
+        "救出被用作诱饵的后续信使",
+        "夺回能证明袭击命令来源的密信",
+        "迫使绑架者首领在守卫面前暴露身份",
+    ]
+
+
 def _event(title="失踪的信使", status="active") -> DirectorEvent:
     return DirectorEvent(
         title=title,
@@ -49,6 +65,8 @@ def _event(title="失踪的信使", status="active") -> DirectorEvent:
         stages=_stages(),
         related_npcs=["信使"],
         location_constraints=["北郡"],
+        manifesting_prevention_hooks=_manifesting_hooks(),
+        crisis_resolution_hooks=_crisis_hooks(),
         known_to_player=None,
         hidden_developments=None,
         created_turn=1,
@@ -267,6 +285,29 @@ class TestDirectorEventViews:
 
         assert projected["known_to_player"] == ["主角已经知道的旧线索"]
 
+    def test_recent_archived_projection_uses_resolution_hook_json(self):
+        event = _event().model_copy(
+            update={
+                "status": "archived",
+                "resolved_by_hook": _crisis_hooks()[0],
+                "resolved_reason": "诱饵信使已获救。",
+                "resolved_turn": 4,
+                "updated_turn": 4,
+            }
+        )
+
+        projected = json.loads(project_director_event(None, recent_archived_event=event))
+
+        assert projected["status"] == "recently_archived"
+        assert projected["resolved_by_hook"] == _crisis_hooks()[0]
+        assert projected["message"] == f"由于{_crisis_hooks()[0]}，『失踪的信使』事件已收束。"
+
+    def test_projection_exposes_stage_hooks(self):
+        projected = json.loads(project_director_event(_event()))
+
+        assert projected["manifesting_prevention_hooks"] == _manifesting_hooks()
+        assert projected["crisis_resolution_hooks"] == _crisis_hooks()
+
     def test_latent_instructions_are_optional_and_relevance_based(self):
         plot = plot_outline_director_event_instructions(_event())
         resolution = turn_resolution_director_event_instructions(_event())
@@ -283,7 +324,7 @@ class TestDirectorEventViews:
     def test_crisis_instructions_require_real_impact(self):
         event = _event().model_copy(update={"phase": "crisis"})
 
-        assert "必须对本回合的现实局势产生实质影响" in plot_outline_director_event_instructions(event)
+        assert "可操作抓手" in plot_outline_director_event_instructions(event)
         assert "必须考虑危机" in turn_resolution_director_event_instructions(event)
 
     def test_missing_event_gets_no_prompt_instructions(self):
@@ -372,6 +413,127 @@ class TestDirectorEventWorkflow:
         assert store.get_active().phase == "manifesting"
         assert "phase_advanced_by_reviewer" in result.notes
 
+    def test_manifesting_hook_archives_event_before_crisis(self):
+        store = DirectorEventStore()
+        active = _event().model_copy(update={"phase": "manifesting", "phase_turns_elapsed": 2})
+        store.save(active)
+
+        result = _run_review(
+            store,
+            _review_response(
+                reason="主角已经切断绑架者继续截信的暗哨，事件不会进入公开危机。",
+                evidence=["卢西安拆除了道路暗哨，并把暗哨交给守卫"],
+                hidden_development_updates=["绑架者失去继续截获信件的前置据点"],
+                matched_manifesting_prevention_hook=_manifesting_hooks()[2],
+            ),
+            turn_index=6,
+        )
+
+        archived = store.get_by_id(active.event_id)
+        assert archived.status == "archived"
+        assert archived.resolved_by_hook == _manifesting_hooks()[2]
+        assert archived.resolved_reason == result.review_result.reason
+        assert archived.resolved_turn == 6
+        assert "archived_by_manifesting_prevention_hook" in result.notes
+
+    def test_crisis_hook_archives_event(self):
+        store = DirectorEventStore()
+        active = _event().model_copy(update={"phase": "crisis", "phase_turns_elapsed": 1})
+        store.save(active)
+
+        result = _run_review(
+            store,
+            _review_response(
+                reason="主角救出了作为诱饵的信使，危机失去继续扩大的核心条件。",
+                evidence=["卢西安把后续信使从伏击圈中救出"],
+                hidden_development_updates=["绑架者的诱饵计划失败，交通危机开始收束"],
+                matched_crisis_resolution_hook=_crisis_hooks()[0],
+            ),
+            turn_index=7,
+        )
+
+        archived = store.get_by_id(active.event_id)
+        assert archived.status == "archived"
+        assert "archived_by_crisis_resolution_hook" in result.notes
+
+    def test_no_active_event_enters_three_turn_cooldown_after_archive(self):
+        store = DirectorEventStore()
+        active = _event()
+        store.save(active)
+        store.archive_active(
+            active.event_id,
+            turn_index=4,
+            resolved_by_hook=_crisis_hooks()[0],
+            resolved_reason="诱饵信使已获救。",
+        )
+        gateway = _SpyGateway(
+            {
+                "action": "create_new",
+                "suspension_evaluation": "无暂停事件可自然衔接当前局势，进入新事件构思。",
+                "backstage_undercurrent": "一支隐秘的走私团伙正在暗中囤积军械。",
+                "player_connection": "走私活动波及主角当前所在区域的补给线。",
+                "reason": "冷却结束后创建新事件。",
+                "activate_event_id": None,
+                "new_event": {
+                    "title": "钟楼下的旧教团",
+                    "stages": _stages().model_dump(),
+                    "related_npcs": ["旧教团残党"],
+                    "location_constraints": ["北郡钟楼"],
+                    "manifesting_prevention_hooks": _manifesting_hooks(),
+                    "crisis_resolution_hooks": _crisis_hooks(),
+                },
+            }
+        )
+
+        cooling = update_director_event_workflow(
+            user_input="继续。",
+            scene_text="卢西安继续前进。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+            turn_index=7,
+            store=store,
+            reviewer=DirectorEventReviewer(gateway),
+            selector=DirectorEventSelector(gateway),
+        )
+
+        assert cooling.mode == "cooldown"
+        assert store.get_active() is None
+        assert gateway.calls == []
+
+        created = update_director_event_workflow(
+            user_input="继续。",
+            scene_text="卢西安继续前进。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+            turn_index=8,
+            store=store,
+            reviewer=DirectorEventReviewer(gateway),
+            selector=DirectorEventSelector(gateway),
+        )
+
+        assert created.mode == "select_or_create"
+        assert store.get_active().title == "钟楼下的旧教团"
+
+    def test_any_matched_hook_archives_even_if_phase_is_unexpected(self):
+        store = DirectorEventStore()
+        active = _event().model_copy(update={"phase": "latent", "phase_turns_elapsed": 1})
+        store.save(active)
+
+        _run_review(
+            store,
+            _review_response(
+                reason="模型判断玩家行动已经满足事件阻断抓手。",
+                evidence=["卢西安公开了被截获信件的藏匿点"],
+                matched_manifesting_prevention_hook=_manifesting_hooks()[0],
+            ),
+            turn_index=4,
+        )
+
+        archived = store.get_by_id(active.event_id)
+        assert archived.status == "archived"
+
     def test_selects_suspended_event_when_no_active(self):
         store = DirectorEventStore()
         suspended = _event(status="suspended")
@@ -379,6 +541,7 @@ class TestDirectorEventWorkflow:
         gateway = _SpyGateway(
             {
                 "action": "activate_suspended",
+                "suspension_evaluation": "暂停事件可自然衔接当前局势，决定重新激活。",
                 "reason": "主角回到北郡，事件重新适合当前剧情。",
                 "activate_event_id": suspended.event_id,
                 "new_event": None,
@@ -391,7 +554,7 @@ class TestDirectorEventWorkflow:
             current_state=_state(),
             core_memory=_core(),
             scene_summaries=[],
-            turn_index=3,
+            turn_index=5,
             store=store,
             reviewer=DirectorEventReviewer(gateway),
             selector=DirectorEventSelector(gateway),
@@ -404,6 +567,7 @@ class TestDirectorEventWorkflow:
         gateway = _SpyGateway(
             {
                 "action": "activate_suspended",
+                "suspension_evaluation": "无激活理由。",
                 "reason": "错误引用。",
                 "activate_event_id": "missing_event",
                 "new_event": None,
@@ -428,6 +592,9 @@ class TestDirectorEventWorkflow:
         gateway = _SpyGateway(
             {
                 "action": "create_new",
+                "suspension_evaluation": "无暂停事件可自然衔接当前局势，进入新事件构思。",
+                "backstage_undercurrent": "一支隐秘的走私团伙正在暗中囤积军械。",
+                "player_connection": "走私活动波及主角当前所在区域的补给线。",
                 "reason": "当前剧情需要一个与北郡相关的新后台事件。",
                 "activate_event_id": None,
                 "new_event": {
@@ -435,6 +602,8 @@ class TestDirectorEventWorkflow:
                     "stages": _stages().model_dump(),
                     "related_npcs": ["旧教团残党"],
                     "location_constraints": ["北郡钟楼"],
+                    "manifesting_prevention_hooks": _manifesting_hooks(),
+                    "crisis_resolution_hooks": _crisis_hooks(),
                 },
             }
         )
@@ -454,6 +623,8 @@ class TestDirectorEventWorkflow:
         active = store.get_active()
         assert active.phase == "latent"
         assert active.stages.crisis == _stages().crisis
+        assert active.manifesting_prevention_hooks == _manifesting_hooks()
+        assert active.crisis_resolution_hooks == _crisis_hooks()
 
 
 class TestDirectorEventAgents:
@@ -497,6 +668,9 @@ class TestDirectorEventAgents:
         gateway = _SpyGateway(
             {
                 "action": "create_new",
+                "suspension_evaluation": "无暂停事件可自然衔接当前局势，进入新事件构思。",
+                "backstage_undercurrent": "一名流亡贵族正在暗中招募旧部，图谋复辟。",
+                "player_connection": "流亡贵族的招募活动延伸到主角所在的北郡钟楼一带。",
                 "reason": "当前剧情需要一个不重复的新后台事件。",
                 "activate_event_id": None,
                 "new_event": {
@@ -504,6 +678,8 @@ class TestDirectorEventAgents:
                     "stages": _stages().model_dump(),
                     "related_npcs": ["旧教团残党"],
                     "location_constraints": ["北郡钟楼"],
+                    "manifesting_prevention_hooks": _manifesting_hooks(),
+                    "crisis_resolution_hooks": _crisis_hooks(),
                 },
             }
         )

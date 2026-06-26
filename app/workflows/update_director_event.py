@@ -18,6 +18,8 @@ PHASE_MAX_ACTIVE_TURNS = {
     "manifesting": 3,
 }
 
+DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS = 3
+
 
 class DirectorEventWorkflowResult(BaseModel):
     mode: str
@@ -60,8 +62,19 @@ def update_director_event_workflow(
             hidden_development_updates=review.hidden_development_updates,
             turn_index=turn_index,
         )
-        if review.decision == "archive_active":
-            store.archive_active(active.event_id, turn_index=turn_index)
+        prevention_hook_met = bool(review.matched_manifesting_prevention_hook)
+        crisis_hook_met = bool(review.matched_crisis_resolution_hook)
+        if review.decision == "archive_active" or prevention_hook_met or crisis_hook_met:
+            resolved_by_hook = (
+                review.matched_manifesting_prevention_hook
+                or review.matched_crisis_resolution_hook
+            )
+            store.archive_active(
+                active.event_id,
+                turn_index=turn_index,
+                resolved_by_hook=resolved_by_hook,
+                resolved_reason=review.reason if resolved_by_hook else None,
+            )
         elif review.decision == "suspend_active":
             store.suspend(
                 active.event_id,
@@ -90,6 +103,10 @@ def update_director_event_workflow(
 
         active_after = store.get_active()
         notes = ["reviewed_existing_active_event"]
+        if prevention_hook_met:
+            notes.append("archived_by_manifesting_prevention_hook")
+        if crisis_hook_met:
+            notes.append("archived_by_crisis_resolution_hook")
         if (
             review.decision == "keep_active"
             and active_after is not None
@@ -108,6 +125,18 @@ def update_director_event_workflow(
             changed_event_id=changed_event_id,
             notes=notes,
         )
+
+    latest_inactive = store.get_latest_inactive()
+    if latest_inactive is not None:
+        inactive_turn = latest_inactive.updated_turn or latest_inactive.created_turn
+        if turn_index <= inactive_turn + DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS:
+            return DirectorEventWorkflowResult(
+                mode="cooldown",
+                active_before=None,
+                active_after=None,
+                changed_event_id=latest_inactive.event_id,
+                notes=["director_event_idle_cooldown"],
+            )
 
     suspended = store.list_suspended()
     archived = store.list_archived()

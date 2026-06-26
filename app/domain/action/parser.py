@@ -1,3 +1,6 @@
+import json
+from typing import cast
+
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import (
     ActionExtractionResult,
@@ -64,15 +67,23 @@ class ActionParser:
         core_memory: CoreMemory,
         trace_id: str | None = None,
     ) -> AnchorExtractionResult:
-        return self.anchor_llm.run(
-            task="anchor_extract",
-            input_data={
-                "user_input": user_input,
-                "current_state_json": project_current_state(current_state),
-                "core_memory_json": core_memory.model_dump_json(indent=2),
-            },
-            output_schema=AnchorExtractionResult,
-            trace_id=trace_id,
+        return cast(
+            AnchorExtractionResult,
+            self.anchor_llm.run(
+                task="anchor_extract",
+                input_data={
+                    "user_input": user_input,
+                    "current_state_json": project_current_state(current_state),
+                    "core_memory_json": core_memory.model_dump_json(indent=2),
+                    "output_schema_json": json.dumps(
+                        AnchorExtractionResult.model_json_schema(),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                },
+                output_schema=AnchorExtractionResult,
+                trace_id=trace_id,
+            ),
         )
 
     def extract_actions(
@@ -85,15 +96,23 @@ class ActionParser:
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         trace_id: str | None = None,
     ) -> ActionExtractionResult:
-        return self.action_llm.run(
-            task="action_extract",
-            input_data={
-                "user_input": user_input,
-                "current_state_json": project_current_state(current_state),
-                "core_memory_json": core_memory.model_dump_json(indent=2),
-                "recent_summaries_json": project_scene_summaries(recent_summaries or []),
-                "entity_profiles_json": project_entity_profiles(entity_profiles or []),
-            },
-            output_schema=ActionExtractionResult,
-            trace_id=trace_id,
+        return cast(
+            ActionExtractionResult,
+            self.action_llm.run(
+                task="action_extract",
+                input_data={
+                    "user_input": user_input,
+                    "current_state_json": project_current_state(current_state),
+                    "core_memory_json": core_memory.model_dump_json(indent=2),
+                    "recent_summaries_json": project_scene_summaries(recent_summaries or []),
+                    "entity_profiles_json": project_entity_profiles(entity_profiles or []),
+                    "output_schema_json": json.dumps(
+                        ActionExtractionResult.model_json_schema(),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                },
+                output_schema=ActionExtractionResult,
+                trace_id=trace_id,
+            ),
         )

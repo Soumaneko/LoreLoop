@@ -122,10 +122,18 @@ def _confirm_turn_stream_locked(
         gateway = create_gateway()
         gateway.set_trace_context(turn_index=pending.turn_index, session_type="confirmation")
         updater = StateUpdater(gateway)
+        npc_aliases = {
+            profile.name: list(profile.aliases)
+            for profile in existing_entity_profiles
+            if getattr(profile, "entity_type", None) == "npc"
+            and profile.name
+            and profile.aliases
+        }
         result = updater.update(
             pending.state_before,
             effective_scene_text,
             core_memory=core_memory,
+            npc_aliases=npc_aliases,
             trace_id=trace_id,
         )
         cache["updated_state"] = result

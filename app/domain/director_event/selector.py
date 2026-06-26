@@ -36,7 +36,7 @@ class DirectorEventSelector:
                         indent=2,
                     ),
                     "archived_events_json": json.dumps(
-                        [event.model_dump(mode="json") for event in archived_events],
+                        [{"title": event.title} for event in archived_events],
                         ensure_ascii=False,
                         indent=2,
                     ),

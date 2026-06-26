@@ -91,9 +91,13 @@ class PlotOutlineAgent:
                     "retrieved_memories_json": project_retrieved_memories(context.retrieved_memories),
                     "scene_summaries_json": project_scene_summaries(context.scene_summaries),
                     "entity_profiles_json": project_entity_profiles(context.entity_profiles),
-                    "director_event_json": project_director_event(context.director_event),
+                    "director_event_json": project_director_event(
+                        context.director_event,
+                        recent_archived_event=context.recent_archived_director_event,
+                    ),
                     "director_event_instructions": plot_outline_director_event_instructions(
-                        context.director_event
+                        context.director_event,
+                        recent_archived_event=context.recent_archived_director_event,
                     ),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },

@@ -17,6 +17,7 @@ from app.workflows.generate_scene import (
 from app.workflows.resolve_rolls import resolve_rolls_workflow
 from app.workflows.resolve_turn import resolve_turn_workflow
 from app.workflows.retrieve_candidates import retrieve_candidates_workflow
+from app.workflows.update_director_event import DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS
 from app.workflows.update_entity_profiles import gather_entity_profiles_from_state_and_anchors
 
 from .serialization import model_data
@@ -69,6 +70,14 @@ def generate_turn_stream(
 
     with director_event_store() as director_store:
         active_director_event = director_store.get_active()
+        recent_archived_director_event = (
+            None
+            if active_director_event is not None
+            else director_store.get_recent_archived(
+                turn_index=turn_index,
+                cooldown_turns=DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS,
+            )
+        )
 
     yield {
         "step": "state_loaded",
@@ -80,6 +89,7 @@ def generate_turn_stream(
             "scene_summaries": model_data(scene_summaries),
             "recent_summaries": model_data(recent_summaries),
             "active_director_event": model_data(active_director_event),
+            "recent_archived_director_event": model_data(recent_archived_director_event),
         },
     }
 
@@ -202,6 +212,7 @@ def generate_turn_stream(
         scene_summaries=scene_summaries,
         entity_profiles=action_entity_profile_views,
         director_event=active_director_event,
+        recent_archived_director_event=recent_archived_director_event,
         gateway=gateway,
         previous_types=recent_narrative_types(short_term_memory),
         trace_id=trace_id,
@@ -224,6 +235,7 @@ def generate_turn_stream(
         scene_summaries=scene_summaries,
         entity_profiles=action_entity_profile_views,
         director_event=active_director_event,
+        recent_archived_director_event=recent_archived_director_event,
     )
 
     yield {
