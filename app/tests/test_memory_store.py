@@ -34,7 +34,8 @@ class TestMemoryStoreSaveAndRead:
             records = store.list_all()
             assert len(records) == 1
             r = records[0]
-            assert r.subtype == "fact"
+            assert r.memory_kind == "open_thread"
+            assert r.evidence_mode == "inferred"
             assert r.subject == "测试记忆"
             assert r.content == "这是一条测试记忆内容。"
             assert r.entities == ["主角"]
@@ -111,10 +112,20 @@ class TestMemoryStoreDedup:
             assert len(ids2) == 0
             assert store.count() == 1
 
-    def test_different_subtype_allows_save(self):
+    def test_different_memory_kind_allows_save(self):
         with MemoryStore(":memory:") as store:
-            m1 = _make_memory(subtype="fact", subject="同主题", content="同内容")
-            m2 = _make_memory(subtype="event", subject="同主题", content="同内容")
+            m1 = _make_memory(
+                memory_kind="open_thread",
+                evidence_mode="observed",
+                subject="同主题",
+                content="同内容",
+            )
+            m2 = _make_memory(
+                memory_kind="action_constraint",
+                evidence_mode="observed",
+                subject="同主题",
+                content="同内容",
+            )
 
             ids = store.save_many([m1, m2])
             assert len(ids) == 2
@@ -147,7 +158,7 @@ class TestMemoryStoreActiveRecords:
             assert second_id == first_id
             assert store.count() == 1
 
-    def test_save_one_returning_id_reactivates_existing_duplicate(self):
+    def test_save_one_returning_id_does_not_reactivate_inactive_duplicate(self):
         with MemoryStore(":memory:") as store:
             first_id = store.save_one_returning_id(_make_memory(subject="重复", content="同内容"))
             replacement_id = store.save_one_returning_id(_make_memory(subject="替代", content="新内容"))
@@ -157,8 +168,8 @@ class TestMemoryStoreActiveRecords:
 
             assert returned_id == first_id
             record = store.get_by_id(first_id)
-            assert record.active is True
-            assert record.merged_into is None
+            assert record.status == "superseded"
+            assert record.superseded_by == replacement_id
 
     def test_different_subject_allows_save(self):
         with MemoryStore(":memory:") as store:

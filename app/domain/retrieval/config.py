@@ -39,177 +39,62 @@ IDF_CLAMP_MIN = 0.5
 IDF_CLAMP_MAX = 2.0
 
 
-ACTION_TYPE_SUBTYPE_INTENT_BOOST: dict[str, dict[str, float]] = {
+ACTION_TYPE_MEMORY_KIND_BOOST: dict[str, dict[str, float]] = {
     "signal_ally": {
-        "agreement": 5.0,
-        "trait": 1.5,
-        "relationship": 1.0,
-        "fact": 0.5,
-        "item": 0.5,
-        "event": 0.5,
+        "commitment": 4.0,
+        "relationship_state": 2.0,
+        "action_constraint": 1.0,
     },
     "instruct_ally": {
-        "agreement": 3.0,
-        "relationship": 2.0,
-        "trait": 1.5,
-        "fact": 0.5,
-        "item": 0.5,
-        "event": 0.5,
+        "commitment": 3.0,
+        "relationship_state": 2.0,
+        "action_constraint": 2.0,
     },
     "inspect_object": {
-        "item": 4.0,
-        "event": 2.0,
-        "fact": 2.0,
-        "agreement": 0.5,
-        "trait": 0.5,
-        "relationship": 0.5,
+        "resource_access": 3.0,
+        "open_thread": 2.0,
+        "belief": 1.0,
     },
     "interact_object": {
-        "item": 4.0,
-        "agreement": 1.0,
-        "fact": 0.5,
-        "trait": 0.5,
-        "relationship": 0.5,
-        "event": 0.5,
+        "resource_access": 4.0,
+        "action_constraint": 1.5,
+        "commitment": 1.0,
     },
     "observe": {
-        "trait": 2.0,
-        "fact": 2.0,
-        "event": 1.5,
-        "item": 1.5,
-        "agreement": 0.5,
-        "relationship": 0.5,
+        "open_thread": 2.5,
+        "belief": 2.0,
+        "action_constraint": 1.0,
     },
     "speak": {
-        "relationship": 3.0,
-        "agreement": 2.0,
-        "trait": 2.0,
-        "fact": 1.0,
-        "item": 1.0,
-        "event": 1.0,
+        "belief": 3.0,
+        "commitment": 2.5,
+        "relationship_state": 2.0,
+        "resource_access": 1.0,
     },
     "hide_or_stealth": {
-        "trait": 2.0,
-        "fact": 2.0,
-        "event": 1.0,
-        "agreement": 0.5,
-        "relationship": 0.5,
-        "item": 0.5,
+        "action_constraint": 3.0,
+        "open_thread": 1.5,
+        "belief": 1.0,
     },
     "move": {
-        "fact": 2.0,
-        "event": 1.0,
-        "item": 1.0,
-        "agreement": 0.5,
-        "trait": 0.5,
-        "relationship": 0.5,
+        "open_thread": 2.0,
+        "action_constraint": 1.5,
+        "resource_access": 0.5,
     },
 }
-
-
-ACTION_TYPE_LAYER_BOOST: dict[str, dict[str, float]] = {
-    "observe": {"truth": 1.2, "claim": 0.8, "belief": 0.5, "profile": 0.4},
-    "inspect_object": {"truth": 1.2, "claim": 0.6, "belief": 0.4, "profile": 0.4},
-    "interact_object": {"truth": 1.0, "claim": 0.6, "belief": 0.4, "profile": 0.5},
-    "speak": {"claim": 1.2, "belief": 1.0, "profile": 0.8, "truth": 0.7},
-    "signal_ally": {"belief": 1.1, "profile": 1.0, "claim": 0.8, "truth": 0.7},
-    "instruct_ally": {"belief": 1.1, "profile": 1.0, "claim": 0.8, "truth": 0.7},
-    "hide_or_stealth": {"truth": 1.0, "profile": 0.8, "belief": 0.6, "claim": 0.5},
-    "attack": {"truth": 1.0, "profile": 0.8, "belief": 0.4, "claim": 0.3},
-    "defend": {"truth": 1.0, "profile": 0.8, "belief": 0.5, "claim": 0.4},
-    "cast_or_use_power": {"truth": 1.0, "profile": 0.7, "claim": 0.5, "belief": 0.4},
-    "move": {"truth": 1.1, "claim": 0.6, "belief": 0.4, "profile": 0.4},
-    "wait": {"truth": 0.8, "claim": 0.6, "belief": 0.5, "profile": 0.5},
-    "other": {"truth": 0.8, "claim": 0.7, "belief": 0.6, "profile": 0.6},
-}
-
-
-ACTION_TYPE_SUBTYPE_BOOST: dict[str, dict[str, float]] = {
-    "observe": {
-        "fact": 0.5,
-        "event": 0.4,
-        "location_state": 0.5,
-        "item": 0.3,
-        "secret": 0.3,
-    },
-    "inspect_object": {
-        "item": 0.6,
-        "resource": 0.5,
-        "fact": 0.4,
-        "location_state": 0.4,
-        "secret": 0.3,
-    },
-    "interact_object": {
-        "item": 0.6,
-        "resource": 0.5,
-        "agreement": 0.3,
-        "location_state": 0.3,
-    },
-    "speak": {
-        "testimony": 0.6,
-        "rumor": 0.5,
-        "belief": 0.5,
-        "misunderstanding": 0.4,
-        "relationship": 0.4,
-        "agreement": 0.4,
-    },
-    "signal_ally": {
-        "relationship": 0.5,
-        "agreement": 0.5,
-        "belief": 0.4,
-        "trait": 0.4,
-        "goal": 0.4,
-    },
-    "instruct_ally": {
-        "relationship": 0.5,
-        "agreement": 0.5,
-        "belief": 0.4,
-        "trait": 0.4,
-        "goal": 0.4,
-    },
-    "hide_or_stealth": {
-        "location_state": 0.5,
-        "trait": 0.4,
-        "event": 0.3,
-        "secret": 0.3,
-    },
-    "attack": {
-        "trait": 0.5,
-        "event": 0.4,
-        "fact": 0.3,
-        "item": 0.3,
-    },
-    "defend": {
-        "trait": 0.5,
-        "event": 0.4,
-        "fact": 0.3,
-        "item": 0.3,
-    },
-    "cast_or_use_power": {
-        "fact": 0.4,
-        "trait": 0.4,
-        "item": 0.3,
-        "secret": 0.3,
-    },
-    "move": {
-        "location_state": 0.6,
-        "event": 0.4,
-        "fact": 0.3,
-    },
-}
-
 
 PAST_REF_KEYWORDS = [
     "之前", "上次", "老办法", "约好的", "见过的", "那个", "同样的",
 ]
 
 
-PAST_REF_SUBTYPE_BOOST: dict[str, float] = {
-    "agreement": 3.0,
-    "event": 2.0,
-    "item": 2.0,
-    "trait": 1.5,
-    "relationship": 1.0,
+PAST_REF_MEMORY_KIND_BOOST: dict[str, float] = {
+    "commitment": 3.0,
+    "open_thread": 2.5,
+    "resource_access": 2.0,
+    "relationship_state": 1.5,
+    "belief": 1.5,
+    "action_constraint": 1.0,
 }
 
 

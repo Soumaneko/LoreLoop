@@ -191,7 +191,9 @@ class CandidateRetriever:
                         entities=item.entities,
                         location=item.location,
                         time_label=item.time_label,
-                        extractor_hint=item.extractor_hint,
+                        memory_kind=item.memory_kind,
+                        subject=item.subject,
+                        owner=item.owner,
                         importance_hint=item.importance_hint,
                         score=score,
                         matched_anchors=sorted(matched_anchors),
@@ -303,8 +305,8 @@ class CandidateRetriever:
             results.append(
                 MemoryCandidate(
                     memory_id=mem.id,
-                    layer=mem.layer,
-                    subtype=mem.subtype,
+                    memory_kind=mem.memory_kind,
+                    evidence_mode=mem.evidence_mode,
                     subject=mem.subject,
                     content=mem.content,
                     entities=list(mem.entities),

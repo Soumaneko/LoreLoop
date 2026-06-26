@@ -1,6 +1,8 @@
 import json
 from dataclasses import dataclass, field
 
+from pydantic import model_validator
+
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -51,6 +53,14 @@ class MemoryBatchClassifier:
         if not pending_items:
             return MemoryBatchClassifierResult()
 
+        expected_pending_items = list(pending_items)
+
+        class CoveredMemoryBatchClassificationResult(MemoryBatchClassificationResult):
+            @model_validator(mode="after")
+            def _validate_complete_pending_coverage(self):
+                _validate_pending_coverage(self, expected_pending_items)
+                return self
+
         llm_result = self._llm.run(
             task="memory_batch_classify",
             input_data={
@@ -65,8 +75,13 @@ class MemoryBatchClassifier:
                     ensure_ascii=False,
                     indent=2,
                 ),
+                "output_schema_json": json.dumps(
+                    MemoryBatchClassificationResult.model_json_schema(),
+                    ensure_ascii=False,
+                    indent=2,
+                ),
             },
-            output_schema=MemoryBatchClassificationResult,
+            output_schema=CoveredMemoryBatchClassificationResult,
             trace_id=trace_id,
         )
 
@@ -111,3 +126,29 @@ def _summarize_current_state(current_state: CurrentState) -> dict:
         "flags": getattr(current_state, "flags", []),
         "open_threads": getattr(current_state, "open_threads", []),
     }
+
+
+def _validate_pending_coverage(
+    result: MemoryBatchClassificationResult,
+    pending_items: list[PendingMemoryItem],
+) -> None:
+    expected = {item.id for item in pending_items}
+    referenced: list[str] = [
+        pending_id
+        for candidate in result.candidates
+        for pending_id in candidate.source_pending_ids
+    ]
+    referenced_set = set(referenced)
+    missing = sorted(expected - referenced_set)
+    unknown = sorted(referenced_set - expected)
+    counts: dict[str, int] = {}
+    for pending_id in referenced:
+        counts[pending_id] = counts.get(pending_id, 0) + 1
+    duplicates = sorted(
+        pending_id for pending_id, count in counts.items() if count > 1
+    )
+    if missing or unknown or duplicates:
+        raise ValueError(
+            "memory batch candidate coverage invalid: "
+            f"missing={missing}, unknown={unknown}, duplicates={duplicates}"
+        )

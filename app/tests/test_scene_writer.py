@@ -348,7 +348,8 @@ class TestSceneWriterWorkflow:
 
         assert len(selected) == 1
         assert selected[0].memory_id == "pending:pending_001"
-        assert selected[0].layer == "pending"
+        assert selected[0].memory_kind == "belief"
+        assert selected[0].evidence_mode == "inferred"
         assert selected[0].content == "米莉刚刚提到暴风城调查团有异常动向。"
         assert selected[0].source_pending_ids == ["pending_001"]
 

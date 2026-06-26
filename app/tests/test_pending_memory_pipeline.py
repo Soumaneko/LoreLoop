@@ -165,6 +165,44 @@ class TestMemoryDraftExtractor:
             assert item.classified is False
             assert pending_store.count() == 1
 
+    def test_extract_discards_model_generated_location_and_time_label(self):
+        mock = MockLLM()
+        mock.set_responses(
+            [
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "raw_text": "老板声称钥匙被送往钟楼。",
+                                "source_text_span": ["老板压低声音说，钥匙被送往钟楼。"],
+                                "entities": ["老板", "钥匙", "钟楼"],
+                                "extractor_hint": "reported_info",
+                                "importance_hint": "high",
+                                "location": "模型瞎编的地点",
+                                "time_label": "第999日凌晨",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                )
+            ]
+        )
+        extractor = MemoryDraftExtractor(mock.build_gateway())
+
+        result = extractor.extract(
+            "老板压低声音说，钥匙被送往钟楼。",
+            _state(),
+            core_memory=CoreMemory(items=[]),
+            turn_index=7,
+        )
+
+        assert len(result.items) == 1
+        item = result.items[0]
+        assert item.scene_id == "scene_001"
+        assert item.turn_index == 7
+        assert item.location is None
+        assert item.time_label is None
+
     def test_scene_metadata_can_be_filled_from_updated_state_after_extract(self):
         item = PendingMemoryItem(
             scene_id="scene_001",
@@ -260,11 +298,11 @@ class TestBatchClassifyPendingMemories:
             assert len(result.saved_ids) == 1
             assert pending_store.unclassified_turn_count() == 0
             assert result.batch_classify_count == 1
-            assert result.should_consolidate is False
+            assert result.should_maintain is True
 
             memory = memory_store.list_all()[0]
-            assert memory.layer == "claim"
-            assert memory.subtype == "rumor"
+            assert memory.memory_kind == "belief"
+            assert memory.evidence_mode == "reported"
             assert memory.confidence == 0.9
             assert memory.source_pending_ids == ["pending_a", "pending_b"]
             assert len(memory.source_text_span) == 2

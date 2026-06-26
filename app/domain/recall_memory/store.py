@@ -3,7 +3,17 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 
-from app.domain.recall_memory.schemas import Memory, MemoryRecord
+from app.domain.recall_memory.schemas import (
+    Memory,
+    MemoryRecord,
+    MemoryStatus,
+    legacy_evidence_mode,
+    legacy_memory_kind,
+)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 class MemoryStore:
@@ -15,11 +25,29 @@ class MemoryStore:
 
     def _init_table(self) -> None:
         self._create_table()
+        self._migrate_legacy_schema()
         self._conn.execute("DROP INDEX IF EXISTS idx_memories_dedup")
         self._conn.execute(
             """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_dedup
-            ON memories(layer, subtype, IFNULL(owner, ''), subject, entities_json, content)
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_dedup_v2
+            ON memories(
+                memory_kind, evidence_mode, IFNULL(owner, ''),
+                subject, entities_json, content
+            )
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memories_status_created
+            ON memories(status, created_at)
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memory_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
             """
         )
         self._conn.commit()
@@ -29,8 +57,8 @@ class MemoryStore:
             """
             CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY,
-                layer TEXT NOT NULL DEFAULT 'truth',
-                subtype TEXT NOT NULL DEFAULT 'fact',
+                memory_kind TEXT,
+                evidence_mode TEXT,
                 subject TEXT NOT NULL,
                 content TEXT NOT NULL,
                 entities_json TEXT NOT NULL DEFAULT '[]',
@@ -44,32 +72,88 @@ class MemoryStore:
                 source_scene_id TEXT,
                 source_text_span_json TEXT NOT NULL DEFAULT '[]',
                 source_pending_ids_json TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'active',
+                status_reason TEXT,
+                superseded_by TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT '',
+                layer TEXT NOT NULL DEFAULT 'truth',
+                subtype TEXT NOT NULL DEFAULT 'fact',
                 active INTEGER NOT NULL DEFAULT 1,
-                merged_into TEXT,
-                created_at TEXT NOT NULL
+                merged_into TEXT
             )
             """
         )
 
+    def _migrate_legacy_schema(self) -> None:
+        columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(memories)").fetchall()
+        }
+        additions = {
+            "memory_kind": "TEXT",
+            "evidence_mode": "TEXT",
+            "status": "TEXT NOT NULL DEFAULT 'active'",
+            "status_reason": "TEXT",
+            "superseded_by": "TEXT",
+            "updated_at": "TEXT NOT NULL DEFAULT ''",
+        }
+        for name, ddl in additions.items():
+            if name not in columns:
+                self._conn.execute(f"ALTER TABLE memories ADD COLUMN {name} {ddl}")
+
+        rows = self._conn.execute(
+            """
+            SELECT id, layer, subtype, active, merged_into, created_at,
+                   memory_kind, evidence_mode, status, superseded_by, updated_at
+            FROM memories
+            """
+        ).fetchall()
+        for row in rows:
+            memory_kind = row["memory_kind"] or legacy_memory_kind(
+                row["layer"], row["subtype"]
+            )
+            evidence_mode = row["evidence_mode"] or legacy_evidence_mode(row["layer"])
+            status = row["status"] or (
+                "active" if bool(row["active"]) else "superseded"
+            )
+            if not bool(row["active"]) and status == "active":
+                status = "superseded"
+            superseded_by = row["superseded_by"] or row["merged_into"]
+            updated_at = row["updated_at"] or row["created_at"] or _utc_now()
+            self._conn.execute(
+                """
+                UPDATE memories
+                SET memory_kind = ?, evidence_mode = ?, status = ?,
+                    superseded_by = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    memory_kind,
+                    evidence_mode,
+                    status,
+                    superseded_by,
+                    updated_at,
+                    row["id"],
+                ),
+            )
+
     def _make_dedup_key(self, memory: Memory) -> tuple:
         return (
-            memory.layer,
-            memory.subtype,
+            memory.memory_kind,
+            memory.evidence_mode,
             memory.owner or "",
             memory.subject,
             json.dumps(sorted(memory.entities), ensure_ascii=False),
             memory.content,
         )
 
-    def _exists(self, memory: Memory) -> bool:
-        return self._get_existing_id(memory) is not None
-
     def _get_existing_id(self, memory: Memory) -> str | None:
         row = self._conn.execute(
             """
             SELECT id FROM memories
-            WHERE layer = ?
-              AND subtype = ?
+            WHERE memory_kind = ?
+              AND evidence_mode = ?
               AND IFNULL(owner, '') = ?
               AND subject = ?
               AND entities_json = ?
@@ -81,13 +165,11 @@ class MemoryStore:
 
     def save_many(self, memories: list[Memory]) -> list[str]:
         saved_ids: list[str] = []
-        now = datetime.now(timezone.utc).isoformat()
-
+        now = _utc_now()
         for memory in memories:
             memory_id = self._insert_memory(memory, now=now)
             if memory_id is not None:
                 saved_ids.append(memory_id)
-
         self._conn.commit()
         return saved_ids
 
@@ -96,18 +178,18 @@ class MemoryStore:
         cursor = self._conn.execute(
             """
             INSERT OR IGNORE INTO memories (
-                id, layer, subtype, subject, content,
+                id, memory_kind, evidence_mode, subject, content,
                 entities_json, location, time_label,
                 visibility_json, tags_json,
                 confidence, salience, owner,
                 source_scene_id, source_text_span_json, source_pending_ids_json,
-                active, merged_into, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status, status_reason, superseded_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 memory_id,
-                memory.layer,
-                memory.subtype,
+                memory.memory_kind,
+                memory.evidence_mode,
                 memory.subject,
                 memory.content,
                 json.dumps(sorted(memory.entities), ensure_ascii=False),
@@ -121,8 +203,10 @@ class MemoryStore:
                 memory.source_scene_id,
                 json.dumps(memory.source_text_span, ensure_ascii=False),
                 json.dumps(memory.source_pending_ids, ensure_ascii=False),
-                1,
+                "active",
                 None,
+                None,
+                now,
                 now,
             ),
         )
@@ -131,13 +215,8 @@ class MemoryStore:
     def save_one_returning_id(self, memory: Memory) -> str:
         existing_id = self._get_existing_id(memory)
         if existing_id is not None:
-            self._conn.execute(
-                "UPDATE memories SET active = 1, merged_into = NULL WHERE id = ?",
-                (existing_id,),
-            )
-            self._conn.commit()
             return existing_id
-        now = datetime.now(timezone.utc).isoformat()
+        now = _utc_now()
         memory_id = self._insert_memory(memory, now=now)
         self._conn.commit()
         if memory_id is None:
@@ -155,7 +234,11 @@ class MemoryStore:
 
     def list_active(self) -> list[MemoryRecord]:
         rows = self._conn.execute(
-            "SELECT * FROM memories WHERE active = 1 ORDER BY created_at DESC"
+            """
+            SELECT * FROM memories
+            WHERE status = 'active'
+            ORDER BY created_at DESC
+            """
         ).fetchall()
         return [self._row_to_record(row) for row in rows]
 
@@ -163,15 +246,13 @@ class MemoryStore:
         row = self._conn.execute(
             "SELECT * FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
-        if row is None:
-            return None
-        return self._row_to_record(row)
+        return self._row_to_record(row) if row is not None else None
 
     def _row_to_record(self, row: sqlite3.Row) -> MemoryRecord:
         return MemoryRecord(
             id=row["id"],
-            layer=row["layer"],
-            subtype=row["subtype"],
+            memory_kind=row["memory_kind"],
+            evidence_mode=row["evidence_mode"],
             subject=row["subject"],
             content=row["content"],
             entities=json.loads(row["entities_json"]),
@@ -185,30 +266,87 @@ class MemoryStore:
             source_scene_id=row["source_scene_id"],
             source_text_span=json.loads(row["source_text_span_json"]),
             source_pending_ids=json.loads(row["source_pending_ids_json"]),
+            status=row["status"],
+            status_reason=row["status_reason"],
+            superseded_by=row["superseded_by"],
             created_at=row["created_at"],
-            active=bool(row["active"]),
-            merged_into=row["merged_into"],
+            updated_at=row["updated_at"],
         )
 
     def count(self) -> int:
-        row = self._conn.execute("SELECT COUNT(*) FROM memories").fetchone()
-        return row[0]
+        return int(self._conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0])
 
-    def deactivate(self, memory_id: str, *, merged_into: str) -> None:
-        self._conn.execute(
-            "UPDATE memories SET active = 0, merged_into = ? WHERE id = ?",
-            (merged_into, memory_id),
-        )
-        self._conn.commit()
-
-    def deactivate_many(self, memory_ids: list[str], *, merged_into: str) -> None:
+    def set_status(
+        self,
+        memory_ids: list[str],
+        *,
+        status: MemoryStatus,
+        reason: str,
+        superseded_by: str | None = None,
+    ) -> None:
         if not memory_ids:
             return
+        now = _utc_now()
         self._conn.executemany(
-            "UPDATE memories SET active = 0, merged_into = ? WHERE id = ?",
-            [(merged_into, memory_id) for memory_id in memory_ids],
+            """
+            UPDATE memories
+            SET status = ?, status_reason = ?, superseded_by = ?,
+                updated_at = ?, active = ?, merged_into = ?
+            WHERE id = ? AND status = 'active'
+            """,
+            [
+                (
+                    status,
+                    reason,
+                    superseded_by,
+                    now,
+                    int(status == "active"),
+                    superseded_by,
+                    memory_id,
+                )
+                for memory_id in memory_ids
+            ],
         )
         self._conn.commit()
+
+    def get_meta_int(self, key: str, default: int = 0) -> int:
+        row = self._conn.execute(
+            "SELECT value FROM memory_meta WHERE key = ?", (key,)
+        ).fetchone()
+        if row is None:
+            return default
+        try:
+            return int(row["value"])
+        except (TypeError, ValueError):
+            return default
+
+    def set_meta_int(self, key: str, value: int) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO memory_meta(key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (key, str(value)),
+        )
+        self._conn.commit()
+
+    # Compatibility helpers for old callers during migration.
+    def deactivate(self, memory_id: str, *, merged_into: str) -> None:
+        self.set_status(
+            [memory_id],
+            status="superseded",
+            reason="merged_by_legacy_consolidator",
+            superseded_by=merged_into,
+        )
+
+    def deactivate_many(self, memory_ids: list[str], *, merged_into: str) -> None:
+        self.set_status(
+            memory_ids,
+            status="superseded",
+            reason="merged_by_legacy_consolidator",
+            superseded_by=merged_into,
+        )
 
     def close(self) -> None:
         self._conn.close()

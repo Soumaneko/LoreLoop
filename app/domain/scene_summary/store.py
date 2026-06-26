@@ -102,6 +102,24 @@ class SceneSummaryStore:
         active.sort(key=lambda summary: (-summary.turn_end, summary.level))
         return active[:limit]
 
+    def list_l1_since(
+        self,
+        turn_index: int,
+        *,
+        through_turn: int | None = None,
+    ) -> list[SceneSummary]:
+        sql = (
+            "SELECT * FROM scene_summaries "
+            "WHERE level = 1 AND turn_end > ?"
+        )
+        params: list[int] = [turn_index]
+        if through_turn is not None:
+            sql += " AND turn_end <= ?"
+            params.append(through_turn)
+        sql += " ORDER BY turn_start ASC, turn_end ASC, created_at ASC"
+        rows = self._conn.execute(sql, tuple(params)).fetchall()
+        return [self._row_to_summary(row) for row in rows]
+
     def mark_condensed(self, ids: list[str], *, condensed_into: str) -> int:
         if not ids:
             return 0

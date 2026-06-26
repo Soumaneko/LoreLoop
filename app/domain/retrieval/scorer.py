@@ -1,11 +1,11 @@
 from app.domain.action.schemas import Anchor, AtomicAction
 from app.domain.recall_memory.schemas import MemoryRecord
 from app.domain.retrieval.config import (
-    ACTION_TYPE_SUBTYPE_INTENT_BOOST,
+    ACTION_TYPE_MEMORY_KIND_BOOST,
     KIND_FACTOR,
     LOW_WEIGHT_ANCHOR_KINDS,
     PAST_REF_KEYWORDS,
-    PAST_REF_SUBTYPE_BOOST,
+    PAST_REF_MEMORY_KIND_BOOST,
     RetrievalConfig,
 )
 from app.domain.retrieval.normalizer import normalize_text
@@ -83,8 +83,8 @@ class MemoryScorer:
         subtype_boost = 0.0
         if has_match:
             for action in atomic_actions:
-                boost_map = ACTION_TYPE_SUBTYPE_INTENT_BOOST.get(action.action_type, {})
-                subtype_boost += boost_map.get(memory.subtype, 0.0)
+                boost_map = ACTION_TYPE_MEMORY_KIND_BOOST.get(action.action_type, {})
+                subtype_boost += boost_map.get(memory.memory_kind, 0.0)
         breakdown["subtype_boost"] = subtype_boost
 
         past_ref_boost = 0.0
@@ -138,7 +138,7 @@ class MemoryScorer:
         if not has_past_ref:
             return 0.0
 
-        boost = PAST_REF_SUBTYPE_BOOST.get(memory.subtype, 0.0)
+        boost = PAST_REF_MEMORY_KIND_BOOST.get(memory.memory_kind, 0.0)
 
         if boost > 0 and matched_anchor_texts:
             entity_anchor_matched = any(

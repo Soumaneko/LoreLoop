@@ -121,8 +121,8 @@ class TestMemoryCandidateShape:
 
         assert len(result.candidates) == 1
         candidate = result.candidates[0]
-        assert candidate.layer == "claim"
-        assert candidate.subtype == "testimony"
+        assert candidate.memory_kind == "belief"
+        assert candidate.evidence_mode == "reported"
         assert candidate.owner == "守卫"
         assert candidate.visibility == ["主角"]
         assert candidate.confidence == pytest.approx(0.7)
@@ -264,7 +264,7 @@ class TestSecretSignalRecall:
         result = retriever.retrieve(parse_result)
 
         assert len(result.candidates) >= 1
-        assert result.candidates[0].subtype == "agreement"
+        assert result.candidates[0].memory_kind == "commitment"
         assert result.candidates[0].subject == "沉默暗号"
         assert result.candidates[0].score > 0
         assert "entity_score" in result.candidates[0].score_breakdown

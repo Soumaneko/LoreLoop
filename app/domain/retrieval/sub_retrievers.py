@@ -4,14 +4,12 @@ from dataclasses import dataclass, field
 from app.domain.action.schemas import Anchor, AtomicAction
 from app.domain.recall_memory.schemas import MemoryRecord
 from app.domain.retrieval.config import (
-    ACTION_TYPE_LAYER_BOOST,
-    ACTION_TYPE_SUBTYPE_INTENT_BOOST,
-    ACTION_TYPE_SUBTYPE_BOOST,
+    ACTION_TYPE_MEMORY_KIND_BOOST,
     IDF_CLAMP_MAX,
     IDF_CLAMP_MIN,
     KIND_FACTOR,
     PAST_REF_KEYWORDS,
-    PAST_REF_SUBTYPE_BOOST,
+    PAST_REF_MEMORY_KIND_BOOST,
     RetrievalConfig,
 )
 from app.domain.retrieval.normalizer import normalize_text
@@ -230,8 +228,9 @@ def layer_intent_retrieve(
 
         score = 0.0
         for action in ctx.atomic_actions:
-            score += ACTION_TYPE_LAYER_BOOST.get(action.action_type, {}).get(mem.layer, 0.0)
-            score += ACTION_TYPE_SUBTYPE_BOOST.get(action.action_type, {}).get(mem.subtype, 0.0)
+            score += ACTION_TYPE_MEMORY_KIND_BOOST.get(
+                action.action_type, {}
+            ).get(mem.memory_kind, 0.0)
 
         salience = getattr(mem, "salience", 0.5)
 
@@ -280,11 +279,11 @@ def subtype_intent_retrieve(
             continue
 
         for action in ctx.atomic_actions:
-            boost_map = ACTION_TYPE_SUBTYPE_INTENT_BOOST.get(action.action_type, {})
-            score += boost_map.get(mem.subtype, 0.0)
+            boost_map = ACTION_TYPE_MEMORY_KIND_BOOST.get(action.action_type, {})
+            score += boost_map.get(mem.memory_kind, 0.0)
 
         if has_past_ref:
-            score += PAST_REF_SUBTYPE_BOOST.get(mem.subtype, 0.0)
+            score += PAST_REF_MEMORY_KIND_BOOST.get(mem.memory_kind, 0.0)
             if entity_scores.get(mem.id, 0.0) > 0 and any(
                 a.kind in entity_anchor_kinds for a in ctx.anchors
             ):

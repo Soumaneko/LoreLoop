@@ -203,6 +203,41 @@ class TestDirectorEventReviewSchema:
             DirectorEventReviewResult.model_validate(response)
 
 
+class TestDirectorEventReviewerInput:
+    def _review(self, event):
+        spy = _SpyGateway(_review_response())
+        DirectorEventReviewer(spy).review(
+            active_event=event,
+            user_input="我继续行动。",
+            scene_text="卢西安完成了本轮行动。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+        )
+        return json.loads(spy.calls[0]["input_data"]["active_event_json"])
+
+    def test_reviewer_omits_known_to_player_in_crisis(self):
+        event = _event().model_copy(update={
+            "phase": "crisis",
+            "known_to_player": ["主角已经知道的旧线索"],
+        })
+
+        sent = self._review(event)
+
+        assert "known_to_player" not in sent
+        assert sent["current_description"] == _stages().crisis
+
+    def test_reviewer_keeps_known_to_player_before_crisis(self):
+        event = _event().model_copy(update={
+            "phase": "manifesting",
+            "known_to_player": ["主角已经知道的旧线索"],
+        })
+
+        sent = self._review(event)
+
+        assert sent["known_to_player"] == ["主角已经知道的旧线索"]
+
+
 class TestDirectorEventViews:
     def test_semantic_view_only_exposes_current_stage_description(self):
         projected = json.loads(project_director_event(_event()))

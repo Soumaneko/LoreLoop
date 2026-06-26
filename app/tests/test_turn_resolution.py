@@ -185,20 +185,21 @@ class TestTurnResolutionAgent:
         assert result.action_resolutions[0].outcome_band == "critical_success"
         assert "异常" in result.action_resolutions[0].resolved_effect
 
-    def test_rejects_changed_outcome_band(self):
+    def test_coerces_changed_outcome_band_to_deterministic(self):
         mock = MockLLM()
         mock.set_responses([_response("advance", "failure")])
 
-        with pytest.raises(ValueError):
-            TurnResolutionAgent(mock.build_gateway()).resolve(
-                user_input="观察",
-                current_state=_state(),
-                action_parse_result=_parse(),
-                roll_results=_roll_batch(_roll(20)),
-                core_memory=CoreMemory(items=[]),
-                retrieved_memories=CandidateRetrievalResult(),
-                scene_summaries=[],
-            )
+        result = TurnResolutionAgent(mock.build_gateway()).resolve(
+            user_input="观察",
+            current_state=_state(),
+            action_parse_result=_parse(),
+            roll_results=_roll_batch(_roll(20)),
+            core_memory=CoreMemory(items=[]),
+            retrieved_memories=CandidateRetrievalResult(),
+            scene_summaries=[],
+        )
+
+        assert result.action_resolutions[0].outcome_band == "critical_success"
 
     def test_workflow_returns_result(self):
         mock = MockLLM()

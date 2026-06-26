@@ -335,17 +335,9 @@ def _confirm_turn_stream_locked(
             store_count_after = store_count_before
             store_total = len(mem_store.list_all())
 
-        if should_batch and not cache.get("memory_batch_scheduled"):
-            batch_queued = submit_memory_batch_once(
-                run_memory_batch_maintenance,
-                updated_state,
-                trace_id,
-                pending.turn_index,
-                core_memory=core_memory,
-            )
-            cache["memory_batch_scheduled"] = batch_queued
+        summary_future = None
         if not cache.get("scene_summary_scheduled"):
-            BACKGROUND_EXECUTOR.submit(
+            summary_future = BACKGROUND_EXECUTOR.submit(
                 run_scene_summary_maintenance,
                 effective_scene_text,
                 updated_state,
@@ -355,6 +347,16 @@ def _confirm_turn_stream_locked(
                 core_memory=core_memory,
             )
             cache["scene_summary_scheduled"] = True
+        if should_batch and not cache.get("memory_batch_scheduled"):
+            batch_queued = submit_memory_batch_once(
+                run_memory_batch_maintenance,
+                updated_state,
+                trace_id,
+                pending.turn_index,
+                core_memory=core_memory,
+                wait_for_summary=summary_future,
+            )
+            cache["memory_batch_scheduled"] = batch_queued
     else:
         with short_term_memory_store() as short_store:
             short_term_after = short_store.get_recent()
@@ -662,17 +664,9 @@ def _confirm_opening_stream_locked(
             store_count_after = store_count_before
             store_total = len(mem_store.list_all())
 
-        if should_batch and not cache.get("memory_batch_scheduled"):
-            batch_queued = submit_memory_batch_once(
-                run_memory_batch_maintenance,
-                updated_state,
-                trace_id,
-                0,
-                core_memory=core_memory,
-            )
-            cache["memory_batch_scheduled"] = batch_queued
+        summary_future = None
         if not cache.get("scene_summary_scheduled"):
-            BACKGROUND_EXECUTOR.submit(
+            summary_future = BACKGROUND_EXECUTOR.submit(
                 run_scene_summary_maintenance,
                 effective_scene_text,
                 updated_state,
@@ -682,6 +676,16 @@ def _confirm_opening_stream_locked(
                 core_memory=core_memory,
             )
             cache["scene_summary_scheduled"] = True
+        if should_batch and not cache.get("memory_batch_scheduled"):
+            batch_queued = submit_memory_batch_once(
+                run_memory_batch_maintenance,
+                updated_state,
+                trace_id,
+                0,
+                core_memory=core_memory,
+                wait_for_summary=summary_future,
+            )
+            cache["memory_batch_scheduled"] = batch_queued
     else:
         with short_term_memory_store() as short_store:
             short_term_after = short_store.get_recent()

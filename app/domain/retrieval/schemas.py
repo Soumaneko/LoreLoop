@@ -1,19 +1,23 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.domain.action.schemas import Anchor, AtomicAction
+from app.domain.recall_memory.schemas import (
+    legacy_evidence_mode,
+    legacy_memory_kind,
+)
 
 
 class CandidateRetrievalInput(BaseModel):
     turn_intent: str
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
     anchors: list[Anchor] = Field(default_factory=list)
-    top_k: int = 20
+    top_k: int = 8
 
 
 class MemoryCandidate(BaseModel):
     memory_id: str
-    layer: str = "truth"
-    subtype: str = "fact"
+    memory_kind: str
+    evidence_mode: str
     subject: str
     content: str
     entities: list[str] = Field(default_factory=list)
@@ -33,6 +37,27 @@ class MemoryCandidate(BaseModel):
     matched_anchors: list[str] = Field(default_factory=list)
     matched_actions: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_fields(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        values = dict(data)
+        values.setdefault(
+            "memory_kind",
+            legacy_memory_kind(values.get("layer"), values.get("subtype")),
+        )
+        values.setdefault("evidence_mode", legacy_evidence_mode(values.get("layer")))
+        return values
+
+    @property
+    def layer(self) -> str:
+        return self.evidence_mode
+
+    @property
+    def subtype(self) -> str:
+        return self.memory_kind
+
 
 class PendingMemoryNote(BaseModel):
     pending_id: str
@@ -43,11 +68,30 @@ class PendingMemoryNote(BaseModel):
     entities: list[str] = Field(default_factory=list)
     location: str | None = None
     time_label: str | None = None
-    extractor_hint: str = "unknown"
+    memory_kind: str
+    subject: str
+    owner: str | None = None
     importance_hint: str = "medium"
     score: float = 0.0
     matched_anchors: list[str] = Field(default_factory=list)
     matched_actions: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_fields(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        values = dict(data)
+        values.setdefault(
+            "memory_kind",
+            legacy_memory_kind(None, values.get("extractor_hint")),
+        )
+        values.setdefault("subject", values.get("raw_text") or "未指定主体")
+        return values
+
+    @property
+    def extractor_hint(self) -> str:
+        return self.memory_kind
 
 
 class CandidateRetrievalResult(BaseModel):

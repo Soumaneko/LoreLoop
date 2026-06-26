@@ -294,9 +294,8 @@ def _validate_action_resolutions(
         if judgment is None or resolution.action_id in seen:
             continue
         if resolution.outcome_band != judgment.outcome_band:
-            raise ValueError(
-                f"Resolution for {resolution.action_id} changed outcome_band "
-                f"from {judgment.outcome_band} to {resolution.outcome_band}"
+            resolution = resolution.model_copy(
+                update={"outcome_band": judgment.outcome_band}
             )
         cleaned.append(resolution)
         seen.add(resolution.action_id)

@@ -1,13 +1,14 @@
 import traceback
 import uuid
+from concurrent.futures import Future
 
 from app.core.llm.config import create_gateway
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState
 from app.domain.recall_memory.batch_classifier import MemoryBatchClassifier
-from app.domain.recall_memory.consolidator import MemoryConsolidator
+from app.domain.recall_memory.maintainer import MemoryMaintainer
 from app.domain.scene_summary.summarizer import SceneSummarizer
-from app.workflows.consolidate_memories import consolidate_memories_workflow
+from app.workflows.consolidate_memories import maintain_memories_workflow
 from app.workflows.extract_memory import batch_classify_pending_memories_workflow
 from app.workflows.scene_summaries import run_scene_summary_maintenance as run_scene_summary_maintenance_workflow
 
@@ -65,8 +66,11 @@ def run_memory_batch_maintenance(
     turn_index: int,
     *,
     core_memory: CoreMemory,
+    wait_for_summary: Future | None = None,
 ) -> None:
     try:
+        if wait_for_summary is not None:
+            wait_for_summary.result()
         gateway = create_gateway()
         gateway.set_trace_context(
             turn_index=turn_index,
@@ -88,27 +92,29 @@ def run_memory_batch_maintenance(
                 turn_threshold=5,
                 trace_id=trace_id,
             )
-            consolidation_result = None
-            if result.triggered and result.should_consolidate:
-                consolidation_result = consolidate_memories_workflow(
-                    store=mem_store,
-                    consolidator=MemoryConsolidator(gateway),
-                    core_memory=core_memory,
-                    max_group_size=5,
-                    trace_id=trace_id,
-                )
+            maintenance_result = None
+            if result.triggered:
+                with scene_summary_store() as summary_store:
+                    maintenance_result = maintain_memories_workflow(
+                        store=mem_store,
+                        summary_store=summary_store,
+                        maintainer=MemoryMaintainer(gateway),
+                        core_memory=core_memory,
+                        through_turn=turn_index,
+                        trace_id=trace_id,
+                    )
         print(
             "[debug-server] memory batch maintenance "
             f"triggered={result.triggered} pending={result.pending_count} "
             f"saved={len(result.saved_ids)} classified={len(result.classified_pending_ids)} "
             f"batch_count={result.batch_classify_count}"
         )
-        if consolidation_result is not None:
+        if maintenance_result is not None:
             print(
-                "[debug-server] memory consolidation "
-                f"groups={len(consolidation_result.groups)} "
-                f"merged={consolidation_result.merged_count} "
-                f"deactivated={consolidation_result.deactivated_count}"
+                "[debug-server] memory maintenance "
+                f"summaries={maintenance_result.summary_count} "
+                f"changed={maintenance_result.changed_count} "
+                f"cursor={maintenance_result.cursor_after}"
             )
     except Exception:
         print("[debug-server] memory batch maintenance failed")
@@ -170,15 +176,20 @@ def batch_classify_stream():
             force=force,
             trace_id=trace_id,
         )
-        consolidation_result = None
-        if result.triggered and result.should_consolidate:
-            consolidation_result = consolidate_memories_workflow(
-                store=bmstore,
-                consolidator=MemoryConsolidator(gateway),
-                core_memory=core_memory,
-                max_group_size=5,
-                trace_id=trace_id,
-            )
+        maintenance_result = None
+        if result.triggered:
+            with scene_summary_store() as summary_store:
+                maintenance_result = maintain_memories_workflow(
+                    store=bmstore,
+                    summary_store=summary_store,
+                    maintainer=MemoryMaintainer(gateway),
+                    core_memory=core_memory,
+                    through_turn=max(
+                        (item.turn_index for item in pending_items),
+                        default=0,
+                    ),
+                    trace_id=trace_id,
+                )
 
     yield {
         "step": "batch_classified",
@@ -189,9 +200,9 @@ def batch_classify_stream():
             "discarded_count": result.discarded_count,
             "self_check_result": model_data(result.self_check_result),
             "batch_classify_count": result.batch_classify_count,
-            "should_consolidate": result.should_consolidate,
+            "should_maintain": result.should_maintain,
             "entity_links_created": result.entity_links_created,
-            "consolidation": model_data(consolidation_result),
+            "maintenance": model_data(maintenance_result),
         },
     }
 
@@ -203,7 +214,7 @@ def batch_classify_stream():
             "pending_count": result.pending_count,
             "batch_classify_count": result.batch_classify_count,
             "entity_links_created": result.entity_links_created,
-            "consolidation": model_data(consolidation_result),
+            "maintenance": model_data(maintenance_result),
         },
     }
 
@@ -218,7 +229,7 @@ def consolidate_stream():
         total_count = mem_store.count()
         gateway = create_gateway()
         gateway.set_trace_context(session_type="maintenance")
-        consolidator = MemoryConsolidator(gateway)
+        maintainer = MemoryMaintainer(gateway)
 
         yield {
             "step": "consolidate_started",
@@ -230,13 +241,14 @@ def consolidate_stream():
             },
         }
 
-        result = consolidate_memories_workflow(
-            store=mem_store,
-            consolidator=consolidator,
-            core_memory=core_memory,
-            max_group_size=5,
-            trace_id=trace_id,
-        )
+        with scene_summary_store() as summary_store:
+            result = maintain_memories_workflow(
+                store=mem_store,
+                summary_store=summary_store,
+                maintainer=maintainer,
+                core_memory=core_memory,
+                trace_id=trace_id,
+            )
 
     with pending_memory_store() as pending_store:
         pending_store.reset_batch_classify_count()
@@ -245,10 +257,10 @@ def consolidate_stream():
         "step": "consolidate_done",
         "data": {
             "active_before": active_count,
-            "groups": len(result.groups),
-            "merged": result.merged_count,
-            "deactivated": result.deactivated_count,
-            "active_after": active_count - result.deactivated_count + result.merged_count,
+            "summaries": result.summary_count,
+            "changed": result.changed_count,
+            "cursor_before": result.cursor_before,
+            "cursor_after": result.cursor_after,
             "proposals": model_data(result.proposals),
         },
     }

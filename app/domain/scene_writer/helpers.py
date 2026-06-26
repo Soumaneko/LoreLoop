@@ -107,9 +107,9 @@ def _indexed_retrieved_memories(
 def _pending_note_to_candidate(note: PendingMemoryNote) -> MemoryCandidate:
     return MemoryCandidate(
         memory_id=f"pending:{note.pending_id}",
-        layer="pending",
-        subtype=note.extractor_hint or "note",
-        subject="pending memory",
+        memory_kind=note.memory_kind,
+        evidence_mode="inferred",
+        subject=note.subject,
         content=note.raw_text,
         entities=note.entities,
         tags=[],

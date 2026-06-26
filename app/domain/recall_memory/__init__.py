@@ -2,11 +2,14 @@ from .schemas import (
     ClassifiedMemoryCandidate,
     ExtractorHint,
     ImportanceHint,
+    EvidenceMode,
     Memory,
     MemoryBatchClassificationResult,
     MemoryDraftExtractResult,
     MemoryLayer,
+    MemoryKind,
     MemoryRecord,
+    MemoryStatus,
     MemorySubtype,
     PendingMemoryItem,
 )
@@ -25,12 +28,21 @@ from .consolidator import (
     MemoryConsolidationGroup,
     MemoryConsolidator,
 )
+from .maintainer import (
+    MemoryMaintenanceApplyResult,
+    MemoryMaintenanceBatch,
+    MemoryMaintenanceProposal,
+    MemoryMaintainer,
+)
 from .repository import MemoryRepository
 from .self_check import MemorySelfCheck, SelfCheckResult
 
 __all__ = [
     "Memory",
     "MemoryLayer",
+    "MemoryKind",
+    "EvidenceMode",
+    "MemoryStatus",
     "MemorySubtype",
     "MemoryDraftExtractResult",
     "MemoryBatchClassificationResult",
@@ -50,6 +62,10 @@ __all__ = [
     "MemoryConsolidationBatch",
     "MemoryConsolidationGroup",
     "MemoryConsolidator",
+    "MemoryMaintainer",
+    "MemoryMaintenanceProposal",
+    "MemoryMaintenanceBatch",
+    "MemoryMaintenanceApplyResult",
     "MemoryRepository",
     "MemorySelfCheck",
     "SelfCheckResult",

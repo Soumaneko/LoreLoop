@@ -25,18 +25,21 @@ class DirectorEventReviewer:
         scene_summaries: list[SceneSummary],
         trace_id: str | None = None,
     ) -> DirectorEventReviewResult:
+        event_view = active_event.semantic_view()
+        if active_event.phase == "crisis":
+            event_view.pop("known_to_player", None)
+        event_view.update(
+            status=active_event.status,
+            created_turn=active_event.created_turn,
+            updated_turn=active_event.updated_turn,
+        )
         return cast(
             DirectorEventReviewResult,
             self.llm.run(
                 task="director_event_review",
                 input_data={
                     "active_event_json": json.dumps(
-                        {
-                            **active_event.semantic_view(),
-                            "status": active_event.status,
-                            "created_turn": active_event.created_turn,
-                            "updated_turn": active_event.updated_turn,
-                        },
+                        event_view,
                         ensure_ascii=False,
                         indent=2,
                     ),

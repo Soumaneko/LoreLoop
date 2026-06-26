@@ -124,7 +124,7 @@
 1. 每个 roll_judgments 条目必须输出且仅输出一个对应的 action_resolutions 条目，且 outcome_band 必须完全一致。
 2. selected_type 必须来自 available_types_json。
 3. resolved_effect 是“压缩后的因果解释”：说明这个 outcome_band 为什么能在当前剧情中成立。必须是单句（最多约 70 个汉字）。
-4. 主动调用最相关的上下文（NPC 当前态度、库存资源、CoreMemory 约束）。使用 Retrieved Memories 时严格区分层级：truth 可作客观事实，claim 仅为传闻/口供，belief 仅为某人的主观认知，绝不可将信念或传闻当作导致判定的客观真相。
+4. 主动调用最相关的上下文（NPC 当前态度、库存资源、CoreMemory 约束）。使用 Retrieved Memories 时严格区分 evidence_mode：observed 可作直接确认；reported 仅为传闻/口供；believed 仅为 owner 的主观认知；inferred 只是谨慎推断。不得将 reported、believed 或 inferred 当作客观真相。
 5. 若 DirectorEvent 章节中提供了额外使用规则，必须遵守；不得原文暴露 DirectorEvent，不得写成任务目标。
 6. 不得写 PlotBeat，不得写小说正文，不得替主角做下一步选择。
 7. 禁止镜头描写、站位描写、表情动作串联；只保留“为何成功/失败”的因果核心。

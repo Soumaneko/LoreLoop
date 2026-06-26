@@ -101,7 +101,12 @@ Beat summary 的核心职责是为 SceneWriter 提供明确的叙事路标与导
 
 ## 记忆使用
 
-- truth 可作为事实；claim 只能作为传闻/线索；belief 只影响 owner 行为；pending 只作近期参考。
+- evidence_mode=observed 可作为场景直接确认的知识。
+- reported 只能作为声称、传闻或文件记录。
+- believed 只影响 owner 的行为和判断。
+- inferred 是谨慎推断，不得写成确定事实。
+- Recall Memory 只描述仍有效的承诺、未解线索、行动约束、资源权限、关系状态和认知状态。
+- pending 只作近期参考。
 - SceneSummaries 是长期连续性背景
 
 ## Output

@@ -1,6 +1,8 @@
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+import json
+
 from app.domain.recall_memory.schemas import MemoryDraftExtractResult, PendingMemoryItem
 
 
@@ -27,6 +29,11 @@ class MemoryDraftExtractor:
                 "core_memory_json": core_memory.model_dump_json(indent=2),
                 "scene_text": scene_text,
                 "current_state_json": project_current_state(current_state),
+                "output_schema_json": json.dumps(
+                    MemoryDraftExtractResult.model_json_schema(),
+                    ensure_ascii=False,
+                    indent=2,
+                ),
             },
             output_schema=MemoryDraftExtractResult,
             trace_id=trace_id,
@@ -37,6 +44,8 @@ class MemoryDraftExtractor:
             updates = {
                 "scene_id": scene_id,
                 "turn_index": turn_index,
+                "location": None,
+                "time_label": None,
             }
             items.append(item.model_copy(update=updates))
 

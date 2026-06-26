@@ -15,11 +15,17 @@ from app.domain.recall_memory.consolidator import (
     MemoryConsolidationGroup,
     MemoryConsolidator,
 )
+from app.domain.recall_memory.maintainer import (
+    MemoryMaintenanceApplyResult,
+    MemoryMaintenanceProposal,
+    MemoryMaintainer,
+)
 from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.domain.recall_memory.pending_store import PendingMemoryStore
 from app.domain.recall_memory.schemas import Memory, MemoryDraftExtractResult, PendingMemoryItem
 from app.domain.recall_memory.self_check import SelfCheckResult
 from app.domain.recall_memory.store import MemoryStore
+from app.domain.scene_summary.store import SceneSummaryStore
 
 _MEMORY_BATCH_LOCK = Lock()
 
@@ -43,8 +49,13 @@ class BatchClassifyPendingMemoryWorkflowResult:
     saved_ids: list[str] = field(default_factory=list)
     classified_pending_ids: list[str] = field(default_factory=list)
     batch_classify_count: int = 0
-    should_consolidate: bool = False
+    should_maintain: bool = False
     entity_links_created: int = 0
+
+    @property
+    def should_consolidate(self) -> bool:
+        """Deprecated compatibility alias."""
+        return self.should_maintain
 
 
 @dataclass
@@ -61,6 +72,20 @@ class ConsolidateMemoriesWorkflowResult:
     @property
     def deactivated_count(self) -> int:
         return sum(len(result.deactivated_ids) for result in self.apply_results)
+
+
+@dataclass
+class MaintainMemoriesWorkflowResult:
+    active_count: int = 0
+    summary_count: int = 0
+    cursor_before: int = 0
+    cursor_after: int = 0
+    proposals: list[MemoryMaintenanceProposal] = field(default_factory=list)
+    apply_results: list[MemoryMaintenanceApplyResult] = field(default_factory=list)
+
+    @property
+    def changed_count(self) -> int:
+        return sum(len(result.changed_ids) for result in self.apply_results)
 
 
 def fill_pending_memory_scene_metadata(
@@ -182,7 +207,7 @@ def _batch_classify_pending_memories_locked(
             discarded_ids.extend(candidate.source_pending_ids)
 
     valid_pending_ids = {item.id for item in pending_items}
-    classified_ids = valid_pending_ids
+    classified_ids &= valid_pending_ids
 
     if discarded_ids:
         pending_store.mark_discarded(
@@ -193,7 +218,7 @@ def _batch_classify_pending_memories_locked(
     pending_store.mark_classified(sorted(classified_ids))
     wfr.classified_pending_ids = sorted(classified_ids)
     wfr.batch_classify_count = pending_store.record_batch_classified()
-    wfr.should_consolidate = pending_store.should_trigger_consolidation(every=3)
+    wfr.should_maintain = True
     return wfr
 
 
@@ -225,4 +250,81 @@ def consolidate_memories_workflow(
                 consolidator.apply(store, proposal, sources)
             )
 
+    return result
+
+
+def maintain_memories_workflow(
+    *,
+    store: MemoryStore,
+    summary_store: SceneSummaryStore,
+    maintainer: MemoryMaintainer,
+    core_memory: CoreMemory,
+    through_turn: int | None = None,
+    trace_id: str | None = None,
+) -> MaintainMemoriesWorkflowResult:
+    cursor = store.get_meta_int("memory_maintainer_last_turn", -1)
+    summaries = summary_store.list_l1_since(
+        cursor,
+        through_turn=through_turn,
+    )
+    active_memories = store.list_active()
+    result = MaintainMemoriesWorkflowResult(
+        active_count=len(active_memories),
+        summary_count=len(summaries),
+        cursor_before=cursor,
+        cursor_after=cursor,
+    )
+    if not summaries:
+        return result
+
+    if active_memories:
+        batch = maintainer.review(
+            active_memories=active_memories,
+            summaries=summaries,
+            core_memory=core_memory,
+            trace_id=trace_id,
+        )
+        result.proposals = batch.proposals
+        used_memory_ids: set[str] = set()
+        validation_errors: list[str | None] = []
+        for proposal in batch.proposals:
+            duplicate_ids = used_memory_ids & set(proposal.source_memory_ids)
+            if duplicate_ids:
+                validation_errors.append(
+                    "memory_referenced_by_multiple_proposals:"
+                    + ",".join(sorted(duplicate_ids))
+                )
+            else:
+                validation_errors.append(
+                    maintainer.validate(
+                        proposal,
+                        active_memories=active_memories,
+                        summaries=summaries,
+                    )
+                )
+            used_memory_ids.update(proposal.source_memory_ids)
+
+        if any(validation_errors):
+            result.apply_results = [
+                MemoryMaintenanceApplyResult(
+                    proposal=proposal,
+                    skipped_reason=error or "maintenance_batch_validation_failed",
+                )
+                for proposal, error in zip(batch.proposals, validation_errors)
+            ]
+            return result
+
+        for proposal in batch.proposals:
+            result.apply_results.append(
+                maintainer.apply(
+                    store,
+                    proposal,
+                    active_memories,
+                    summaries,
+                )
+            )
+
+    cursor_after = max(summary.turn_end for summary in summaries)
+    store.set_meta_int("memory_maintainer_last_turn", cursor_after)
+    result.cursor_after = cursor_after
     return result
