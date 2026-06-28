@@ -4,7 +4,7 @@ from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.short_term_memory.schemas import ShortTermScene
 
 
-_BEAT_EXCLUDE: set[str] = {"linked_action_ids", "linked_roll_ids", "linked_outcome_ids"}
+_BEAT_EXCLUDE: set[str] = {"linked_outcome_ids"}
 
 
 def project_outline(result: PlotOutlineResult) -> str:

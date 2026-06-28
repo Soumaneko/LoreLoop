@@ -60,7 +60,15 @@
     - 你要做的是完全无视除了 CoreMemory 以外的，当前已知的所有线索，引入一个全新的势力、新人物或新图谋（必须符合世界观，规模必须匹配主角当前层级）。
     - 写明：这个全新的势力/人在暗中做什么，目的是什么。本字段内严禁提及主角或现有摘要里的任何专有名词。
     - 仅在 action="create_new" 时填写；action="activate_suspended" 时填 null。
-3. player_connection（建立关联辐射）：将构思好的后台事件根据 CurrentState、SceneSummaries 和 scene_text 的内容进行修改，以和主角建立合理的物理或利益关联。这一步的作用是让事件不会过于独立，让用户无法接触。注意，不要改动主角已经经历的事件。
+3. new_event.backstage_premise（锚定版后台暗流）：第 2 步事件的最终后台事实版本，会被持久化保存。它仍只写幕后事件本体，但可吸收 CurrentState、SceneSummaries 和 scene_text 中的地点、路线、区域势力、NPC背景、物品或利益关系。
+    - 只回答：谁在暗中行动、目标是什么、在哪里行动、使用什么资源/手段、已推进到什么程度。
+    - 尽量保留 backstage_undercurrent 中的重要细节，例如资助者、真实目标、关键道具、组织结构、秘密据点、长期计划、资源和当前进度；除非与当前锚点冲突，否则不要丢失。
+    - 禁止写外部表现：居民/机构观察到的异常、传闻、症状、事故、环境征兆。
+    - 禁止写主角如何接触它：主角会发现/听说/抵达后看到，NPC会告知，塞琳会注意到。
+    - 禁止元叙述：我将/已将/修订为/锚定到/调整为。
+    - 可观察异常和导入方式只属于 new_event.stages，不属于本字段。
+    - 最终的 stages 和 hooks 必须以 new_event.backstage_premise 为基础展开，不得遗漏其中的关键主体、动机、资源和目标。
+    - 不要改动主角已经经历的事件，不要把新事件改写成当前主线伏笔的直接续集。
     - 仅在 action="create_new" 时填写；action="activate_suspended" 时填 null。
 
 ## 选择规则
@@ -108,15 +116,15 @@
 如果激活 suspended 事件：
 - action = "activate_suspended"
 - activate_event_id 填对应 event_id
-- backstage_undercurrent 与 player_connection 填 null
+- backstage_undercurrent 填 null
 - new_event = null
 - reason 简述激活该事件的最终理由
 
 如果创建新事件：
 - action = "create_new"
-- 必须填写 backstage_undercurrent 与 player_connection（分别对应思考步骤 2、3）
+- 必须填写 backstage_undercurrent 与 new_event.backstage_premise（分别对应思考步骤 2、3）
 - activate_event_id = null
-- new_event 填写 title、stages、related_npcs、location_constraints
+- new_event 填写 title、backstage_premise、stages、related_npcs、location_constraints
 - manifesting_prevention_hooks 与 crisis_resolution_hooks 各填写 3 条
 - reason 简述创建该事件的最终理由
 

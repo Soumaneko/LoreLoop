@@ -6,6 +6,8 @@ from app.domain.roll.schemas import DIFFICULTY_DICE_COUNT, RollConfig, RollResul
 
 
 def _never_rolls(action: AtomicAction) -> bool:
+    if action.action_type == "wait":
+        return True
     return action.action_type == "move" and action.risk_level == "low"
 
 

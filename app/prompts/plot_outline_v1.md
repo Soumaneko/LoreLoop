@@ -52,12 +52,6 @@
 {user_input}
 ```
 
-## ActionParseResult
-
-```json
-{action_parse_result_json}
-```
-
 ## TurnResolutionResult
 
 ```json
@@ -79,11 +73,9 @@
 - beats：1-4 个剧情节拍，按行动发生顺序排列；每个节拍（PlotBeat）按以下字段填写：
   - beat_id：节拍唯一标识，如 b1、b2。
   - summary：2-4 句，陈述该节拍发生了什么事实、达成了什么系统结果（状态变化），并为 SceneWriter 定调（NPC 行为动机、场景氛围张力、需重点表现的叙事焦点）。
-  - user_action_execution：当 linked_action_ids 非空时，用 1-2 句描述这些用户行动在正文中如何被演出，包括用户明确要求的发言、动作、方式和先后顺序；linked_action_ids 为空时填 null。
+  - user_action_execution：用 1-2 句描述 Player Input 对应行动在正文中如何被演出，包括用户明确要求的发言、动作、方式和先后顺序；该 beat 不承载用户行动时填 null。
   - protagonist_response_guidance：用确定语气指定该节拍中必须发生的一项具体主角反应（一句话），不写具体台词。
   - related_entities：该节拍涉及的实体标准名称列表，不含玩家自身。
-  - linked_action_ids：该节拍演出的 atomic action ID 列表。
-  - linked_roll_ids：该节拍涉及的骰点 ID 列表，无则填空列表。
   - linked_outcome_ids：该节拍体现的 ActionResolutionFrame.action_id 列表。
   - required_outcomes：该节拍必须落实的具体结果列表。
   - required_memory_indices：该节拍引用的 Memories 中的 memory_index 列表，不需要时填空列表。
@@ -96,11 +88,11 @@
 
 # 核心规则
 
-1. 围绕 TurnResolutionResult 和 Player Input 组织大纲。
-2. 大纲必须基于 ActionParseResult 中的行动，结果必须遵循 TurnResolutionResult.action_resolutions：
-   - ActionParseResult 中每个 atomic action 都是本回合尚未演出的用户输入，必须在至少一个 beat 中实际发生，不能从行动完成后的 NPC 评价、环境反馈或撤离途中开始写。
-   - 按 atomic action 的 sequence 保持行动发生顺序。可以让一个 beat 承载多个连续行动，但不得跳过任何行动。
-   - 所有 atomic action ID 必须在某个 beat 的 linked_action_ids 中至少出现一次；不得只链接有骰点的行动，无骰点的发言、交付、说明和简单动作同样必须覆盖。
+1. 围绕 Player Input 和 TurnResolutionResult 组织大纲；Player Input 是本回合用户意图的最高优先级来源。
+2. 大纲必须忠实响应 Player Input 中的明确意图、限制和偏好，结果必须遵循 TurnResolutionResult：
+   - Player Input 中每个明确行动、目标、约束和偏好都必须在至少一个 beat 中得到实际回应，不能被简化成只移动、只观察或只等待下一回合。不能从行动完成后的 NPC 评价、环境反馈或撤离途中开始写。
+   - 若用户提出“准备、购买、打听、尝试、寻找、制作、协商”等开放式目标，必须给出本回合实质进展：可购买清单、价格、利弊、NPC 反馈、实际获得物或明确障碍；不得只把角色带到地点后结束。
+   - 按 Player Input 的自然顺序组织行动。可以让一个 beat 承载多个连续意图，但不得跳过关键意图。
    - failure 或 critical_failure 不能写成干净成功。
    - partial_success 必须实现部分目标，可附带代价或延迟。
    - critical_success 可给额外优势，但不得违背 CurrentState。
@@ -123,12 +115,12 @@
 4. 绝对禁止代写具体的对话台词正文（不要出现引号包裹的句子），禁止发明角色的具体微表情和微动作。
 5. 不用“你”称呼玩家，不使用 GM 评论，不提及骰子或系统指令。
 6. constraints_for_scene_writer 和 risks_to_avoid 禁止填入任何通用写作规则，包括：对话格式、引号、第二人称、篇幅、文风、JSON 格式、Beat 写法等。
-7. user_action_execution 只描述用户行动本身，不得写成行动完成后的 NPC 评价或环境后果，也不得把用户行动降格为“之前已经做过”或仅由 NPC 评价代替演出。
+7. user_action_execution 只描述用户输入对应的行动本身，不得写成行动完成后的 NPC 评价或环境后果，也不得把用户行动降格为“之前已经做过”或仅由 NPC 评价代替演出。
 8. protagonist_response_guidance 不得写成“可以 A 或 B”等可选项，也不得把反应决定权再次丢回 SceneWriter。
 
 # 例子
 
-假设本回合 ActionParseResult 含两个动作：A1（推开密室石门走进去）、A2（举起火把照亮室内）；TurnResolutionResult.selected_type 为 `advance`，A1 与 A2 均为 success。一个合法输出形如：
+假设本回合 Player Input 为“推开密室石门走进去，然后举起火把照亮室内”；TurnResolutionResult.selected_type 为 `advance`，其中 A1（推门）与 A2（照明）均为 success。一个合法输出形如：
 
 ```json
 {{
@@ -140,8 +132,6 @@
       "user_action_execution": "主角用力推开石门，确认通路后径直走进密室。",
       "protagonist_response_guidance": "主角稳住呼吸，警觉地环顾入口附近的环境。",
       "related_entities": ["密室石门"],
-      "linked_action_ids": ["A1"],
-      "linked_roll_ids": [],
       "linked_outcome_ids": ["A1"],
       "required_outcomes": ["成功进入密室"],
       "required_memory_indices": [],
@@ -154,8 +144,6 @@
       "user_action_execution": "主角高举火把，缓慢转身让火光扫过房间四壁。",
       "protagonist_response_guidance": "主角将注意力锁定在尽头的暗道入口，记下它的位置。",
       "related_entities": ["火把", "暗道入口"],
-      "linked_action_ids": ["A2"],
-      "linked_roll_ids": [],
       "linked_outcome_ids": ["A2"],
       "required_outcomes": ["看清室内布局", "发现通往下一层的暗道入口"],
       "required_memory_indices": [],

@@ -126,16 +126,20 @@ def update_director_event_workflow(
             notes=notes,
         )
 
-    latest_inactive = store.get_latest_inactive()
-    if latest_inactive is not None:
-        inactive_turn = latest_inactive.updated_turn or latest_inactive.created_turn
-        if turn_index <= inactive_turn + DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS:
+    latest_archived = store.get_latest_archived()
+    if latest_archived is not None:
+        archived_turn = (
+            latest_archived.resolved_turn
+            or latest_archived.updated_turn
+            or latest_archived.created_turn
+        )
+        if turn_index <= archived_turn + DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS:
             return DirectorEventWorkflowResult(
                 mode="cooldown",
                 active_before=None,
                 active_after=None,
-                changed_event_id=latest_inactive.event_id,
-                notes=["director_event_idle_cooldown"],
+                changed_event_id=latest_archived.event_id,
+                notes=["director_event_archived_cooldown"],
             )
 
     suspended = store.list_suspended()

@@ -15,7 +15,6 @@ from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import RollResultBatch
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.views import (
-    project_action_parse,
     project_current_state,
     project_entity_profiles,
     project_retrieved_memories,
@@ -245,7 +244,6 @@ class TurnResolutionAgent:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(current_state),
                     "user_input": user_input,
-                    "action_parse_result_json": project_action_parse(action_parse_result),
                     "retrieved_memories_json": project_retrieved_memories(retrieved_memories),
                     "scene_summaries_json": project_scene_summaries(scene_summaries),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),

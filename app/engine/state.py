@@ -65,6 +65,7 @@ def load_debug_state() -> dict:
         "entity_profiles": model_data(entity_profiles),
         "active_director_event": model_data(active_director_event),
         "suspended_director_events": model_data(suspended_director_events),
+        "archived_director_events": model_data(archived_director_events),
         "archived_director_event_count": len(archived_director_events),
         "chat_history": model_data(chat_history),
         "difficulty": settings.get("difficulty", "困难"),

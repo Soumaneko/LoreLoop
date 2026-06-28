@@ -52,12 +52,6 @@
 {user_input}
 ```
 
-## ActionParseResult
-
-```json
-{action_parse_result_json}
-```
-
 ## 程序判定的掷骰结果
 
 ```json
@@ -88,7 +82,8 @@
   - actor：与对应 roll_judgment 一致。
   - action_type：与对应 roll_judgment 一致。
   - outcome_band：必须与对应 roll_judgment 的 outcome_band 完全一致，不得改写。
-  - resolved_effect：单句因果解释（最多约 70 个汉字），说明该 outcome_band 为何能在当前剧情中成立。
+  - effect_reasoning：先写出推导 resolved_effect 的思考过程（最多约 200 个汉字）。在动笔写结论前理清逻辑：先判断玩家想要的结果属于 A 类还是 B 类可能性，再锚定 CurrentState/Memories 中的具体支点、玩家原文意图、相关 NPC 人设以及 outcome_band 的兑现方向，并据此说明该结果为何能、且只能这样成立。这是内部推理，不是最终叙事结论。
+  - resolved_effect：在 effect_reasoning 的结论之上，写出单句因果解释（最多约 70 个汉字），说明该 outcome_band 为何能在当前剧情中成立；必须与 effect_reasoning 的判断保持一致，不得自相矛盾。
 
 
 # 核心规则
@@ -102,11 +97,12 @@
    - critical_success：强力成功，并可产生一个与行动自然相关的额外优势。
 3. outcome_band 缩放的是“运气与程度”，不是“客观可能性”（此原则优先于上面的档位语义）。判定只在“这件事本就可能发生”的范围内起作用，请用你对本世界的常识先把玩家想要的结果归类：
    - A 类（低概率但客观可能）：band 负责兑现程度，critical_success 可以兑现到超出行动者平常能力或概率的水平，要大胆给。例如：你本打不过豺狼人，但它脚下一滑，自己撞死在你的匕首上。
-   - B 类（客观不可能，或所需信息在该来源处根本不存在）：任何 band 都不能让它发生，因为它不在可能性之内。例如街头路人或普通商贩根本不掌握的世界本源秘密，骰子再高也问不出；又如以匕首秒杀远超自身层级的存在。
+   - B 类（客观不可能，或所需信息在该来源处根本不存在）：任何 band 都不能让它发生，因为它不在可能性之内。例如街头路人不可能掌握世界本源秘密；匕首不可能秒杀远超自身层级的存在；
    - 当玩家想要的结果落入 B，critical_success 应转而兑现“A 类里最接近且确实可能”的结果——让该来源确实掌握或能接触到的最好那部分浮现（一条真实存在的线索、一个值得深挖的疑点、一次有利的偶然），而不是强行实现 B。
-4. resolved_effect 构建指引（在逻辑自洽的前提下让剧情生动）：
+4. effect_reasoning 与 resolved_effect 构建指引（先想清楚，再下结论）：
+   - 先推理后结论：必须先在 effect_reasoning 中完成思考（A/B 可能性归类、支点选取、玩家意图、NPC 人设、档位方向），resolved_effect 只能是这段推理的自然结论，二者不得矛盾；不要在没有推理的情况下直接给出结果。
    - 锚定具体细节：从 CurrentState 或 Memories 中提取一个具体名词作为成败的“支点”，不要使用抽象词汇。
-   - 呼应动作特征：结果必须是对 ActionParseResult 中玩家具体做法（鲁莽、谨慎、取巧）的反馈。
+   - 呼应玩家原文：结果必须是对玩家输入中具体意图、措辞和做法的反馈；roll_judgments 只是程序判定摘要，不得替代玩家原文。
    - 符合实体人设：当结果涉及 NPC 反应时，必须体现 Entity Profiles 中的性格特质或过往经历。
    - 拒绝“无事发生”：即使是 failure，也应改变当前战局或社交态势（激怒对方、暴露位置、消耗时间、破坏掩体）。
 5. 主动调用最相关的上下文（NPC 当前态度、库存资源、CoreMemory 约束）。使用 Memories 时严格区分 evidence_mode：observed 可作直接确认；reported 仅为传闻/口供；believed 仅为 owner 的主观认知；inferred 只是谨慎推断。
@@ -145,6 +141,7 @@
       "actor": "艾伦",
       "action_type": "interact_object",
       "outcome_band": "success",
+      "effect_reasoning": "推开石门属于 A 类可能性：门虽沉重但本就可被开启。支点取 CurrentState 中的密室石门；玩家原文是主动推门进入，success 档位应让其顺利但不夸张地成功，故让年久失修的旧插销恰好松动作为合理成因。",
       "resolved_effect": "石门年久失修的旧插销恰好松动，艾伦顺势推开沉重门扇进入密室。"
     }},
     {{
@@ -153,6 +150,7 @@
       "actor": "艾伦",
       "action_type": "observe",
       "outcome_band": "success",
+      "effect_reasoning": "举火照亮观察属于 A 类：火把足以照亮密室。支点取火光与四壁布局；玩家意图是看清室内，success 应给出清晰但克制的发现，故让其看清布局并发现一处具体线索——尽头墙脚的暗道入口。",
       "resolved_effect": "火把照亮四壁，艾伦借光看清布局并瞥见尽头墙脚的暗道入口。"
     }}
   ]

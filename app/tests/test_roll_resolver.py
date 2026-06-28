@@ -674,3 +674,81 @@ class TestDifficulty:
         result = resolver.resolve(parse)
 
         assert result.results[0].all_raw_values == [result.results[0].raw_value]
+
+
+class TestNeverRolls:
+    def _action(self, action_id, sequence, action_type, *, likely_needs_roll, risk_level=None):
+        return AtomicAction(
+            action_id=action_id,
+            sequence=sequence,
+            actor="主角",
+            action_type=action_type,
+            raw_text="行动",
+            verb="行动",
+            likely_needs_roll=likely_needs_roll,
+            risk_level=risk_level,
+            confidence=0.9,
+        )
+
+    def test_wait_is_never_rolled_even_if_marked(self):
+        parse_result = ActionParseResult(
+            turn_intent="等待",
+            atomic_actions=[
+                self._action("w1", 1, "wait", likely_needs_roll=True),
+            ],
+            anchors=[],
+            ambiguities=[],
+        )
+
+        resolver = RollResolver(RollConfig(min_rolls=2, seed=1))
+        result = resolver.resolve(parse_result)
+
+        assert result.total_rolls == 0
+
+    def test_wait_excluded_from_forced_sampling(self):
+        parse_result = ActionParseResult(
+            turn_intent="观察并等待",
+            atomic_actions=[
+                self._action("a1", 1, "observe", likely_needs_roll=True),
+                self._action("w1", 2, "wait", likely_needs_roll=False),
+            ],
+            anchors=[],
+            ambiguities=[],
+        )
+
+        resolver = RollResolver(RollConfig(min_rolls=2, seed=1))
+        result = resolver.resolve(parse_result)
+
+        assert result.total_rolls == 1
+        assert {r.action_id for r in result.results} == {"a1"}
+
+    def test_low_risk_move_is_never_rolled(self):
+        parse_result = ActionParseResult(
+            turn_intent="走过去",
+            atomic_actions=[
+                self._action("m1", 1, "move", likely_needs_roll=True, risk_level="low"),
+            ],
+            anchors=[],
+            ambiguities=[],
+        )
+
+        resolver = RollResolver(RollConfig(min_rolls=2, seed=1))
+        result = resolver.resolve(parse_result)
+
+        assert result.total_rolls == 0
+
+    def test_high_risk_move_can_be_rolled(self):
+        parse_result = ActionParseResult(
+            turn_intent="冲过去",
+            atomic_actions=[
+                self._action("m1", 1, "move", likely_needs_roll=True, risk_level="high"),
+            ],
+            anchors=[],
+            ambiguities=[],
+        )
+
+        resolver = RollResolver(RollConfig(min_rolls=0, seed=1))
+        result = resolver.resolve(parse_result)
+
+        assert result.total_rolls == 1
+        assert result.results[0].action_id == "m1"

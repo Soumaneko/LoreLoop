@@ -10,7 +10,13 @@ def project_turn_resolution(result: TurnResolutionResult) -> str:
     return json.dumps(
         result.model_dump(
             mode="json",
-            exclude={"available_types", "previous_types", "roll_filter_notes", "cooldown_filter_notes"},
+            exclude={
+                "available_types": True,
+                "previous_types": True,
+                "roll_filter_notes": True,
+                "cooldown_filter_notes": True,
+                "action_resolutions": {"__all__": {"effect_reasoning"}},
+            },
         ),
         ensure_ascii=False,
         indent=2,

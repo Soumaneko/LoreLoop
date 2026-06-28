@@ -56,6 +56,7 @@ class ActionResolutionFrame(BaseModel):
     actor: str
     action_type: str
     outcome_band: OutcomeBand
+    effect_reasoning: str = Field(min_length=1, max_length=300)
     resolved_effect: str = Field(min_length=1, max_length=100)
 
 

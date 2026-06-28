@@ -487,11 +487,11 @@ class TestDirectorEventWorkflow:
                 "action": "create_new",
                 "suspension_evaluation": "无暂停事件可自然衔接当前局势，进入新事件构思。",
                 "backstage_undercurrent": "一支隐秘的走私团伙正在暗中囤积军械。",
-                "player_connection": "走私活动波及主角当前所在区域的补给线。",
                 "reason": "冷却结束后创建新事件。",
                 "activate_event_id": None,
                 "new_event": {
                     "title": "钟楼下的旧教团",
+                    "backstage_premise": "一支隐秘的走私团伙正在北郡补给线附近暗中囤积军械，借当地商队和仓库掩护转运物资。",
                     "stages": _stages().model_dump(),
                     "related_npcs": ["旧教团残党"],
                     "location_constraints": ["北郡钟楼"],
@@ -578,6 +578,67 @@ class TestDirectorEventWorkflow:
 
         assert store.get_active().event_id == suspended.event_id
 
+    def test_suspended_event_can_be_selected_next_turn_without_archive_cooldown(self):
+        store = DirectorEventStore()
+        active = _event()
+        store.save(active)
+
+        reviewer_mock = MockLLM()
+        reviewer_mock.set_responses(
+            [
+                json.dumps(
+                    _review_response(
+                        decision="suspend_active",
+                        reason="主角暂时离开北郡，这个后台事件不适合当前场景。",
+                        suspended_reason="主角离开相关地点，事件暂时悬挂。",
+                    ),
+                    ensure_ascii=False,
+                )
+            ]
+        )
+        selector_gateway = _SpyGateway(
+            {
+                "action": "activate_suspended",
+                "suspension_evaluation": "暂停事件可自然衔接当前局势，决定重新激活。",
+                "reason": "主角回到北郡，事件重新适合当前剧情。",
+                "activate_event_id": active.event_id,
+                "new_event": None,
+            }
+        )
+
+        suspended_result = update_director_event_workflow(
+            user_input="我先离开北郡。",
+            scene_text="卢西安离开北郡，前往南边驿站。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+            turn_index=4,
+            store=store,
+            reviewer=DirectorEventReviewer(reviewer_mock.build_gateway()),
+            selector=DirectorEventSelector(selector_gateway),
+        )
+
+        assert suspended_result.mode == "review_active"
+        assert store.get_active() is None
+        assert store.get_by_id(active.event_id).status == "suspended"
+        assert selector_gateway.calls == []
+
+        reactivated = update_director_event_workflow(
+            user_input="我回到北郡。",
+            scene_text="卢西安回到北郡。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+            turn_index=5,
+            store=store,
+            reviewer=DirectorEventReviewer(selector_gateway),
+            selector=DirectorEventSelector(selector_gateway),
+        )
+
+        assert reactivated.mode == "select_or_create"
+        assert store.get_active().event_id == active.event_id
+        assert len(selector_gateway.calls) == 1
+
     def test_rejects_unknown_suspended_event_id(self):
         store = DirectorEventStore()
         gateway = _SpyGateway(
@@ -610,11 +671,11 @@ class TestDirectorEventWorkflow:
                 "action": "create_new",
                 "suspension_evaluation": "无暂停事件可自然衔接当前局势，进入新事件构思。",
                 "backstage_undercurrent": "一支隐秘的走私团伙正在暗中囤积军械。",
-                "player_connection": "走私活动波及主角当前所在区域的补给线。",
                 "reason": "当前剧情需要一个与北郡相关的新后台事件。",
                 "activate_event_id": None,
                 "new_event": {
                     "title": "钟楼下的旧教团",
+                    "backstage_premise": "一支隐秘的走私团伙正在北郡补给线附近暗中囤积军械，借当地商队和仓库掩护转运物资。",
                     "stages": _stages().model_dump(),
                     "related_npcs": ["旧教团残党"],
                     "location_constraints": ["北郡钟楼"],
@@ -638,6 +699,7 @@ class TestDirectorEventWorkflow:
 
         active = store.get_active()
         assert active.phase == "latent"
+        assert active.backstage_premise == "一支隐秘的走私团伙正在北郡补给线附近暗中囤积军械，借当地商队和仓库掩护转运物资。"
         assert active.stages.crisis == _stages().crisis
         assert active.manifesting_prevention_hooks == _manifesting_hooks()
         assert active.crisis_resolution_hooks == _crisis_hooks()
@@ -686,11 +748,11 @@ class TestDirectorEventAgents:
                 "action": "create_new",
                 "suspension_evaluation": "无暂停事件可自然衔接当前局势，进入新事件构思。",
                 "backstage_undercurrent": "一名流亡贵族正在暗中招募旧部，图谋复辟。",
-                "player_connection": "流亡贵族的招募活动延伸到主角所在的北郡钟楼一带。",
                 "reason": "当前剧情需要一个不重复的新后台事件。",
                 "activate_event_id": None,
                 "new_event": {
                     "title": "钟楼上的黑旗",
+                    "backstage_premise": "一名流亡贵族正在北郡钟楼一带暗中招募旧部，借钟楼附近的货栈和教堂联系人传递复辟密信。",
                     "stages": _stages().model_dump(),
                     "related_npcs": ["旧教团残党"],
                     "location_constraints": ["北郡钟楼"],

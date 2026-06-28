@@ -441,6 +441,8 @@ function renderStatePanel() {
   const activeEvent = data.active_director_event;
   const memories = data.memories || [];
   const activeMemories = memories.filter((m) => (m.status || "active") === "active").slice(0, 12);
+  const summaries = data.scene_summaries || [];
+  const recentSummaries = data.recent_summaries || [];
   const pendingVisible = filterVisiblePending(data.pending_memory_items || []);
   const pendingStats = pendingMemoryStats(data);
   els.statePanel.innerHTML = `
@@ -466,6 +468,13 @@ function renderStatePanel() {
     ]))}
     ${details(`NPC (${npcs.length})`, npcs.length ? npcs.map(npcCard).join("") : `<div class="empty">暂无 NPC</div>`)}
     ${details("导演事件", activeEvent ? directorCard(activeEvent) : `<div class="empty">暂无 active 事件</div>`)}
+    ${details(`场景摘要 (${summaries.length})`, `
+      ${metrics([
+        metric("活跃", summaries.length),
+        metric("最近", recentSummaries.length, "info"),
+      ])}
+      ${(recentSummaries.length ? recentSummaries : summaries.slice(0, 8)).map(sceneSummaryCard).join("") || `<div class="empty">暂无场景摘要</div>`}
+    `)}
     ${details(`实体档案 (${(data.entity_profiles || []).length})`, renderEntityGroups(data.entity_profiles || []))}
     ${details(`长期记忆 (${data.active_memory_count || 0}/${data.memory_count || 0})`, activeMemories.length ? activeMemories.map(memoryRecordCard).join("") : `<div class="empty">暂无活跃记忆</div>`)}
     ${details(`待定记忆 (${pendingStats.unclassified}/${pendingStats.total})`, `
@@ -683,6 +692,7 @@ function renderMemory() {
   const maintain = step("maintenance", "memory_maintain_done") || batch?.maintenance;
   const confirm = step("confirmation", "finish")?.memory_extraction;
   return `
+    ${timeline("maintenance", "维护事件")}
     ${confirm ? card("本轮待定记忆", `
       ${metrics([metric("候选", confirm.pending_items?.length || 0), metric("保存", confirm.saved_pending_ids?.length || 0), metric("库内", confirm.store_total || 0)])}
       ${filterVisiblePending(confirm.pending_items || []).map(pendingMemoryCard).join("") || `<div class="empty">无未分类候选</div>`}
@@ -704,8 +714,16 @@ function renderEntityDebug() {
 function renderDirectorDebug() {
   const result = merged("confirmation").director_event_result;
   const server = state.serverState || {};
+  const active = server.active_director_event ? [server.active_director_event] : [];
+  const suspended = server.suspended_director_events || [];
+  const archived = server.archived_director_events || [];
   return `
-    ${card("当前事件", server.active_director_event ? directorCard(server.active_director_event) : `<div class="empty">暂无 active 事件</div>`)}
+    ${card("事件库存", metrics([
+      metric("Active", active.length, active.length ? "ok" : ""),
+      metric("Suspended", suspended.length, suspended.length ? "warn" : ""),
+      metric("Archived", archived.length, archived.length ? "info" : ""),
+    ]))}
+    ${details("Active", active.map(directorCard).join("") || `<div class="empty">暂无 active 事件</div>`, true)}
     ${result ? card("本轮结果", `
       ${kv([
         ["模式", esc(text(result.mode))],
@@ -715,7 +733,8 @@ function renderDirectorDebug() {
       ${result.review_result ? details("Review", jsonBlock(result.review_result), true) : ""}
       ${result.selection_result ? details("Select/Create", jsonBlock(result.selection_result), true) : ""}
     `) : card("本轮结果", `<div class="empty">确认正式回合后展示。</div>`)}
-    ${details("暂停事件", (server.suspended_director_events || []).map(directorCard).join("") || `<div class="empty">暂无暂停事件</div>`)}
+    ${details("Suspended", suspended.map(directorCard).join("") || `<div class="empty">暂无 suspended 事件</div>`)}
+    ${details("Archived", archived.map(directorCard).join("") || `<div class="empty">暂无 archived 事件</div>`)}
   `;
 }
 
@@ -839,7 +858,6 @@ function renderOutline(outline) {
       ${kv([
         ["用户行动", esc(text(b.user_action_execution))],
         ["主角反应", esc(text(b.protagonist_response_guidance))],
-        ["行动", chips(b.linked_action_ids)],
         ["结果", chips(b.linked_outcome_ids)],
         ["实体", chips(b.related_entities)],
         ["状态影响", list(b.state_implications)],
@@ -1019,14 +1037,36 @@ function directorCard(event) {
   if (!event) return `<div class="empty">无</div>`;
   return `<div class="section-card">
     <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.status || "active", event.phase || "")}</div>
+    ${event.backstage_premise ? `<div style="margin-bottom:8px">${esc(event.backstage_premise)}</div>` : ""}
     <div style="margin-bottom:8px">${esc(text(event.stages?.[event.phase]))}</div>
     ${kv([
       ["ID", esc(text(event.event_id))],
       ["阶段回合", esc(text(event.phase_turns_elapsed))],
+      ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
+      ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
+      ["解决Hook", esc(text(event.resolved_by_hook))],
+      ["暂停原因", esc(text(event.suspended_reason))],
+      ["解决原因", esc(text(event.resolved_reason))],
       ["关联NPC", chips(event.related_npcs)],
       ["地点限制", chips(event.location_constraints)],
+      ["Manifest Hooks", list(event.manifesting_prevention_hooks)],
+      ["Crisis Hooks", list(event.crisis_resolution_hooks)],
       ["已知", list(event.known_to_player)],
       ["隐藏", list(event.hidden_developments)],
+    ])}
+  </div>`;
+}
+
+function sceneSummaryCard(summary) {
+  return `<div class="section-card">
+    <div class="card-title"><span>${esc(`L${summary.level || "?"} · Turn ${text(summary.turn_start)}-${text(summary.turn_end)}`)}</span>${metric(summary.active === false ? "inactive" : "active", (summary.scene_ids || []).length, summary.active === false ? "warn" : "ok")}</div>
+    <div style="margin-bottom:8px">${esc(text(summary.content))}</div>
+    ${kv([
+      ["ID", esc(text(summary.id))],
+      ["场景", chips(summary.scene_ids)],
+      ["来源", chips(summary.source_ids)],
+      ["压缩到", esc(text(summary.condensed_into))],
+      ["创建", esc(text(summary.created_at))],
     ])}
   </div>`;
 }

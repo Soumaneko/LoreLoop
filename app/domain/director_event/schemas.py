@@ -31,6 +31,7 @@ class DirectorEvent(BaseModel):
     status: DirectorEventStatus = "active"
     phase: DirectorEventPhase
     phase_turns_elapsed: int = Field(default=0, ge=0)
+    backstage_premise: str = ""
     stages: DirectorEventStages
     related_npcs: list[str] = Field(default_factory=list)
     location_constraints: list[str] = Field(default_factory=list)
@@ -53,6 +54,7 @@ class DirectorEvent(BaseModel):
             "title": self.title,
             "phase": self.phase,
             "phase_turns_elapsed": self.phase_turns_elapsed,
+            "backstage_premise": self.backstage_premise,
             "current_description": getattr(self.stages, self.phase),
             "related_npcs": self.related_npcs,
             "location_constraints": self.location_constraints,
@@ -65,6 +67,7 @@ class DirectorEvent(BaseModel):
 
 class DirectorEventDraft(BaseModel):
     title: str = Field(min_length=1)
+    backstage_premise: str = Field(min_length=1)
     stages: DirectorEventStages
     related_npcs: list[str] = Field(default_factory=list)
     location_constraints: list[str] = Field(default_factory=list)
@@ -78,6 +81,7 @@ class DirectorEventDraft(BaseModel):
             status=status,
             phase="latent",
             phase_turns_elapsed=0,
+            backstage_premise=self.backstage_premise,
             stages=self.stages,
             related_npcs=self.related_npcs,
             location_constraints=self.location_constraints,
@@ -133,7 +137,6 @@ class DirectorEventReviewResult(BaseModel):
 class DirectorEventSelectionResult(BaseModel):
     suspension_evaluation: str = Field(min_length=1)
     backstage_undercurrent: str | None = None
-    player_connection: str | None = None
     action: SelectionAction
     reason: str = Field(min_length=1)
     activate_event_id: str | None = None
@@ -148,6 +151,4 @@ class DirectorEventSelectionResult(BaseModel):
                 raise ValueError("new_event is required when action is create_new")
             if not (self.backstage_undercurrent or "").strip():
                 raise ValueError("backstage_undercurrent is required when action is create_new")
-            if not (self.player_connection or "").strip():
-                raise ValueError("player_connection is required when action is create_new")
         return self

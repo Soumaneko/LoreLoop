@@ -14,7 +14,6 @@ from app.domain.plot_outline.views import (
     project_turn_resolution,
 )
 from app.domain.views import (
-    project_action_parse,
     project_current_state,
     project_entity_profiles,
     project_scene_summaries,
@@ -32,47 +31,47 @@ class PlotOutlineAgent:
         *,
         trace_id: str | None = None,
     ) -> PlotOutlineResult:
-        expected_action_ids = [
-            action.action_id
-            for action in context.action_parse_result.atomic_actions
+        expected_outcome_ids = [
+            frame.action_id
+            for frame in context.turn_resolution.action_resolutions
         ]
 
         class RuntimePlotOutlineResult(PlotOutlineResult):
             @model_validator(mode="after")
-            def _require_all_user_actions(self):
+            def _require_all_turn_resolution_outcomes(self):
                 linked_in_order: list[str] = []
                 for beat in self.beats:
-                    for action_id in beat.linked_action_ids:
-                        if action_id not in linked_in_order:
-                            linked_in_order.append(action_id)
+                    for outcome_id in beat.linked_outcome_ids:
+                        if outcome_id not in linked_in_order:
+                            linked_in_order.append(outcome_id)
 
                 linked_ids = set(linked_in_order)
-                expected_ids = set(expected_action_ids)
+                expected_ids = set(expected_outcome_ids)
                 unknown = [
-                    action_id
-                    for action_id in linked_in_order
-                    if action_id not in expected_ids
+                    outcome_id
+                    for outcome_id in linked_in_order
+                    if outcome_id not in expected_ids
                 ]
                 if unknown:
                     raise ValueError(
-                        f"plot beats reference unknown linked_action_ids: {unknown}"
+                        f"plot beats reference unknown linked_outcome_ids: {unknown}"
                     )
 
                 missing = [
-                    action_id
-                    for action_id in expected_action_ids
-                    if action_id not in linked_ids
+                    outcome_id
+                    for outcome_id in expected_outcome_ids
+                    if outcome_id not in linked_ids
                 ]
                 if missing:
                     raise ValueError(
-                        "all user actions must be enacted in plot beats; "
-                        f"missing linked_action_ids: {missing}"
+                        "all turn resolution outcomes must be enacted in plot beats; "
+                        f"missing linked_outcome_ids: {missing}"
                     )
 
-                if linked_in_order != expected_action_ids:
+                if linked_in_order != expected_outcome_ids:
                     raise ValueError(
-                        "user actions must be enacted in atomic action sequence; "
-                        f"expected {expected_action_ids}, got {linked_in_order}"
+                        "turn resolution outcomes must be enacted in order; "
+                        f"expected {expected_outcome_ids}, got {linked_in_order}"
                     )
                 return self
 
@@ -86,7 +85,6 @@ class PlotOutlineAgent:
                     "core_memory_json": context.core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(context.current_state),
                     "user_input": context.user_input,
-                    "action_parse_result_json": project_action_parse(context.action_parse_result),
                     "turn_resolution_json": project_turn_resolution(context.turn_resolution),
                     "retrieved_memories_json": project_retrieved_memories(context.retrieved_memories),
                     "scene_summaries_json": project_scene_summaries(context.scene_summaries),

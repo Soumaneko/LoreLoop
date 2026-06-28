@@ -87,10 +87,21 @@ def _response(selected_type: str = "advance", outcome_band: str = "critical_succ
                 "actor": "主角",
                 "action_type": "observe",
                 "outcome_band": outcome_band,
+                "effect_reasoning": "观察属于 A 类可能性，玩家意图是查看四周，critical_success 应给出清晰且有利的发现。",
                 "resolved_effect": "主角清楚捕捉到四周最关键的异常，并获得一个可立即利用的优势。",
             }
         ],
     }, ensure_ascii=False)
+
+
+class _SpyGateway:
+    def __init__(self, response: dict):
+        self.response = response
+        self.calls: list[dict] = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        return kwargs["output_schema"].model_validate(self.response)
 
 
 class TestRollJudgment:
@@ -133,6 +144,7 @@ class TestRollJudgment:
                 actor="主角",
                 action_type="observe",
                 outcome_band="success",
+                effect_reasoning="观察属于 A 类，玩家意图查看四周，success 给出克制发现。",
                 resolved_effect=(
                     "这是一段过长的结果解释，会开始描写角色动作、场景氛围、心理变化和后续走向，"
                     "因此它已经不再是简短的判定事实，而是重新变成了大纲的大纲，甚至还继续补充更多细节，"
@@ -167,6 +179,24 @@ class TestTurnResolutionFilters:
 
 
 class TestTurnResolutionAgent:
+    def test_prompt_input_omits_action_parse_result(self):
+        gateway = _SpyGateway(json.loads(_response("advance", "critical_success")))
+
+        TurnResolutionAgent(gateway).resolve(
+            user_input="观察",
+            current_state=_state(),
+            action_parse_result=_parse(),
+            roll_results=_roll_batch(_roll(20)),
+            core_memory=CoreMemory(items=[]),
+            retrieved_memories=CandidateRetrievalResult(),
+            scene_summaries=[],
+        )
+
+        input_data = gateway.calls[0]["input_data"]
+        assert "user_input" in input_data
+        assert "roll_judgments_json" in input_data
+        assert "action_parse_result_json" not in input_data
+
     def test_llm_interprets_consequence_and_selects_type(self):
         mock = MockLLM()
         mock.set_responses([_response("advance", "critical_success")])

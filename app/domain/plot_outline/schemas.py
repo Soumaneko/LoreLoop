@@ -1,6 +1,6 @@
 import re
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class PlotBeat(BaseModel):
@@ -9,25 +9,11 @@ class PlotBeat(BaseModel):
     user_action_execution: str | None = None
     protagonist_response_guidance: str = Field(min_length=1)
     related_entities: list[str] = Field(default_factory=list)
-    linked_action_ids: list[str] = Field(default_factory=list)
-    linked_roll_ids: list[str] = Field(default_factory=list)
     linked_outcome_ids: list[str] = Field(default_factory=list)
     required_outcomes: list[str] = Field(default_factory=list)
     required_memory_indices: list[int] = Field(default_factory=list)
     state_implications: list[str] = Field(default_factory=list)
     tone_notes: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _require_execution_for_linked_actions(self):
-        if self.linked_action_ids and not (self.user_action_execution or "").strip():
-            raise ValueError(
-                "user_action_execution is required when linked_action_ids is not empty"
-            )
-        if not self.linked_action_ids and self.user_action_execution is not None:
-            raise ValueError(
-                "user_action_execution must be null when linked_action_ids is empty"
-            )
-        return self
 
     @field_validator("protagonist_response_guidance")
     @classmethod

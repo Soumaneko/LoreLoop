@@ -82,6 +82,7 @@ def _make_context() -> PlotOutlineContext:
                     actor="主角",
                     action_type="observe",
                     outcome_band="success",
+                    effect_reasoning="观察属于 A 类，玩家意图打量客人，success 给出可疑线索。",
                     resolved_effect="主角清楚发现酒馆客人中的可疑行为。",
                 )
             ],
@@ -149,7 +150,6 @@ def _build_outline_response(
                 "summary": "主角环顾酒馆，注意到角落里的可疑人物",
                 "user_action_execution": "主角按照用户输入仔细观察酒馆里的客人。",
                 "protagonist_response_guidance": "主角以警觉的观察和简短确认表现自己已经发现异常，但不立刻惊动对方。",
-                "linked_action_ids": ["a1"],
                 "linked_outcome_ids": ["a1"],
                 "required_outcomes": ["主角清楚发现酒馆客人中的可疑行为。"],
                 "required_memory_indices": [0],
@@ -162,7 +162,28 @@ def _build_outline_response(
     }, ensure_ascii=False)
 
 
+class _SpyGateway:
+    def __init__(self, response: dict):
+        self.response = response
+        self.calls: list[dict] = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        return kwargs["output_schema"].model_validate(self.response)
+
+
 class TestPlotOutlineAgent:
+    def test_prompt_input_omits_action_parse_result(self):
+        context = _make_context()
+        gateway = _SpyGateway(json.loads(_build_outline_response()))
+
+        PlotOutlineAgent(gateway).generate(context)
+
+        input_data = gateway.calls[0]["input_data"]
+        assert "user_input" in input_data
+        assert "turn_resolution_json" in input_data
+        assert "action_parse_result_json" not in input_data
+
     def test_generates_outline(self):
         context = _make_context()
         mock = MockLLM()
@@ -178,6 +199,9 @@ class TestPlotOutlineAgent:
         prompt = Path("app/prompts/plot_outline_v1.md").read_text(encoding="utf-8")
 
         assert "TurnResolutionResult" in prompt
+        assert "ActionParseResult" not in prompt
+        assert "Player Input 是本回合用户意图的最高优先级来源" in prompt
+        assert "不得只把角色带到地点后结束" in prompt
         assert "narrative_goal" not in prompt
         assert "resolved_effect" in prompt
         assert "information_policy" not in prompt
@@ -206,7 +230,6 @@ class TestPlotOutlineAgent:
         assert len(beat.summary) > 0
         assert len(beat.user_action_execution) > 0
         assert len(beat.protagonist_response_guidance) > 0
-        assert isinstance(beat.linked_action_ids, list)
         assert isinstance(beat.linked_outcome_ids, list)
         assert isinstance(beat.required_outcomes, list)
         assert isinstance(beat.required_memory_indices, list)
@@ -218,23 +241,15 @@ class TestPlotOutlineAgent:
                 summary="NPC 单方面提供一段重要情报。",
             )
 
-    def test_plot_beat_requires_execution_for_linked_actions(self):
-        with pytest.raises(ValueError, match="user_action_execution is required"):
-            PlotBeat(
-                beat_id="b1",
-                summary="行动结束后 NPC 作出评价。",
-                protagonist_response_guidance="主角简短回应 NPC 的评价。",
-                linked_action_ids=["a1"],
-            )
+    def test_plot_beat_accepts_execution_without_outcome_links(self):
+        beat = PlotBeat(
+            beat_id="b1",
+            summary="主角按用户原文行动。",
+            user_action_execution="主角执行了用户输入中的行动。",
+            protagonist_response_guidance="主角警觉地观察环境变化。",
+        )
 
-    def test_plot_beat_rejects_execution_without_linked_actions(self):
-        with pytest.raises(ValueError, match="must be null"):
-            PlotBeat(
-                beat_id="b1",
-                summary="纯环境变化。",
-                user_action_execution="主角执行了某个行动。",
-                protagonist_response_guidance="主角警觉地观察环境变化。",
-            )
+        assert "用户输入" in beat.user_action_execution
 
     @pytest.mark.parametrize(
         "guidance",
@@ -345,7 +360,7 @@ class TestPlotOutlineAgent:
                     "summary": "主角观察但没发现异常",
                     "user_action_execution": "主角仔细观察酒馆中的所有客人。",
                     "protagonist_response_guidance": "主角对没有发现异常表现出克制的疑惑，并继续保持观察姿态。",
-                    "linked_action_ids": ["a1"],
+                    "linked_outcome_ids": ["a1"],
                     "required_memory_indices": [],
                     "state_implications": [],
                     "tone_notes": [],
@@ -368,7 +383,7 @@ class TestPlotOutlineAgent:
                     "summary": "第一步",
                     "user_action_execution": "主角执行观察行动。",
                     "protagonist_response_guidance": "主角对第一步结果作即时确认。",
-                    "linked_action_ids": ["a1"],
+                    "linked_outcome_ids": ["a1"],
                     "required_memory_indices": [],
                     "state_implications": [],
                     "tone_notes": [],
@@ -377,7 +392,6 @@ class TestPlotOutlineAgent:
                     "beat_id": "b2",
                     "summary": "第二步",
                     "protagonist_response_guidance": "主角承接前一步信息，自然回应当前变化。",
-                    "linked_action_ids": [],
                     "required_memory_indices": [],
                     "state_implications": [],
                     "tone_notes": [],
@@ -392,16 +406,16 @@ class TestPlotOutlineAgent:
         assert result.beats[0].beat_id == "b1"
         assert result.beats[1].beat_id == "b2"
 
-    def test_retries_when_user_action_is_omitted(self):
+    def test_retries_when_turn_resolution_outcome_is_omitted(self):
         context = _make_context()
         invalid = _build_outline_response(
             beats=[
                 {
                     "beat_id": "b1",
-                    "summary": "从观察行动完成后的 NPC 反应开始。",
-                    "user_action_execution": None,
+                    "summary": "主角观察酒馆，但没有落实判定结果。",
+                    "user_action_execution": "主角仔细观察酒馆里的客人。",
                     "protagonist_response_guidance": "主角对 NPC 的反应保持警觉。",
-                    "linked_action_ids": [],
+                    "linked_outcome_ids": [],
                 }
             ]
         )
@@ -410,54 +424,42 @@ class TestPlotOutlineAgent:
 
         result = PlotOutlineAgent(mock.build_gateway()).generate(context)
 
-        assert result.beats[0].linked_action_ids == ["a1"]
+        assert result.beats[0].linked_outcome_ids == ["a1"]
         assert "仔细观察" in result.beats[0].user_action_execution
 
-    def test_retries_when_plot_starts_after_earlier_user_actions(self):
+    def test_retries_when_turn_resolution_outcomes_are_out_of_order(self):
         context = _make_context()
-        context.action_parse_result.atomic_actions = [
-            AtomicAction(
-                action_id="A1",
-                sequence=1,
-                actor="主角",
-                action_type="speak",
-                raw_text="说明无法力敌，并提出挖沟拖延。",
-                verb="说明",
-                target="同伴",
-                likely_needs_roll=False,
-                confidence=0.95,
-            ),
-            AtomicAction(
-                action_id="A2",
-                sequence=2,
-                actor="主角",
-                action_type="interact_object",
-                raw_text="快速挖一条小壕沟。",
-                verb="挖掘",
-                target="地面",
-                likely_needs_roll=True,
-                confidence=0.95,
-            ),
-            AtomicAction(
-                action_id="A3",
-                sequence=3,
-                actor="主角",
-                action_type="move",
-                raw_text="以最快速度绕路返回镇子。",
-                verb="返回",
-                target="镇子",
-                likely_needs_roll=True,
-                confidence=0.95,
-            ),
-        ]
+        context.turn_resolution = TurnResolutionResult(
+            selected_type="advance",
+            action_resolutions=[
+                ActionResolutionFrame(
+                    action_id="A2",
+                    sequence=2,
+                    actor="主角",
+                    action_type="interact_object",
+                    outcome_band="success",
+                    effect_reasoning="挖沟属于 A 类，玩家主动挖掘，success 让浅沟拖慢主蔓。",
+                    resolved_effect="主角挖出的浅沟成功拖慢主蔓蔓延。",
+                ),
+                ActionResolutionFrame(
+                    action_id="A3",
+                    sequence=3,
+                    actor="主角",
+                    action_type="move",
+                    outcome_band="success",
+                    effect_reasoning="绕行属于 A 类，玩家沿路返回，success 让其顺利抵达。",
+                    resolved_effect="主角沿绕行路线顺利返回镇子外围。",
+                ),
+            ],
+        )
         invalid = _build_outline_response(
             beats=[
                 {
                     "beat_id": "b1",
-                    "summary": "两人沿绕行路线撤离。",
-                    "user_action_execution": "主角开始绕路返回镇子。",
+                    "summary": "主角先撤离再挖沟，顺序错误。",
+                    "user_action_execution": "主角先返回镇子，再回头处理浅沟。",
                     "protagonist_response_guidance": "主角警觉地观察撤离路线。",
-                    "linked_action_ids": ["A3"],
+                    "linked_outcome_ids": ["A3", "A2"],
                 }
             ]
         )
@@ -465,13 +467,13 @@ class TestPlotOutlineAgent:
             beats=[
                 {
                     "beat_id": "b1",
-                    "summary": "主角说明计划并挖沟，然后开始撤离。",
+                    "summary": "主角先挖沟拖慢主蔓，再开始撤离。",
                     "user_action_execution": (
-                        "主角先向同伴说明无法力敌并提出挖沟拖延，随后亲手快速挖出浅沟，"
+                        "主角根据用户原文先亲手快速挖出浅沟，"
                         "完成后立即沿绕行路线返回镇子。"
                     ),
                     "protagonist_response_guidance": "主角确认浅沟截住主蔓后，警觉地观察撤离路线。",
-                    "linked_action_ids": ["A1", "A2", "A3"],
+                    "linked_outcome_ids": ["A2", "A3"],
                 }
             ]
         )
@@ -480,7 +482,7 @@ class TestPlotOutlineAgent:
 
         result = PlotOutlineAgent(mock.build_gateway()).generate(context)
 
-        assert result.beats[0].linked_action_ids == ["A1", "A2", "A3"]
+        assert result.beats[0].linked_outcome_ids == ["A2", "A3"]
         assert "挖出浅沟" in result.beats[0].user_action_execution
 
 

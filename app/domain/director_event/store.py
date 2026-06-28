@@ -64,10 +64,13 @@ class DirectorEventStore:
         return self._list_by_status("archived")
 
     def get_latest_inactive(self) -> DirectorEvent | None:
+        return self.get_latest_archived()
+
+    def get_latest_archived(self) -> DirectorEvent | None:
         row = self._conn.execute(
             """
             SELECT event_json FROM director_events
-            WHERE status IN ('archived', 'suspended')
+            WHERE status = 'archived'
             ORDER BY COALESCE(updated_turn, created_turn) DESC, updated_at DESC
             LIMIT 1
             """
@@ -80,17 +83,9 @@ class DirectorEventStore:
         turn_index: int,
         cooldown_turns: int,
     ) -> DirectorEvent | None:
-        row = self._conn.execute(
-            """
-            SELECT event_json FROM director_events
-            WHERE status = 'archived'
-            ORDER BY COALESCE(updated_turn, created_turn) DESC, updated_at DESC
-            LIMIT 1
-            """
-        ).fetchone()
-        if row is None:
+        event = self.get_latest_archived()
+        if event is None:
             return None
-        event = self._event_from_row(row)
         resolved_turn = event.resolved_turn or event.updated_turn
         if resolved_turn is None or turn_index > resolved_turn + cooldown_turns:
             return None
