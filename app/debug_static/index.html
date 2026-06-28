@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TVG Memory Debugger</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="panel state-panel">
+      <header class="panel-header">
+        <div>
+          <div class="eyebrow">Runtime</div>
+          <h1>State</h1>
+        </div>
+        <button id="refreshBtn" class="icon-button" title="刷新状态">↻</button>
+      </header>
+      <div id="statePanel" class="panel-scroll"></div>
+    </aside>
+
+    <main class="panel play-panel">
+      <header class="panel-header">
+        <div>
+          <div class="eyebrow">Interactive Narrative</div>
+          <h1>Turn Console</h1>
+        </div>
+        <div id="statusText" class="status-pill">Ready</div>
+      </header>
+      <section id="messages" class="messages"></section>
+      <footer class="composer">
+        <textarea id="input" placeholder="输入玩家行动，例如：我环顾酒馆，低声询问米莉昨晚看见了什么。"></textarea>
+        <div class="composer-actions">
+          <div class="button-row">
+            <button id="generateBtn" class="primary-button">执行回合</button>
+            <button id="confirmBtn" disabled>确认采用</button>
+            <label class="control-pill">
+              难度
+              <select id="difficultySelect">
+                <option value="困难" selected>困难</option>
+                <option value="普通">普通</option>
+                <option value="简单">简单</option>
+              </select>
+            </label>
+            <label class="control-pill">
+              篇幅
+              <input id="maxCharsInput" type="number" min="100" max="5000" step="100" value="1500" />
+            </label>
+            <label class="control-pill">
+              <input id="writeDbToggle" type="checkbox" checked />
+              写入 DB
+            </label>
+          </div>
+          <div id="turnInfo" class="muted">等待玩家行动</div>
+        </div>
+      </footer>
+    </main>
+
+    <aside class="panel debug-panel">
+      <header class="panel-header">
+        <div>
+          <div class="eyebrow">Observability</div>
+          <h1>Debug</h1>
+        </div>
+        <div id="debugStatus" class="status-pill muted-pill">无生成结果</div>
+      </header>
+      <nav id="tabs" class="tabs"></nav>
+      <div id="debugBody" class="debug-body"></div>
+    </aside>
+  </div>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>

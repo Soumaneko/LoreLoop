@@ -12,6 +12,7 @@ from app.domain.scene_writer.helpers import (
     select_required_memories,
 )
 from app.domain.scene_writer.schemas import SceneWriterResult
+from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.short_term_memory.schemas import ShortTermMemory
 
 __all__ = [
@@ -32,6 +33,7 @@ def generate_scene_workflow(
     gateway: LLMGateway,
     turn_index: int,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
+    recent_summaries: list[SceneSummary] | None = None,
     memory_store: MemoryStore | None = None,
     max_chars: int = 1500,
     trace_id: str | None = None,
@@ -55,6 +57,7 @@ def generate_scene_workflow(
         core_memory=core_memory,
         selected_memories=selected_memories,
         entity_profiles=entity_profiles or [],
+        recent_summaries=recent_summaries or [],
         recent_scene=recent_scene,
         turn_index=turn_index,
         max_chars=max_chars,

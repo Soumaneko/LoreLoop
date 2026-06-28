@@ -9,7 +9,7 @@ from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandida
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.opening import OpeningSceneAgent
 from app.domain.scene_writer.schemas import SceneWriterResult
-from app.domain.scene_writer.views import project_outline
+from app.domain.scene_writer.views import project_outline, project_recent_scene
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
 from app.domain.core_memory import InitConfig, build_core_memory, build_initial_current_state
 from app.workflows.generate_scene import generate_scene_workflow, select_required_memories
@@ -91,6 +91,23 @@ class TestSceneWriterAgent:
         assert projected["beats"][0]["user_action_execution"] == (
             "主角走向吧台，主动向米莉打招呼。"
         )
+
+    def test_recent_scene_projection_omits_user_input(self):
+        projected = json.loads(project_recent_scene(ShortTermScene(
+            scene_id="scene_001",
+            turn_index=1,
+            user_input="观察四周",
+            scene_text="主角环顾酒馆。",
+            narrative_type="advance",
+        )))
+
+        assert projected == {
+            "scene_id": "scene_001",
+            "turn_index": 1,
+            "scene_text": "主角环顾酒馆。",
+            "narrative_type": "advance",
+        }
+        assert "user_input" not in projected
 
     def test_prompt_allows_natural_reactions_but_protects_major_decisions(self):
         prompt = Path("app/prompts/scene_write_v1.md").read_text(encoding="utf-8")

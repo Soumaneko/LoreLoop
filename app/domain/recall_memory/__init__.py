@@ -21,13 +21,6 @@ from .batch_classifier import (
 from .draft_extractor import MemoryDraftExtractor
 from .pending_store import PendingMemoryStore
 from .store import MemoryStore
-from .consolidator import (
-    ConsolidationProposal,
-    MemoryConsolidationApplyResult,
-    MemoryConsolidationBatch,
-    MemoryConsolidationGroup,
-    MemoryConsolidator,
-)
 from .maintainer import (
     MemoryMaintenanceApplyResult,
     MemoryMaintenanceBatch,
@@ -57,11 +50,6 @@ __all__ = [
     "MemoryDraftExtractor",
     "SimilarMemoryPreMerger",
     "MemoryStore",
-    "ConsolidationProposal",
-    "MemoryConsolidationApplyResult",
-    "MemoryConsolidationBatch",
-    "MemoryConsolidationGroup",
-    "MemoryConsolidator",
     "MemoryMaintainer",
     "MemoryMaintenanceProposal",
     "MemoryMaintenanceBatch",

@@ -75,10 +75,14 @@ class TestPendingMemoryStore:
 
             assert len(ids) == 5
             assert store.unclassified_turn_count() == 5
+            assert store.count() == 5
+            assert store.count_unclassified() == 5
             assert store.should_trigger_batch(turn_threshold=5)
 
             store.mark_classified(ids[:2])
             assert store.unclassified_turn_count() == 3
+            assert store.count() == 5
+            assert store.count_unclassified() == 3
 
     def test_source_text_span_list_round_trips(self):
         with PendingMemoryStore(":memory:") as store:
@@ -103,21 +107,17 @@ class TestPendingMemoryStore:
                 "侍者也说钥匙在钟楼。",
             ]
 
-    def test_batch_classify_count_persists_and_triggers_consolidation(self, tmp_path):
+    def test_batch_classify_count_persists(self, tmp_path):
         db_path = str(tmp_path / "pending.db")
 
         with PendingMemoryStore(db_path) as store:
             assert store.batch_classify_count() == 0
-            assert store.should_trigger_consolidation(every=3) is False
             assert store.record_batch_classified() == 1
             assert store.record_batch_classified() == 2
-            assert store.should_trigger_consolidation(every=3) is False
             assert store.record_batch_classified() == 3
-            assert store.should_trigger_consolidation(every=3) is True
 
         with PendingMemoryStore(db_path) as store:
             assert store.batch_classify_count() == 3
-            assert store.should_trigger_consolidation(every=3) is True
 
 
 class TestMemoryDraftExtractor:

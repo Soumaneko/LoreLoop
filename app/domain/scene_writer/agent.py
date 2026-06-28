@@ -9,13 +9,15 @@ from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.retrieval.schemas import MemoryCandidate
+from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
-from app.domain.scene_writer.views import project_outline
+from app.domain.scene_writer.views import project_outline, project_recent_scene
 from app.domain.short_term_memory.schemas import ShortTermScene
 from app.domain.views import (
     project_current_state,
     project_entity_profiles,
     project_memory_candidates,
+    project_scene_summaries,
 )
 
 
@@ -32,6 +34,7 @@ class SceneWriterAgent:
         selected_memories: list[MemoryCandidate],
         recent_scene: ShortTermScene | None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
+        recent_summaries: list[SceneSummary] | None = None,
         turn_index: int = 1,
         max_chars: int = 1500,
         trace_id: str | None = None,
@@ -57,7 +60,8 @@ class SceneWriterAgent:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "selected_memories_json": project_memory_candidates(selected_memories),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),
-                    "recent_scene_json": recent_scene.model_dump_json(indent=2) if recent_scene else "null",
+                    "recent_summaries_json": project_scene_summaries(recent_summaries or []),
+                    "recent_scene_json": project_recent_scene(recent_scene),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=runtime_schema,

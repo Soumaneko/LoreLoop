@@ -3,32 +3,51 @@ import json
 from .schemas import DirectorEvent
 
 
+def _recent_archived_projection(recent_archived_event: DirectorEvent | None) -> dict | None:
+    if recent_archived_event is None or not recent_archived_event.resolved_by_hook:
+        return None
+    data = {
+        "status": "recently_archived",
+        "event_id": recent_archived_event.event_id,
+        "title": recent_archived_event.title,
+        "resolved_turn": recent_archived_event.resolved_turn
+        or recent_archived_event.updated_turn,
+        "resolved_by_hook": recent_archived_event.resolved_by_hook,
+        "message": (
+            f"由于{recent_archived_event.resolved_by_hook}，"
+            f"『{recent_archived_event.title}』事件已收束。"
+        ),
+    }
+    if recent_archived_event.resolved_reason:
+        data["resolved_reason"] = recent_archived_event.resolved_reason
+    return data
+
+
+def _active_event_projection(event: DirectorEvent) -> dict:
+    data = event.semantic_view()
+    if event.phase == "crisis":
+        data.pop("known_to_player", None)
+    if event.phase == "latent":
+        data.pop("manifesting_prevention_hooks", None)
+        data.pop("crisis_resolution_hooks", None)
+    elif event.phase == "manifesting":
+        data.pop("crisis_resolution_hooks", None)
+    elif event.phase == "crisis":
+        data.pop("manifesting_prevention_hooks", None)
+    return data
+
+
 def project_director_event(
     event: DirectorEvent | None,
     *,
     recent_archived_event: DirectorEvent | None = None,
 ) -> str:
     if event is None:
-        if recent_archived_event is not None and recent_archived_event.resolved_by_hook:
-            data = {
-                "status": "recently_archived",
-                "event_id": recent_archived_event.event_id,
-                "title": recent_archived_event.title,
-                "resolved_turn": recent_archived_event.resolved_turn
-                or recent_archived_event.updated_turn,
-                "resolved_by_hook": recent_archived_event.resolved_by_hook,
-                "message": (
-                    f"由于{recent_archived_event.resolved_by_hook}，"
-                    f"『{recent_archived_event.title}』事件已收束。"
-                ),
-            }
-            if recent_archived_event.resolved_reason:
-                data["resolved_reason"] = recent_archived_event.resolved_reason
+        data = _recent_archived_projection(recent_archived_event)
+        if data is not None:
             return json.dumps(data, ensure_ascii=False, indent=2)
         return "null"
-    data = event.semantic_view()
-    if event.phase == "crisis":
-        data.pop("known_to_player", None)
+    data = _active_event_projection(event)
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 

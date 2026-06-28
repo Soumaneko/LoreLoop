@@ -17,6 +17,12 @@
 {current_state_summary_json}
 ```
 
+## Scene Summaries
+
+```json
+{recent_summaries_json}
+```
+
 
 # 输入
 

@@ -29,6 +29,12 @@
 {entity_profiles_json}
 ```
 
+## Scene Summaries
+
+```json
+{recent_summaries_json}
+```
+
 ## Recent Scene
 
 ```json

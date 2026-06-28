@@ -154,7 +154,12 @@ class TestActiveMemoryFiltering:
                 confidence=0.9,
             ),
         ])
-        store.deactivate(ids[0], merged_into=ids[1])
+        store.set_status(
+            [ids[0]],
+            status="superseded",
+            reason="replaced_by_newer_memory",
+            superseded_by=ids[1],
+        )
 
         action = _make_action(
             action_id="A1",

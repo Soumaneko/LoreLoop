@@ -302,10 +302,26 @@ class TestDirectorEventViews:
         assert projected["resolved_by_hook"] == _crisis_hooks()[0]
         assert projected["message"] == f"由于{_crisis_hooks()[0]}，『失踪的信使』事件已收束。"
 
-    def test_projection_exposes_stage_hooks(self):
+    def test_projection_hides_hooks_while_latent(self):
         projected = json.loads(project_director_event(_event()))
 
+        assert "manifesting_prevention_hooks" not in projected
+        assert "crisis_resolution_hooks" not in projected
+
+    def test_projection_exposes_only_manifesting_hooks(self):
+        event = _event().model_copy(update={"phase": "manifesting"})
+
+        projected = json.loads(project_director_event(event))
+
         assert projected["manifesting_prevention_hooks"] == _manifesting_hooks()
+        assert "crisis_resolution_hooks" not in projected
+
+    def test_projection_exposes_only_crisis_hooks(self):
+        event = _event().model_copy(update={"phase": "crisis"})
+
+        projected = json.loads(project_director_event(event))
+
+        assert "manifesting_prevention_hooks" not in projected
         assert projected["crisis_resolution_hooks"] == _crisis_hooks()
 
     def test_latent_instructions_are_optional_and_relevance_based(self):

@@ -288,6 +288,7 @@ def generate_turn_stream(
             gateway=gateway,
             turn_index=next_turn_index,
             entity_profiles=writer_entity_profile_views,
+            recent_summaries=recent_summaries,
             memory_store=mem_store,
             max_chars=max_chars,
             trace_id=trace_id,

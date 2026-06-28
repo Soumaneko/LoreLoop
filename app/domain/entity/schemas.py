@@ -91,6 +91,8 @@ class EntityProfile(BaseModel):
     confidence: float = Field(default=0.5, ge=0, le=1)
     updated_at: str = ""
     active: bool = True
+    name_hit_count: int = Field(default=1, ge=0)
+    alias_hit_counts: dict[str, int] = Field(default_factory=dict)
 
     def semantic_view(self) -> EntityProfileUpdateInput:
         return EntityProfileUpdateInput(
@@ -120,6 +122,8 @@ def profile_from_semantic(
     confidence: float = 0.5,
     updated_at: str | None = None,
     active: bool = True,
+    name_hit_count: int = 1,
+    alias_hit_counts: dict[str, int] | None = None,
 ) -> EntityProfile:
     return EntityProfile(
         entity_id=entity_id or _new_id(),
@@ -142,4 +146,6 @@ def profile_from_semantic(
         confidence=confidence,
         updated_at=updated_at or utc_now(),
         active=active,
+        name_hit_count=name_hit_count,
+        alias_hit_counts=dict(alias_hit_counts or {}),
     )

@@ -34,11 +34,8 @@ class PlotBeat(BaseModel):
     def _require_concrete_protagonist_response(cls, value: str) -> str:
         cleaned = value.strip()
         optional_patterns = (
-            r"可以",
             r"可选择",
-            r"也可",
             r"任选",
-            r"或(?:者)?(?:询问|追问|确认|表达|观察|回应|保持|指出)",
         )
         if any(re.search(pattern, cleaned) for pattern in optional_patterns):
             raise ValueError(

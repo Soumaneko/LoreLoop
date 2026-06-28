@@ -132,14 +132,19 @@ class TestMemoryStoreDedup:
 
 
 class TestMemoryStoreActiveRecords:
-    def test_list_active_excludes_deactivated_memory(self):
+    def test_list_active_excludes_superseded_memory(self):
         with MemoryStore(":memory:") as store:
             ids = store.save_many([
                 _make_memory(subject="旧记忆", content="旧内容"),
                 _make_memory(subject="新记忆", content="新内容"),
             ])
 
-            store.deactivate(ids[0], merged_into=ids[1])
+            store.set_status(
+                [ids[0]],
+                status="superseded",
+                reason="replaced_by_newer_memory",
+                superseded_by=ids[1],
+            )
 
             active = store.list_active()
             assert [memory.id for memory in active] == [ids[1]]
@@ -162,7 +167,12 @@ class TestMemoryStoreActiveRecords:
         with MemoryStore(":memory:") as store:
             first_id = store.save_one_returning_id(_make_memory(subject="重复", content="同内容"))
             replacement_id = store.save_one_returning_id(_make_memory(subject="替代", content="新内容"))
-            store.deactivate(first_id, merged_into=replacement_id)
+            store.set_status(
+                [first_id],
+                status="superseded",
+                reason="replaced_by_newer_memory",
+                superseded_by=replacement_id,
+            )
 
             returned_id = store.save_one_returning_id(_make_memory(subject="重复", content="同内容"))
 

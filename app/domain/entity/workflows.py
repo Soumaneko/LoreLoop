@@ -11,6 +11,7 @@ from app.domain.entity.schemas import (
 from app.domain.entity.extractor import EntityExtractor
 from app.domain.entity.store import EntityStore
 from app.domain.entity.updater import EntityProfileUpdater, apply_semantic_update
+from app.domain.scene_summary.schemas import SceneSummary
 
 
 @dataclass
@@ -26,6 +27,7 @@ def update_entity_profiles_workflow(
     gateway: LLMGateway,
     entity_store: EntityStore,
     *,
+    recent_summaries: list[SceneSummary] | None = None,
     trace_id: str | None = None,
 ) -> UpdateEntityProfilesResult:
     existing = entity_store.list_all()
@@ -45,6 +47,7 @@ def update_entity_profiles_workflow(
         entity_store=entity_store,
         existing_profiles=existing,
         extraction=extraction,
+        recent_summaries=recent_summaries,
         trace_id=trace_id,
     )
 
@@ -58,10 +61,20 @@ def update_entity_profiles_from_extraction(
     entity_store: EntityStore,
     existing_profiles: list[EntityProfile],
     extraction: EntityExtractionResult,
+    recent_summaries: list[SceneSummary] | None = None,
     trace_id: str | None = None,
 ) -> UpdateEntityProfilesResult:
+    _record_existing_entity_mentions(entity_store, extraction, existing_profiles)
+    existing_profiles = [
+        entity_store.get_by_id(profile.entity_id) or profile
+        for profile in existing_profiles
+    ]
     extraction = _normalize_extraction_matches(extraction, existing_profiles)
     _apply_alias_matches(entity_store, extraction.alias_matches)
+    existing_profiles = [
+        entity_store.get_by_id(profile.entity_id) or profile
+        for profile in existing_profiles
+    ]
 
     profiles_by_index = {
         index: profile
@@ -95,6 +108,7 @@ def update_entity_profiles_from_extraction(
         relevant_profiles=relevant_profiles,
         new_entity_hints=new_entity_hints,
         core_memory=core_memory,
+        recent_summaries=recent_summaries,
         trace_id=trace_id,
     )
 
@@ -293,7 +307,57 @@ def _apply_alias_matches(entity_store: EntityStore, alias_matches) -> None:
             continue
         profile = entity_store.get_by_name(match.matched_entity_name)
         if profile is not None:
-            entity_store.append_alias(profile.entity_id, match.new_alias)
+            entity_store.append_alias(
+                profile.entity_id,
+                match.new_alias,
+                initial_hit_count=1,
+            )
+
+
+def _record_existing_entity_mentions(
+    entity_store: EntityStore,
+    extraction: EntityExtractionResult,
+    existing_profiles: list[EntityProfile],
+) -> None:
+    seen: set[tuple[str, str]] = set()
+
+    for entity in extraction.retrieved_entities:
+        if entity.source == "new":
+            continue
+        profile_index = _resolve_matched_profile_index(
+            requested_index=entity.matched_entity_index,
+            matched_name=entity.matched_entity_name,
+            extracted_text=entity.name,
+            entity_type=entity.entity_type,
+            existing_profiles=existing_profiles,
+        )
+        if profile_index is None:
+            continue
+        profile = existing_profiles[profile_index]
+        surface = str(entity.name).strip()
+        key = (profile.entity_id, _normalize_key(surface))
+        if surface and key not in seen:
+            seen.add(key)
+            entity_store.record_mention(profile.entity_id, surface)
+
+    for match in extraction.alias_matches:
+        if match.new_alias:
+            continue
+        profile_index = _resolve_matched_profile_index(
+            requested_index=match.matched_entity_index,
+            matched_name=match.matched_entity_name,
+            extracted_text=match.extracted_text,
+            entity_type=match.matched_entity_type,
+            existing_profiles=existing_profiles,
+        )
+        if profile_index is None:
+            continue
+        profile = existing_profiles[profile_index]
+        surface = str(match.extracted_text).strip()
+        key = (profile.entity_id, _normalize_key(surface))
+        if surface and key not in seen:
+            seen.add(key)
+            entity_store.record_mention(profile.entity_id, surface)
 
 
 def _gather_names(

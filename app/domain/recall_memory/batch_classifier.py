@@ -6,6 +6,7 @@ from pydantic import model_validator
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.recall_memory.schemas import (
     ClassifiedMemoryCandidate,
     Memory,
@@ -48,10 +49,13 @@ class MemoryBatchClassifier:
         current_state: CurrentState,
         *,
         core_memory: CoreMemory,
+        recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
     ) -> MemoryBatchClassifierResult:
         if not pending_items:
             return MemoryBatchClassifierResult()
+
+        from app.domain.views import project_scene_summaries
 
         expected_pending_items = list(pending_items)
 
@@ -75,6 +79,7 @@ class MemoryBatchClassifier:
                     ensure_ascii=False,
                     indent=2,
                 ),
+                "recent_summaries_json": project_scene_summaries(recent_summaries or []),
                 "output_schema_json": json.dumps(
                     MemoryBatchClassificationResult.model_json_schema(),
                     ensure_ascii=False,

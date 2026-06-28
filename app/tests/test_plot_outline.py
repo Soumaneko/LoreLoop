@@ -239,10 +239,8 @@ class TestPlotOutlineAgent:
     @pytest.mark.parametrize(
         "guidance",
         [
-            "主角可以追问材料用量。",
             "主角可选择确认风险。",
-            "主角追问配比，或询问附近是否有材料。",
-            "主角也可以保持沉默。",
+            "主角在追问与沉默之间任选其一。",
         ],
     )
     def test_plot_beat_rejects_optional_response_choices(self, guidance):
@@ -252,6 +250,23 @@ class TestPlotOutlineAgent:
                 summary="NPC 提供关键情报。",
                 protagonist_response_guidance=guidance,
             )
+
+    @pytest.mark.parametrize(
+        "guidance",
+        [
+            "主角点头表示理解，确认自己可以应付眼前的局势。",
+            "主角追问真相，语气里带着疑虑，或者说更接近不安。",
+            "主角也可能在心里盘算下一步，但当下只是简短回应。",
+        ],
+    )
+    def test_plot_beat_accepts_relaxed_concrete_response(self, guidance):
+        beat = PlotBeat(
+            beat_id="b1",
+            summary="NPC 提供关键情报。",
+            protagonist_response_guidance=guidance,
+        )
+
+        assert beat.protagonist_response_guidance == guidance
 
     def test_plot_beat_accepts_one_concrete_response(self):
         beat = PlotBeat(

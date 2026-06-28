@@ -30,9 +30,21 @@ class EntityStore:
                 source_memory_ids_json TEXT NOT NULL DEFAULT '[]',
                 confidence REAL NOT NULL DEFAULT 0.5,
                 updated_at TEXT NOT NULL DEFAULT '',
-                active INTEGER NOT NULL DEFAULT 1
+                active INTEGER NOT NULL DEFAULT 1,
+                name_hit_count INTEGER NOT NULL DEFAULT 1,
+                alias_hit_counts_json TEXT NOT NULL DEFAULT '{}'
             )
             """
+        )
+        self._ensure_column(
+            "entity_profiles",
+            "name_hit_count",
+            "INTEGER NOT NULL DEFAULT 1",
+        )
+        self._ensure_column(
+            "entity_profiles",
+            "alias_hit_counts_json",
+            "TEXT NOT NULL DEFAULT '{}'",
         )
         self._db.execute(
             """
@@ -59,6 +71,12 @@ class EntityStore:
         )
         self._db.commit()
 
+    def _ensure_column(self, table: str, column: str, definition: str) -> None:
+        rows = self._db.execute(f"PRAGMA table_info({table})").fetchall()
+        if column in {str(row["name"]) for row in rows}:
+            return
+        self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
     def _row_to_profile(self, row: sqlite3.Row) -> EntityProfile:
         semantic = EntityProfileUpdateInput.model_validate(json.loads(row["profile_json"]))
         return profile_from_semantic(
@@ -69,9 +87,12 @@ class EntityStore:
             confidence=row["confidence"],
             updated_at=row["updated_at"],
             active=bool(row["active"]),
+            name_hit_count=int(row["name_hit_count"]),
+            alias_hit_counts=json.loads(row["alias_hit_counts_json"] or "{}"),
         )
 
     def upsert(self, profile: EntityProfile) -> str:
+        self._maybe_promote_alias(profile)
         now = profile.updated_at or utc_now()
         semantic = profile.semantic_view()
         self._db.execute(
@@ -79,8 +100,8 @@ class EntityStore:
             INSERT INTO entity_profiles (
                 id, entity_type, name, aliases_json, profile_json,
                 source_scene_ids_json, source_memory_ids_json,
-                confidence, updated_at, active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                confidence, updated_at, active, name_hit_count, alias_hit_counts_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 entity_type = excluded.entity_type,
                 name = excluded.name,
@@ -90,7 +111,9 @@ class EntityStore:
                 source_memory_ids_json = excluded.source_memory_ids_json,
                 confidence = excluded.confidence,
                 updated_at = excluded.updated_at,
-                active = excluded.active
+                active = excluded.active,
+                name_hit_count = excluded.name_hit_count,
+                alias_hit_counts_json = excluded.alias_hit_counts_json
             """,
             (
                 profile.entity_id,
@@ -103,6 +126,8 @@ class EntityStore:
                 profile.confidence,
                 now,
                 int(profile.active),
+                profile.name_hit_count,
+                json.dumps(profile.alias_hit_counts, ensure_ascii=False),
             ),
         )
         self._db.commit()
@@ -191,7 +216,13 @@ class EntityStore:
         profile.updated_at = utc_now()
         self.upsert(profile)
 
-    def append_alias(self, entity_id: str, alias: str) -> bool:
+    def append_alias(
+        self,
+        entity_id: str,
+        alias: str,
+        *,
+        initial_hit_count: int = 0,
+    ) -> bool:
         profile = self.get_by_id(entity_id)
         clean = str(alias).strip()
         if profile is None or not clean:
@@ -200,9 +231,69 @@ class EntityStore:
         if clean.casefold() in alias_keys or clean.casefold() == profile.name.casefold():
             return False
         profile.aliases.append(clean)
+        if initial_hit_count > 0:
+            profile.alias_hit_counts[clean] = max(
+                profile.alias_hit_counts.get(clean, 0),
+                initial_hit_count,
+            )
+        self._maybe_promote_alias(profile)
         profile.updated_at = utc_now()
         self.upsert(profile)
         return True
+
+    def record_mention(self, entity_id: str, surface: str) -> bool:
+        profile = self.get_by_id(entity_id)
+        clean = str(surface).strip()
+        if profile is None or not clean:
+            return False
+
+        if clean.casefold() == profile.name.casefold():
+            profile.name_hit_count += 1
+        else:
+            alias = _find_alias(profile, clean)
+            if alias is None:
+                return False
+            profile.alias_hit_counts[alias] = profile.alias_hit_counts.get(alias, 0) + 1
+
+        self._maybe_promote_alias(profile)
+        profile.updated_at = utc_now()
+        self.upsert(profile)
+        return True
+
+    def _maybe_promote_alias(self, profile: EntityProfile) -> None:
+        candidates = []
+        for alias in profile.aliases:
+            count = profile.alias_hit_counts.get(alias, 0)
+            if count > profile.name_hit_count:
+                candidates.append((count, alias))
+        if not candidates:
+            return
+
+        candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        promoted_alias = candidates[0][1]
+        if self._name_conflicts(profile, promoted_alias):
+            return
+
+        old_name = profile.name
+        old_name_count = profile.name_hit_count
+        promoted_count = profile.alias_hit_counts.pop(promoted_alias, 0)
+        profile.name = promoted_alias
+        profile.name_hit_count = promoted_count
+        profile.aliases = _merge_unique([
+            old_name,
+            *[alias for alias in profile.aliases if alias.casefold() != promoted_alias.casefold()],
+        ])
+        profile.alias_hit_counts[old_name] = max(
+            profile.alias_hit_counts.get(old_name, 0),
+            old_name_count,
+        )
+
+    def _name_conflicts(self, profile: EntityProfile, name: str) -> bool:
+        key = _norm(name)
+        for other in self.list_all(entity_type=profile.entity_type):
+            if other.entity_id != profile.entity_id and _norm(other.name) == key:
+                return True
+        return False
 
     def close(self) -> None:
         self._db.close()
@@ -221,6 +312,26 @@ def _norm(value: str) -> str:
 def _name_matches(term: str, profile: EntityProfile) -> bool:
     names = [profile.name, *profile.aliases]
     return any(term == _norm(name) for name in names)
+
+
+def _find_alias(profile: EntityProfile, surface: str) -> str | None:
+    key = surface.casefold()
+    for alias in profile.aliases:
+        if alias.casefold() == key:
+            return alias
+    return None
+
+
+def _merge_unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    merged: list[str] = []
+    for value in values:
+        clean = str(value).strip()
+        key = clean.casefold()
+        if clean and key not in seen:
+            seen.add(key)
+            merged.append(clean)
+    return merged
 
 
 def _match_score(memory_entity: str, profile_name: str, aliases: list[str]) -> float:

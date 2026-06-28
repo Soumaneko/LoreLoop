@@ -331,23 +331,6 @@ class MemoryStore:
         )
         self._conn.commit()
 
-    # Compatibility helpers for old callers during migration.
-    def deactivate(self, memory_id: str, *, merged_into: str) -> None:
-        self.set_status(
-            [memory_id],
-            status="superseded",
-            reason="merged_by_legacy_consolidator",
-            superseded_by=merged_into,
-        )
-
-    def deactivate_many(self, memory_ids: list[str], *, merged_into: str) -> None:
-        self.set_status(
-            memory_ids,
-            status="superseded",
-            reason="merged_by_legacy_consolidator",
-            superseded_by=merged_into,
-        )
-
     def close(self) -> None:
         self._conn.close()
 

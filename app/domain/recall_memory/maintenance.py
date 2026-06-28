@@ -9,12 +9,6 @@ from app.domain.recall_memory.batch_classifier import (
     MemoryBatchClassifier,
     MemoryBatchClassifierResult,
 )
-from app.domain.recall_memory.consolidator import (
-    ConsolidationProposal,
-    MemoryConsolidationApplyResult,
-    MemoryConsolidationGroup,
-    MemoryConsolidator,
-)
 from app.domain.recall_memory.maintainer import (
     MemoryMaintenanceApplyResult,
     MemoryMaintenanceProposal,
@@ -51,27 +45,6 @@ class BatchClassifyPendingMemoryWorkflowResult:
     batch_classify_count: int = 0
     should_maintain: bool = False
     entity_links_created: int = 0
-
-    @property
-    def should_consolidate(self) -> bool:
-        """Deprecated compatibility alias."""
-        return self.should_maintain
-
-
-@dataclass
-class ConsolidateMemoriesWorkflowResult:
-    active_count: int = 0
-    groups: list[MemoryConsolidationGroup] = field(default_factory=list)
-    proposals: list[ConsolidationProposal] = field(default_factory=list)
-    apply_results: list[MemoryConsolidationApplyResult] = field(default_factory=list)
-
-    @property
-    def merged_count(self) -> int:
-        return sum(1 for result in self.apply_results if result.merged_memory_id)
-
-    @property
-    def deactivated_count(self) -> int:
-        return sum(len(result.deactivated_ids) for result in self.apply_results)
 
 
 @dataclass
@@ -134,6 +107,7 @@ def batch_classify_pending_memories_workflow(
     pending_store: PendingMemoryStore,
     memory_store: MemoryStore,
     entity_store: EntityStore | None = None,
+    summary_store: SceneSummaryStore | None = None,
     turn_threshold: int = 5,
     force: bool = False,
     trace_id: str | None = None,
@@ -146,6 +120,7 @@ def batch_classify_pending_memories_workflow(
             pending_store=pending_store,
             memory_store=memory_store,
             entity_store=entity_store,
+            summary_store=summary_store,
             turn_threshold=turn_threshold,
             force=force,
             trace_id=trace_id,
@@ -160,6 +135,7 @@ def _batch_classify_pending_memories_locked(
     pending_store: PendingMemoryStore,
     memory_store: MemoryStore,
     entity_store: EntityStore | None = None,
+    summary_store: SceneSummaryStore | None = None,
     turn_threshold: int = 5,
     force: bool = False,
     trace_id: str | None = None,
@@ -177,10 +153,14 @@ def _batch_classify_pending_memories_locked(
         return wfr
 
     wfr.triggered = True
+    recent_summaries = (
+        summary_store.get_recent(5) if summary_store is not None else []
+    )
     result: MemoryBatchClassifierResult = classifier.classify(
         pending_items,
         current_state,
         core_memory=core_memory,
+        recent_summaries=recent_summaries,
         trace_id=trace_id,
     )
     wfr.raw_candidates = result.raw_candidates
@@ -220,37 +200,6 @@ def _batch_classify_pending_memories_locked(
     wfr.batch_classify_count = pending_store.record_batch_classified()
     wfr.should_maintain = True
     return wfr
-
-
-def consolidate_memories_workflow(
-    *,
-    store: MemoryStore,
-    consolidator: MemoryConsolidator,
-    core_memory: CoreMemory,
-    max_group_size: int = 5,
-    trace_id: str | None = None,
-) -> ConsolidateMemoriesWorkflowResult:
-    active_memories = store.list_active()
-    groups = consolidator.build_groups(
-        active_memories,
-        max_group_size=max_group_size,
-    )
-    result = ConsolidateMemoriesWorkflowResult(
-        active_count=len(active_memories),
-        groups=groups,
-    )
-
-    group_sources = {group.group_id: group.memories for group in groups}
-    for group in groups:
-        batch = consolidator.decide_group(group, core_memory=core_memory, trace_id=trace_id)
-        result.proposals.extend(batch.proposals)
-        for proposal in batch.proposals:
-            sources = group_sources.get(proposal.group_id, group.memories)
-            result.apply_results.append(
-                consolidator.apply(store, proposal, sources)
-            )
-
-    return result
 
 
 def maintain_memories_workflow(

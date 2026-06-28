@@ -8,7 +8,7 @@ from app.domain.current_state import CurrentState
 from app.domain.recall_memory.batch_classifier import MemoryBatchClassifier
 from app.domain.recall_memory.maintainer import MemoryMaintainer
 from app.domain.scene_summary.summarizer import SceneSummarizer
-from app.workflows.consolidate_memories import maintain_memories_workflow
+from app.workflows.maintain_memories import maintain_memories_workflow
 from app.workflows.extract_memory import batch_classify_pending_memories_workflow
 from app.workflows.scene_summaries import run_scene_summary_maintenance as run_scene_summary_maintenance_workflow
 
@@ -81,6 +81,7 @@ def run_memory_batch_maintenance(
             pending_memory_store() as pending_store,
             memory_store() as mem_store,
             entity_store() as ent_store,
+            scene_summary_store() as summary_store,
         ):
             result = batch_classify_pending_memories_workflow(
                 current_state=current_state,
@@ -89,20 +90,20 @@ def run_memory_batch_maintenance(
                 pending_store=pending_store,
                 memory_store=mem_store,
                 entity_store=ent_store,
+                summary_store=summary_store,
                 turn_threshold=5,
                 trace_id=trace_id,
             )
             maintenance_result = None
             if result.triggered:
-                with scene_summary_store() as summary_store:
-                    maintenance_result = maintain_memories_workflow(
-                        store=mem_store,
-                        summary_store=summary_store,
-                        maintainer=MemoryMaintainer(gateway),
-                        core_memory=core_memory,
-                        through_turn=turn_index,
-                        trace_id=trace_id,
-                    )
+                maintenance_result = maintain_memories_workflow(
+                    store=mem_store,
+                    summary_store=summary_store,
+                    maintainer=MemoryMaintainer(gateway),
+                    core_memory=core_memory,
+                    through_turn=turn_index,
+                    trace_id=trace_id,
+                )
         print(
             "[debug-server] memory batch maintenance "
             f"triggered={result.triggered} pending={result.pending_count} "
@@ -164,6 +165,7 @@ def batch_classify_stream():
         pending_memory_store() as bpstore,
         memory_store() as bmstore,
         entity_store() as ent_store,
+        scene_summary_store() as summary_store,
     ):
         result = batch_classify_pending_memories_workflow(
             current_state=current_state,
@@ -172,24 +174,24 @@ def batch_classify_stream():
             pending_store=bpstore,
             memory_store=bmstore,
             entity_store=ent_store,
+            summary_store=summary_store,
             turn_threshold=1,
             force=force,
             trace_id=trace_id,
         )
         maintenance_result = None
         if result.triggered:
-            with scene_summary_store() as summary_store:
-                maintenance_result = maintain_memories_workflow(
-                    store=bmstore,
-                    summary_store=summary_store,
-                    maintainer=MemoryMaintainer(gateway),
-                    core_memory=core_memory,
-                    through_turn=max(
-                        (item.turn_index for item in pending_items),
-                        default=0,
-                    ),
-                    trace_id=trace_id,
-                )
+            maintenance_result = maintain_memories_workflow(
+                store=bmstore,
+                summary_store=summary_store,
+                maintainer=MemoryMaintainer(gateway),
+                core_memory=core_memory,
+                through_turn=max(
+                    (item.turn_index for item in pending_items),
+                    default=0,
+                ),
+                trace_id=trace_id,
+            )
 
     yield {
         "step": "batch_classified",
@@ -219,7 +221,7 @@ def batch_classify_stream():
     }
 
 
-def consolidate_stream():
+def memory_maintain_stream():
     trace_id = str(uuid.uuid4())
 
     core_memory = core_memory_store().load_required()
@@ -232,7 +234,7 @@ def consolidate_stream():
         maintainer = MemoryMaintainer(gateway)
 
         yield {
-            "step": "consolidate_started",
+            "step": "memory_maintain_started",
             "data": {
                 "trace_id": trace_id,
                 "active_count": active_count,
@@ -254,7 +256,7 @@ def consolidate_stream():
         pending_store.reset_batch_classify_count()
 
     yield {
-        "step": "consolidate_done",
+        "step": "memory_maintain_done",
         "data": {
             "active_before": active_count,
             "summaries": result.summary_count,

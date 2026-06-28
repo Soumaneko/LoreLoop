@@ -19,6 +19,12 @@ CurrentState 中的 NPCs、location、inventory 等字段提示了本轮场景�
 {current_state_summary_json}
 ```
 
+## Scene Summaries
+
+```json
+{recent_summaries_json}
+```
+
 ## Relevant Existing Entity Profiles
 
 只包含本场景中命中的已有实体档案，不是全量实体库。

@@ -188,12 +188,6 @@ class PendingMemoryStore:
         self._conn.commit()
         return count
 
-    def should_trigger_consolidation(self, *, every: int = 3) -> bool:
-        if every < 1:
-            raise ValueError("every must be >= 1")
-        count = self.batch_classify_count()
-        return count > 0 and count % every == 0
-
     def reset_batch_classify_count(self) -> None:
         self._conn.execute(
             "DELETE FROM pending_memory_meta WHERE key = ?",
@@ -203,6 +197,16 @@ class PendingMemoryStore:
 
     def count(self) -> int:
         row = self._conn.execute("SELECT COUNT(*) FROM pending_memory_items").fetchone()
+        return int(row[0])
+
+    def count_unclassified(self) -> int:
+        row = self._conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM pending_memory_items
+            WHERE classified = 0 AND discarded = 0
+            """
+        ).fetchone()
         return int(row[0])
 
     def _row_to_item(self, row: sqlite3.Row) -> PendingMemoryItem:

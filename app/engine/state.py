@@ -29,6 +29,7 @@ def load_debug_state() -> dict:
 
     with pending_memory_store() as pending_store:
         pending_count = pending_store.count()
+        pending_unclassified_count = pending_store.count_unclassified()
         pending_unclassified = pending_store.list_recent_unclassified(limit=20)
         pending_unclassified_turn_count = pending_store.unclassified_turn_count()
 
@@ -56,6 +57,7 @@ def load_debug_state() -> dict:
         "inactive_memory_count": inactive_memory_count,
         "memories": model_data(memories),
         "pending_memory_count": pending_count,
+        "pending_unclassified_count": pending_unclassified_count,
         "pending_unclassified_turn_count": pending_unclassified_turn_count,
         "pending_memory_items": model_data(pending_unclassified),
         "scene_summaries": model_data(scene_summaries),

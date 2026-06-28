@@ -17,6 +17,7 @@ from app.domain.entity.updater import EntityProfileUpdater
 from app.domain.action.schemas import Anchor
 from app.workflows.update_entity_profiles import (
     gather_entity_profiles_from_state_and_anchors,
+    update_entity_profiles_from_extraction,
     update_entity_profiles_workflow,
 )
 
@@ -104,6 +105,37 @@ class TestEntityStore:
         assert store.append_alias(entity_id, "红发女侍者") is False
 
         assert store.get_by_id(entity_id).aliases == ["红发女侍者"]
+
+    def test_entity_hit_counts_are_not_prompt_semantic_fields(self):
+        profile = EntityProfile(
+            entity_type="item",
+            name="旧地图",
+            aliases=["破旧地图"],
+            name_hit_count=3,
+            alias_hit_counts={"破旧地图": 2},
+        )
+
+        view = profile.semantic_view()
+
+        assert not hasattr(view, "name_hit_count")
+        assert not hasattr(view, "alias_hit_counts")
+
+    def test_alias_promotes_when_hits_exceed_name_for_any_entity_type(self):
+        store = EntityStore(":memory:")
+        entity_id = store.upsert(
+            EntityProfile(entity_type="item", name="旧图纸", aliases=["星钥蓝图"])
+        )
+
+        assert store.record_mention(entity_id, "星钥蓝图") is True
+        assert store.record_mention(entity_id, "星钥蓝图") is True
+
+        profile = store.get_by_id(entity_id)
+        assert profile.name == "星钥蓝图"
+        assert "旧图纸" in profile.aliases
+        assert store.get_by_name("旧图纸").entity_id == entity_id
+        assert store.get_by_name("星钥蓝图").entity_id == entity_id
+        assert profile.name_hit_count == 2
+        assert profile.alias_hit_counts["旧图纸"] == 1
 
 
 class TestEntityExtractor:
@@ -386,6 +418,7 @@ class TestEntityProfileUpdater:
         assert len(result) == 1
         assert result[0].name == "北郡修道院"
         assert result[0].entity_type == "location"
+        assert result[0].name_hit_count == 1
 
 
 class TestUpdateEntityProfilesWorkflow:
@@ -458,7 +491,48 @@ class TestUpdateEntityProfilesWorkflow:
         assert len(saved.saved_ids) == 2
         assert unrelated_id not in saved.saved_ids
         assert "红发女侍者" in store.get_by_id(existing_id).aliases
+        assert store.get_by_id(existing_id).alias_hit_counts["红发女侍者"] == 1
         assert store.get_by_id(existing_id).summary == "米莉是北郡酒馆的侍者。"
+
+    def test_workflow_counts_raw_alias_before_normalized_extraction(self):
+        store = EntityStore(":memory:")
+        entity_id = store.upsert(
+            EntityProfile(
+                entity_type="location",
+                name="旧钟楼",
+                aliases=["星钟塔"],
+                alias_hit_counts={"星钟塔": 1},
+            )
+        )
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps({"entities": []}, ensure_ascii=False),
+        ])
+
+        saved = update_entity_profiles_from_extraction(
+            scene_text="星钟塔的顶层再次亮起蓝光。",
+            current_state=_make_state(),
+            core_memory=CoreMemory(items=[]),
+            gateway=mock.build_gateway(),
+            entity_store=store,
+            existing_profiles=store.list_all(),
+            extraction=EntityExtractionResult(
+                alias_matches=[],
+                retrieved_entities=[
+                    RetrievedEntity(
+                        name="星钟塔",
+                        entity_type="location",
+                        source="exact_match",
+                        matched_entity_index=0,
+                        matched_entity_name="旧钟楼",
+                    )
+                ],
+            ),
+        )
+
+        assert saved.extraction.retrieved_entities[0].name == "星钟塔"
+        assert store.get_by_id(entity_id).name == "星钟塔"
+        assert store.get_by_id(entity_id).name_hit_count == 2
 
     def test_workflow_deduplicates_existing_entity_missed_by_extractor(self):
         store = EntityStore(":memory:")

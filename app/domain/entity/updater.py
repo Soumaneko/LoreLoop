@@ -4,6 +4,7 @@ from typing import cast
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.entity.schemas import (
     EntityProfile,
     EntityProfileUpdateBatch,
@@ -26,12 +27,13 @@ class EntityProfileUpdater:
         new_entity_hints: list[RetrievedEntity] | None = None,
         *,
         core_memory: CoreMemory,
+        recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
     ) -> list[EntityProfile]:
         if not scene_text.strip():
             return []
 
-        from app.domain.views import project_current_state
+        from app.domain.views import project_current_state, project_scene_summaries
 
         result = cast(
             EntityProfileUpdateBatch,
@@ -41,6 +43,7 @@ class EntityProfileUpdater:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_text": scene_text,
                     "current_state_summary_json": project_current_state(current_state),
+                    "recent_summaries_json": project_scene_summaries(recent_summaries or []),
                     "relevant_profiles_json": json.dumps(
                         [
                             profile.semantic_view().model_dump(mode="json")
@@ -120,7 +123,15 @@ def apply_semantic_update(
     target.entity_type = source.entity_type
     if source.name.strip():
         target.name = source.name
+    existing_alias_keys = {_norm(alias) for alias in target.aliases}
     target.aliases = _merge_unique([*target.aliases, *source.aliases])
+    for alias in source.aliases:
+        clean = str(alias).strip()
+        if clean and _norm(clean) not in existing_alias_keys:
+            target.alias_hit_counts[clean] = max(
+                target.alias_hit_counts.get(clean, 0),
+                1,
+            )
     if source.summary is not None:
         target.summary = source.summary
     if source.role is not None:

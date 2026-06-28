@@ -79,7 +79,7 @@ def test_memory_batch_maintenance_sets_turn_trace_context(monkeypatch):
             saved_ids=[],
             classified_pending_ids=[],
             batch_classify_count=0,
-            should_consolidate=False,
+            should_maintain=False,
         ),
     )
 

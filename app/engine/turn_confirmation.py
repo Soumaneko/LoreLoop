@@ -291,6 +291,7 @@ def _confirm_turn_stream_locked(
                     entity_store=ent_store,
                     existing_profiles=existing_entity_profiles,
                     extraction=entity_extraction,
+                    recent_summaries=recent_summaries,
                     trace_id=trace_id,
                 )
                 updated_entity_ids = entity_result.saved_ids
@@ -620,6 +621,7 @@ def _confirm_opening_stream_locked(
                 entity_store=ent_store,
                 existing_profiles=existing_entity_profiles,
                 extraction=entity_extraction,
+                recent_summaries=recent_summaries,
                 trace_id=trace_id,
             )
             updated_entity_ids = entity_result.saved_ids
