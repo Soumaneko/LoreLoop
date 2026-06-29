@@ -9,6 +9,7 @@ from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.action_preview.schemas import ActionPreview, ActionPreviewResult
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, InventoryItem, NPCState, PlayerState, ResourcesState, SceneState
+from app.domain.scene_writer.schemas import NextActionDirection
 from app.domain.scene_summary.schemas import SceneSummary
 from app.workflows.build_action_parse_from_preview import build_parse_from_preview
 from app.workflows.generate_action_preview import generate_action_preview_workflow
@@ -153,6 +154,38 @@ class TestActionPreviewAgent:
         assert {preview.level for preview in result.previews} == {"冒险举动", "保守举动", "信息获取", "奇招"}
         assert all(preview.anchors for preview in result.previews)
 
+    def test_passes_next_action_directions_to_llm(self):
+        class SpyGateway:
+            def __init__(self):
+                self.input_data = None
+
+            def run(self, **kwargs):
+                self.input_data = kwargs["input_data"]
+                return ActionPreviewResult.model_validate(json.loads(_build_response()))
+
+        gateway = SpyGateway()
+
+        ActionPreviewAgent(gateway).generate(
+            scene_text="米莉压低声音，提到仓库区最近有人夜里出没。",
+            current_state=_make_state(),
+            core_memory=_make_core_memory(),
+            recent_summaries=_make_recent_summaries(),
+            next_action_directions=[
+                NextActionDirection(
+                    direction="追问仓库区的夜间出没",
+                    rationale="正文结尾公开了米莉的线索，主角仍在酒馆内。",
+                    anchors=["米莉", "仓库区"],
+                )
+            ],
+        )
+
+        directions = json.loads(gateway.input_data["next_action_directions_json"])
+        assert directions == [{
+            "direction": "追问仓库区的夜间出没",
+            "rationale": "正文结尾公开了米莉的线索，主角仍在酒馆内。",
+            "anchors": ["米莉", "仓库区"],
+        }]
+
     def test_workflow_uses_agent(self):
         mock = MockLLM()
         mock.set_responses([_build_response()])
@@ -162,6 +195,13 @@ class TestActionPreviewAgent:
             current_state=_make_state(),
             core_memory=_make_core_memory(),
             recent_summaries=_make_recent_summaries(),
+            next_action_directions=[
+                NextActionDirection(
+                    direction="追问仓库区的夜间出没",
+                    rationale="正文结尾公开了米莉的线索，主角仍在酒馆内。",
+                    anchors=["米莉", "仓库区"],
+                )
+            ],
             gateway=mock.build_gateway(),
         )
 

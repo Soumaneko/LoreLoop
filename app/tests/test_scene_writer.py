@@ -8,7 +8,7 @@ from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.opening import OpeningSceneAgent
-from app.domain.scene_writer.schemas import SceneWriterResult
+from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
 from app.domain.scene_writer.views import project_outline, project_recent_scene
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
 from app.domain.core_memory import InitConfig, build_core_memory, build_initial_current_state
@@ -70,10 +70,12 @@ def _make_outline() -> PlotOutlineResult:
 def _build_response(
     scene_text: str = "主角推开酒馆沉重的木门，夜风卷起几片落叶随着他一同进入温暖的室内。米莉正在吧台后面擦拭酒杯，看到主角后露出微笑。",
     changes: list[str] | None = None,
+    directions: list[dict] | None = None,
 ) -> str:
     return json.dumps({
         "scene_text": scene_text,
         "changes_summary": changes or ["主角进入了酒馆", "与米莉进行了交谈"],
+        "next_action_directions": directions or [],
     }, ensure_ascii=False)
 
 
@@ -150,6 +152,32 @@ class TestSceneWriterAgent:
 
         assert len(result.scene_text) > 0
         assert len(result.changes_summary) >= 1
+
+    def test_preserves_next_action_directions(self):
+        mock = MockLLM()
+        mock.set_responses([_build_response(directions=[
+            {
+                "direction": "追问仓库区的异常",
+                "rationale": "米莉刚提到夜里有人出没，现场仍可继续交谈。",
+                "anchors": ["米莉", "仓库区"],
+            }
+        ])])
+
+        result = SceneWriterAgent(mock.build_gateway()).write(
+            outline=_make_outline(),
+            current_state=_make_state(),
+            core_memory=CoreMemory(items=[]),
+            selected_memories=[],
+            recent_scene=None,
+        )
+
+        assert result.next_action_directions == [
+            NextActionDirection(
+                direction="追问仓库区的异常",
+                rationale="米莉刚提到夜里有人出没，现场仍可继续交谈。",
+                anchors=["米莉", "仓库区"],
+            )
+        ]
 
     def test_retries_when_scene_exceeds_max_chars(self):
         mock = MockLLM()

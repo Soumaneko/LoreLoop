@@ -76,7 +76,7 @@ class TestResourcesState:
     def test_money_can_be_none_or_int(self):
         assert ResourcesState().money is None
         assert ResourcesState(money=12).money == 12
-        assert ResourcesState(money=12).money_unit == "金币"
+        assert ResourcesState(money=12).money_unit is None
 
     def test_inventory_item_quantity(self):
         item = InventoryItem(name="箭矢", quantity=12)

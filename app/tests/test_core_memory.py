@@ -56,7 +56,6 @@ class TestInitConfig:
                 fanfic=False,
                 world_name="艾兰",
                 world_style="西幻",
-                magic_level="普通",
                 protagonist_name="",
             )
 
@@ -66,7 +65,6 @@ class TestInitConfig:
                 fanfic=False,
                 world_name="艾兰",
                 world_style="西幻",
-                magic_level="普通",
                 protagonist_name="卢西安",
                 protagonist_abilities=["a", "b", "c", "d"],
             )
@@ -93,19 +91,43 @@ class TestBuildCoreMemory:
             fanfic=False,
             world_name="艾兰",
             world_style="西幻",
-            magic_level="高魔",
+            ability_system="魔法",
             protagonist_name="卢西安",
         ))
 
         world = next(item for item in cm.items if item.id == "core_world_identity")
-        assert world.content == "当前世界名为「艾兰」，是一个西幻风格的原创世界。魔力等级为高魔。"
+        assert world.content == "当前世界名为「艾兰」，是一个西幻风格的原创世界。能力体系为魔法。"
+
+    def test_original_world_identity_omits_ability_system_when_empty(self):
+        cm = build_core_memory(InitConfig(
+            fanfic=False,
+            world_name="好莱坞",
+            world_style="1990年代娱乐业",
+            protagonist_name="莱尔",
+        ))
+
+        world = next(item for item in cm.items if item.id == "core_world_identity")
+        assert world.content == "当前世界名为「好莱坞」，是一个1990年代娱乐业风格的原创世界。"
+        assert "能力体系" not in world.content
+
+    def test_original_world_identity_uses_custom_ability_system(self):
+        cm = build_core_memory(InitConfig(
+            fanfic=False,
+            world_name="星港",
+            world_style="太空歌剧",
+            ability_system="自定义",
+            custom_ability_system="星舰核心与基因调律",
+            protagonist_name="莱拉",
+        ))
+
+        world = next(item for item in cm.items if item.id == "core_world_identity")
+        assert "能力体系为星舰核心与基因调律" in world.content
 
     def test_player_identity_optional_age_and_background(self):
         cm = build_core_memory(InitConfig(
             fanfic=False,
             world_name="艾兰",
             world_style="西幻",
-            magic_level="普通",
             protagonist_gender="男",
             protagonist_name="卢西安",
             protagonist_age=22,
@@ -120,7 +142,6 @@ class TestBuildCoreMemory:
             fanfic=False,
             world_name="艾兰",
             world_style="西幻",
-            magic_level="普通",
             protagonist_name="卢西安",
             protagonist_abilities=["旁观者之瞳：顺应历史时获得运势加成", "闪现"],
         ))
@@ -133,7 +154,6 @@ class TestBuildCoreMemory:
             fanfic=False,
             world_name="艾兰",
             world_style="西幻",
-            magic_level="普通",
             protagonist_name="卢西安",
         ))
 
@@ -145,7 +165,6 @@ class TestBuildCoreMemory:
             fanfic=False,
             world_name="艾兰",
             world_style="西幻",
-            magic_level="普通",
             protagonist_name="卢西安",
             narrative_tone="冷峻写实",
             extra_core_memory_items=[extra],
@@ -159,7 +178,6 @@ class TestBuildCoreMemory:
             fanfic=False,
             world_name="好莱坞",
             world_style="1990年代娱乐业",
-            magic_level="普通",
             protagonist_name="莱尔",
             story_expectation="经营经纪公司，发掘演员并建立事业与浪漫关系。",
         ))
@@ -177,7 +195,6 @@ class TestStoryDirectionAgent:
             fanfic=False,
             world_name="好莱坞",
             world_style="1990年代娱乐业",
-            magic_level="普通",
             protagonist_name="莱尔",
             protagonist_background="穿越者，准备经营一家小型经纪公司。",
             story_expectation="经营经纪公司，发掘演员，体验事业成长和浪漫关系。",
@@ -189,7 +206,8 @@ class TestStoryDirectionAgent:
                 "content": (
                     "剧情围绕1990年代好莱坞的小型经纪公司经营展开，持续关注演员发掘、"
                     "项目争取、行业人脉、事业扩张，以及事业合作中逐步发展的浪漫关系。"
-                )
+                ),
+                "currency_unit": "美元",
             }, ensure_ascii=False)
         ])
 
@@ -204,13 +222,16 @@ class TestStoryDirectionAgent:
         assert item.category == "story"
         assert item.priority == 100
         assert "经纪公司经营" in item.content
+        assert result.currency_unit == "美元"
+        currency = result.to_core_memory_items()[1]
+        assert currency.id == "core_currency_system"
+        assert currency.content == "本游戏默认货币单位为「美元」。"
 
     def test_rejects_empty_story_expectation(self):
         config = InitConfig(
             fanfic=False,
             world_name="艾兰",
             world_style="西幻",
-            magic_level="普通",
             protagonist_name="卢西安",
         )
 
@@ -229,6 +250,7 @@ class TestStoryDirectionAgent:
             content="剧情聚焦冒险、成长与关系发展。",
             priority=100,
         )
+        assert result.to_core_memory_items() == [result.to_core_memory_item()]
 
 
 class TestBuildInitialCurrentState:
@@ -256,7 +278,6 @@ class TestBuildInitialCurrentState:
             fanfic=False,
             world_name="艾兰",
             world_style="西幻",
-            magic_level="普通",
             protagonist_name="卢西安",
         ))
 
@@ -315,7 +336,8 @@ class TestDebugCoreMemoryPreview:
                 calls.append((task, input_data))
                 if task == "story_direction":
                     return output_schema.model_validate({
-                        "content": "剧情聚焦好莱坞经纪公司的经营成长、演员发掘、行业合作与浪漫关系。"
+                        "content": "剧情聚焦好莱坞经纪公司的经营成长、演员发掘、行业合作与浪漫关系。",
+                        "currency_unit": "美元",
                     })
                 if task == "opening_scene":
                     return output_schema.model_validate({
@@ -348,7 +370,6 @@ class TestDebugCoreMemoryPreview:
         result = core_memory_engine.apply_core_memory_init({
             "version": 1,
             "fanfic": False,
-            "magic_level": "普通",
             "world_name": "好莱坞",
             "world_style": "1990年代娱乐业",
             "protagonist_name": "莱尔",
@@ -363,6 +384,11 @@ class TestDebugCoreMemoryPreview:
                 item["id"] == "core_story_direction"
                 for item in opening_core["items"]
             )
+            assert any(
+                item["id"] == "core_currency_system"
+                for item in opening_core["items"]
+            )
+            assert result["current_state"]["resources"]["money_unit"] == "美元"
             assert core_store.load() == CoreMemory.model_validate(result["core_memory"])
         finally:
             PENDING_OPENINGS.pop(result["turn_id"], None)

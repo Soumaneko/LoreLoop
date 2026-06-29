@@ -12,6 +12,9 @@ from app.domain.current_state.schemas import (
 )
 
 
+AbilitySystemPreset = Literal["无超自然", "低超自然", "魔法", "灵能", "科技奇迹", "自定义"]
+
+
 class InitConfig(BaseModel):
     version: int = 1
 
@@ -20,9 +23,10 @@ class InitConfig(BaseModel):
     birth_location: str | None = None
     story_era: str | None = None
 
-    magic_level: Literal["低魔", "普通", "高魔"] | None = None
     world_name: str | None = None
     world_style: str | None = None
+    ability_system: AbilitySystemPreset | None = None
+    custom_ability_system: str | None = None
 
     protagonist_gender: Literal["男", "女", "其他"] = "男"
     protagonist_name: str = ""
@@ -51,11 +55,14 @@ class InitConfig(BaseModel):
         else:
             missing = [
                 name
-                for name in ["magic_level", "world_name", "world_style"]
+                for name in ["world_name", "world_style"]
                 if not str(getattr(self, name) or "").strip()
             ]
             if missing:
                 raise ValueError("original config missing required fields: " + ", ".join(missing))
+
+            if self.ability_system == "自定义" and not str(self.custom_ability_system or "").strip():
+                raise ValueError("custom_ability_system is required when ability_system is 自定义")
 
         return self
 
@@ -147,8 +154,10 @@ def _build_world_identity(config: InitConfig) -> CoreMemoryItem:
         content = (
             f"当前世界名为「{config.world_name}」，"
             f"是一个{config.world_style}风格的原创世界。"
-            f"魔力等级为{config.magic_level}。"
         )
+        ability_system = _ability_system_label(config)
+        if ability_system:
+            content += f"能力体系为{ability_system}。"
     return CoreMemoryItem(
         id="core_world_identity",
         category="world",
@@ -172,3 +181,11 @@ def _build_player_identity(config: InitConfig) -> CoreMemoryItem:
         content=content,
         priority=100,
     )
+
+
+def _ability_system_label(config: InitConfig) -> str | None:
+    if config.ability_system == "自定义":
+        return (config.custom_ability_system or "").strip() or None
+    if config.ability_system:
+        return config.ability_system
+    return None

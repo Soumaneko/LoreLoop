@@ -58,7 +58,7 @@ class InventoryItem(BaseModel):
 class ResourcesState(BaseModel):
     inventory: list[InventoryItem] = Field(default_factory=list)
     money: int | None = None
-    money_unit: str = "金币"
+    money_unit: str | None = None
     key_items: list[str] = Field(default_factory=list)
     fixed_assets: list[str] = Field(default_factory=list)
     temporary_assets: list[str] = Field(default_factory=list)

@@ -9,6 +9,11 @@ from app.domain.entity.schemas import (
     EntityProfile,
 )
 from app.domain.entity.extractor import EntityExtractor
+from app.domain.entity.quality import (
+    is_acceptable_alias,
+    is_persistent_entity_candidate,
+    is_acceptable_retrieved_entity,
+)
 from app.domain.entity.store import EntityStore
 from app.domain.entity.updater import EntityProfileUpdater, apply_semantic_update
 from app.domain.scene_summary.schemas import SceneSummary
@@ -148,10 +153,14 @@ def _normalize_extraction_matches(
             normalized
             for match in extraction.alias_matches
             if (normalized := _normalize_alias_match(match, existing_profiles)) is not None
+            and is_acceptable_alias(normalized)
         ],
         retrieved_entities=[
-            _normalize_retrieved_entity(entity, existing_profiles)
+            normalized
             for entity in extraction.retrieved_entities
+            if is_acceptable_retrieved_entity(
+                normalized := _normalize_retrieved_entity(entity, existing_profiles)
+            )
         ],
     )
 
@@ -334,6 +343,8 @@ def _record_existing_entity_mentions(
         if profile_index is None:
             continue
         profile = existing_profiles[profile_index]
+        if not is_persistent_entity_candidate(profile.entity_type, profile.name):
+            continue
         surface = str(entity.name).strip()
         key = (profile.entity_id, _normalize_key(surface))
         if surface and key not in seen:
@@ -353,6 +364,8 @@ def _record_existing_entity_mentions(
         if profile_index is None:
             continue
         profile = existing_profiles[profile_index]
+        if not is_persistent_entity_candidate(profile.entity_type, profile.name):
+            continue
         surface = str(match.extracted_text).strip()
         key = (profile.entity_id, _normalize_key(surface))
         if surface and key not in seen:

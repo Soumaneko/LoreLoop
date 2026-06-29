@@ -39,7 +39,12 @@ class EntityProfileUpdateInput(BaseModel):
 
 
 class EntityProfileUpdateBatch(BaseModel):
-    entities: list[EntityProfileUpdateInput] = Field(default_factory=list)
+    entities: list["EntityProfileIndexedUpdate"] = Field(default_factory=list)
+
+
+class EntityProfileIndexedUpdate(BaseModel):
+    entity_index: int
+    profile: EntityProfileUpdateInput
 
 
 class EntityAliasMatch(BaseModel):

@@ -242,6 +242,7 @@ def _confirm_turn_stream_locked(
             current_state=updated_state,
             core_memory=core_memory_store().load_required(),
             recent_summaries=recent_summaries,
+            next_action_directions=pending.scene_result.next_action_directions,
             gateway=gateway,
             trace_id=trace_id,
         )
@@ -593,6 +594,7 @@ def _confirm_opening_stream_locked(
             current_state=updated_state,
             core_memory=core_memory_store().load_required(),
             recent_summaries=recent_summaries,
+            next_action_directions=pending.scene_result.next_action_directions,
             gateway=gateway,
             trace_id=trace_id,
         )

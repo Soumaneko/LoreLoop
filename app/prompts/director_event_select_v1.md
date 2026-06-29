@@ -55,18 +55,18 @@
 在生成最终决定前，你必须严格按以下顺序完成三步推演，并把每一步分别写入对应的输出字段：
 
 1. suspension_evaluation（悬挂事件评估）：首先判断 suspended_events 中是否有能自然衔接当前局势的事件。如果有，阐述激活理由并结束思考；如果没有，明确说明并进入新事件构思阶段。
-2. backstage_undercurrent（盲写后台暗流）**（系统最高级警告：绝不允许回收利用 SceneSummaries 或 CurrentState 中的已有线索！）**
+2. backstage_undercurrent（独立后台事件草稿）**（系统最高级警告：绝不允许回收利用 SceneSummaries 或 CurrentState 中的已有线索！）**
     - 大模型在这一步极易受下文提供的历史摘要影响，去续写摘要中未解决的伏笔或物品。**你必须克制这种填坑本能！**
     - 你要做的是完全无视除了 CoreMemory 以外的，当前已知的所有线索，引入一个全新的势力、新人物或新图谋（必须符合世界观，规模必须匹配主角当前层级）。
     - 写明：这个全新的势力/人在暗中做什么，目的是什么。本字段内严禁提及主角或现有摘要里的任何专有名词。
     - 仅在 action="create_new" 时填写；action="activate_suspended" 时填 null。
-3. new_event.backstage_premise（锚定版后台暗流）：第 2 步事件的最终后台事实版本，会被持久化保存。它仍只写幕后事件本体，但可吸收 CurrentState、SceneSummaries 和 scene_text 中的地点、路线、区域势力、NPC背景、物品或利益关系。
+3. new_event.backstage_premise（最终后台事实）：第 2 步事件的可持久化版本。它仍只写幕后事件本体，但可根据 CurrentState、SceneSummaries 和 scene_text 中的地点、路线、区域势力、NPC背景、物品或利益关系，调整成更适合当前叙事环境的事件。
     - 只回答：谁在暗中行动、目标是什么、在哪里行动、使用什么资源/手段、已推进到什么程度。
-    - 尽量保留 backstage_undercurrent 中的重要细节，例如资助者、真实目标、关键道具、组织结构、秘密据点、长期计划、资源和当前进度；除非与当前锚点冲突，否则不要丢失。
+    - 尽量保留 backstage_undercurrent 中的重要细节，例如资助者、真实目标、关键道具、组织结构、秘密据点、长期计划、资源和当前进度；除非与当前叙事事实冲突，否则不要丢失。
     - 禁止写外部表现：居民/机构观察到的异常、传闻、症状、事故、环境征兆。
-    - 禁止写主角如何接触它：主角会发现/听说/抵达后看到，NPC会告知，塞琳会注意到。
-    - 禁止元叙述：我将/已将/修订为/锚定到/调整为。
-    - 可观察异常和导入方式只属于 new_event.stages，不属于本字段。
+    - 禁止写任何接触路径：不要描述主角、同伴、NPC、机构或居民如何发现、听说、遭遇、注意到此事。
+    - 禁止元叙述：我将/已将/修订为/调整为。
+    - 可观察异常只属于 new_event.stages；接触路径不属于任何字段。
     - 最终的 stages 和 hooks 必须以 new_event.backstage_premise 为基础展开，不得遗漏其中的关键主体、动机、资源和目标。
     - 不要改动主角已经经历的事件，不要把新事件改写成当前主线伏笔的直接续集。
     - 仅在 action="create_new" 时填写；action="activate_suspended" 时填 null。

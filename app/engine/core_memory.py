@@ -55,8 +55,17 @@ def apply_core_memory_init(payload: dict[str, Any]) -> dict[str, Any]:
             trace_id=trace_id,
         )
         core_memory = CoreMemory(
-            items=[*core_memory.items, story_direction.to_core_memory_item()]
+            items=[*core_memory.items, *story_direction.to_core_memory_items()]
         )
+        currency_unit = (story_direction.currency_unit or "").strip()
+        if currency_unit:
+            current_state = current_state.model_copy(
+                update={
+                    "resources": current_state.resources.model_copy(
+                        update={"money_unit": currency_unit}
+                    )
+                }
+            )
 
     opening_scene = OpeningSceneAgent(gateway).generate(
         config=config,

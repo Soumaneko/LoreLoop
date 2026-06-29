@@ -161,7 +161,7 @@ function textBlock(value) {
 
 function money(resources) {
   if (!resources || resources.money === null || resources.money === undefined || resources.money === "") return "无";
-  return `${resources.money} ${resources.money_unit || "金币"}`;
+  return `${resources.money}${resources.money_unit ? ` ${resources.money_unit}` : ""}`;
 }
 
 function inventory(items) {
@@ -341,9 +341,10 @@ function readInitConfig() {
     work_name: $("initWorkName")?.value.trim() || null,
     birth_location: $("initBirthLocation")?.value.trim() || null,
     story_era: $("initStoryEra")?.value.trim() || null,
-    magic_level: $("initMagicLevel")?.value || null,
     world_name: $("initWorldName")?.value.trim() || null,
     world_style: $("initWorldStyle")?.value.trim() || null,
+    ability_system: $("initAbilitySystem")?.value || null,
+    custom_ability_system: $("initCustomAbilitySystem")?.value.trim() || null,
     protagonist_gender: $("initGender")?.value || "男",
     protagonist_name: $("initName")?.value.trim() || "",
     protagonist_age: age ? Number(age) : null,
@@ -354,13 +355,15 @@ function readInitConfig() {
     extra_core_memory_items: extraItems,
   };
   if (fanfic) {
-    config.magic_level = null;
     config.world_name = null;
     config.world_style = null;
+    config.ability_system = null;
+    config.custom_ability_system = null;
   } else {
     config.work_name = null;
     config.birth_location = null;
     config.story_era = null;
+    if (config.ability_system !== "自定义") config.custom_ability_system = null;
   }
   return config;
 }
@@ -380,9 +383,18 @@ function renderInitPanel() {
       <input id="initWorkName" placeholder="同人作品名" />
       <input id="initBirthLocation" placeholder="同人出生地点" />
       <input id="initStoryEra" placeholder="同人故事时代" />
-      <select id="initMagicLevel"><option value="普通">普通魔法</option><option value="低魔">低魔</option><option value="高魔">高魔</option></select>
       <input id="initWorldName" placeholder="原创世界名" />
       <input id="initWorldStyle" placeholder="世界风格" />
+      <select id="initAbilitySystem">
+        <option value="">能力体系，可选</option>
+        <option value="无超自然">无超自然</option>
+        <option value="低超自然">低超自然</option>
+        <option value="魔法">魔法</option>
+        <option value="灵能">灵能</option>
+        <option value="科技奇迹">科技奇迹</option>
+        <option value="自定义">自定义</option>
+      </select>
+      <input id="initCustomAbilitySystem" placeholder="自定义能力体系，仅选择自定义时填写" />
       <input class="init-ability" placeholder="能力 1" />
       <input class="init-ability" placeholder="能力 2" />
       <input class="init-ability" placeholder="能力 3" />

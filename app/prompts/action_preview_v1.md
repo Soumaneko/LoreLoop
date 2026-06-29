@@ -14,6 +14,12 @@
 {scene_text}
 ```
 
+## Next Action Directions
+
+```json
+{next_action_directions_json}
+```
+
 ## CurrentState
 
 ```json
@@ -31,8 +37,9 @@
 在生成具体选项前，你必须在 scene_context 字段中进行简短的内部局势盘点（50-100字），确保逻辑严密：
 
 1. 当前主要矛盾/危机是什么？
-2. 场景可用资源盘点： CurrentState 中是否有可以直接用来破局的物品或环境要素？（强制规则： 如果某物品与当前场景的 NPC 或危机有明显关联，必须在最终选项中设计一条使用该物品的行动。）
-3. 构思 6-8 条可能行动，覆盖不同风格。
+2. Next Action Directions 中哪些方向与 Scene Text 结尾最贴合？优先围绕这些方向构思，但必须根据 Scene Text 和 CurrentState 校验可行性。
+3. 场景可用资源盘点： CurrentState 中是否有可以直接用来破局的物品或环境要素？（强制规则： 如果某物品与当前场景的 NPC 或危机有明显关联，必须在最终选项中设计一条使用该物品的行动。）
+4. 构思 6-8 条可能行动，覆盖不同风格。
 
 
 ## 四维选项设计
@@ -77,7 +84,8 @@
 2. 禁止凭空造物： 绝不臆测 CurrentState 中物品/资源的来源。若 temporary_assets 中的物品来源不明，禁止在描述中自行指定给予者。
 3. 禁止瞬移与穿墙： 绝不要求玩家执行当前地理位置或物理状态下绝对无法自然发起的行动。
 4. 禁止剧透与越权： 绝不透露隐藏的真相、幕后设定或系统推理逻辑。
-5. 禁止格式污染： 仅输出符合 Schema 要求的 JSON，不含任何 Markdown 标记或额外解释。
+5. 禁止机械照抄：不得直接把 Next Action Directions 原句复制为 label；必须改写为可直接作为 user_input 的具体行动。
+6. 禁止格式污染： 仅输出符合 Schema 要求的 JSON，不含任何 Markdown 标记或额外解释。
 
 ## 输出
 

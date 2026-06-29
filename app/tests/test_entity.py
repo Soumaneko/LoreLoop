@@ -308,12 +308,15 @@ class TestEntityProfileUpdater:
                 {
                     "entities": [
                         {
-                            "entity_type": "npc",
-                            "name": "米莉",
-                            "aliases": ["酒馆侍者"],
-                            "summary": "米莉是北郡酒馆中谨慎友善的侍者。",
-                            "role": "酒馆侍者",
-                            "personality_traits": ["谨慎", "友善"],
+                            "entity_index": 0,
+                            "profile": {
+                                "entity_type": "npc",
+                                "name": "米莉",
+                                "aliases": ["酒馆侍者"],
+                                "summary": "米莉是北郡酒馆中谨慎友善的侍者。",
+                                "role": "酒馆侍者",
+                                "personality_traits": ["谨慎", "友善"],
+                            },
                         }
                     ]
                 },
@@ -348,12 +351,15 @@ class TestEntityProfileUpdater:
                 {
                     "entities": [
                         {
-                            "entity_type": "item",
-                            "name": "旧地图",
-                            "aliases": ["破旧羊皮纸"],
-                            "item_type": "地图",
-                            "item_source": "从米莉处获得",
-                            "description": "一张标注了仓库区路线的旧地图。",
+                            "entity_index": 0,
+                            "profile": {
+                                "entity_type": "item",
+                                "name": "旧地图",
+                                "aliases": ["破旧羊皮纸"],
+                                "item_type": "地图",
+                                "item_source": "从米莉处获得",
+                                "description": "一张标注了仓库区路线的旧地图。",
+                            },
                         }
                     ]
                 },
@@ -388,11 +394,14 @@ class TestEntityProfileUpdater:
                 {
                     "entities": [
                         {
-                            "entity_type": "location",
-                            "name": "北郡修道院",
-                            "aliases": [],
-                            "summary": "北郡的重要修道院。",
-                            "location_type": "修道院",
+                            "entity_index": 0,
+                            "profile": {
+                                "entity_type": "location",
+                                "name": "北郡修道院",
+                                "aliases": [],
+                                "summary": "北郡的重要修道院。",
+                                "location_type": "修道院",
+                            },
                         }
                     ]
                 },
@@ -461,17 +470,23 @@ class TestUpdateEntityProfilesWorkflow:
                 {
                     "entities": [
                         {
-                            "entity_type": "npc",
-                            "name": "米莉",
-                            "aliases": ["红发女侍者"],
-                            "summary": "米莉是北郡酒馆的侍者。",
+                            "entity_index": 0,
+                            "profile": {
+                                "entity_type": "npc",
+                                "name": "米莉",
+                                "aliases": ["红发女侍者"],
+                                "summary": "米莉是北郡酒馆的侍者。",
+                            },
                         },
                         {
-                            "entity_type": "item",
-                            "name": "旧地图",
-                            "aliases": [],
-                            "item_type": "地图",
-                            "description": "一张标注了仓库区路线的旧地图。",
+                            "entity_index": 1,
+                            "profile": {
+                                "entity_type": "item",
+                                "name": "旧地图",
+                                "aliases": [],
+                                "item_type": "地图",
+                                "description": "一张标注了仓库区路线的旧地图。",
+                            },
                         },
                     ]
                 },
@@ -499,7 +514,7 @@ class TestUpdateEntityProfilesWorkflow:
         entity_id = store.upsert(
             EntityProfile(
                 entity_type="location",
-                name="旧钟楼",
+                name="星塔旧址",
                 aliases=["星钟塔"],
                 alias_hit_counts={"星钟塔": 1},
             )
@@ -524,7 +539,7 @@ class TestUpdateEntityProfilesWorkflow:
                         entity_type="location",
                         source="exact_match",
                         matched_entity_index=0,
-                        matched_entity_name="旧钟楼",
+                        matched_entity_name="星塔旧址",
                     )
                 ],
             ),
@@ -534,7 +549,7 @@ class TestUpdateEntityProfilesWorkflow:
         assert store.get_by_id(entity_id).name == "星钟塔"
         assert store.get_by_id(entity_id).name_hit_count == 2
 
-    def test_workflow_deduplicates_existing_entity_missed_by_extractor(self):
+    def test_workflow_rejects_updater_entity_not_matching_extraction_candidate(self):
         store = EntityStore(":memory:")
         existing_id = store.upsert(EntityProfile(entity_type="npc", name="米莉"))
         mock = MockLLM()
@@ -557,10 +572,13 @@ class TestUpdateEntityProfilesWorkflow:
                 {
                     "entities": [
                         {
-                            "entity_type": "npc",
-                            "name": "米莉",
-                            "aliases": [],
-                            "summary": "米莉是北郡酒馆的侍者。",
+                            "entity_index": 0,
+                            "profile": {
+                                "entity_type": "npc",
+                                "name": "米莉",
+                                "aliases": [],
+                                "summary": "米莉是北郡酒馆的侍者。",
+                            },
                         }
                     ]
                 },
@@ -576,9 +594,9 @@ class TestUpdateEntityProfilesWorkflow:
             store,
         )
 
-        assert saved.saved_ids == [existing_id]
+        assert saved.saved_ids == []
         assert store.count() == 1
-        assert store.get_by_id(existing_id).summary == "米莉是北郡酒馆的侍者。"
+        assert store.get_by_id(existing_id).summary is None
 
     def test_workflow_recovers_when_extractor_uses_wrong_entity_index(self):
         store = EntityStore(":memory:")
@@ -613,10 +631,13 @@ class TestUpdateEntityProfilesWorkflow:
                 {
                     "entities": [
                         {
-                            "entity_type": "npc",
-                            "name": "米莉",
-                            "aliases": ["红发女侍者"],
-                            "summary": "米莉是北郡酒馆的侍者。",
+                            "entity_index": 0,
+                            "profile": {
+                                "entity_type": "npc",
+                                "name": "米莉",
+                                "aliases": ["红发女侍者"],
+                                "summary": "米莉是北郡酒馆的侍者。",
+                            },
                         }
                     ]
                 },
@@ -664,10 +685,13 @@ class TestUpdateEntityProfilesWorkflow:
                 {
                     "entities": [
                         {
-                            "entity_type": "npc",
-                            "name": "黑石信使",
-                            "aliases": [],
-                            "summary": "黑石信使带来一封密封信。",
+                            "entity_index": 0,
+                            "profile": {
+                                "entity_type": "npc",
+                                "name": "黑石信使",
+                                "aliases": [],
+                                "summary": "黑石信使带来一封密封信。",
+                            },
                         }
                     ]
                 },
@@ -686,3 +710,326 @@ class TestUpdateEntityProfilesWorkflow:
         assert saved.extraction.retrieved_entities[0].source == "new"
         assert saved.extraction.retrieved_entities[0].matched_entity_index is None
         assert store.count() == 2
+
+    def test_workflow_rejects_forged_update_index(self):
+        store = EntityStore(":memory:")
+        store.upsert(EntityProfile(entity_type="npc", name="米莉"))
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps(
+                {
+                    "alias_matches": [],
+                    "retrieved_entities": [
+                        {
+                            "name": "米莉",
+                            "entity_type": "npc",
+                            "source": "exact_match",
+                            "matched_entity_index": 0,
+                            "matched_entity_name": "米莉",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps(
+                {
+                    "entities": [
+                        {
+                            "entity_index": 3,
+                            "profile": {
+                                "entity_type": "npc",
+                                "name": "凭空出现的人",
+                                "aliases": [],
+                                "summary": "这不在候选列表里。",
+                            },
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+        ])
+
+        saved = update_entity_profiles_workflow(
+            "米莉递来一张旧地图。",
+            _make_state(),
+            CoreMemory(items=[]),
+            mock.build_gateway(),
+            store,
+        )
+
+        assert saved.saved_ids == []
+        assert store.count() == 1
+
+    def test_workflow_rejects_existing_index_with_wrong_profile_name(self):
+        store = EntityStore(":memory:")
+        milly_id = store.upsert(EntityProfile(entity_type="npc", name="米莉"))
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps(
+                {
+                    "alias_matches": [],
+                    "retrieved_entities": [
+                        {
+                            "name": "米莉",
+                            "entity_type": "npc",
+                            "source": "exact_match",
+                            "matched_entity_index": 0,
+                            "matched_entity_name": "米莉",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps(
+                {
+                    "entities": [
+                        {
+                            "entity_index": 0,
+                            "profile": {
+                                "entity_type": "npc",
+                                "name": "莎拉",
+                                "aliases": [],
+                                "summary": "错误地把米莉改成了莎拉。",
+                            },
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+        ])
+
+        saved = update_entity_profiles_workflow(
+            "米莉递来一张旧地图。",
+            _make_state(),
+            CoreMemory(items=[]),
+            mock.build_gateway(),
+            store,
+        )
+
+        assert saved.saved_ids == []
+        assert store.get_by_id(milly_id).name == "米莉"
+        assert store.get_by_id(milly_id).summary is None
+
+    def test_workflow_filters_generic_entities_and_aliases(self):
+        store = EntityStore(":memory:")
+        milly_id = store.upsert(EntityProfile(entity_type="npc", name="米莉"))
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps(
+                {
+                    "alias_matches": [
+                        {
+                            "extracted_text": "登记员",
+                            "matched_entity_index": 0,
+                            "matched_entity_name": "米莉",
+                            "matched_entity_type": "npc",
+                            "new_alias": "登记员",
+                        }
+                    ],
+                    "retrieved_entities": [
+                        {
+                            "name": "北境霜爪狼人",
+                            "entity_type": "npc",
+                            "source": "new",
+                            "context_span": "北境霜爪狼人出现在丘陵上。",
+                        },
+                        {
+                            "name": "镇公所",
+                            "entity_type": "location",
+                            "source": "new",
+                            "context_span": "镇公所门开着。",
+                        },
+                        {
+                            "name": "任务单",
+                            "entity_type": "item",
+                            "source": "new",
+                            "context_span": "墙上贴着任务单。",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps({"entities": []}, ensure_ascii=False),
+        ])
+
+        saved = update_entity_profiles_workflow(
+            "登记员指着任务单说北境霜爪狼人正在靠近镇公所。",
+            _make_state(),
+            CoreMemory(items=[]),
+            mock.build_gateway(),
+            store,
+        )
+
+        assert saved.extraction.alias_matches == []
+        assert saved.extraction.retrieved_entities == []
+        assert saved.saved_ids == []
+        assert store.get_by_id(milly_id).aliases == []
+
+    def test_trace_turn_37_filters_existing_bad_entities(self):
+        store = EntityStore(":memory:")
+        store.upsert(EntityProfile(entity_type="npc", name="精灵登记员", aliases=["登记员"]))
+        store.upsert(EntityProfile(entity_type="npc", name="塞琳"))
+        store.upsert(EntityProfile(entity_type="npc", name="北境霜爪狼人", aliases=["霜爪狼人"]))
+        store.upsert(EntityProfile(entity_type="location", name="三丘农场"))
+        store.upsert(EntityProfile(entity_type="location", name="镇东铁匠铺", aliases=["铁匠铺"]))
+        store.upsert(EntityProfile(entity_type="location", name="北境"))
+        store.upsert(EntityProfile(entity_type="item", name="密林古树实验笔记卷轴", aliases=["深棕色的卷轴"]))
+        store.upsert(EntityProfile(entity_type="organization", name="冒险者公会"))
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps(
+                {
+                    "alias_matches": [
+                        {
+                            "extracted_text": "登记员",
+                            "matched_entity_index": 0,
+                            "matched_entity_name": "精灵登记员",
+                            "matched_entity_type": "npc",
+                            "new_alias": "登记员",
+                        },
+                        {
+                            "extracted_text": "铁匠铺",
+                            "matched_entity_index": 4,
+                            "matched_entity_name": "镇东铁匠铺",
+                            "matched_entity_type": "location",
+                            "new_alias": "铁匠铺",
+                        },
+                        {
+                            "extracted_text": "深棕色的卷轴",
+                            "matched_entity_index": 6,
+                            "matched_entity_name": "密林古树实验笔记卷轴",
+                            "matched_entity_type": "item",
+                            "new_alias": "深棕色的卷轴",
+                        },
+                    ],
+                    "retrieved_entities": [
+                        {
+                            "name": "精灵登记员",
+                            "entity_type": "npc",
+                            "source": "alias_match",
+                            "matched_entity_index": 0,
+                            "matched_entity_name": "精灵登记员",
+                        },
+                        {
+                            "name": "塞琳",
+                            "entity_type": "npc",
+                            "source": "exact_match",
+                            "matched_entity_index": 1,
+                            "matched_entity_name": "塞琳",
+                        },
+                        {
+                            "name": "北境霜爪狼人",
+                            "entity_type": "npc",
+                            "source": "exact_match",
+                            "matched_entity_index": 2,
+                            "matched_entity_name": "北境霜爪狼人",
+                        },
+                        {
+                            "name": "三丘农场",
+                            "entity_type": "location",
+                            "source": "exact_match",
+                            "matched_entity_index": 3,
+                            "matched_entity_name": "三丘农场",
+                        },
+                        {
+                            "name": "镇东铁匠铺",
+                            "entity_type": "location",
+                            "source": "alias_match",
+                            "matched_entity_index": 4,
+                            "matched_entity_name": "镇东铁匠铺",
+                        },
+                        {
+                            "name": "北境",
+                            "entity_type": "location",
+                            "source": "exact_match",
+                            "matched_entity_index": 5,
+                            "matched_entity_name": "北境",
+                        },
+                        {
+                            "name": "密林古树实验笔记卷轴",
+                            "entity_type": "item",
+                            "source": "alias_match",
+                            "matched_entity_index": 6,
+                            "matched_entity_name": "密林古树实验笔记卷轴",
+                        },
+                        {
+                            "name": "冒险者公会",
+                            "entity_type": "organization",
+                            "source": "exact_match",
+                            "matched_entity_index": 7,
+                            "matched_entity_name": "冒险者公会",
+                        },
+                        {
+                            "name": "原谷物仓库",
+                            "entity_type": "location",
+                            "source": "new",
+                            "context_span": "镇上以前那座谷物仓库——原谷物仓库，我记得好像是在东边？",
+                        },
+                        {
+                            "name": "镇东旧城区",
+                            "entity_type": "location",
+                            "source": "new",
+                            "context_span": "镇东旧城区。",
+                        },
+                        {
+                            "name": "镇长",
+                            "entity_type": "npc",
+                            "source": "new",
+                            "context_span": "现在去，还是先去见镇长？",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps({"entities": []}, ensure_ascii=False),
+        ])
+
+        saved = update_entity_profiles_workflow(
+            "登记员提到铁匠铺、深棕色的卷轴、北境霜爪狼人、原谷物仓库和镇东旧城区。",
+            _make_state(),
+            CoreMemory(items=[]),
+            mock.build_gateway(),
+            store,
+        )
+
+        kept = {(entity.entity_type, entity.name) for entity in saved.extraction.retrieved_entities}
+        assert ("npc", "北境霜爪狼人") not in kept
+        assert ("location", "镇东铁匠铺") not in kept
+        assert ("npc", "镇长") not in kept
+        assert ("location", "原谷物仓库") in kept
+        assert ("location", "镇东旧城区") in kept
+        assert [match.extracted_text for match in saved.extraction.alias_matches] == ["深棕色的卷轴"]
+
+    def test_existing_low_quality_entity_mentions_do_not_increment_counts(self):
+        store = EntityStore(":memory:")
+        bad_id = store.upsert(EntityProfile(entity_type="npc", name="北境霜爪狼人", aliases=["霜爪狼人"]))
+        mock = MockLLM()
+        mock.set_responses([
+            json.dumps(
+                {
+                    "alias_matches": [],
+                    "retrieved_entities": [
+                        {
+                            "name": "北境霜爪狼人",
+                            "entity_type": "npc",
+                            "source": "exact_match",
+                            "matched_entity_index": 0,
+                            "matched_entity_name": "北境霜爪狼人",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps({"entities": []}, ensure_ascii=False),
+        ])
+
+        saved = update_entity_profiles_workflow(
+            "北境霜爪狼人被登记员提到。",
+            _make_state(),
+            CoreMemory(items=[]),
+            mock.build_gateway(),
+            store,
+        )
+
+        assert saved.extraction.retrieved_entities == []
+        assert store.get_by_id(bad_id).name_hit_count == 1

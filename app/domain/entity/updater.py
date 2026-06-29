@@ -7,12 +7,31 @@ from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.entity.schemas import (
     EntityProfile,
+    EntityProfileIndexedUpdate,
     EntityProfileUpdateBatch,
     EntityProfileUpdateInput,
     RetrievedEntity,
     profile_from_semantic,
     utc_now,
 )
+from app.domain.entity.quality import is_acceptable_profile_update
+
+
+class _EntityUpdateCandidate:
+    def __init__(
+        self,
+        *,
+        entity_index: int,
+        entity_type: str,
+        name: str,
+        existing_profile: EntityProfile | None = None,
+        new_hint: RetrievedEntity | None = None,
+    ):
+        self.entity_index = entity_index
+        self.entity_type = entity_type
+        self.name = name
+        self.existing_profile = existing_profile
+        self.new_hint = new_hint
 
 
 class EntityProfileUpdater:
@@ -35,6 +54,8 @@ class EntityProfileUpdater:
 
         from app.domain.views import project_current_state, project_scene_summaries
 
+        candidates = _build_update_candidates(relevant_profiles, new_entity_hints or [])
+
         result = cast(
             EntityProfileUpdateBatch,
             self._gateway.run(
@@ -44,19 +65,8 @@ class EntityProfileUpdater:
                     "scene_text": scene_text,
                     "current_state_summary_json": project_current_state(current_state),
                     "recent_summaries_json": project_scene_summaries(recent_summaries or []),
-                    "relevant_profiles_json": json.dumps(
-                        [
-                            profile.semantic_view().model_dump(mode="json")
-                            for profile in relevant_profiles
-                        ],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    "new_entity_hints_json": json.dumps(
-                        [
-                            hint.model_dump(mode="json")
-                            for hint in (new_entity_hints or [])
-                        ],
+                    "entity_candidates_json": json.dumps(
+                        [_candidate_for_prompt(candidate) for candidate in candidates],
                         ensure_ascii=False,
                         indent=2,
                     ),
@@ -70,21 +80,24 @@ class EntityProfileUpdater:
                 trace_id=trace_id,
             ),
         )
-        return self._merge(relevant_profiles, result.entities, current_state.scene.scene_id)
+        validated = _validate_indexed_updates(result.entities, candidates)
+        return self._merge(candidates, validated, current_state.scene.scene_id)
 
     def _merge(
         self,
-        old_profiles: list[EntityProfile],
-        returned: list[EntityProfileUpdateInput],
+        candidates: list[_EntityUpdateCandidate],
+        returned: list[EntityProfileIndexedUpdate],
         scene_id: str,
     ) -> list[EntityProfile]:
         result: list[EntityProfile] = []
         now = utc_now()
         for update in returned:
-            existing = _find_existing(update, old_profiles)
+            candidate = candidates[update.entity_index]
+            profile_update = update.profile
+            existing = candidate.existing_profile
             if existing is not None:
                 merged = existing.model_copy(deep=True)
-                apply_semantic_update(merged, update)
+                apply_semantic_update(merged, profile_update)
                 if scene_id not in merged.source_scene_ids:
                     merged.source_scene_ids.append(scene_id)
                 merged.confidence = min(1.0, merged.confidence + 0.05)
@@ -93,7 +106,7 @@ class EntityProfileUpdater:
             else:
                 result.append(
                     profile_from_semantic(
-                        update,
+                        profile_update,
                         source_scene_ids=[scene_id],
                         confidence=0.5,
                         updated_at=now,
@@ -102,18 +115,80 @@ class EntityProfileUpdater:
         return result
 
 
-def _find_existing(
-    update: EntityProfileUpdateInput,
-    profiles: list[EntityProfile],
-) -> EntityProfile | None:
-    update_names = {_norm(update.name), *[_norm(alias) for alias in update.aliases]}
-    update_names.discard("")
-    for profile in profiles:
-        profile_names = {_norm(profile.name), *[_norm(alias) for alias in profile.aliases]}
-        profile_names.discard("")
-        if update_names & profile_names:
-            return profile
-    return None
+def _build_update_candidates(
+    relevant_profiles: list[EntityProfile],
+    new_entity_hints: list[RetrievedEntity],
+) -> list[_EntityUpdateCandidate]:
+    candidates: list[_EntityUpdateCandidate] = []
+    for index, profile in enumerate(relevant_profiles):
+        candidates.append(
+            _EntityUpdateCandidate(
+                entity_index=index,
+                entity_type=profile.entity_type,
+                name=profile.name,
+                existing_profile=profile,
+            )
+        )
+    offset = len(candidates)
+    for index, hint in enumerate(new_entity_hints):
+        candidates.append(
+            _EntityUpdateCandidate(
+                entity_index=offset + index,
+                entity_type=hint.entity_type,
+                name=hint.name,
+                new_hint=hint,
+            )
+        )
+    return candidates
+
+
+def _candidate_for_prompt(candidate: _EntityUpdateCandidate) -> dict:
+    if candidate.existing_profile is not None:
+        return {
+            "entity_index": candidate.entity_index,
+            "source": "existing",
+            **candidate.existing_profile.semantic_view().model_dump(mode="json"),
+        }
+    return {
+        "entity_index": candidate.entity_index,
+        "source": "new_hint",
+        "name": candidate.name,
+        "entity_type": candidate.entity_type,
+        "context_span": candidate.new_hint.context_span if candidate.new_hint else None,
+    }
+
+
+def _validate_indexed_updates(
+    returned: list[EntityProfileIndexedUpdate],
+    candidates: list[_EntityUpdateCandidate],
+) -> list[EntityProfileIndexedUpdate]:
+    valid: list[EntityProfileIndexedUpdate] = []
+    seen: set[int] = set()
+    for update in returned:
+        if update.entity_index in seen:
+            continue
+        if update.entity_index < 0 or update.entity_index >= len(candidates):
+            continue
+        candidate = candidates[update.entity_index]
+        profile = update.profile
+        if profile.entity_type != candidate.entity_type:
+            continue
+        if (
+            candidate.existing_profile is not None
+            and _norm(profile.name)
+            not in {
+                _norm(candidate.existing_profile.name),
+                *[_norm(alias) for alias in candidate.existing_profile.aliases],
+            }
+        ):
+            continue
+        if not is_acceptable_profile_update(profile):
+            continue
+        if candidate.new_hint is not None and _norm(profile.name) != _norm(candidate.name):
+            continue
+        valid.append(update)
+        seen.add(update.entity_index)
+    return valid
 
 
 def apply_semantic_update(
