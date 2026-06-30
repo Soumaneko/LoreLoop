@@ -64,12 +64,10 @@ class TestResourcesState:
         r2 = ResourcesState()
 
         r1.inventory.append(InventoryItem(name="匕首", quantity=1))
-        r1.key_items.append("鹰徽章")
         r1.fixed_assets.append("葡萄园")
         r1.temporary_assets.append("临时通行证")
 
         assert r2.inventory == []
-        assert r2.key_items == []
         assert r2.fixed_assets == []
         assert r2.temporary_assets == []
 
@@ -109,11 +107,11 @@ class TestCurrentState:
                     current_intent="关心明日安排",
                 )
             ],
-            resources=ResourcesState(key_items=["鹰徽章"]),
+            resources=ResourcesState(fixed_assets=["葡萄园"]),
         )
 
         assert state.scene.scene_id == "scene_001"
         assert state.world_clock.phase == "上午"
         assert state.player.name == "卢西安"
         assert state.npcs[0].name == "莎拉"
-        assert state.resources.key_items == ["鹰徽章"]
+        assert state.resources.fixed_assets == ["葡萄园"]

@@ -35,6 +35,16 @@
 {entity_profiles_json}
 ```
 
+## NPCProfiles
+
+包含本回合相关 NPC 的人物档案与导演连续性信息。判定涉及 NPC 反应、态度、能力或动机时，优先参考这里。
+
+NPCProfiles 中的 `core_motivation`、`fear_or_wound`、`hidden_secret` 属于导演幕后信息，只能用于约束 NPC 的反应逻辑，不等于玩家可得情报。除非玩家本回合明确追问对应秘密、旧伤、恐惧、创伤、真实目的、过往隐情，或已通过已公开线索直接逼近该事实，否则不得把 `hidden_secret` 或 `fear_or_wound` 写入 effect_reasoning 的可揭示结果，也不得让 resolved_effect 直接泄露。`core_motivation` 也必须结合当前关系、信任程度、玩家行动强度和 outcome_band 判断；即使 critical_success，也优先揭示外层目标、条件、态度转变或可追问线索，而不是完整摊牌。
+
+```json
+{npc_profiles_json}
+```
+
 ## DirectorEvent
 
 ```json
@@ -104,6 +114,7 @@
    - 锚定具体细节：从 CurrentState 或 Memories 中提取一个具体名词作为成败的“支点”，不要使用抽象词汇。
    - 呼应玩家原文：结果必须是对玩家输入中具体意图、措辞和做法的反馈；roll_judgments 只是程序判定摘要，不得替代玩家原文。
    - 符合实体人设：当结果涉及 NPC 反应时，必须体现 Entity Profiles 中的性格特质或过往经历。
+   - 私密档案分层：NPCProfile 的幕后字段可以解释“为什么 NPC 这样反应”，但不能自动变成“NPC 直接说出口”。`hidden_secret` 与 `fear_or_wound` 默认只允许影响语气、回避、迟疑、试探、拒绝或抛出外层条件；只有玩家明确触及且当前关系足以承受时，才可揭示极少量边缘信息。`core_motivation` 可作为长期反应方向，但公开程度必须与当前关系和场景压力匹配。
    - 拒绝“无事发生”：即使是 failure，也应改变当前战局或社交态势（激怒对方、暴露位置、消耗时间、破坏掩体）。
 5. 主动调用最相关的上下文（NPC 当前态度、库存资源、CoreMemory 约束）。使用 Memories 时严格区分 evidence_mode：observed 可作直接确认；reported 仅为传闻/口供；believed 仅为 owner 的主观认知；inferred 只是谨慎推断。
 6. selected_type 必须来自“可选叙事类型”列表，根据本次判定的整体走向和历史剧情节奏选择最优类型：
@@ -122,9 +133,10 @@
 1. 不得改写或反转 outcome_band，不得让结果偏离程序判定的档位。
 2. 不得将 reported、believed 或 inferred 当作客观真相。
 3. 不得原文暴露 DirectorEvent，不得将其写成任务目标。
-4. 不得写 PlotBeat，不得写小说正文，不得替主角做下一步选择。
-5. resolved_effect 禁止镜头描写、站位描写、表情动作串联，也不得堆砌无关细节或对白，只保留“为何成功/失败”的因果核心。
-6. selected_type 不得选择“可选叙事类型”列表之外的类型。
+4. 不得将 NPCProfile 的 `hidden_secret`、`fear_or_wound` 作为奖励情报直接泄露；不得仅因 critical_success 就让 NPC 坦白最深秘密或创伤。
+5. 不得写 PlotBeat，不得写小说正文，不得替主角做下一步选择。
+6. resolved_effect 禁止镜头描写、站位描写、表情动作串联，也不得堆砌无关细节或对白，只保留“为何成功/失败”的因果核心。
+7. selected_type 不得选择“可选叙事类型”列表之外的类型。
 
 
 # 例子

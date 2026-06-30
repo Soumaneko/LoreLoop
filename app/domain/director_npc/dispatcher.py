@@ -3,7 +3,7 @@ from typing import cast
 
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.current_state.schemas import CurrentState, NPCState
+from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_event.views import project_director_event
 from app.domain.director_npc.schemas import (
@@ -28,9 +28,9 @@ class DirectorNPCDispatcher:
         recent_summaries: list[SceneSummary],
         director_event: DirectorEvent | None,
         standby_npcs: list[DirectorNPCDraft],
-        existing_candidates: list[NPCState],
+        existing_candidates: list[ExistingNPCCandidate],
         dispatched_director_npc_candidates: list[DispatchedDirectorNPCCandidate],
-        trigger_reason: str,
+        user_input: str,
         trace_id: str | None = None,
     ) -> DirectorNPCDispatchDecision:
         result = cast(
@@ -49,13 +49,7 @@ class DirectorNPCDispatcher:
                     ),
                     "existing_npc_candidates_json": json.dumps(
                         [
-                            ExistingNPCCandidate(
-                                name=npc.name,
-                                role=npc.role,
-                                current_intent=npc.current_intent,
-                                attitude_to_player=npc.attitude_to_player,
-                                absent_turns=npc.absent_turns,
-                            ).model_dump(mode="json")
+                            npc.model_dump(mode="json")
                             for npc in existing_candidates
                         ],
                         ensure_ascii=False,
@@ -69,7 +63,7 @@ class DirectorNPCDispatcher:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "trigger_reason": trigger_reason,
+                    "user_input": user_input,
                     "output_schema_json": json.dumps(
                         DirectorNPCDispatchDecision.model_json_schema(),
                         ensure_ascii=False,

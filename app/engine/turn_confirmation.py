@@ -4,11 +4,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.core.llm.config import create_gateway
-from app.domain.current_state import StateUpdater
+from app.domain.current_state import NPCState, StateUpdater
+from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.reviewer import DirectorEventReviewer
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.entity.extractor import EntityExtractor
-from app.domain.entity.schemas import EntityProfile
+from app.domain.npc_profile.extractor import NPCProfileExtractor
+from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.npc_profile.workflows import (
+    sync_npc_profile_absence_from_current_state,
+    update_npc_profiles_from_extraction,
+)
 from app.domain.turn_resolution import NARRATIVE_TYPE_LABELS
 from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.workflows.extract_memory import fill_pending_memory_scene_metadata
@@ -16,6 +22,7 @@ from app.workflows.generate_action_preview import generate_action_preview_workfl
 from app.workflows.update_entity_profiles import update_entity_profiles_from_extraction
 from app.workflows.update_director_event import update_director_event_workflow
 from app.workflows.director_npc import DIRECTOR_NPC_STANDBY_TARGET
+from app.domain.director_npc.schemas import DirectorNPCDraft
 
 from .maintenance import (
     run_director_npc_restock,
@@ -38,6 +45,7 @@ from .stores import (
     director_npc_store,
     entity_store,
     memory_store,
+    npc_profile_store,
     pending_memory_store,
     scene_summary_store,
     short_term_memory_store,
@@ -64,6 +72,12 @@ class _ConfirmationPipelineInput:
     )
     confirm_started_extra: dict[str, Any] = field(default_factory=dict)
     finish_extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class _DirectorNPCConfirmation:
+    npc_id: str
+    draft: DirectorNPCDraft
 
 
 def confirm_stream(
@@ -104,11 +118,11 @@ def confirm_turn_stream(
         )
 
 
-def _promote_dispatched_director_npc_shell(
+def _promote_dispatched_director_npc_profile(
     pending,
     *,
     turn_index: int,
-) -> str | None:
+) -> _DirectorNPCConfirmation | None:
     result = pending.director_npc_result
     if (
         result is None
@@ -118,22 +132,121 @@ def _promote_dispatched_director_npc_shell(
         return None
 
     dispatch = result.dispatch
-    with director_npc_store() as npc_store, entity_store() as ent_store:
-        draft = npc_store.mark_dispatched(dispatch.selected_id, turn_index=turn_index)
+    with director_npc_store() as director_store, npc_profile_store() as npc_store:
+        draft = director_store.mark_dispatched(dispatch.selected_id, turn_index=turn_index)
         if draft is None:
             return None
-        existing = ent_store.get_by_name(draft.name)
-        if existing is not None and existing.entity_type == "npc":
-            return existing.entity_id
-        return ent_store.upsert(
-            EntityProfile(
-                entity_type="npc",
+        npc_profile = _npc_profile_from_director_draft(draft)
+        existing_npc = npc_store.get_by_source_director_npc_id(draft.draft_id) or npc_store.get_by_name(draft.name)
+        if existing_npc is not None:
+            npc_profile = _merge_director_draft_into_npc_profile(existing_npc, draft)
+        npc_id = npc_store.upsert(npc_profile)
+        return _DirectorNPCConfirmation(npc_id=npc_id, draft=draft)
+
+
+def _npc_profile_from_director_draft(draft: DirectorNPCDraft) -> NPCProfile:
+    return NPCProfile(
+        name=draft.name,
+        public_summary=draft.role,
+        role=draft.role,
+        appearance=draft.appearance,
+        personality_traits=list(draft.personality_traits),
+        known_abilities=list(draft.known_abilities),
+        faction=draft.faction,
+        core_motivation=draft.core_motivation,
+        fear_or_wound=draft.fear_or_wound,
+        hidden_secret=draft.hidden_secret,
+        conflict_style=draft.conflict_style,
+        social_style=draft.social_style,
+        encounter_potentials=list(draft.encounter_potentials),
+        source_director_npc_id=draft.draft_id,
+        created_turn=draft.created_turn,
+        dispatched_turn=draft.dispatched_turn,
+        confidence=0.7,
+        name_hit_count=1,
+    )
+
+
+def _merge_director_draft_into_npc_profile(profile: NPCProfile, draft: DirectorNPCDraft) -> NPCProfile:
+    merged = profile.model_copy(deep=True)
+    merged.public_summary = merged.public_summary or draft.role
+    merged.role = merged.role or draft.role
+    merged.appearance = merged.appearance or draft.appearance
+    if not merged.personality_traits:
+        merged.personality_traits = list(draft.personality_traits)
+    if not merged.known_abilities:
+        merged.known_abilities = list(draft.known_abilities)
+    merged.faction = merged.faction or draft.faction
+    merged.core_motivation = merged.core_motivation or draft.core_motivation
+    merged.fear_or_wound = merged.fear_or_wound or draft.fear_or_wound
+    merged.hidden_secret = merged.hidden_secret or draft.hidden_secret
+    merged.conflict_style = merged.conflict_style or draft.conflict_style
+    merged.social_style = merged.social_style or draft.social_style
+    if not merged.encounter_potentials:
+        merged.encounter_potentials = list(draft.encounter_potentials)
+    merged.source_director_npc_id = merged.source_director_npc_id or draft.draft_id
+    merged.created_turn = merged.created_turn or draft.created_turn
+    merged.dispatched_turn = draft.dispatched_turn
+    merged.confidence = max(merged.confidence, 0.7)
+    merged.name_hit_count = max(merged.name_hit_count, 1)
+    return merged
+
+
+def _merge_unique_ids(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    merged: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        merged.append(value)
+    return merged
+
+
+def _state_with_confirmed_director_npc(
+    state: CurrentState,
+    draft: DirectorNPCDraft | None,
+) -> CurrentState:
+    if draft is None:
+        return state
+
+    participants = list(state.scene.participants)
+    if draft.name not in participants:
+        participants.append(draft.name)
+
+    npcs = []
+    matched = False
+    for npc in state.npcs:
+        if npc.name == draft.name:
+            matched = True
+            npcs.append(
+                npc.model_copy(
+                    update={
+                        "role": npc.role or draft.role,
+                        "location": npc.location or state.scene.location,
+                        "absent_turns": 0,
+                    }
+                )
+            )
+        else:
+            npcs.append(npc)
+
+    if not matched:
+        npcs.append(
+            NPCState(
                 name=draft.name,
                 role=draft.role,
-                confidence=0.2,
-                name_hit_count=1,
+                location=state.scene.location,
+                absent_turns=0,
             )
         )
+
+    return state.model_copy(
+        update={
+            "scene": state.scene.model_copy(update={"participants": participants}),
+            "npcs": npcs,
+        }
+    )
 
 
 def _confirm_turn_stream_locked(
@@ -204,25 +317,50 @@ def _confirm_pipeline_locked(
         },
     }
 
-    director_npc_entity_id = cache.get("director_npc_entity_id")
+    director_npc_profile_id = cache.get("director_npc_profile_id")
+    confirmed_director_npc_draft = cache.get("confirmed_director_npc_draft")
     director_npc_restock_scheduled = bool(cache.get("director_npc_restock_scheduled"))
     if (
         pipeline_input.handle_director_npc
         and write_db
-        and director_npc_entity_id is None
-        and "director_npc_entity_id" not in cache
+        and director_npc_profile_id is None
+        and "director_npc_profile_id" not in cache
     ):
-        director_npc_entity_id = _promote_dispatched_director_npc_shell(
+        director_npc_confirmation = _promote_dispatched_director_npc_profile(
             pending,
             turn_index=pipeline_input.turn_index,
         )
-        cache["director_npc_entity_id"] = director_npc_entity_id
+        if director_npc_confirmation is not None:
+            director_npc_profile_id = director_npc_confirmation.npc_id
+            confirmed_director_npc_draft = director_npc_confirmation.draft
+        cache["director_npc_profile_id"] = director_npc_profile_id
+        cache["confirmed_director_npc_draft"] = confirmed_director_npc_draft
+
+    if (
+        pipeline_input.handle_director_npc
+        and write_db
+        and pending.director_npc_result is not None
+        and pending.director_npc_result.dispatch is not None
+        and pending.director_npc_result.dispatch.action != "none"
+        and not cache.get("director_npc_last_dispatch_turn_set")
+    ):
+        with director_npc_store() as npc_store:
+            npc_store.set_meta_int("last_dispatch_turn", pipeline_input.turn_index)
+        cache["director_npc_last_dispatch_turn_set"] = True
+
+    state_before_update = _state_with_confirmed_director_npc(
+        pipeline_input.state_before,
+        confirmed_director_npc_draft,
+    )
 
     existing_entity_profiles = cache.get("existing_entity_profiles", [])
+    existing_npc_profiles = cache.get("existing_npc_profiles", [])
     if write_db and "existing_entity_profiles" not in cache:
-        with entity_store() as ent_store:
+        with entity_store() as ent_store, npc_profile_store() as npc_store:
             existing_entity_profiles = ent_store.list_all()
+            existing_npc_profiles = npc_store.list_all()
         cache["existing_entity_profiles"] = existing_entity_profiles
+        cache["existing_npc_profiles"] = existing_npc_profiles
 
     core_memory = core_memory_store().load_required()
 
@@ -232,13 +370,11 @@ def _confirm_pipeline_locked(
         updater = StateUpdater(gateway)
         npc_aliases = {
             profile.name: list(profile.aliases)
-            for profile in existing_entity_profiles
-            if getattr(profile, "entity_type", None) == "npc"
-            and profile.name
-            and profile.aliases
+            for profile in existing_npc_profiles
+            if profile.name and profile.aliases
         }
         result = updater.update(
-            pipeline_input.state_before,
+            state_before_update,
             effective_scene_text,
             core_memory=core_memory,
             npc_aliases=npc_aliases,
@@ -253,10 +389,10 @@ def _confirm_pipeline_locked(
         extractor = MemoryDraftExtractor(gateway)
         result = extractor.extract(
             effective_scene_text,
-            pipeline_input.state_before,
+            state_before_update,
             core_memory=core_memory,
             turn_index=pipeline_input.turn_index,
-            scene_id=pipeline_input.state_before.scene.scene_id,
+            scene_id=state_before_update.scene.scene_id,
             trace_id=trace_id,
         )
         cache["pending_memory_result"] = result
@@ -275,10 +411,24 @@ def _confirm_pipeline_locked(
         cache["entity_extraction"] = result
         return result
 
+    def _do_npc_extract():
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        extractor = NPCProfileExtractor(gateway)
+        result = extractor.extract(
+            core_memory=core_memory,
+            scene_text=effective_scene_text,
+            existing_profiles=existing_npc_profiles,
+            trace_id=trace_id,
+        )
+        cache["npc_extraction"] = result
+        return result
+
     updated_state = cache.get("updated_state")
     pending_memory_result = cache.get("pending_memory_result")
     entity_extraction = cache.get("entity_extraction")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+    npc_extraction = cache.get("npc_extraction")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         state_fu = pool.submit(_do_state_update) if updated_state is None else None
         extract_fu = (
             pool.submit(_do_memory_draft_extract)
@@ -290,10 +440,15 @@ def _confirm_pipeline_locked(
             if write_db and entity_extraction is None
             else None
         )
+        npc_extract_fu = (
+            pool.submit(_do_npc_extract)
+            if write_db and npc_extraction is None
+            else None
+        )
 
         first_wave = [
             future
-            for future in (state_fu, extract_fu, entity_extract_fu)
+            for future in (state_fu, extract_fu, entity_extract_fu, npc_extract_fu)
             if future is not None
         ]
 
@@ -311,13 +466,22 @@ def _confirm_pipeline_locked(
                     },
                 }
             else:
-                entity_extraction = future.result()
-                yield {
-                    "step": "entity_extract_done",
-                    "data": {
-                        "entity_extraction": model_data(entity_extraction),
-                    },
-                }
+                if future == entity_extract_fu:
+                    entity_extraction = future.result()
+                    yield {
+                        "step": "entity_extract_done",
+                        "data": {
+                            "entity_extraction": model_data(entity_extraction),
+                        },
+                    }
+                else:
+                    npc_extraction = future.result()
+                    yield {
+                        "step": "npc_extract_done",
+                        "data": {
+                            "npc_extraction": model_data(npc_extraction),
+                        },
+                    }
 
     if not cache.get("pending_memory_metadata_filled"):
         pending_memory_items = fill_pending_memory_scene_metadata(
@@ -367,6 +531,7 @@ def _confirm_pipeline_locked(
     }
 
     updated_entity_ids: list[str] = cache.get("updated_entity_ids", [])
+    updated_npc_profile_ids: list[str] = cache.get("updated_npc_profile_ids", [])
     director_event_result = cache.get("director_event_result")
     if write_db:
         if (
@@ -409,9 +574,33 @@ def _confirm_pipeline_locked(
                 )
                 updated_entity_ids = entity_result.saved_ids
             cache["updated_entity_ids"] = updated_entity_ids
+        if npc_extraction is not None and "updated_npc_profile_ids" not in cache:
+            with npc_profile_store() as npc_store:
+                gateway = create_gateway()
+                gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+                npc_result = update_npc_profiles_from_extraction(
+                    scene_text=effective_scene_text,
+                    current_state=updated_state,
+                    core_memory=core_memory,
+                    gateway=gateway,
+                    npc_store=npc_store,
+                    existing_profiles=existing_npc_profiles,
+                    extraction=npc_extraction,
+                    recent_summaries=recent_summaries,
+                    trace_id=trace_id,
+                )
+                updated_npc_profile_ids = npc_result.saved_ids
+                absence_synced_ids = sync_npc_profile_absence_from_current_state(
+                    npc_store=npc_store,
+                    current_state=updated_state,
+                )
+                updated_npc_profile_ids = _merge_unique_ids(
+                    [*updated_npc_profile_ids, *absence_synced_ids]
+                )
+            cache["updated_npc_profile_ids"] = updated_npc_profile_ids
         if (
             pipeline_input.handle_director_npc
-            and director_npc_entity_id
+            and director_npc_profile_id
             and not cache.get("director_npc_restock_scheduled")
         ):
             with director_npc_store() as npc_store:
@@ -430,11 +619,12 @@ def _confirm_pipeline_locked(
                 cache["director_npc_restock_scheduled"] = True
     entity_update_data = {
         "updated_entity_ids": updated_entity_ids,
+        "updated_npc_profile_ids": updated_npc_profile_ids,
     }
     if pipeline_input.handle_director_npc or pipeline_input.update_director_event:
         entity_update_data.update(
             {
-                "director_npc_entity_id": director_npc_entity_id,
+                "director_npc_profile_id": director_npc_profile_id,
                 "director_npc_restock_scheduled": director_npc_restock_scheduled,
                 "director_npc_result": model_data(
                     getattr(pending, "director_npc_result", None)
@@ -554,12 +744,14 @@ def _confirm_pipeline_locked(
         "short_term_memory_after": model_data(short_term_after),
         "memory_extraction": memory_data,
         "updated_entity_ids": updated_entity_ids,
+        "updated_npc_profile_ids": updated_npc_profile_ids,
+        "npc_extraction": model_data(npc_extraction) if npc_extraction is not None else None,
         "status": "committed" if write_db else "dry_run",
     }
     if pipeline_input.handle_director_npc or pipeline_input.update_director_event:
         finish_data.update(
             {
-                "director_npc_entity_id": director_npc_entity_id,
+                "director_npc_profile_id": director_npc_profile_id,
                 "director_npc_restock_scheduled": director_npc_restock_scheduled,
                 "director_npc_result": model_data(
                     getattr(pending, "director_npc_result", None)

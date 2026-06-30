@@ -4,7 +4,6 @@ from typing import cast
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.director_npc.schemas import DirectorNPCCreateOutput, DirectorNPCDraft
-from app.domain.entity.schemas import EntityProfile
 
 
 class DirectorNPCCreator:
@@ -15,7 +14,7 @@ class DirectorNPCCreator:
         self,
         *,
         core_memory: CoreMemory,
-        existing_npcs: list[EntityProfile],
+        existing_npcs: list,
         reserved_npcs: list[dict[str, str | None]] | None = None,
         protagonist_name: str,
         turn_index: int,
@@ -24,7 +23,7 @@ class DirectorNPCCreator:
         existing_npc_views = []
         seen_names = set()
         for npc in existing_npcs:
-            if npc.entity_type != "npc" or npc.name in seen_names:
+            if npc.name in seen_names:
                 continue
             existing_npc_views.append({"name": npc.name, "role": npc.role})
             seen_names.add(npc.name)

@@ -16,6 +16,7 @@ from app.domain.plot_outline.views import (
 from app.domain.views import (
     project_current_state,
     project_entity_profiles,
+    project_npc_profiles,
     project_scene_summaries,
 )
 from app.workflows.context_assembler import PlotOutlineContext
@@ -89,6 +90,7 @@ class PlotOutlineAgent:
                     "retrieved_memories_json": project_retrieved_memories(context.retrieved_memories),
                     "scene_summaries_json": project_scene_summaries(context.scene_summaries),
                     "entity_profiles_json": project_entity_profiles(context.entity_profiles),
+                    "npc_profiles_json": project_npc_profiles(context.npc_profiles),
                     "director_event_json": project_director_event(
                         context.director_event,
                         recent_archived_event=context.recent_archived_director_event,

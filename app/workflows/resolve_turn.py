@@ -3,6 +3,7 @@ from app.domain.action.schemas import ActionParseResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import RollResultBatch
 from app.domain.scene_summary.schemas import SceneSummary
@@ -20,6 +21,7 @@ def resolve_turn_workflow(
     retrieved_memories: CandidateRetrievalResult,
     scene_summaries: list[SceneSummary],
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
+    npc_profiles: list[NPCProfileDirectorView] | None = None,
     director_event: DirectorEvent | None = None,
     recent_archived_director_event: DirectorEvent | None = None,
     gateway: LLMGateway,
@@ -37,6 +39,7 @@ def resolve_turn_workflow(
         retrieved_memories=retrieved_memories,
         scene_summaries=scene_summaries,
         entity_profiles=entity_profiles or [],
+        npc_profiles=npc_profiles or [],
         director_event=director_event,
         recent_archived_director_event=recent_archived_director_event,
         previous_types=previous_types,

@@ -8,6 +8,7 @@ from .stores import (
     director_npc_store,
     entity_store,
     memory_store,
+    npc_profile_store,
     pending_memory_store,
     scene_summary_store,
     short_term_memory_store,
@@ -41,6 +42,12 @@ def load_debug_state() -> dict:
     with entity_store() as ent_store:
         entity_profiles = ent_store.list_all()
 
+    with npc_profile_store() as npc_store:
+        npc_profiles = npc_store.list_all()
+        npc_profiles_active = npc_store.list_all(active_only=True)
+        npc_profile_count = len(npc_profiles)
+        npc_active_profile_count = len(npc_profiles_active)
+
     with director_event_store() as director_store:
         active_director_event = director_store.get_active()
         suspended_director_events = director_store.list_suspended()
@@ -70,6 +77,9 @@ def load_debug_state() -> dict:
         "scene_summaries": model_data(scene_summaries),
         "recent_summaries": model_data(recent_summaries),
         "entity_profiles": model_data(entity_profiles),
+        "npc_profiles": model_data(npc_profiles),
+        "npc_profile_count": npc_profile_count,
+        "npc_active_profile_count": npc_active_profile_count,
         "active_director_event": model_data(active_director_event),
         "suspended_director_events": model_data(suspended_director_events),
         "archived_director_events": model_data(archived_director_events),

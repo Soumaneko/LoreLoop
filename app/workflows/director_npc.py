@@ -1,7 +1,7 @@
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.current_state.schemas import CurrentState, NPCState
+from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.creator import DirectorNPCCreator
 from app.domain.director_npc.dispatcher import DirectorNPCDispatcher
@@ -9,15 +9,18 @@ from app.domain.director_npc.schemas import (
     DirectorNPCDraft,
     DirectorNPCWorkflowResult,
     DispatchedDirectorNPCCandidate,
+    ExistingNPCCandidate,
 )
+from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.director_npc.store import DirectorNPCStore
-from app.domain.entity.store import EntityStore
+from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.short_term_memory.schemas import ShortTermMemory
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 
 
 DIRECTOR_NPC_HARD_MAX_TURNS = 8
+DIRECTOR_NPC_FIRST_FORCED_TURN = 2
 DIRECTOR_NPC_REPEAT_BLOCK_TURNS = 2
 DIRECTOR_NPC_STANDBY_TARGET = 3
 PRESSURE_TYPES = {"escalate_pressure", "complication"}
@@ -33,19 +36,21 @@ def maybe_director_npc_workflow(
     short_term_memory: ShortTermMemory,
     recent_summaries: list[SceneSummary],
     director_event: DirectorEvent | None,
+    user_input: str,
     turn_index: int,
     director_npc_store: DirectorNPCStore,
-    entity_store: EntityStore,
+    npc_profile_store: NPCProfileStore | None = None,
     creator_gateway: LLMGateway,
     dispatcher_gateway: LLMGateway,
     trace_id: str | None = None,
 ) -> DirectorNPCWorkflowResult:
+    owned_profile_store = npc_profile_store or NPCProfileStore(":memory:")
     created_drafts = restock_director_npc_standby(
         core_memory=core_memory,
         protagonist_name=current_state.player.name,
         turn_index=turn_index,
         director_npc_store=director_npc_store,
-        entity_store=entity_store,
+        npc_profile_store=owned_profile_store,
         creator_gateway=creator_gateway,
         trace_id=trace_id,
     )
@@ -64,10 +69,10 @@ def maybe_director_npc_workflow(
             skipped_reason="trigger conditions not met",
         )
 
-    existing_candidates = _existing_recall_candidates(current_state.npcs)
+    existing_candidates = _existing_recall_candidates(owned_profile_store.list_all())
     dispatched_director_npc_candidates = _dispatched_director_npc_candidates(
         director_npc_store,
-        entity_store,
+        owned_profile_store,
     )
     dispatch = DirectorNPCDispatcher(dispatcher_gateway).dispatch(
         core_memory=core_memory,
@@ -77,7 +82,7 @@ def maybe_director_npc_workflow(
         standby_npcs=standby,
         existing_candidates=existing_candidates,
         dispatched_director_npc_candidates=dispatched_director_npc_candidates,
-        trigger_reason=trigger_reason,
+        user_input=user_input,
         trace_id=trace_id,
     )
     if not _dispatch_references_valid(
@@ -99,7 +104,7 @@ def maybe_director_npc_workflow(
             }
         )
     if dispatch.action != "none":
-        director_npc_store.set_meta_int("last_dispatch_turn", turn_index)
+        pass  # last_dispatch_turn is persisted during confirmation, not generation
     return DirectorNPCWorkflowResult(
         created_drafts=created_drafts,
         dispatch=dispatch,
@@ -119,13 +124,14 @@ def create_director_npc_standby(
     protagonist_name: str,
     turn_index: int,
     director_npc_store: DirectorNPCStore,
-    entity_store: EntityStore,
+    npc_profile_store: NPCProfileStore | None = None,
     creator_gateway: LLMGateway,
     trace_id: str | None = None,
 ) -> DirectorNPCDraft:
+    owned_profile_store = npc_profile_store or NPCProfileStore(":memory:")
     created = DirectorNPCCreator(creator_gateway).create(
         core_memory=core_memory,
-        existing_npcs=entity_store.list_all(entity_type="npc"),
+        existing_npcs=owned_profile_store.list_all(),
         reserved_npcs=[
             {"name": npc.name, "role": npc.role}
             for npc in director_npc_store.list_standby()
@@ -144,11 +150,12 @@ def restock_director_npc_standby(
     protagonist_name: str,
     turn_index: int,
     director_npc_store: DirectorNPCStore,
-    entity_store: EntityStore,
+    npc_profile_store: NPCProfileStore | None = None,
     creator_gateway: LLMGateway,
     trace_id: str | None = None,
 ) -> list[DirectorNPCDraft]:
     created_drafts: list[DirectorNPCDraft] = []
+    owned_profile_store = npc_profile_store or NPCProfileStore(":memory:")
     for _ in range(director_npc_standby_missing_count(director_npc_store)):
         created_drafts.append(
             create_director_npc_standby(
@@ -156,7 +163,7 @@ def restock_director_npc_standby(
                 protagonist_name=protagonist_name,
                 turn_index=turn_index,
                 director_npc_store=director_npc_store,
-                entity_store=entity_store,
+                npc_profile_store=owned_profile_store,
                 creator_gateway=creator_gateway,
                 trace_id=trace_id,
             )
@@ -174,6 +181,8 @@ def _director_npc_trigger_reason(
 ) -> str | None:
     if last_dispatch_turn and turn_index <= last_dispatch_turn + DIRECTOR_NPC_REPEAT_BLOCK_TURNS:
         return None
+    if turn_index == DIRECTOR_NPC_FIRST_FORCED_TURN and not last_dispatch_turn:
+        return f"forced director NPC dispatch on turn {DIRECTOR_NPC_FIRST_FORCED_TURN}"
     if _has_blocking_action(action_parse_result):
         return None
     if last_dispatch_turn and turn_index >= last_dispatch_turn + DIRECTOR_NPC_HARD_MAX_TURNS:
@@ -207,9 +216,15 @@ def _recent_pressure_exists(
     return any(narrative_type in PRESSURE_TYPES for narrative_type in recent_types)
 
 
-def _existing_recall_candidates(npcs: list[NPCState]) -> list[NPCState]:
+def _existing_recall_candidates(npcs: list[NPCProfile]) -> list[ExistingNPCCandidate]:
     return [
-        npc
+        ExistingNPCCandidate(
+            name=npc.name,
+            role=npc.role,
+            current_intent=npc.current_intent,
+            attitude_to_player=npc.attitude_to_player,
+            absent_turns=npc.absent_turns,
+        )
         for npc in npcs
         if npc.absent_turns >= 1
     ]
@@ -217,19 +232,19 @@ def _existing_recall_candidates(npcs: list[NPCState]) -> list[NPCState]:
 
 def _dispatched_director_npc_candidates(
     director_npc_store: DirectorNPCStore,
-    entity_store: EntityStore,
+    npc_profile_store: NPCProfileStore,
 ) -> list[DispatchedDirectorNPCCandidate]:
     candidates = []
     for draft in director_npc_store.list_all():
         if draft.status != "dispatched":
             continue
-        public_profile = entity_store.get_by_name(draft.name)
+        public_profile = npc_profile_store.get_by_name(draft.name)
         candidates.append(
             DispatchedDirectorNPCCandidate(
                 selected_id=draft.draft_id,
                 selected_name=draft.name,
                 public_entity_profile=(
-                    public_profile.semantic_view()
+                    public_profile.public_view()
                     if public_profile is not None
                     else None
                 ),
@@ -242,7 +257,7 @@ def _dispatched_director_npc_candidates(
 def _dispatch_references_valid(
     dispatch,
     standby: list,
-    existing_candidates: list[NPCState],
+    existing_candidates: list[ExistingNPCCandidate],
     dispatched_director_npc_candidates: list[DispatchedDirectorNPCCandidate],
 ) -> bool:
     if dispatch.action == "none":

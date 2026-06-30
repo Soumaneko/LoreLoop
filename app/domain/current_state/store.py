@@ -31,7 +31,6 @@ def make_default_state(scene_id: str = "scene_001") -> CurrentState:
         resources=ResourcesState(
             inventory=[],
             money=None,
-            key_items=[],
             fixed_assets=[],
             temporary_assets=[],
         ),

@@ -47,7 +47,7 @@
   - reason：时间变化的简短理由，无变化时可简述或填 null。
 - player：更新后的玩家状态，包含 name、condition、position、visible_status；name 保持不变。
 - npcs：更新后的 NPC 列表，每个 NPC 包含 name、role、location、condition、attitude_to_player、current_intent；不确定的字段保持 null。
-- resources：更新后的资源。inventory 每项为 {{"name": "物品名", "quantity": 正整数}}；另含 money、money_unit、key_items、fixed_assets、temporary_assets。
+- resources：更新后的资源。inventory 每项为 {{"name": "物品名", "quantity": 正整数}}；另含 money、money_unit、fixed_assets、temporary_assets。
 - mentioned_npcs：本回合剧情原文中被提及或涉及的所有 NPC 名字列表（用于系统底层的出场频率计算）。
 
 
@@ -114,7 +114,6 @@
     ],
     "money": 30,
     "money_unit": "金币",
-    "key_items": [],
     "fixed_assets": [],
     "temporary_assets": []
   }},

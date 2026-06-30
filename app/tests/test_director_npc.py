@@ -11,11 +11,12 @@ from app.domain.director_npc.schemas import (
     DirectorNPCWorkflowResult,
 )
 from app.domain.director_npc.store import DirectorNPCStore
-from app.domain.entity.schemas import EntityProfile
-from app.domain.entity.store import EntityStore
+from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.short_term_memory.schemas import ShortTermMemory, ShortTermScene
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.workflows.director_npc import (
+    DIRECTOR_NPC_FIRST_FORCED_TURN,
     DIRECTOR_NPC_STANDBY_TARGET,
     _director_npc_trigger_reason,
     create_director_npc_standby,
@@ -139,6 +140,28 @@ def _dispatch_response(action="dispatch_standby", selected_id="director_npc_x", 
 
 
 class TestDirectorNPCTrigger:
+    def test_turn_two_forces_first_dispatch_even_without_five_turn_window(self):
+        reason = _director_npc_trigger_reason(
+            action_parse_result=_action_parse(),
+            turn_resolution=_turn_resolution("advance"),
+            short_term_memory=_stm("transition"),
+            turn_index=2,
+            last_dispatch_turn=0,
+        )
+
+        assert reason == f"forced director NPC dispatch on turn {DIRECTOR_NPC_FIRST_FORCED_TURN}"
+
+    def test_turn_two_force_does_not_repeat_after_same_turn_dispatch(self):
+        reason = _director_npc_trigger_reason(
+            action_parse_result=_action_parse(),
+            turn_resolution=_turn_resolution("advance"),
+            short_term_memory=_stm("transition"),
+            turn_index=2,
+            last_dispatch_turn=2,
+        )
+
+        assert reason is None
+
     def test_blocks_within_two_turns(self):
         reason = _director_npc_trigger_reason(
             action_parse_result=_action_parse(),
@@ -224,7 +247,6 @@ class TestDirectorNPCWorkflow:
 
     def test_create_standby_creates_one_draft(self):
         director_store = DirectorNPCStore(":memory:")
-        entity_store = EntityStore(":memory:")
         creator = MockLLM()
         creator.set_responses([_draft_response()])
 
@@ -233,7 +255,6 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
             creator_gateway=creator.build_gateway(),
         )
 
@@ -242,7 +263,6 @@ class TestDirectorNPCWorkflow:
 
     def test_create_standby_assigns_program_fields(self):
         director_store = DirectorNPCStore(":memory:")
-        entity_store = EntityStore(":memory:")
         gateway = SpyGateway(_draft_response(draft_id="llm_supplied_id"))
 
         created = create_director_npc_standby(
@@ -250,7 +270,6 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=7,
             director_npc_store=director_store,
-            entity_store=entity_store,
             creator_gateway=gateway,
         )
 
@@ -266,7 +285,6 @@ class TestDirectorNPCWorkflow:
 
     def test_restock_standby_creates_when_pool_is_empty(self):
         director_store = DirectorNPCStore(":memory:")
-        entity_store = EntityStore(":memory:")
         creator = MockLLM()
         creator.set_responses(_draft_responses("艾琳娜", "薇拉", "洛珊"))
 
@@ -275,7 +293,6 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
             creator_gateway=creator.build_gateway(),
         )
 
@@ -287,7 +304,6 @@ class TestDirectorNPCWorkflow:
         director_store = DirectorNPCStore(":memory:")
         draft = DirectorNPCDraft.model_validate(json.loads(_draft_response()))
         director_store.save(draft)
-        entity_store = EntityStore(":memory:")
         creator = MockLLM()
         creator.set_responses(_draft_responses("薇拉", "洛珊"))
 
@@ -296,7 +312,6 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
             creator_gateway=creator.build_gateway(),
         )
 
@@ -307,7 +322,6 @@ class TestDirectorNPCWorkflow:
         director_store = DirectorNPCStore(":memory:")
         for response in _draft_responses("艾琳娜", "薇拉", "洛珊"):
             director_store.save(DirectorNPCDraft.model_validate(json.loads(response)))
-        entity_store = EntityStore(":memory:")
         creator = MockLLM()
 
         created = restock_director_npc_standby(
@@ -315,7 +329,6 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
             creator_gateway=creator.build_gateway(),
         )
 
@@ -325,7 +338,6 @@ class TestDirectorNPCWorkflow:
     def test_restock_passes_current_standby_as_reserved_names(self):
         director_store = DirectorNPCStore(":memory:")
         director_store.save(DirectorNPCDraft.model_validate(json.loads(_draft_response("艾琳娜"))))
-        entity_store = EntityStore(":memory:")
         gateway = SpyGateway(_draft_response("薇拉"))
 
         restock_director_npc_standby(
@@ -333,7 +345,6 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
             creator_gateway=gateway,
         )
 
@@ -347,13 +358,12 @@ class TestDirectorNPCWorkflow:
 
     def test_creator_input_uses_only_name_role_and_protagonist_name(self):
         director_store = DirectorNPCStore(":memory:")
-        entity_store = EntityStore(":memory:")
-        entity_store.upsert(
-            EntityProfile(
-                entity_type="npc",
+        npc_profile_store = NPCProfileStore(":memory:")
+        npc_profile_store.upsert(
+            NPCProfile(
                 name="塞琳",
                 role="炼金学院学徒",
-                summary="正在追查莫里斯，已经与主角建立默契。",
+                public_summary="正在追查莫里斯，已经与主角建立默契。",
                 personality_traits=["谨慎"],
                 known_abilities=["植物炼金术"],
                 faction="北境炼金学院",
@@ -366,7 +376,7 @@ class TestDirectorNPCWorkflow:
             protagonist_name="克莱",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
+            npc_profile_store=npc_profile_store,
             creator_gateway=gateway,
         )
 
@@ -381,8 +391,6 @@ class TestDirectorNPCWorkflow:
         director_store.save(draft)
         for response in _draft_responses("薇拉", "洛珊"):
             director_store.save(DirectorNPCDraft.model_validate(json.loads(response)))
-        entity_store = EntityStore(":memory:")
-        entity_store.upsert(EntityProfile(entity_type="npc", name="米莉", role="酒馆老板"))
         creator = MockLLM()
         dispatcher = MockLLM()
         dispatcher.set_responses([_dispatch_response(selected_id=draft.draft_id, selected_name=draft.name)])
@@ -395,9 +403,9 @@ class TestDirectorNPCWorkflow:
             short_term_memory=_stm("advance", "advance", "advance", "advance"),
             recent_summaries=[],
             director_event=None,
+            user_input="我环顾四周寻找线索",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
             creator_gateway=creator.build_gateway(),
             dispatcher_gateway=dispatcher.build_gateway(),
         )
@@ -405,7 +413,7 @@ class TestDirectorNPCWorkflow:
         assert result.created_drafts == []
         assert result.dispatch is not None
         assert result.dispatch.action == "dispatch_standby"
-        assert director_store.get_meta_int("last_dispatch_turn") == 4
+        assert director_store.get_meta_int("last_dispatch_turn") == 0
 
     def test_dispatcher_receives_dispatched_director_private_and_public_profile(self):
         director_store = DirectorNPCStore(":memory:")
@@ -415,13 +423,12 @@ class TestDirectorNPCWorkflow:
         for response in _draft_responses("薇拉", "洛珊"):
             director_store.save(DirectorNPCDraft.model_validate(json.loads(response)))
         director_store.save(dispatched.model_copy(update={"status": "dispatched", "dispatched_turn": 3}))
-        entity_store = EntityStore(":memory:")
-        entity_store.upsert(
-            EntityProfile(
-                entity_type="npc",
+        npc_profile_store = NPCProfileStore(":memory:")
+        npc_profile_store.upsert(
+            NPCProfile(
                 name="柯莱",
                 role="吟游诗人",
-                summary="剧情中只公开表现为路过的吟游诗人。",
+                public_summary="剧情中只公开表现为路过的吟游诗人。",
             )
         )
         creator = MockLLM()
@@ -435,9 +442,10 @@ class TestDirectorNPCWorkflow:
             short_term_memory=_stm("advance", "advance", "advance", "advance"),
             recent_summaries=[],
             director_event=None,
+            user_input="我走向广场中心",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
+            npc_profile_store=npc_profile_store,
             creator_gateway=creator.build_gateway(),
             dispatcher_gateway=dispatcher,
         )
@@ -448,12 +456,65 @@ class TestDirectorNPCWorkflow:
         )
         assert candidates[0]["selected_id"] == dispatched.draft_id
         assert candidates[0]["selected_name"] == "柯莱"
-        assert candidates[0]["public_entity_profile"]["summary"] == "剧情中只公开表现为路过的吟游诗人。"
+        assert candidates[0]["public_entity_profile"]["public_summary"] == "剧情中只公开表现为路过的吟游诗人。"
         assert candidates[0]["director_private_profile"]["hidden_secret"] == dispatched.hidden_secret
+
+    def test_dispatcher_receives_absent_existing_npcs_from_npc_profiles(self):
+        director_store = DirectorNPCStore(":memory:")
+        for response in _draft_responses("艾琳娜", "薇拉", "洛珊"):
+            director_store.save(DirectorNPCDraft.model_validate(json.loads(response)))
+        npc_profile_store = NPCProfileStore(":memory:")
+        npc_profile_store.upsert(
+            NPCProfile(
+                name="周泰",
+                role="巡检司都头",
+                current_intent="维护城内治安",
+                attitude_to_player="公事公办",
+                absent_turns=2,
+            )
+        )
+        npc_profile_store.upsert(
+            NPCProfile(
+                name="裴玉奴",
+                role="鸣玉坊琵琶名手",
+                absent_turns=0,
+            )
+        )
+        creator = MockLLM()
+        dispatcher = SpyGateway(_dispatch_response(action="none"))
+
+        result = maybe_director_npc_workflow(
+            core_memory=CoreMemory(items=[]),
+            current_state=_state(),
+            action_parse_result=_action_parse(),
+            turn_resolution=_turn_resolution("advance"),
+            short_term_memory=_stm("advance", "advance", "advance", "advance"),
+            recent_summaries=[],
+            director_event=None,
+            user_input="我走向广场中心",
+            turn_index=4,
+            director_npc_store=director_store,
+            npc_profile_store=npc_profile_store,
+            creator_gateway=creator.build_gateway(),
+            dispatcher_gateway=dispatcher,
+        )
+
+        assert result.dispatch is not None
+        candidates = json.loads(
+            dispatcher.calls[0]["input_data"]["existing_npc_candidates_json"]
+        )
+        assert candidates == [
+            {
+                "name": "周泰",
+                "role": "巡检司都头",
+                "current_intent": "维护城内治安",
+                "attitude_to_player": "公事公办",
+                "absent_turns": 2,
+            }
+        ]
 
     def test_creates_standby_when_pool_is_empty_even_if_not_triggered(self):
         director_store = DirectorNPCStore(":memory:")
-        entity_store = EntityStore(":memory:")
         creator = MockLLM()
         dispatcher = MockLLM()
         creator.set_responses(_draft_responses("艾琳娜", "薇拉", "洛珊"))
@@ -466,9 +527,9 @@ class TestDirectorNPCWorkflow:
             short_term_memory=_stm("advance", "advance"),
             recent_summaries=[],
             director_event=None,
+            user_input="我小心前进",
             turn_index=4,
             director_npc_store=director_store,
-            entity_store=entity_store,
             creator_gateway=creator.build_gateway(),
             dispatcher_gateway=dispatcher.build_gateway(),
         )
@@ -490,9 +551,9 @@ class TestDirectorNPCWorkflow:
         assert store.list_standby() == []
         assert store.get_meta_int("last_dispatch_turn") == 9
 
-    def test_confirm_promotion_creates_only_entity_shell(self, monkeypatch, tmp_path):
+    def test_confirm_promotion_creates_npc_profile(self, monkeypatch, tmp_path):
         director_db = tmp_path / "director_npcs.db"
-        entity_db = tmp_path / "entities.db"
+        npc_profile_db = tmp_path / "npc_profiles.db"
         draft = DirectorNPCDraft.model_validate(json.loads(_draft_response("柯莱")))
         with DirectorNPCStore(str(director_db)) as store:
             store.save(draft)
@@ -506,15 +567,15 @@ class TestDirectorNPCWorkflow:
                 store.close()
 
         @contextmanager
-        def entity_store_factory():
-            store = EntityStore(str(entity_db))
+        def npc_profile_store_factory():
+            store = NPCProfileStore(str(npc_profile_db))
             try:
                 yield store
             finally:
                 store.close()
 
         monkeypatch.setattr(turn_confirmation, "director_npc_store", director_store_factory)
-        monkeypatch.setattr(turn_confirmation, "entity_store", entity_store_factory)
+        monkeypatch.setattr(turn_confirmation, "npc_profile_store", npc_profile_store_factory)
 
         pending = type("Pending", (), {})()
         pending.director_npc_result = DirectorNPCWorkflowResult(
@@ -530,24 +591,45 @@ class TestDirectorNPCWorkflow:
             )
         )
 
-        entity_id = turn_confirmation._promote_dispatched_director_npc_shell(
+        confirmation = turn_confirmation._promote_dispatched_director_npc_profile(
             pending,
             turn_index=9,
         )
+        assert confirmation is not None
+        assert confirmation.draft.name == "柯莱"
 
-        with EntityStore(str(entity_db)) as store:
-            profile = store.get_by_id(entity_id)
-        assert profile is not None
-        assert profile.name == "柯莱"
-        assert profile.role == "流浪药剂师"
-        assert profile.summary is None
-        assert profile.description is None
-        assert profile.personality_traits == []
-        assert profile.known_abilities == []
-        assert profile.faction is None
+        with NPCProfileStore(str(npc_profile_db)) as store:
+            npc_profile = store.get_by_id(confirmation.npc_id)
+        assert npc_profile is not None
+        assert npc_profile.name == "柯莱"
+        assert npc_profile.role == "流浪药剂师"
+        assert npc_profile.public_summary == "流浪药剂师"
+        assert npc_profile.hidden_secret == draft.hidden_secret
+        assert npc_profile.source_director_npc_id == draft.draft_id
 
         with DirectorNPCStore(str(director_db)) as store:
             updated = store.get_by_id(draft.draft_id)
         assert updated is not None
         assert updated.status == "dispatched"
         assert updated.hidden_secret == draft.hidden_secret
+
+    def test_confirmed_director_npc_is_forced_into_state_before_update(self):
+        draft = DirectorNPCDraft.model_validate(json.loads(_draft_response("柯莱")))
+        state = CurrentState(
+            scene=SceneState(
+                scene_id="scene_009",
+                location="旧桥",
+                participants=["主角"],
+            ),
+            player=PlayerState(name="主角"),
+            npcs=[],
+        )
+
+        updated = turn_confirmation._state_with_confirmed_director_npc(state, draft)
+
+        assert updated.scene.participants == ["主角", "柯莱"]
+        assert len(updated.npcs) == 1
+        assert updated.npcs[0].name == "柯莱"
+        assert updated.npcs[0].role == "流浪药剂师"
+        assert updated.npcs[0].location == "旧桥"
+        assert updated.npcs[0].absent_turns == 0

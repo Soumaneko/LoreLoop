@@ -2,6 +2,7 @@ from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfilePublicView
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.schemas import CandidateRetrievalResult
@@ -33,6 +34,7 @@ def generate_scene_workflow(
     gateway: LLMGateway,
     turn_index: int,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
+    npc_profiles: list[NPCProfilePublicView] | None = None,
     recent_summaries: list[SceneSummary] | None = None,
     memory_store: MemoryStore | None = None,
     max_chars: int = 1500,
@@ -57,6 +59,7 @@ def generate_scene_workflow(
         core_memory=core_memory,
         selected_memories=selected_memories,
         entity_profiles=entity_profiles or [],
+        npc_profiles=npc_profiles or [],
         recent_summaries=recent_summaries or [],
         recent_scene=recent_scene,
         turn_index=turn_index,

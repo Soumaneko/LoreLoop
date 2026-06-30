@@ -209,14 +209,6 @@ def apply_semantic_update(
             )
     if source.summary is not None:
         target.summary = source.summary
-    if source.role is not None:
-        target.role = source.role
-    if source.personality_traits:
-        target.personality_traits = source.personality_traits
-    if source.known_abilities:
-        target.known_abilities = source.known_abilities
-    if source.faction is not None:
-        target.faction = source.faction
     if source.item_type is not None:
         target.item_type = source.item_type
     if source.item_source is not None:

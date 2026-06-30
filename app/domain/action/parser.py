@@ -10,10 +10,12 @@ from app.domain.action.schemas import (
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.views import (
     project_current_state,
     project_entity_profiles,
+    project_npc_profiles,
     project_scene_summaries,
 )
 
@@ -31,6 +33,7 @@ class ActionParser:
         core_memory: CoreMemory,
         recent_summaries: list[SceneSummary] | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
+        npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
     ) -> ActionParseResult:
         anchor_result = self.extract_anchors(
@@ -45,6 +48,7 @@ class ActionParser:
             core_memory=core_memory,
             recent_summaries=recent_summaries or [],
             entity_profiles=entity_profiles or [],
+            npc_profiles=npc_profiles or [],
             trace_id=trace_id,
         )
 
@@ -94,6 +98,7 @@ class ActionParser:
         core_memory: CoreMemory,
         recent_summaries: list[SceneSummary] | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
+        npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
     ) -> ActionExtractionResult:
         return cast(
@@ -106,6 +111,7 @@ class ActionParser:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "recent_summaries_json": project_scene_summaries(recent_summaries or []),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),
+                    "npc_profiles_json": project_npc_profiles(npc_profiles or []),
                     "output_schema_json": json.dumps(
                         ActionExtractionResult.model_json_schema(),
                         ensure_ascii=False,

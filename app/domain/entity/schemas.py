@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-EntityType = Literal["npc", "item", "location", "organization"]
+EntityType = Literal["item", "location", "organization"]
 
 
 def _new_id() -> str:
@@ -22,11 +22,6 @@ class EntityProfileUpdateInput(BaseModel):
     aliases: list[str] = Field(default_factory=list)
 
     summary: str | None = None
-
-    role: str | None = None
-    personality_traits: list[str] = Field(default_factory=list)
-    known_abilities: list[str] = Field(default_factory=list)
-    faction: str | None = None
 
     item_type: str | None = None
     item_source: str | None = None
@@ -77,11 +72,6 @@ class EntityProfile(BaseModel):
 
     summary: str | None = None
 
-    role: str | None = None
-    personality_traits: list[str] = Field(default_factory=list)
-    known_abilities: list[str] = Field(default_factory=list)
-    faction: str | None = None
-
     item_type: str | None = None
     item_source: str | None = None
 
@@ -105,10 +95,6 @@ class EntityProfile(BaseModel):
             name=self.name,
             aliases=list(self.aliases),
             summary=self.summary,
-            role=self.role,
-            personality_traits=list(self.personality_traits),
-            known_abilities=list(self.known_abilities),
-            faction=self.faction,
             item_type=self.item_type,
             item_source=self.item_source,
             location_type=self.location_type,
@@ -136,10 +122,6 @@ def profile_from_semantic(
         name=profile.name,
         aliases=list(profile.aliases),
         summary=profile.summary,
-        role=profile.role,
-        personality_traits=list(profile.personality_traits),
-        known_abilities=list(profile.known_abilities),
-        faction=profile.faction,
         item_type=profile.item_type,
         item_source=profile.item_source,
         location_type=profile.location_type,

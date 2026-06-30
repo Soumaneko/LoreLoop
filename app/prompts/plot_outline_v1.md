@@ -35,6 +35,16 @@
 {entity_profiles_json}
 ```
 
+## NPC Profiles
+
+包含本回合相关 NPC 的公开档案、当前状态和导演幕后连续性。可以用于保持人物长期动机、秘密和弧线一致；但只有当信息已被剧情公开或大纲明确安排揭示时，才能让 SceneWriter 在正文中表现出来。
+
+NPCProfiles 中的 `hidden_secret` 与 `fear_or_wound` 默认不可直接公开。除非 Player Input 明确追问对应秘密、创伤、恐惧、旧债、真实身份或过往隐情，且 TurnResolutionResult 已明确允许揭示，否则不得安排 NPC 坦白这些字段的事实内容。`core_motivation` 可以用于规划人物选择，但公开程度必须根据当前关系、信任、场景压力和本回合行动强度判断；通常只揭示外层目标、谈判条件、情绪倾向或可追问线索，不直接完整摊牌。
+
+```json
+{npc_profiles_json}
+```
+
 ## DirectorEvent
 
 ```json
@@ -108,12 +118,17 @@
 5. protagonist_response_guidance 必须用确定语气指定一项已发生的具体反应，即使该 beat 主要由 NPC 推进也不得留空；若主角刻意沉默，须规定一个可感知的沉默动作及其态度。
 6. required_memory_indices 只能引用 Memories 中真实存在的 memory_index。
 7. NPC 反应必须符合已知性格，不得为制造冲突而歪曲。不得违背 CoreMemory 或 CurrentState，不得凭空出现物品、金钱或能力。
-8. 每个 beat 必须给出单一、已经发生的结果。这只要求结果唯一，不限制你引入有趣的主动复杂化、世界反应或伏笔。
-9. 最后一个 beat 应尽量制造清晰的下一回合选择空间：在本回合行动得到实质回应后，让场景停在新线索、新障碍、新机会、NPC 提问、风险逼近或多条可行路径刚刚呈现的位置，但不得替玩家拍板。
-10. 区分“自然反应”和“重大决定”：
+8. NPC 私密信息必须分层规划：
+   - `hidden_secret`：默认只能作为幕后因果，不得进入 beat summary、required_outcomes、state_implications 或 SceneWriter 可写事实；除非玩家明确命中且 TurnResolutionResult 明确揭示。
+   - `fear_or_wound`：默认只影响回避、沉默、防备、犹豫、语气变化或关系阻力；不得让 NPC 直接讲出创伤细节。
+   - `core_motivation`：可转化为外层目标、条件、交换筹码或下一步可追问线索；只有在关系足够、场景压力足够且玩家行动明确触发时，才允许部分公开。
+   - 若本回合使用了任何私密字段，必须在 `constraints_for_scene_writer` 中写清哪些可以公开、哪些仍必须保留。
+9. 每个 beat 必须给出单一、已经发生的结果。这只要求结果唯一，不限制你引入有趣的主动复杂化、世界反应或伏笔。
+10. 最后一个 beat 应尽量制造清晰的下一回合选择空间：在本回合行动得到实质回应后，让场景停在新线索、新障碍、新机会、NPC 提问、风险逼近或多条可行路径刚刚呈现的位置，但不得替玩家拍板。
+11. 区分“自然反应”和“重大决定”：
     - 必须允许并规划低决策成本的自然反应：接话、简短回应、追问刚提到的信息、确认理解、表达符合上下文的惊讶/怀疑/赞同/警惕、维持用户已确定的态度、观察对方、调整姿态、处理手边物品，以及危险中的本能闪避或提醒。
     - 主角可以参与讨论、质疑风险和确认事实，然后停在真正需要玩家决定的节点；“保留玩家选择”不等于让主角全程沉默。
-11. 如果 Director NPC Injection 不为 null 且 action 不是 none，必须至少安排一个 beat 让该 NPC 依据 immediate_intent 主动介入当前场景，并把 selected_name 加入 related_entities。该介入必须制造 first_pressure 所描述的压力、机会或扰动，但不得强迫主角接受任务、立刻帮助、攻击或长期同行。
+12. 如果 Director NPC Injection 不为 null 且 action 不是 none，必须至少安排一个 beat 让该 NPC 依据 immediate_intent 主动介入当前场景，并把 selected_name 加入 related_entities。该介入必须制造 first_pressure 所描述的压力、机会或扰动，但不得强迫主角接受任务、立刻帮助、攻击或长期同行。
 
 # 禁止事项
 
@@ -125,6 +140,7 @@
 6. constraints_for_scene_writer 和 risks_to_avoid 禁止填入任何通用写作规则，包括：对话格式、引号、第二人称、篇幅、文风、JSON 格式、Beat 写法等。
 7. user_action_execution 只描述用户输入对应的行动本身，不得写成行动完成后的 NPC 评价或环境后果，也不得把用户行动降格为“之前已经做过”或仅由 NPC 评价代替演出。
 8. protagonist_response_guidance 不得写成“可以 A 或 B”等可选项，也不得把反应决定权再次丢回 SceneWriter。
+9. 不得把 `hidden_secret` 或 `fear_or_wound` 写成 NPC 主动坦白、旁白确认或 SceneWriter 必须落实的公开事实；不得仅因 critical_success 就完整揭开 NPC 私密动机链。
 
 # 例子
 

@@ -52,7 +52,6 @@ def _make_state() -> CurrentState:
         resources=ResourcesState(
             inventory=[InventoryItem(name="旧地图"), InventoryItem(name="干粮")],
             money=50,
-            key_items=[],
             fixed_assets=[],
             temporary_assets=["租来的马"],
         ),

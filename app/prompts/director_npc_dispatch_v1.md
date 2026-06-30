@@ -48,10 +48,10 @@
 {dispatched_director_npc_candidates_json}
 ```
 
-## 触发原因
+## 用户输入
 
 ```text
-{trigger_reason}
+{user_input}
 ```
 
 

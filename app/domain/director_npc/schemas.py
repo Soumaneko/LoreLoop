@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfilePublicView
 
 
 DirectorNPCStatus = Literal["standby", "dispatched", "discarded"]
@@ -105,7 +105,7 @@ class DirectorNPCPrivateProfile(BaseModel):
 class DispatchedDirectorNPCCandidate(BaseModel):
     selected_id: str
     selected_name: str
-    public_entity_profile: EntityProfileUpdateInput | None = None
+    public_entity_profile: NPCProfilePublicView | None = None
     director_private_profile: DirectorNPCPrivateProfile
 
 

@@ -20,6 +20,7 @@ from .stores import (
     director_npc_store,
     entity_store,
     memory_store,
+    npc_profile_store,
     pending_memory_store,
     scene_summary_store,
 )
@@ -38,13 +39,13 @@ def run_director_npc_restock(
             turn_index=turn_index,
             session_type="maintenance",
         )
-        with director_npc_store() as npc_store, entity_store() as ent_store:
+        with director_npc_store() as npc_store, npc_profile_store() as profile_store:
             created_drafts = restock_director_npc_standby(
                 core_memory=core_memory,
                 protagonist_name=protagonist_name,
                 turn_index=turn_index,
                 director_npc_store=npc_store,
-                entity_store=ent_store,
+                npc_profile_store=profile_store,
                 creator_gateway=gateway,
                 trace_id=trace_id,
             )

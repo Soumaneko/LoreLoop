@@ -1,42 +1,6 @@
 from app.domain.entity.schemas import EntityAliasMatch, EntityProfileUpdateInput, RetrievedEntity
 
 
-_GENERIC_NPC_NAMES = {
-    "登记员",
-    "协会登记员",
-    "镇长",
-    "守卫",
-    "民兵",
-    "猎人",
-    "铁匠",
-    "文书",
-    "酒保",
-    "老板",
-    "路人",
-    "神秘人",
-    "怪物",
-}
-
-_GENERIC_NPC_NAME_FRAGMENTS = (
-    "登记员",
-    "镇长",
-    "守卫",
-    "民兵",
-    "猎人",
-    "铁匠",
-    "文书",
-)
-
-_NPC_KIND_TERMS = (
-    "怪物",
-    "野猪",
-    "狼人",
-    "野狼",
-    "魔兽",
-    "兽群",
-    "族群",
-)
-
 _GENERIC_LOCATION_NAMES = {
     "铁匠铺",
     "镇东铁匠铺",
@@ -99,8 +63,6 @@ def is_persistent_entity_candidate(entity_type: str, name: str) -> bool:
     clean = _clean(name)
     if not clean:
         return False
-    if entity_type == "npc":
-        return _is_persistent_npc(clean)
     if entity_type == "location":
         return _is_persistent_location(clean)
     if entity_type == "item":
@@ -118,8 +80,6 @@ def is_acceptable_alias(match: EntityAliasMatch) -> bool:
         return False
     if len(alias) <= 3 and any(term in alias for term in _GENERIC_ALIAS_TERMS):
         return False
-    if match.matched_entity_type == "npc" and _looks_like_kind_or_role(alias):
-        return False
     if match.matched_entity_type == "location" and alias in _GENERIC_LOCATION_NAMES:
         return False
     if match.matched_entity_type == "item" and _is_generic_item(alias):
@@ -133,14 +93,6 @@ def is_acceptable_retrieved_entity(entity: RetrievedEntity) -> bool:
 
 def is_acceptable_profile_update(update: EntityProfileUpdateInput) -> bool:
     return is_persistent_entity_candidate(update.entity_type, update.name)
-
-
-def _is_persistent_npc(name: str) -> bool:
-    if name in _GENERIC_NPC_NAMES:
-        return False
-    if _looks_like_kind_or_role(name):
-        return False
-    return True
 
 
 def _is_persistent_location(name: str) -> bool:
@@ -157,16 +109,6 @@ def _is_persistent_item(name: str) -> bool:
     if _is_generic_item(name):
         return False
     return True
-
-
-def _looks_like_kind_or_role(name: str) -> bool:
-    if name in _GENERIC_NPC_NAMES:
-        return True
-    if any(term in name for term in _GENERIC_NPC_NAME_FRAGMENTS):
-        return True
-    if any(term in name for term in _NPC_KIND_TERMS):
-        return True
-    return False
 
 
 def _is_generic_item(name: str) -> bool:

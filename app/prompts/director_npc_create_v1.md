@@ -33,7 +33,9 @@
 
 # 输出规范
 
-只返回符合以下 schema 的有效 JSON，不含任何额外解释或 Markdown：
+只返回符合以下 schema 的有效 JSON，不含任何额外解释或 Markdown。
+
+硬性格式要求：顶层必须直接是 NPC 实例对象，第一层字段必须是 `name`、`role`、`appearance` 等业务字段；绝对不要输出 JSON Schema、`properties`、`required`、`title`、`type` 或把 NPC 包在 `properties` 里面。
 
 ```json
 {output_schema_json}
@@ -63,6 +65,8 @@
 3. 避免与主角或已有 NPC 重名，也避免与已有 NPC 同职能、同定位。
 4. 这个人必须有自己的生活、动机、缺陷、能力边界和秘密；不要为了“发任务”“找麻烦”而设计。
 5. 让 encounter_potentials 保持多样化，避免把 NPC 设计成单一剧情按钮。
+6. CoreMemory 中关于主角的描述，是主角专属事实，只能用来理解世界风格和主角边界；不得复制、改写、镜像或平移到新 NPC 身上。
+7. 如果 CoreMemory 提到主角的背景，NPC 不得拥有同构背景。除非 CoreMemory 明确要求“世界中普遍存在此类群体”。
 
 
 # 禁止事项
@@ -70,3 +74,4 @@
 1. 不要写“为了让主角……”这类元叙述。
 2. 不要让每个 NPC 都是委托发布者、追杀者、骗子或麻烦制造者。
 3. 不要绑定当前主角路线、当前城镇、当前任务或当前导演事件。
+4. 不要把主角的核心背景词当作 NPC 背景模板反复使用，尤其禁止在 `core_motivation`、`fear_or_wound`、`hidden_secret` 和 `encounter_potentials` 中复刻主角背景。

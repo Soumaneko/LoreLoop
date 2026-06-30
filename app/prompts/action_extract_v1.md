@@ -34,6 +34,14 @@
 {entity_profiles_json}
 ```
 
+## 本回合锚点命中的 NPC Profiles
+
+以下 NPC 由本回合人物锚点、CurrentState 参与者和 NPC 状态，与 NPCProfile 的 name/aliases 匹配得到。该上下文优先用于解析人物目标、别名、态度和可行性。
+
+```json
+{npc_profiles_json}
+```
+
 
 # 输入
 

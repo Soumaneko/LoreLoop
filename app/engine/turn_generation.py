@@ -20,6 +20,7 @@ from app.workflows.retrieve_candidates import retrieve_candidates_workflow
 from app.workflows.update_director_event import DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS
 from app.workflows.director_npc import maybe_director_npc_workflow
 from app.workflows.update_entity_profiles import gather_entity_profiles_from_state_and_anchors
+from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
 from .serialization import model_data
 from .session import PENDING_TURNS, PendingTurn
@@ -30,6 +31,7 @@ from .stores import (
     director_npc_store,
     entity_store,
     memory_store,
+    npc_profile_store,
     pending_memory_store,
     scene_summary_store,
     short_term_memory_store,
@@ -102,15 +104,24 @@ def generate_turn_stream(
         core_memory=core_memory,
         trace_id=trace_id,
     )
-    with entity_store() as ent_store:
+    with entity_store() as ent_store, npc_profile_store() as npc_store:
         action_entity_profiles = gather_entity_profiles_from_state_and_anchors(
             current_state=current_state,
             anchors=anchor_result.anchors,
             entity_store=ent_store,
         )
+        action_npc_profiles = gather_npc_profiles_from_state_and_anchors(
+            current_state=current_state,
+            anchors=anchor_result.anchors,
+            npc_store=npc_store,
+        )
     action_entity_profile_views = [
         profile.semantic_view()
         for profile in action_entity_profiles
+    ]
+    action_npc_director_views = [
+        profile.director_view()
+        for profile in action_npc_profiles
     ]
 
     yield {
@@ -118,6 +129,7 @@ def generate_turn_stream(
         "data": {
             "anchors": model_data(anchor_result.anchors),
             "entity_profiles": model_data(action_entity_profile_views),
+            "npc_profiles": model_data(action_npc_director_views),
         },
     }
 
@@ -127,6 +139,7 @@ def generate_turn_stream(
         core_memory=core_memory,
         recent_summaries=recent_summaries,
         entity_profiles=action_entity_profile_views,
+        npc_profiles=action_npc_director_views,
         trace_id=trace_id,
     )
     raw_action_parse_result = ActionParseResult(
@@ -213,6 +226,7 @@ def generate_turn_stream(
         retrieved_memories=retrieved_memories,
         scene_summaries=scene_summaries,
         entity_profiles=action_entity_profile_views,
+        npc_profiles=action_npc_director_views,
         director_event=active_director_event,
         recent_archived_director_event=recent_archived_director_event,
         gateway=gateway,
@@ -228,7 +242,7 @@ def generate_turn_stream(
     }
 
     director_npc_result = None
-    with director_npc_store() as npc_store, entity_store() as ent_store:
+    with director_npc_store() as npc_store, npc_profile_store() as profile_store:
         creator_gateway = create_gateway()
         creator_gateway.set_trace_context(turn_index=turn_index, session_type="generation")
         dispatcher_gateway = create_gateway()
@@ -241,9 +255,10 @@ def generate_turn_stream(
             short_term_memory=short_term_memory,
             recent_summaries=recent_summaries,
             director_event=active_director_event,
+            user_input=user_input,
             turn_index=turn_index,
             director_npc_store=npc_store,
-            entity_store=ent_store,
+            npc_profile_store=profile_store,
             creator_gateway=creator_gateway,
             dispatcher_gateway=dispatcher_gateway,
             trace_id=trace_id,
@@ -265,6 +280,7 @@ def generate_turn_stream(
         retrieved_memories=retrieved_memories,
         scene_summaries=scene_summaries,
         entity_profiles=action_entity_profile_views,
+        npc_profiles=action_npc_director_views,
         director_event=active_director_event,
         recent_archived_director_event=recent_archived_director_event,
         director_npc_injection=(
@@ -297,15 +313,24 @@ def generate_turn_stream(
     selected_memories = select_required_memories(outline, retrieved_memories)
     selected_memory_ids = [candidate.memory_id for candidate in selected_memories]
     beat_entity_anchors = build_entity_retrieval_anchors(outline)
-    with entity_store() as ent_store:
+    with entity_store() as ent_store, npc_profile_store() as npc_store:
         writer_entity_profiles = gather_entity_profiles_from_state_and_anchors(
             current_state=current_state,
             anchors=[*action_parse_result.anchors, *beat_entity_anchors],
             entity_store=ent_store,
         )
+        writer_npc_profiles = gather_npc_profiles_from_state_and_anchors(
+            current_state=current_state,
+            anchors=[*action_parse_result.anchors, *beat_entity_anchors],
+            npc_store=npc_store,
+        )
     writer_entity_profile_views = [
         profile.semantic_view()
         for profile in writer_entity_profiles
+    ]
+    writer_npc_public_views = [
+        profile.public_view()
+        for profile in writer_npc_profiles
     ]
     recent_scene = (
         short_term_memory.recent_scenes[-1]
@@ -324,6 +349,7 @@ def generate_turn_stream(
             gateway=gateway,
             turn_index=next_turn_index,
             entity_profiles=writer_entity_profile_views,
+            npc_profiles=writer_npc_public_views,
             recent_summaries=recent_summaries,
             memory_store=mem_store,
             max_chars=max_chars,
@@ -353,6 +379,7 @@ def generate_turn_stream(
             "selected_memory_ids": selected_memory_ids,
             "selected_memories": model_data(selected_memories),
             "writer_entity_profiles": model_data(writer_entity_profile_views),
+            "writer_npc_profiles": model_data(writer_npc_public_views),
             "recent_scene": model_data(recent_scene),
             "scene_result": model_data(scene_result),
             "context": model_data(context),

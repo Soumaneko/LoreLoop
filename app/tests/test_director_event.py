@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -7,6 +8,7 @@ from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.director_event import (
     DirectorEvent,
+    DirectorEventDraft,
     DirectorEventReviewResult,
     DirectorEventReviewer,
     DirectorEventSelector,
@@ -772,3 +774,51 @@ class TestDirectorEventAgents:
         )
 
         assert "旧修道院足迹" in gateway.calls[0]["input_data"]["archived_events_json"]
+
+    def test_selector_prompt_and_schema_ban_time_anchors_for_new_events(self):
+        gateway = _SpyGateway(
+            {
+                "action": "create_new",
+                "suspension_evaluation": "无暂停事件可自然衔接当前局势，进入新事件构思。",
+                "backstage_undercurrent": "一名流亡贵族正在暗中招募旧部，图谋复辟。",
+                "reason": "当前剧情需要一个不重复的新后台事件。",
+                "activate_event_id": None,
+                "new_event": {
+                    "title": "钟楼上的黑旗",
+                    "backstage_premise": "一名流亡贵族正在北郡钟楼一带暗中招募旧部，借钟楼附近的货栈和教堂联系人传递复辟密信。",
+                    "stages": _stages().model_dump(),
+                    "related_npcs": ["旧教团残党"],
+                    "location_constraints": ["北郡钟楼"],
+                    "manifesting_prevention_hooks": _manifesting_hooks(),
+                    "crisis_resolution_hooks": _crisis_hooks(),
+                },
+            }
+        )
+
+        DirectorEventSelector(gateway).select_or_create(
+            suspended_events=[],
+            archived_events=[],
+            scene_text="卢西安来到北郡钟楼附近。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+        )
+
+        prompt = Path("app/prompts/director_event_select_v1.md").read_text(encoding="utf-8")
+        schema_json = gateway.calls[0]["input_data"]["output_schema_json"]
+        assert "禁止写任何时间相关内容" in prompt
+        assert "月圆之夜" in prompt
+        assert "半月后" in prompt
+        assert "time anchors" in schema_json
+
+    def test_new_event_draft_rejects_time_anchors(self):
+        with pytest.raises(ValueError, match="time anchors"):
+            DirectorEventDraft(
+                title="钟楼上的黑旗",
+                backstage_premise="一名流亡贵族将在半月后的月圆之夜完成复辟仪式。",
+                stages=_stages(),
+                related_npcs=["旧教团残党"],
+                location_constraints=["北郡钟楼"],
+                manifesting_prevention_hooks=_manifesting_hooks(),
+                crisis_resolution_hooks=_crisis_hooks(),
+            )

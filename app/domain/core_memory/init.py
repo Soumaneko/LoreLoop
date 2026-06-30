@@ -101,7 +101,6 @@ def build_initial_current_state(
         resources=ResourcesState(
             inventory=[],
             money=None,
-            key_items=[],
             fixed_assets=[],
             temporary_assets=[],
         ),

@@ -29,6 +29,14 @@
 {entity_profiles_json}
 ```
 
+## NPC Profiles
+
+这里只包含 NPC 的公开档案与当前状态，不包含 hidden_secret、core_motivation、fear_or_wound 等导演幕后信息。正文不得透露这里不存在的 NPC 幕后事实。
+
+```json
+{npc_profiles_json}
+```
+
 ## Scene Summaries
 
 ```json

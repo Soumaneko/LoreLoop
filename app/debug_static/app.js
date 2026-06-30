@@ -24,6 +24,7 @@ const tabs = [
   ["confirmation", "确认"],
   ["memory", "记忆"],
   ["entity", "实体"],
+  ["npc", "NPC档案"],
   ["director", "导演"],
   ["preview", "行动预览"],
   ["raw", "Raw"],
@@ -476,11 +477,11 @@ function renderStatePanel() {
     ${card("资源", kv([
       ["金钱", esc(money(resources))],
       ["物品", inventory(resources.inventory)],
-      ["关键物", chips(resources.key_items)],
       ["资产", chips(resources.fixed_assets)],
       ["临时", chips(resources.temporary_assets)],
     ]))}
     ${details(`NPC (${npcs.length})`, npcs.length ? npcs.map(npcCard).join("") : `<div class="empty">暂无 NPC</div>`)}
+    ${details(`NPC 档案 (${data.npc_active_profile_count ?? 0}/${data.npc_profile_count ?? 0})`, renderNpcStateGroup(data.npc_profiles || []))}
     ${details("导演", `
       ${metrics([
         metric("事件", activeEvent ? "active" : "none", activeEvent ? "ok" : ""),
@@ -546,6 +547,7 @@ function renderDebug() {
     confirmation: renderConfirmation,
     memory: renderMemory,
     entity: renderEntityDebug,
+    npc: renderNpcDebug,
     director: renderDirectorDebug,
     preview: renderPreview,
     raw: renderRaw,
@@ -635,8 +637,9 @@ function stepTasks(scope, stepName) {
     state_update_done: ["state_update"],
     memory_draft_extract_done: ["memory_draft_extract"],
     entity_extract_done: ["entity_extract"],
+    npc_extract_done: ["npc_profile_extract"],
     action_preview_done: ["action_preview"],
-    entity_profiles_updated: ["entity_profile_update", "director_event_review", "director_event_select"],
+    entity_profiles_updated: ["entity_profile_update", "npc_profile_update", "director_event_review", "director_event_select"],
     finish: ["*"],
   };
   const maintenance = {
@@ -680,6 +683,7 @@ function stepSummary(name, data) {
   if (name === "state_update_done") return "state updated";
   if (name === "memory_draft_extract_done") return `${data.pending_items_count || 0} pending`;
   if (name === "entity_extract_done") return `${data.entity_extraction?.retrieved_entities?.length || 0} entities`;
+  if (name === "npc_extract_done") return `${data.npc_extraction?.retrieved_npcs?.length || 0} npcs`;
   if (name === "batch_classified") return `${data.final_memories?.length || 0} final`;
   if (name === "memory_maintain_done") return `${data.changed || 0} changed`;
   if (name === "finish") return data.status || "done";
@@ -704,11 +708,14 @@ function renderGeneration() {
 function renderConfirmation() {
   const c = merged("confirmation");
   if (!state.run.confirmation.order.length) return `<div class="empty">暂无确认流程。</div>`;
+  const npcExtraction = c.npc_extraction || step("confirmation", "npc_extract_done")?.npc_extraction;
+  const updatedNpcIds = c.updated_npc_profile_ids || step("confirmation", "entity_profiles_updated")?.updated_npc_profile_ids;
   return `
     ${timeline("confirmation", "确认事件")}
     ${renderStateDiff()}
     ${card("Pending Memories", filterVisiblePending(c.memory_extraction?.pending_items || c.pending_items || []).map(pendingMemoryCard).join("") || `<div class="empty">暂无未分类候选</div>`)}
     ${card("Entity Updates", renderEntityExtraction(c.entity_extraction || step("confirmation", "entity_extract_done")?.entity_extraction, c.updated_entity_ids))}
+    ${card("NPC Profile Updates", renderNpcExtraction(npcExtraction, updatedNpcIds))}
   `;
 }
 
@@ -734,6 +741,19 @@ function renderEntityDebug() {
   return `
     ${card("实体提取", renderEntityExtraction(extraction, updated))}
     ${card("实体档案快照", renderEntityGroups(state.serverState?.entity_profiles || []))}
+  `;
+}
+
+function renderNpcDebug() {
+  const extraction = step("confirmation", "npc_extract_done")?.npc_extraction || merged("confirmation").npc_extraction;
+  const updatedIds = step("confirmation", "entity_profiles_updated")?.updated_npc_profile_ids || merged("confirmation").updated_npc_profile_ids;
+  const server = state.serverState || {};
+  const npcProfiles = server.npc_profiles || [];
+  const npcCount = server.npc_profile_count ?? npcProfiles.length;
+  const npcActiveCount = server.npc_active_profile_count ?? npcProfiles.filter((p) => p.active !== false).length;
+  return `
+    ${card("NPC 提取", renderNpcExtraction(extraction, updatedIds))}
+    ${card(`NPC 档案 (${npcActiveCount}/${npcCount})`, npcProfiles.length ? npcProfiles.map(npcProfileCard).join("") : `<div class="empty">暂无 NPC 档案</div>`)}
   `;
 }
 
@@ -941,7 +961,6 @@ function diffRows(before, after) {
     ["player.condition", "主角状态"],
     ["resources.money", "金钱"],
     ["resources.inventory", "物品"],
-    ["resources.key_items", "关键物"],
     ["resources.fixed_assets", "固定资产"],
     ["resources.temporary_assets", "临时资产"],
     ["npcs", "NPC明细"],
@@ -1047,6 +1066,68 @@ function renderEntityExtraction(data, updatedIds = []) {
   `;
 }
 
+function renderNpcExtraction(data, updatedIds = []) {
+  if (!data) return `<div class="empty">No write_db or 暂无 NPC 提取。</div>`;
+  const aliasMatches = data.alias_matches || [];
+  const retrieved = data.retrieved_npcs || [];
+  return `
+    ${metrics([metric("别名匹配", aliasMatches.length, "info"), metric("NPC", retrieved.length), metric("更新档案", updatedIds?.length || 0, "ok")])}
+    ${aliasMatches.map((m) => `<div class="section-card">${kv([
+      ["称呼", esc(text(m.extracted_text))],
+      ["匹配NPC", esc(text(m.matched_npc_name))],
+      ["新增别名", esc(text(m.new_alias))],
+    ])}</div>`).join("")}
+    ${retrieved.map((e) => `<div class="section-card">${kv([
+      ["名称", esc(text(e.name))],
+      ["来源", esc(text(e.source))],
+      ["匹配NPC", esc(text(e.matched_npc_name))],
+      ["原文", esc(text(e.context_span))],
+    ])}</div>`).join("")}
+    ${updatedIds?.length ? card("更新 NPC 档案ID", chips(updatedIds)) : ""}
+  `;
+}
+
+function npcProfileCard(profile) {
+  const aliasHits = Object.entries(profile.alias_hit_counts || {}).sort((a, b) => Number(b[1]) - Number(a[1])).map(([k, v]) => `${k} ×${v}`);
+  const active = profile.active !== false;
+  return `<div class="section-card" style="${active ? "" : "opacity:.6"}">
+    <div class="card-title"><span>${esc(profile.name)}</span>${metric(active ? "active" : "inactive", `hit ${profile.name_hit_count ?? 0}`, active ? "ok" : "warn")}</div>
+    ${profile.public_summary || profile.role ? `<div style="margin-bottom:8px">${esc(text(profile.public_summary || profile.role))}</div>` : ""}
+    ${kv([
+      ["ID", esc(text(profile.npc_id))],
+      ["别名", chips(profile.aliases)],
+      ["别名命中", chips(aliasHits)],
+      ["角色", esc(text(profile.role))],
+      ["外观", esc(text(profile.appearance))],
+      ["性格", chips(profile.personality_traits)],
+      ["能力", chips(profile.known_abilities)],
+      ["派系", esc(text(profile.faction))],
+      ["所在地", esc(text(profile.current_location))],
+      ["态度", esc(text(profile.attitude_to_player))],
+      ["意图", esc(text(profile.current_intent))],
+      ["缺席回合", esc(text(profile.absent_turns))],
+      ["描述", esc(text(profile.description))],
+      ["信心", esc(fmt(profile.confidence))],
+      ["来源场景", chips(profile.source_scene_ids)],
+      ["来源导演NPC", esc(text(profile.source_director_npc_id))],
+      ["创建回合", esc(text(profile.created_turn))],
+      ["调度回合", esc(text(profile.dispatched_turn))],
+      ["更新时间", esc(text(profile.updated_at))],
+    ])}
+    ${profile.core_motivation || profile.hidden_secret ? details("导演视图", `
+      ${kv([
+        ["核心动机", esc(text(profile.core_motivation))],
+        ["创伤/恐惧", esc(text(profile.fear_or_wound))],
+        ["秘密", esc(text(profile.hidden_secret))],
+        ["冲突风格", esc(text(profile.conflict_style))],
+        ["社交风格", esc(text(profile.social_style))],
+        ["出场潜力", chips(profile.encounter_potentials)],
+        ["导演备注", esc(text(profile.director_notes))],
+      ])}
+    `) : ""}
+  </div>`;
+}
+
 function renderEntityGroups(profiles) {
   if (!profiles.length) return `<div class="empty">暂无实体档案。</div>`;
   const groups = {};
@@ -1057,6 +1138,12 @@ function renderEntityGroups(profiles) {
   }
   const labels = { npc: "NPC", item: "物品", location: "地点", organization: "组织" };
   return Object.entries(groups).map(([type, items]) => details(`${labels[type] || type} (${items.length})`, items.map(entityCard).join(""), type === "npc")).join("");
+}
+
+function renderNpcStateGroup(profiles) {
+  if (!profiles.length) return `<div class="empty">暂无 NPC 档案。</div>`;
+  const activeProfiles = profiles.filter((p) => p.active !== false).slice(0, 10);
+  return activeProfiles.map(npcProfileCard).join("") || `<div class="empty">暂无活跃 NPC 档案。</div>`;
 }
 
 function directorNpcStepSummary(result) {
@@ -1355,6 +1442,7 @@ async function confirmTurn() {
       if (event.step === "state_update_done") state.activeTab = "diff";
       if (event.step === "memory_draft_extract_done") state.activeTab = "confirmation";
       if (event.step === "entity_extract_done") state.activeTab = "entity";
+      if (event.step === "npc_extract_done") state.activeTab = "npc";
       if (event.step === "action_preview_done") state.activeTab = "preview";
       if (event.step === "finish") {
         const data = event.data || {};

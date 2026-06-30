@@ -1,8 +1,9 @@
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 DirectorEventStatus = Literal["active", "suspended", "archived"]
@@ -19,10 +20,47 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_TIME_ANCHOR_RE = re.compile(
+    r"("
+    r"\d+\s*(?:日|天|个月|月|年|时辰|小时|分钟)(?:内|后|前)?"
+    r"|[一二三四五六七八九十百半数几两]\s*(?:日|天|个月|月|年|时辰)(?:内|后|前)?"
+    r"|[一二三四五六七八九十百数几两]\s*刻钟(?:内|后|前)?"
+    r"|月圆|月相|朔月|满月|新月|半月"
+    r"|子时|丑时|寅时|卯时|辰时|巳时|午时|未时|申时|酉时|戌时|亥时"
+    r"|入夜|夜间|夜半|清晨|黎明|黄昏|傍晚|正午|午后|昨夜|明日|前夕"
+    r"|节庆|节前|节后|期限|截止|倒计时|日期|时日"
+    r")"
+)
+
+
+def _reject_time_anchors(value: str) -> str:
+    if _TIME_ANCHOR_RE.search(value):
+        raise ValueError("director event text must not contain time anchors")
+    return value
+
+
+def _reject_time_anchors_in_list(values: list[str]) -> list[str]:
+    return [_reject_time_anchors(value) for value in values]
+
+
 class DirectorEventStages(BaseModel):
-    latent: str = Field(min_length=1)
-    manifesting: str = Field(min_length=1)
-    crisis: str = Field(min_length=1)
+    latent: str = Field(
+        min_length=1,
+        description="Stage facts without dates, deadlines, countdowns, seasons, moon phases, hours, or other time anchors.",
+    )
+    manifesting: str = Field(
+        min_length=1,
+        description="Stage facts without dates, deadlines, countdowns, seasons, moon phases, hours, or other time anchors.",
+    )
+    crisis: str = Field(
+        min_length=1,
+        description="Stage facts without dates, deadlines, countdowns, seasons, moon phases, hours, or other time anchors.",
+    )
+
+    @field_validator("latent", "manifesting", "crisis")
+    @classmethod
+    def _validate_no_time_anchors(cls, value: str) -> str:
+        return _reject_time_anchors(value)
 
 
 class DirectorEvent(BaseModel):
@@ -48,6 +86,16 @@ class DirectorEvent(BaseModel):
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
 
+    @field_validator("backstage_premise")
+    @classmethod
+    def _validate_backstage_premise_no_time_anchors(cls, value: str) -> str:
+        return _reject_time_anchors(value)
+
+    @field_validator("manifesting_prevention_hooks", "crisis_resolution_hooks")
+    @classmethod
+    def _validate_hooks_no_time_anchors(cls, values: list[str]) -> list[str]:
+        return _reject_time_anchors_in_list(values)
+
     def semantic_view(self) -> dict:
         return {
             "event_id": self.event_id,
@@ -67,12 +115,25 @@ class DirectorEvent(BaseModel):
 
 class DirectorEventDraft(BaseModel):
     title: str = Field(min_length=1)
-    backstage_premise: str = Field(min_length=1)
+    backstage_premise: str = Field(
+        min_length=1,
+        description="Hidden event facts without dates, deadlines, countdowns, seasons, moon phases, hours, or other time anchors.",
+    )
     stages: DirectorEventStages
     related_npcs: list[str] = Field(default_factory=list)
     location_constraints: list[str] = Field(default_factory=list)
     manifesting_prevention_hooks: list[str] = Field(min_length=3, max_length=3)
     crisis_resolution_hooks: list[str] = Field(min_length=3, max_length=3)
+
+    @field_validator("backstage_premise")
+    @classmethod
+    def _validate_backstage_premise_no_time_anchors(cls, value: str) -> str:
+        return _reject_time_anchors(value)
+
+    @field_validator("manifesting_prevention_hooks", "crisis_resolution_hooks")
+    @classmethod
+    def _validate_hooks_no_time_anchors(cls, values: list[str]) -> list[str]:
+        return _reject_time_anchors_in_list(values)
 
     def to_event(self, *, turn_index: int, status: DirectorEventStatus = "active") -> DirectorEvent:
         now = utc_now()
@@ -141,6 +202,13 @@ class DirectorEventSelectionResult(BaseModel):
     reason: str = Field(min_length=1)
     activate_event_id: str | None = None
     new_event: DirectorEventDraft | None = None
+
+    @field_validator("backstage_undercurrent")
+    @classmethod
+    def _validate_backstage_undercurrent_no_time_anchors(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _reject_time_anchors(value)
 
     @model_validator(mode="after")
     def _validate_action_payload(self):

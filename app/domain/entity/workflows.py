@@ -389,7 +389,6 @@ def _gather_names(
     resources = current_state.resources
     for collection in [
         resources.inventory,
-        resources.key_items,
         resources.fixed_assets,
         resources.temporary_assets,
     ]:

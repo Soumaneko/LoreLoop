@@ -6,6 +6,7 @@ from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.schemas import DirectorNPCDispatchDecision
 from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.turn_resolution.schemas import TurnResolutionResult
@@ -20,6 +21,7 @@ class PlotOutlineContext(BaseModel):
     retrieved_memories: CandidateRetrievalResult
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
+    npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
     director_event: DirectorEvent | None = None
     recent_archived_director_event: DirectorEvent | None = None
     director_npc_injection: DirectorNPCDispatchDecision | None = None
@@ -35,6 +37,7 @@ def assemble_context(
     retrieved_memories: CandidateRetrievalResult,
     scene_summaries: list[SceneSummary] | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
+    npc_profiles: list[NPCProfileDirectorView] | None = None,
     director_event: DirectorEvent | None = None,
     recent_archived_director_event: DirectorEvent | None = None,
     director_npc_injection: DirectorNPCDispatchDecision | None = None,
@@ -48,6 +51,7 @@ def assemble_context(
         retrieved_memories=retrieved_memories,
         scene_summaries=scene_summaries or [],
         entity_profiles=entity_profiles or [],
+        npc_profiles=npc_profiles or [],
         director_event=director_event,
         recent_archived_director_event=recent_archived_director_event,
         director_npc_injection=director_npc_injection,

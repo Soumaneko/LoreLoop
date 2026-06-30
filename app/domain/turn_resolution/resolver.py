@@ -11,12 +11,14 @@ from app.domain.director_event.views import (
     turn_resolution_director_event_instructions,
 )
 from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import RollResultBatch
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.views import (
     project_current_state,
     project_entity_profiles,
+    project_npc_profiles,
     project_retrieved_memories,
     project_scene_summaries,
 )
@@ -199,6 +201,7 @@ class TurnResolutionAgent:
         retrieved_memories: CandidateRetrievalResult,
         scene_summaries: list[SceneSummary],
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
+        npc_profiles: list[NPCProfileDirectorView] | None = None,
         director_event: DirectorEvent | None = None,
         recent_archived_director_event: DirectorEvent | None = None,
         previous_types: list[NarrativeType] | None = None,
@@ -247,6 +250,7 @@ class TurnResolutionAgent:
                     "retrieved_memories_json": project_retrieved_memories(retrieved_memories),
                     "scene_summaries_json": project_scene_summaries(scene_summaries),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),
+                    "npc_profiles_json": project_npc_profiles(npc_profiles or []),
                     "director_event_json": project_director_event(
                         director_event,
                         recent_archived_event=recent_archived_director_event,
