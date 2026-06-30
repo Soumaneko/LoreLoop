@@ -5,6 +5,7 @@ from concurrent.futures import Future
 from app.core.llm.config import create_gateway
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState
+from app.workflows.director_npc import restock_director_npc_standby
 from app.domain.recall_memory.batch_classifier import MemoryBatchClassifier
 from app.domain.recall_memory.maintainer import MemoryMaintainer
 from app.domain.scene_summary.summarizer import SceneSummarizer
@@ -16,11 +17,45 @@ from .serialization import model_data
 from .stores import (
     core_memory_store,
     current_state_store,
+    director_npc_store,
     entity_store,
     memory_store,
     pending_memory_store,
     scene_summary_store,
 )
+
+
+def run_director_npc_restock(
+    trace_id: str,
+    turn_index: int,
+    *,
+    core_memory: CoreMemory,
+    protagonist_name: str,
+) -> None:
+    try:
+        gateway = create_gateway()
+        gateway.set_trace_context(
+            turn_index=turn_index,
+            session_type="maintenance",
+        )
+        with director_npc_store() as npc_store, entity_store() as ent_store:
+            created_drafts = restock_director_npc_standby(
+                core_memory=core_memory,
+                protagonist_name=protagonist_name,
+                turn_index=turn_index,
+                director_npc_store=npc_store,
+                entity_store=ent_store,
+                creator_gateway=gateway,
+                trace_id=trace_id,
+            )
+        created_names = ", ".join(draft.name for draft in created_drafts) or "none"
+        print(
+            "[debug-server] director npc restock "
+            f"created_count={len(created_drafts)} created={created_names}"
+        )
+    except Exception:
+        print("[debug-server] director npc restock failed")
+        traceback.print_exc()
 
 
 def run_scene_summary_maintenance(

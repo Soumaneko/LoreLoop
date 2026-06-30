@@ -12,9 +12,10 @@ from .sub_retrievers import (
     build_context,
     content_keyword_retrieve,
     entity_retrieve,
+    evidence_intent_retrieve,
+    memory_kind_intent_retrieve,
     scene_context_retrieve,
     subject_tag_retrieve,
-    subtype_intent_retrieve,
 )
 from .rrf import rrf_fusion
 from .candidate_retriever import CandidateRetriever
@@ -31,9 +32,10 @@ __all__ = [
     "build_context",
     "content_keyword_retrieve",
     "entity_retrieve",
+    "evidence_intent_retrieve",
+    "memory_kind_intent_retrieve",
     "normalize_text",
     "rrf_fusion",
     "scene_context_retrieve",
     "subject_tag_retrieve",
-    "subtype_intent_retrieve",
 ]

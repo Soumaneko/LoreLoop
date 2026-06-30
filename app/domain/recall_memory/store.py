@@ -7,8 +7,6 @@ from app.domain.recall_memory.schemas import (
     Memory,
     MemoryRecord,
     MemoryStatus,
-    legacy_evidence_mode,
-    legacy_memory_kind,
 )
 
 
@@ -25,8 +23,6 @@ class MemoryStore:
 
     def _init_table(self) -> None:
         self._create_table()
-        self._migrate_legacy_schema()
-        self._conn.execute("DROP INDEX IF EXISTS idx_memories_dedup")
         self._conn.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_dedup_v2
@@ -76,67 +72,10 @@ class MemoryStore:
                 status_reason TEXT,
                 superseded_by TEXT,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL DEFAULT '',
-                layer TEXT NOT NULL DEFAULT 'truth',
-                subtype TEXT NOT NULL DEFAULT 'fact',
-                active INTEGER NOT NULL DEFAULT 1,
-                merged_into TEXT
+                updated_at TEXT NOT NULL DEFAULT ''
             )
             """
         )
-
-    def _migrate_legacy_schema(self) -> None:
-        columns = {
-            row["name"]
-            for row in self._conn.execute("PRAGMA table_info(memories)").fetchall()
-        }
-        additions = {
-            "memory_kind": "TEXT",
-            "evidence_mode": "TEXT",
-            "status": "TEXT NOT NULL DEFAULT 'active'",
-            "status_reason": "TEXT",
-            "superseded_by": "TEXT",
-            "updated_at": "TEXT NOT NULL DEFAULT ''",
-        }
-        for name, ddl in additions.items():
-            if name not in columns:
-                self._conn.execute(f"ALTER TABLE memories ADD COLUMN {name} {ddl}")
-
-        rows = self._conn.execute(
-            """
-            SELECT id, layer, subtype, active, merged_into, created_at,
-                   memory_kind, evidence_mode, status, superseded_by, updated_at
-            FROM memories
-            """
-        ).fetchall()
-        for row in rows:
-            memory_kind = row["memory_kind"] or legacy_memory_kind(
-                row["layer"], row["subtype"]
-            )
-            evidence_mode = row["evidence_mode"] or legacy_evidence_mode(row["layer"])
-            status = row["status"] or (
-                "active" if bool(row["active"]) else "superseded"
-            )
-            if not bool(row["active"]) and status == "active":
-                status = "superseded"
-            superseded_by = row["superseded_by"] or row["merged_into"]
-            updated_at = row["updated_at"] or row["created_at"] or _utc_now()
-            self._conn.execute(
-                """
-                UPDATE memories
-                SET memory_kind = ?, evidence_mode = ?, status = ?,
-                    superseded_by = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    memory_kind,
-                    evidence_mode,
-                    status,
-                    superseded_by,
-                    updated_at,
-                    row["id"],
-                ),
-            )
 
     def _make_dedup_key(self, memory: Memory) -> tuple:
         return (
@@ -290,8 +229,7 @@ class MemoryStore:
         self._conn.executemany(
             """
             UPDATE memories
-            SET status = ?, status_reason = ?, superseded_by = ?,
-                updated_at = ?, active = ?, merged_into = ?
+            SET status = ?, status_reason = ?, superseded_by = ?, updated_at = ?
             WHERE id = ? AND status = 'active'
             """,
             [
@@ -300,8 +238,6 @@ class MemoryStore:
                     reason,
                     superseded_by,
                     now,
-                    int(status == "active"),
-                    superseded_by,
                     memory_id,
                 )
                 for memory_id in memory_ids

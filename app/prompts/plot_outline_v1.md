@@ -43,6 +43,12 @@
 
 {director_event_instructions}
 
+## Director NPC Injection
+
+```json
+{director_npc_injection_json}
+```
+
 
 # 输入
 
@@ -107,6 +113,7 @@
 10. 区分“自然反应”和“重大决定”：
     - 必须允许并规划低决策成本的自然反应：接话、简短回应、追问刚提到的信息、确认理解、表达符合上下文的惊讶/怀疑/赞同/警惕、维持用户已确定的态度、观察对方、调整姿态、处理手边物品，以及危险中的本能闪避或提醒。
     - 主角可以参与讨论、质疑风险和确认事实，然后停在真正需要玩家决定的节点；“保留玩家选择”不等于让主角全程沉默。
+11. 如果 Director NPC Injection 不为 null 且 action 不是 none，必须至少安排一个 beat 让该 NPC 依据 immediate_intent 主动介入当前场景，并把 selected_name 加入 related_entities。该介入必须制造 first_pressure 所描述的压力、机会或扰动，但不得强迫主角接受任务、立刻帮助、攻击或长期同行。
 
 # 禁止事项
 

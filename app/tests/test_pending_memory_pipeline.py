@@ -66,6 +66,8 @@ class TestPendingMemoryStore:
                     PendingMemoryItem(
                         scene_id=f"scene_{i}",
                         turn_index=i,
+                        memory_kind="belief",
+                        subject=f"候选 {i}",
                         raw_text=f"候选 {i}",
                         source_text_span=[f"证据 {i}"],
                     )
@@ -91,6 +93,8 @@ class TestPendingMemoryStore:
                     PendingMemoryItem(
                         scene_id="scene_001",
                         turn_index=1,
+                        memory_kind="belief",
+                        subject="钥匙在钟楼的传闻",
                         raw_text="老板和侍者都提到钥匙。",
                         source_text_span=[
                             "老板说钥匙在钟楼。",
@@ -134,7 +138,7 @@ class TestMemoryDraftExtractor:
                                     "老板压低声音说，钥匙被送往钟楼。"
                                 ],
                                 "entities": ["老板", "钥匙", "钟楼"],
-                                "extractor_hint": "reported_info",
+                                "memory_kind": "belief", "subject": "钥匙在钟楼的传闻",
                                 "importance_hint": "high",
                             }
                         ]
@@ -176,7 +180,7 @@ class TestMemoryDraftExtractor:
                                 "raw_text": "老板声称钥匙被送往钟楼。",
                                 "source_text_span": ["老板压低声音说，钥匙被送往钟楼。"],
                                 "entities": ["老板", "钥匙", "钟楼"],
-                                "extractor_hint": "reported_info",
+                                "memory_kind": "belief", "subject": "钥匙在钟楼的传闻",
                                 "importance_hint": "high",
                                 "location": "模型瞎编的地点",
                                 "time_label": "第999日凌晨",
@@ -207,6 +211,8 @@ class TestMemoryDraftExtractor:
         item = PendingMemoryItem(
             scene_id="scene_001",
             turn_index=8,
+            memory_kind="belief",
+            subject="钥匙在钟楼的传闻",
             raw_text="老板声称钥匙在钟楼。",
             source_text_span=["老板声称钥匙在钟楼。"],
             location=None,
@@ -238,7 +244,7 @@ class TestBatchClassifyPendingMemories:
             raw_text="老板声称钥匙被送往钟楼。",
             source_text_span=["老板说钥匙被送往钟楼。"],
             entities=["老板", "钥匙", "钟楼"],
-            extractor_hint="reported_info",
+            memory_kind="belief", subject="钥匙在钟楼的传闻",
         )
         pending_b = PendingMemoryItem(
             id="pending_b",
@@ -247,7 +253,7 @@ class TestBatchClassifyPendingMemories:
             raw_text="侍者也听说钥匙在钟楼。",
             source_text_span=["侍者补充说，他也听说钥匙在钟楼。"],
             entities=["侍者", "钥匙", "钟楼"],
-            extractor_hint="reported_info",
+            memory_kind="belief", subject="钥匙在钟楼的传闻",
         )
         mock = MockLLM()
         mock.set_responses(
@@ -257,8 +263,7 @@ class TestBatchClassifyPendingMemories:
                         "candidates": [
                             {
                                 "keep": True,
-                                "layer": "claim",
-                                "subtype": "rumor",
+                                "memory_kind": "belief", "evidence_mode": "reported",
                                 "subject": "钥匙在钟楼的传闻",
                                 "content": "老板和侍者都提到钥匙可能在钟楼。",
                                 "entities": ["老板", "侍者", "钥匙", "钟楼"],
@@ -322,7 +327,7 @@ class TestRetrievalWithPendingNotes:
                             "他指了指钟楼方向。",
                         ],
                         entities=["老板", "钥匙", "钟楼"],
-                        extractor_hint="reported_info",
+                        memory_kind="belief", subject="钥匙在钟楼的传闻",
                         importance_hint="high",
                     )
                 ]

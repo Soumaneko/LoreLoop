@@ -22,7 +22,7 @@ SCENE_CONTEXT = _cs(scene_id="scene_002", location="灰鹭旅店二楼", time_la
 
 def _make_memory(**overrides) -> Memory:
     defaults = {
-        "subtype": "agreement",
+        "memory_kind": "commitment", "evidence_mode": "observed",
         "subject": "沉默暗号",
         "content": "主角和伊莱娜约定：左手轻敲两下桌面表示保持沉默。",
         "entities": ["主角", "伊莱娜"],
@@ -216,8 +216,8 @@ class TestDeduplication:
         assert len(cleaned) == 2
 
     def test_different_subtype_not_deduped(self):
-        m1 = _make_memory(subtype="agreement", subject="同主题", content="同内容", entities=["主角"])
-        m2 = _make_memory(subtype="fact", subject="同主题", content="同内容", entities=["主角"])
+        m1 = _make_memory(memory_kind="commitment", evidence_mode="observed", subject="同主题", content="同内容", entities=["主角"])
+        m2 = _make_memory(memory_kind="open_thread", evidence_mode="observed", subject="同主题", content="同内容", entities=["主角"])
         cleaned, result = SC.check([m1, m2], SCENE_TEXT, SCENE_CONTEXT)
         assert len(cleaned) == 2
 

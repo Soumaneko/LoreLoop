@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from app.domain.recall_memory.schemas import PendingMemoryItem, legacy_memory_kind
+from app.domain.recall_memory.schemas import PendingMemoryItem
 
 
 class PendingMemoryStore:
@@ -26,7 +26,6 @@ class PendingMemoryStore:
                 owner TEXT,
                 location TEXT,
                 time_label TEXT,
-                extractor_hint TEXT NOT NULL DEFAULT 'unknown',
                 importance_hint TEXT NOT NULL DEFAULT 'medium',
                 created_at TEXT NOT NULL,
                 classified INTEGER NOT NULL DEFAULT 0,
@@ -41,11 +40,7 @@ class PendingMemoryStore:
                 "PRAGMA table_info(pending_memory_items)"
             ).fetchall()
         }
-        for name, ddl in {
-            "memory_kind": "TEXT",
-            "subject": "TEXT",
-            "owner": "TEXT",
-        }.items():
+        for name, ddl in {"memory_kind": "TEXT", "subject": "TEXT", "owner": "TEXT"}.items():
             if name not in columns:
                 self._conn.execute(
                     f"ALTER TABLE pending_memory_items ADD COLUMN {name} {ddl}"
@@ -74,9 +69,9 @@ class PendingMemoryStore:
                 INSERT OR IGNORE INTO pending_memory_items (
                     id, scene_id, turn_index, memory_kind, subject,
                     raw_text, source_text_span, entities_json, owner,
-                    location, time_label, extractor_hint,
-                    importance_hint, created_at, classified, discarded, discard_reason
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    location, time_label, importance_hint, created_at,
+                    classified, discarded, discard_reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item.id,
@@ -90,7 +85,6 @@ class PendingMemoryStore:
                     item.owner,
                     item.location,
                     item.time_label,
-                    item.memory_kind,
                     item.importance_hint,
                     item.created_at,
                     int(item.classified),
@@ -214,10 +208,7 @@ class PendingMemoryStore:
             id=row["id"],
             scene_id=row["scene_id"],
             turn_index=row["turn_index"],
-            memory_kind=legacy_memory_kind(
-                None,
-                row["memory_kind"] or row["extractor_hint"],
-            ),
+            memory_kind=row["memory_kind"],
             subject=row["subject"] or row["raw_text"][:80],
             raw_text=row["raw_text"],
             source_text_span=_load_source_text_span(row["source_text_span"]),

@@ -7,6 +7,7 @@ from app.domain.core_memory import InitConfig
 from app.domain.current_state import CurrentState
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
+from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.short_term_memory import ShortTermMemory
 from app.workflows.context_assembler import PlotOutlineContext
 
@@ -26,6 +27,7 @@ class PendingTurn:
     outline: PlotOutlineResult
     scene_result: SceneWriterResult
     selected_memory_ids: list[str]
+    director_npc_result: DirectorNPCWorkflowResult | None = None
     turn_index: int = 1
     short_term_memory: ShortTermMemory | None = None
     confirmation_cache: dict[str, Any] = field(default_factory=dict)

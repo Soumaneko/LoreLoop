@@ -107,7 +107,7 @@ def _make_context() -> PlotOutlineContext:
             candidates=[
                 MemoryCandidate(
                     memory_id="mem_001",
-                    subtype="fact",
+                    memory_kind="open_thread", evidence_mode="observed",
                     subject="修道院情报",
                     content="北郡修道院最近来了一些陌生的面孔，不是常客。",
                     entities=["北郡修道院"],
@@ -300,7 +300,7 @@ class TestPlotOutlineAgent:
                 candidates=[
                     MemoryCandidate(
                         memory_id="mem_001",
-                        subtype="fact",
+                        memory_kind="open_thread", evidence_mode="observed",
                         subject="正式记忆",
                         content="北郡修道院最近来了一些陌生人。",
                         entities=["北郡修道院"],
@@ -315,6 +315,8 @@ class TestPlotOutlineAgent:
                         pending_id="pending_001",
                         scene_id="scene_001",
                         turn_index=1,
+                        memory_kind="belief",
+                        subject="调查团异常",
                         raw_text="米莉刚刚提到调查团异常。",
                         entities=["米莉", "调查团"],
                     ),

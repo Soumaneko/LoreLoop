@@ -105,7 +105,7 @@ def _make_retrieved_memories() -> CandidateRetrievalResult:
         candidates=[
             MemoryCandidate(
                 memory_id="mem_001",
-                subtype="fact",
+                memory_kind="open_thread", evidence_mode="observed",
                 subject="修道院历史",
                 content="北郡修道院曾是大战时期的据点。",
                 entities=["北郡修道院"],
@@ -210,7 +210,7 @@ class TestAssembleContext:
         with pytest.raises(ValidationError):
             PlotOutlineContext(
                 user_input="测试",
-                current_state="not_a_state",  # subtype: ignore[arg-subtype]
+                current_state="not_a_state",  # type: ignore[arg-type]
                 action_parse_result=_make_action_parse_result(),
                 turn_resolution=_make_turn_resolution(),
                 core_memory=_make_core_memory(),

@@ -20,19 +20,19 @@ from app.domain.retrieval.sub_retrievers import (
     build_context,
     content_keyword_retrieve,
     entity_retrieve,
-    layer_intent_retrieve,
+    evidence_intent_retrieve,
     scene_context_retrieve,
     subject_tag_retrieve,
-    subtype_intent_retrieve,
+    memory_kind_intent_retrieve,
 )
 
 RRF_WEIGHTS = [
     "rrf_entity_weight",
     "rrf_subject_tag_weight",
     "rrf_content_keyword_weight",
-    "rrf_subtype_intent_weight",
+    "rrf_memory_kind_intent_weight",
     "rrf_scene_context_weight",
-    "rrf_layer_intent_weight",
+    "rrf_evidence_intent_weight",
 ]
 
 
@@ -211,13 +211,13 @@ class CandidateRetriever:
         entity_scores = entity_retrieve(ctx, self.config)
         subject_tag_scores = subject_tag_retrieve(ctx, self.config)
         content_scores = content_keyword_retrieve(ctx, self.config)
-        subtype_intent_scores = subtype_intent_retrieve(
+        memory_kind_intent_scores = memory_kind_intent_retrieve(
             ctx, entity_scores, subject_tag_scores, content_scores, self.config
         )
         scene_context_scores = scene_context_retrieve(
             ctx, entity_scores, subject_tag_scores, content_scores, self.config
         )
-        layer_intent_scores = layer_intent_retrieve(
+        evidence_intent_scores = evidence_intent_retrieve(
             ctx, entity_scores, subject_tag_scores, content_scores, self.config
         )
 
@@ -226,17 +226,17 @@ class CandidateRetriever:
                 entity_scores,
                 subject_tag_scores,
                 content_scores,
-                subtype_intent_scores,
+                memory_kind_intent_scores,
                 scene_context_scores,
-                layer_intent_scores,
+                evidence_intent_scores,
             ],
             [
                 self.config.rrf_entity_weight,
                 self.config.rrf_subject_tag_weight,
                 self.config.rrf_content_keyword_weight,
-                self.config.rrf_subtype_intent_weight,
+                self.config.rrf_memory_kind_intent_weight,
                 self.config.rrf_scene_context_weight,
-                self.config.rrf_layer_intent_weight,
+                self.config.rrf_evidence_intent_weight,
             ],
             k=self.config.rrf_k,
         )
@@ -245,16 +245,16 @@ class CandidateRetriever:
             "entity_scores": entity_scores,
             "subject_tag_scores": subject_tag_scores,
             "content_scores": content_scores,
-            "subtype_intent_scores": subtype_intent_scores,
+            "memory_kind_intent_scores": memory_kind_intent_scores,
             "scene_context_scores": scene_context_scores,
-            "layer_intent_scores": layer_intent_scores,
+            "evidence_intent_scores": evidence_intent_scores,
             "rrf_scores": rrf_scores,
             "entity_ranks": self._compute_ranks(entity_scores),
             "subject_tag_ranks": self._compute_ranks(subject_tag_scores),
             "content_ranks": self._compute_ranks(content_scores),
-            "subtype_intent_ranks": self._compute_ranks(subtype_intent_scores),
+            "memory_kind_intent_ranks": self._compute_ranks(memory_kind_intent_scores),
             "scene_context_ranks": self._compute_ranks(scene_context_scores),
-            "layer_intent_ranks": self._compute_ranks(layer_intent_scores),
+            "evidence_intent_ranks": self._compute_ranks(evidence_intent_scores),
             "match_info": self._compute_match_info(ctx),
         }
 
@@ -284,12 +284,12 @@ class CandidateRetriever:
                 "subject_tag_rank": result["subject_tag_ranks"].get(mid, 0),
                 "content_score": result["content_scores"].get(mid, 0.0),
                 "content_rank": result["content_ranks"].get(mid, 0),
-                "subtype_intent_score": result["subtype_intent_scores"].get(mid, 0.0),
-                "subtype_intent_rank": result["subtype_intent_ranks"].get(mid, 0),
+                "memory_kind_intent_score": result["memory_kind_intent_scores"].get(mid, 0.0),
+                "memory_kind_intent_rank": result["memory_kind_intent_ranks"].get(mid, 0),
                 "scene_context_score": result["scene_context_scores"].get(mid, 0.0),
                 "scene_context_rank": result["scene_context_ranks"].get(mid, 0),
-                "layer_intent_score": result["layer_intent_scores"].get(mid, 0.0),
-                "layer_intent_rank": result["layer_intent_ranks"].get(mid, 0),
+                "evidence_intent_score": result["evidence_intent_scores"].get(mid, 0.0),
+                "evidence_intent_rank": result["evidence_intent_ranks"].get(mid, 0),
                 "rrf_score": rrf,
                 "total_memories": total_memories,
             }

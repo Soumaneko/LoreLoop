@@ -24,7 +24,7 @@ const tabs = [
   ["confirmation", "确认"],
   ["memory", "记忆"],
   ["entity", "实体"],
-  ["director", "导演事件"],
+  ["director", "导演"],
   ["preview", "行动预览"],
   ["raw", "Raw"],
 ];
@@ -451,6 +451,8 @@ function renderStatePanel() {
   const resources = current.resources || {};
   const npcs = current.npcs || [];
   const activeEvent = data.active_director_event;
+  const standbyDirectorNpcs = data.standby_director_npcs || [];
+  const dispatchedDirectorNpcs = data.dispatched_director_npcs || [];
   const memories = data.memories || [];
   const activeMemories = memories.filter((m) => (m.status || "active") === "active").slice(0, 12);
   const summaries = data.scene_summaries || [];
@@ -479,7 +481,16 @@ function renderStatePanel() {
       ["临时", chips(resources.temporary_assets)],
     ]))}
     ${details(`NPC (${npcs.length})`, npcs.length ? npcs.map(npcCard).join("") : `<div class="empty">暂无 NPC</div>`)}
-    ${details("导演事件", activeEvent ? directorCard(activeEvent) : `<div class="empty">暂无 active 事件</div>`)}
+    ${details("导演", `
+      ${metrics([
+        metric("事件", activeEvent ? "active" : "none", activeEvent ? "ok" : ""),
+        metric("待命NPC", standbyDirectorNpcs.length, standbyDirectorNpcs.length ? "info" : ""),
+        metric("已调度NPC", dispatchedDirectorNpcs.length, dispatchedDirectorNpcs.length ? "ok" : ""),
+        metric("NPC上次", data.last_director_npc_dispatch_turn || "无"),
+      ])}
+      ${activeEvent ? directorCard(activeEvent) : `<div class="empty">暂无 active 事件</div>`}
+      ${standbyDirectorNpcs.slice(0, 3).map(directorNpcCard).join("")}
+    `)}
     ${details(`场景摘要 (${summaries.length})`, `
       ${metrics([
         metric("活跃", summaries.length),
@@ -616,6 +627,7 @@ function stepTasks(scope, stepName) {
     action_parsed: ["action_extract"],
     modifiers_done: ["roll_modifier"],
     turn_resolution_done: ["turn_resolution"],
+    director_npc_done: ["director_npc_create", "director_npc_dispatch"],
     outline_done: ["plot_outline"],
     scene_written: ["scene_write"],
   };
@@ -663,6 +675,7 @@ function stepSummary(name, data) {
   if (name === "action_parsed") return `${data.action_parse_result?.atomic_actions?.length || 0} actions`;
   if (name === "retrieval_done") return `${data.retrieved_memories?.total_returned || 0} memories`;
   if (name === "rolls_done") return `${data.roll_results?.total_rolls || 0} rolls`;
+  if (name === "director_npc_done") return directorNpcStepSummary(data.director_npc_result);
   if (name === "scene_written") return `turn ${data.turn_index || "?"}`;
   if (name === "state_update_done") return "state updated";
   if (name === "memory_draft_extract_done") return `${data.pending_items_count || 0} pending`;
@@ -681,6 +694,7 @@ function renderGeneration() {
     ${card("Retrieval", renderRetrieval(g.retrieved_memories, g.selected_memory_ids, g.selected_memories))}
     ${card("Roll", renderRoll(g.roll_results))}
     ${card("Turn Resolution", renderResolution(g.turn_resolution))}
+    ${card("Director NPC", renderDirectorNpcResult(g.director_npc_result))}
     ${card("Outline", renderOutline(g.plot_outline))}
     ${card("Writer", g.scene_result ? `<div class="section-card">${esc(g.scene_result.scene_text)}</div>${list(g.scene_result.changes_summary)}` : `<div class="empty">未生成正文</div>`)}
     ${details("Context", jsonBlock(g.context))}
@@ -725,16 +739,32 @@ function renderEntityDebug() {
 
 function renderDirectorDebug() {
   const result = merged("confirmation").director_event_result;
+  const npcGeneration = merged("generation").director_npc_result;
+  const npcConfirmation = merged("confirmation").director_npc_result;
+  const directorNpcEntityId = merged("confirmation").director_npc_entity_id;
   const server = state.serverState || {};
   const active = server.active_director_event ? [server.active_director_event] : [];
   const suspended = server.suspended_director_events || [];
   const archived = server.archived_director_events || [];
+  const standbyNpcs = server.standby_director_npcs || [];
+  const dispatchedNpcs = server.dispatched_director_npcs || [];
   return `
-    ${card("事件库存", metrics([
+    ${card("导演库存", metrics([
       metric("Active", active.length, active.length ? "ok" : ""),
       metric("Suspended", suspended.length, suspended.length ? "warn" : ""),
       metric("Archived", archived.length, archived.length ? "info" : ""),
+      metric("Standby NPC", standbyNpcs.length, standbyNpcs.length ? "info" : ""),
+      metric("Dispatched NPC", dispatchedNpcs.length, dispatchedNpcs.length ? "ok" : ""),
+      metric("NPC上次", server.last_director_npc_dispatch_turn || "无"),
     ]))}
+    ${npcGeneration ? card("本轮导演 NPC", renderDirectorNpcResult(npcGeneration)) : card("本轮导演 NPC", `<div class="empty">生成回合后展示。</div>`)}
+    ${npcConfirmation ? card("导演 NPC 入库", kv([
+      ["实体ID", esc(text(directorNpcEntityId))],
+      ["后台补货", esc(merged("confirmation").director_npc_restock_scheduled ? "已排队" : "未排队")],
+      ["结果", renderDirectorNpcResult(npcConfirmation)],
+    ])) : ""}
+    ${details("Standby NPC", standbyNpcs.map(directorNpcCard).join("") || `<div class="empty">暂无 standby NPC</div>`, true)}
+    ${details("Dispatched NPC", dispatchedNpcs.map(directorNpcCard).join("") || `<div class="empty">暂无 dispatched NPC</div>`)}
     ${details("Active", active.map(directorCard).join("") || `<div class="empty">暂无 active 事件</div>`, true)}
     ${result ? card("本轮结果", `
       ${kv([
@@ -1027,6 +1057,67 @@ function renderEntityGroups(profiles) {
   }
   const labels = { npc: "NPC", item: "物品", location: "地点", organization: "组织" };
   return Object.entries(groups).map(([type, items]) => details(`${labels[type] || type} (${items.length})`, items.map(entityCard).join(""), type === "npc")).join("");
+}
+
+function directorNpcStepSummary(result) {
+  if (!result) return "none";
+  if (result.dispatch) return `${result.dispatch.action} · ${result.dispatch.selected_name || "none"}`;
+  const createdDrafts = result.created_drafts || [];
+  if (createdDrafts.length) return `created standby × ${createdDrafts.length}`;
+  return result.skipped_reason || "skipped";
+}
+
+function renderDirectorNpcResult(result) {
+  if (!result) return `<div class="empty">暂无导演 NPC 结果。</div>`;
+  const dispatch = result.dispatch;
+  const createdDrafts = result.created_drafts || [];
+  return `
+    ${metrics([
+      result.trigger_reason ? metric("触发", "是", "ok") : metric("触发", "否"),
+      createdDrafts.length ? metric("新建待命", createdDrafts.length, "info") : "",
+      dispatch ? metric("动作", dispatch.action, dispatch.action === "none" ? "" : "ok") : "",
+    ])}
+    ${kv([
+      ["触发原因", esc(text(result.trigger_reason))],
+      ["跳过原因", esc(text(result.skipped_reason))],
+    ])}
+    ${createdDrafts.length ? details("新建待命 NPC", createdDrafts.map(directorNpcCard).join(""), true) : ""}
+    ${dispatch ? details("调度决策", directorNpcDispatchCard(dispatch), true) : ""}
+  `;
+}
+
+function directorNpcDispatchCard(dispatch) {
+  return `<div class="section-card">${kv([
+    ["动作", esc(text(dispatch.action))],
+    ["选择", esc(`${text(dispatch.selected_name)} · ${text(dispatch.selected_id)}`)],
+    ["原因", esc(text(dispatch.reason))],
+    ["出现逻辑", esc(text(dispatch.contextual_presence))],
+    ["即时意图", esc(text(dispatch.immediate_intent))],
+    ["第一压力", esc(text(dispatch.first_pressure))],
+    ["场景功能", esc(text(dispatch.scene_function))],
+  ])}</div>`;
+}
+
+function directorNpcCard(npc) {
+  if (!npc) return `<div class="empty">无</div>`;
+  return `<div class="section-card">
+    <div class="card-title"><span>${esc(npc.name || npc.draft_id)}</span>${metric(npc.status || "standby", `T${text(npc.created_turn)}`)}</div>
+    <div style="margin-bottom:8px">${esc(text(npc.appearance))}</div>
+    ${kv([
+      ["ID", esc(text(npc.draft_id))],
+      ["角色", esc(text(npc.role))],
+      ["派系", esc(text(npc.faction))],
+      ["调度回合", esc(text(npc.dispatched_turn))],
+      ["性格", chips(npc.personality_traits)],
+      ["能力", chips(npc.known_abilities)],
+      ["核心动机", esc(text(npc.core_motivation))],
+      ["创伤/恐惧", esc(text(npc.fear_or_wound))],
+      ["秘密", esc(text(npc.hidden_secret))],
+      ["冲突风格", esc(text(npc.conflict_style))],
+      ["社交风格", esc(text(npc.social_style))],
+      ["出场潜力", chips(npc.encounter_potentials)],
+    ])}
+  </div>`;
 }
 
 function entityCard(profile) {

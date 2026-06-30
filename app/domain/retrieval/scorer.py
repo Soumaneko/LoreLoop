@@ -80,12 +80,12 @@ class MemoryScorer:
 
         has_match = any(breakdown[k] > 0 for k in ["entity_score", "tag_score", "subject_score", "content_score"])
 
-        subtype_boost = 0.0
+        memory_kind_boost = 0.0
         if has_match:
             for action in atomic_actions:
                 boost_map = ACTION_TYPE_MEMORY_KIND_BOOST.get(action.action_type, {})
-                subtype_boost += boost_map.get(memory.memory_kind, 0.0)
-        breakdown["subtype_boost"] = subtype_boost
+                memory_kind_boost += boost_map.get(memory.memory_kind, 0.0)
+        breakdown["memory_kind_boost"] = memory_kind_boost
 
         past_ref_boost = 0.0
         if has_match:

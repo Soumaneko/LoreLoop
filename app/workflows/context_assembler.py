@@ -4,6 +4,7 @@ from app.domain.action.schemas import ActionParseResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director_npc.schemas import DirectorNPCDispatchDecision
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.scene_summary.schemas import SceneSummary
@@ -21,6 +22,7 @@ class PlotOutlineContext(BaseModel):
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     director_event: DirectorEvent | None = None
     recent_archived_director_event: DirectorEvent | None = None
+    director_npc_injection: DirectorNPCDispatchDecision | None = None
 
 
 def assemble_context(
@@ -35,6 +37,7 @@ def assemble_context(
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     director_event: DirectorEvent | None = None,
     recent_archived_director_event: DirectorEvent | None = None,
+    director_npc_injection: DirectorNPCDispatchDecision | None = None,
 ) -> PlotOutlineContext:
     return PlotOutlineContext(
         user_input=user_input,
@@ -47,4 +50,5 @@ def assemble_context(
         entity_profiles=entity_profiles or [],
         director_event=director_event,
         recent_archived_director_event=recent_archived_director_event,
+        director_npc_injection=director_npc_injection,
     )

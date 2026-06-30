@@ -18,6 +18,7 @@ from app.workflows.resolve_rolls import resolve_rolls_workflow
 from app.workflows.resolve_turn import resolve_turn_workflow
 from app.workflows.retrieve_candidates import retrieve_candidates_workflow
 from app.workflows.update_director_event import DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS
+from app.workflows.director_npc import maybe_director_npc_workflow
 from app.workflows.update_entity_profiles import gather_entity_profiles_from_state_and_anchors
 
 from .serialization import model_data
@@ -26,6 +27,7 @@ from .stores import (
     core_memory_store,
     current_state_store,
     director_event_store,
+    director_npc_store,
     entity_store,
     memory_store,
     pending_memory_store,
@@ -225,6 +227,35 @@ def generate_turn_stream(
         },
     }
 
+    director_npc_result = None
+    with director_npc_store() as npc_store, entity_store() as ent_store:
+        creator_gateway = create_gateway()
+        creator_gateway.set_trace_context(turn_index=turn_index, session_type="generation")
+        dispatcher_gateway = create_gateway()
+        dispatcher_gateway.set_trace_context(turn_index=turn_index, session_type="generation")
+        director_npc_result = maybe_director_npc_workflow(
+            core_memory=core_memory,
+            current_state=current_state,
+            action_parse_result=action_parse_result,
+            turn_resolution=turn_resolution,
+            short_term_memory=short_term_memory,
+            recent_summaries=recent_summaries,
+            director_event=active_director_event,
+            turn_index=turn_index,
+            director_npc_store=npc_store,
+            entity_store=ent_store,
+            creator_gateway=creator_gateway,
+            dispatcher_gateway=dispatcher_gateway,
+            trace_id=trace_id,
+        )
+
+    yield {
+        "step": "director_npc_done",
+        "data": {
+            "director_npc_result": model_data(director_npc_result),
+        },
+    }
+
     context = assemble_context(
         user_input=user_input,
         current_state=current_state,
@@ -236,6 +267,11 @@ def generate_turn_stream(
         entity_profiles=action_entity_profile_views,
         director_event=active_director_event,
         recent_archived_director_event=recent_archived_director_event,
+        director_npc_injection=(
+            director_npc_result.dispatch
+            if director_npc_result is not None
+            else None
+        ),
     )
 
     yield {
@@ -303,6 +339,7 @@ def generate_turn_stream(
         outline=outline,
         scene_result=scene_result,
         selected_memory_ids=selected_memory_ids,
+        director_npc_result=director_npc_result,
         turn_index=next_turn_index,
         short_term_memory=short_term_memory,
     )

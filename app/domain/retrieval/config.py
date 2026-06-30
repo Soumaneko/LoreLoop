@@ -20,9 +20,9 @@ class RetrievalConfig(BaseModel):
     rrf_entity_weight: float = 0.8
     rrf_subject_tag_weight: float = 1.2
     rrf_content_keyword_weight: float = 0.8
-    rrf_subtype_intent_weight: float = 0.5
+    rrf_memory_kind_intent_weight: float = 0.5
     rrf_scene_context_weight: float = 0.5
-    rrf_layer_intent_weight: float = 0.6
+    rrf_evidence_intent_weight: float = 0.6
 
 
 KIND_FACTOR: dict[str, float] = {

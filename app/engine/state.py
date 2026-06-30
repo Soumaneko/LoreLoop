@@ -5,6 +5,7 @@ from .stores import (
     core_memory_store,
     current_state_store,
     director_event_store,
+    director_npc_store,
     entity_store,
     memory_store,
     pending_memory_store,
@@ -45,6 +46,12 @@ def load_debug_state() -> dict:
         suspended_director_events = director_store.list_suspended()
         archived_director_events = director_store.list_archived()
 
+    with director_npc_store() as npc_store:
+        director_npcs = npc_store.list_all()
+        standby_director_npcs = [npc for npc in director_npcs if npc.status == "standby"]
+        dispatched_director_npcs = [npc for npc in director_npcs if npc.status == "dispatched"]
+        last_director_npc_dispatch_turn = npc_store.get_meta_int("last_dispatch_turn", 0)
+
     settings = load_settings()
     core_memory = core_memory_store().load()
     return {
@@ -67,6 +74,10 @@ def load_debug_state() -> dict:
         "suspended_director_events": model_data(suspended_director_events),
         "archived_director_events": model_data(archived_director_events),
         "archived_director_event_count": len(archived_director_events),
+        "director_npcs": model_data(director_npcs),
+        "standby_director_npcs": model_data(standby_director_npcs),
+        "dispatched_director_npcs": model_data(dispatched_director_npcs),
+        "last_director_npc_dispatch_turn": last_director_npc_dispatch_turn,
         "chat_history": model_data(chat_history),
         "difficulty": settings.get("difficulty", "困难"),
         "max_chars": int(settings.get("max_chars", 1500)),

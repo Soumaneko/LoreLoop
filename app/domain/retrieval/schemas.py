@@ -1,10 +1,6 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from app.domain.action.schemas import Anchor, AtomicAction
-from app.domain.recall_memory.schemas import (
-    legacy_evidence_mode,
-    legacy_memory_kind,
-)
 
 
 class CandidateRetrievalInput(BaseModel):
@@ -37,27 +33,6 @@ class MemoryCandidate(BaseModel):
     matched_anchors: list[str] = Field(default_factory=list)
     matched_actions: list[str] = Field(default_factory=list)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_legacy_fields(cls, data: object) -> object:
-        if not isinstance(data, dict):
-            return data
-        values = dict(data)
-        values.setdefault(
-            "memory_kind",
-            legacy_memory_kind(values.get("layer"), values.get("subtype")),
-        )
-        values.setdefault("evidence_mode", legacy_evidence_mode(values.get("layer")))
-        return values
-
-    @property
-    def layer(self) -> str:
-        return self.evidence_mode
-
-    @property
-    def subtype(self) -> str:
-        return self.memory_kind
-
 
 class PendingMemoryNote(BaseModel):
     pending_id: str
@@ -75,23 +50,6 @@ class PendingMemoryNote(BaseModel):
     score: float = 0.0
     matched_anchors: list[str] = Field(default_factory=list)
     matched_actions: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_legacy_fields(cls, data: object) -> object:
-        if not isinstance(data, dict):
-            return data
-        values = dict(data)
-        values.setdefault(
-            "memory_kind",
-            legacy_memory_kind(None, values.get("extractor_hint")),
-        )
-        values.setdefault("subject", values.get("raw_text") or "未指定主体")
-        return values
-
-    @property
-    def extractor_hint(self) -> str:
-        return self.memory_kind
 
 
 class CandidateRetrievalResult(BaseModel):

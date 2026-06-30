@@ -6,7 +6,7 @@ from app.domain.recall_memory.store import MemoryStore
 
 def _make_memory(**overrides) -> Memory:
     defaults = {
-        "subtype": "fact",
+        "memory_kind": "open_thread", "evidence_mode": "observed",
         "subject": "测试记忆",
         "content": "这是一条测试记忆内容。",
         "entities": ["主角"],
@@ -35,7 +35,7 @@ class TestMemoryStoreSaveAndRead:
             assert len(records) == 1
             r = records[0]
             assert r.memory_kind == "open_thread"
-            assert r.evidence_mode == "inferred"
+            assert r.evidence_mode == "observed"
             assert r.subject == "测试记忆"
             assert r.content == "这是一条测试记忆内容。"
             assert r.entities == ["主角"]
@@ -44,7 +44,7 @@ class TestMemoryStoreSaveAndRead:
             assert isinstance(r.id, str) and len(r.id) == 32
             assert r.created_at != ""
             assert r.active is True
-            assert r.merged_into is None
+            assert r.superseded_by is None
 
     def test_save_multiple_memories(self):
         with MemoryStore(":memory:") as store:
@@ -152,7 +152,7 @@ class TestMemoryStoreActiveRecords:
             old = store.get_by_id(ids[0])
             assert old is not None
             assert old.active is False
-            assert old.merged_into == ids[1]
+            assert old.superseded_by == ids[1]
 
     def test_save_one_returning_id_returns_existing_duplicate_id(self):
         with MemoryStore(":memory:") as store:

@@ -97,6 +97,15 @@ class PlotOutlineAgent:
                         context.director_event,
                         recent_archived_event=context.recent_archived_director_event,
                     ),
+                    "director_npc_injection_json": json.dumps(
+                        (
+                            context.director_npc_injection.model_dump(mode="json")
+                            if context.director_npc_injection is not None
+                            else None
+                        ),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=RuntimePlotOutlineResult,

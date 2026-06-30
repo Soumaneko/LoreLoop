@@ -42,8 +42,7 @@ def _record(
 ):
     return SimpleNamespace(
         id=memory_id,
-        layer="truth",
-        subtype="fact",
+        memory_kind="open_thread", evidence_mode="observed",
         subject=subject,
         content="米莉知道仓库区的传闻。",
         entities=entities or ["米莉"],

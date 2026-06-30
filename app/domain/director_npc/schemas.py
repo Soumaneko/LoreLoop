@@ -1,0 +1,146 @@
+import uuid
+from datetime import datetime, timezone
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+from app.domain.entity.schemas import EntityProfileUpdateInput
+
+
+DirectorNPCStatus = Literal["standby", "dispatched", "discarded"]
+DirectorNPCDispatchAction = Literal["dispatch_standby", "recall_existing", "none"]
+DirectorNPCSceneFunction = Literal[
+    "complication",
+    "temptation",
+    "information",
+    "conflict",
+    "rescue",
+    "rivalry",
+    "social_pressure",
+    "color",
+]
+
+
+def _new_id() -> str:
+    return f"director_npc_{uuid.uuid4().hex[:12]}"
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class DirectorNPCDraft(BaseModel):
+    draft_id: str = Field(default_factory=_new_id)
+    name: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    appearance: str = Field(min_length=1)
+    personality_traits: list[str] = Field(min_length=2, max_length=5)
+    known_abilities: list[str] = Field(default_factory=list, max_length=5)
+    faction: str | None = None
+    core_motivation: str = Field(min_length=1)
+    fear_or_wound: str = Field(min_length=1)
+    hidden_secret: str = Field(min_length=1)
+    conflict_style: str = Field(min_length=1)
+    social_style: str = Field(min_length=1)
+    encounter_potentials: list[str] = Field(min_length=3, max_length=5)
+    status: DirectorNPCStatus = "standby"
+    created_turn: int = Field(ge=0)
+    dispatched_turn: int | None = Field(default=None, ge=0)
+    created_at: str = Field(default_factory=utc_now)
+    updated_at: str = Field(default_factory=utc_now)
+
+    def private_view(self) -> "DirectorNPCPrivateProfile":
+        return DirectorNPCPrivateProfile(
+            draft_id=self.draft_id,
+            name=self.name,
+            role=self.role,
+            appearance=self.appearance,
+            personality_traits=list(self.personality_traits),
+            known_abilities=list(self.known_abilities),
+            faction=self.faction,
+            core_motivation=self.core_motivation,
+            fear_or_wound=self.fear_or_wound,
+            hidden_secret=self.hidden_secret,
+            conflict_style=self.conflict_style,
+            social_style=self.social_style,
+            encounter_potentials=list(self.encounter_potentials),
+            created_turn=self.created_turn,
+            dispatched_turn=self.dispatched_turn,
+        )
+
+
+class DirectorNPCCreateOutput(BaseModel):
+    name: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    appearance: str = Field(min_length=1)
+    personality_traits: list[str] = Field(min_length=2, max_length=5)
+    known_abilities: list[str] = Field(default_factory=list, max_length=5)
+    faction: str | None = None
+    core_motivation: str = Field(min_length=1)
+    fear_or_wound: str = Field(min_length=1)
+    hidden_secret: str = Field(min_length=1)
+    conflict_style: str = Field(min_length=1)
+    social_style: str = Field(min_length=1)
+    encounter_potentials: list[str] = Field(min_length=3, max_length=5)
+
+
+class DirectorNPCPrivateProfile(BaseModel):
+    draft_id: str
+    name: str
+    role: str
+    appearance: str
+    personality_traits: list[str] = Field(default_factory=list)
+    known_abilities: list[str] = Field(default_factory=list)
+    faction: str | None = None
+    core_motivation: str
+    fear_or_wound: str
+    hidden_secret: str
+    conflict_style: str
+    social_style: str
+    encounter_potentials: list[str] = Field(default_factory=list)
+    created_turn: int
+    dispatched_turn: int | None = None
+
+
+class DispatchedDirectorNPCCandidate(BaseModel):
+    selected_id: str
+    selected_name: str
+    public_entity_profile: EntityProfileUpdateInput | None = None
+    director_private_profile: DirectorNPCPrivateProfile
+
+
+class ExistingNPCCandidate(BaseModel):
+    name: str
+    role: str | None = None
+    current_intent: str | None = None
+    attitude_to_player: str | None = None
+    absent_turns: int = Field(default=0, ge=0)
+
+
+class DirectorNPCDispatchDecision(BaseModel):
+    action: DirectorNPCDispatchAction
+    selected_id: str | None = None
+    selected_name: str | None = None
+    reason: str = ""
+    contextual_presence: str | None = None
+    immediate_intent: str | None = None
+    first_pressure: str | None = None
+    scene_function: DirectorNPCSceneFunction | None = None
+
+    @model_validator(mode="after")
+    def _validate_payload(self):
+        if self.action == "none":
+            return self
+        if not (self.selected_id and self.selected_name):
+            raise ValueError("selected_id and selected_name are required when dispatching")
+        for field_name in ("contextual_presence", "immediate_intent", "first_pressure", "scene_function"):
+            if getattr(self, field_name) in (None, ""):
+                raise ValueError(f"{field_name} is required when dispatching")
+        return self
+
+
+class DirectorNPCWorkflowResult(BaseModel):
+    created_drafts: list[DirectorNPCDraft] = Field(default_factory=list)
+    dispatch: DirectorNPCDispatchDecision | None = None
+    trigger_reason: str | None = None
+    skipped_reason: str | None = None

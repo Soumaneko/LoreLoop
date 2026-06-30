@@ -130,7 +130,7 @@ class TestSceneWriterAgent:
             selected_memories=[
                 MemoryCandidate(
                     memory_id="mem_001",
-                    subtype="fact",
+                    memory_kind="open_thread", evidence_mode="observed",
                     subject="暴风城现状",
                     content="暴风城正在经历政治风波，暗流涌动。",
                     entities=["暴风城"],
@@ -253,7 +253,7 @@ class TestSceneWriterWorkflow:
                 candidates=[
                     MemoryCandidate(
                         memory_id="mem_001",
-                        subtype="fact",
+                        memory_kind="open_thread", evidence_mode="observed",
                         subject="暴风城现状",
                         content="暴风城正在经历政治风波。",
                         entities=["暴风城"],
@@ -265,7 +265,7 @@ class TestSceneWriterWorkflow:
                     ),
                     MemoryCandidate(
                         memory_id="mem_999",
-                        subtype="trait",
+                        memory_kind="relationship_state", evidence_mode="inferred",
                         subject="无关记忆",
                         content="不应该被选中的记忆。",
                         entities=["无关"],
@@ -302,7 +302,7 @@ class TestSceneWriterWorkflow:
             candidates=[
                 MemoryCandidate(
                     memory_id="mem_001",
-                    subtype="event",
+                    memory_kind="open_thread", evidence_mode="observed",
                     subject="米莉的邀请",
                     content="米莉邀请卢西安下次再来北郡。",
                     entities=["米莉"],
@@ -313,7 +313,7 @@ class TestSceneWriterWorkflow:
                 ),
                 MemoryCandidate(
                     memory_id="mem_002",
-                    subtype="trait",
+                    memory_kind="relationship_state", evidence_mode="inferred",
                     subject="卢西安的施法风格",
                     content="卢西安擅长精细奥术魔法控制。",
                     entities=["卢西安"],
@@ -324,7 +324,7 @@ class TestSceneWriterWorkflow:
                 ),
                 MemoryCandidate(
                     memory_id="mem_999",
-                    subtype="fact",
+                    memory_kind="open_thread", evidence_mode="observed",
                     subject="无关记忆",
                     content="不应被选择。",
                     entities=[],
@@ -358,7 +358,7 @@ class TestSceneWriterWorkflow:
             candidates=[
                 MemoryCandidate(
                     memory_id="mem_001",
-                    subtype="event",
+                    memory_kind="open_thread", evidence_mode="observed",
                     subject="正式记忆",
                     content="这条正式记忆不应被选中。",
                     entities=[],
@@ -375,7 +375,7 @@ class TestSceneWriterWorkflow:
                     turn_index=3,
                     raw_text="米莉刚刚提到暴风城调查团有异常动向。",
                     entities=["米莉", "暴风城调查团"],
-                    extractor_hint="claim",
+                    memory_kind="belief", subject="暴风城调查团异常动向",
                     score=0.14,
                 ),
             ],

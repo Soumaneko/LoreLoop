@@ -1,6 +1,7 @@
 from app.domain.core_memory import CoreMemoryStore
 from app.domain.current_state import CurrentStateStore
 from app.domain.director_event.store import DirectorEventStore
+from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.entity.store import EntityStore
 from app.domain.recall_memory.pending_store import PendingMemoryStore
 from app.domain.recall_memory.store import MemoryStore
@@ -11,6 +12,7 @@ from .paths import (
     CORE_MEMORY_JSON,
     DATA_DIR,
     DIRECTOR_EVENT_DB,
+    DIRECTOR_NPC_DB,
     ENTITY_DB,
     MEMORY_DB,
     PENDING_MEMORY_DB,
@@ -58,3 +60,8 @@ def core_memory_store() -> CoreMemoryStore:
 def director_event_store() -> DirectorEventStore:
     DATA_DIR.mkdir(exist_ok=True)
     return DirectorEventStore(str(DIRECTOR_EVENT_DB))
+
+
+def director_npc_store() -> DirectorNPCStore:
+    DATA_DIR.mkdir(exist_ok=True)
+    return DirectorNPCStore(str(DIRECTOR_NPC_DB))

@@ -1,5 +1,4 @@
 import json
-import sqlite3
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
@@ -22,66 +21,6 @@ def _memory(**overrides) -> Memory:
     }
     values.update(overrides)
     return Memory(**values)
-
-
-def test_legacy_database_rows_are_migrated(tmp_path):
-    db_path = tmp_path / "legacy_memories.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        """
-        CREATE TABLE memories (
-            id TEXT PRIMARY KEY,
-            layer TEXT NOT NULL,
-            subtype TEXT NOT NULL,
-            subject TEXT NOT NULL,
-            content TEXT NOT NULL,
-            entities_json TEXT NOT NULL DEFAULT '[]',
-            location TEXT,
-            time_label TEXT,
-            visibility_json TEXT NOT NULL DEFAULT '[]',
-            tags_json TEXT NOT NULL DEFAULT '[]',
-            confidence REAL NOT NULL DEFAULT 1.0,
-            salience REAL NOT NULL DEFAULT 0.5,
-            owner TEXT,
-            source_scene_id TEXT,
-            source_text_span_json TEXT NOT NULL DEFAULT '[]',
-            source_pending_ids_json TEXT NOT NULL DEFAULT '[]',
-            active INTEGER NOT NULL DEFAULT 1,
-            merged_into TEXT,
-            created_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        INSERT INTO memories (
-            id, layer, subtype, subject, content, entities_json,
-            active, merged_into, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "legacy-1",
-            "claim",
-            "agreement",
-            "旧承诺",
-            "老板声称会归还钥匙。",
-            '["老板", "钥匙"]',
-            0,
-            "replacement-1",
-            "2026-01-01T00:00:00+00:00",
-        ),
-    )
-    conn.commit()
-    conn.close()
-
-    with MemoryStore(str(db_path)) as store:
-        record = store.get_by_id("legacy-1")
-
-    assert record is not None
-    assert record.memory_kind == "commitment"
-    assert record.evidence_mode == "reported"
-    assert record.status == "superseded"
-    assert record.superseded_by == "replacement-1"
 
 
 def test_maintainer_invalidates_memory_and_uses_inactive_l1_summary():

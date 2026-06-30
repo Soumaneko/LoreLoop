@@ -208,7 +208,7 @@ def content_keyword_retrieve(ctx: RetrievalContext, config: RetrievalConfig | No
     return scores
 
 
-def layer_intent_retrieve(
+def evidence_intent_retrieve(
     ctx: RetrievalContext,
     entity_scores: dict[str, float],
     subject_tag_scores: dict[str, float],
@@ -240,7 +240,7 @@ def layer_intent_retrieve(
     return scores
 
 
-def subtype_intent_retrieve(
+def memory_kind_intent_retrieve(
     ctx: RetrievalContext,
     entity_scores: dict[str, float],
     subject_tag_scores: dict[str, float],

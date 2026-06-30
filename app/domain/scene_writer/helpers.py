@@ -35,9 +35,9 @@ def retrieve_memories_by_entities(
 
     config = RetrievalConfig(
         top_k=max_results,
-        rrf_subtype_intent_weight=0.0,
+        rrf_memory_kind_intent_weight=0.0,
         rrf_scene_context_weight=0.0,
-        rrf_layer_intent_weight=0.0,
+        rrf_evidence_intent_weight=0.0,
     )
 
     with CandidateRetriever(memory_store, config) as retriever:
