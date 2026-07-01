@@ -76,11 +76,9 @@ def project_scene_summaries(summaries: list[SceneSummary]) -> str:
 def project_action_parse(result: ActionParseResult) -> str:
     actions = []
     for a in result.atomic_actions:
-        d = a.model_dump(mode="json", exclude={"likely_needs_roll", "confidence"})
+        d = a.model_dump(mode="json", exclude={"likely_needs_roll"})
         if d.get("condition") is None:
             d.pop("condition", None)
-        if d.get("roll_hint") is None:
-            d.pop("roll_hint", None)
         actions.append(d)
     data = {
         "turn_intent": result.turn_intent,

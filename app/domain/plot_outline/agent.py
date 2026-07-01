@@ -1,7 +1,7 @@
 import json
 from typing import cast
 
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
 from app.domain.director_event.views import (
@@ -22,6 +22,15 @@ from app.domain.views import (
 from app.workflows.context_assembler import PlotOutlineContext
 
 
+class _RuntimePlotBeat(BaseModel):
+    summary: str
+    user_action_execution: str | None = None
+    related_entities: list[str] = Field(default_factory=list)
+    linked_outcome_ids: list[str] = Field(default_factory=list)
+    required_outcomes: list[str] = Field(default_factory=list)
+    required_memory_indices: list[int] = Field(default_factory=list)
+
+
 class PlotOutlineAgent:
     def __init__(self, llm: LLMGateway):
         self.llm = llm
@@ -37,7 +46,13 @@ class PlotOutlineAgent:
             for frame in context.turn_resolution.action_resolutions
         ]
 
-        class RuntimePlotOutlineResult(PlotOutlineResult):
+        class RuntimePlotOutlineResult(BaseModel):
+            context_reasoning: str = Field(min_length=1)
+            beats: list[_RuntimePlotBeat] = Field(default_factory=list)
+            constraints_for_scene_writer: list[str] = Field(default_factory=list)
+            risks_to_avoid: list[str] = Field(default_factory=list)
+            director_event_note: str | None = None
+
             @model_validator(mode="after")
             def _require_all_turn_resolution_outcomes(self):
                 linked_in_order: list[str] = []
@@ -79,7 +94,7 @@ class PlotOutlineAgent:
         schema = RuntimePlotOutlineResult.model_json_schema()
 
         result = cast(
-            PlotOutlineResult,
+            RuntimePlotOutlineResult,
             self.llm.run(
                 task="plot_outline",
                 input_data={
@@ -115,4 +130,9 @@ class PlotOutlineAgent:
                 trace_id=trace_id,
             ),
         )
-        return PlotOutlineResult.model_validate(result.model_dump())
+        data = result.model_dump()
+        data["beats"] = [
+            {"beat_id": f"b{index}", **beat}
+            for index, beat in enumerate(data["beats"], start=1)
+        ]
+        return PlotOutlineResult.model_validate(data)

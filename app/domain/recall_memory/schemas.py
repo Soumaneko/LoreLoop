@@ -11,7 +11,6 @@ MemoryKind = Literal[
     "action_constraint",
     "resource_access",
     "relationship_state",
-    "belief",
 ]
 
 EvidenceMode = Literal["observed", "reported", "believed", "inferred"]

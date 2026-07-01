@@ -5,10 +5,15 @@ from app.domain.short_term_memory.schemas import ShortTermScene
 
 
 _BEAT_EXCLUDE: set[str] = {"linked_outcome_ids"}
+_OUTLINE_EXCLUDE: set[str] = {"context_reasoning"}
 
 
 def project_outline(result: PlotOutlineResult) -> str:
-    data = result.model_dump(mode="json")
+    data = {
+        key: value
+        for key, value in result.model_dump(mode="json").items()
+        if key not in _OUTLINE_EXCLUDE
+    }
     data["beats"] = [
         {k: v for k, v in beat.items() if k not in _BEAT_EXCLUDE}
         for beat in data["beats"]

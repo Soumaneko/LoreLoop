@@ -20,7 +20,7 @@ from app.domain.turn_resolution.schemas import TurnResolutionResult
 
 
 DIRECTOR_NPC_HARD_MAX_TURNS = 8
-DIRECTOR_NPC_FIRST_FORCED_TURN = 2
+DIRECTOR_NPC_FIRST_FORCED_TURN = 1
 DIRECTOR_NPC_REPEAT_BLOCK_TURNS = 2
 DIRECTOR_NPC_STANDBY_TARGET = 3
 PRESSURE_TYPES = {"escalate_pressure", "complication"}
@@ -133,7 +133,12 @@ def create_director_npc_standby(
         core_memory=core_memory,
         existing_npcs=owned_profile_store.list_all(),
         reserved_npcs=[
-            {"name": npc.name, "role": npc.role}
+            {
+                "name": npc.name,
+                "role": npc.role,
+                "core_motivation": npc.core_motivation,
+                "hidden_secret": npc.hidden_secret,
+            }
             for npc in director_npc_store.list_standby()
         ],
         protagonist_name=protagonist_name,

@@ -18,7 +18,7 @@
 {protagonist_name}
 ```
 
-## 已有 NPC 列表（只含 name + role，用于避免重复）
+## 已有 NPC 列表（含 name / role / core_motivation / hidden_secret，用于避免重复）
 
 ```json
 {existing_npcs_json}
@@ -49,7 +49,6 @@
 - `known_abilities`：最多 5 个明确能力标签；只写 TA 确实擅长或可被剧情使用的能力，不写万能能力。
 - `faction`：所属组织、家族、职业团体或阵营；没有明确归属则填 `null`。
 - `core_motivation`：TA 长期追求、执念或人生驱动力；必须独立于主角当前行动。
-- `fear_or_wound`：TA 的恐惧、创伤、弱点或不愿面对的失败经验。
 - `hidden_secret`：一个不公开的秘密、缺陷、亏欠、伪装、情感牵挂或欲望；不得直接等同于“其实是反派”。
 - `conflict_style`：TA 面对冲突时倾向怎么做，例如谈判、逃避、威胁、欺骗、忍耐、正面对抗等，并体现能力边界。
 - `social_style`：TA 与人相处时的可演出方式，例如谨慎试探、热情套近乎、冷淡交易、习惯讽刺等。
@@ -67,6 +66,7 @@
 5. 让 encounter_potentials 保持多样化，避免把 NPC 设计成单一剧情按钮。
 6. CoreMemory 中关于主角的描述，是主角专属事实，只能用来理解世界风格和主角边界；不得复制、改写、镜像或平移到新 NPC 身上。
 7. 如果 CoreMemory 提到主角的背景，NPC 不得拥有同构背景。除非 CoreMemory 明确要求“世界中普遍存在此类群体”。
+8. 必须对照已有 NPC 的 `core_motivation` 与 `hidden_secret`，不得创造同构动机、同构秘密或相同人生困境。
 
 
 # 禁止事项
@@ -74,4 +74,4 @@
 1. 不要写“为了让主角……”这类元叙述。
 2. 不要让每个 NPC 都是委托发布者、追杀者、骗子或麻烦制造者。
 3. 不要绑定当前主角路线、当前城镇、当前任务或当前导演事件。
-4. 不要把主角的核心背景词当作 NPC 背景模板反复使用，尤其禁止在 `core_motivation`、`fear_or_wound`、`hidden_secret` 和 `encounter_potentials` 中复刻主角背景。
+4. 不要把主角的核心背景词当作 NPC 背景模板反复使用，尤其禁止在 `core_motivation`、`hidden_secret` 和 `encounter_potentials` 中复刻主角背景。

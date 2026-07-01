@@ -77,3 +77,32 @@ class TraceLogger:
                 if trace_id is None or entry.get("trace_id") == trace_id:
                     traces.append(entry)
         return traces
+
+
+class NullTraceLogger:
+    @property
+    def log_path(self) -> str:
+        return ""
+
+    def log(
+        self,
+        trace_id: str,
+        task: str,
+        model: str,
+        prompt_version: str,
+        input_data: dict[str, Any],
+        raw_output: str,
+        parsed_output: Any,
+        schema_valid: bool,
+        latency_ms: float,
+        error: str | None,
+        *,
+        attempt: int | None = None,
+        token_usage: dict | None = None,
+        turn_index: int | None = None,
+        session_type: str | None = None,
+    ) -> None:
+        return None
+
+    def read_traces(self, trace_id: str | None = None) -> list[dict[str, Any]]:
+        return []

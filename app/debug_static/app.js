@@ -46,7 +46,6 @@ const memoryKindLabels = {
   action_constraint: "行动约束",
   resource_access: "资源/权限",
   relationship_state: "关系状态",
-  belief: "信念",
 };
 
 const evidenceLabels = {
@@ -700,7 +699,7 @@ function renderGeneration() {
     ${card("Turn Resolution", renderResolution(g.turn_resolution))}
     ${card("Director NPC", renderDirectorNpcResult(g.director_npc_result))}
     ${card("Outline", renderOutline(g.plot_outline))}
-    ${card("Writer", g.scene_result ? `<div class="section-card">${esc(g.scene_result.scene_text)}</div>${list(g.scene_result.changes_summary)}` : `<div class="empty">未生成正文</div>`)}
+    ${card("Writer", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>` : `<div class="empty">未生成正文</div>`)}
     ${details("Context", jsonBlock(g.context))}
   `;
 }
@@ -892,13 +891,14 @@ function renderRoll(result) {
 function renderResolution(result) {
   if (!result) return `<div class="empty">暂无结果判定。</div>`;
   return `
+    ${card("判定审计", esc(text(result.resolution_reasoning)))}
     ${metrics([metric("类型", result.selected_type, "info"), metric("解释", result.total_resolutions || 0)])}
     ${(result.action_resolutions || []).map((o) => `<div class="section-card">
       <div class="card-title"><span>${esc(o.action_id)} · ${esc(o.outcome_band)}</span>${metric("type", o.action_type)}</div>
       ${kv([
         ["行动者", esc(text(o.actor))],
         ["序号", esc(text(o.sequence))],
-        ["成立方式", esc(text(o.resolved_effect))],
+        ["事实结论", esc(text(o.resolved_fact))],
       ])}
     </div>`).join("")}
     ${details("叙事类型过滤", kv([
@@ -913,16 +913,15 @@ function renderResolution(result) {
 function renderOutline(outline) {
   if (!outline) return `<div class="empty">暂无大纲。</div>`;
   return `
-    ${card("摘要", esc(text(outline.outline_summary)))}
+    ${card("上下文承接", esc(text(outline.context_reasoning)))}
     ${(outline.beats || []).map((b) => `<div class="section-card">
       <div class="card-title"><span>${esc(b.beat_id)}</span>${metric("记忆", (b.required_memory_indices || []).length)}</div>
       <div style="margin-bottom:8px">${esc(text(b.summary))}</div>
       ${kv([
         ["用户行动", esc(text(b.user_action_execution))],
-        ["主角反应", esc(text(b.protagonist_response_guidance))],
         ["结果", chips(b.linked_outcome_ids)],
         ["实体", chips(b.related_entities)],
-        ["状态影响", list(b.state_implications)],
+        ["必要结果", list(b.required_outcomes)],
       ])}
     </div>`).join("")}
     ${details("写作约束", list(outline.constraints_for_scene_writer))}
@@ -1117,7 +1116,6 @@ function npcProfileCard(profile) {
     ${profile.core_motivation || profile.hidden_secret ? details("导演视图", `
       ${kv([
         ["核心动机", esc(text(profile.core_motivation))],
-        ["创伤/恐惧", esc(text(profile.fear_or_wound))],
         ["秘密", esc(text(profile.hidden_secret))],
         ["冲突风格", esc(text(profile.conflict_style))],
         ["社交风格", esc(text(profile.social_style))],
@@ -1198,7 +1196,6 @@ function directorNpcCard(npc) {
       ["性格", chips(npc.personality_traits)],
       ["能力", chips(npc.known_abilities)],
       ["核心动机", esc(text(npc.core_motivation))],
-      ["创伤/恐惧", esc(text(npc.fear_or_wound))],
       ["秘密", esc(text(npc.hidden_secret))],
       ["冲突风格", esc(text(npc.conflict_style))],
       ["社交风格", esc(text(npc.social_style))],

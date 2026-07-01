@@ -53,7 +53,6 @@ ACTION_TYPE_MEMORY_KIND_BOOST: dict[str, dict[str, float]] = {
     "inspect_object": {
         "resource_access": 3.0,
         "open_thread": 2.0,
-        "belief": 1.0,
     },
     "interact_object": {
         "resource_access": 4.0,
@@ -62,11 +61,9 @@ ACTION_TYPE_MEMORY_KIND_BOOST: dict[str, dict[str, float]] = {
     },
     "observe": {
         "open_thread": 2.5,
-        "belief": 2.0,
         "action_constraint": 1.0,
     },
     "speak": {
-        "belief": 3.0,
         "commitment": 2.5,
         "relationship_state": 2.0,
         "resource_access": 1.0,
@@ -74,7 +71,6 @@ ACTION_TYPE_MEMORY_KIND_BOOST: dict[str, dict[str, float]] = {
     "hide_or_stealth": {
         "action_constraint": 3.0,
         "open_thread": 1.5,
-        "belief": 1.0,
     },
     "move": {
         "open_thread": 2.0,
@@ -93,7 +89,6 @@ PAST_REF_MEMORY_KIND_BOOST: dict[str, float] = {
     "open_thread": 2.5,
     "resource_access": 2.0,
     "relationship_state": 1.5,
-    "belief": 1.5,
     "action_constraint": 1.0,
 }
 

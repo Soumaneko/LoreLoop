@@ -20,7 +20,7 @@ from app.core.llm.providers import (
 )
 from app.core.llm.prompts import PromptLoader
 from app.core.llm.schemas import EchoResult
-from app.core.llm.tracing import TraceLogger
+from app.core.llm.tracing import NullTraceLogger, TraceLogger
 from app.debug_prompt_runner import FilePromptProvider
 
 
@@ -150,6 +150,21 @@ class TestLLMGatewayRetryFlow:
 
 
 class TestTraceLogging:
+    def test_mock_gateway_uses_null_tracer_by_default(self):
+        mock = MockLLM()
+        mock.set_responses(['{"text": "hello", "length": 5}'])
+        gateway = mock.build_gateway()
+
+        gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+            trace_id="mock-trace",
+        )
+
+        assert isinstance(gateway.tracer, NullTraceLogger)
+        assert gateway.tracer.read_traces(trace_id="mock-trace") == []
+
     def test_trace_written_on_success(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             trace_path = f.name

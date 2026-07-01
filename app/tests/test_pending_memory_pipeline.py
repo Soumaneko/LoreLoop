@@ -66,7 +66,7 @@ class TestPendingMemoryStore:
                     PendingMemoryItem(
                         scene_id=f"scene_{i}",
                         turn_index=i,
-                        memory_kind="belief",
+                        memory_kind="open_thread",
                         subject=f"候选 {i}",
                         raw_text=f"候选 {i}",
                         source_text_span=[f"证据 {i}"],
@@ -93,7 +93,7 @@ class TestPendingMemoryStore:
                     PendingMemoryItem(
                         scene_id="scene_001",
                         turn_index=1,
-                        memory_kind="belief",
+                        memory_kind="open_thread",
                         subject="钥匙在钟楼的传闻",
                         raw_text="老板和侍者都提到钥匙。",
                         source_text_span=[
@@ -138,7 +138,7 @@ class TestMemoryDraftExtractor:
                                     "老板压低声音说，钥匙被送往钟楼。"
                                 ],
                                 "entities": ["老板", "钥匙", "钟楼"],
-                                "memory_kind": "belief", "subject": "钥匙在钟楼的传闻",
+                                "memory_kind": "open_thread", "subject": "钥匙在钟楼的传闻",
                                 "importance_hint": "high",
                             }
                         ]
@@ -180,7 +180,7 @@ class TestMemoryDraftExtractor:
                                 "raw_text": "老板声称钥匙被送往钟楼。",
                                 "source_text_span": ["老板压低声音说，钥匙被送往钟楼。"],
                                 "entities": ["老板", "钥匙", "钟楼"],
-                                "memory_kind": "belief", "subject": "钥匙在钟楼的传闻",
+                                "memory_kind": "open_thread", "subject": "钥匙在钟楼的传闻",
                                 "importance_hint": "high",
                                 "location": "模型瞎编的地点",
                                 "time_label": "第999日凌晨",
@@ -211,7 +211,7 @@ class TestMemoryDraftExtractor:
         item = PendingMemoryItem(
             scene_id="scene_001",
             turn_index=8,
-            memory_kind="belief",
+            memory_kind="open_thread",
             subject="钥匙在钟楼的传闻",
             raw_text="老板声称钥匙在钟楼。",
             source_text_span=["老板声称钥匙在钟楼。"],
@@ -244,7 +244,7 @@ class TestBatchClassifyPendingMemories:
             raw_text="老板声称钥匙被送往钟楼。",
             source_text_span=["老板说钥匙被送往钟楼。"],
             entities=["老板", "钥匙", "钟楼"],
-            memory_kind="belief", subject="钥匙在钟楼的传闻",
+            memory_kind="open_thread", subject="钥匙在钟楼的传闻",
         )
         pending_b = PendingMemoryItem(
             id="pending_b",
@@ -253,7 +253,7 @@ class TestBatchClassifyPendingMemories:
             raw_text="侍者也听说钥匙在钟楼。",
             source_text_span=["侍者补充说，他也听说钥匙在钟楼。"],
             entities=["侍者", "钥匙", "钟楼"],
-            memory_kind="belief", subject="钥匙在钟楼的传闻",
+            memory_kind="open_thread", subject="钥匙在钟楼的传闻",
         )
         mock = MockLLM()
         mock.set_responses(
@@ -263,7 +263,7 @@ class TestBatchClassifyPendingMemories:
                         "candidates": [
                             {
                                 "keep": True,
-                                "memory_kind": "belief", "evidence_mode": "reported",
+                                "memory_kind": "open_thread", "evidence_mode": "reported",
                                 "subject": "钥匙在钟楼的传闻",
                                 "content": "老板和侍者都提到钥匙可能在钟楼。",
                                 "entities": ["老板", "侍者", "钥匙", "钟楼"],
@@ -306,12 +306,82 @@ class TestBatchClassifyPendingMemories:
             assert result.should_maintain is True
 
             memory = memory_store.list_all()[0]
-            assert memory.memory_kind == "belief"
+            assert memory.memory_kind == "open_thread"
             assert memory.evidence_mode == "reported"
             assert memory.confidence == 0.9
             assert memory.source_pending_ids == ["pending_a", "pending_b"]
             assert len(memory.source_text_span) == 2
 
+    def test_batch_classifier_invalidates_believed_memories_after_save(self):
+        state = _state()
+        pending = PendingMemoryItem(
+            id="pending_believed",
+            scene_id="scene_001",
+            turn_index=1,
+            raw_text="老板觉得钥匙大概还在钟楼。",
+            source_text_span=["老板皱眉说，他觉得钥匙大概还在钟楼。"],
+            entities=["老板", "钥匙", "钟楼"],
+            memory_kind="open_thread",
+            subject="钥匙在钟楼的主观判断",
+        )
+        mock = MockLLM()
+        mock.set_responses(
+            [
+                json.dumps(
+                    {
+                        "candidates": [
+                            {
+                                "keep": True,
+                                "memory_kind": "open_thread",
+                                "evidence_mode": "believed",
+                                "subject": "钥匙在钟楼的主观判断",
+                                "content": "老板觉得钥匙大概还在钟楼。",
+                                "entities": ["老板", "钥匙", "钟楼"],
+                                "location": "旧旅店",
+                                "time_label": "第2日晚上",
+                                "owner": "老板",
+                                "visibility": ["主角", "老板"],
+                                "confidence": 0.5,
+                                "salience": 0.4,
+                                "tags": ["钥匙", "钟楼"],
+                                "source_pending_ids": ["pending_believed"],
+                                "source_scene_id": "scene_001",
+                                "source_text_span": ["老板皱眉说，他觉得钥匙大概还在钟楼。"],
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                )
+            ]
+        )
+
+        with PendingMemoryStore(":memory:") as pending_store, MemoryStore(":memory:") as memory_store:
+            pending_store.save_many([pending])
+            result = batch_classify_pending_memories_workflow(
+                current_state=state,
+                core_memory=CoreMemory(items=[]),
+                classifier=MemoryBatchClassifier(mock.build_gateway()),
+                pending_store=pending_store,
+                memory_store=memory_store,
+                force=True,
+            )
+
+            assert len(result.saved_ids) == 1
+            assert result.invalidated_believed_ids == result.saved_ids
+            assert pending_store.count_unclassified() == 0
+
+            record = memory_store.get_by_id(result.saved_ids[0])
+            assert record is not None
+            assert record.evidence_mode == "believed"
+            assert record.status == "invalidated"
+            assert record.status_reason == "believed_evidence_mode_not_retrievable"
+            assert memory_store.list_active() == []
+
+            retrieved = retrieve_candidates_workflow(
+                _action_parse(),
+                memory_store,
+            )
+            assert retrieved.candidates == []
 
 class TestRetrievalWithPendingNotes:
     def test_retrieval_keeps_pending_notes_separate_from_classified_memories(self):
@@ -327,7 +397,7 @@ class TestRetrievalWithPendingNotes:
                             "他指了指钟楼方向。",
                         ],
                         entities=["老板", "钥匙", "钟楼"],
-                        memory_kind="belief", subject="钥匙在钟楼的传闻",
+                        memory_kind="open_thread", subject="钥匙在钟楼的传闻",
                         importance_hint="high",
                     )
                 ]

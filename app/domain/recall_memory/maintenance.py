@@ -41,6 +41,7 @@ class BatchClassifyPendingMemoryWorkflowResult:
     discarded_count: int = 0
     self_check_result: SelfCheckResult | None = None
     saved_ids: list[str] = field(default_factory=list)
+    invalidated_believed_ids: list[str] = field(default_factory=list)
     classified_pending_ids: list[str] = field(default_factory=list)
     batch_classify_count: int = 0
     should_maintain: bool = False
@@ -169,12 +170,26 @@ def _batch_classify_pending_memories_locked(
     wfr.self_check_result = result.self_check_result
 
     if result.kept_memories:
-        wfr.saved_ids = memory_store.save_many(result.kept_memories)
-        if entity_store is not None and wfr.saved_ids:
+        active_saved_ids: list[str] = []
+        for memory in result.kept_memories:
+            memory_id = memory_store.save_one_returning_id(memory)
+            wfr.saved_ids.append(memory_id)
+            if memory.evidence_mode == "believed":
+                wfr.invalidated_believed_ids.append(memory_id)
+            else:
+                active_saved_ids.append(memory_id)
+        if wfr.invalidated_believed_ids:
+            memory_store.set_status(
+                wfr.invalidated_believed_ids,
+                status="invalidated",
+                reason="believed_evidence_mode_not_retrievable",
+            )
+        if entity_store is not None and active_saved_ids:
             records = [
                 record
-                for memory_id in wfr.saved_ids
+                for memory_id in active_saved_ids
                 if (record := memory_store.get_by_id(memory_id)) is not None
+                and record.active
             ]
             links = EntityMemoryLinker(entity_store).link_records(records)
             wfr.entity_links_created = len(links)

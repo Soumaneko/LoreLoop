@@ -14,7 +14,6 @@ from .schemas import (
     OutcomeBand,
     RiskLevel,
     RollJudgment,
-    TurnResolutionDecision,
     TurnResolutionResult,
 )
 
@@ -27,7 +26,6 @@ __all__ = [
     "RiskLevel",
     "RollJudgment",
     "TurnResolutionAgent",
-    "TurnResolutionDecision",
     "TurnResolutionResult",
     "build_roll_judgments",
     "cooldown_filter_types",

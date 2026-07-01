@@ -81,7 +81,7 @@ def _make_turn_resolution() -> TurnResolutionResult:
                 action_type="observe",
                 outcome_band="success",
                 effect_reasoning="调查属于 A 类，玩家意图查看大厅，success 给出清晰发现。",
-                resolved_effect="主角清楚发现修道院大厅中的关键异常。",
+                resolved_fact="主角发现修道院大厅中的关键异常。",
             ),
         ],
     )

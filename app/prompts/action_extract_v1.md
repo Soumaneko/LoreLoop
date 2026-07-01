@@ -11,7 +11,7 @@
 {core_memory_json}
 ```
 
-## 当前状态（CurrentState）
+## CurrentState
 
 ```json
 {current_state_json}
@@ -19,24 +19,17 @@
 
 ## Recent Scene Summaries
 
-最近剧情摘要，L1 最详细，较高 level 是更长期的冷凝摘要。
-
 ```json
 {recent_summaries_json}
 ```
 
-## 本回合锚点命中的实体档案
-
-以下实体由 anchor extract 从本回合用户输入和当前场景中提取后，与实体库 name/aliases 精确匹配得到，是本回合行动解析的优先实体约束。
-如果用户显式使用其中某个 alias，行动 target 必须保留用户使用的称呼或对应 canonical name；如果用户显式提到的名字不在这里，必须保留用户原文名字。
+## Entity Profiles
 
 ```json
 {entity_profiles_json}
 ```
 
-## 本回合锚点命中的 NPC Profiles
-
-以下 NPC 由本回合人物锚点、CurrentState 参与者和 NPC 状态，与 NPCProfile 的 name/aliases 匹配得到。该上下文优先用于解析人物目标、别名、态度和可行性。
+## NPC Profiles
 
 ```json
 {npc_profiles_json}
@@ -67,7 +60,7 @@
 - atomic_actions：拆解出的原子行动列表，至少一个。每个 AtomicAction 按以下字段填写：
   - action_id：行动唯一标识，如 A1、A2。
   - sequence：行动发生顺序，从 1 开始递增。
-  - actor：行动者，使用 CurrentState 中的玩家姓名，不要用“主角”或“我”。
+  - actor：行动者
   - action_type：从下方 ActionType 列表中选择最贴切的类型。
   - raw_text：原文中对应该行动的完整子句。
   - verb：动作动词。
@@ -76,10 +69,7 @@
   - goal：行动目的，无则填 null。
   - condition：触发条件，无则填 null。
   - likely_needs_roll：是否可能需要掷骰，按下方规则判断。
-  - roll_hint：掷骰要点提示，无则填 null。
   - risk_level：low、medium 或 high 之一，按下方规则结合上下文判断。
-  - confidence：0 到 1 之间的解析置信度。
-- ambiguities：解析中存在的歧义点列表，无则填空列表。
 
 
 # 核心规则
@@ -149,9 +139,7 @@
       "goal": "进入密室",
       "condition": null,
       "likely_needs_roll": true,
-      "roll_hint": "推动沉重锈蚀的石门",
-      "risk_level": "low",
-      "confidence": 0.95
+      "risk_level": "low"
     }},
     {{
       "action_id": "A2",
@@ -165,11 +153,8 @@
       "goal": "看清室内布局",
       "condition": null,
       "likely_needs_roll": false,
-      "roll_hint": null,
-      "risk_level": "low",
-      "confidence": 0.95
+      "risk_level": "low"
     }}
-  ],
-  "ambiguities": []
+  ]
 }}
 ```

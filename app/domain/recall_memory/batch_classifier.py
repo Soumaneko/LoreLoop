@@ -90,14 +90,15 @@ class MemoryBatchClassifier:
             trace_id=trace_id,
         )
 
+        candidates = list(llm_result.candidates)
         kept = [
             candidate.to_memory()
-            for candidate in llm_result.candidates
+            for candidate in candidates
             if candidate.keep
         ]
         discarded = [
             candidate
-            for candidate in llm_result.candidates
+            for candidate in candidates
             if not candidate.keep
         ]
 
@@ -115,7 +116,7 @@ class MemoryBatchClassifier:
             )
 
         return MemoryBatchClassifierResult(
-            raw_candidates=llm_result.candidates,
+            raw_candidates=candidates,
             kept_memories=kept,
             discarded_candidates=discarded,
             self_check_result=check_result,

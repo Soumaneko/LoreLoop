@@ -35,25 +35,19 @@ def _make_state() -> CurrentState:
 
 def _make_outline() -> PlotOutlineResult:
     return PlotOutlineResult(
-        outline_summary="主角与米莉交谈，达成约定",
+        context_reasoning="本测试大纲根据主角与米莉交谈的输入组织两个连续节拍，先落实打招呼，再承接询问消息。",
         beats=[
             PlotBeat(
                 beat_id="b1",
                 summary="主角走向吧台与米莉打招呼",
                 user_action_execution="主角走向吧台，主动向米莉打招呼。",
-                protagonist_response_guidance="主角自然回应米莉的招呼，并以轻松语气开启话题。",
                 required_memory_indices=[0],
-                state_implications=["米莉对主角的态度更加友善"],
-                tone_notes=["轻松", "友好"],
             ),
             PlotBeat(
                 beat_id="b2",
                 summary="米莉告诉主角关于暴风城的消息",
                 user_action_execution="主角继续询问暴风城的近况。",
-                protagonist_response_guidance="主角对消息表现出警觉，简短追问与自己当前处境最相关的部分。",
                 required_memory_indices=[],
-                state_implications=["主角获得了新的情报"],
-                tone_notes=["神秘", "暗示"],
             ),
         ],
         constraints_for_scene_writer=[
@@ -69,23 +63,24 @@ def _make_outline() -> PlotOutlineResult:
 
 def _build_response(
     scene_text: str = "主角推开酒馆沉重的木门，夜风卷起几片落叶随着他一同进入温暖的室内。米莉正在吧台后面擦拭酒杯，看到主角后露出微笑。",
-    changes: list[str] | None = None,
     directions: list[dict] | None = None,
 ) -> str:
     return json.dumps({
+        "scene_reasoning": "本回合先承接大纲节拍顺序，确认主角行动与米莉反馈都来自公开上下文。正文只演出已给出的酒馆、米莉和暴风城消息，不新增任务或隐藏真相。",
         "scene_text": scene_text,
-        "changes_summary": changes or ["主角进入了酒馆", "与米莉进行了交谈"],
         "next_action_directions": directions or [],
     }, ensure_ascii=False)
 
 
 class TestSceneWriterAgent:
-    def test_outline_projection_keeps_protagonist_response_guidance(self):
+    def test_outline_projection_keeps_user_action_execution(self):
         projected = json.loads(project_outline(_make_outline()))
 
-        assert projected["beats"][0]["protagonist_response_guidance"] == (
-            "主角自然回应米莉的招呼，并以轻松语气开启话题。"
-        )
+        assert "protagonist_response_guidance" not in projected["beats"][0]
+        assert "state_implications" not in projected["beats"][0]
+        assert "tone_notes" not in projected["beats"][0]
+        assert "outline_summary" not in projected
+        assert "context_reasoning" not in projected
         assert projected["beats"][0]["user_action_execution"] == (
             "主角走向吧台，主动向米莉打招呼。"
         )
@@ -111,10 +106,13 @@ class TestSceneWriterAgent:
         prompt = Path("app/prompts/scene_write_v1.md").read_text(encoding="utf-8")
 
         assert "不得替主角接受或拒绝任务" in prompt
-        assert "不得把多条 guidance 合并成开头的一次反应" in prompt
-        assert "必须先完整演出 `user_action_execution`" in prompt
+        assert "自然覆盖所有 beat" in prompt
         assert "不得从“行动已经完成以后”开始" in prompt
-        assert "不是用户原始行动的替代品" in prompt
+        assert "protagonist_response_guidance" not in prompt
+        assert "changes_summary" not in prompt
+        assert "scene_reasoning" in prompt
+        assert "正文生成前的逻辑审计" in prompt
+        assert "不得在 scene_text 中自行补出具体机构、专有名词、功能物品" in prompt
 
     def test_generates_scene_text(self):
         mock = MockLLM()
@@ -151,7 +149,6 @@ class TestSceneWriterAgent:
         assert isinstance(result, SceneWriterResult)
 
         assert len(result.scene_text) > 0
-        assert len(result.changes_summary) >= 1
 
     def test_preserves_next_action_directions(self):
         mock = MockLLM()
@@ -219,14 +216,11 @@ class TestSceneWriterAgent:
         agent = SceneWriterAgent(mock.build_gateway())
         result = agent.write(
             outline=PlotOutlineResult(
-                outline_summary="测试",
+                context_reasoning="本测试大纲只用于验证写作约束会被传入 SceneWriter。",
                 beats=[PlotBeat(
                     beat_id="b1",
                     summary="测试节拍",
-                    protagonist_response_guidance="主角以紧张的观察和简短回应参与当前场面。",
                     required_memory_indices=[],
-                    state_implications=[],
-                    tone_notes=["紧张"],
                 )],
                 constraints_for_scene_writer=["不能使用魔法"],
                 risks_to_avoid=["不要引入新角色"],
@@ -288,12 +282,11 @@ class TestSceneWriterWorkflow:
 
     def test_select_required_memories_uses_input_indices(self):
         outline = PlotOutlineResult(
-            outline_summary="测试",
+            context_reasoning="本测试大纲用于验证 required_memory_indices 会筛选对应记忆。",
             beats=[
                 PlotBeat(
                     beat_id="b1",
                     summary="测试节拍",
-                    protagonist_response_guidance="主角确认自己理解了当前信息，但不作新的重大决定。",
                     required_memory_indices=[0, 1, 999],
                 )
             ],
@@ -344,12 +337,11 @@ class TestSceneWriterWorkflow:
 
     def test_select_required_memories_can_select_pending_notes(self):
         outline = PlotOutlineResult(
-            outline_summary="测试",
+            context_reasoning="本测试大纲用于验证 pending note 可以按 required_memory_indices 被选中。",
             beats=[
                 PlotBeat(
                     beat_id="b1",
                     summary="测试节拍",
-                    protagonist_response_guidance="主角对刚出现的情报作简短追问。",
                     required_memory_indices=[1],
                 )
             ],
@@ -375,7 +367,7 @@ class TestSceneWriterWorkflow:
                     turn_index=3,
                     raw_text="米莉刚刚提到暴风城调查团有异常动向。",
                     entities=["米莉", "暴风城调查团"],
-                    memory_kind="belief", subject="暴风城调查团异常动向",
+                    memory_kind="open_thread", subject="暴风城调查团异常动向",
                     score=0.14,
                 ),
             ],
@@ -387,7 +379,7 @@ class TestSceneWriterWorkflow:
 
         assert len(selected) == 1
         assert selected[0].memory_id == "pending:pending_001"
-        assert selected[0].memory_kind == "belief"
+        assert selected[0].memory_kind == "open_thread"
         assert selected[0].evidence_mode == "inferred"
         assert selected[0].content == "米莉刚刚提到暴风城调查团有异常动向。"
         assert selected[0].source_pending_ids == ["pending_001"]
@@ -437,7 +429,6 @@ class TestOpeningSceneAgent:
         mock = MockLLM()
         mock.set_responses([_build_response(
             scene_text="清晨的北郡修道院钟声响起，卢西安站在熟悉的石阶前。",
-            changes=["卢西安从北郡修道院开始旅程"],
         )])
 
         result = OpeningSceneAgent(mock.build_gateway()).generate(
@@ -448,4 +439,3 @@ class TestOpeningSceneAgent:
 
         assert isinstance(result, SceneWriterResult)
         assert "卢西安" in result.scene_text
-        assert result.changes_summary == ["卢西安从北郡修道院开始旅程"]

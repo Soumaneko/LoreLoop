@@ -66,6 +66,7 @@ class _ConfirmationPipelineInput:
     invalid_narrative_fallback: str | None = None
     update_director_event: bool = True
     handle_director_npc: bool = True
+    director_npc_restock_sync: bool = False
     clear_short_term_before_save: bool = False
     dry_run_memory_reason: str = (
         "DB writes are disabled; pending memory candidates were extracted but not saved."
@@ -123,7 +124,7 @@ def _promote_dispatched_director_npc_profile(
     *,
     turn_index: int,
 ) -> _DirectorNPCConfirmation | None:
-    result = pending.director_npc_result
+    result = getattr(pending, "director_npc_result", None)
     if (
         result is None
         or result.dispatch is None
@@ -154,7 +155,6 @@ def _npc_profile_from_director_draft(draft: DirectorNPCDraft) -> NPCProfile:
         known_abilities=list(draft.known_abilities),
         faction=draft.faction,
         core_motivation=draft.core_motivation,
-        fear_or_wound=draft.fear_or_wound,
         hidden_secret=draft.hidden_secret,
         conflict_style=draft.conflict_style,
         social_style=draft.social_style,
@@ -178,7 +178,6 @@ def _merge_director_draft_into_npc_profile(profile: NPCProfile, draft: DirectorN
         merged.known_abilities = list(draft.known_abilities)
     merged.faction = merged.faction or draft.faction
     merged.core_motivation = merged.core_motivation or draft.core_motivation
-    merged.fear_or_wound = merged.fear_or_wound or draft.fear_or_wound
     merged.hidden_secret = merged.hidden_secret or draft.hidden_secret
     merged.conflict_style = merged.conflict_style or draft.conflict_style
     merged.social_style = merged.social_style or draft.social_style
@@ -339,7 +338,7 @@ def _confirm_pipeline_locked(
     if (
         pipeline_input.handle_director_npc
         and write_db
-        and pending.director_npc_result is not None
+        and getattr(pending, "director_npc_result", None) is not None
         and pending.director_npc_result.dispatch is not None
         and pending.director_npc_result.dispatch.action != "none"
         and not cache.get("director_npc_last_dispatch_turn_set")
@@ -539,7 +538,8 @@ def _confirm_pipeline_locked(
             and pipeline_input.turn_index >= 1
             and "director_event_result" not in cache
         ):
-            with director_event_store() as director_store:
+            with director_event_store() as director_store, director_npc_store() as director_npc_repo:
+                standby_director_npcs = director_npc_repo.list_standby()
                 reviewer_gateway = create_gateway()
                 reviewer_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
                 selector_gateway = create_gateway()
@@ -554,6 +554,7 @@ def _confirm_pipeline_locked(
                     store=director_store,
                     reviewer=DirectorEventReviewer(reviewer_gateway),
                     selector=DirectorEventSelector(selector_gateway),
+                    standby_director_npcs=standby_director_npcs,
                     trace_id=trace_id,
                 )
             cache["director_event_result"] = director_event_result
@@ -600,7 +601,6 @@ def _confirm_pipeline_locked(
             cache["updated_npc_profile_ids"] = updated_npc_profile_ids
         if (
             pipeline_input.handle_director_npc
-            and director_npc_profile_id
             and not cache.get("director_npc_restock_scheduled")
         ):
             with director_npc_store() as npc_store:
@@ -608,13 +608,21 @@ def _confirm_pipeline_locked(
                     len(npc_store.list_standby()) < DIRECTOR_NPC_STANDBY_TARGET
                 )
             if should_restock_director_npc:
-                BACKGROUND_EXECUTOR.submit(
-                    run_director_npc_restock,
-                    trace_id,
-                    pipeline_input.turn_index,
-                    core_memory=core_memory,
-                    protagonist_name=updated_state.player.name,
-                )
+                if pipeline_input.director_npc_restock_sync:
+                    run_director_npc_restock(
+                        trace_id,
+                        pipeline_input.turn_index,
+                        core_memory=core_memory,
+                        protagonist_name=updated_state.player.name,
+                    )
+                else:
+                    BACKGROUND_EXECUTOR.submit(
+                        run_director_npc_restock,
+                        trace_id,
+                        pipeline_input.turn_index,
+                        core_memory=core_memory,
+                        protagonist_name=updated_state.player.name,
+                    )
                 director_npc_restock_scheduled = True
                 cache["director_npc_restock_scheduled"] = True
     entity_update_data = {
@@ -679,7 +687,7 @@ def _confirm_pipeline_locked(
             store_count_after = store_count_before
             store_total = len(mem_store.list_all())
 
-        summary_future = None
+        summary_future = cache.get("scene_summary_future")
         if not cache.get("scene_summary_scheduled"):
             summary_future = BACKGROUND_EXECUTOR.submit(
                 run_scene_summary_maintenance,
@@ -690,6 +698,7 @@ def _confirm_pipeline_locked(
                 trace_id,
                 core_memory=core_memory,
             )
+            cache["scene_summary_future"] = summary_future
             cache["scene_summary_scheduled"] = True
         if should_batch and not cache.get("memory_batch_scheduled"):
             batch_queued = submit_memory_batch_once(
@@ -808,7 +817,8 @@ def _confirm_opening_stream_locked(
             ),
             pending_registry=PENDING_OPENINGS,
             update_director_event=False,
-            handle_director_npc=False,
+            handle_director_npc=True,
+            director_npc_restock_sync=True,
             clear_short_term_before_save=True,
             dry_run_memory_reason="DB writes are disabled; opening scene was not saved.",
             confirm_started_extra={"opening": True},

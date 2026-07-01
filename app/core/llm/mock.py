@@ -25,8 +25,10 @@ class MockLLM:
 
     def build_gateway(self):
         from .gateway import LLMGateway
+        from .tracing import NullTraceLogger
 
         return LLMGateway(
             provider=self._provider,
             prompt_loader=self._prompt_loader,
+            tracer=NullTraceLogger(),
         )

@@ -148,7 +148,6 @@ def generate_turn_stream(
         atomic_actions=action_result.atomic_actions,
         anchors=anchor_result.anchors,
         ambiguities=[
-            *action_result.ambiguities,
             *anchor_result.ambiguities,
         ],
     )

@@ -22,9 +22,7 @@ def build_parse_from_preview(
         goal=preview.goal,
         condition=None,
         likely_needs_roll=preview.likely_needs_roll,
-        roll_hint=None,
         risk_level=preview.risk_level,
-        confidence=1.0,
     )
     anchors = [
         Anchor(

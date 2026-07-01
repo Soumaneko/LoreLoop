@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.director_event.reviewer import DirectorEventReviewer
 from app.domain.director_event.schemas import (
     DirectorEvent,
@@ -42,6 +43,7 @@ def update_director_event_workflow(
     store: DirectorEventStore,
     reviewer: DirectorEventReviewer,
     selector: DirectorEventSelector,
+    standby_director_npcs: list[DirectorNPCDraft] | None = None,
     trace_id: str | None = None,
 ) -> DirectorEventWorkflowResult:
     active = store.get_active()
@@ -144,9 +146,19 @@ def update_director_event_workflow(
 
     suspended = store.list_suspended()
     archived = store.list_archived()
+    standby_director_npcs = standby_director_npcs or []
+    if not suspended and not standby_director_npcs:
+        return DirectorEventWorkflowResult(
+            mode="no_standby_director_npc",
+            active_before=None,
+            active_after=None,
+            notes=["director_event_creation_skipped_no_standby_director_npc"],
+        )
+
     selection = selector.select_or_create(
         suspended_events=suspended,
         archived_events=archived,
+        standby_director_npcs=standby_director_npcs,
         scene_text=scene_text,
         current_state=current_state,
         core_memory=core_memory,
@@ -168,6 +180,13 @@ def update_director_event_workflow(
             )
         changed_event_id = selection.activate_event_id
     else:
+        standby_names = {npc.name for npc in standby_director_npcs}
+        related_names = set(selection.new_event.related_npcs)
+        if not (standby_names & related_names):
+            raise ValueError(
+                "DirectorEventSelector created a new event without a standby director NPC "
+                "in related_npcs"
+            )
         event = selection.new_event.to_event(turn_index=turn_index)
         changed_event_id = store.save(event)
 

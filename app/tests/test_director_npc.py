@@ -95,7 +95,6 @@ def _draft_response(name="艾琳娜", *, draft_id: str | None = None) -> str:
         "known_abilities": ["辨识药草", "急救"],
         "faction": None,
         "core_motivation": "想证明自己不只是导师的影子。",
-        "fear_or_wound": "害怕再次误判病症导致别人受伤。",
         "hidden_secret": "她正在寻找一份被自己弄丢的导师手稿。",
         "conflict_style": "先谈条件，必要时用药粉拖延。",
         "social_style": "礼貌但保持距离，习惯用交易掩饰求助。",
@@ -140,24 +139,24 @@ def _dispatch_response(action="dispatch_standby", selected_id="director_npc_x", 
 
 
 class TestDirectorNPCTrigger:
-    def test_turn_two_forces_first_dispatch_even_without_five_turn_window(self):
+    def test_turn_one_forces_first_dispatch_even_without_five_turn_window(self):
         reason = _director_npc_trigger_reason(
             action_parse_result=_action_parse(),
             turn_resolution=_turn_resolution("advance"),
             short_term_memory=_stm("transition"),
-            turn_index=2,
+            turn_index=1,
             last_dispatch_turn=0,
         )
 
         assert reason == f"forced director NPC dispatch on turn {DIRECTOR_NPC_FIRST_FORCED_TURN}"
 
-    def test_turn_two_force_does_not_repeat_after_same_turn_dispatch(self):
+    def test_turn_one_force_does_not_repeat_after_same_turn_dispatch(self):
         reason = _director_npc_trigger_reason(
             action_parse_result=_action_parse(),
             turn_resolution=_turn_resolution("advance"),
             short_term_memory=_stm("transition"),
-            turn_index=2,
-            last_dispatch_turn=2,
+            turn_index=1,
+            last_dispatch_turn=1,
         )
 
         assert reason is None
@@ -350,13 +349,30 @@ class TestDirectorNPCWorkflow:
 
         first_call_existing = json.loads(gateway.calls[0]["input_data"]["existing_npcs_json"])
         second_call_existing = json.loads(gateway.calls[1]["input_data"]["existing_npcs_json"])
-        assert first_call_existing == [{"name": "艾琳娜", "role": "流浪药剂师"}]
+        assert first_call_existing == [
+            {
+                "name": "艾琳娜",
+                "role": "流浪药剂师",
+                "core_motivation": "想证明自己不只是导师的影子。",
+                "hidden_secret": "她正在寻找一份被自己弄丢的导师手稿。",
+            }
+        ]
         assert second_call_existing == [
-            {"name": "艾琳娜", "role": "流浪药剂师"},
-            {"name": "薇拉", "role": "流浪药剂师"},
+            {
+                "name": "艾琳娜",
+                "role": "流浪药剂师",
+                "core_motivation": "想证明自己不只是导师的影子。",
+                "hidden_secret": "她正在寻找一份被自己弄丢的导师手稿。",
+            },
+            {
+                "name": "薇拉",
+                "role": "流浪药剂师",
+                "core_motivation": "想证明自己不只是导师的影子。",
+                "hidden_secret": "她正在寻找一份被自己弄丢的导师手稿。",
+            },
         ]
 
-    def test_creator_input_uses_only_name_role_and_protagonist_name(self):
+    def test_creator_input_includes_existing_hidden_fields_and_protagonist_name(self):
         director_store = DirectorNPCStore(":memory:")
         npc_profile_store = NPCProfileStore(":memory:")
         npc_profile_store.upsert(
@@ -367,6 +383,8 @@ class TestDirectorNPCWorkflow:
                 personality_traits=["谨慎"],
                 known_abilities=["植物炼金术"],
                 faction="北境炼金学院",
+                core_motivation="证明自己的炼金术能救人。",
+                hidden_secret="她隐瞒了一次失败实验。",
             )
         )
         gateway = SpyGateway(_draft_response())
@@ -383,7 +401,14 @@ class TestDirectorNPCWorkflow:
         input_data = gateway.calls[0]["input_data"]
         existing = json.loads(input_data["existing_npcs_json"])
         assert input_data["protagonist_name"] == "克莱"
-        assert existing == [{"name": "塞琳", "role": "炼金学院学徒"}]
+        assert existing == [
+            {
+                "name": "塞琳",
+                "role": "炼金学院学徒",
+                "core_motivation": "证明自己的炼金术能救人。",
+                "hidden_secret": "她隐瞒了一次失败实验。",
+            }
+        ]
 
     def test_uses_existing_standby_and_dispatches(self):
         director_store = DirectorNPCStore(":memory:")

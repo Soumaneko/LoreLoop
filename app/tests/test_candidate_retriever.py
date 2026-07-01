@@ -92,7 +92,7 @@ class TestMemoryCandidateShape:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                memory_kind="belief", evidence_mode="reported",
+                memory_kind="open_thread", evidence_mode="reported",
                 subject="守卫证词",
                 content="守卫声称艾琳娜在钟楼附近见过黑衣人。",
                 entities=["守卫", "艾琳娜", "钟楼"],
@@ -120,7 +120,7 @@ class TestMemoryCandidateShape:
 
         assert len(result.candidates) == 1
         candidate = result.candidates[0]
-        assert candidate.memory_kind == "belief"
+        assert candidate.memory_kind == "open_thread"
         assert candidate.evidence_mode == "reported"
         assert candidate.owner == "守卫"
         assert candidate.visibility == ["主角"]
@@ -179,7 +179,7 @@ class TestLayerIntentRetrieval:
         store = MemoryStore(":memory:")
         store.save_many([
             _make_memory(
-                memory_kind="belief", evidence_mode="reported",
+                memory_kind="open_thread", evidence_mode="reported",
                 subject="无关证词",
                 content="酒馆老板声称码头昨夜有争执。",
                 entities=["酒馆老板", "码头"],

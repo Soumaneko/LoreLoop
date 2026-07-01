@@ -1,6 +1,8 @@
 import json
 from typing import cast
 
+from pydantic import BaseModel, Field
+
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory.schemas import CoreMemory
@@ -30,7 +32,6 @@ from .schemas import (
     OutcomeBand,
     RiskLevel,
     RollJudgment,
-    TurnResolutionDecision,
     TurnResolutionResult,
 )
 
@@ -44,6 +45,18 @@ ALL_NARRATIVE_TYPES: list[NarrativeType] = [
     "transition",
     "respite",
 ]
+
+
+class _ActionResolutionOutput(BaseModel):
+    action_id: str
+    effect_reasoning: str = Field(min_length=1, max_length=120)
+    resolved_fact: str = Field(min_length=1, max_length=120)
+
+
+class _TurnResolutionOutput(BaseModel):
+    resolution_reasoning: str = Field(min_length=1)
+    selected_type: NarrativeType
+    action_resolutions: list[_ActionResolutionOutput] = Field(default_factory=list)
 
 
 def map_roll_to_band(value: int, sides: int) -> OutcomeBand:
@@ -214,6 +227,7 @@ class TurnResolutionAgent:
 
         if not judgments:
             return TurnResolutionResult(
+                resolution_reasoning="本回合没有需要掷骰解释的行动，回合判定回退为默认推进。",
                 selected_type="advance",
                 available_types=["advance"],
                 previous_types=previous_types[-2:],
@@ -222,12 +236,12 @@ class TurnResolutionAgent:
                 action_resolutions=[],
             )
 
-        schema = TurnResolutionDecision.model_json_schema()
+        schema = _TurnResolutionOutput.model_json_schema()
         if "properties" in schema and "selected_type" in schema["properties"]:
             schema["properties"]["selected_type"]["enum"] = list(final_available)
 
         decision = cast(
-            TurnResolutionDecision,
+            _TurnResolutionOutput,
             self.llm.run(
                 task="turn_resolution",
                 input_data={
@@ -265,7 +279,7 @@ class TurnResolutionAgent:
                         indent=2,
                     ),
                 },
-                output_schema=TurnResolutionDecision,
+                output_schema=_TurnResolutionOutput,
                 temperature=0.6,
                 trace_id=trace_id,
             ),
@@ -279,6 +293,7 @@ class TurnResolutionAgent:
             judgments,
         )
         return TurnResolutionResult(
+            resolution_reasoning=decision.resolution_reasoning,
             selected_type=decision.selected_type,
             available_types=final_available,
             previous_types=previous_types[-2:],
@@ -289,7 +304,7 @@ class TurnResolutionAgent:
 
 
 def _validate_action_resolutions(
-    resolutions: list[ActionResolutionFrame],
+    resolutions: list[_ActionResolutionOutput],
     judgments: list[RollJudgment],
 ) -> list[ActionResolutionFrame]:
     judgment_by_id = {judgment.action_id: judgment for judgment in judgments}
@@ -300,11 +315,17 @@ def _validate_action_resolutions(
         judgment = judgment_by_id.get(resolution.action_id)
         if judgment is None or resolution.action_id in seen:
             continue
-        if resolution.outcome_band != judgment.outcome_band:
-            resolution = resolution.model_copy(
-                update={"outcome_band": judgment.outcome_band}
+        cleaned.append(
+            ActionResolutionFrame(
+                action_id=judgment.action_id,
+                sequence=judgment.sequence,
+                actor=judgment.actor,
+                action_type=judgment.action_type,
+                outcome_band=judgment.outcome_band,
+                effect_reasoning=resolution.effect_reasoning,
+                resolved_fact=resolution.resolved_fact,
             )
-        cleaned.append(resolution)
+        )
         seen.add(resolution.action_id)
 
     missing = [

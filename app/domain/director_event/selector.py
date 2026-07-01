@@ -4,10 +4,38 @@ from typing import cast
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.views import project_current_state, project_scene_summaries
 
 from .schemas import DirectorEvent, DirectorEventSelectionResult
+
+
+def _archived_event_dedupe_view(event: DirectorEvent) -> dict:
+    return {
+        "title": event.title,
+        "backstage_premise": event.backstage_premise,
+        "stages": event.stages.model_dump(mode="json"),
+        "related_npcs": event.related_npcs,
+        "location_constraints": event.location_constraints,
+    }
+
+
+def _standby_director_npc_view(npc: DirectorNPCDraft) -> dict:
+    return {
+        "draft_id": npc.draft_id,
+        "name": npc.name,
+        "role": npc.role,
+        "appearance": npc.appearance,
+        "personality_traits": npc.personality_traits,
+        "known_abilities": npc.known_abilities,
+        "faction": npc.faction,
+        "core_motivation": npc.core_motivation,
+        "hidden_secret": npc.hidden_secret,
+        "conflict_style": npc.conflict_style,
+        "social_style": npc.social_style,
+        "encounter_potentials": npc.encounter_potentials,
+    }
 
 
 class DirectorEventSelector:
@@ -19,6 +47,7 @@ class DirectorEventSelector:
         *,
         suspended_events: list[DirectorEvent],
         archived_events: list[DirectorEvent],
+        standby_director_npcs: list[DirectorNPCDraft],
         scene_text: str,
         current_state: CurrentState,
         core_memory: CoreMemory,
@@ -36,7 +65,12 @@ class DirectorEventSelector:
                         indent=2,
                     ),
                     "archived_events_json": json.dumps(
-                        [{"title": event.title} for event in archived_events],
+                        [_archived_event_dedupe_view(event) for event in archived_events],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    "standby_director_npcs_json": json.dumps(
+                        [_standby_director_npc_view(npc) for npc in standby_director_npcs],
                         ensure_ascii=False,
                         indent=2,
                     ),

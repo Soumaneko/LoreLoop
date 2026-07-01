@@ -9,7 +9,7 @@ from .errors import (
 from .prompts import PromptLoader
 from .providers import LLMProvider, MockProvider, OpenAICompatibleProvider
 from .schemas import EchoResult
-from .tracing import TraceLogger
+from .tracing import NullTraceLogger, TraceLogger
 from .mock import MockLLM
 from .config import LLMConfig, create_gateway
 
@@ -26,6 +26,7 @@ __all__ = [
     "OpenAICompatibleProvider",
     "EchoResult",
     "TraceLogger",
+    "NullTraceLogger",
     "MockLLM",
     "LLMConfig",
     "create_gateway",

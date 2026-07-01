@@ -46,10 +46,7 @@ class AtomicAction(BaseModel):
     condition: str | None = None
 
     likely_needs_roll: bool
-    roll_hint: str | None = None
     risk_level: ActionRiskLevel | None = None
-
-    confidence: float = Field(ge=0, le=1)
 
 
 class Anchor(BaseModel):
@@ -64,7 +61,6 @@ class ActionExtractionResult(BaseModel):
     analysis: str = ""
     turn_intent: str
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
-    ambiguities: list[str] = Field(default_factory=list)
 
 
 class AnchorExtractionResult(BaseModel):

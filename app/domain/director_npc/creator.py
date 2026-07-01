@@ -25,13 +25,13 @@ class DirectorNPCCreator:
         for npc in existing_npcs:
             if npc.name in seen_names:
                 continue
-            existing_npc_views.append({"name": npc.name, "role": npc.role})
+            existing_npc_views.append(_existing_npc_view(npc))
             seen_names.add(npc.name)
         for npc in reserved_npcs or []:
             name = npc.get("name")
             if not name or name in seen_names:
                 continue
-            existing_npc_views.append({"name": name, "role": npc.get("role")})
+            existing_npc_views.append(_existing_npc_view(npc))
             seen_names.add(name)
 
         result = cast(
@@ -64,3 +64,19 @@ class DirectorNPCCreator:
             status="standby",
             dispatched_turn=None,
         )
+
+
+def _existing_npc_view(npc) -> dict[str, str | None]:
+    if isinstance(npc, dict):
+        return {
+            "name": npc.get("name"),
+            "role": npc.get("role"),
+            "core_motivation": npc.get("core_motivation"),
+            "hidden_secret": npc.get("hidden_secret"),
+        }
+    return {
+        "name": getattr(npc, "name", None),
+        "role": getattr(npc, "role", None),
+        "core_motivation": getattr(npc, "core_motivation", None),
+        "hidden_secret": getattr(npc, "hidden_secret", None),
+    }

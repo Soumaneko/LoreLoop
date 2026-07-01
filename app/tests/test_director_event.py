@@ -6,6 +6,7 @@ import pytest
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
+from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.director_event import (
     DirectorEvent,
     DirectorEventDraft,
@@ -73,6 +74,26 @@ def _event(title="失踪的信使", status="active") -> DirectorEvent:
         hidden_developments=None,
         created_turn=1,
         updated_turn=1,
+    )
+
+
+def _standby_npc(name="旧教团残党") -> DirectorNPCDraft:
+    return DirectorNPCDraft(
+        name=name,
+        role="可牵动后台事件的未出场导演 NPC",
+        appearance="灰衣蒙面，行踪谨慎。",
+        personality_traits=["谨慎", "精于交涉"],
+        known_abilities=["联络地方势力"],
+        core_motivation="借局部事件扩大自身影响力。",
+        hidden_secret="暗中握有一份能改变局势的账册。",
+        conflict_style="优先借他人之手施压，必要时亲自谈判。",
+        social_style="话少而准确，擅长试探对方底线。",
+        encounter_potentials=[
+            "在交易场合与主角产生交集",
+            "通过中间人向主角释放消息",
+            "因利益冲突被迫现身",
+        ],
+        created_turn=1,
     )
 
 
@@ -529,6 +550,7 @@ class TestDirectorEventWorkflow:
             store=store,
             reviewer=DirectorEventReviewer(gateway),
             selector=DirectorEventSelector(gateway),
+            standby_director_npcs=[_standby_npc()],
         )
 
         assert created.mode == "select_or_create"
@@ -643,6 +665,7 @@ class TestDirectorEventWorkflow:
 
     def test_rejects_unknown_suspended_event_id(self):
         store = DirectorEventStore()
+        store.save(_event(title="可被选择的暂停事件", status="suspended"))
         gateway = _SpyGateway(
             {
                 "action": "activate_suspended",
@@ -697,6 +720,7 @@ class TestDirectorEventWorkflow:
             store=store,
             reviewer=DirectorEventReviewer(gateway),
             selector=DirectorEventSelector(gateway),
+            standby_director_npcs=[_standby_npc()],
         )
 
         active = store.get_active()
@@ -705,6 +729,78 @@ class TestDirectorEventWorkflow:
         assert active.stages.crisis == _stages().crisis
         assert active.manifesting_prevention_hooks == _manifesting_hooks()
         assert active.crisis_resolution_hooks == _crisis_hooks()
+
+    def test_skips_new_event_creation_without_standby_director_npc(self):
+        store = DirectorEventStore()
+        gateway = _SpyGateway(
+            {
+                "action": "create_new",
+                "suspension_evaluation": "不应被调用。",
+                "backstage_undercurrent": "不应被调用。",
+                "reason": "不应被调用。",
+                "activate_event_id": None,
+                "new_event": {
+                    "title": "不应创建",
+                    "backstage_premise": "不应创建。",
+                    "stages": _stages().model_dump(),
+                    "related_npcs": ["旧教团残党"],
+                    "location_constraints": ["北郡"],
+                    "manifesting_prevention_hooks": _manifesting_hooks(),
+                    "crisis_resolution_hooks": _crisis_hooks(),
+                },
+            }
+        )
+
+        result = update_director_event_workflow(
+            user_input="继续。",
+            scene_text="卢西安继续前进。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+            turn_index=1,
+            store=store,
+            reviewer=DirectorEventReviewer(gateway),
+            selector=DirectorEventSelector(gateway),
+        )
+
+        assert result.mode == "no_standby_director_npc"
+        assert store.get_active() is None
+        assert gateway.calls == []
+
+    def test_rejects_new_event_without_standby_npc_relation(self):
+        store = DirectorEventStore()
+        gateway = _SpyGateway(
+            {
+                "action": "create_new",
+                "suspension_evaluation": "无暂停事件可自然衔接当前局势，进入新事件构思。",
+                "backstage_undercurrent": "一支隐秘的走私团伙正在暗中囤积军械。",
+                "reason": "当前剧情需要一个新后台事件。",
+                "activate_event_id": None,
+                "new_event": {
+                    "title": "钟楼下的旧教团",
+                    "backstage_premise": "一支隐秘的走私团伙正在北郡补给线附近暗中囤积军械，借当地商队和仓库掩护转运物资。",
+                    "stages": _stages().model_dump(),
+                    "related_npcs": ["无关人物"],
+                    "location_constraints": ["北郡钟楼"],
+                    "manifesting_prevention_hooks": _manifesting_hooks(),
+                    "crisis_resolution_hooks": _crisis_hooks(),
+                },
+            }
+        )
+
+        with pytest.raises(ValueError, match="without a standby director NPC"):
+            update_director_event_workflow(
+                user_input="继续。",
+                scene_text="卢西安继续前进。",
+                current_state=_state(),
+                core_memory=_core(),
+                scene_summaries=[],
+                turn_index=1,
+                store=store,
+                reviewer=DirectorEventReviewer(gateway),
+                selector=DirectorEventSelector(gateway),
+                standby_director_npcs=[_standby_npc()],
+            )
 
 
 class TestDirectorEventAgents:
@@ -744,7 +840,11 @@ class TestDirectorEventAgents:
         assert event.stages.crisis not in gateway.calls[0]["input_data"]["active_event_json"]
 
     def test_selector_includes_archived_events_for_dedupe(self):
-        archived = _event(title="旧修道院足迹", status="archived")
+        archived = _event(title="旧修道院足迹", status="archived").model_copy(
+            update={
+                "backstage_premise": "旧修道院下方的暗道曾被走私者用来转移军械。",
+            }
+        )
         gateway = _SpyGateway(
             {
                 "action": "create_new",
@@ -767,13 +867,20 @@ class TestDirectorEventAgents:
         DirectorEventSelector(gateway).select_or_create(
             suspended_events=[],
             archived_events=[archived],
+            standby_director_npcs=[_standby_npc()],
             scene_text="卢西安来到北郡钟楼附近。",
             current_state=_state(),
             core_memory=_core(),
             scene_summaries=[],
         )
 
-        assert "旧修道院足迹" in gateway.calls[0]["input_data"]["archived_events_json"]
+        archived_events = json.loads(gateway.calls[0]["input_data"]["archived_events_json"])
+        standby_npcs = json.loads(gateway.calls[0]["input_data"]["standby_director_npcs_json"])
+        assert archived_events[0]["title"] == "旧修道院足迹"
+        assert archived_events[0]["backstage_premise"] == archived.backstage_premise
+        assert archived_events[0]["stages"]["latent"] == archived.stages.latent
+        assert standby_npcs[0]["name"] == "旧教团残党"
+        assert standby_npcs[0]["hidden_secret"] == "暗中握有一份能改变局势的账册。"
 
     def test_selector_prompt_and_schema_ban_time_anchors_for_new_events(self):
         gateway = _SpyGateway(
@@ -798,6 +905,7 @@ class TestDirectorEventAgents:
         DirectorEventSelector(gateway).select_or_create(
             suspended_events=[],
             archived_events=[],
+            standby_director_npcs=[_standby_npc()],
             scene_text="卢西安来到北郡钟楼附近。",
             current_state=_state(),
             core_memory=_core(),

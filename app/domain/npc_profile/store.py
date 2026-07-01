@@ -57,7 +57,6 @@ class NPCProfileStore:
         for field in (
             "absent_turns",
             "core_motivation",
-            "fear_or_wound",
             "hidden_secret",
             "conflict_style",
             "social_style",

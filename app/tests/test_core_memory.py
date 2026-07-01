@@ -342,7 +342,6 @@ class TestDebugCoreMemoryPreview:
                 if task == "opening_scene":
                     return output_schema.model_validate({
                         "scene_text": "清晨，你站在刚租下的经纪公司办公室里。",
-                        "changes_summary": ["经纪公司正式开始营业"],
                     })
                 raise AssertionError(f"unexpected task: {task}")
 

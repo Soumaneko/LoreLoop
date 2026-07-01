@@ -38,7 +38,6 @@ class DirectorNPCDraft(BaseModel):
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     core_motivation: str = Field(min_length=1)
-    fear_or_wound: str = Field(min_length=1)
     hidden_secret: str = Field(min_length=1)
     conflict_style: str = Field(min_length=1)
     social_style: str = Field(min_length=1)
@@ -59,7 +58,6 @@ class DirectorNPCDraft(BaseModel):
             known_abilities=list(self.known_abilities),
             faction=self.faction,
             core_motivation=self.core_motivation,
-            fear_or_wound=self.fear_or_wound,
             hidden_secret=self.hidden_secret,
             conflict_style=self.conflict_style,
             social_style=self.social_style,
@@ -77,7 +75,6 @@ class DirectorNPCCreateOutput(BaseModel):
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     core_motivation: str = Field(min_length=1)
-    fear_or_wound: str = Field(min_length=1)
     hidden_secret: str = Field(min_length=1)
     conflict_style: str = Field(min_length=1)
     social_style: str = Field(min_length=1)
@@ -93,7 +90,6 @@ class DirectorNPCPrivateProfile(BaseModel):
     known_abilities: list[str] = Field(default_factory=list)
     faction: str | None = None
     core_motivation: str
-    fear_or_wound: str
     hidden_secret: str
     conflict_style: str
     social_style: str

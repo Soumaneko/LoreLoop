@@ -68,7 +68,7 @@
 
 1. 只处理 NPC Candidates 中的 NPC。
 2. 公开档案只能记录场景文本明示的信息，禁止写入导演幕后信息。
-3. 严禁写入 hidden_secret、core_motivation、fear_or_wound、encounter_potentials 等幕后字段；schema 中没有这些字段，也不要夹在 description 里。
+3. 严禁写入 hidden_secret、core_motivation、encounter_potentials 等幕后字段；schema 中没有这些字段，也不要夹在 description 里。
 4. 不要把本回合一次性动作写成长期属性；可以把稳定公开关系或身份压缩进 public_summary。
 5. 没有新信息的 NPC 不要输出。
 6. 不要输出 npc_id、source_scene_ids、confidence、active 等底层字段。

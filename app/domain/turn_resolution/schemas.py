@@ -56,16 +56,12 @@ class ActionResolutionFrame(BaseModel):
     actor: str
     action_type: str
     outcome_band: OutcomeBand
-    effect_reasoning: str = Field(min_length=1, max_length=300)
-    resolved_effect: str = Field(min_length=1, max_length=100)
-
-
-class TurnResolutionDecision(BaseModel):
-    selected_type: NarrativeType
-    action_resolutions: list[ActionResolutionFrame] = Field(default_factory=list)
+    effect_reasoning: str = Field(min_length=1, max_length=120)
+    resolved_fact: str = Field(min_length=1, max_length=120)
 
 
 class TurnResolutionResult(BaseModel):
+    resolution_reasoning: str = ""
     selected_type: NarrativeType
     available_types: list[NarrativeType] = Field(default_factory=list)
     previous_types: list[NarrativeType] = Field(default_factory=list)

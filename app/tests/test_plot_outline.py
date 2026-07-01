@@ -83,7 +83,7 @@ def _make_context() -> PlotOutlineContext:
                     action_type="observe",
                     outcome_band="success",
                     effect_reasoning="观察属于 A 类，玩家意图打量客人，success 给出可疑线索。",
-                    resolved_effect="主角清楚发现酒馆客人中的可疑行为。",
+                    resolved_fact="主角发现酒馆客人中的可疑行为。",
                 )
             ],
         ),
@@ -136,25 +136,21 @@ def _make_context() -> PlotOutlineContext:
 
 def _build_outline_response(
     *,
-    outline_summary: str = "主角观察酒馆客人，注意到可疑行为",
+    context_reasoning: str = "本回合根据玩家观察酒馆客人的输入和 TurnResolutionResult 的成功结果，安排主角发现可疑行为。Memories 支持修道院有陌生面孔，因此大纲只落实可疑线索，不直接揭开真相。",
     beats: list[dict] | None = None,
     constraints: list[str] | None = None,
     risks: list[str] | None = None,
 ) -> str:
     import json
     return json.dumps({
-        "outline_summary": outline_summary,
+        "context_reasoning": context_reasoning,
         "beats": beats or [
             {
-                "beat_id": "b1",
                 "summary": "主角环顾酒馆，注意到角落里的可疑人物",
                 "user_action_execution": "主角按照用户输入仔细观察酒馆里的客人。",
-                "protagonist_response_guidance": "主角以警觉的观察和简短确认表现自己已经发现异常，但不立刻惊动对方。",
                 "linked_outcome_ids": ["a1"],
                 "required_outcomes": ["主角清楚发现酒馆客人中的可疑行为。"],
                 "required_memory_indices": [0],
-                "state_implications": ["主角发现可疑线索"],
-                "tone_notes": ["保持悬疑氛围"],
             },
         ],
         "constraints_for_scene_writer": constraints or ["必须描写酒馆氛围"],
@@ -182,7 +178,14 @@ class TestPlotOutlineAgent:
         input_data = gateway.calls[0]["input_data"]
         assert "user_input" in input_data
         assert "turn_resolution_json" in input_data
+        assert "resolution_reasoning" not in input_data["turn_resolution_json"]
         assert "action_parse_result_json" not in input_data
+        schema_json = input_data["output_schema_json"]
+        assert "outline_summary" not in schema_json
+        assert "beat_id" not in schema_json
+        assert "protagonist_response_guidance" not in schema_json
+        assert "state_implications" not in schema_json
+        assert "tone_notes" not in schema_json
 
     def test_generates_outline(self):
         context = _make_context()
@@ -193,28 +196,36 @@ class TestPlotOutlineAgent:
         result = agent.generate(context)
 
         assert isinstance(result, PlotOutlineResult)
-        assert result.outline_summary == "主角观察酒馆客人，注意到可疑行为"
+        assert result.beats[0].beat_id == "b1"
+        assert result.beats[0].summary == "主角环顾酒馆，注意到角落里的可疑人物"
 
     def test_prompt_contains_outcome_following_requirements(self):
         prompt = Path("app/prompts/plot_outline_v1.md").read_text(encoding="utf-8")
 
         assert "TurnResolutionResult" in prompt
         assert "ActionParseResult" not in prompt
-        assert "Player Input 是本回合用户意图的最高优先级来源" in prompt
-        assert "不得只把角色带到地点后结束" in prompt
+        assert "忠实地反应 Player Input 和 TurnResolutionResult" in prompt
+        assert "不能被简化成只移动、只观察或只等待下一回合" in prompt
         assert "narrative_goal" not in prompt
-        assert "resolved_effect" in prompt
+        assert "ActionResolutionFrame" in prompt
+        assert "必须落实为已经发生的具体结果" in prompt
+        assert "resolved_effect" not in prompt
         assert "information_policy" not in prompt
         assert "ambiguous_hint_only" not in prompt
         assert "clear_answer_with_advantage" not in prompt
         assert "linked_outcome_ids" in prompt
-        assert "failure 或 critical_failure" in prompt
-        assert "partial_success" in prompt
-        assert "protagonist_response_guidance" in prompt
-        assert "低决策成本的自然反应" in prompt
-        assert "保留玩家选择”不等于让主角全程沉默" in prompt
+        assert "protagonist_response_guidance" not in prompt
+        assert "outline_summary" not in prompt
+        assert "state_implications" not in prompt
+        assert "tone_notes" not in prompt
         assert "SceneSummaries" in prompt
         assert "scene_summaries_json" in prompt
+        assert "context_reasoning" in prompt
+        assert "大纲生成前的逻辑审计" in prompt
+        assert "不能用“上下文里存在某设定”来替 NPC 或世界公开确认 TR 没允许的新情报" in prompt
+        assert "检查 NPC 或世界反应的因果链" in prompt
+        assert "不得写入 `required_outcomes` 的信息边界" in prompt
+        assert "hidden_secret" in prompt
 
     def test_beats_have_required_fields(self):
         context = _make_context()
@@ -229,70 +240,18 @@ class TestPlotOutlineAgent:
         assert beat.beat_id == "b1"
         assert len(beat.summary) > 0
         assert len(beat.user_action_execution) > 0
-        assert len(beat.protagonist_response_guidance) > 0
         assert isinstance(beat.linked_outcome_ids, list)
         assert isinstance(beat.required_outcomes, list)
         assert isinstance(beat.required_memory_indices, list)
-
-    def test_plot_beat_requires_protagonist_response_guidance(self):
-        with pytest.raises(ValueError):
-            PlotBeat(
-                beat_id="b1",
-                summary="NPC 单方面提供一段重要情报。",
-            )
 
     def test_plot_beat_accepts_execution_without_outcome_links(self):
         beat = PlotBeat(
             beat_id="b1",
             summary="主角按用户原文行动。",
             user_action_execution="主角执行了用户输入中的行动。",
-            protagonist_response_guidance="主角警觉地观察环境变化。",
         )
 
         assert "用户输入" in beat.user_action_execution
-
-    @pytest.mark.parametrize(
-        "guidance",
-        [
-            "主角可选择确认风险。",
-            "主角在追问与沉默之间任选其一。",
-        ],
-    )
-    def test_plot_beat_rejects_optional_response_choices(self, guidance):
-        with pytest.raises(ValueError, match="one concrete response"):
-            PlotBeat(
-                beat_id="b1",
-                summary="NPC 提供关键情报。",
-                protagonist_response_guidance=guidance,
-            )
-
-    @pytest.mark.parametrize(
-        "guidance",
-        [
-            "主角点头表示理解，确认自己可以应付眼前的局势。",
-            "主角追问真相，语气里带着疑虑，或者说更接近不安。",
-            "主角也可能在心里盘算下一步，但当下只是简短回应。",
-        ],
-    )
-    def test_plot_beat_accepts_relaxed_concrete_response(self, guidance):
-        beat = PlotBeat(
-            beat_id="b1",
-            summary="NPC 提供关键情报。",
-            protagonist_response_guidance=guidance,
-        )
-
-        assert beat.protagonist_response_guidance == guidance
-
-    def test_plot_beat_accepts_one_concrete_response(self):
-        beat = PlotBeat(
-            beat_id="b1",
-            summary="NPC 说明错误点火会扩大孢子扩散。",
-            protagonist_response_guidance=(
-                "主角质疑错误点火的风险，并追问安全引燃距离。"
-            ),
-        )
-
-        assert beat.protagonist_response_guidance.startswith("主角质疑")
 
     def test_retrieved_memory_projection_uses_unified_indices(self):
         projected = project_retrieved_memories(
@@ -315,7 +274,7 @@ class TestPlotOutlineAgent:
                         pending_id="pending_001",
                         scene_id="scene_001",
                         turn_index=1,
-                        memory_kind="belief",
+                        memory_kind="open_thread",
                         subject="调查团异常",
                         raw_text="米莉刚刚提到调查团异常。",
                         entities=["米莉", "调查团"],
@@ -358,14 +317,10 @@ class TestPlotOutlineAgent:
         mock.set_responses([_build_outline_response(
             beats=[
                 {
-                    "beat_id": "b1",
                     "summary": "主角观察但没发现异常",
                     "user_action_execution": "主角仔细观察酒馆中的所有客人。",
-                    "protagonist_response_guidance": "主角对没有发现异常表现出克制的疑惑，并继续保持观察姿态。",
                     "linked_outcome_ids": ["a1"],
                     "required_memory_indices": [],
-                    "state_implications": [],
-                    "tone_notes": [],
                 },
             ],
         )])
@@ -381,22 +336,14 @@ class TestPlotOutlineAgent:
         mock.set_responses([_build_outline_response(
             beats=[
                 {
-                    "beat_id": "b1",
                     "summary": "第一步",
                     "user_action_execution": "主角执行观察行动。",
-                    "protagonist_response_guidance": "主角对第一步结果作即时确认。",
                     "linked_outcome_ids": ["a1"],
                     "required_memory_indices": [],
-                    "state_implications": [],
-                    "tone_notes": [],
                 },
                 {
-                    "beat_id": "b2",
                     "summary": "第二步",
-                    "protagonist_response_guidance": "主角承接前一步信息，自然回应当前变化。",
                     "required_memory_indices": [],
-                    "state_implications": [],
-                    "tone_notes": [],
                 },
             ],
         )])
@@ -413,10 +360,8 @@ class TestPlotOutlineAgent:
         invalid = _build_outline_response(
             beats=[
                 {
-                    "beat_id": "b1",
                     "summary": "主角观察酒馆，但没有落实判定结果。",
                     "user_action_execution": "主角仔细观察酒馆里的客人。",
-                    "protagonist_response_guidance": "主角对 NPC 的反应保持警觉。",
                     "linked_outcome_ids": [],
                 }
             ]
@@ -441,7 +386,7 @@ class TestPlotOutlineAgent:
                     action_type="interact_object",
                     outcome_band="success",
                     effect_reasoning="挖沟属于 A 类，玩家主动挖掘，success 让浅沟拖慢主蔓。",
-                    resolved_effect="主角挖出的浅沟成功拖慢主蔓蔓延。",
+                    resolved_fact="主角挖出的浅沟拖慢主蔓蔓延。",
                 ),
                 ActionResolutionFrame(
                     action_id="A3",
@@ -450,17 +395,15 @@ class TestPlotOutlineAgent:
                     action_type="move",
                     outcome_band="success",
                     effect_reasoning="绕行属于 A 类，玩家沿路返回，success 让其顺利抵达。",
-                    resolved_effect="主角沿绕行路线顺利返回镇子外围。",
+                    resolved_fact="主角沿绕行路线返回镇子外围。",
                 ),
             ],
         )
         invalid = _build_outline_response(
             beats=[
                 {
-                    "beat_id": "b1",
                     "summary": "主角先撤离再挖沟，顺序错误。",
                     "user_action_execution": "主角先返回镇子，再回头处理浅沟。",
-                    "protagonist_response_guidance": "主角警觉地观察撤离路线。",
                     "linked_outcome_ids": ["A3", "A2"],
                 }
             ]
@@ -468,13 +411,11 @@ class TestPlotOutlineAgent:
         valid = _build_outline_response(
             beats=[
                 {
-                    "beat_id": "b1",
                     "summary": "主角先挖沟拖慢主蔓，再开始撤离。",
                     "user_action_execution": (
                         "主角根据用户原文先亲手快速挖出浅沟，"
                         "完成后立即沿绕行路线返回镇子。"
                     ),
-                    "protagonist_response_guidance": "主角确认浅沟截住主蔓后，警觉地观察撤离路线。",
                     "linked_outcome_ids": ["A2", "A3"],
                 }
             ]

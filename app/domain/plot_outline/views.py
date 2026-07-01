@@ -11,6 +11,7 @@ def project_turn_resolution(result: TurnResolutionResult) -> str:
         result.model_dump(
             mode="json",
             exclude={
+                "resolution_reasoning": True,
                 "available_types": True,
                 "previous_types": True,
                 "roll_filter_notes": True,

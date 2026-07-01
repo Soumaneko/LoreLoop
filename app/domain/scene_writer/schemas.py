@@ -8,6 +8,6 @@ class NextActionDirection(BaseModel):
 
 
 class SceneWriterResult(BaseModel):
+    scene_reasoning: str = ""
     scene_text: str
-    changes_summary: list[str] = Field(default_factory=list)
     next_action_directions: list[NextActionDirection] = Field(default_factory=list, max_length=5)

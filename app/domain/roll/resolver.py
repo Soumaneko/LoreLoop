@@ -75,7 +75,7 @@ class RollResolver:
                     dice=per_action_dice,
                     value=value,
                     dice_sides=sides,
-                    roll_hint=action.roll_hint,
+                    roll_hint=None,
                     raw_value=raw_value,
                     all_raw_values=all_raw,
                     modifiers=modifiers,

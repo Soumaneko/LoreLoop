@@ -47,6 +47,7 @@ class SceneWriterAgent:
         runtime_schema = create_model(
             "RuntimeSceneWriterResult",
             __base__=SceneWriterResult,
+            scene_reasoning=(str, Field(min_length=1)),
             scene_text=(str, Field(min_length=1, max_length=max_chars)),
         )
         schema = runtime_schema.model_json_schema()
@@ -69,7 +70,7 @@ class SceneWriterAgent:
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=runtime_schema,
-                temperature=0.9,
+                temperature=0.8,
                 trace_id=trace_id,
             ),
         )

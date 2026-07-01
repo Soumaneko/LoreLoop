@@ -213,14 +213,14 @@ class TestResultFields:
         assert a1_result.sequence == 1
         assert a1_result.actor == "主角"
         assert a1_result.action_type == "hide_or_stealth"
-        assert a1_result.roll_hint == "stealth"
+        assert a1_result.roll_hint is None
 
         a2_result = result.results[1]
         assert a2_result.action_id == "a2"
         assert a2_result.sequence == 2
         assert a2_result.actor == "主角"
         assert a2_result.action_type == "observe"
-        assert a2_result.roll_hint == "perception"
+        assert a2_result.roll_hint is None
 
     def test_dice_formula_matches_total_rolls(self):
         parse_result = ActionParseResult(

@@ -45,14 +45,14 @@
 
 - candidates：分类结果列表，必须覆盖所有输入 pending（每个 pending ID 恰好被一个 candidate 的 source_pending_ids 覆盖一次）。列表中每个 ClassifiedMemoryCandidate 按以下字段填写：
   - keep：保留为正式 Memory 填 true，丢弃填 false。
-  - memory_kind：keep=true 时必填，六类 MemoryKind 之一。
+  - memory_kind：keep=true 时必填，五类 MemoryKind 之一。
   - evidence_mode：keep=true 时必填，四种 EvidenceMode 之一。
   - subject：keep=true 时必填，稳定、简短的检索主题。
   - content：keep=true 时必填，当前仍有效的动态知识命题。
   - entities：具名角色、地点、组织和关键物品。
   - location：相关地点，无则 null。
   - time_label：相关时间标签，无则 null。
-  - owner：该认知/承诺/权限/关系的主体（见核心规则），不适用时 null。
+  - owner：该承诺、权限或关系状态的主体（见核心规则），不适用时 null。
   - visibility：谁能够使用该知识，不要默认 public。
   - confidence：0 到 1，该命题的可靠度。
   - salience：0 到 1，对未来选择的重要度。
@@ -71,7 +71,6 @@
    - action_constraint：会允许、禁止、加成或惩罚后续行动的规则或条件。
    - resource_access：物品、资源的使用权或访问权属于谁。
    - relationship_state：足以改变后续互动方式的关系、态度或行为倾向。
-   - belief：某人主观相信、误解、怀疑或隐瞒的命题。
 2. EvidenceMode 定义，必须严格评估 content 中核心命题的真实证据来源：
    - observed：场景叙事旁白/系统正文直接确认为客观现实的事实。
    - reported：某人声称、传闻或文件记载；命题本身未被旁白确认。
@@ -80,8 +79,10 @@
 3. 覆盖：所有输入 pending ID 必须且只能被一个 candidate 的 source_pending_ids 覆盖。
 4. 合并：在当前批次内，如果多个 pending 指向同一 MemoryKind、同一核心命题且证据链一致，必须合并为一个 candidate，合并它们的 source_pending_ids，并将原有的 source_text_span 整合去重。
 5. 字段必填：keep=true 必须填写 memory_kind、evidence_mode、subject、content 和 source_pending_ids；keep=false 必须填写 source_pending_ids 和 discard_reason。
-6. owner：believed 必须填写认知主体；commitment/resource_access/relationship_state 在有明确主体时填写。
+6. owner：commitment/resource_access/relationship_state 在有明确主体时填写；若 evidence_mode 为 believed，也必须填写该判断或态度的主体。
 7. content 必须写当前仍有效的动态知识，不写章节过程摘要。
+8. 不得把单纯的主观相信、误解、猜测、怀疑、吐槽或心理判断保留为正式 Memory；如果它不能归入 commitment/open_thread/action_constraint/resource_access/relationship_state，必须 keep=false。
+9. 若 evidence_mode 判断为 believed，可以 keep=true 输出；系统会在保存后将其标记为 invalidated，使其保留审计痕迹但不参与后续检索。
 
 
 # 禁止事项

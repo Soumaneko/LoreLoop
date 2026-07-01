@@ -30,7 +30,6 @@ class NPCProfilePublicView(BaseModel):
 
 class NPCProfileDirectorView(NPCProfilePublicView):
     core_motivation: str | None = None
-    fear_or_wound: str | None = None
     hidden_secret: str | None = None
     conflict_style: str | None = None
     social_style: str | None = None
@@ -107,7 +106,6 @@ class NPCProfile(BaseModel):
     absent_turns: int = Field(default=0, ge=0)
 
     core_motivation: str | None = None
-    fear_or_wound: str | None = None
     hidden_secret: str | None = None
     conflict_style: str | None = None
     social_style: str | None = None
@@ -149,7 +147,6 @@ class NPCProfile(BaseModel):
         return NPCProfileDirectorView(
             **self.public_view().model_dump(mode="json"),
             core_motivation=self.core_motivation,
-            fear_or_wound=self.fear_or_wound,
             hidden_secret=self.hidden_secret,
             conflict_style=self.conflict_style,
             social_style=self.social_style,
