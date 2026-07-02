@@ -64,6 +64,19 @@ class NPCProfileUpdateBatch(BaseModel):
     npcs: list[NPCProfileIndexedUpdate] = Field(default_factory=list)
 
 
+class NPCProfileBackfillOutput(BaseModel):
+    name: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    appearance: str = Field(min_length=1)
+    personality_traits: list[str] = Field(min_length=2, max_length=5)
+    known_abilities: list[str] = Field(default_factory=list, max_length=5)
+    faction: str | None = None
+    core_motivation: str = Field(min_length=1)
+    hidden_secret: str = Field(min_length=1)
+    conflict_style: str = Field(min_length=1)
+    social_style: str = Field(min_length=1)
+
+
 class NPCAliasMatch(BaseModel):
     extracted_text: str
     matched_npc_index: int | None = None

@@ -94,7 +94,7 @@ class NPCProfileUpdater:
             existing = candidate.existing_profile
             if existing is not None:
                 merged = existing.model_copy(deep=True)
-                apply_npc_update(merged, profile_update)
+                apply_existing_npc_update(merged, profile_update)
                 if scene_id not in merged.source_scene_ids:
                     merged.source_scene_ids.append(scene_id)
                 merged.confidence = min(1.0, merged.confidence + 0.05)
@@ -135,6 +135,17 @@ def apply_npc_update(target: NPCProfile, source: NPCProfileUpdateInput) -> None:
         target.faction = source.faction
     if source.description is not None:
         target.description = source.description
+    if source.current_location is not None:
+        target.current_location = source.current_location
+    if source.attitude_to_player is not None:
+        target.attitude_to_player = source.attitude_to_player
+    if source.current_intent is not None:
+        target.current_intent = source.current_intent
+
+
+def apply_existing_npc_update(target: NPCProfile, source: NPCProfileUpdateInput) -> None:
+    if source.public_summary is not None:
+        target.public_summary = source.public_summary
     if source.current_location is not None:
         target.current_location = source.current_location
     if source.attitude_to_player is not None:
@@ -196,15 +207,14 @@ def _validate_indexed_updates(
             continue
         candidate = candidates[update.npc_index]
         profile = update.profile
-        if (
-            candidate.existing_profile is not None
-            and _norm(profile.name)
-            not in {
-                _norm(candidate.existing_profile.name),
-                *[_norm(alias) for alias in candidate.existing_profile.aliases],
-            }
-        ):
-            continue
+        if candidate.existing_profile is not None:
+            update = update.model_copy(
+                update={
+                    "profile": profile.model_copy(
+                        update={"name": candidate.existing_profile.name}
+                    )
+                }
+            )
         if candidate.new_hint is not None and _norm(profile.name) != _norm(candidate.name):
             continue
         valid.append(update)

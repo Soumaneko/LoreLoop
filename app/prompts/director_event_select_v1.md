@@ -30,7 +30,7 @@
 {scene_summaries_json}
 ```
 
-## 本轮确认剧情原文
+## 本轮确认剧情原文（只用于适配，不可作为新事件来源）
 
 ```text
 {scene_text}
@@ -50,7 +50,10 @@
 {archived_events_json}
 ```
 
-## Standby DirectorNPC
+## Standby DirectorNPC（创建新事件时的唯一人物来源）
+
+这些 NPC 是尚未正式进入剧情的导演 NPC。创建新事件时，必须先从这里选择至少一个 NPC 作为事件绑定对象。
+这些幕后信息只用于构造后台事件，不代表玩家已知，也不得在前台直接泄露。
 
 ```json
 {standby_director_npcs_json}
@@ -60,15 +63,16 @@
 
 在生成最终决定前，你必须严格按以下顺序完成三步推演，并把每一步分别写入对应的输出字段：
 
-1. suspension_evaluation（悬挂事件评估）：首先判断 suspended_events 中是否有能自然衔接当前局势的事件。如果有，阐述激活理由并结束思考；如果没有，明确说明并进入新事件构思阶段。
-2. backstage_undercurrent（独立后台事件草稿）**（系统最高级警告：绝不允许回收利用 SceneSummaries 或 CurrentState 中的已有线索！）**
-    - 大模型在这一步极易受下文提供的历史摘要影响，去续写摘要中未解决的伏笔或物品。**你必须克制这种填坑本能！**
-    - 你要做的是从 standby_director_npcs 中选择至少一个 NPC，让 TA 成为新后台事件的关键参与者、受益者、受害者、掩护者、竞争者或知情人。
-    - 除了 CoreMemory 和被选中的 standby DirectorNPC，不要回收利用当前已知线索来构思事件。
-    - 独立后台事件不等于灾难事件。默认优先构思可互动的局部人事、利益、资源、组织、声望、交易、债务、情报或权力暗流。
-    - 写明：被选中的 standby NPC 或与其直接相关的人/势力正在暗中做什么，目的是什么。本字段内严禁提及主角、现有摘要里的任何专有名词，或本轮 scene_text 中新导入的专有名词。
+1. suspension_evaluation（悬挂事件评估）：首先判断 suspended_events 中是否有能自然衔接当前局势的事件。如果有，阐述激活理由并结束思考；如果没有，明确说明并进入 standby NPC 绑定构思阶段。
+2. backstage_undercurrent（standby NPC 绑定事件草稿）**（系统最高级警告：事件本体必须来自 standby_director_npcs！）**
+    - 大模型在这一步极易受 SceneSummaries、CurrentState 或 scene_text 影响，去续写本轮刚出现的桥段、传闻、交易或未解决伏笔。**你必须克制这种填坑本能！**
+    - 你要做的是从 standby_director_npcs 中选择至少一个 NPC，让 TA 成为后台事件的关键参与者、受益者、受害者、掩护者、竞争者或知情人。
+    - 事件本体只能来自被选中的 standby DirectorNPC 的 role、core_motivation、hidden_secret、conflict_style、social_style、encounter_potentials 及 CoreMemory 世界观。
+    - CurrentState、SceneSummaries 和 scene_text 只能用于判断事件规模、地点适配、玩家当前层级和近期可介入性；不得作为事件主体、目标、秘密、交易、冲突或新人物的来源。
+    - NPC 绑定后台事件不等于灾难事件。默认优先构思可互动的局部人事、利益、资源、组织、声望、交易、债务、情报或权力暗流。
+    - 写明：被选中的 standby NPC 或与其直接相关的人/势力正在暗中做什么，目的是什么。本字段内严禁提及主角、现有摘要里的专有名词，或本轮 scene_text 中新导入的专有名词。
     - 仅在 action="create_new" 时填写；action="activate_suspended" 时填 null。
-3. new_event.backstage_premise（最终后台事实）：第 2 步事件的可持久化版本。它仍只写幕后事件本体，但可根据 CurrentState、SceneSummaries 和 scene_text 中的地点、路线、区域势力、NPC背景、物品或利益关系，调整成更适合当前叙事环境的事件。
+3. new_event.backstage_premise（最终后台事实）：第 2 步事件的可持久化版本。它仍只写幕后事件本体，并保持 standby NPC 绑定；只可根据 CurrentState、SceneSummaries 和 scene_text 调整事件的地域范围、规模层级和可介入距离，不可吸收其中的新桥段、新人物、新交易或未解决伏笔。
     - 只回答：谁在暗中行动、目标是什么、在哪里行动、使用什么资源/手段、已推进到什么程度。
     - 尽量保留 backstage_undercurrent 中的重要细节，例如资助者、真实目标、关键道具、组织结构、秘密据点、长期计划、资源和当前进度；除非与当前叙事事实冲突，否则不要丢失。
     - 禁止写外部表现：居民/机构观察到的异常、传闻、症状、事故、环境征兆。
@@ -76,7 +80,7 @@
     - 禁止元叙述：我将/已将/修订为/调整为。
     - 可观察异常只属于 new_event.stages；接触路径不属于任何字段。
     - 最终的 stages 和 hooks 必须以 new_event.backstage_premise 为基础展开，不得遗漏其中的关键主体、动机、资源和目标。
-    - 不要改动主角已经经历的事件，不要把新事件改写成当前主线伏笔的直接续集。
+    - 不要改动主角已经经历的事件，不要把新事件改写成当前主线伏笔、本轮导入桥段或 scene_text 新信息的直接续集。
     - 仅在 action="create_new" 时填写；action="activate_suspended" 时填 null。
 
 ## 选择规则
@@ -85,12 +89,12 @@
 2. 如果 CoreMemory 包含 `core_story_direction`，它描述了本游戏的剧情主旨与游玩期待。事件的核心矛盾、参与方式和发展空间应主动服务这条叙事方向，使事件成为该体验的自然组成部分。
 3. 从叙事角度判断 suspended 事件是否适合当前剧情，不要机械按距离判断。如果 suspended 事件与当前地点、NPC、线索、玩家当前处境能自然重新连接，优先激活它。
 4. 不要创建与 suspended/archived 事件高度重复的新事件。archived 事件只能作为去重参照，不能重新激活。
-5. 可以创建与 archived 事件存在主题呼应的新事件，但必须有新的冲突主体、地点或叙事功能，不能只是换名复刻。
+5. 可以创建与 archived 事件存在主题呼应的新事件，但必须由 standby DirectorNPC 带来新的冲突主体、地点或叙事功能，不能只是换名复刻。
 6. 如果创建新事件，必须绑定至少一个 standby_director_npcs 中的 NPC：new_event.related_npcs 必须包含其 name。事件可以围绕 TA 的目标、秘密、利益关系、敌人、合作对象或误入的麻烦展开，但不得把 TA 的 hidden_secret/core_motivation 原文照抄成前台可见信息。
-7. 如果创建新事件，绝不能是对主角当前行为的直接顺延或配合（避免局部叙事螺旋）。你需要主动引入一个全新的“后台事实”，一个外部的、有自己既定目标的独立事件。尤其不要从本轮 scene_text 中的 DirectorNPC 导入内容反推新导演事件。
+7. 如果创建新事件，绝不能是对主角当前行为的直接顺延或配合（避免局部叙事螺旋）。你需要围绕被选中的 standby DirectorNPC 建立一个外部的、有自己既定目标的独立后台事实。尤其不要从本轮 scene_text 中的 DirectorNPC 导入内容反推新导演事件。
 8. 区分世界观来源（参考 CoreMemory）：
-    - 如果是同人/衍生世界：优先引入该时期、该地点下应有的正史暗流、势力互动、局部格局变化或灾变。
-    - 如果是原创世界：创造新的、可被主角当前层级接触和影响的暗线。
+    - 如果是同人/衍生世界：standby NPC 的事件必须符合该时期、该地点下应有的正史暗流、势力互动或局部格局变化。
+    - 如果是原创世界：standby NPC 的事件必须符合 CoreMemory 世界观，并可被主角当前层级接触和影响。
 9. 规模与可介入性约束：新事件的规模和层级必须与主角当前的地理位置、能力阶段和资源相匹配。
     - 绝对不要生成主角当前完全无法触及或干预的宏大事件。
     - 事件应该是一个在主角当前所在区域或利益相关方中正在酝酿或进行的“图谋或变故”。它必须具备让主角在后续几轮剧情中，通过调查、交涉或战斗直接介入的可能性。

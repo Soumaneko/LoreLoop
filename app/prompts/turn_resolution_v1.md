@@ -119,12 +119,12 @@
    - complication：出现严重的新障碍、误解或麻烦时优先。
    - transition：完成地点、场景、对话阶段的平滑切换。
    - respite：降低压力，整理信息，恢复节奏，给玩家提供思考空间。
-7. 若 DirectorEvent 章节提供了额外使用规则，必须遵守。
+5. 若 DirectorEvent 章节提供了额外使用规则，必须遵守。
 
 
 # 禁止事项
 
-1. 不得改写或反转 outcome_band，不得让结果偏离程序判定的档位。
+1. outcome_band 永远绑定玩家行动，不绑定 NPC 的应对行动。不得改写或反转 outcome_band，不得让结果偏离程序判定的档位。
 2. 不得将 reported、believed 或 inferred 当作客观真相。
 3. 不得原文暴露 DirectorEvent，不得将其写成任务目标。
 4. 不得将 NPCProfile 的 `hidden_secret` 作为奖励情报直接泄露；不得仅因 critical_success 就让 NPC 坦白最深秘密。

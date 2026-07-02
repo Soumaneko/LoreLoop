@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
@@ -56,6 +57,15 @@ def _action_parse() -> ActionParseResult:
             )
         ],
     )
+
+
+class TestMemoryDraftExtractPrompt:
+    def test_does_not_expand_temporary_expression_into_action_constraint(self):
+        prompt = Path("app/prompts/memory_draft_extract_v1.md").read_text(encoding="utf-8")
+
+        assert "临时表达、当前偏好、暂住、随口打算、礼貌回应或未承诺的计划不是 action_constraint" in prompt
+        assert "不得把临时表达扩写成行动约束" in prompt
+        assert "所有行动将" in prompt
 
 
 class TestPendingMemoryStore:

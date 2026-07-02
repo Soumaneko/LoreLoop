@@ -4,6 +4,7 @@ from app.core.llm import LLMGateway
 from app.domain.action.schemas import Anchor
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.npc_profile.backfiller import NPCProfileBackfiller
 from app.domain.npc_profile.extractor import NPCProfileExtractor
 from app.domain.npc_profile.schemas import (
     NPCExtractionResult,
@@ -121,9 +122,43 @@ def update_npc_profiles_from_extraction(
     )
 
     saved_ids: list[str] = []
+    existing_ids = {profile.npc_id for profile in existing_profiles}
+    backfiller = NPCProfileBackfiller(gateway)
     for profile in updated:
-        saved_ids.append(npc_store.upsert(profile))
+        saved_id = npc_store.upsert(profile)
+        saved_ids.append(saved_id)
+        if _should_backfill_new_npc(profile, existing_ids):
+            refreshed = npc_store.get_by_id(saved_id) or profile
+            backfilled = backfiller.backfill(
+                profile=refreshed,
+                existing_profiles=[
+                    npc
+                    for npc in npc_store.list_all()
+                    if npc.npc_id != saved_id
+                ],
+                scene_text=scene_text,
+                current_state=current_state,
+                core_memory=core_memory,
+                recent_summaries=recent_summaries,
+                trace_id=trace_id,
+            )
+            npc_store.upsert(backfilled)
     return UpdateNPCProfilesResult(extraction=extraction, saved_ids=saved_ids)
+
+
+def _should_backfill_new_npc(profile: NPCProfile, existing_ids: set[str]) -> bool:
+    if profile.npc_id in existing_ids:
+        return False
+    if profile.source_director_npc_id:
+        return False
+    return not all(
+        [
+            profile.core_motivation,
+            profile.hidden_secret,
+            profile.conflict_style,
+            profile.social_style,
+        ]
+    )
 
 
 def update_npc_profiles_workflow(

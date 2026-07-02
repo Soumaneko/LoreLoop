@@ -248,6 +248,39 @@ def _state_with_confirmed_director_npc(
     )
 
 
+def _project_scene_text_for_confirmation(
+    scene_text: str,
+    *,
+    pending,
+    confirmed_director_npc_draft: DirectorNPCDraft | None,
+) -> str:
+    result = getattr(pending, "director_npc_result", None)
+    dispatch = getattr(result, "dispatch", None)
+    if dispatch is None or dispatch.action != "dispatch_standby" or not dispatch.selected_name:
+        return scene_text
+
+    name = confirmed_director_npc_draft.name if confirmed_director_npc_draft is not None else dispatch.selected_name
+    role = confirmed_director_npc_draft.role if confirmed_director_npc_draft is not None else None
+    role_note = f"（{role}）" if role else ""
+    selected_id = (
+        confirmed_director_npc_draft.draft_id
+        if confirmed_director_npc_draft is not None
+        else dispatch.selected_id
+    )
+
+    return (
+        "【确认用系统注记】\n"
+        f"本回合 DirectorNPCDispatcher 引入了导演 NPC：{name}{role_note}。"
+        f"系统 ID：{selected_id}。\n"
+        "如果正文中出现未透露姓名、临时称呼、只以外貌/位置描述出现的新增角色，"
+        f"且其出场与本回合导演 NPC 调度相符，确认流程应在内部状态、NPC档案和摘要中将其视为{name}。\n"
+        "该注记只用于确认流程；不代表玩家知道TA的姓名；不得写成角色已自报姓名；"
+        "不得泄露 hidden_secret、core_motivation 或其他幕后信息。\n"
+        "【正文】\n"
+        f"{scene_text}"
+    )
+
+
 def _confirm_turn_stream_locked(
     turn_id: str,
     write_db: bool = True,
@@ -351,6 +384,11 @@ def _confirm_pipeline_locked(
         pipeline_input.state_before,
         confirmed_director_npc_draft,
     )
+    confirmation_scene_text = _project_scene_text_for_confirmation(
+        effective_scene_text,
+        pending=pending,
+        confirmed_director_npc_draft=confirmed_director_npc_draft,
+    )
 
     existing_entity_profiles = cache.get("existing_entity_profiles", [])
     existing_npc_profiles = cache.get("existing_npc_profiles", [])
@@ -374,7 +412,7 @@ def _confirm_pipeline_locked(
         }
         result = updater.update(
             state_before_update,
-            effective_scene_text,
+            confirmation_scene_text,
             core_memory=core_memory,
             npc_aliases=npc_aliases,
             trace_id=trace_id,
@@ -416,7 +454,7 @@ def _confirm_pipeline_locked(
         extractor = NPCProfileExtractor(gateway)
         result = extractor.extract(
             core_memory=core_memory,
-            scene_text=effective_scene_text,
+            scene_text=confirmation_scene_text,
             existing_profiles=existing_npc_profiles,
             trace_id=trace_id,
         )
@@ -580,7 +618,7 @@ def _confirm_pipeline_locked(
                 gateway = create_gateway()
                 gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
                 npc_result = update_npc_profiles_from_extraction(
-                    scene_text=effective_scene_text,
+                    scene_text=confirmation_scene_text,
                     current_state=updated_state,
                     core_memory=core_memory,
                     gateway=gateway,
@@ -691,7 +729,7 @@ def _confirm_pipeline_locked(
         if not cache.get("scene_summary_scheduled"):
             summary_future = BACKGROUND_EXECUTOR.submit(
                 run_scene_summary_maintenance,
-                effective_scene_text,
+                confirmation_scene_text,
                 updated_state,
                 updated_state.scene.scene_id,
                 pipeline_input.turn_index,

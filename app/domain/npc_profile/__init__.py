@@ -3,6 +3,7 @@ from .schemas import (
     NPCAliasMatch,
     NPCExtractionResult,
     NPCProfile,
+    NPCProfileBackfillOutput,
     NPCProfileDirectorView,
     NPCProfileIndexedUpdate,
     NPCProfilePublicView,
@@ -12,18 +13,12 @@ from .schemas import (
 )
 from .store import NPCProfileStore
 from .updater import NPCProfileUpdater
-from .workflows import (
-    UpdateNPCProfilesResult,
-    gather_npc_profiles_from_state_and_anchors,
-    sync_npc_profile_absence_from_current_state,
-    update_npc_profiles_from_extraction,
-    update_npc_profiles_workflow,
-)
 
 __all__ = [
     "NPCAliasMatch",
     "NPCExtractionResult",
     "NPCProfile",
+    "NPCProfileBackfillOutput",
     "NPCProfileDirectorView",
     "NPCProfileExtractor",
     "NPCProfileIndexedUpdate",
@@ -33,9 +28,4 @@ __all__ = [
     "NPCProfileUpdateInput",
     "NPCProfileUpdater",
     "RetrievedNPC",
-    "UpdateNPCProfilesResult",
-    "gather_npc_profiles_from_state_and_anchors",
-    "sync_npc_profile_absence_from_current_state",
-    "update_npc_profiles_from_extraction",
-    "update_npc_profiles_workflow",
 ]

@@ -71,7 +71,7 @@
 - `selected_id`：当 `action=dispatch_standby` 时填候选的 `draft_id`；当 `action=recall_existing` 且选择普通旧 NPC 时填该 NPC 的 `name`；当选择已调度导演 NPC 时填该候选的 `selected_id`；当 `action=none` 时填 `null`。
 - `selected_name`：被选择 NPC 的显示姓名；必须与候选列表中的姓名一致；当 `action=none` 时填 `null`。
 - `reason`：选择或不选择的理由。选择 NPC 时说明为什么 TA 比其他候选更适合当前局面；选择 `none` 时说明为什么当前场景不适合插入 NPC。
-- `contextual_presence`：TA 为什么此刻会出现在当前区域、路线、组织关系或事件边缘。必须合理、简洁，不得改写已发生剧情；当 `action=none` 时填 `null`。
+- `contextual_presence`：TA 为什么此刻会出现在当前区域、路线、组织关系或事件边缘。必须合理、简洁，不得改写已发生剧情；如果候选的常驻地、所在地或最近位置不同，必须说明 TA 为什么会移动到这里或与当前路线交叉；当 `action=none` 时填 `null`。
 - `immediate_intent`：TA 出场后的即时意图。必须主动、具体、可演出，但不等于一定找麻烦或发任务；当 `action=none` 时填 `null`。
 - `first_pressure`：TA 给场景带来的第一个压力、机会或扰动。可以是社交压力、信息诱惑、误会、交易窗口、共同避险、竞争、请求、情绪冲击或日常插曲；当 `action=none` 时填 `null`。
 - `scene_function`：本次介入在场景中的功能，必须与 `first_pressure` 一致；可选值包括 `complication`、`temptation`、`information`、`conflict`、`rescue`、`rivalry`、`social_pressure`、`color`；当 `action=none` 时填 `null`。
@@ -80,11 +80,13 @@
 # 核心规则
 
 1. 优先选择能与当前剧情产生具体交集的候选；如果所有候选都牵强，action 选 none。
-2. 不得替玩家决定是否帮助、接受、拒绝、追随、攻击或泄露秘密；只制造必须回应的场面。
-3. 不得让 NPC 无视常识或知道不该知道的秘密。
-4. 不要每次都选择 `complication` 或 `conflict`；根据候选和场景选择真实合适的功能。
-5. `public_entity_profile` 是剧情中已经表现或记录过的信息，可以作为公开行为和称呼依据。
-6. `director_private_profile` 是导演私有底稿，只能用于判断该 NPC 的内在驱动力、行为倾向和一致性；不得把 `hidden_secret`、深层动机或未公开创伤直接写成别人已知、NPC自曝或场景事实。
+2. 地理位置不是硬锁定：候选档案中的 `current_location`、常驻地或最近位置只代表 TA 平时/上次待的地方，不代表 TA 绝对不能移动。不得因为地理位置不一致直接选择 `none`；先判断是否存在合理的事务或 DirectorEvent 边缘牵动。
+3. 如果让 NPC 跨区域进入，必须在 `contextual_presence` 中给出简洁可演出的移动理由；理由只能基于公开信息、身份职责、候选动机或当前世界局势，不得让 NPC 知道隐藏秘密，也不得瞬移或跨越当前时间尺度不可能抵达的距离。
+4. 不得替玩家决定是否帮助、接受、拒绝、追随、攻击或泄露秘密；只制造必须回应的场面。
+5. 不得让 NPC 无视常识或知道不该知道的秘密。
+6. 不要每次都选择 `complication` 或 `conflict`；根据候选和场景选择真实合适的功能。
+7. `public_entity_profile` 是剧情中已经表现或记录过的信息，可以作为公开行为和称呼依据。
+8. `director_private_profile` 是导演私有底稿，只能用于判断该 NPC 的内在驱动力、行为倾向和一致性；不得把 `hidden_secret`、深层动机或未公开创伤直接写成别人已知、NPC自曝或场景事实。
 
 
 # 多样化要求
@@ -93,6 +95,7 @@
 - 带来一个交易机会或稀缺资源。
 - 误认主角或同伴，引发短暂社交压力。
 - 与主角路线同向，提出临时结伴或交换信息。
+- 因各种事务离开常驻地，与主角当前位置发生交叉。
 - 被环境危机波及，需要共同避险。
 - 与当前 NPC 有旧识、债务或尴尬关系。
 - 对主角持有的公开物品/徽记/身份产生兴趣。

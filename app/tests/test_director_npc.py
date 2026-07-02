@@ -1,5 +1,6 @@
 import json
 from contextlib import contextmanager
+from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.action.schemas import ActionParseResult, AtomicAction
@@ -25,6 +26,59 @@ from app.workflows.director_npc import (
     restock_director_npc_standby,
 )
 from app.engine import turn_confirmation
+
+
+class TestDirectorNPCDispatchPrompt:
+    def test_location_is_soft_anchor_not_hard_block(self):
+        prompt = Path("app/prompts/director_npc_dispatch_v1.md").read_text(encoding="utf-8")
+
+        assert "地理位置不是硬锁定" in prompt
+        assert "不得因为地理位置不一致直接选择 `none`" in prompt
+        assert "必须说明 TA 为什么会移动到这里或与当前路线交叉" in prompt
+
+
+class TestDirectorNPCConfirmationSceneProjection:
+    def test_scene_text_is_unchanged_without_director_npc_dispatch(self):
+        pending = type("Pending", (), {})()
+        pending.director_npc_result = None
+
+        projected = turn_confirmation._project_scene_text_for_confirmation(
+            "巷口有人影一闪。",
+            pending=pending,
+            confirmed_director_npc_draft=None,
+        )
+
+        assert projected == "巷口有人影一闪。"
+
+    def test_scene_text_projection_adds_dispatch_identity_without_gender_assumption(self):
+        draft = DirectorNPCDraft.model_validate(json.loads(_draft_response("苏念棠")))
+        pending = type("Pending", (), {})()
+        pending.director_npc_result = DirectorNPCWorkflowResult(
+            dispatch=DirectorNPCDispatchDecision(
+                action="dispatch_standby",
+                selected_id=draft.draft_id,
+                selected_name=draft.name,
+                reason="test",
+                contextual_presence="test",
+                immediate_intent="test",
+                first_pressure="test",
+                scene_function="information",
+            )
+        )
+
+        projected = turn_confirmation._project_scene_text_for_confirmation(
+            "巷口的暗处站着一个年轻角色。",
+            pending=pending,
+            confirmed_director_npc_draft=draft,
+        )
+
+        assert "【确认用系统注记】" in projected
+        assert "导演 NPC：苏念棠" in projected
+        assert "新增角色" in projected
+        assert "不代表玩家知道TA的姓名" in projected
+        assert "hidden_secret" in projected
+        assert "女性" not in projected
+        assert projected.endswith("巷口的暗处站着一个年轻角色。")
 
 
 class SpyGateway:
