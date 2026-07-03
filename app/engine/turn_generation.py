@@ -32,7 +32,6 @@ from .stores import (
     entity_store,
     memory_store,
     npc_profile_store,
-    pending_memory_store,
     scene_summary_store,
     short_term_memory_store,
 )
@@ -167,11 +166,10 @@ def generate_turn_stream(
         },
     }
 
-    with memory_store() as mem_store, pending_memory_store() as pending_store:
+    with memory_store() as mem_store:
         retrieved_memories = retrieve_candidates_workflow(
             action_parse_result,
             mem_store,
-            pending_memory_store=pending_store,
         )
 
     yield {

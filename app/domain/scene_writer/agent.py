@@ -48,7 +48,8 @@ class SceneWriterAgent:
             "RuntimeSceneWriterResult",
             __base__=SceneWriterResult,
             scene_reasoning=(str, Field(min_length=1)),
-            scene_text=(str, Field(min_length=1, max_length=max_chars)),
+            scene_text=(str, Field(min_length=1)),
+            closing_prompt=(str, Field(min_length=1)),
         )
         schema = runtime_schema.model_json_schema()
 
@@ -74,4 +75,17 @@ class SceneWriterAgent:
                 trace_id=trace_id,
             ),
         )
-        return SceneWriterResult.model_validate(result.model_dump())
+        return _append_closing_prompt(result)
+
+
+def _append_closing_prompt(result: SceneWriterResult) -> SceneWriterResult:
+    scene_text = result.scene_text.strip()
+    closing_prompt = result.closing_prompt.strip()
+    if closing_prompt and not scene_text.endswith(closing_prompt):
+        scene_text = f"{scene_text}\n\n{closing_prompt}" if scene_text else closing_prompt
+    return SceneWriterResult(
+        scene_reasoning=result.scene_reasoning,
+        scene_text=scene_text,
+        closing_prompt=closing_prompt,
+        next_action_directions=result.next_action_directions,
+    )

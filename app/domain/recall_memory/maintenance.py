@@ -66,11 +66,15 @@ def fill_pending_memory_scene_metadata(
     items: list[PendingMemoryItem],
     current_state: CurrentState,
 ) -> list[PendingMemoryItem]:
-    updates = {
-        "location": current_state.scene.location,
-        "time_label": current_state.world_clock.label,
-    }
-    return [item.model_copy(update=updates) for item in items]
+    result: list[PendingMemoryItem] = []
+    for item in items:
+        updates = {}
+        if item.location is None and current_state.scene.location:
+            updates["location"] = current_state.scene.location
+        if item.time_label is None and current_state.world_clock.label:
+            updates["time_label"] = current_state.world_clock.label
+        result.append(item.model_copy(update=updates) if updates else item)
+    return result
 
 
 def extract_memory_drafts_workflow(

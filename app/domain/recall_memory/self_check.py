@@ -124,7 +124,7 @@ class MemorySelfCheck:
             )
 
         location = current_state.scene.location
-        if memory.location is None and location:
+        if memory.location is None and location and not preserves_pending_sources:
             updates["location"] = location
             result.fixes.append(
                 f"Memory '{memory.subject}' location filled from current_state: "
@@ -132,7 +132,7 @@ class MemorySelfCheck:
             )
 
         time_label = current_state.world_clock.label
-        if memory.time_label is None and time_label:
+        if memory.time_label is None and time_label and not preserves_pending_sources:
             updates["time_label"] = time_label
             result.fixes.append(
                 f"Memory '{memory.subject}' time_label filled from current_state: "

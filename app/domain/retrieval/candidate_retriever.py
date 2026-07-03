@@ -2,7 +2,6 @@ from pathlib import Path
 
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
 from app.domain.recall_memory.schemas import MemoryRecord
-from app.domain.recall_memory.pending_store import PendingMemoryStore
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.alias_store import AliasStore
 from app.domain.retrieval.config import (
@@ -14,7 +13,6 @@ from app.domain.retrieval.normalizer import normalize_text
 from app.domain.retrieval.schemas import (
     CandidateRetrievalResult,
     MemoryCandidate,
-    PendingMemoryNote,
 )
 from app.domain.retrieval.sub_retrievers import (
     build_context,
@@ -42,10 +40,8 @@ class CandidateRetriever:
         memory_store: MemoryStore,
         config: RetrievalConfig | None = None,
         alias_store=None,
-        pending_memory_store: PendingMemoryStore | None = None,
     ):
         self.memory_store = memory_store
-        self.pending_memory_store = pending_memory_store
         self.config = config or RetrievalConfig()
         if alias_store is not None:
             self.alias_store = alias_store
@@ -76,26 +72,21 @@ class CandidateRetriever:
         top_k = min(max(top_k, 1), 50)
 
         all_memories = self.memory_store.list_active()
-        pending_notes = self._retrieve_pending_notes(parse_result, top_k=top_k)
         total_memories = len(all_memories)
 
         if total_memories == 0:
-            pending_notes = pending_notes[:top_k]
             return CandidateRetrievalResult(
                 candidates=[],
-                pending_notes=pending_notes,
-                total_scanned=len(pending_notes),
-                total_returned=len(pending_notes),
+                total_scanned=0,
+                total_returned=0,
             )
 
         anchors = parse_result.anchors
         if not anchors:
-            pending_notes = pending_notes[:top_k]
             return CandidateRetrievalResult(
                 candidates=[],
-                pending_notes=pending_notes,
-                total_scanned=total_memories + len(pending_notes),
-                total_returned=len(pending_notes),
+                total_scanned=total_memories,
+                total_returned=0,
             )
 
         retrieval_result = self._run_turn_pipeline(
@@ -110,17 +101,11 @@ class CandidateRetriever:
             parse_result.atomic_actions,
             top_k,
         )
-        candidates, pending_notes = _limit_combined_results(
-            candidates,
-            pending_notes,
-            top_k=top_k,
-        )
 
         return CandidateRetrievalResult(
             candidates=candidates,
-            pending_notes=pending_notes,
-            total_scanned=total_memories + len(pending_notes),
-            total_returned=len(candidates) + len(pending_notes),
+            total_scanned=total_memories,
+            total_returned=len(candidates),
         )
 
     def close(self) -> None:
@@ -134,76 +119,6 @@ class CandidateRetriever:
 
     def __exit__(self, *args):
         self.close()
-
-    def _retrieve_pending_notes(
-        self,
-        parse_result: ActionParseResult,
-        *,
-        top_k: int,
-    ) -> list[PendingMemoryNote]:
-        if self.pending_memory_store is None:
-            return []
-        pending_items = self.pending_memory_store.list_recent_unclassified(limit=50)
-        if not pending_items:
-            return []
-
-        anchors = parse_result.anchors
-        action_ids = [action.action_id for action in parse_result.atomic_actions]
-        scored: list[tuple[float, PendingMemoryNote]] = []
-        for item in pending_items:
-            norm_text = normalize_text(
-                " ".join(
-                    [
-                        item.raw_text,
-                        " ".join(item.source_text_span),
-                        " ".join(item.entities),
-                    ]
-                )
-            )
-            matched_anchors: set[str] = set()
-            score = 0.0
-
-            for anchor in anchors:
-                term = normalize_text(anchor.normalized or anchor.text)
-                if not term:
-                    continue
-                if term in norm_text:
-                    matched_anchors.add(anchor.text)
-                    score += 1.0
-
-            if score <= 0:
-                continue
-
-            if item.importance_hint == "high":
-                score += 0.4
-            elif item.importance_hint == "medium":
-                score += 0.2
-
-            scored.append(
-                (
-                    score,
-                    PendingMemoryNote(
-                        pending_id=item.id,
-                        scene_id=item.scene_id,
-                        turn_index=item.turn_index,
-                        raw_text=item.raw_text,
-                        source_text_span=item.source_text_span,
-                        entities=item.entities,
-                        location=item.location,
-                        time_label=item.time_label,
-                        memory_kind=item.memory_kind,
-                        subject=item.subject,
-                        owner=item.owner,
-                        importance_hint=item.importance_hint,
-                        score=score,
-                        matched_anchors=sorted(matched_anchors),
-                        matched_actions=action_ids,
-                    ),
-                )
-            )
-
-        scored.sort(key=lambda item: item[0], reverse=True)
-        return [note for _score, note in scored[: min(max(top_k, 1), 20)]]
 
     def _run_turn_pipeline(self, all_memories, anchors, actions) -> dict:
         ctx = build_context(all_memories, anchors, actions, self.alias_store)
@@ -402,33 +317,3 @@ class CandidateRetriever:
             }
 
         return info
-
-
-def _limit_combined_results(
-    candidates: list[MemoryCandidate],
-    pending_notes: list[PendingMemoryNote],
-    *,
-    top_k: int,
-) -> tuple[list[MemoryCandidate], list[PendingMemoryNote]]:
-    selected_candidates: list[MemoryCandidate] = []
-    selected_pending: list[PendingMemoryNote] = []
-    candidate_index = 0
-    pending_index = 0
-
-    while len(selected_candidates) + len(selected_pending) < top_k:
-        added = False
-        if candidate_index < len(candidates):
-            selected_candidates.append(candidates[candidate_index])
-            candidate_index += 1
-            added = True
-        if (
-            len(selected_candidates) + len(selected_pending) < top_k
-            and pending_index < len(pending_notes)
-        ):
-            selected_pending.append(pending_notes[pending_index])
-            pending_index += 1
-            added = True
-        if not added:
-            break
-
-    return selected_candidates, selected_pending

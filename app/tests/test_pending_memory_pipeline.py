@@ -63,9 +63,21 @@ class TestMemoryDraftExtractPrompt:
     def test_does_not_expand_temporary_expression_into_action_constraint(self):
         prompt = Path("app/prompts/memory_draft_extract_v1.md").read_text(encoding="utf-8")
 
-        assert "临时表达、当前偏好、暂住、随口打算、礼貌回应或未承诺的计划不是 action_constraint" in prompt
         assert "不得把临时表达扩写成行动约束" in prompt
-        assert "所有行动将" in prompt
+        assert "当前偏好扩写为长期行动约束" in prompt
+        assert "之后都围绕某事行动" in prompt
+
+
+class TestMemoryBatchClassifyPrompt:
+    def test_does_not_expand_temporary_expression_into_action_constraint(self):
+        prompt = Path("app/prompts/memory_batch_classify_v1.md").read_text(encoding="utf-8")
+
+        assert "以 source_text_span 为证据上限" in prompt
+        assert "pending raw_text 只是草稿命题" in prompt
+        assert "不得照抄无证据支持的身份标签或质变词" in prompt
+        assert "暂住/落脚/所在地、礼貌回应和未确认打算必须 keep=false" in prompt
+        assert "较弱态度" in prompt
+        assert "合伙人、潜在合伙人、盟友、根本转变、完全信任" in prompt
 
 
 class TestPendingMemoryStore:
@@ -243,6 +255,32 @@ class TestMemoryDraftExtractor:
         assert filled[0].location == "钟楼门厅"
         assert filled[0].time_label == "第2日深夜"
 
+    def test_scene_metadata_does_not_overwrite_existing_pending_values(self):
+        item = PendingMemoryItem(
+            scene_id="scene_001",
+            turn_index=8,
+            memory_kind="open_thread",
+            subject="钥匙在钟楼的传闻",
+            raw_text="老板声称钥匙在钟楼。",
+            source_text_span=["老板声称钥匙在钟楼。"],
+            location="旧旅店",
+            time_label="第2日晚上",
+        )
+        updated_state = CurrentState(
+            scene=SceneState(
+                scene_id="scene_002",
+                location="钟楼门厅",
+                participants=["主角"],
+            ),
+            world_clock=WorldClock(day=2, phase="深夜"),
+            player=PlayerState(name="主角"),
+        )
+
+        filled = fill_pending_memory_scene_metadata([item], updated_state)
+
+        assert filled[0].location == "旧旅店"
+        assert filled[0].time_label == "第2日晚上"
+
 
 class TestBatchClassifyPendingMemories:
     def test_batch_classifier_merges_pending_items_and_saves_memory(self):
@@ -394,7 +432,7 @@ class TestBatchClassifyPendingMemories:
             assert retrieved.candidates == []
 
 class TestRetrievalWithPendingNotes:
-    def test_retrieval_keeps_pending_notes_separate_from_classified_memories(self):
+    def test_retrieval_ignores_pending_notes(self):
         with MemoryStore(":memory:") as memory_store, PendingMemoryStore(":memory:") as pending_store:
             pending_store.save_many(
                 [
@@ -416,13 +454,9 @@ class TestRetrievalWithPendingNotes:
             result = retrieve_candidates_workflow(
                 _action_parse(),
                 memory_store,
-                pending_memory_store=pending_store,
             )
 
             assert result.candidates == []
-            assert len(result.pending_notes) == 1
-            assert result.pending_notes[0].raw_text == "老板声称钥匙在钟楼。"
-            assert result.pending_notes[0].source_text_span == [
-                "老板声称钥匙在钟楼。",
-                "他指了指钟楼方向。",
-            ]
+            assert result.pending_notes == []
+            assert result.total_scanned == 0
+            assert result.total_returned == 0

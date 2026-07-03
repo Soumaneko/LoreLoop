@@ -10,4 +10,5 @@ class NextActionDirection(BaseModel):
 class SceneWriterResult(BaseModel):
     scene_reasoning: str = ""
     scene_text: str
+    closing_prompt: str = ""
     next_action_directions: list[NextActionDirection] = Field(default_factory=list, max_length=5)

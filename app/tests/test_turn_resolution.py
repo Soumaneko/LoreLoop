@@ -178,7 +178,8 @@ class TestTurnResolutionAgent:
 
         assert "resolution_reasoning" in prompt
         assert "回合判定前的逻辑审计" in prompt
-        assert "结果的合理表现是什么" in prompt
+        assert "事实边界是什么" in prompt
+        assert "不要预写具体演出" in prompt
         assert "确定信息边界" in prompt
         assert "客观可能性" in prompt
         assert "selected_type 必须来自" in prompt

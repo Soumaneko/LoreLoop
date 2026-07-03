@@ -63,6 +63,10 @@
 4. supersede/merge 必须提供 replacement；merge 至少包含两条 source memory。
 5. replacement 必须是仍有效的动态知识；evidence_mode 描述 replacement 命题本身的证据来源（observed / reported / believed / inferred）。
 6. 只能引用输入中的 memory ID 和 summary ID。
+7. active memory 的 content 可能过宽；应以 L1 summaries 与 source_text_span 能支持的最窄命题为准，必要时 supersede 收窄。
+8. 仅表达暂住/落脚/所在地的 action_constraint 是错误类型，直接 discard_summary_like；其自身内容就是证据，不需要新剧情推翻。
+9. relationship_state 只维护稳定关系变化。若 source_text_span/L1 summaries 只支持好感、兴趣、谈判或邀请，不得 keep 已成立身份或质变结论（如合伙人、潜在合伙人、盟友、根本转变、完全信任），应 supersede 为较弱态度或移除。
+10. 多条 active memory 指向同一约定、线索或承诺时，即使 memory_kind 不同，也必须 merge/supersede 到证据支持的准确类型，不得分别 keep。
 
 
 # 禁止事项
@@ -72,7 +76,8 @@
 3. 不要对同一 memory 输出多个 proposal。
 4. 不得引用输入之外的 memory ID 或 summary ID。
 5. keep、invalidate、discard_summary_like 等非 supersede/merge 操作不得包含 replacement。
-6. 只输出符合 schema 的 JSON，不要任何前缀、后缀或解释。
+6. 不得 keep 明显超过证据强度的强结论，尤其是无硬约束的暂住类 action_constraint。
+7. 只输出符合 schema 的 JSON，不要任何前缀、后缀或解释。
 
 
 # 例子

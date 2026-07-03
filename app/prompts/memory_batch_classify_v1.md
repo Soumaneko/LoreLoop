@@ -68,7 +68,7 @@
 1. MemoryKind 定义：
    - commitment：债务、承诺、约定、交换条件、尚未兑现的人情。
    - open_thread：未解决的任务、谜题、线索、威胁、目标。
-   - action_constraint：会允许、禁止、加成或惩罚后续行动的规则或条件。
+   - action_constraint：会允许、禁止、加成或惩罚后续行动的长期规则或条件。只有外部规则、明确承诺条件、资源限制、危险条件、权限变化或硬性代价可以归入此类。
    - resource_access：物品、资源的使用权或访问权属于谁。
    - relationship_state：足以改变后续互动方式的关系、态度或行为倾向。
 2. EvidenceMode 定义，必须严格评估 content 中核心命题的真实证据来源：
@@ -83,6 +83,9 @@
 7. content 必须写当前仍有效的动态知识，不写章节过程摘要。
 8. 不得把单纯的主观相信、误解、猜测、怀疑、吐槽或心理判断保留为正式 Memory；如果它不能归入 commitment/open_thread/action_constraint/resource_access/relationship_state，必须 keep=false。
 9. 若 evidence_mode 判断为 believed，可以 keep=true 输出；系统会在保存后将其标记为 invalidated，使其保留审计痕迹但不参与后续检索。
+10. 以 source_text_span 为证据上限；pending raw_text 只是草稿命题，若更强、更宽或更长期，必须收窄、改类或丢弃，不得照抄无证据支持的身份标签或质变词。
+11. 临时计划、当前偏好、暂住/落脚/所在地、礼貌回应和未确认打算必须 keep=false，不得写成 action_constraint；只有明确规则、条件、权限、代价或外部限制才算约束。
+12. relationship_state 只记录稳定且会改变后续互动的关系变化。若证据只显示好感、惊讶、兴趣、谈判或邀请，只能写成较弱态度（如更愿意继续谈、戒心降低、愿意洽谈合作），不得升级为身份关系或质变结论（如合伙人、潜在合伙人、盟友、根本转变、完全信任），除非 source_text_span 明确支持。
 
 
 # 禁止事项
@@ -92,7 +95,8 @@
 3. visibility 不要默认 public。
 4. source_text_span 只能来自输入证据，不得发明、改写或拼接。
 5. 对仅是“谁做了什么”的摘要、已解决事件或 CurrentState 重复项，必须 keep=false 并说明原因，不要硬留。
-6. 只输出符合 schema 的 JSON，不要任何前缀、后缀或解释。
+6. 不得输出强度超过 source_text_span 的结论。
+7. 只输出符合 schema 的 JSON，不要任何前缀、后缀或解释。
 
 
 # 例子

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
@@ -142,3 +143,16 @@ def test_failed_proposal_does_not_advance_summary_cursor():
     assert cursor == -1
     assert known is not None
     assert known.status == "active"
+
+
+def test_maintainer_prompt_can_narrow_overbroad_memories():
+    prompt = Path("app/prompts/memory_maintain_v1.md").read_text(encoding="utf-8")
+
+    assert "content 可能过宽" in prompt
+    assert "supersede 收窄" in prompt
+    assert "直接 discard_summary_like" in prompt
+    assert "不需要新剧情推翻" in prompt
+    assert "source_text_span/L1 summaries 只支持" in prompt
+    assert "合伙人、潜在合伙人、盟友、根本转变、完全信任" in prompt
+    assert "即使 memory_kind 不同" in prompt
+    assert "不得分别 keep" in prompt

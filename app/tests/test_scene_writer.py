@@ -63,11 +63,13 @@ def _make_outline() -> PlotOutlineResult:
 
 def _build_response(
     scene_text: str = "主角推开酒馆沉重的木门，夜风卷起几片落叶随着他一同进入温暖的室内。米莉正在吧台后面擦拭酒杯，看到主角后露出微笑。",
+    closing_prompt: str = "米莉似乎知道暴风城的更多消息，你会怎么做？",
     directions: list[dict] | None = None,
 ) -> str:
     return json.dumps({
         "scene_reasoning": "本回合先承接大纲节拍顺序，确认主角行动与米莉反馈都来自公开上下文。正文只演出已给出的酒馆、米莉和暴风城消息，不新增任务或隐藏真相。",
         "scene_text": scene_text,
+        "closing_prompt": closing_prompt,
         "next_action_directions": directions or [],
     }, ensure_ascii=False)
 
@@ -111,6 +113,7 @@ class TestSceneWriterAgent:
         assert "protagonist_response_guidance" not in prompt
         assert "changes_summary" not in prompt
         assert "scene_reasoning" in prompt
+        assert "closing_prompt" in prompt
         assert "正文生成前的逻辑审计" in prompt
         assert "不得在 scene_text 中自行补出具体机构、专有名词、功能物品" in prompt
 
@@ -149,6 +152,8 @@ class TestSceneWriterAgent:
         assert isinstance(result, SceneWriterResult)
 
         assert len(result.scene_text) > 0
+        assert result.scene_text.endswith(result.closing_prompt)
+        assert result.closing_prompt == "米莉似乎知道暴风城的更多消息，你会怎么做？"
 
     def test_preserves_next_action_directions(self):
         mock = MockLLM()
@@ -176,11 +181,11 @@ class TestSceneWriterAgent:
             )
         ]
 
-    def test_retries_when_scene_exceeds_max_chars(self):
+    def test_accepts_scene_text_beyond_max_chars_interface_hint(self):
         mock = MockLLM()
         mock.set_responses([
             _build_response(scene_text="过" * 11),
-            _build_response(scene_text="合规正文"),
+            _build_response(scene_text="不应重试"),
         ])
 
         result = SceneWriterAgent(mock.build_gateway()).write(
@@ -192,7 +197,7 @@ class TestSceneWriterAgent:
             max_chars=10,
         )
 
-        assert result.scene_text == "合规正文"
+        assert result.scene_text == f"{'过' * 11}\n\n米莉似乎知道暴风城的更多消息，你会怎么做？"
 
     def test_handles_no_recent_scene(self):
         mock = MockLLM()

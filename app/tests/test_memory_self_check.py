@@ -100,6 +100,18 @@ class TestSceneContextFix:
         assert cleaned[0].time_label == "第2日晚上"
         assert any("time_label" in f for f in result.fixes)
 
+    def test_pending_source_does_not_get_current_context_location_or_time(self):
+        m = _make_memory(
+            location=None,
+            time_label=None,
+            source_pending_ids=["pending-1"],
+        )
+        cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
+        assert cleaned[0].location is None
+        assert cleaned[0].time_label is None
+        assert not any("location filled from current_state" in f for f in result.fixes)
+        assert not any("time_label filled from current_state" in f for f in result.fixes)
+
     def test_existing_values_not_overwritten(self):
         m = _make_memory(location="自定地点", time_label="自定时间")
         cleaned, result = SC.check([m], SCENE_TEXT, SCENE_CONTEXT)
