@@ -46,9 +46,7 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(monkeypat
         turn_id=turn_id,
         user_input="观察四周",
         state_before=state,
-        context=SimpleNamespace(
-            turn_resolution=SimpleNamespace(selected_type="advance")
-        ),
+        context=SimpleNamespace(turn_resolution=SimpleNamespace()),
         outline=SimpleNamespace(),
         scene_result=SceneWriterResult(scene_text="场景正文"),
         selected_memory_ids=[],
@@ -149,16 +147,14 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
         turn_id=turn_id,
         user_input="继续观察",
         state_before=state,
-        context=SimpleNamespace(
-            turn_resolution=SimpleNamespace(selected_type="advance")
-        ),
+        context=SimpleNamespace(turn_resolution=SimpleNamespace()),
         outline=SimpleNamespace(),
         scene_result=SceneWriterResult(scene_text="场景正文"),
         selected_memory_ids=[],
         turn_index=14,
         short_term_memory=ShortTermMemory(),
         confirmation_cache={
-            "key": ("场景正文", "advance"),
+            "key": "场景正文",
             "scene_summary_scheduled": True,
             "scene_summary_future": summary_future,
         },

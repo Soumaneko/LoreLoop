@@ -179,9 +179,8 @@ class TestSceneSummaryMaintenance:
 
 class TestSceneSummaryPrompts:
     def test_prompts_define_length_limits(self):
-        summarize_prompt = (PROMPT_DIR / "scene_summarize_v1.md").read_text(encoding="utf-8")
-        condense_prompt = (PROMPT_DIR / "scene_summary_condense_v1.md").read_text(encoding="utf-8")
-
+        summarize_prompt = (PROMPT_DIR / "maintenance" / "scene_summarize_v1.md").read_text(encoding="utf-8")
+        condense_prompt = (PROMPT_DIR / "maintenance" / "scene_summary_condense_v1.md").read_text(encoding="utf-8")
         assert "硬性上限 300" in summarize_prompt
         assert "硬性上限 400" in condense_prompt
         assert "不得随 source summaries 数量线性增长" in condense_prompt

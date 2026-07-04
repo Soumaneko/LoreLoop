@@ -3,7 +3,6 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from app.core.llm import MockLLM
-from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState, NPCState, PlayerState, SceneState
 from app.domain.director_npc.schemas import (
@@ -14,8 +13,6 @@ from app.domain.director_npc.schemas import (
 from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
-from app.domain.short_term_memory.schemas import ShortTermMemory, ShortTermScene
-from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.workflows.director_npc import (
     DIRECTOR_NPC_FIRST_FORCED_TURN,
     DIRECTOR_NPC_STANDBY_TARGET,
@@ -30,11 +27,11 @@ from app.engine import turn_confirmation
 
 class TestDirectorNPCDispatchPrompt:
     def test_location_is_soft_anchor_not_hard_block(self):
-        prompt = Path("app/prompts/director_npc_dispatch_v1.md").read_text(encoding="utf-8")
+        prompt = Path("app/prompts/generation/director_npc_dispatch_v1.md").read_text(encoding="utf-8")
 
         assert "地理位置不是硬锁定" in prompt
-        assert "不得因为地理位置不一致直接选择 `none`" in prompt
-        assert "必须说明 TA 为什么会移动到这里或与当前路线交叉" in prompt
+        assert "默认选择 `none`" in prompt
+        assert "你不负责设计出场桥段" in prompt
 
 
 class TestDirectorNPCConfirmationSceneProjection:
@@ -59,10 +56,6 @@ class TestDirectorNPCConfirmationSceneProjection:
                 selected_id=draft.draft_id,
                 selected_name=draft.name,
                 reason="test",
-                contextual_presence="test",
-                immediate_intent="test",
-                first_pressure="test",
-                scene_function="information",
             )
         )
 
@@ -89,47 +82,6 @@ class SpyGateway:
     def run(self, **kwargs):
         self.calls.append(kwargs)
         return kwargs["output_schema"].model_validate(json.loads(self.response))
-
-
-def _action_parse(*, action_type="observe", risk_level="medium") -> ActionParseResult:
-    return ActionParseResult(
-        turn_intent="观察",
-        atomic_actions=[
-            AtomicAction(
-                action_id="a1",
-                sequence=1,
-                actor="主角",
-                action_type=action_type,
-                raw_text="观察周围",
-                verb="观察",
-                likely_needs_roll=False,
-                risk_level=risk_level,
-                confidence=0.9,
-            )
-        ],
-    )
-
-
-def _turn_resolution(selected_type="advance") -> TurnResolutionResult:
-    return TurnResolutionResult(
-        selected_type=selected_type,
-        available_types=["advance", "escalate_pressure", "complication"],
-    )
-
-
-def _stm(*types: str) -> ShortTermMemory:
-    return ShortTermMemory(
-        recent_scenes=[
-            ShortTermScene(
-                scene_id=f"scene_{index:03}",
-                turn_index=index,
-                user_input="",
-                scene_text="剧情",
-                narrative_type=narrative_type,
-            )
-            for index, narrative_type in enumerate(types, start=1)
-        ]
-    )
 
 
 def _state() -> CurrentState:
@@ -175,19 +127,11 @@ def _dispatch_response(action="dispatch_standby", selected_id="director_npc_x", 
         "selected_id": selected_id,
         "selected_name": selected_name,
         "reason": "她能用药剂师身份与当前旅途产生交集。",
-        "contextual_presence": "她沿同一条路寻找稀有药草，刚好抵达当前区域。",
-        "immediate_intent": "想用一瓶止血药交换主角知道的路线消息。",
-        "first_pressure": "她提出交易窗口，同时表现出对附近危险的隐约了解。",
-        "scene_function": "information",
     }
     if action == "none":
         payload.update({
             "selected_id": None,
             "selected_name": None,
-            "contextual_presence": None,
-            "immediate_intent": None,
-            "first_pressure": None,
-            "scene_function": None,
         })
     return json.dumps(payload, ensure_ascii=False)
 
@@ -195,9 +139,6 @@ def _dispatch_response(action="dispatch_standby", selected_id="director_npc_x", 
 class TestDirectorNPCTrigger:
     def test_turn_one_forces_first_dispatch_even_without_five_turn_window(self):
         reason = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("transition"),
             turn_index=1,
             last_dispatch_turn=0,
         )
@@ -206,9 +147,6 @@ class TestDirectorNPCTrigger:
 
     def test_turn_one_force_does_not_repeat_after_same_turn_dispatch(self):
         reason = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("transition"),
             turn_index=1,
             last_dispatch_turn=1,
         )
@@ -217,77 +155,19 @@ class TestDirectorNPCTrigger:
 
     def test_blocks_within_two_turns(self):
         reason = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution(),
-            short_term_memory=_stm("advance", "advance"),
             turn_index=10,
             last_dispatch_turn=8,
         )
 
         assert reason is None
 
-    def test_blocks_high_risk_and_stealth(self):
-        high = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(risk_level="high"),
-            turn_resolution=_turn_resolution(),
-            short_term_memory=_stm("advance", "advance", "advance", "advance"),
-            turn_index=10,
-            last_dispatch_turn=1,
-        )
-        stealth = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(action_type="hide_or_stealth", risk_level="low"),
-            turn_resolution=_turn_resolution(),
-            short_term_memory=_stm("advance", "advance", "advance", "advance"),
-            turn_index=10,
-            last_dispatch_turn=1,
-        )
-
-        assert high is None
-        assert stealth is None
-
-    def test_triggers_when_no_pressure_in_recent_five_including_current(self):
+    def test_triggers_after_two_turn_cooldown(self):
         reason = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("advance", "relationship_shift", "respite", "transition"),
-            turn_index=6,
-            last_dispatch_turn=1,
+            turn_index=11,
+            last_dispatch_turn=8,
         )
 
-        assert reason == "no pressure or complication in the last 5 turns including this turn"
-
-    def test_does_not_trigger_before_five_turn_window_exists(self):
-        reason = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("advance", "relationship_shift", "respite"),
-            turn_index=4,
-            last_dispatch_turn=0,
-        )
-
-        assert reason is None
-
-    def test_does_not_trigger_when_current_turn_has_pressure(self):
-        reason = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("complication"),
-            short_term_memory=_stm("advance", "relationship_shift", "respite", "transition"),
-            turn_index=6,
-            last_dispatch_turn=1,
-        )
-
-        assert reason is None
-
-    def test_hard_max_triggers_after_eight_turns(self):
-        reason = _director_npc_trigger_reason(
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("complication", "advance", "advance", "advance"),
-            turn_index=10,
-            last_dispatch_turn=2,
-        )
-
-        assert reason == "8 turns passed since last director NPC dispatch"
+        assert reason == "director NPC dispatch check after cooldown"
 
 
 class TestDirectorNPCWorkflow:
@@ -477,9 +357,6 @@ class TestDirectorNPCWorkflow:
         result = maybe_director_npc_workflow(
             core_memory=CoreMemory(items=[]),
             current_state=_state(),
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("advance", "advance", "advance", "advance"),
             recent_summaries=[],
             director_event=None,
             user_input="我环顾四周寻找线索",
@@ -492,6 +369,9 @@ class TestDirectorNPCWorkflow:
         assert result.created_drafts == []
         assert result.dispatch is not None
         assert result.dispatch.action == "dispatch_standby"
+        assert result.plot_injection is not None
+        assert result.plot_injection.selected_name == draft.name
+        assert result.plot_injection.selected_npc["hidden_secret"] == draft.hidden_secret
         assert director_store.get_meta_int("last_dispatch_turn") == 0
 
     def test_dispatcher_receives_dispatched_director_private_and_public_profile(self):
@@ -516,9 +396,6 @@ class TestDirectorNPCWorkflow:
         result = maybe_director_npc_workflow(
             core_memory=CoreMemory(items=[]),
             current_state=_state(),
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("advance", "advance", "advance", "advance"),
             recent_summaries=[],
             director_event=None,
             user_input="我走向广场中心",
@@ -565,9 +442,6 @@ class TestDirectorNPCWorkflow:
         result = maybe_director_npc_workflow(
             core_memory=CoreMemory(items=[]),
             current_state=_state(),
-            action_parse_result=_action_parse(),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("advance", "advance", "advance", "advance"),
             recent_summaries=[],
             director_event=None,
             user_input="我走向广场中心",
@@ -594,6 +468,7 @@ class TestDirectorNPCWorkflow:
 
     def test_creates_standby_when_pool_is_empty_even_if_not_triggered(self):
         director_store = DirectorNPCStore(":memory:")
+        director_store.set_meta_int("last_dispatch_turn", 3)
         creator = MockLLM()
         dispatcher = MockLLM()
         creator.set_responses(_draft_responses("艾琳娜", "薇拉", "洛珊"))
@@ -601,9 +476,6 @@ class TestDirectorNPCWorkflow:
         result = maybe_director_npc_workflow(
             core_memory=CoreMemory(items=[]),
             current_state=_state(),
-            action_parse_result=_action_parse(risk_level="high"),
-            turn_resolution=_turn_resolution("advance"),
-            short_term_memory=_stm("advance", "advance"),
             recent_summaries=[],
             director_event=None,
             user_input="我小心前进",
@@ -663,10 +535,6 @@ class TestDirectorNPCWorkflow:
                 selected_id=draft.draft_id,
                 selected_name=draft.name,
                 reason="test",
-                contextual_presence="test",
-                immediate_intent="test",
-                first_pressure="test",
-                scene_function="information",
             )
         )
 

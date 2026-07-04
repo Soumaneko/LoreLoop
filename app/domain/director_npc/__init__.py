@@ -4,6 +4,7 @@ from .schemas import (
     DirectorNPCCreateOutput,
     DirectorNPCDispatchDecision,
     DirectorNPCDraft,
+    DirectorNPCPlotInjection,
     DirectorNPCWorkflowResult,
     ExistingNPCCandidate,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "DirectorNPCDispatcher",
     "DirectorNPCDispatchDecision",
     "DirectorNPCDraft",
+    "DirectorNPCPlotInjection",
     "DirectorNPCStore",
     "DirectorNPCWorkflowResult",
     "ExistingNPCCandidate",

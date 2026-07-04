@@ -49,7 +49,7 @@
 
 {director_event_instructions}
 
-## Director NPC Injection
+## Director NPC Candidate
 
 ```json
 {director_npc_injection_json}
@@ -97,7 +97,7 @@
 
 # 任务逻辑
 
-1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Memories 是过去剧情的钩子；SceneSummaries 是过去发生的剧情；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍；DirectorEvent 是剧情背景中的导演事件；Director NPC Injection则是本轮中要加入的新NPC的介绍；
+1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Memories 是过去剧情的钩子；SceneSummaries 是过去发生的剧情；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍；DirectorEvent 是剧情背景中的导演事件；Director NPC Candidate 是本轮可考虑导入的 NPC 的介绍；
 2. 第二步，确定信息边界，主角知道什么不知道什么？NPC知道什么不知道什么？
 3. 第三步，你需要在不违背第一第二步的前提下，构思一个合理的，忠实地反应 Player Input 和 TurnResolutionResult 的剧情走向。
 4. 第四步，你需要在不违背第一第二步的前提下，将剧情走向通过 beat 的格式分割补全，最终以输出的格式展示。
@@ -108,7 +108,10 @@
    - 若用户提出“准备、购买、打听、协商”等开放式目标，必须给出本回合实质进展。
    - 按 Player Input 的自然顺序组织行动，不得跳过意图。
    - 每个 ActionResolutionFrame 必须被至少一个 beat 体现，必须落实为已经发生的具体结果；不得扩展出 TR 未声明的新事实。
-2. 如果 Director NPC Injection 不为 null，必须至少安排一个 beat 让该 NPC 依据 immediate_intent 主动介入当前场景。该介入必须制造 first_pressure 所描述的压力、机会或扰动，但不得强迫主角接受任务、立刻帮助、攻击或长期同行。
+2. 如果 Director NPC Candidate 不为 null，你拥有二次裁量权：
+   - 若该 NPC 与当前剧情有自然交点，应安排轻量介入。
+   - 若导入会打断当前行动、要求创造未建立事实，或把场景推向逻辑性差的剧情，应拒绝使用，并在 director_event_note 中简要说明。
+   - 不能为了省事每次都拒绝；拒绝必须基于当前场景的因果与节奏。
 3. 为了保证叙事连贯性和逻辑性，可以生成“过渡性 Beat”。
 4. NPC 反应必须符合上下文内容，不得为制造冲突而歪曲。
 5. NPC 私密信息必须分层规划：
@@ -135,7 +138,7 @@
 
 # 例子
 
-假设本回合 Player Input 为“推开密室石门走进去，然后举起火把照亮室内”；TurnResolutionResult.selected_type 为 `advance`，其中 A1（推门）与 A2（照明）均为 success。一个合法输出形如：
+假设本回合 Player Input 为“推开密室石门走进去，然后举起火把照亮室内”；TurnResolutionResult 中 A1（推门）与 A2（照明）均为 success。一个合法输出形如：
 
 ```json
 {{

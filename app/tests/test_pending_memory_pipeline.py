@@ -61,7 +61,7 @@ def _action_parse() -> ActionParseResult:
 
 class TestMemoryDraftExtractPrompt:
     def test_does_not_expand_temporary_expression_into_action_constraint(self):
-        prompt = Path("app/prompts/memory_draft_extract_v1.md").read_text(encoding="utf-8")
+        prompt = Path("app/prompts/confirmation/memory_draft_extract_v1.md").read_text(encoding="utf-8")
 
         assert "不得把临时表达扩写成行动约束" in prompt
         assert "当前偏好扩写为长期行动约束" in prompt
@@ -70,7 +70,7 @@ class TestMemoryDraftExtractPrompt:
 
 class TestMemoryBatchClassifyPrompt:
     def test_does_not_expand_temporary_expression_into_action_constraint(self):
-        prompt = Path("app/prompts/memory_batch_classify_v1.md").read_text(encoding="utf-8")
+        prompt = Path("app/prompts/maintenance/memory_batch_classify_v1.md").read_text(encoding="utf-8")
 
         assert "以 source_text_span 为证据上限" in prompt
         assert "pending raw_text 只是草稿命题" in prompt

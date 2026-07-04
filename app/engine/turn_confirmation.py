@@ -15,7 +15,6 @@ from app.domain.npc_profile.workflows import (
     sync_npc_profile_absence_from_current_state,
     update_npc_profiles_from_extraction,
 )
-from app.domain.turn_resolution import NARRATIVE_TYPE_LABELS
 from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.workflows.extract_memory import fill_pending_memory_scene_metadata
 from app.workflows.generate_action_preview import generate_action_preview_workflow
@@ -60,10 +59,8 @@ class _ConfirmationPipelineInput:
     scene_result: Any
     user_input: str
     turn_index: int
-    default_narrative_type: str
     stale_message: str
     pending_registry: dict[str, Any]
-    invalid_narrative_fallback: str | None = None
     update_director_event: bool = True
     handle_director_npc: bool = True
     director_npc_restock_sync: bool = False
@@ -85,21 +82,18 @@ def confirm_stream(
     turn_id: str,
     write_db: bool = True,
     scene_text: str | None = None,
-    narrative_type: str | None = None,
 ):
     if turn_id in PENDING_OPENINGS:
         yield from confirm_opening_stream(
             turn_id,
             write_db=write_db,
             scene_text=scene_text,
-            narrative_type=narrative_type,
         )
         return
     yield from confirm_turn_stream(
         turn_id,
         write_db=write_db,
         scene_text=scene_text,
-        narrative_type=narrative_type,
     )
 
 
@@ -107,7 +101,6 @@ def confirm_turn_stream(
     turn_id: str,
     write_db: bool = True,
     scene_text: str | None = None,
-    narrative_type: str | None = None,
 ):
     lock = confirmation_lock(turn_id)
     with lock:
@@ -115,7 +108,6 @@ def confirm_turn_stream(
             turn_id,
             write_db=write_db,
             scene_text=scene_text,
-            narrative_type=narrative_type,
         )
 
 
@@ -285,7 +277,6 @@ def _confirm_turn_stream_locked(
     turn_id: str,
     write_db: bool = True,
     scene_text: str | None = None,
-    narrative_type: str | None = None,
 ):
     pending = PENDING_TURNS.get(turn_id)
     if pending is None:
@@ -299,7 +290,6 @@ def _confirm_turn_stream_locked(
             scene_result=pending.scene_result,
             user_input=pending.user_input,
             turn_index=pending.turn_index,
-            default_narrative_type=pending.context.turn_resolution.selected_type,
             stale_message=(
                 "Pending turn is stale because CurrentState changed after generation. "
                 "Generate the turn again before confirming."
@@ -310,7 +300,6 @@ def _confirm_turn_stream_locked(
         ),
         write_db=write_db,
         scene_text=scene_text,
-        narrative_type=narrative_type,
     )
 
 
@@ -318,18 +307,12 @@ def _confirm_pipeline_locked(
     pipeline_input: _ConfirmationPipelineInput,
     write_db: bool = True,
     scene_text: str | None = None,
-    narrative_type: str | None = None,
 ):
     pending = pipeline_input.pending
     turn_id = pipeline_input.turn_id
     trace_id = str(uuid.uuid4())
     effective_scene_text = scene_text if scene_text is not None else pipeline_input.scene_result.scene_text
-    effective_narrative_type = narrative_type or pipeline_input.default_narrative_type
-    if effective_narrative_type not in NARRATIVE_TYPE_LABELS:
-        if pipeline_input.invalid_narrative_fallback is None:
-            raise ValueError(f"Invalid narrative_type: {effective_narrative_type}")
-        effective_narrative_type = pipeline_input.invalid_narrative_fallback
-    cache_key = (effective_scene_text, effective_narrative_type)
+    cache_key = effective_scene_text
     cache = pending.confirmation_cache
     if cache.get("key") != cache_key:
         cache.clear()
@@ -344,7 +327,6 @@ def _confirm_pipeline_locked(
         "step": "confirm_started",
         "data": {
             "trace_id": trace_id,
-            "narrative_type": effective_narrative_type,
             **pipeline_input.confirm_started_extra,
         },
     }
@@ -736,7 +718,6 @@ def _confirm_pipeline_locked(
                     turn_index=pipeline_input.turn_index,
                     user_input=pipeline_input.user_input,
                     scene_text=effective_scene_text,
-                    narrative_type=effective_narrative_type,
                 )
                 cache["short_term_saved"] = True
             short_term_after = short_store.get_recent()
@@ -814,7 +795,6 @@ def _confirm_pipeline_locked(
         "trace_id": trace_id,
         "write_db": write_db,
         **pipeline_input.finish_extra,
-        "narrative_type": effective_narrative_type,
         "state_before": model_data(pipeline_input.state_before),
         "state_after": model_data(updated_state),
         "scene_result": scene_result_data,
@@ -848,7 +828,6 @@ def confirm_opening_stream(
     turn_id: str,
     write_db: bool = True,
     scene_text: str | None = None,
-    narrative_type: str | None = None,
 ):
     lock = confirmation_lock(turn_id)
     with lock:
@@ -856,7 +835,6 @@ def confirm_opening_stream(
             turn_id,
             write_db=write_db,
             scene_text=scene_text,
-            narrative_type=narrative_type,
         )
 
 
@@ -864,7 +842,6 @@ def _confirm_opening_stream_locked(
     turn_id: str,
     write_db: bool = True,
     scene_text: str | None = None,
-    narrative_type: str | None = None,
 ):
     pending = PENDING_OPENINGS.get(turn_id)
     if pending is None:
@@ -878,8 +855,6 @@ def _confirm_opening_stream_locked(
             scene_result=pending.scene_result,
             user_input="",
             turn_index=0,
-            default_narrative_type="transition",
-            invalid_narrative_fallback="transition",
             stale_message=(
                 "Pending opening is stale because initialization state changed. "
                 "Initialize again before confirming."
@@ -895,5 +870,4 @@ def _confirm_opening_stream_locked(
         ),
         write_db=write_db,
         scene_text=scene_text,
-        narrative_type=narrative_type,
     )

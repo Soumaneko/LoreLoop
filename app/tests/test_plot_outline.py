@@ -16,6 +16,7 @@ from app.domain.current_state import (
 from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
 from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.plot_outline.views import project_retrieved_memories
+from app.domain.director_npc.schemas import DirectorNPCPlotInjection
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
@@ -73,8 +74,6 @@ def _make_context() -> PlotOutlineContext:
             ambiguities=[],
         ),
         turn_resolution=TurnResolutionResult(
-            available_types=["advance", "relationship_shift"],
-            selected_type="advance",
             action_resolutions=[
                 ActionResolutionFrame(
                     action_id="a1",
@@ -187,6 +186,28 @@ class TestPlotOutlineAgent:
         assert "state_implications" not in schema_json
         assert "tone_notes" not in schema_json
 
+    def test_director_npc_candidate_input_omits_dispatch_reason(self):
+        context = _make_context()
+        context.director_npc_injection = DirectorNPCPlotInjection(
+            action="dispatch_standby",
+            selected_id="director_npc_x",
+            selected_name="艾琳娜",
+            selected_npc={
+                "name": "艾琳娜",
+                "role": "流浪药剂师",
+                "hidden_secret": "只用于导演判断",
+            },
+        )
+        gateway = _SpyGateway(json.loads(_build_outline_response()))
+
+        PlotOutlineAgent(gateway).generate(context)
+
+        injection_json = gateway.calls[0]["input_data"]["director_npc_injection_json"]
+        assert "艾琳娜" in injection_json
+        assert "reason" not in injection_json
+        assert "immediate_intent" not in injection_json
+        assert "first_pressure" not in injection_json
+
     def test_generates_outline(self):
         context = _make_context()
         mock = MockLLM()
@@ -200,7 +221,7 @@ class TestPlotOutlineAgent:
         assert result.beats[0].summary == "主角环顾酒馆，注意到角落里的可疑人物"
 
     def test_prompt_contains_outcome_following_requirements(self):
-        prompt = Path("app/prompts/plot_outline_v1.md").read_text(encoding="utf-8")
+        prompt = Path("app/prompts/generation/plot_outline_v1.md").read_text(encoding="utf-8")
 
         assert "TurnResolutionResult" in prompt
         assert "ActionParseResult" not in prompt
@@ -227,8 +248,9 @@ class TestPlotOutlineAgent:
         assert "不得写入 `required_outcomes` 的信息边界" in prompt
         assert "hidden_secret" in prompt
         assert "只写抽象边界" in prompt
-        assert "不得在 beats、required_outcomes、constraints_for_scene_writer 或 risks_to_avoid 中列举隐秘的具体名词" in prompt
-        assert "不得把“禁止透露的具体隐藏内容”作为约束转交给 SceneWriter" in prompt
+        assert "constraints_for_scene_writer 填写的禁止内容，不能把具体内容写进去" in prompt
+        assert "二次裁量权" in prompt
+        assert "不能为了省事每次都拒绝" in prompt
 
     def test_beats_have_required_fields(self):
         context = _make_context()
@@ -380,7 +402,6 @@ class TestPlotOutlineAgent:
     def test_retries_when_turn_resolution_outcomes_are_out_of_order(self):
         context = _make_context()
         context.turn_resolution = TurnResolutionResult(
-            selected_type="advance",
             action_resolutions=[
                 ActionResolutionFrame(
                     action_id="A2",

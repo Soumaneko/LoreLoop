@@ -17,25 +17,10 @@ class TestShortTermMemoryStore:
         assert memory.recent_scenes[0].scene_id == "s1"
         assert memory.recent_scenes[0].user_input == "观察四周"
         assert memory.recent_scenes[0].scene_text == "第一段剧情"
-        assert memory.recent_scenes[0].narrative_type is None
         assert memory.recent_scenes[1].scene_id == "s2"
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "第二段剧情"
         assert memory.max_items == 5
-
-    def test_add_and_get_recent_with_narrative_type(self):
-        store = ShortTermMemoryStore(max_items=5)
-        store.add_turn(
-            "s1",
-            1,
-            "观察四周",
-            "第一段剧情",
-            narrative_type="advance",
-        )
-
-        memory = store.get_recent()
-
-        assert memory.recent_scenes[0].narrative_type == "advance"
 
     def test_evicts_oldest_when_exceeded(self):
         store = ShortTermMemoryStore(max_items=3)
@@ -113,7 +98,6 @@ class TestShortTermMemoryModel:
             scene_id="s1", turn_index=1, scene_text="剧情",
         )
         assert scene.user_input == ""
-        assert scene.narrative_type is None
 
 
 class TestShortTermMemoryPersistence:
@@ -141,7 +125,7 @@ class TestShortTermMemoryPersistence:
         import os
         os.unlink(db_path)
 
-    def test_existing_db_without_narrative_type_is_migrated(self):
+    def test_existing_minimal_db_is_supported(self):
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
@@ -172,12 +156,12 @@ class TestShortTermMemoryPersistence:
 
         store = ShortTermMemoryStore(db_path=db_path)
         memory = store.get_recent()
-        store.add_turn("s2", 2, "继续", "新剧情", narrative_type="advance")
+        store.add_turn("s2", 2, "继续", "新剧情")
         updated = store.get_recent()
         store.close()
 
-        assert memory.recent_scenes[0].narrative_type is None
-        assert updated.recent_scenes[1].narrative_type == "advance"
+        assert memory.recent_scenes[0].scene_text == "旧剧情"
+        assert updated.recent_scenes[1].scene_text == "新剧情"
 
         import os
         os.unlink(db_path)
@@ -239,7 +223,7 @@ class TestListAll:
 
     def test_list_all_returns_short_term_scene_objects(self):
         store = ShortTermMemoryStore(max_items=5)
-        store.add_turn("s1", 1, "观察", "剧情", narrative_type="advance")
+        store.add_turn("s1", 1, "观察", "剧情")
 
         all_scenes = store.list_all()
         assert len(all_scenes) == 1
@@ -248,5 +232,4 @@ class TestListAll:
         assert scene.scene_id == "s1"
         assert scene.user_input == "观察"
         assert scene.scene_text == "剧情"
-        assert scene.narrative_type == "advance"
         assert scene.created_at is not None

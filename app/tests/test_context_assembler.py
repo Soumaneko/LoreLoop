@@ -71,8 +71,6 @@ def _make_action_parse_result() -> ActionParseResult:
 
 def _make_turn_resolution() -> TurnResolutionResult:
     return TurnResolutionResult(
-        available_types=["advance", "relationship_shift"],
-        selected_type="advance",
         action_resolutions=[
             ActionResolutionFrame(
                 action_id="a1",
@@ -136,7 +134,6 @@ class TestAssembleContext:
         assert ctx.current_state.scene.scene_id == "scene_001"
         assert ctx.action_parse_result.turn_intent == "探索修道院"
         assert ctx.turn_resolution.total_resolutions == 1
-        assert ctx.turn_resolution.selected_type == "advance"
         assert len(ctx.core_memory.items) == 1
         assert ctx.retrieved_memories.total_returned == 1
         assert ctx.scene_summaries == []
@@ -204,7 +201,6 @@ class TestAssembleContext:
         assert restored.current_state.scene.scene_id == ctx.current_state.scene.scene_id
         assert restored.core_memory.items[0].id == ctx.core_memory.items[0].id
         assert restored.turn_resolution.action_resolutions[0].outcome_band == "success"
-        assert restored.turn_resolution.selected_type == "advance"
 
     def test_subtype_validation_rejects_wrong_subtype(self):
         with pytest.raises(ValidationError):

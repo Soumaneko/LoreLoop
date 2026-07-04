@@ -30,16 +30,6 @@ const tabs = [
   ["raw", "Raw"],
 ];
 
-const narrativeTypes = [
-  ["advance", "推进"],
-  ["relationship_shift", "关系变化"],
-  ["reveal_information", "揭示信息"],
-  ["escalate_pressure", "升压"],
-  ["complication", "麻烦"],
-  ["transition", "过渡"],
-  ["respite", "休整"],
-];
-
 const memoryKindLabels = {
   commitment: "承诺",
   open_thread: "未决线索",
@@ -62,7 +52,6 @@ const state = {
   traceRequests: {},
   pendingTurnId: null,
   pendingSceneText: null,
-  selectedNarrativeType: "advance",
   chatRestored: false,
   coreMemoryInitialized: true,
   operationStatus: "Ready",
@@ -252,10 +241,9 @@ function restoreChat(history) {
   }
 }
 
-function addEditableScene(textValue, meta, narrativeType) {
+function addEditableScene(textValue, meta) {
   removePendingScene();
   state.pendingSceneText = textValue;
-  state.selectedNarrativeType = narrativeType || "advance";
   const wrap = document.createElement("div");
   wrap.className = "message assistant";
   wrap.id = "pendingSceneBubble";
@@ -266,9 +254,6 @@ function addEditableScene(textValue, meta, narrativeType) {
         <button class="scene-edit">编辑</button>
       </div>
       <div class="scene-display"></div>
-      <div class="scene-narrative-options">
-        ${narrativeTypes.map(([id, label]) => `<button class="scene-type ${state.selectedNarrativeType === id ? "selected" : ""}" data-type="${id}">${esc(label)}</button>`).join("")}
-      </div>
       <div class="scene-editor-wrap" style="display:none">
         <textarea class="scene-editor"></textarea>
         <div class="scene-actions">
@@ -299,12 +284,6 @@ function addEditableScene(textValue, meta, narrativeType) {
     editorWrap.style.display = "none";
     display.style.display = "block";
   };
-  wrap.querySelectorAll(".scene-type").forEach((btn) => {
-    btn.onclick = () => {
-      state.selectedNarrativeType = btn.dataset.type;
-      wrap.querySelectorAll(".scene-type").forEach((other) => other.classList.toggle("selected", other === btn));
-    };
-  });
   els.messages.appendChild(wrap);
   els.messages.scrollTop = els.messages.scrollHeight;
 }
@@ -318,7 +297,6 @@ function markPendingSceneConfirmed() {
   if (!bubble) return;
   bubble.removeAttribute("id");
   bubble.querySelector(".scene-edit")?.remove();
-  bubble.querySelector(".scene-narrative-options")?.remove();
   bubble.querySelector(".scene-editor-wrap")?.remove();
   const meta = bubble.querySelector(".scene-meta");
   if (meta) meta.insertAdjacentHTML("afterend", ` <span class="scene-confirmed">已确认</span>`);
@@ -427,9 +405,8 @@ async function applyInit() {
     const data = await api("/api/init/apply", { method: "POST", body: JSON.stringify(readInitConfig()) });
     state.coreMemoryInitialized = true;
     state.pendingTurnId = data.turn_id || null;
-    state.selectedNarrativeType = "transition";
     await refreshState({ preserveStatus: true });
-    if (data.opening_scene?.scene_text) addEditableScene(data.opening_scene.scene_text, "开场 · 待确认", "transition");
+    if (data.opening_scene?.scene_text) addEditableScene(data.opening_scene.scene_text, "开场 · 待确认");
     setStatus(state.pendingTurnId ? "开场已生成 - 待确认" : "Core Memory 已初始化");
     els.turnInfo.textContent = state.pendingTurnId ? `Pending ${state.pendingTurnId}` : "等待玩家行动";
   } catch (err) {
@@ -892,7 +869,7 @@ function renderResolution(result) {
   if (!result) return `<div class="empty">暂无结果判定。</div>`;
   return `
     ${card("判定审计", esc(text(result.resolution_reasoning)))}
-    ${metrics([metric("类型", result.selected_type, "info"), metric("解释", result.total_resolutions || 0)])}
+    ${metrics([metric("解释", result.total_resolutions || 0)])}
     ${(result.action_resolutions || []).map((o) => `<div class="section-card">
       <div class="card-title"><span>${esc(o.action_id)} · ${esc(o.outcome_band)}</span>${metric("type", o.action_type)}</div>
       ${kv([
@@ -901,12 +878,6 @@ function renderResolution(result) {
         ["事实结论", esc(text(o.resolved_fact))],
       ])}
     </div>`).join("")}
-    ${details("叙事类型过滤", kv([
-      ["可选", chips(result.available_types)],
-      ["前置", chips(result.previous_types)],
-      ["Roll", list(result.roll_filter_notes)],
-      ["冷却", list(result.cooldown_filter_notes)],
-    ]))}
   `;
 }
 
@@ -1176,10 +1147,6 @@ function directorNpcDispatchCard(dispatch) {
     ["动作", esc(text(dispatch.action))],
     ["选择", esc(`${text(dispatch.selected_name)} · ${text(dispatch.selected_id)}`)],
     ["原因", esc(text(dispatch.reason))],
-    ["出现逻辑", esc(text(dispatch.contextual_presence))],
-    ["即时意图", esc(text(dispatch.immediate_intent))],
-    ["第一压力", esc(text(dispatch.first_pressure))],
-    ["场景功能", esc(text(dispatch.scene_function))],
   ])}</div>`;
 }
 
@@ -1410,7 +1377,7 @@ async function generateTurn() {
       if (event.step === "action_parsed") state.activeTab = "generation";
       if (event.step === "scene_written") {
         state.pendingTurnId = data.turn_id;
-        addEditableScene(data.scene_result.scene_text, `待确认 · Turn ${data.turn_index}`, merged("generation").turn_resolution?.selected_type);
+        addEditableScene(data.scene_result.scene_text, `待确认 · Turn ${data.turn_index}`);
         els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
         setStatus("正文已生成 - 待确认");
         setDebugStatus("等待确认");
@@ -1437,7 +1404,6 @@ async function confirmTurn() {
     const body = { turn_id: state.pendingTurnId, write_db: writeDb };
     const sceneText = getSceneText();
     if (sceneText != null) body.scene_text = sceneText;
-    if (state.selectedNarrativeType) body.narrative_type = state.selectedNarrativeType;
     const response = await fetch("/api/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

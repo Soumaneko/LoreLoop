@@ -12,10 +12,6 @@ def project_turn_resolution(result: TurnResolutionResult) -> str:
             mode="json",
             exclude={
                 "resolution_reasoning": True,
-                "available_types": True,
-                "previous_types": True,
-                "roll_filter_notes": True,
-                "cooldown_filter_notes": True,
                 "action_resolutions": {"__all__": {"effect_reasoning"}},
             },
         ),

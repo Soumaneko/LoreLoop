@@ -9,18 +9,6 @@ from app.domain.npc_profile.schemas import NPCProfilePublicView
 
 DirectorNPCStatus = Literal["standby", "dispatched", "discarded"]
 DirectorNPCDispatchAction = Literal["dispatch_standby", "recall_existing", "none"]
-DirectorNPCSceneFunction = Literal[
-    "complication",
-    "temptation",
-    "information",
-    "conflict",
-    "rescue",
-    "rivalry",
-    "social_pressure",
-    "color",
-]
-
-
 def _new_id() -> str:
     return f"director_npc_{uuid.uuid4().hex[:12]}"
 
@@ -118,10 +106,6 @@ class DirectorNPCDispatchDecision(BaseModel):
     selected_id: str | None = None
     selected_name: str | None = None
     reason: str = ""
-    contextual_presence: str | None = None
-    immediate_intent: str | None = None
-    first_pressure: str | None = None
-    scene_function: DirectorNPCSceneFunction | None = None
 
     @model_validator(mode="after")
     def _validate_payload(self):
@@ -129,14 +113,19 @@ class DirectorNPCDispatchDecision(BaseModel):
             return self
         if not (self.selected_id and self.selected_name):
             raise ValueError("selected_id and selected_name are required when dispatching")
-        for field_name in ("contextual_presence", "immediate_intent", "first_pressure", "scene_function"):
-            if getattr(self, field_name) in (None, ""):
-                raise ValueError(f"{field_name} is required when dispatching")
         return self
+
+
+class DirectorNPCPlotInjection(BaseModel):
+    action: Literal["dispatch_standby", "recall_existing"]
+    selected_id: str
+    selected_name: str
+    selected_npc: dict = Field(default_factory=dict)
 
 
 class DirectorNPCWorkflowResult(BaseModel):
     created_drafts: list[DirectorNPCDraft] = Field(default_factory=list)
     dispatch: DirectorNPCDispatchDecision | None = None
+    plot_injection: DirectorNPCPlotInjection | None = None
     trigger_reason: str | None = None
     skipped_reason: str | None = None

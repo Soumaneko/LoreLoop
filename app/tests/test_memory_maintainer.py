@@ -146,7 +146,7 @@ def test_failed_proposal_does_not_advance_summary_cursor():
 
 
 def test_maintainer_prompt_can_narrow_overbroad_memories():
-    prompt = Path("app/prompts/memory_maintain_v1.md").read_text(encoding="utf-8")
+    prompt = Path("app/prompts/maintenance/memory_maintain_v1.md").read_text(encoding="utf-8")
 
     assert "content 可能过宽" in prompt
     assert "supersede 收窄" in prompt

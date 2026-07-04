@@ -26,25 +26,12 @@ from app.domain.views import (
 )
 
 from .schemas import (
-    NARRATIVE_TYPE_LABELS,
     ActionResolutionFrame,
-    NarrativeType,
     OutcomeBand,
     RiskLevel,
     RollJudgment,
     TurnResolutionResult,
 )
-
-
-ALL_NARRATIVE_TYPES: list[NarrativeType] = [
-    "advance",
-    "relationship_shift",
-    "reveal_information",
-    "escalate_pressure",
-    "complication",
-    "transition",
-    "respite",
-]
 
 
 class _ActionResolutionOutput(BaseModel):
@@ -55,7 +42,6 @@ class _ActionResolutionOutput(BaseModel):
 
 class _TurnResolutionOutput(BaseModel):
     resolution_reasoning: str = Field(min_length=1)
-    selected_type: NarrativeType
     action_resolutions: list[_ActionResolutionOutput] = Field(default_factory=list)
 
 
@@ -93,76 +79,6 @@ def infer_risk_level(action: AtomicAction, band: OutcomeBand) -> RiskLevel:
         if base == "medium":
             return "high"
     return base
-
-
-def roll_filter_types(
-    judgments: list[RollJudgment],
-    available_types: list[NarrativeType] | None = None,
-) -> tuple[list[NarrativeType], list[str]]:
-    current = list(available_types or ALL_NARRATIVE_TYPES)
-    bands = {judgment.outcome_band for judgment in judgments}
-    notes: list[str] = []
-
-    has_critical_success = "critical_success" in bands
-    has_critical_failure = "critical_failure" in bands
-    success_like = bool(bands & {"success", "critical_success", "partial_success"})
-    failure_like = bool(bands & {"failure", "critical_failure"})
-
-    if has_critical_success and has_critical_failure:
-        notes.append("critical_success and critical_failure both present; roll filter keeps all narrative types.")
-        return current, notes
-
-    if has_critical_failure:
-        filtered = [t for t in current if t in {"escalate_pressure", "complication"}]
-        if not filtered:
-            filtered = ["advance"]
-            notes.append("critical_failure left no available type; fallback to advance.")
-        else:
-            notes.append("critical_failure without critical_success allows only pressure or complication.")
-        return filtered, notes
-
-    if not failure_like:
-        current = [t for t in current if t not in {"escalate_pressure", "complication"}]
-        notes.append("no failure-like outcome; removed pressure and complication.")
-
-    if not success_like:
-        current = [t for t in current if t not in {"reveal_information", "transition"}]
-        notes.append("no success-like outcome; removed information reveal and transition.")
-
-    if not current:
-        current = ["advance"]
-        notes.append("roll filter left no available type; fallback to advance.")
-
-    return current, notes
-
-
-def cooldown_filter_types(
-    available_types: list[NarrativeType],
-    previous_types: list[NarrativeType],
-) -> tuple[list[NarrativeType], list[str]]:
-    current = list(available_types)
-    previous_two = previous_types[-2:]
-    notes: list[str] = []
-
-    if previous_two:
-        last_type = previous_two[-1]
-        if last_type != "advance" and last_type in current:
-            current = [t for t in current if t != last_type]
-            notes.append(f"removed previous narrative type: {last_type}.")
-
-    if len(previous_two) >= 2 and previous_two[-2:] == ["advance", "advance"]:
-        current = [t for t in current if t != "advance"]
-        notes.append("removed advance after two consecutive advance chapters.")
-
-    if any(t in {"transition", "respite"} for t in previous_two):
-        current = [t for t in current if t not in {"transition", "respite"}]
-        notes.append("removed transition and respite due to shared cooldown.")
-
-    if not current:
-        current = ["advance"]
-        notes.append("cooldown filter left no available type; fallback to advance.")
-
-    return current, notes
 
 
 def build_roll_judgments(
@@ -217,42 +133,23 @@ class TurnResolutionAgent:
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         director_event: DirectorEvent | None = None,
         recent_archived_director_event: DirectorEvent | None = None,
-        previous_types: list[NarrativeType] | None = None,
         trace_id: str | None = None,
     ) -> TurnResolutionResult:
-        previous_types = list(previous_types or [])
         judgments = build_roll_judgments(action_parse_result, roll_results)
-        roll_available, roll_notes = roll_filter_types(judgments)
-        final_available, cooldown_notes = cooldown_filter_types(roll_available, previous_types)
 
         if not judgments:
             return TurnResolutionResult(
                 resolution_reasoning="本回合没有需要掷骰解释的行动，回合判定回退为默认推进。",
-                selected_type="advance",
-                available_types=["advance"],
-                previous_types=previous_types[-2:],
-                roll_filter_notes=["no rolled actions; fallback to advance."],
-                cooldown_filter_notes=[],
                 action_resolutions=[],
             )
 
         schema = _TurnResolutionOutput.model_json_schema()
-        if "properties" in schema and "selected_type" in schema["properties"]:
-            schema["properties"]["selected_type"]["enum"] = list(final_available)
 
         decision = cast(
             _TurnResolutionOutput,
             self.llm.run(
                 task="turn_resolution",
                 input_data={
-                    "available_types_json": json.dumps(
-                        [
-                            {"id": t, "label": NARRATIVE_TYPE_LABELS[t]}
-                            for t in final_available
-                        ],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
                     "roll_judgments_json": json.dumps(
                         [judgment.model_dump(mode="json") for judgment in judgments],
                         ensure_ascii=False,
@@ -285,20 +182,12 @@ class TurnResolutionAgent:
             ),
         )
 
-        if decision.selected_type not in final_available:
-            raise ValueError(f"TurnResolution selected unavailable type: {decision.selected_type}")
-
         action_resolutions = _validate_action_resolutions(
             decision.action_resolutions,
             judgments,
         )
         return TurnResolutionResult(
             resolution_reasoning=decision.resolution_reasoning,
-            selected_type=decision.selected_type,
-            available_types=final_available,
-            previous_types=previous_types[-2:],
-            roll_filter_notes=roll_notes,
-            cooldown_filter_notes=cooldown_notes,
             action_resolutions=action_resolutions,
         )
 

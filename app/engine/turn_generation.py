@@ -37,14 +37,6 @@ from .stores import (
 )
 
 
-def recent_narrative_types(short_term_memory) -> list[str]:
-    return [
-        scene.narrative_type
-        for scene in short_term_memory.recent_scenes[-2:]
-        if scene.narrative_type
-    ]
-
-
 def generate_turn_stream(
     user_input: str,
     difficulty: Difficulty = "困难",
@@ -227,7 +219,6 @@ def generate_turn_stream(
         director_event=active_director_event,
         recent_archived_director_event=recent_archived_director_event,
         gateway=gateway,
-        previous_types=recent_narrative_types(short_term_memory),
         trace_id=trace_id,
     )
 
@@ -247,9 +238,6 @@ def generate_turn_stream(
         director_npc_result = maybe_director_npc_workflow(
             core_memory=core_memory,
             current_state=current_state,
-            action_parse_result=action_parse_result,
-            turn_resolution=turn_resolution,
-            short_term_memory=short_term_memory,
             recent_summaries=recent_summaries,
             director_event=active_director_event,
             user_input=user_input,
@@ -281,7 +269,7 @@ def generate_turn_stream(
         director_event=active_director_event,
         recent_archived_director_event=recent_archived_director_event,
         director_npc_injection=(
-            director_npc_result.dispatch
+            director_npc_result.plot_injection
             if director_npc_result is not None
             else None
         ),

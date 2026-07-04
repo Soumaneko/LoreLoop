@@ -14,9 +14,7 @@ from app.domain.turn_resolution import (
     ActionResolutionFrame,
     TurnResolutionAgent,
     build_roll_judgments,
-    cooldown_filter_types,
     map_roll_to_band,
-    roll_filter_types,
 )
 from app.workflows.resolve_turn import resolve_turn_workflow
 
@@ -78,10 +76,9 @@ def _state() -> CurrentState:
     )
 
 
-def _response(selected_type: str = "advance", outcome_band: str = "critical_success") -> str:
+def _response(outcome_band: str = "critical_success") -> str:
     return json.dumps({
-        "resolution_reasoning": "本回合只有观察行动，roll_judgment 为给定 outcome_band，观察四周属于 A 类可能。CurrentState 支持主角处在当前场景中，因此结果应兑现为发现环境异常，并选择与推进调查相符的叙事类型。",
-        "selected_type": selected_type,
+        "resolution_reasoning": "本回合只有观察行动，roll_judgment 为给定 outcome_band。CurrentState 支持主角处在当前场景中，因此结果应兑现为发现环境异常。",
         "action_resolutions": [
             {
                 "action_id": "a1",
@@ -147,34 +144,9 @@ class TestRollJudgment:
             )
 
 
-class TestTurnResolutionFilters:
-    def test_critical_failure_only_allows_pressure_or_complication(self):
-        judgments = build_roll_judgments(_parse(), _roll_batch(_roll(1)))
-
-        available, _ = roll_filter_types(judgments)
-
-        assert available == ["escalate_pressure", "complication"]
-
-    def test_no_failure_like_removes_pressure_and_complication(self):
-        judgments = build_roll_judgments(_parse(), _roll_batch(_roll(20)))
-
-        available, _ = roll_filter_types(judgments)
-
-        assert "escalate_pressure" not in available
-        assert "complication" not in available
-
-    def test_cooldown_blocks_repeated_non_advance_type(self):
-        available, _ = cooldown_filter_types(
-            ["advance", "relationship_shift"],
-            ["relationship_shift"],
-        )
-
-        assert available == ["advance"]
-
-
 class TestTurnResolutionAgent:
     def test_prompt_contains_top_level_reasoning_requirements(self):
-        prompt = Path("app/prompts/turn_resolution_v1.md").read_text(encoding="utf-8")
+        prompt = Path("app/prompts/generation/turn_resolution_v1.md").read_text(encoding="utf-8")
 
         assert "resolution_reasoning" in prompt
         assert "回合判定前的逻辑审计" in prompt
@@ -182,7 +154,8 @@ class TestTurnResolutionAgent:
         assert "不要预写具体演出" in prompt
         assert "确定信息边界" in prompt
         assert "客观可能性" in prompt
-        assert "selected_type 必须来自" in prompt
+        assert "selected_type" not in prompt
+        assert "可选叙事类型" not in prompt
         assert "本行动的结果依据" in prompt
         assert "resolved_fact" in prompt
         assert "本行动判定后的权威事实结论" in prompt
@@ -190,7 +163,7 @@ class TestTurnResolutionAgent:
         assert "resolved_effect" not in prompt
 
     def test_prompt_input_omits_action_parse_result(self):
-        gateway = _SpyGateway(json.loads(_response("advance", "critical_success")))
+        gateway = _SpyGateway(json.loads(_response("critical_success")))
 
         TurnResolutionAgent(gateway).resolve(
             user_input="观察",
@@ -206,7 +179,9 @@ class TestTurnResolutionAgent:
         assert "user_input" in input_data
         assert "roll_judgments_json" in input_data
         assert "action_parse_result_json" not in input_data
+        assert "available_types_json" not in input_data
         assert "resolution_reasoning" in input_data["output_schema_json"]
+        assert "selected_type" not in input_data["output_schema_json"]
         schema = json.loads(input_data["output_schema_json"])
         action_resolution_ref = schema["properties"]["action_resolutions"]["items"]["$ref"]
         action_resolution_def = schema["$defs"][action_resolution_ref.removeprefix("#/$defs/")]
@@ -217,9 +192,9 @@ class TestTurnResolutionAgent:
             "resolved_fact",
         }
 
-    def test_llm_interprets_consequence_and_selects_type(self):
+    def test_llm_interprets_consequence(self):
         mock = MockLLM()
-        mock.set_responses([_response("advance", "critical_success")])
+        mock.set_responses([_response("critical_success")])
 
         result = TurnResolutionAgent(mock.build_gateway()).resolve(
             user_input="观察",
@@ -231,14 +206,13 @@ class TestTurnResolutionAgent:
             scene_summaries=[],
         )
 
-        assert result.selected_type == "advance"
         assert "观察行动" in result.resolution_reasoning
         assert result.action_resolutions[0].outcome_band == "critical_success"
         assert "异常" in result.action_resolutions[0].resolved_fact
 
     def test_fills_action_resolution_identity_from_roll_judgment(self):
         mock = MockLLM()
-        mock.set_responses([_response("advance", "failure")])
+        mock.set_responses([_response("failure")])
 
         result = TurnResolutionAgent(mock.build_gateway()).resolve(
             user_input="观察",
@@ -258,7 +232,7 @@ class TestTurnResolutionAgent:
 
     def test_workflow_returns_result(self):
         mock = MockLLM()
-        mock.set_responses([_response("advance", "critical_success")])
+        mock.set_responses([_response("critical_success")])
 
         result = resolve_turn_workflow(
             user_input="观察",

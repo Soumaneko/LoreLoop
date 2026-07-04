@@ -7,7 +7,7 @@ from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import RollResultBatch
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.turn_resolution import NarrativeType, TurnResolutionAgent, TurnResolutionResult
+from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.domain.director_event.schemas import DirectorEvent
 
 
@@ -25,7 +25,6 @@ def resolve_turn_workflow(
     director_event: DirectorEvent | None = None,
     recent_archived_director_event: DirectorEvent | None = None,
     gateway: LLMGateway,
-    previous_types: list[NarrativeType] | None = None,
     resolver: TurnResolutionAgent | None = None,
     trace_id: str | None = None,
 ) -> TurnResolutionResult:
@@ -42,6 +41,5 @@ def resolve_turn_workflow(
         npc_profiles=npc_profiles or [],
         director_event=director_event,
         recent_archived_director_event=recent_archived_director_event,
-        previous_types=previous_types,
         trace_id=trace_id,
     )

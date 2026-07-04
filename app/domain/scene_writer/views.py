@@ -29,6 +29,4 @@ def project_recent_scene(scene: ShortTermScene | None) -> str:
         "turn_index": scene.turn_index,
         "scene_text": scene.scene_text,
     }
-    if scene.narrative_type:
-        data["narrative_type"] = scene.narrative_type
     return json.dumps(data, ensure_ascii=False, indent=2)

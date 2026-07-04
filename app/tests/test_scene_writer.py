@@ -93,19 +93,17 @@ class TestSceneWriterAgent:
             turn_index=1,
             user_input="观察四周",
             scene_text="主角环顾酒馆。",
-            narrative_type="advance",
         )))
 
         assert projected == {
             "scene_id": "scene_001",
             "turn_index": 1,
             "scene_text": "主角环顾酒馆。",
-            "narrative_type": "advance",
         }
         assert "user_input" not in projected
 
     def test_prompt_allows_natural_reactions_but_protects_major_decisions(self):
-        prompt = Path("app/prompts/scene_write_v1.md").read_text(encoding="utf-8")
+        prompt = Path("app/prompts/generation/scene_write_v1.md").read_text(encoding="utf-8")
 
         assert "不得替主角接受或拒绝任务" in prompt
         assert "自然覆盖所有 beat" in prompt
@@ -422,7 +420,7 @@ class TestSceneWriterWorkflow:
 
 class TestOpeningSceneAgent:
     def test_opening_prompt_initializes_scene_without_npcs_or_events(self):
-        prompt = Path("app/prompts/opening_scene_v1.md").read_text(encoding="utf-8")
+        prompt = Path("app/prompts/confirmation/opening_scene_v1.md").read_text(encoding="utf-8")
 
         assert "初始情景" in prompt
         assert "不得引入新的具名 NPC" in prompt
