@@ -226,6 +226,9 @@ class TestPlotOutlineAgent:
         assert "检查 NPC 或世界反应的因果链" in prompt
         assert "不得写入 `required_outcomes` 的信息边界" in prompt
         assert "hidden_secret" in prompt
+        assert "只写抽象边界" in prompt
+        assert "不得在 beats、required_outcomes、constraints_for_scene_writer 或 risks_to_avoid 中列举隐秘的具体名词" in prompt
+        assert "不得把“禁止透露的具体隐藏内容”作为约束转交给 SceneWriter" in prompt
 
     def test_beats_have_required_fields(self):
         context = _make_context()

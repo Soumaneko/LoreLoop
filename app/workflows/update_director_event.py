@@ -14,11 +14,6 @@ from app.domain.director_event.store import DirectorEventStore
 from app.domain.scene_summary.schemas import SceneSummary
 
 
-PHASE_MAX_ACTIVE_TURNS = {
-    "latent": 4,
-    "manifesting": 3,
-}
-
 DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS = 3
 
 
@@ -58,24 +53,13 @@ def update_director_event_workflow(
             trace_id=trace_id,
         )
         changed_event_id = active.event_id
-        store.update_dynamic_fields(
-            active.event_id,
-            known_to_player_updates=review.known_to_player_updates,
-            hidden_development_updates=review.hidden_development_updates,
-            turn_index=turn_index,
-        )
-        prevention_hook_met = bool(review.matched_manifesting_prevention_hook)
-        crisis_hook_met = bool(review.matched_crisis_resolution_hook)
-        if review.decision == "archive_active" or prevention_hook_met or crisis_hook_met:
-            resolved_by_hook = (
-                review.matched_manifesting_prevention_hook
-                or review.matched_crisis_resolution_hook
-            )
+        if review.player_involved and not active.player_involved:
+            store.mark_player_involved(active.event_id, turn_index=turn_index)
+        if review.decision == "archive_active":
             store.archive_active(
                 active.event_id,
                 turn_index=turn_index,
-                resolved_by_hook=resolved_by_hook,
-                resolved_reason=review.reason if resolved_by_hook else None,
+                resolved_reason=review.reason,
             )
         elif review.decision == "suspend_active":
             store.suspend(
@@ -84,41 +68,16 @@ def update_director_event_workflow(
                 turn_index=turn_index,
             )
         else:
-            store.increment_active_phase_turn(
-                active.event_id,
-                turn_index=turn_index,
-            )
-            updated_active = store.get_by_id(active.event_id)
-            max_turns = PHASE_MAX_ACTIVE_TURNS.get(updated_active.phase)
-            deadline_reached = (
-                max_turns is not None
-                and updated_active.phase_turns_elapsed >= max_turns
-            )
-            if (
-                updated_active.phase != "crisis"
-                and (review.phase_advance_recommended or deadline_reached)
-            ):
-                store.advance_active_phase(
-                    active.event_id,
-                    turn_index=turn_index,
-                )
+            store.touch(active.event_id, turn_index=turn_index)
 
         active_after = store.get_active()
         notes = ["reviewed_existing_active_event"]
-        if prevention_hook_met:
-            notes.append("archived_by_manifesting_prevention_hook")
-        if crisis_hook_met:
-            notes.append("archived_by_crisis_resolution_hook")
-        if (
-            review.decision == "keep_active"
-            and active_after is not None
-            and active_after.phase != active.phase
-        ):
-            notes.append(
-                "phase_advanced_by_reviewer"
-                if review.phase_advance_recommended
-                else "phase_advanced_by_turn_limit"
-            )
+        if review.decision == "archive_active":
+            notes.append("archived_active_event")
+        elif review.decision == "suspend_active":
+            notes.append("suspended_active_event")
+        else:
+            notes.append("kept_active_event")
         return DirectorEventWorkflowResult(
             mode="review_active",
             active_before=active,

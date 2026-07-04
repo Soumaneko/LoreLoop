@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 DirectorEventStatus = Literal["active", "suspended", "archived"]
-DirectorEventPhase = Literal["latent", "manifesting", "crisis"]
 ReviewDecision = Literal["keep_active", "archive_active", "suspend_active"]
 SelectionAction = Literal["activate_suspended", "create_new"]
 
@@ -43,42 +42,46 @@ def _reject_time_anchors_in_list(values: list[str]) -> list[str]:
     return [_reject_time_anchors(value) for value in values]
 
 
-class DirectorEventStages(BaseModel):
-    latent: str = Field(
+class DirectorEventEntryPoint(BaseModel):
+    summary: str = Field(
         min_length=1,
-        description="Stage facts without dates, deadlines, countdowns, seasons, moon phases, hours, or other time anchors.",
+        description="A natural way this backstage event can enter frontstage play.",
     )
-    manifesting: str = Field(
+    natural_contexts: list[str] = Field(default_factory=list)
+    involved_npcs: list[str] = Field(default_factory=list)
+    pressure: str = Field(
         min_length=1,
-        description="Stage facts without dates, deadlines, countdowns, seasons, moon phases, hours, or other time anchors.",
-    )
-    crisis: str = Field(
-        min_length=1,
-        description="Stage facts without dates, deadlines, countdowns, seasons, moon phases, hours, or other time anchors.",
+        description="The immediate pressure, opportunity, or disturbance this entry point creates.",
     )
 
-    @field_validator("latent", "manifesting", "crisis")
+    @field_validator("summary", "pressure")
     @classmethod
     def _validate_no_time_anchors(cls, value: str) -> str:
         return _reject_time_anchors(value)
+
+    @field_validator("natural_contexts", "involved_npcs")
+    @classmethod
+    def _validate_list_no_time_anchors(cls, values: list[str]) -> list[str]:
+        return _reject_time_anchors_in_list(values)
 
 
 class DirectorEvent(BaseModel):
     event_id: str = Field(default_factory=_new_id)
     title: str = Field(min_length=1)
     status: DirectorEventStatus = "active"
-    phase: DirectorEventPhase
-    phase_turns_elapsed: int = Field(default=0, ge=0)
     backstage_premise: str = ""
-    stages: DirectorEventStages
+    player_involved: bool = Field(
+        default=False,
+        description="Whether the player has already directly engaged with this event.",
+    )
+    entry_points: list[DirectorEventEntryPoint] = Field(default_factory=list)
     related_npcs: list[str] = Field(default_factory=list)
     location_constraints: list[str] = Field(default_factory=list)
-    manifesting_prevention_hooks: list[str] = Field(default_factory=list)
-    crisis_resolution_hooks: list[str] = Field(default_factory=list)
-    known_to_player: list[str] | None
-    hidden_developments: list[str] | None
+    driving_tension: str = Field(
+        default="",
+        description="Why this event is still active and unresolved.",
+    )
     suspended_reason: str | None = None
-    resolved_by_hook: str | None = None
     resolved_reason: str | None = None
     resolved_turn: int | None = Field(default=None, ge=0)
     created_turn: int = Field(ge=0)
@@ -86,30 +89,26 @@ class DirectorEvent(BaseModel):
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
 
-    @field_validator("backstage_premise")
+    @field_validator("backstage_premise", "driving_tension")
     @classmethod
-    def _validate_backstage_premise_no_time_anchors(cls, value: str) -> str:
+    def _validate_no_time_anchors(cls, value: str) -> str:
         return _reject_time_anchors(value)
 
-    @field_validator("manifesting_prevention_hooks", "crisis_resolution_hooks")
+    @field_validator("related_npcs", "location_constraints")
     @classmethod
-    def _validate_hooks_no_time_anchors(cls, values: list[str]) -> list[str]:
+    def _validate_lists_no_time_anchors(cls, values: list[str]) -> list[str]:
         return _reject_time_anchors_in_list(values)
 
     def semantic_view(self) -> dict:
         return {
             "event_id": self.event_id,
             "title": self.title,
-            "phase": self.phase,
-            "phase_turns_elapsed": self.phase_turns_elapsed,
             "backstage_premise": self.backstage_premise,
-            "current_description": getattr(self.stages, self.phase),
+            "player_involved": self.player_involved,
+            "entry_points": [entry.model_dump(mode="json") for entry in self.entry_points],
             "related_npcs": self.related_npcs,
             "location_constraints": self.location_constraints,
-            "manifesting_prevention_hooks": self.manifesting_prevention_hooks,
-            "crisis_resolution_hooks": self.crisis_resolution_hooks,
-            "known_to_player": self.known_to_player,
-            "hidden_developments": self.hidden_developments,
+            "driving_tension": self.driving_tension,
         }
 
 
@@ -117,22 +116,24 @@ class DirectorEventDraft(BaseModel):
     title: str = Field(min_length=1)
     backstage_premise: str = Field(
         min_length=1,
-        description="Hidden event facts without dates, deadlines, countdowns, seasons, moon phases, hours, or other time anchors.",
+        description="Hidden event facts without dates, deadlines, countdowns, seasons, lunar cycles, hours, or other time anchors.",
     )
-    stages: DirectorEventStages
+    entry_points: list[DirectorEventEntryPoint] = Field(min_length=1)
     related_npcs: list[str] = Field(default_factory=list)
     location_constraints: list[str] = Field(default_factory=list)
-    manifesting_prevention_hooks: list[str] = Field(min_length=3, max_length=3)
-    crisis_resolution_hooks: list[str] = Field(min_length=3, max_length=3)
+    driving_tension: str = Field(
+        min_length=1,
+        description="The unresolved active tension that explains why this director event is still not over.",
+    )
 
-    @field_validator("backstage_premise")
+    @field_validator("backstage_premise", "driving_tension")
     @classmethod
-    def _validate_backstage_premise_no_time_anchors(cls, value: str) -> str:
+    def _validate_no_time_anchors(cls, value: str) -> str:
         return _reject_time_anchors(value)
 
-    @field_validator("manifesting_prevention_hooks", "crisis_resolution_hooks")
+    @field_validator("related_npcs", "location_constraints")
     @classmethod
-    def _validate_hooks_no_time_anchors(cls, values: list[str]) -> list[str]:
+    def _validate_lists_no_time_anchors(cls, values: list[str]) -> list[str]:
         return _reject_time_anchors_in_list(values)
 
     def to_event(self, *, turn_index: int, status: DirectorEventStatus = "active") -> DirectorEvent:
@@ -140,16 +141,11 @@ class DirectorEventDraft(BaseModel):
         return DirectorEvent(
             title=self.title,
             status=status,
-            phase="latent",
-            phase_turns_elapsed=0,
             backstage_premise=self.backstage_premise,
-            stages=self.stages,
+            entry_points=list(self.entry_points),
             related_npcs=self.related_npcs,
             location_constraints=self.location_constraints,
-            manifesting_prevention_hooks=self.manifesting_prevention_hooks,
-            crisis_resolution_hooks=self.crisis_resolution_hooks,
-            known_to_player=None,
-            hidden_developments=None,
+            driving_tension=self.driving_tension,
             created_turn=turn_index,
             updated_turn=turn_index,
             created_at=now,
@@ -160,38 +156,16 @@ class DirectorEventDraft(BaseModel):
 class DirectorEventReviewResult(BaseModel):
     reason: str = Field(min_length=1)
     decision: ReviewDecision
+    player_involved: bool = Field(
+        description="True if the confirmed scene shows the player has directly engaged with this event.",
+    )
     evidence: list[str] = Field(default_factory=list)
     suspended_reason: str | None = None
-    phase_advance_recommended: bool
-    phase_advance_reason: str | None
-    known_to_player_updates: list[str] | None
-    hidden_development_updates: list[str] | None
-    matched_manifesting_prevention_hook: str | None = None
-    matched_crisis_resolution_hook: str | None = None
 
     @model_validator(mode="after")
     def _validate_suspended_reason(self):
         if self.decision == "suspend_active" and not (self.suspended_reason or "").strip():
             self.suspended_reason = self.reason
-        if self.phase_advance_recommended:
-            if self.decision != "keep_active":
-                raise ValueError("phase advance can only be recommended for keep_active")
-            if not (self.phase_advance_reason or "").strip():
-                raise ValueError(
-                    "phase_advance_reason is required when phase advance is recommended"
-                )
-            if not self.evidence:
-                raise ValueError(
-                    "evidence is required when phase advance is recommended"
-                )
-        elif self.phase_advance_reason is not None:
-            raise ValueError(
-                "phase_advance_reason must be null when phase advance is not recommended"
-            )
-        if self.matched_manifesting_prevention_hook and self.matched_crisis_resolution_hook:
-            raise ValueError(
-                "only one director event hook can be matched in a single review"
-            )
         return self
 
 

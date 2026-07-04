@@ -15,9 +15,11 @@ def _archived_event_dedupe_view(event: DirectorEvent) -> dict:
     return {
         "title": event.title,
         "backstage_premise": event.backstage_premise,
-        "stages": event.stages.model_dump(mode="json"),
+        "player_involved": event.player_involved,
+        "entry_points": [entry.model_dump(mode="json") for entry in event.entry_points],
         "related_npcs": event.related_npcs,
         "location_constraints": event.location_constraints,
+        "driving_tension": event.driving_tension,
     }
 
 

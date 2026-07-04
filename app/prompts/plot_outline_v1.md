@@ -90,7 +90,7 @@
   - linked_outcome_ids：该节拍体现的 ActionResolutionFrame.action_id 列表。
   - required_outcomes：该节拍必须落实的具体结果列表。
   - required_memory_indices：该节拍引用的 Memories 中的 memory_index 列表，不需要时填空列表。
-- constraints_for_scene_writer：本回合特有的、SceneWriter 必须遵守的剧情事实、角色动机、信息可见性和连续性边界列表。
+- constraints_for_scene_writer：本回合特有的、SceneWriter 必须遵守的剧情事实、角色动机、信息可见性和连续性边界列表。严禁把具体的隐秘内容写在这里，写在这里只会反而泄密。
 - risks_to_avoid：本回合需要避免的具体剧情风险列表。
 - director_event_note：本回合如何使用或为何未使用幕后事件。
 
@@ -114,6 +114,7 @@
 5. NPC 私密信息必须分层规划：
    - `hidden_secret`：幕后因果，不得进入 beat；除非玩家明确命中且 TurnResolutionResult 明确揭示。
    - `core_motivation`：根据NPC性格判断是否愿意表现。
+   - 当需要表达“不要泄露某个隐秘”时，beats、required_outcomes、constraints_for_scene_writer 或 risks_to_avoid 中只写抽象边界，不得列举隐秘的具体名词。
 6. 每个 beat 必须给出单一、确定发生的结果。
 7. 最后一个 beat 只需停在当前行动结果刚刚成立后的交互节点；不要添加收束、转场或新的待办来证明它开放。选择空间来自当前互动未被关闭，而不是额外创造新分叉。
 
@@ -130,6 +131,7 @@
 9. 不得把 `hidden_secret` 写成 NPC 主动坦白、旁白确认或 SceneWriter 必须落实的公开事实；不得仅因 critical_success 就完整揭开 NPC 私密动机链。
 10. 不得为了制造下一回合选择而新增问题、邀约、资源分配、地点、任务或后续安排。
 11. 如果 Player Input 或 TurnResolutionResult 已明确某项资源、承诺或行动的用途，不得在后续 beat 中重新开放其用途、归属或决策权。
+12. constraints_for_scene_writer 填写的禁止内容，不能把具体内容写进去，以免传递给下游。
 
 # 例子
 

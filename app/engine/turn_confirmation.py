@@ -549,94 +549,125 @@ def _confirm_pipeline_locked(
         return generate_action_preview_workflow(
             scene_text=effective_scene_text,
             current_state=updated_state,
-            core_memory=core_memory_store().load_required(),
+            core_memory=core_memory,
             recent_summaries=recent_summaries,
             next_action_directions=pipeline_input.scene_result.next_action_directions,
             gateway=gateway,
             trace_id=trace_id,
         )
 
-    action_preview = cache.get("action_preview")
-    if action_preview is None:
-        action_preview = _do_action_preview()
-        cache["action_preview"] = action_preview
-    yield {
-        "step": "action_preview_done",
-        "data": {
-            "action_preview": model_data(action_preview),
-        },
-    }
+    def _do_director_event_update():
+        with director_event_store() as director_store, director_npc_store() as director_npc_repo:
+            standby_director_npcs = director_npc_repo.list_standby()
+            reviewer_gateway = create_gateway()
+            reviewer_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+            selector_gateway = create_gateway()
+            selector_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+            return update_director_event_workflow(
+                user_input=pipeline_input.user_input,
+                scene_text=effective_scene_text,
+                current_state=updated_state,
+                core_memory=core_memory,
+                scene_summaries=scene_summaries,
+                turn_index=pipeline_input.turn_index,
+                store=director_store,
+                reviewer=DirectorEventReviewer(reviewer_gateway),
+                selector=DirectorEventSelector(selector_gateway),
+                standby_director_npcs=standby_director_npcs,
+                trace_id=trace_id,
+            )
 
+    def _do_entity_profile_update():
+        with entity_store() as ent_store:
+            gateway = create_gateway()
+            gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+            entity_result = update_entity_profiles_from_extraction(
+                scene_text=effective_scene_text,
+                current_state=updated_state,
+                core_memory=core_memory,
+                gateway=gateway,
+                entity_store=ent_store,
+                existing_profiles=existing_entity_profiles,
+                extraction=entity_extraction,
+                recent_summaries=recent_summaries,
+                trace_id=trace_id,
+            )
+            return entity_result.saved_ids
+
+    def _do_npc_profile_update():
+        with npc_profile_store() as npc_store:
+            gateway = create_gateway()
+            gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+            npc_result = update_npc_profiles_from_extraction(
+                scene_text=confirmation_scene_text,
+                current_state=updated_state,
+                core_memory=core_memory,
+                gateway=gateway,
+                npc_store=npc_store,
+                existing_profiles=existing_npc_profiles,
+                extraction=npc_extraction,
+                recent_summaries=recent_summaries,
+                trace_id=trace_id,
+            )
+            absence_synced_ids = sync_npc_profile_absence_from_current_state(
+                npc_store=npc_store,
+                current_state=updated_state,
+            )
+            return _merge_unique_ids([*npc_result.saved_ids, *absence_synced_ids])
+
+    action_preview = cache.get("action_preview")
     updated_entity_ids: list[str] = cache.get("updated_entity_ids", [])
     updated_npc_profile_ids: list[str] = cache.get("updated_npc_profile_ids", [])
     director_event_result = cache.get("director_event_result")
+
+    second_wave: dict[concurrent.futures.Future, str] = {}
+    action_preview_yielded = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        if action_preview is None:
+            second_wave[pool.submit(_do_action_preview)] = "action_preview"
+        if write_db:
+            if (
+                pipeline_input.update_director_event
+                and pipeline_input.turn_index >= 1
+                and "director_event_result" not in cache
+            ):
+                second_wave[pool.submit(_do_director_event_update)] = "director_event"
+            if entity_extraction is not None and "updated_entity_ids" not in cache:
+                second_wave[pool.submit(_do_entity_profile_update)] = "entity_profile"
+            if npc_extraction is not None and "updated_npc_profile_ids" not in cache:
+                second_wave[pool.submit(_do_npc_profile_update)] = "npc_profile"
+
+        for future in concurrent.futures.as_completed(second_wave):
+            kind = second_wave[future]
+            if kind == "action_preview":
+                action_preview = future.result()
+                cache["action_preview"] = action_preview
+                action_preview_yielded = True
+                yield {
+                    "step": "action_preview_done",
+                    "data": {
+                        "action_preview": model_data(action_preview),
+                    },
+                }
+            elif kind == "director_event":
+                director_event_result = future.result()
+                cache["director_event_result"] = director_event_result
+            elif kind == "entity_profile":
+                updated_entity_ids = future.result()
+                cache["updated_entity_ids"] = updated_entity_ids
+            elif kind == "npc_profile":
+                updated_npc_profile_ids = future.result()
+                cache["updated_npc_profile_ids"] = updated_npc_profile_ids
+
+    if not action_preview_yielded:
+        yield {
+            "step": "action_preview_done",
+            "data": {
+                "action_preview": model_data(action_preview),
+            },
+        }
+
     if write_db:
-        if (
-            pipeline_input.update_director_event
-            and pipeline_input.turn_index >= 1
-            and "director_event_result" not in cache
-        ):
-            with director_event_store() as director_store, director_npc_store() as director_npc_repo:
-                standby_director_npcs = director_npc_repo.list_standby()
-                reviewer_gateway = create_gateway()
-                reviewer_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
-                selector_gateway = create_gateway()
-                selector_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
-                director_event_result = update_director_event_workflow(
-                    user_input=pipeline_input.user_input,
-                    scene_text=effective_scene_text,
-                    current_state=updated_state,
-                    core_memory=core_memory_store().load_required(),
-                    scene_summaries=scene_summaries,
-                    turn_index=pipeline_input.turn_index,
-                    store=director_store,
-                    reviewer=DirectorEventReviewer(reviewer_gateway),
-                    selector=DirectorEventSelector(selector_gateway),
-                    standby_director_npcs=standby_director_npcs,
-                    trace_id=trace_id,
-                )
-            cache["director_event_result"] = director_event_result
-        if entity_extraction is not None and "updated_entity_ids" not in cache:
-            with entity_store() as ent_store:
-                gateway = create_gateway()
-                gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
-                entity_result = update_entity_profiles_from_extraction(
-                    scene_text=effective_scene_text,
-                    current_state=updated_state,
-                    core_memory=core_memory,
-                    gateway=gateway,
-                    entity_store=ent_store,
-                    existing_profiles=existing_entity_profiles,
-                    extraction=entity_extraction,
-                    recent_summaries=recent_summaries,
-                    trace_id=trace_id,
-                )
-                updated_entity_ids = entity_result.saved_ids
-            cache["updated_entity_ids"] = updated_entity_ids
-        if npc_extraction is not None and "updated_npc_profile_ids" not in cache:
-            with npc_profile_store() as npc_store:
-                gateway = create_gateway()
-                gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
-                npc_result = update_npc_profiles_from_extraction(
-                    scene_text=confirmation_scene_text,
-                    current_state=updated_state,
-                    core_memory=core_memory,
-                    gateway=gateway,
-                    npc_store=npc_store,
-                    existing_profiles=existing_npc_profiles,
-                    extraction=npc_extraction,
-                    recent_summaries=recent_summaries,
-                    trace_id=trace_id,
-                )
-                updated_npc_profile_ids = npc_result.saved_ids
-                absence_synced_ids = sync_npc_profile_absence_from_current_state(
-                    npc_store=npc_store,
-                    current_state=updated_state,
-                )
-                updated_npc_profile_ids = _merge_unique_ids(
-                    [*updated_npc_profile_ids, *absence_synced_ids]
-                )
-            cache["updated_npc_profile_ids"] = updated_npc_profile_ids
         if (
             pipeline_input.handle_director_npc
             and not cache.get("director_npc_restock_scheduled")

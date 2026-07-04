@@ -26,8 +26,6 @@ class DirectorEventReviewer:
         trace_id: str | None = None,
     ) -> DirectorEventReviewResult:
         event_view = active_event.semantic_view()
-        if active_event.phase == "crisis":
-            event_view.pop("known_to_player", None)
         event_view.update(
             status=active_event.status,
             created_turn=active_event.created_turn,

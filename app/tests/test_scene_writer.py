@@ -421,6 +421,14 @@ class TestSceneWriterWorkflow:
 
 
 class TestOpeningSceneAgent:
+    def test_opening_prompt_initializes_scene_without_npcs_or_events(self):
+        prompt = Path("app/prompts/opening_scene_v1.md").read_text(encoding="utf-8")
+
+        assert "初始情景" in prompt
+        assert "不得引入新的具名 NPC" in prompt
+        assert "不得引入具体剧情事件" in prompt
+        assert "重点是初始化" in prompt
+
     def test_generates_opening_scene(self):
         config = InitConfig(
             fanfic=True,

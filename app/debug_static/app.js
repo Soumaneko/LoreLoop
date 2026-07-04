@@ -373,7 +373,7 @@ function renderInitPanel() {
   setStatus("需要初始化 Core Memory");
   els.turnInfo.textContent = "未初始化";
   els.statePanel.innerHTML = `
-    ${card("初始化", `<div class="empty">创建核心记忆后会生成开场场景，并进入待确认状态。</div>`)}
+    ${card("初始化", `<div class="empty">创建核心记忆后会生成开场情景，并进入待确认状态。</div>`)}
     <section class="card init-grid">
       <label><input id="initFanfic" type="checkbox" /> 同人世界</label>
       <input id="initName" placeholder="主角姓名" />
@@ -1222,25 +1222,33 @@ function entityCard(profile) {
 
 function directorCard(event) {
   if (!event) return `<div class="empty">无</div>`;
+  const entryPoints = event.entry_points || [];
+  const entryPointCards = entryPoints.map((entry, index) => `
+    <div class="entry-point">
+      <div class="muted">入口 ${index + 1}</div>
+      <div style="margin:4px 0 8px">${esc(text(entry.summary))}</div>
+      ${kv([
+        ["场合", chips(entry.natural_contexts)],
+        ["NPC", chips(entry.involved_npcs)],
+        ["压力", esc(text(entry.pressure))],
+      ])}
+    </div>
+  `).join("");
   return `<div class="section-card">
-    <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.status || "active", event.phase || "")}</div>
+    <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.status || "active", entryPoints.length)}</div>
     ${event.backstage_premise ? `<div style="margin-bottom:8px">${esc(event.backstage_premise)}</div>` : ""}
-    <div style="margin-bottom:8px">${esc(text(event.stages?.[event.phase]))}</div>
     ${kv([
       ["ID", esc(text(event.event_id))],
-      ["阶段回合", esc(text(event.phase_turns_elapsed))],
       ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
-      ["解决Hook", esc(text(event.resolved_by_hook))],
       ["暂停原因", esc(text(event.suspended_reason))],
       ["解决原因", esc(text(event.resolved_reason))],
+      ["玩家介入", esc(event.player_involved ? "是" : "否")],
       ["关联NPC", chips(event.related_npcs)],
       ["地点限制", chips(event.location_constraints)],
-      ["Manifest Hooks", list(event.manifesting_prevention_hooks)],
-      ["Crisis Hooks", list(event.crisis_resolution_hooks)],
-      ["已知", list(event.known_to_player)],
-      ["隐藏", list(event.hidden_developments)],
+      ["未结束原因", esc(text(event.driving_tension))],
     ])}
+    ${entryPointCards || `<div class="empty">无入口</div>`}
   </div>`;
 }
 

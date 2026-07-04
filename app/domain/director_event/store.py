@@ -133,7 +133,6 @@ class DirectorEventStore:
         event_id: str,
         *,
         turn_index: int,
-        resolved_by_hook: str | None = None,
         resolved_reason: str | None = None,
     ) -> bool:
         event = self.get_by_id(event_id)
@@ -143,80 +142,8 @@ class DirectorEventStore:
             update={
                 "status": "archived",
                 "suspended_reason": None,
-                "resolved_by_hook": resolved_by_hook or event.resolved_by_hook,
                 "resolved_reason": resolved_reason or event.resolved_reason,
-                "resolved_turn": turn_index if resolved_by_hook else event.resolved_turn,
-                "updated_turn": turn_index,
-                "updated_at": utc_now(),
-            }
-        )
-        self.save(updated)
-        return True
-
-    def update_dynamic_fields(
-        self,
-        event_id: str,
-        *,
-        known_to_player_updates: list[str] | None = None,
-        hidden_development_updates: list[str] | None = None,
-        turn_index: int,
-    ) -> bool:
-        event = self.get_by_id(event_id)
-        if event is None:
-            return False
-
-        known_to_player = _merge_unique(
-            event.known_to_player,
-            known_to_player_updates,
-        )
-        hidden_developments = _merge_unique(
-            event.hidden_developments,
-            hidden_development_updates,
-        )
-        updated = event.model_copy(
-            update={
-                "known_to_player": known_to_player,
-                "hidden_developments": hidden_developments,
-                "updated_turn": turn_index,
-                "updated_at": utc_now(),
-            }
-        )
-        self.save(updated)
-        return True
-
-    def advance_active_phase(
-        self,
-        event_id: str,
-        *,
-        turn_index: int,
-    ) -> bool:
-        event = self.get_by_id(event_id)
-        if event is None or event.status != "active" or event.phase == "crisis":
-            return False
-        next_phase = "manifesting" if event.phase == "latent" else "crisis"
-        updated = event.model_copy(
-            update={
-                "phase": next_phase,
-                "phase_turns_elapsed": 0,
-                "updated_turn": turn_index,
-                "updated_at": utc_now(),
-            }
-        )
-        self.save(updated)
-        return True
-
-    def increment_active_phase_turn(
-        self,
-        event_id: str,
-        *,
-        turn_index: int,
-    ) -> bool:
-        event = self.get_by_id(event_id)
-        if event is None or event.status != "active":
-            return False
-        updated = event.model_copy(
-            update={
-                "phase_turns_elapsed": event.phase_turns_elapsed + 1,
+                "resolved_turn": turn_index,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
             }
@@ -229,6 +156,20 @@ class DirectorEventStore:
         if event is None:
             return False
         updated = event.model_copy(update={"updated_turn": turn_index, "updated_at": utc_now()})
+        self.save(updated)
+        return True
+
+    def mark_player_involved(self, event_id: str, *, turn_index: int) -> bool:
+        event = self.get_by_id(event_id)
+        if event is None:
+            return False
+        updated = event.model_copy(
+            update={
+                "player_involved": True,
+                "updated_turn": turn_index,
+                "updated_at": utc_now(),
+            }
+        )
         self.save(updated)
         return True
 
@@ -297,15 +238,3 @@ class DirectorEventStore:
     def _event_from_row(row) -> DirectorEvent:
         data = json.loads(row["event_json"])
         return DirectorEvent.model_validate(data)
-
-
-def _merge_unique(existing: list[str] | None, updates: list[str] | None) -> list[str] | None:
-    merged: list[str] = []
-    seen: set[str] = set()
-    for item in [*(existing or []), *(updates or [])]:
-        cleaned = item.strip()
-        if not cleaned or cleaned in seen:
-            continue
-        merged.append(cleaned)
-        seen.add(cleaned)
-    return merged or None
