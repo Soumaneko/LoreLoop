@@ -780,19 +780,11 @@ function renderPreview() {
   const preview = merged("confirmation").action_preview;
   if (!preview) return `<div class="empty">确认后生成行动预览。</div>`;
   return card("行动预览", `
-    <div class="section-card">${esc(text(preview.scene_context))}</div>
     ${(preview.previews || []).map((p) => `<div class="section-card">
-      <div class="card-title"><span>${esc(p.label)}</span>${metric(p.level || "", p.action_type || "")}</div>
+      <div class="card-title"><span>${esc(p.label)}</span>${metric(p.level || "")}</div>
       ${kv([
-        ["说明", esc(text(p.description))],
         ["收益", esc(text(p.good_result))],
         ["风险", esc(text(p.risk))],
-        ["动词", esc(text(p.verb))],
-        ["目标", esc(text(p.target))],
-        ["方式", esc(text(p.method))],
-        ["目的", esc(text(p.goal))],
-        ["骰点", esc(p.likely_needs_roll ? "是" : "否")],
-        ["锚点", chips((p.anchors || []).map((a) => `${a.text} · ${a.kind}`))],
       ])}
     </div>`).join("")}
   `);

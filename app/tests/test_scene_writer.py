@@ -110,6 +110,10 @@ class TestSceneWriterAgent:
 
         assert "不得替主角接受或拒绝任务" in prompt
         assert "必须自然落实所有 planned_events" in prompt
+        assert "planned_events` 是事实清单" in prompt
+        assert "低风险移动、吃饭、等待、普通观察、路人闲聊等过渡事件应合并处理" in prompt
+        assert "{max_chars}" not in prompt
+        assert "Length Target" not in prompt
         assert "不得从“行动已经完成以后”开始" in prompt
         assert "protagonist_response_guidance" not in prompt
         assert "changes_summary" not in prompt

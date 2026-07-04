@@ -9,7 +9,7 @@ from app.domain.scene_summary.schemas import SceneSummary
 
 def generate_action_preview_workflow(
     *,
-    scene_text: str,
+    closing_prompt: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
     recent_summaries: list[SceneSummary],
@@ -19,7 +19,7 @@ def generate_action_preview_workflow(
 ) -> ActionPreviewResult:
     agent = ActionPreviewAgent(gateway)
     return agent.generate(
-        scene_text=scene_text,
+        closing_prompt=closing_prompt,
         current_state=current_state,
         core_memory=core_memory,
         recent_summaries=recent_summaries,

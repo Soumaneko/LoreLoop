@@ -56,7 +56,6 @@
 {outline_json}
 ```
 
-
 # 输出规范
 
 只返回一个 SceneWriterResult JSON，不含任何前缀、后缀或解释：
@@ -67,8 +66,8 @@
 
 按以下顺序为每个字段产出期望内容：
 
-- scene_reasoning：正文生成前的逻辑审计，用 3-6 句自然语言写清楚你将如何在不违反 Plot Outline、CurrentState、Memories、Entity/NPC Profiles 和 Recent Scene 的前提下串联本回合正文。
-- scene_text：以第二人称撰写的文字冒险剧情正文，自然流畅、文笔出色、逻辑严密地落实 Plot Outline 。篇幅应服从本回合复杂度：关键行动、对话和因果转折必须写清楚，简单过渡不要拖长。不得包含“你会怎么做？”式控制权归还句；正文写到 scene_stopping_point 指定的当前互动状态即可。
+- scene_reasoning：正文生成前的逻辑审计，用 2-4 句自然语言写清楚你将如何在不违反 Plot Outline、CurrentState、Memories、Entity/NPC Profiles 和 Recent Scene 的前提下落实本回合正文。
+- scene_text：以第二人称撰写的文字冒险剧情正文，自然流畅、逻辑严密地落实 Plot Outline。`planned_events` 是事实清单，不是必须逐条扩写的剧情节拍；关键行动、必要对话和因果转折必须写清楚，不要写过多慢镜头、长铺陈或无功能的生活细节。不得包含“你会怎么做？”式控制权归还句；正文写到 scene_stopping_point 指定的当前互动状态即可。
 - closing_prompt：只写一句话，必须使用“[玩家当前面临的选择或压力]，你会怎么做？”格式，供程序拼接到正文末尾；不得加入环境描写、气氛描写、镜头收束、额外动作、邀约、地点或任务。
 - next_action_directions：2-5 条下一回合可自然展开的行动方向，供 ActionPreviewAgent 使用；每条包含 direction、rationale、anchors。它们不是正文内容，不得写入 scene_text。
 
@@ -83,15 +82,14 @@
 
 # 核心规则
 
-1. 自然、流畅、逻辑严密地将 Plot Outline 编织成有动作、有对话、有冲突的具体场景，而不是生硬照抄事实列表。
+1. 自然、流畅、逻辑严密地将 Plot Outline 编织成有动作、有对话、有冲突的场景，而不是生硬照抄事实列表，也不是把每个 planned_event 扩写成独立小节。
 2. 主角必须是推动剧情的核心，不得沦为被动旁观者。
 3. NPC 反应必须符合已知性格，不得为制造戏剧冲突而歪曲其态度或行为。
 4. 主角可以接话、追问刚出现的信息、确认理解、回应玩笑/挑衅/关心、维持既定行动方向，或在危险中作本能反应；
-5. 文用引号写出角色实际说出口的完整对话，并让角色在说话时与环境互动（把玩酒杯、避开视线、擦拭武器），用肢体语言暗示其心情和状态；每个场景包含烘托当前氛围的感官细节；在危险或冲突时刻使用简短有力的句子，保持紧凑的张力与节奏。
-6. 必须尊重 CurrentState 中的资源；金钱交易必须写出具体数字。
-7. 必须自然落实所有 planned_events 和 must_establish_facts，严格避开 must_not_establish_facts，并遵守 information_boundaries；不要为填充篇幅添加无意义描写，也不要用概述跳过关键行动、对话或因果转折。
-8. scene_text 不负责归还控制权，不得为了收尾添加额外动作、镜头落点或新钩子；closing_prompt 单独负责用一句话归还控制权。scene_text 的停点必须符合 scene_stopping_point。
-9. 你的目标不是写出有深意的散文大作，而是写出精彩的冒险剧情文本，不需要深度，不需要意义。
+5. 必须尊重 CurrentState 中的资源；金钱交易必须写出具体数字。
+6. 必须自然落实所有 planned_events 和 must_establish_facts，严格避开 must_not_establish_facts，并遵守 information_boundaries；落实可以是概括、转述或一句明确结果，不要求逐事件展开。不要为填充篇幅添加无意义描写，也不要用概述跳过真正关键的行动、对话或因果转折。
+7. scene_text 不负责归还控制权，不得为了收尾添加额外动作、镜头落点或新钩子；closing_prompt 单独负责用一句话归还控制权。scene_text 的停点必须符合 scene_stopping_point。
+8. 你的目标不是写出有深意的散文大作，而是写出精彩的冒险剧情文本，不需要深度，不需要意义。
 
 
 # 禁止事项
@@ -106,3 +104,4 @@
 8. 禁止为了制造下一幕钩子，在结尾主动抛出新邀约、新地点、新后续安排或替主角移动；next_action_directions 只能从已发生的正文张力中提取。
 9. 如果 Plot Outline 只给出抽象帮助、联系人、地点、酬劳、威胁或线索，不得在 scene_text 中自行补出具体机构、专有名词、功能物品、确切入口、完整解决方案或新任务。
 10. 不得自主新增会被状态或记忆持久化的结果，例如获得物品/文件、建立承诺、敲定合同、暴露身份、改变关系阶段；除非 Plot Outline 明确要求。
+11. 不得使用“不是……而是……”的自我纠正句式，以避免AI风过重。

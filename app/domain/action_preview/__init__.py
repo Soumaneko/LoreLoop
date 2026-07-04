@@ -1,9 +1,8 @@
 from .agent import ActionPreviewAgent
-from .schemas import ActionPreview, ActionPreviewAnchor, ActionPreviewResult
+from .schemas import ActionPreview, ActionPreviewResult
 
 __all__ = [
     "ActionPreview",
-    "ActionPreviewAnchor",
     "ActionPreviewAgent",
     "ActionPreviewResult",
 ]
