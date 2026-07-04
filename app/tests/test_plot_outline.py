@@ -13,7 +13,7 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
-from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
+from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
 from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.plot_outline.views import project_retrieved_memories
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
@@ -135,25 +135,29 @@ def _make_context() -> PlotOutlineContext:
 
 def _build_outline_response(
     *,
-    context_reasoning: str = "本回合根据玩家观察酒馆客人的输入和 TurnResolutionResult 的成功结果，安排主角发现可疑行为。Memories 支持修道院有陌生面孔，因此大纲只落实可疑线索，不直接揭开真相。",
-    beats: list[dict] | None = None,
-    constraints: list[str] | None = None,
-    risks: list[str] | None = None,
+    planning_reasoning: str = "本回合根据玩家观察酒馆客人的输入和 TurnResolutionResult 的成功结果，安排主角发现可疑行为。Memories 支持修道院有陌生面孔，因此规划只落实可疑线索，不直接揭开真相。",
+    planned_events: list[dict] | None = None,
+    must_establish_facts: list[str] | None = None,
+    must_not_establish_facts: list[str] | None = None,
 ) -> str:
     import json
     return json.dumps({
-        "context_reasoning": context_reasoning,
-        "beats": beats or [
+        "planning_reasoning": planning_reasoning,
+        "planned_events": planned_events or [
             {
-                "summary": "主角环顾酒馆，注意到角落里的可疑人物",
-                "user_action_execution": "主角按照用户输入仔细观察酒馆里的客人。",
+                "event_fact": "主角仔细观察酒馆里的客人，并清楚发现其中存在可疑行为。",
                 "linked_outcome_ids": ["a1"],
-                "required_outcomes": ["主角清楚发现酒馆客人中的可疑行为。"],
+                "involved_entities": ["酒馆客人"],
                 "required_memory_indices": [0],
             },
         ],
-        "constraints_for_scene_writer": constraints or ["必须描写酒馆氛围"],
-        "risks_to_avoid": risks or ["不要透露真相太早"],
+        "must_establish_facts": must_establish_facts or ["主角发现酒馆客人中的可疑行为。"],
+        "must_not_establish_facts": must_not_establish_facts or ["不得透露可疑行为背后的完整真相。"],
+        "information_boundaries": ["主角只能确认可见行为异常，不能确认幕后原因。"],
+        "required_entities": ["酒馆客人"],
+        "scene_stopping_point": "主角发现可疑行为后仍留在酒馆大厅，可以继续互动。",
+        "director_event_reason": "本回合没有自然交点，未使用。",
+        "director_npc_reason": "本回合没有自然交点，未使用。",
     }, ensure_ascii=False)
 
 
@@ -181,7 +185,7 @@ class TestPlotOutlineAgent:
         assert "action_parse_result_json" not in input_data
         schema_json = input_data["output_schema_json"]
         assert "outline_summary" not in schema_json
-        assert "beat_id" not in schema_json
+        assert "event_id" not in schema_json
         assert "protagonist_response_guidance" not in schema_json
         assert "state_implications" not in schema_json
         assert "tone_notes" not in schema_json
@@ -217,19 +221,19 @@ class TestPlotOutlineAgent:
         result = agent.generate(context)
 
         assert isinstance(result, PlotOutlineResult)
-        assert result.beats[0].beat_id == "b1"
-        assert result.beats[0].summary == "主角环顾酒馆，注意到角落里的可疑人物"
+        assert result.planned_events[0].event_id == "e1"
+        assert result.planned_events[0].event_fact == "主角仔细观察酒馆里的客人，并清楚发现其中存在可疑行为。"
 
     def test_prompt_contains_outcome_following_requirements(self):
         prompt = Path("app/prompts/generation/plot_outline_v1.md").read_text(encoding="utf-8")
 
         assert "TurnResolutionResult" in prompt
         assert "ActionParseResult" not in prompt
-        assert "忠实地反应 Player Input 和 TurnResolutionResult" in prompt
-        assert "不能被简化成只移动、只观察或只等待下一回合" in prompt
+        assert "根据 Player Input 和 TurnResolutionResult 规划本回合确定事件" in prompt
+        assert "不得把 Player Input 简化成只移动、只观察或只等待下一回合" in prompt
         assert "narrative_goal" not in prompt
         assert "ActionResolutionFrame" in prompt
-        assert "必须落实为已经发生的具体结果" in prompt
+        assert "已经确定发生的事实" in prompt
         assert "resolved_effect" not in prompt
         assert "information_policy" not in prompt
         assert "ambiguous_hint_only" not in prompt
@@ -241,18 +245,18 @@ class TestPlotOutlineAgent:
         assert "tone_notes" not in prompt
         assert "SceneSummaries" in prompt
         assert "scene_summaries_json" in prompt
-        assert "context_reasoning" in prompt
-        assert "大纲生成前的逻辑审计" in prompt
-        assert "不能用“上下文里存在某设定”来替 NPC 或世界公开确认 TR 没允许的新情报" in prompt
-        assert "检查 NPC 或世界反应的因果链" in prompt
-        assert "不得写入 `required_outcomes` 的信息边界" in prompt
+        assert "planning_reasoning" in prompt
+        assert "规划前的逻辑审计" in prompt
+        assert "不得把上下文中存在的设定直接变成 NPC 或世界公开确认" in prompt
+        assert "NPC/世界反应的因果是否成立" in prompt
+        assert "哪些信息不能被公开确认" in prompt
         assert "hidden_secret" in prompt
         assert "只写抽象边界" in prompt
-        assert "constraints_for_scene_writer 填写的禁止内容，不能把具体内容写进去" in prompt
+        assert "不得在原因字段里藏具体剧情影响" in prompt
         assert "二次裁量权" in prompt
         assert "不能为了省事每次都拒绝" in prompt
 
-    def test_beats_have_required_fields(self):
+    def test_planned_events_have_required_fields(self):
         context = _make_context()
         mock = MockLLM()
         mock.set_responses([_build_outline_response()])
@@ -260,23 +264,21 @@ class TestPlotOutlineAgent:
         agent = PlotOutlineAgent(mock.build_gateway())
         result = agent.generate(context)
 
-        assert len(result.beats) >= 1
-        beat = result.beats[0]
-        assert beat.beat_id == "b1"
-        assert len(beat.summary) > 0
-        assert len(beat.user_action_execution) > 0
-        assert isinstance(beat.linked_outcome_ids, list)
-        assert isinstance(beat.required_outcomes, list)
-        assert isinstance(beat.required_memory_indices, list)
+        assert len(result.planned_events) >= 1
+        event = result.planned_events[0]
+        assert event.event_id == "e1"
+        assert len(event.event_fact) > 0
+        assert isinstance(event.linked_outcome_ids, list)
+        assert isinstance(event.involved_entities, list)
+        assert isinstance(event.required_memory_indices, list)
 
-    def test_plot_beat_accepts_execution_without_outcome_links(self):
-        beat = PlotBeat(
-            beat_id="b1",
-            summary="主角按用户原文行动。",
-            user_action_execution="主角执行了用户输入中的行动。",
+    def test_planned_event_accepts_event_without_outcome_links(self):
+        event = PlannedEvent(
+            event_id="e1",
+            event_fact="主角按用户原文行动。",
         )
 
-        assert "用户输入" in beat.user_action_execution
+        assert "行动" in event.event_fact
 
     def test_retrieved_memory_projection_uses_unified_indices(self):
         projected = project_retrieved_memories(
@@ -319,19 +321,19 @@ class TestPlotOutlineAgent:
         assert data["memories"][1]["source"] == "pending"
         assert data["memories"][1]["pending_id"] == "pending_001"
 
-    def test_outline_has_constraints_and_risks(self):
+    def test_outline_has_fact_boundaries(self):
         context = _make_context()
         mock = MockLLM()
         mock.set_responses([_build_outline_response(
-            constraints=["约束1", "约束2"],
-            risks=["风险1"],
+            must_establish_facts=["事实1", "事实2"],
+            must_not_establish_facts=["禁止1"],
         )])
 
         agent = PlotOutlineAgent(mock.build_gateway())
         result = agent.generate(context)
 
-        assert len(result.constraints_for_scene_writer) >= 1
-        assert len(result.risks_to_avoid) >= 1
+        assert len(result.must_establish_facts) >= 1
+        assert len(result.must_not_establish_facts) >= 1
 
     def test_handles_empty_retrieved_memories(self):
         context = _make_context()
@@ -340,11 +342,11 @@ class TestPlotOutlineAgent:
         )
         mock = MockLLM()
         mock.set_responses([_build_outline_response(
-            beats=[
+            planned_events=[
                 {
-                    "summary": "主角观察但没发现异常",
-                    "user_action_execution": "主角仔细观察酒馆中的所有客人。",
+                    "event_fact": "主角仔细观察酒馆中的所有客人，但没有发现额外异常。",
                     "linked_outcome_ids": ["a1"],
+                    "involved_entities": ["酒馆客人"],
                     "required_memory_indices": [],
                 },
             ],
@@ -353,21 +355,20 @@ class TestPlotOutlineAgent:
         agent = PlotOutlineAgent(mock.build_gateway())
         result = agent.generate(context)
 
-        assert len(result.beats) >= 1
+        assert len(result.planned_events) >= 1
 
-    def test_multiple_beats_ordered(self):
+    def test_multiple_planned_events_ordered(self):
         context = _make_context()
         mock = MockLLM()
         mock.set_responses([_build_outline_response(
-            beats=[
+            planned_events=[
                 {
-                    "summary": "第一步",
-                    "user_action_execution": "主角执行观察行动。",
+                    "event_fact": "第一步发生。",
                     "linked_outcome_ids": ["a1"],
                     "required_memory_indices": [],
                 },
                 {
-                    "summary": "第二步",
+                    "event_fact": "第二步发生。",
                     "required_memory_indices": [],
                 },
             ],
@@ -376,17 +377,16 @@ class TestPlotOutlineAgent:
         agent = PlotOutlineAgent(mock.build_gateway())
         result = agent.generate(context)
 
-        assert len(result.beats) == 2
-        assert result.beats[0].beat_id == "b1"
-        assert result.beats[1].beat_id == "b2"
+        assert len(result.planned_events) == 2
+        assert result.planned_events[0].event_id == "e1"
+        assert result.planned_events[1].event_id == "e2"
 
     def test_retries_when_turn_resolution_outcome_is_omitted(self):
         context = _make_context()
         invalid = _build_outline_response(
-            beats=[
+            planned_events=[
                 {
-                    "summary": "主角观察酒馆，但没有落实判定结果。",
-                    "user_action_execution": "主角仔细观察酒馆里的客人。",
+                    "event_fact": "主角观察酒馆，但没有落实判定结果。",
                     "linked_outcome_ids": [],
                 }
             ]
@@ -396,8 +396,8 @@ class TestPlotOutlineAgent:
 
         result = PlotOutlineAgent(mock.build_gateway()).generate(context)
 
-        assert result.beats[0].linked_outcome_ids == ["a1"]
-        assert "仔细观察" in result.beats[0].user_action_execution
+        assert result.planned_events[0].linked_outcome_ids == ["a1"]
+        assert "仔细观察" in result.planned_events[0].event_fact
 
     def test_retries_when_turn_resolution_outcomes_are_out_of_order(self):
         context = _make_context()
@@ -424,22 +424,17 @@ class TestPlotOutlineAgent:
             ],
         )
         invalid = _build_outline_response(
-            beats=[
+            planned_events=[
                 {
-                    "summary": "主角先撤离再挖沟，顺序错误。",
-                    "user_action_execution": "主角先返回镇子，再回头处理浅沟。",
+                    "event_fact": "主角先撤离再挖沟，顺序错误。",
                     "linked_outcome_ids": ["A3", "A2"],
                 }
             ]
         )
         valid = _build_outline_response(
-            beats=[
+            planned_events=[
                 {
-                    "summary": "主角先挖沟拖慢主蔓，再开始撤离。",
-                    "user_action_execution": (
-                        "主角根据用户原文先亲手快速挖出浅沟，"
-                        "完成后立即沿绕行路线返回镇子。"
-                    ),
+                    "event_fact": "主角根据用户原文先亲手快速挖出浅沟，完成后立即沿绕行路线返回镇子。",
                     "linked_outcome_ids": ["A2", "A3"],
                 }
             ]
@@ -449,8 +444,8 @@ class TestPlotOutlineAgent:
 
         result = PlotOutlineAgent(mock.build_gateway()).generate(context)
 
-        assert result.beats[0].linked_outcome_ids == ["A2", "A3"]
-        assert "挖出浅沟" in result.beats[0].user_action_execution
+        assert result.planned_events[0].linked_outcome_ids == ["A2", "A3"]
+        assert "挖出浅沟" in result.planned_events[0].event_fact
 
 
 class TestPlotOutlineWorkflow:
@@ -462,4 +457,4 @@ class TestPlotOutlineWorkflow:
         result = generate_plot_outline_workflow(context, mock.build_gateway())
 
         assert isinstance(result, PlotOutlineResult)
-        assert len(result.beats) >= 1
+        assert len(result.planned_events) >= 1

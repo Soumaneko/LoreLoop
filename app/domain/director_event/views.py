@@ -61,7 +61,8 @@ def plot_outline_director_event_instructions(
         "只有当前行动、地点、NPC、结果或场景气氛与 entry_points 存在自然交点时，"
         "才可选择一个入口，把它转译为前台可感知的压力、机会、阻碍或异常。"
         "没有自然交点时不要强行使用。使用时必须保留玩家选择空间，不得把后台事实直接说破。"
-        "在 director_event_note 中简述使用了哪个入口；未使用时说明缺少自然交点。"
+        "具体前台影响必须融入 planned_events、must_establish_facts 或 must_not_establish_facts；"
+        "director_event_reason 只写使用或未使用的原因。"
     )
 
 

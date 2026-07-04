@@ -4,8 +4,8 @@ from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.short_term_memory.schemas import ShortTermScene
 
 
-_BEAT_EXCLUDE: set[str] = {"linked_outcome_ids"}
-_OUTLINE_EXCLUDE: set[str] = {"context_reasoning"}
+_PLANNED_EVENT_EXCLUDE: set[str] = {"linked_outcome_ids"}
+_OUTLINE_EXCLUDE: set[str] = {"planning_reasoning"}
 
 
 def project_outline(result: PlotOutlineResult) -> str:
@@ -14,9 +14,9 @@ def project_outline(result: PlotOutlineResult) -> str:
         for key, value in result.model_dump(mode="json").items()
         if key not in _OUTLINE_EXCLUDE
     }
-    data["beats"] = [
-        {k: v for k, v in beat.items() if k not in _BEAT_EXCLUDE}
-        for beat in data["beats"]
+    data["planned_events"] = [
+        {k: v for k, v in event.items() if k not in _PLANNED_EVENT_EXCLUDE}
+        for event in data["planned_events"]
     ]
     return json.dumps(data, ensure_ascii=False, indent=2)
 

@@ -884,19 +884,24 @@ function renderResolution(result) {
 function renderOutline(outline) {
   if (!outline) return `<div class="empty">暂无大纲。</div>`;
   return `
-    ${card("上下文承接", esc(text(outline.context_reasoning)))}
-    ${(outline.beats || []).map((b) => `<div class="section-card">
-      <div class="card-title"><span>${esc(b.beat_id)}</span>${metric("记忆", (b.required_memory_indices || []).length)}</div>
-      <div style="margin-bottom:8px">${esc(text(b.summary))}</div>
+    ${card("规划审计", esc(text(outline.planning_reasoning)))}
+    ${(outline.planned_events || []).map((e) => `<div class="section-card">
+      <div class="card-title"><span>${esc(e.event_id)}</span>${metric("记忆", (e.required_memory_indices || []).length)}</div>
+      <div style="margin-bottom:8px">${esc(text(e.event_fact))}</div>
       ${kv([
-        ["用户行动", esc(text(b.user_action_execution))],
-        ["结果", chips(b.linked_outcome_ids)],
-        ["实体", chips(b.related_entities)],
-        ["必要结果", list(b.required_outcomes)],
+        ["结果", chips(e.linked_outcome_ids)],
+        ["实体", chips(e.involved_entities)],
       ])}
     </div>`).join("")}
-    ${details("写作约束", list(outline.constraints_for_scene_writer))}
-    ${details("风险规避", list(outline.risks_to_avoid))}
+    ${details("必须成立", list(outline.must_establish_facts))}
+    ${details("不得成立", list(outline.must_not_establish_facts))}
+    ${details("信息边界", list(outline.information_boundaries))}
+    ${details("必要实体", chips(outline.required_entities))}
+    ${card("停点", esc(text(outline.scene_stopping_point)))}
+    ${details("导演原因", kv([
+      ["DirectorEvent", esc(text(outline.director_event_reason))],
+      ["DirectorNPC", esc(text(outline.director_npc_reason))],
+    ]))}
   `;
 }
 

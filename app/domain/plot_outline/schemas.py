@@ -1,19 +1,21 @@
 from pydantic import BaseModel, Field
 
 
-class PlotBeat(BaseModel):
-    beat_id: str
-    summary: str
-    user_action_execution: str | None = None
-    related_entities: list[str] = Field(default_factory=list)
+class PlannedEvent(BaseModel):
+    event_id: str
+    event_fact: str
     linked_outcome_ids: list[str] = Field(default_factory=list)
-    required_outcomes: list[str] = Field(default_factory=list)
+    involved_entities: list[str] = Field(default_factory=list)
     required_memory_indices: list[int] = Field(default_factory=list)
 
 
 class PlotOutlineResult(BaseModel):
-    context_reasoning: str = Field(min_length=1)
-    beats: list[PlotBeat] = Field(default_factory=list)
-    constraints_for_scene_writer: list[str] = Field(default_factory=list)
-    risks_to_avoid: list[str] = Field(default_factory=list)
-    director_event_note: str | None = None
+    planning_reasoning: str = Field(min_length=1)
+    planned_events: list[PlannedEvent] = Field(default_factory=list)
+    must_establish_facts: list[str] = Field(default_factory=list)
+    must_not_establish_facts: list[str] = Field(default_factory=list)
+    information_boundaries: list[str] = Field(default_factory=list)
+    required_entities: list[str] = Field(default_factory=list)
+    scene_stopping_point: str = Field(min_length=1)
+    director_event_reason: str | None = None
+    director_npc_reason: str | None = None

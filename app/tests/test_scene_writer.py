@@ -4,7 +4,7 @@ from pathlib import Path
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
-from app.domain.plot_outline.schemas import PlotBeat, PlotOutlineResult
+from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.opening import OpeningSceneAgent
@@ -35,29 +35,34 @@ def _make_state() -> CurrentState:
 
 def _make_outline() -> PlotOutlineResult:
     return PlotOutlineResult(
-        context_reasoning="本测试大纲根据主角与米莉交谈的输入组织两个连续节拍，先落实打招呼，再承接询问消息。",
-        beats=[
-            PlotBeat(
-                beat_id="b1",
-                summary="主角走向吧台与米莉打招呼",
-                user_action_execution="主角走向吧台，主动向米莉打招呼。",
+        planning_reasoning="本测试规划根据主角与米莉交谈的输入组织两个连续事件，先落实打招呼，再承接询问消息。",
+        planned_events=[
+            PlannedEvent(
+                event_id="e1",
+                event_fact="主角走向吧台与米莉打招呼。",
+                involved_entities=["米莉"],
                 required_memory_indices=[0],
             ),
-            PlotBeat(
-                beat_id="b2",
-                summary="米莉告诉主角关于暴风城的消息",
-                user_action_execution="主角继续询问暴风城的近况。",
+            PlannedEvent(
+                event_id="e2",
+                event_fact="米莉告诉主角关于暴风城的消息。",
+                involved_entities=["米莉", "暴风城"],
                 required_memory_indices=[],
             ),
         ],
-        constraints_for_scene_writer=[
+        must_establish_facts=[
             "主角必须以人类法师身份行动",
             "不能改变米莉的核心人设",
         ],
-        risks_to_avoid=[
+        must_not_establish_facts=[
             "不能让主角使用超出能力范围的魔法",
             "不能让米莉突然变得敌对",
         ],
+        information_boundaries=["主角只能知道米莉公开说出的暴风城消息。"],
+        required_entities=["米莉", "暴风城"],
+        scene_stopping_point="主角停在吧台前，米莉的话题仍可继续追问。",
+        director_event_reason="本测试未使用。",
+        director_npc_reason="本测试未使用。",
     )
 
 
@@ -67,7 +72,7 @@ def _build_response(
     directions: list[dict] | None = None,
 ) -> str:
     return json.dumps({
-        "scene_reasoning": "本回合先承接大纲节拍顺序，确认主角行动与米莉反馈都来自公开上下文。正文只演出已给出的酒馆、米莉和暴风城消息，不新增任务或隐藏真相。",
+        "scene_reasoning": "本回合先承接规划事件顺序，确认主角行动与米莉反馈都来自公开上下文。正文只演出已给出的酒馆、米莉和暴风城消息，不新增任务或隐藏真相。",
         "scene_text": scene_text,
         "closing_prompt": closing_prompt,
         "next_action_directions": directions or [],
@@ -75,17 +80,15 @@ def _build_response(
 
 
 class TestSceneWriterAgent:
-    def test_outline_projection_keeps_user_action_execution(self):
+    def test_outline_projection_uses_planned_events(self):
         projected = json.loads(project_outline(_make_outline()))
 
-        assert "protagonist_response_guidance" not in projected["beats"][0]
-        assert "state_implications" not in projected["beats"][0]
-        assert "tone_notes" not in projected["beats"][0]
+        assert "protagonist_response_guidance" not in projected["planned_events"][0]
+        assert "state_implications" not in projected["planned_events"][0]
+        assert "tone_notes" not in projected["planned_events"][0]
         assert "outline_summary" not in projected
-        assert "context_reasoning" not in projected
-        assert projected["beats"][0]["user_action_execution"] == (
-            "主角走向吧台，主动向米莉打招呼。"
-        )
+        assert "planning_reasoning" not in projected
+        assert projected["planned_events"][0]["event_fact"] == "主角走向吧台与米莉打招呼。"
 
     def test_recent_scene_projection_omits_user_input(self):
         projected = json.loads(project_recent_scene(ShortTermScene(
@@ -106,7 +109,7 @@ class TestSceneWriterAgent:
         prompt = Path("app/prompts/generation/scene_write_v1.md").read_text(encoding="utf-8")
 
         assert "不得替主角接受或拒绝任务" in prompt
-        assert "自然覆盖所有 beat" in prompt
+        assert "必须自然落实所有 planned_events" in prompt
         assert "不得从“行动已经完成以后”开始" in prompt
         assert "protagonist_response_guidance" not in prompt
         assert "changes_summary" not in prompt
@@ -219,14 +222,15 @@ class TestSceneWriterAgent:
         agent = SceneWriterAgent(mock.build_gateway())
         result = agent.write(
             outline=PlotOutlineResult(
-                context_reasoning="本测试大纲只用于验证写作约束会被传入 SceneWriter。",
-                beats=[PlotBeat(
-                    beat_id="b1",
-                    summary="测试节拍",
+                planning_reasoning="本测试规划只用于验证事实边界会被传入 SceneWriter。",
+                planned_events=[PlannedEvent(
+                    event_id="e1",
+                    event_fact="测试事件成立。",
                     required_memory_indices=[],
                 )],
-                constraints_for_scene_writer=["不能使用魔法"],
-                risks_to_avoid=["不要引入新角色"],
+                must_establish_facts=["不能使用魔法"],
+                must_not_establish_facts=["不要引入新角色"],
+                scene_stopping_point="测试停点。",
             ),
             current_state=_make_state(),
             core_memory=CoreMemory(items=[]),
@@ -285,14 +289,15 @@ class TestSceneWriterWorkflow:
 
     def test_select_required_memories_uses_input_indices(self):
         outline = PlotOutlineResult(
-            context_reasoning="本测试大纲用于验证 required_memory_indices 会筛选对应记忆。",
-            beats=[
-                PlotBeat(
-                    beat_id="b1",
-                    summary="测试节拍",
+            planning_reasoning="本测试规划用于验证 required_memory_indices 会筛选对应记忆。",
+            planned_events=[
+                PlannedEvent(
+                    event_id="e1",
+                    event_fact="测试事件。",
                     required_memory_indices=[0, 1, 999],
                 )
             ],
+            scene_stopping_point="测试停点。",
         )
         retrieved = CandidateRetrievalResult(
             candidates=[
@@ -340,14 +345,15 @@ class TestSceneWriterWorkflow:
 
     def test_select_required_memories_can_select_pending_notes(self):
         outline = PlotOutlineResult(
-            context_reasoning="本测试大纲用于验证 pending note 可以按 required_memory_indices 被选中。",
-            beats=[
-                PlotBeat(
-                    beat_id="b1",
-                    summary="测试节拍",
+            planning_reasoning="本测试规划用于验证 pending note 可以按 required_memory_indices 被选中。",
+            planned_events=[
+                PlannedEvent(
+                    event_id="e1",
+                    event_fact="测试事件。",
                     required_memory_indices=[1],
                 )
             ],
+            scene_stopping_point="测试停点。",
         )
         retrieved = CandidateRetrievalResult(
             candidates=[

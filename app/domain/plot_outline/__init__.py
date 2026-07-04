@@ -1,8 +1,8 @@
-from .schemas import PlotBeat, PlotOutlineResult
+from .schemas import PlannedEvent, PlotOutlineResult
 from .agent import PlotOutlineAgent
 
 __all__ = [
-    "PlotBeat",
+    "PlannedEvent",
     "PlotOutlineAgent",
     "PlotOutlineResult",
 ]

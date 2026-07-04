@@ -22,12 +22,10 @@ from app.domain.views import (
 from app.workflows.context_assembler import PlotOutlineContext
 
 
-class _RuntimePlotBeat(BaseModel):
-    summary: str
-    user_action_execution: str | None = None
-    related_entities: list[str] = Field(default_factory=list)
+class _RuntimePlannedEvent(BaseModel):
+    event_fact: str = Field(min_length=1)
     linked_outcome_ids: list[str] = Field(default_factory=list)
-    required_outcomes: list[str] = Field(default_factory=list)
+    involved_entities: list[str] = Field(default_factory=list)
     required_memory_indices: list[int] = Field(default_factory=list)
 
 
@@ -47,17 +45,21 @@ class PlotOutlineAgent:
         ]
 
         class RuntimePlotOutlineResult(BaseModel):
-            context_reasoning: str = Field(min_length=1)
-            beats: list[_RuntimePlotBeat] = Field(default_factory=list)
-            constraints_for_scene_writer: list[str] = Field(default_factory=list)
-            risks_to_avoid: list[str] = Field(default_factory=list)
-            director_event_note: str | None = None
+            planning_reasoning: str = Field(min_length=1)
+            planned_events: list[_RuntimePlannedEvent] = Field(default_factory=list)
+            must_establish_facts: list[str] = Field(default_factory=list)
+            must_not_establish_facts: list[str] = Field(default_factory=list)
+            information_boundaries: list[str] = Field(default_factory=list)
+            required_entities: list[str] = Field(default_factory=list)
+            scene_stopping_point: str = Field(min_length=1)
+            director_event_reason: str | None = None
+            director_npc_reason: str | None = None
 
             @model_validator(mode="after")
             def _require_all_turn_resolution_outcomes(self):
                 linked_in_order: list[str] = []
-                for beat in self.beats:
-                    for outcome_id in beat.linked_outcome_ids:
+                for event in self.planned_events:
+                    for outcome_id in event.linked_outcome_ids:
                         if outcome_id not in linked_in_order:
                             linked_in_order.append(outcome_id)
 
@@ -70,7 +72,7 @@ class PlotOutlineAgent:
                 ]
                 if unknown:
                     raise ValueError(
-                        f"plot beats reference unknown linked_outcome_ids: {unknown}"
+                        f"planned_events reference unknown linked_outcome_ids: {unknown}"
                     )
 
                 missing = [
@@ -80,7 +82,7 @@ class PlotOutlineAgent:
                 ]
                 if missing:
                     raise ValueError(
-                        "all turn resolution outcomes must be enacted in plot beats; "
+                        "all turn resolution outcomes must be enacted in planned_events; "
                         f"missing linked_outcome_ids: {missing}"
                     )
 
@@ -131,8 +133,8 @@ class PlotOutlineAgent:
             ),
         )
         data = result.model_dump()
-        data["beats"] = [
-            {"beat_id": f"b{index}", **beat}
-            for index, beat in enumerate(data["beats"], start=1)
+        data["planned_events"] = [
+            {"event_id": f"e{index}", **event}
+            for index, event in enumerate(data["planned_events"], start=1)
         ]
         return PlotOutlineResult.model_validate(data)

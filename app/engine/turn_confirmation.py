@@ -529,7 +529,7 @@ def _confirm_pipeline_locked(
         gateway = create_gateway()
         gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
         return generate_action_preview_workflow(
-            scene_text=effective_scene_text,
+            closing_prompt=pipeline_input.scene_result.closing_prompt,
             current_state=updated_state,
             core_memory=core_memory,
             recent_summaries=recent_summaries,
