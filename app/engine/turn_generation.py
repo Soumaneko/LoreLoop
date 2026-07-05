@@ -4,10 +4,12 @@ from app.core.llm.config import create_gateway
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
+from app.domain.context_qa.schemas import ContextQuestionInput
 from app.domain.roll.schemas import Difficulty, RollConfig
 from app.domain.roll.resolver import RollResolver
 from app.workflows.context_assembler import assemble_context
 from app.workflows.evaluate_roll_modifiers import evaluate_roll_modifiers_workflow
+from app.workflows.generate_context_questions import generate_context_questions_workflow
 from app.workflows.generate_plot_outline import generate_plot_outline_workflow
 from app.workflows.generate_scene import (
     build_entity_retrieval_anchors,
@@ -21,6 +23,7 @@ from app.workflows.update_director_event import DIRECTOR_EVENT_IDLE_COOLDOWN_TUR
 from app.workflows.director_npc import maybe_director_npc_workflow
 from app.workflows.update_entity_profiles import gather_entity_profiles_from_state_and_anchors
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
+from app.workflows.select_context_profiles import select_context_profiles
 
 from .serialization import model_data
 from .session import PENDING_TURNS, PendingTurn
@@ -89,23 +92,16 @@ def generate_turn_stream(
     }
 
     parser = ActionParser(gateway)
-    anchor_result = parser.extract_anchors(
-        user_input=user_input,
-        current_state=current_state,
-        core_memory=core_memory,
-        trace_id=trace_id,
-    )
     with entity_store() as ent_store, npc_profile_store() as npc_store:
-        action_entity_profiles = gather_entity_profiles_from_state_and_anchors(
+        context_profile_selection = select_context_profiles(
+            user_input=user_input,
             current_state=current_state,
-            anchors=anchor_result.anchors,
             entity_store=ent_store,
-        )
-        action_npc_profiles = gather_npc_profiles_from_state_and_anchors(
-            current_state=current_state,
-            anchors=anchor_result.anchors,
             npc_store=npc_store,
         )
+    matched_anchors = context_profile_selection.anchors
+    action_entity_profiles = context_profile_selection.entity_profiles
+    action_npc_profiles = context_profile_selection.npc_profiles
     action_entity_profile_views = [
         profile.semantic_view()
         for profile in action_entity_profiles
@@ -118,9 +114,28 @@ def generate_turn_stream(
     yield {
         "step": "entity_profiles_loaded",
         "data": {
-            "anchors": model_data(anchor_result.anchors),
+            "anchors": model_data(matched_anchors),
             "entity_profiles": model_data(action_entity_profile_views),
             "npc_profiles": model_data(action_npc_director_views),
+        },
+    }
+
+    context_questions = generate_context_questions_workflow(
+        ContextQuestionInput(
+            user_input=user_input,
+            current_state=current_state,
+            core_memory=core_memory,
+            entity_profiles=action_entity_profile_views,
+            npc_profiles=action_npc_director_views,
+        ),
+        gateway,
+        trace_id=trace_id,
+    )
+
+    yield {
+        "step": "context_questions_done",
+        "data": {
+            "context_questions": model_data(context_questions),
         },
     }
 
@@ -137,10 +152,8 @@ def generate_turn_stream(
         analysis=action_result.analysis,
         turn_intent=action_result.turn_intent,
         atomic_actions=action_result.atomic_actions,
-        anchors=anchor_result.anchors,
-        ambiguities=[
-            *anchor_result.ambiguities,
-        ],
+        anchors=matched_anchors,
+        ambiguities=[],
     )
     action_self_check = ActionSelfCheck()
     action_parse_result = action_self_check.check(

@@ -601,7 +601,8 @@ function tracesForStep(scope, stepName, traces) {
 
 function stepTasks(scope, stepName) {
   const generation = {
-    entity_profiles_loaded: ["anchor_extract"],
+    entity_profiles_loaded: [],
+    context_questions_done: ["context_questions"],
     action_parsed: ["action_extract"],
     modifiers_done: ["roll_modifier"],
     turn_resolution_done: ["turn_resolution"],
