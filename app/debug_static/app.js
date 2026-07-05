@@ -603,6 +603,8 @@ function stepTasks(scope, stepName) {
   const generation = {
     entity_profiles_loaded: [],
     context_questions_done: ["context_questions"],
+    context_answers_done: ["context_answers"],
+    context_qa_failed: ["context_questions", "context_answers"],
     action_parsed: ["action_extract"],
     modifiers_done: ["roll_modifier"],
     turn_resolution_done: ["turn_resolution"],
@@ -653,6 +655,9 @@ function tracePane(title, body) {
 
 function stepSummary(name, data) {
   if (name === "action_parsed") return `${data.action_parse_result?.atomic_actions?.length || 0} actions`;
+  if (name === "context_questions_done") return `${data.context_questions?.questions?.length || 0} questions`;
+  if (name === "context_answers_done") return `${data.context_answers?.answers?.length || 0} answers`;
+  if (name === "context_qa_failed") return "QA failed";
   if (name === "retrieval_done") return `${data.retrieved_memories?.total_returned || 0} memories`;
   if (name === "rolls_done") return `${data.roll_results?.total_rolls || 0} rolls`;
   if (name === "director_npc_done") return directorNpcStepSummary(data.director_npc_result);
@@ -671,8 +676,13 @@ function renderGeneration() {
   const g = merged("generation");
   if (!state.run.generation.order.length) return `<div class="empty">暂无生成流程。</div>`;
   return `
+    ${card("Context QA", `
+      ${details("Questions", jsonBlock(g.context_questions))}
+      ${details("Answers", jsonBlock(g.context_answers))}
+      ${details("Answer Memories", jsonBlock(g.context_answer_memories))}
+    `)}
     ${card("Action", renderAction(g.action_parse_result, g.raw_action_parse_result, g.action_self_check_result))}
-    ${card("Retrieval", renderRetrieval(g.retrieved_memories, g.selected_memory_ids, g.selected_memories))}
+    ${card("Retrieval", renderRetrieval(g.retrieved_memories))}
     ${card("Roll", renderRoll(g.roll_results))}
     ${card("Turn Resolution", renderResolution(g.turn_resolution))}
     ${card("Director NPC", renderDirectorNpcResult(g.director_npc_result))}
@@ -831,12 +841,11 @@ function renderAction(result, raw, selfCheck) {
   `;
 }
 
-function renderRetrieval(result, selectedIds = [], selected = []) {
+function renderRetrieval(result) {
   if (!result) return `<div class="empty">暂无检索。</div>`;
   return `
-    ${metrics([metric("扫描", result.total_scanned || 0), metric("返回", result.total_returned || 0, "info"), metric("选用", selectedIds?.length || 0, "ok")])}
-    ${selected?.length ? details("Scene Writer 选用", selected.map(memoryCandidateCard).join(""), true) : ""}
-    ${(result.candidates || []).map((c) => memoryCandidateCard(c, selectedIds?.includes(c.memory_id))).join("") || `<div class="empty">无候选</div>`}
+    ${metrics([metric("扫描", result.total_scanned || 0), metric("返回", result.total_returned || 0, "info")])}
+    ${(result.candidates || []).map((c) => memoryCandidateCard(c)).join("") || `<div class="empty">无候选</div>`}
     ${filterVisiblePending(result.pending_notes || []).length ? details("Pending Notes", filterVisiblePending(result.pending_notes || []).map(pendingMemoryCard).join("")) : ""}
   `;
 }
@@ -879,7 +888,7 @@ function renderOutline(outline) {
   return `
     ${card("规划审计", esc(text(outline.planning_reasoning)))}
     ${(outline.planned_events || []).map((e) => `<div class="section-card">
-      <div class="card-title"><span>${esc(e.event_id)}</span>${metric("记忆", (e.required_memory_indices || []).length)}</div>
+      <div class="card-title"><span>${esc(e.event_id)}</span></div>
       <div style="margin-bottom:8px">${esc(text(e.event_fact))}</div>
       ${kv([
         ["结果", chips(e.linked_outcome_ids)],

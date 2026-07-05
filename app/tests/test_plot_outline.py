@@ -18,7 +18,6 @@ from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.plot_outline.views import project_retrieved_memories
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
-from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
 from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 from app.workflows.generate_plot_outline import generate_plot_outline_workflow
@@ -102,34 +101,6 @@ def _make_context() -> PlotOutlineContext:
                 ),
             ]
         ),
-        retrieved_memories=CandidateRetrievalResult(
-            candidates=[
-                MemoryCandidate(
-                    memory_id="mem_001",
-                    memory_kind="open_thread", evidence_mode="observed",
-                    subject="修道院情报",
-                    content="北郡修道院最近来了一些陌生的面孔，不是常客。",
-                    entities=["北郡修道院"],
-                    tags=["情报"],
-                    salience=0.8,
-                    confidence=0.7,
-                    score=0.12,
-                    score_breakdown={"rrf_score": 0.12},
-                ),
-            ],
-            total_scanned=50,
-            total_returned=1,
-        ),
-        scene_summaries=[
-            SceneSummary(
-                level=2,
-                content="此前几回合中，卢西安在北郡调查陌生人。",
-                scene_ids=["scene_001", "scene_002"],
-                source_ids=[],
-                turn_start=1,
-                turn_end=2,
-            )
-        ],
     )
 
 
@@ -148,7 +119,6 @@ def _build_outline_response(
                 "event_fact": "主角仔细观察酒馆里的客人，并清楚发现其中存在可疑行为。",
                 "linked_outcome_ids": ["a1"],
                 "involved_entities": ["酒馆客人"],
-                "required_memory_indices": [0],
             },
         ],
         "must_establish_facts": must_establish_facts or ["主角发现酒馆客人中的可疑行为。"],
@@ -243,8 +213,10 @@ class TestPlotOutlineAgent:
         assert "outline_summary" not in prompt
         assert "state_implications" not in prompt
         assert "tone_notes" not in prompt
-        assert "SceneSummaries" in prompt
-        assert "scene_summaries_json" in prompt
+        assert "Context QA" in prompt
+        assert "context_qa_json" in prompt
+        assert "SceneSummaries" not in prompt
+        assert "scene_summaries_json" not in prompt
         assert "planning_reasoning" in prompt
         assert "规划前的逻辑审计" in prompt
         assert "不得把上下文中存在的设定直接变成 NPC 或世界公开确认" in prompt
@@ -270,7 +242,6 @@ class TestPlotOutlineAgent:
         assert len(event.event_fact) > 0
         assert isinstance(event.linked_outcome_ids, list)
         assert isinstance(event.involved_entities, list)
-        assert isinstance(event.required_memory_indices, list)
 
     def test_planned_event_accepts_event_without_outcome_links(self):
         event = PlannedEvent(
@@ -335,28 +306,6 @@ class TestPlotOutlineAgent:
         assert len(result.must_establish_facts) >= 1
         assert len(result.must_not_establish_facts) >= 1
 
-    def test_handles_empty_retrieved_memories(self):
-        context = _make_context()
-        context.retrieved_memories = CandidateRetrievalResult(
-            candidates=[], total_scanned=0, total_returned=0
-        )
-        mock = MockLLM()
-        mock.set_responses([_build_outline_response(
-            planned_events=[
-                {
-                    "event_fact": "主角仔细观察酒馆中的所有客人，但没有发现额外异常。",
-                    "linked_outcome_ids": ["a1"],
-                    "involved_entities": ["酒馆客人"],
-                    "required_memory_indices": [],
-                },
-            ],
-        )])
-
-        agent = PlotOutlineAgent(mock.build_gateway())
-        result = agent.generate(context)
-
-        assert len(result.planned_events) >= 1
-
     def test_multiple_planned_events_ordered(self):
         context = _make_context()
         mock = MockLLM()
@@ -365,11 +314,9 @@ class TestPlotOutlineAgent:
                 {
                     "event_fact": "第一步发生。",
                     "linked_outcome_ids": ["a1"],
-                    "required_memory_indices": [],
                 },
                 {
                     "event_fact": "第二步发生。",
-                    "required_memory_indices": [],
                 },
             ],
         )])

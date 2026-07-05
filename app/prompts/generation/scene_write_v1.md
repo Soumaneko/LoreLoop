@@ -17,10 +17,10 @@
 {current_state_json}
 ```
 
-## Memories
+## Context QA
 
 ```json
-{selected_memories_json}
+{context_qa_json}
 ```
 
 ## Entity Profiles
@@ -33,12 +33,6 @@
 
 ```json
 {npc_profiles_json}
-```
-
-## Scene Summaries
-
-```json
-{recent_summaries_json}
 ```
 
 ## Recent Scene
@@ -66,7 +60,7 @@
 
 按以下顺序为每个字段产出期望内容：
 
-- scene_reasoning：正文生成前的逻辑审计，用 2-4 句自然语言写清楚你将如何在不违反 Plot Outline、CurrentState、Memories、Entity/NPC Profiles 和 Recent Scene 的前提下落实本回合正文。
+- scene_reasoning：正文生成前的逻辑审计，用 2-4 句自然语言写清楚你将如何在不违反 Plot Outline、CurrentState、Context QA、Entity/NPC Profiles 和 Recent Scene 的前提下落实本回合正文。
 - scene_text：以第二人称撰写的文字冒险剧情正文，自然流畅、逻辑严密地落实 Plot Outline。`planned_events` 是事实清单，不是必须逐条扩写的剧情节拍；关键行动、必要对话和因果转折必须写清楚，不要写过多慢镜头、长铺陈或无功能的生活细节。不得包含“你会怎么做？”式控制权归还句；正文写到 scene_stopping_point 指定的当前互动状态即可。
 - closing_prompt：只写一句话，必须使用“[玩家当前面临的选择或压力]，你会怎么做？”格式，供程序拼接到正文末尾；不得加入环境描写、气氛描写、镜头收束、额外动作、邀约、地点或任务。
 - next_action_directions：2-5 条下一回合可自然展开的行动方向，供 ActionPreviewAgent 使用；每条包含 direction、rationale、anchors。它们不是正文内容，不得写入 scene_text。
@@ -74,7 +68,7 @@
 
 # 任务逻辑
 
-1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Memories 是过去剧情的钩子；SceneSummaries 是过去发生的剧情；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍；Recent Scene 是上一章的正文文本。
+1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Context QA 是上游基于记忆与摘要回答后的历史 1问1答列表；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍；Recent Scene 是上一章的正文文本。
 2. 第二步，确定信息边界，主角知道什么不知道什么？NPC知道什么不知道什么？
 3. 第三步，你需要在不违背第一第二步的前提下，根据 Plot Outline 理解本回合必须成立的事实、禁止成立的事实、信息边界和停点，构思正文的具体演出。
 4. 第四步，你需要在不违背第一第二步的前提下，输出正文。
@@ -89,7 +83,8 @@
 5. 必须尊重 CurrentState 中的资源；金钱交易必须写出具体数字。
 6. 必须自然落实所有 planned_events 和 must_establish_facts，严格避开 must_not_establish_facts，并遵守 information_boundaries；落实可以是概括、转述或一句明确结果，不要求逐事件展开。不要为填充篇幅添加无意义描写，也不要用概述跳过真正关键的行动、对话或因果转折。
 7. scene_text 不负责归还控制权，不得为了收尾添加额外动作、镜头落点或新钩子；closing_prompt 单独负责用一句话归还控制权。scene_text 的停点必须符合 scene_stopping_point。
-8. 你的目标不是写出有深意的散文大作，而是写出精彩的冒险剧情文本，不需要深度，不需要意义。
+8. 不得把 Context QA 中缺失的问题当作否定事实；SceneWriter 只落实 Plot Outline 已经确定的结果，并用 Context QA 中存在的历史答案维持连续性。
+9. 你的目标不是写出有深意的散文大作，而是写出精彩的冒险剧情文本，不需要深度，不需要意义。
 
 
 # 禁止事项

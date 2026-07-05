@@ -11,8 +11,6 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
-from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
 from app.workflows.context_assembler import PlotOutlineContext, assemble_context
 
@@ -98,27 +96,6 @@ def _make_core_memory() -> CoreMemory:
     )
 
 
-def _make_retrieved_memories() -> CandidateRetrievalResult:
-    return CandidateRetrievalResult(
-        candidates=[
-            MemoryCandidate(
-                memory_id="mem_001",
-                memory_kind="open_thread", evidence_mode="observed",
-                subject="修道院历史",
-                content="北郡修道院曾是大战时期的据点。",
-                entities=["北郡修道院"],
-                tags=["历史"],
-                salience=0.8,
-                confidence=0.9,
-                score=0.15,
-                score_breakdown={"rrf_score": 0.15},
-            ),
-        ],
-        total_scanned=50,
-        total_returned=1,
-    )
-
-
 class TestAssembleContext:
     def test_full_assembly(self):
         ctx = assemble_context(
@@ -127,7 +104,6 @@ class TestAssembleContext:
             action_parse_result=_make_action_parse_result(),
             turn_resolution=_make_turn_resolution(),
             core_memory=_make_core_memory(),
-            retrieved_memories=_make_retrieved_memories(),
         )
 
         assert ctx.user_input == "环顾四周观察环境。"
@@ -135,8 +111,7 @@ class TestAssembleContext:
         assert ctx.action_parse_result.turn_intent == "探索修道院"
         assert ctx.turn_resolution.total_resolutions == 1
         assert len(ctx.core_memory.items) == 1
-        assert ctx.retrieved_memories.total_returned == 1
-        assert ctx.scene_summaries == []
+        assert ctx.context_answers.answers == []
 
     def test_empty_core_memory(self):
         ctx = assemble_context(
@@ -145,44 +120,8 @@ class TestAssembleContext:
             action_parse_result=_make_action_parse_result(),
             turn_resolution=_make_turn_resolution(),
             core_memory=CoreMemory(items=[]),
-            retrieved_memories=_make_retrieved_memories(),
         )
         assert ctx.core_memory.items == []
-
-    def test_scene_summaries_are_optional_context(self):
-        summary = SceneSummary(
-            level=2,
-            content="卢西安在旧旅店的调查逐渐指向钟楼。",
-            scene_ids=["scene_001", "scene_002"],
-            source_ids=["sum_1", "sum_2"],
-            turn_start=1,
-            turn_end=2,
-        )
-        ctx = assemble_context(
-            user_input="测试",
-            current_state=_make_current_state(),
-            action_parse_result=_make_action_parse_result(),
-            turn_resolution=_make_turn_resolution(),
-            core_memory=_make_core_memory(),
-            retrieved_memories=_make_retrieved_memories(),
-            scene_summaries=[summary],
-        )
-
-        assert ctx.scene_summaries == [summary]
-
-    def test_empty_retrieved_memories(self):
-        ctx = assemble_context(
-            user_input="测试",
-            current_state=_make_current_state(),
-            action_parse_result=_make_action_parse_result(),
-            turn_resolution=_make_turn_resolution(),
-            core_memory=_make_core_memory(),
-            retrieved_memories=CandidateRetrievalResult(
-                candidates=[], total_scanned=0, total_returned=0
-            ),
-        )
-        assert ctx.retrieved_memories.candidates == []
-        assert ctx.retrieved_memories.total_scanned == 0
 
     def test_serialization_roundtrip(self):
         ctx = assemble_context(
@@ -191,7 +130,6 @@ class TestAssembleContext:
             action_parse_result=_make_action_parse_result(),
             turn_resolution=_make_turn_resolution(),
             core_memory=_make_core_memory(),
-            retrieved_memories=_make_retrieved_memories(),
         )
 
         json_str = ctx.model_dump_json()
@@ -210,5 +148,4 @@ class TestAssembleContext:
                 action_parse_result=_make_action_parse_result(),
                 turn_resolution=_make_turn_resolution(),
                 core_memory=_make_core_memory(),
-                retrieved_memories=_make_retrieved_memories(),
             )

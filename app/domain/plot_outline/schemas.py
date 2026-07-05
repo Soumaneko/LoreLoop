@@ -6,7 +6,6 @@ class PlannedEvent(BaseModel):
     event_fact: str
     linked_outcome_ids: list[str] = Field(default_factory=list)
     involved_entities: list[str] = Field(default_factory=list)
-    required_memory_indices: list[int] = Field(default_factory=list)
 
 
 class PlotOutlineResult(BaseModel):

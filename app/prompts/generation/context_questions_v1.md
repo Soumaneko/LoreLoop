@@ -51,7 +51,6 @@
 
 - turn_focus：一句话概括本回合玩家输入真正要推进的事情。
 - questions：0-5 个问题。每个问题必须服务后续模块的上下文判断。
-  - question_id：使用 q1、q2、q3、q4、q5。
   - question：需要 A 模块查询并回答的问题，必须是针对单个事实簇的清晰问题，不得包含子问题。
   - purpose：问题用途，必须从 schema 枚举中选择。
   - retrieval_hints：用于检索记忆、场景摘要或后台区域的搜索锚点。应是人物、地点、物品、组织、概念或行动实体，严禁抽象短语，保持简洁。
@@ -82,7 +81,6 @@
   "turn_focus": "萧云痕提出庇护顾晚棠，并以约会机会作为报酬。",
   "questions": [
     {{
-      "question_id": "q1",
       "question": "最近几回合中，顾晚棠对萧云痕的信任、戒备和欠情状态是什么样的？",
       "purpose": "npc_reaction",
       "retrieval_hints": [
@@ -99,7 +97,6 @@
       ]
     }},
     {{
-      "question_id": "q2",
       "question": "庇护顾晚棠的原因是什么？",
       "purpose": "continuity",
       "retrieval_hints": [

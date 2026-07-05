@@ -7,7 +7,6 @@ from app.core.llm import MockLLM
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
-from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import RollResult, RollResultBatch
 from app.domain.roll_modifier.schemas import RollModifier
 from app.domain.turn_resolution import (
@@ -171,8 +170,6 @@ class TestTurnResolutionAgent:
             action_parse_result=_parse(),
             roll_results=_roll_batch(_roll(20)),
             core_memory=CoreMemory(items=[]),
-            retrieved_memories=CandidateRetrievalResult(),
-            scene_summaries=[],
         )
 
         input_data = gateway.calls[0]["input_data"]
@@ -202,8 +199,6 @@ class TestTurnResolutionAgent:
             action_parse_result=_parse(),
             roll_results=_roll_batch(_roll(20)),
             core_memory=CoreMemory(items=[]),
-            retrieved_memories=CandidateRetrievalResult(),
-            scene_summaries=[],
         )
 
         assert "观察行动" in result.resolution_reasoning
@@ -220,8 +215,6 @@ class TestTurnResolutionAgent:
             action_parse_result=_parse(),
             roll_results=_roll_batch(_roll(20)),
             core_memory=CoreMemory(items=[]),
-            retrieved_memories=CandidateRetrievalResult(),
-            scene_summaries=[],
         )
 
         frame = result.action_resolutions[0]
@@ -240,8 +233,6 @@ class TestTurnResolutionAgent:
             action_parse_result=_parse(),
             roll_results=_roll_batch(_roll(20)),
             core_memory=CoreMemory(items=[]),
-            retrieved_memories=CandidateRetrievalResult(),
-            scene_summaries=[],
             gateway=mock.build_gateway(),
         )
 

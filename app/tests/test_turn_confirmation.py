@@ -49,7 +49,6 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(monkeypat
         context=SimpleNamespace(turn_resolution=SimpleNamespace()),
         outline=SimpleNamespace(),
         scene_result=SceneWriterResult(scene_text="场景正文"),
-        selected_memory_ids=[],
         turn_index=1,
         short_term_memory=ShortTermMemory(),
     )
@@ -150,7 +149,6 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
         context=SimpleNamespace(turn_resolution=SimpleNamespace()),
         outline=SimpleNamespace(),
         scene_result=SceneWriterResult(scene_text="场景正文"),
-        selected_memory_ids=[],
         turn_index=14,
         short_term_memory=ShortTermMemory(),
         confirmation_cache={

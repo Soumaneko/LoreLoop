@@ -5,14 +5,13 @@ from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
 from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.opening import OpeningSceneAgent
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
 from app.domain.scene_writer.views import project_outline, project_recent_scene
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
 from app.domain.core_memory import InitConfig, build_core_memory, build_initial_current_state
-from app.workflows.generate_scene import generate_scene_workflow, select_required_memories
+from app.workflows.generate_scene import generate_scene_workflow
 
 
 def _make_state() -> CurrentState:
@@ -41,13 +40,11 @@ def _make_outline() -> PlotOutlineResult:
                 event_id="e1",
                 event_fact="主角走向吧台与米莉打招呼。",
                 involved_entities=["米莉"],
-                required_memory_indices=[0],
             ),
             PlannedEvent(
                 event_id="e2",
                 event_fact="米莉告诉主角关于暴风城的消息。",
                 involved_entities=["米莉", "暴风城"],
-                required_memory_indices=[],
             ),
         ],
         must_establish_facts=[
@@ -134,20 +131,6 @@ class TestSceneWriterAgent:
             core_memory=CoreMemory(items=[
                 CoreMemoryItem(id="core_identity", category="player", content="主角是卢西安，人类法师。", priority=100),
             ]),
-            selected_memories=[
-                MemoryCandidate(
-                    memory_id="mem_001",
-                    memory_kind="open_thread", evidence_mode="observed",
-                    subject="暴风城现状",
-                    content="暴风城正在经历政治风波，暗流涌动。",
-                    entities=["暴风城"],
-                    tags=["情报"],
-                    salience=0.8,
-                    confidence=0.7,
-                    score=0.15,
-                    score_breakdown={"rrf_score": 0.15},
-                ),
-            ],
             recent_scene=ShortTermScene(
                 scene_id="scene_001",
                 turn_index=1,
@@ -175,7 +158,6 @@ class TestSceneWriterAgent:
             outline=_make_outline(),
             current_state=_make_state(),
             core_memory=CoreMemory(items=[]),
-            selected_memories=[],
             recent_scene=None,
         )
 
@@ -198,7 +180,6 @@ class TestSceneWriterAgent:
             outline=_make_outline(),
             current_state=_make_state(),
             core_memory=CoreMemory(items=[]),
-            selected_memories=[],
             recent_scene=None,
             max_chars=10,
         )
@@ -214,7 +195,6 @@ class TestSceneWriterAgent:
             outline=_make_outline(),
             current_state=_make_state(),
             core_memory=CoreMemory(items=[]),
-            selected_memories=[],
             recent_scene=None,
         )
 
@@ -231,7 +211,6 @@ class TestSceneWriterAgent:
                 planned_events=[PlannedEvent(
                     event_id="e1",
                     event_fact="测试事件成立。",
-                    required_memory_indices=[],
                 )],
                 must_establish_facts=["不能使用魔法"],
                 must_not_establish_facts=["不要引入新角色"],
@@ -239,7 +218,6 @@ class TestSceneWriterAgent:
             ),
             current_state=_make_state(),
             core_memory=CoreMemory(items=[]),
-            selected_memories=[],
             recent_scene=None,
         )
 
@@ -247,7 +225,7 @@ class TestSceneWriterAgent:
 
 
 class TestSceneWriterWorkflow:
-    def test_workflow_filters_memories_by_required(self):
+    def test_workflow_generates_scene(self):
         mock = MockLLM()
         mock.set_responses([_build_response()])
 
@@ -255,148 +233,12 @@ class TestSceneWriterWorkflow:
             outline=_make_outline(),
             current_state=_make_state(),
             core_memory=CoreMemory(items=[]),
-            retrieved_memories=CandidateRetrievalResult(
-                candidates=[
-                    MemoryCandidate(
-                        memory_id="mem_001",
-                        memory_kind="open_thread", evidence_mode="observed",
-                        subject="暴风城现状",
-                        content="暴风城正在经历政治风波。",
-                        entities=["暴风城"],
-                        tags=[],
-                        salience=0.8,
-                        confidence=0.7,
-                        score=0.15,
-                        score_breakdown={"rrf_score": 0.15},
-                    ),
-                    MemoryCandidate(
-                        memory_id="mem_999",
-                        memory_kind="relationship_state", evidence_mode="inferred",
-                        subject="无关记忆",
-                        content="不应该被选中的记忆。",
-                        entities=["无关"],
-                        tags=[],
-                        salience=0.5,
-                        confidence=0.5,
-                        score=0.05,
-                        score_breakdown={"rrf_score": 0.05},
-                    ),
-                ],
-                total_scanned=10,
-                total_returned=2,
-            ),
             short_term_memory=ShortTermMemory(recent_scenes=[], max_items=5),
             gateway=mock.build_gateway(),
             turn_index=1,
         )
 
         assert isinstance(result, SceneWriterResult)
-
-    def test_select_required_memories_uses_input_indices(self):
-        outline = PlotOutlineResult(
-            planning_reasoning="本测试规划用于验证 required_memory_indices 会筛选对应记忆。",
-            planned_events=[
-                PlannedEvent(
-                    event_id="e1",
-                    event_fact="测试事件。",
-                    required_memory_indices=[0, 1, 999],
-                )
-            ],
-            scene_stopping_point="测试停点。",
-        )
-        retrieved = CandidateRetrievalResult(
-            candidates=[
-                MemoryCandidate(
-                    memory_id="mem_001",
-                    memory_kind="open_thread", evidence_mode="observed",
-                    subject="米莉的邀请",
-                    content="米莉邀请卢西安下次再来北郡。",
-                    entities=["米莉"],
-                    tags=["邀请"],
-                    salience=0.8,
-                    confidence=0.9,
-                    score=0.2,
-                ),
-                MemoryCandidate(
-                    memory_id="mem_002",
-                    memory_kind="relationship_state", evidence_mode="inferred",
-                    subject="卢西安的施法风格",
-                    content="卢西安擅长精细奥术魔法控制。",
-                    entities=["卢西安"],
-                    tags=["奥术"],
-                    salience=0.7,
-                    confidence=0.8,
-                    score=0.15,
-                ),
-                MemoryCandidate(
-                    memory_id="mem_999",
-                    memory_kind="open_thread", evidence_mode="observed",
-                    subject="无关记忆",
-                    content="不应被选择。",
-                    entities=[],
-                    tags=[],
-                    salience=0.1,
-                    confidence=0.9,
-                    score=0.01,
-                ),
-            ],
-            total_scanned=3,
-            total_returned=3,
-        )
-
-        selected = select_required_memories(outline, retrieved)
-
-        assert [memory.memory_id for memory in selected] == ["mem_001", "mem_002"]
-
-    def test_select_required_memories_can_select_pending_notes(self):
-        outline = PlotOutlineResult(
-            planning_reasoning="本测试规划用于验证 pending note 可以按 required_memory_indices 被选中。",
-            planned_events=[
-                PlannedEvent(
-                    event_id="e1",
-                    event_fact="测试事件。",
-                    required_memory_indices=[1],
-                )
-            ],
-            scene_stopping_point="测试停点。",
-        )
-        retrieved = CandidateRetrievalResult(
-            candidates=[
-                MemoryCandidate(
-                    memory_id="mem_001",
-                    memory_kind="open_thread", evidence_mode="observed",
-                    subject="正式记忆",
-                    content="这条正式记忆不应被选中。",
-                    entities=[],
-                    tags=[],
-                    salience=0.8,
-                    confidence=0.9,
-                    score=0.2,
-                ),
-            ],
-            pending_notes=[
-                PendingMemoryNote(
-                    pending_id="pending_001",
-                    scene_id="scene_001",
-                    turn_index=3,
-                    raw_text="米莉刚刚提到暴风城调查团有异常动向。",
-                    entities=["米莉", "暴风城调查团"],
-                    memory_kind="open_thread", subject="暴风城调查团异常动向",
-                    score=0.14,
-                ),
-            ],
-            total_scanned=2,
-            total_returned=2,
-        )
-
-        selected = select_required_memories(outline, retrieved)
-
-        assert len(selected) == 1
-        assert selected[0].memory_id == "pending:pending_001"
-        assert selected[0].memory_kind == "open_thread"
-        assert selected[0].evidence_mode == "inferred"
-        assert selected[0].content == "米莉刚刚提到暴风城调查团有异常动向。"
-        assert selected[0].source_pending_ids == ["pending_001"]
 
     def test_workflow_with_short_term_memory(self):
         mock = MockLLM()
@@ -406,11 +248,6 @@ class TestSceneWriterWorkflow:
             outline=_make_outline(),
             current_state=_make_state(),
             core_memory=CoreMemory(items=[]),
-            retrieved_memories=CandidateRetrievalResult(
-                candidates=[],
-                total_scanned=0,
-                total_returned=0,
-            ),
             short_term_memory=ShortTermMemory(
                 recent_scenes=[
                     ShortTermScene(

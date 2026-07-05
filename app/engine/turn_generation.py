@@ -1,10 +1,12 @@
+from concurrent.futures import ThreadPoolExecutor
+from queue import Empty, Queue
 import uuid
 
 from app.core.llm.config import create_gateway
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
-from app.domain.context_qa.schemas import ContextQuestionInput
+from app.domain.context_qa.schemas import ContextAnswerSet, ContextQuestionInput
 from app.domain.roll.schemas import Difficulty, RollConfig
 from app.domain.roll.resolver import RollResolver
 from app.workflows.context_assembler import assemble_context
@@ -14,7 +16,6 @@ from app.workflows.generate_plot_outline import generate_plot_outline_workflow
 from app.workflows.generate_scene import (
     build_entity_retrieval_anchors,
     generate_scene_workflow,
-    select_required_memories,
 )
 from app.workflows.resolve_rolls import resolve_rolls_workflow
 from app.workflows.resolve_turn import resolve_turn_workflow
@@ -23,6 +24,7 @@ from app.workflows.update_director_event import DIRECTOR_EVENT_IDLE_COOLDOWN_TUR
 from app.workflows.director_npc import maybe_director_npc_workflow
 from app.workflows.update_entity_profiles import gather_entity_profiles_from_state_and_anchors
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
+from app.workflows.answer_context_questions import answer_context_questions_workflow
 from app.workflows.select_context_profiles import select_context_profiles
 
 from .serialization import model_data
@@ -91,7 +93,6 @@ def generate_turn_stream(
         },
     }
 
-    parser = ActionParser(gateway)
     with entity_store() as ent_store, npc_profile_store() as npc_store:
         context_profile_selection = select_context_profiles(
             user_input=user_input,
@@ -120,25 +121,83 @@ def generate_turn_stream(
         },
     }
 
-    context_questions = generate_context_questions_workflow(
-        ContextQuestionInput(
-            user_input=user_input,
-            current_state=current_state,
-            core_memory=core_memory,
-            entity_profiles=action_entity_profile_views,
-            npc_profiles=action_npc_director_views,
-        ),
-        gateway,
-        trace_id=trace_id,
-    )
+    action_gateway = create_gateway()
+    action_gateway.set_trace_context(turn_index=turn_index, session_type="generation")
 
-    yield {
-        "step": "context_questions_done",
-        "data": {
-            "context_questions": model_data(context_questions),
-        },
-    }
+    qa_events: Queue[dict] = Queue()
 
+    def drain_qa_events():
+        while True:
+            try:
+                yield qa_events.get_nowait()
+            except Empty:
+                break
+
+    def emit(event: dict):
+        yield event
+        yield from drain_qa_events()
+
+    def run_context_qa_branch() -> ContextAnswerSet:
+        try:
+            question_gateway = create_gateway()
+            question_gateway.set_trace_context(turn_index=turn_index, session_type="generation")
+            answer_gateway = create_gateway()
+            answer_gateway.set_trace_context(turn_index=turn_index, session_type="generation")
+
+            context_questions = generate_context_questions_workflow(
+                ContextQuestionInput(
+                    user_input=user_input,
+                    current_state=current_state,
+                    core_memory=core_memory,
+                    entity_profiles=action_entity_profile_views,
+                    npc_profiles=action_npc_director_views,
+                ),
+                question_gateway,
+                trace_id=trace_id,
+            )
+
+            qa_events.put({
+                "step": "context_questions_done",
+                "data": {
+                    "context_questions": model_data(context_questions),
+                },
+            })
+
+            with memory_store() as mem_store:
+                context_answers, context_answer_memories = answer_context_questions_workflow(
+                    questions=context_questions,
+                    core_memory=core_memory,
+                    current_state=current_state,
+                    director_event=active_director_event,
+                    recent_archived_director_event=recent_archived_director_event,
+                    scene_summaries=scene_summaries,
+                    memory_store=mem_store,
+                    gateway=answer_gateway,
+                    trace_id=trace_id,
+                )
+
+            qa_events.put({
+                "step": "context_answers_done",
+                "data": {
+                    "context_answers": model_data(context_answers),
+                    "context_answer_memories": model_data(context_answer_memories),
+                },
+            })
+            return context_answers
+        except Exception as exc:
+            qa_events.put({
+                "step": "context_qa_failed",
+                "data": {
+                    "error": str(exc),
+                    "trace_id": trace_id,
+                },
+            })
+            return ContextAnswerSet(turn_focus="Context QA failed", answers=[])
+
+    qa_executor = ThreadPoolExecutor(max_workers=1)
+    qa_future = qa_executor.submit(run_context_qa_branch)
+
+    parser = ActionParser(action_gateway)
     action_result = parser.extract_actions(
         user_input=user_input,
         current_state=current_state,
@@ -161,15 +220,16 @@ def generate_turn_stream(
         user_input,
         current_state,
     )
+    action_self_check_result = action_self_check.last_result
 
-    yield {
+    yield from emit({
         "step": "action_parsed",
         "data": {
             "raw_action_parse_result": model_data(raw_action_parse_result),
-            "action_self_check_result": model_data(action_self_check.last_result),
+            "action_self_check_result": model_data(action_self_check_result),
             "action_parse_result": model_data(action_parse_result),
         },
-    }
+    })
 
     with memory_store() as mem_store:
         retrieved_memories = retrieve_candidates_workflow(
@@ -177,12 +237,12 @@ def generate_turn_stream(
             mem_store,
         )
 
-    yield {
+    yield from emit({
         "step": "retrieval_done",
         "data": {
             "retrieved_memories": model_data(retrieved_memories),
         },
-    }
+    })
 
     roll_config = RollConfig(seed=None, difficulty=difficulty)
     roll_resolver = RollResolver(roll_config)
@@ -197,13 +257,13 @@ def generate_turn_stream(
         trace_id=trace_id,
     )
 
-    yield {
+    yield from emit({
         "step": "modifiers_done",
         "data": {
             "roll_actions": model_data(roll_actions),
             "modifiers": model_data(modifier_batch),
         },
-    }
+    })
 
     roll_results = resolve_rolls_workflow(
         action_parse_result,
@@ -212,12 +272,15 @@ def generate_turn_stream(
         roll_actions=roll_actions,
     )
 
-    yield {
+    yield from emit({
         "step": "rolls_done",
         "data": {
             "roll_results": model_data(roll_results),
         },
-    }
+    })
+
+    context_answers = qa_future.result()
+    yield from drain_qa_events()
 
     turn_resolution = resolve_turn_workflow(
         user_input=user_input,
@@ -225,8 +288,7 @@ def generate_turn_stream(
         action_parse_result=action_parse_result,
         roll_results=roll_results,
         core_memory=core_memory,
-        retrieved_memories=retrieved_memories,
-        scene_summaries=scene_summaries,
+        context_answers=context_answers,
         entity_profiles=action_entity_profile_views,
         npc_profiles=action_npc_director_views,
         director_event=active_director_event,
@@ -235,12 +297,12 @@ def generate_turn_stream(
         trace_id=trace_id,
     )
 
-    yield {
+    yield from emit({
         "step": "turn_resolution_done",
         "data": {
             "turn_resolution": model_data(turn_resolution),
         },
-    }
+    })
 
     director_npc_result = None
     with director_npc_store() as npc_store, npc_profile_store() as profile_store:
@@ -262,12 +324,12 @@ def generate_turn_stream(
             trace_id=trace_id,
         )
 
-    yield {
+    yield from emit({
         "step": "director_npc_done",
         "data": {
             "director_npc_result": model_data(director_npc_result),
         },
-    }
+    })
 
     context = assemble_context(
         user_input=user_input,
@@ -275,8 +337,7 @@ def generate_turn_stream(
         action_parse_result=action_parse_result,
         turn_resolution=turn_resolution,
         core_memory=core_memory,
-        retrieved_memories=retrieved_memories,
-        scene_summaries=scene_summaries,
+        context_answers=context_answers,
         entity_profiles=action_entity_profile_views,
         npc_profiles=action_npc_director_views,
         director_event=active_director_event,
@@ -288,12 +349,12 @@ def generate_turn_stream(
         ),
     )
 
-    yield {
+    yield from emit({
         "step": "context_assembled",
         "data": {
             "context": model_data(context),
         },
-    }
+    })
 
     outline = generate_plot_outline_workflow(
         context=context,
@@ -301,15 +362,13 @@ def generate_turn_stream(
         trace_id=trace_id,
     )
 
-    yield {
+    yield from emit({
         "step": "outline_done",
         "data": {
             "plot_outline": model_data(outline),
         },
-    }
+    })
 
-    selected_memories = select_required_memories(outline, retrieved_memories)
-    selected_memory_ids = [candidate.memory_id for candidate in selected_memories]
     beat_entity_anchors = build_entity_retrieval_anchors(outline)
     with entity_store() as ent_store, npc_profile_store() as npc_store:
         writer_entity_profiles = gather_entity_profiles_from_state_and_anchors(
@@ -337,22 +396,19 @@ def generate_turn_stream(
     )
     next_turn_index = (recent_scene.turn_index + 1) if recent_scene else 1
 
-    with memory_store() as mem_store:
-        scene_result = generate_scene_workflow(
-            outline=outline,
-            current_state=current_state,
-            core_memory=core_memory,
-            retrieved_memories=retrieved_memories,
-            short_term_memory=short_term_memory,
-            gateway=gateway,
-            turn_index=next_turn_index,
-            entity_profiles=writer_entity_profile_views,
-            npc_profiles=writer_npc_public_views,
-            recent_summaries=recent_summaries,
-            memory_store=mem_store,
-            max_chars=max_chars,
-            trace_id=trace_id,
-        )
+    scene_result = generate_scene_workflow(
+        outline=outline,
+        current_state=current_state,
+        core_memory=core_memory,
+        context_answers=context_answers,
+        short_term_memory=short_term_memory,
+        gateway=gateway,
+        turn_index=next_turn_index,
+        entity_profiles=writer_entity_profile_views,
+        npc_profiles=writer_npc_public_views,
+        max_chars=max_chars,
+        trace_id=trace_id,
+    )
 
     turn_id = str(uuid.uuid4())
     PENDING_TURNS[turn_id] = PendingTurn(
@@ -362,20 +418,19 @@ def generate_turn_stream(
         context=context,
         outline=outline,
         scene_result=scene_result,
-        selected_memory_ids=selected_memory_ids,
         director_npc_result=director_npc_result,
         turn_index=next_turn_index,
         short_term_memory=short_term_memory,
     )
 
-    yield {
+    qa_executor.shutdown(wait=False, cancel_futures=False)
+
+    yield from emit({
         "step": "scene_written",
         "data": {
             "turn_id": turn_id,
             "trace_id": trace_id,
             "turn_index": next_turn_index,
-            "selected_memory_ids": selected_memory_ids,
-            "selected_memories": model_data(selected_memories),
             "writer_entity_profiles": model_data(writer_entity_profile_views),
             "writer_npc_profiles": model_data(writer_npc_public_views),
             "recent_scene": model_data(recent_scene),
@@ -383,4 +438,4 @@ def generate_turn_stream(
             "context": model_data(context),
             "status": "awaiting_confirm",
         },
-    }
+    })

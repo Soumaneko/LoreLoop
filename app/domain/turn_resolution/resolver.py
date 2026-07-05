@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory.schemas import CoreMemory
+from app.domain.context_qa.schemas import ContextAnswerSet
+from app.domain.context_qa.views import project_context_qa
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_event.views import (
@@ -14,15 +16,11 @@ from app.domain.director_event.views import (
 )
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
-from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import RollResultBatch
-from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.views import (
     project_current_state,
     project_entity_profiles,
     project_npc_profiles,
-    project_retrieved_memories,
-    project_scene_summaries,
 )
 
 from .schemas import (
@@ -127,8 +125,7 @@ class TurnResolutionAgent:
         action_parse_result: ActionParseResult,
         roll_results: RollResultBatch,
         core_memory: CoreMemory,
-        retrieved_memories: CandidateRetrievalResult,
-        scene_summaries: list[SceneSummary],
+        context_answers: ContextAnswerSet | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         director_event: DirectorEvent | None = None,
@@ -158,8 +155,9 @@ class TurnResolutionAgent:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(current_state),
                     "user_input": user_input,
-                    "retrieved_memories_json": project_retrieved_memories(retrieved_memories),
-                    "scene_summaries_json": project_scene_summaries(scene_summaries),
+                    "context_qa_json": project_context_qa(
+                        context_answers or ContextAnswerSet(turn_focus="No Context QA", answers=[])
+                    ),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),
                     "npc_profiles_json": project_npc_profiles(npc_profiles or []),
                     "director_event_json": project_director_event(

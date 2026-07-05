@@ -26,7 +26,6 @@ class PendingTurn:
     context: PlotOutlineContext
     outline: PlotOutlineResult
     scene_result: SceneWriterResult
-    selected_memory_ids: list[str]
     director_npc_result: DirectorNPCWorkflowResult | None = None
     turn_index: int = 1
     short_term_memory: ShortTermMemory | None = None

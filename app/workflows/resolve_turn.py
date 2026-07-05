@@ -1,12 +1,11 @@
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult
+from app.domain.context_qa.schemas import ContextAnswerSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
-from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import RollResultBatch
-from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.domain.director_event.schemas import DirectorEvent
 
@@ -18,8 +17,7 @@ def resolve_turn_workflow(
     action_parse_result: ActionParseResult,
     roll_results: RollResultBatch,
     core_memory: CoreMemory,
-    retrieved_memories: CandidateRetrievalResult,
-    scene_summaries: list[SceneSummary],
+    context_answers: ContextAnswerSet | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
     director_event: DirectorEvent | None = None,
@@ -35,8 +33,7 @@ def resolve_turn_workflow(
         action_parse_result=action_parse_result,
         roll_results=roll_results,
         core_memory=core_memory,
-        retrieved_memories=retrieved_memories,
-        scene_summaries=scene_summaries,
+        context_answers=context_answers,
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
         director_event=director_event,

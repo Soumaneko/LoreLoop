@@ -17,16 +17,10 @@
 {current_state_json}
 ```
 
-## Memories
+## Context QA
 
 ```json
-{retrieved_memories_json}
-```
-
-## SceneSummaries
-
-```json
-{scene_summaries_json}
+{context_qa_json}
 ```
 
 ## EntityProfiles
@@ -84,7 +78,7 @@
 
 # 任务逻辑
 
-1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Memories 是过去剧情的钩子；SceneSummaries 是过去发生的剧情；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍；Recent Scene 是上一章的正文文本；DirectorEvent 是剧情背景中的导演事件
+1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Context QA 是上游基于记忆与摘要回答后的历史 1问1答列表；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍；DirectorEvent 是剧情背景中的导演事件。
 2. 第二步，确定信息边界，主角知道什么不知道什么？NPC知道什么不知道什么？
 3. 第三步，你需要在不违背第一第二步的前提下，根据掷骰结果确定行动的直接事实结果；不要替 Plot 或 Scene Writer 设计完整桥段。
 
@@ -102,7 +96,8 @@
    - 客观不可能：任何 band 都不能让它发生，因为它不在可能性之内。例如街头路人不可能掌握世界本源秘密；匕首不可能秒杀远超自身层级的存在；
    - 当玩家想要的结果是客观不可能，应转而兑现低概率但客观可能的结果，而不是强行创造客观不可能。
 4. 若 DirectorEvent 章节提供了额外使用规则，必须遵守。DirectorEvent 只能影响与玩家行动或结果存在自然交点的判定边界，不得被原文暴露。
-5. TR 输出只负责“判定边界”，不负责“剧情演出”：
+5. 不得把 Context QA 的缺失项作为失败、拒绝、沉默或无方案的理由。询问、交涉、试探是否成功，只能根据 roll_judgments、当前状态、NPC 档案、玩家行动方式和信息边界判断。
+6. TR 输出只负责“判定边界”，不负责“剧情演出”：
    - 可以写：行动是否成功、直接发现了什么层级的信息、关系/风险是否发生直接变化、代价是什么。
    - 不要写：NPC 如何长篇回应、态度如何连续转折、秘密如何逐层吐露、对话如何展开、场面如何调度。
    - 如果行动涉及询问、试探或观察，resolved_fact 只写信息释放的边界，例如“只得到身份线索，未确认幕后动机”；具体话术和节奏交给 Plot/Scene Writer。

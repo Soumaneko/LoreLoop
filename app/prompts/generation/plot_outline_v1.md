@@ -17,16 +17,10 @@
 {current_state_json}
 ```
 
-## Memories
+## Context QA
 
 ```json
-{retrieved_memories_json}
-```
-
-## SceneSummaries
-
-```json
-{scene_summaries_json}
+{context_qa_json}
 ```
 
 ## Entity Profiles
@@ -86,7 +80,6 @@
   - event_fact：本事件确定发生的事实结果。必须具体、可写入正文，但不能替 SceneWriter 写演出方式。
   - linked_outcome_ids：本事件落实的 ActionResolutionFrame.action_id 列表。所有 TurnResolutionResult 中的 action_id 必须按顺序被覆盖。
   - involved_entities：本事件涉及的实体标准名称列表，不含玩家自身。
-  - required_memory_indices：本事件需要引用的 Memories 中 memory_index 列表，不需要时填空列表。
 - must_establish_facts：SceneWriter 必须在正文中落实的事实列表。DirectorEvent 或 Director NPC 如被使用，其前台可见影响必须写入这里或 planned_events，而不是只写在原因字段。
 - must_not_establish_facts：SceneWriter 本回合不得写成已经成立的事实列表，包括不得替玩家作出的决定、不得公开的隐秘、不得新增的任务/地点/资源/承诺，头脑风暴 SceneWriter 可能犯的错误。
 - information_boundaries：信息可见性边界。只写抽象边界，不列举 hidden_secret 等隐秘内容的具体名词或真相。
@@ -98,7 +91,7 @@
 
 # 任务逻辑
 
-1. 先理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是本轮前的即时状态；Memories 和 SceneSummaries 是连续性依据；Entity Profiles 和 NPC Profiles 是实体与角色依据；DirectorEvent 和 Director NPC Candidate 是可选的后台调度输入。
+1. 先理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是本轮前的即时状态；Context QA 是上游基于记忆与摘要回答后的历史 1问1答列表；Entity Profiles 和 NPC Profiles 是实体与角色依据；DirectorEvent 和 Director NPC Candidate 是可选的后台调度输入。
 2. 明确信息边界：主角知道什么，NPC 知道什么，旁白能确认什么，哪些后台事实只能转译为前台压力、异常或机会。
 3. 根据 Player Input 和 TurnResolutionResult 规划本回合确定事件。TurnResolutionResult 是行动结果上限，不得扩展出它没有允许的新事实。
 4. 判断 DirectorEvent / Director NPC Candidate 是否有自然交点。若使用，必须转译为前台可见事实并写入 planned_events、must_establish_facts 或 must_not_establish_facts；若不使用，只在原因字段说明。
@@ -118,7 +111,8 @@
    - 当需要表达“不泄露隐秘”时，只写抽象边界，不写隐秘具体内容。
 7. DirectorEvent 是后台事件，不得原文暴露、写成任务目标或替玩家决定回应。只有存在自然交点时才可转译成前台影响。
 8. Director NPC Candidate 不为 null 时，你有二次裁量权：自然、轻量、有因果交点时可使用；若会打断当前行动、要求创造未建立事实或破坏节奏，应拒绝。不能为了省事每次都拒绝。
-9. scene_stopping_point 不得添加新任务、新邀约、新地点、新资源分配或替玩家移动。停点来自当前互动未被关闭。
+9. 不得把 Context QA 中缺失的问题当作否定事实或失败理由；Plot 只能落实 TurnResolutionResult 已经确定的结果，并用 Context QA 中存在的历史答案维持连续性。
+10. scene_stopping_point 不得添加新任务、新邀约、新地点、新资源分配或替玩家移动。停点来自当前互动未被关闭。
 
 
 # 禁止事项
@@ -137,19 +131,17 @@
 
 ```json
 {{
-  "planning_reasoning": "本回合 Player Input 包含推门进入与举火照明两个连续行动，TurnResolutionResult 已判定二者均成功，因此规划必须先落实进入密室，再落实照明观察。Memories 只支持密室入口与旧石门的既有事实，不支持额外敌人或宝物，因此后续发现应保持为环境线索。主角能确认房间布局和暗道入口，但不能确认暗道内部情况。场景应停在主角看见暗道入口后的可交互状态，不替主角进入暗道。",
+  "planning_reasoning": "本回合 Player Input 包含推门进入与举火照明两个连续行动，TurnResolutionResult 已判定二者均成功，因此规划必须先落实进入密室，再落实照明观察。Context QA 只支持密室入口与旧石门的既有事实，不支持额外敌人或宝物，因此后续发现应保持为环境线索。主角能确认房间布局和暗道入口，但不能确认暗道内部情况。场景应停在主角看见暗道入口后的可交互状态，不替主角进入暗道。",
   "planned_events": [
     {{
       "event_fact": "主角成功推开密室石门并进入此前无法进入的密室。",
       "linked_outcome_ids": ["A1"],
-      "involved_entities": ["密室石门"],
-      "required_memory_indices": []
+      "involved_entities": ["密室石门"]
     }},
     {{
       "event_fact": "主角用火把照亮室内，看清房间布局，并发现通往下一层的暗道入口。",
       "linked_outcome_ids": ["A2"],
-      "involved_entities": ["火把", "暗道入口"],
-      "required_memory_indices": []
+      "involved_entities": ["火把", "暗道入口"]
     }}
   ],
   "must_establish_facts": ["密室石门已经开启", "主角已经进入密室", "暗道入口已经被主角看见"],
