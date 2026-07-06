@@ -111,7 +111,7 @@ class TestAssembleContext:
         assert ctx.action_parse_result.turn_intent == "探索修道院"
         assert ctx.turn_resolution.total_resolutions == 1
         assert len(ctx.core_memory.items) == 1
-        assert ctx.context_answers.answers == []
+        assert ctx.context_facts.facts == []
 
     def test_empty_core_memory(self):
         ctx = assemble_context(

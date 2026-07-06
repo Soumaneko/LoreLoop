@@ -4,7 +4,7 @@ from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfilePublicView
 from app.domain.plot_outline.schemas import PlotOutlineResult
-from app.domain.context_qa.schemas import ContextAnswerSet
+from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.helpers import build_entity_retrieval_anchors
 from app.domain.scene_writer.schemas import SceneWriterResult
@@ -24,7 +24,7 @@ def generate_scene_workflow(
     short_term_memory: ShortTermMemory,
     gateway: LLMGateway,
     turn_index: int,
-    context_answers: ContextAnswerSet | None = None,
+    context_facts: ContextFactSet | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfilePublicView] | None = None,
     max_chars: int = 1500,
@@ -37,7 +37,7 @@ def generate_scene_workflow(
         outline=outline,
         current_state=current_state,
         core_memory=core_memory,
-        context_answers=context_answers or ContextAnswerSet(turn_focus="No Context QA", answers=[]),
+        context_facts=context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[]),
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
         recent_scene=recent_scene,

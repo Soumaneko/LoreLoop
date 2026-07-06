@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 from app.domain.action.schemas import ActionParseResult
-from app.domain.context_qa.schemas import ContextAnswerSet
+from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
@@ -17,8 +17,8 @@ class PlotOutlineContext(BaseModel):
     action_parse_result: ActionParseResult
     turn_resolution: TurnResolutionResult
     core_memory: CoreMemory
-    context_answers: ContextAnswerSet = Field(
-        default_factory=lambda: ContextAnswerSet(turn_focus="No Context QA", answers=[])
+    context_facts: ContextFactSet = Field(
+        default_factory=lambda: ContextFactSet(turn_focus="No Context Facts", facts=[])
     )
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
@@ -34,7 +34,7 @@ def assemble_context(
     action_parse_result: ActionParseResult,
     turn_resolution: TurnResolutionResult,
     core_memory: CoreMemory,
-    context_answers: ContextAnswerSet | None = None,
+    context_facts: ContextFactSet | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
     director_event: DirectorEvent | None = None,
@@ -47,7 +47,7 @@ def assemble_context(
         action_parse_result=action_parse_result,
         turn_resolution=turn_resolution,
         core_memory=core_memory,
-        context_answers=context_answers or ContextAnswerSet(turn_focus="No Context QA", answers=[]),
+        context_facts=context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[]),
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
         director_event=director_event,

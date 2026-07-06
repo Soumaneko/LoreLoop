@@ -602,9 +602,8 @@ function tracesForStep(scope, stepName, traces) {
 function stepTasks(scope, stepName) {
   const generation = {
     entity_profiles_loaded: [],
-    context_questions_done: ["context_questions"],
-    context_answers_done: ["context_answers"],
-    context_qa_failed: ["context_questions", "context_answers"],
+    context_facts_done: ["context_extract"],
+    context_extract_failed: ["context_extract"],
     action_parsed: ["action_extract"],
     modifiers_done: ["roll_modifier"],
     turn_resolution_done: ["turn_resolution"],
@@ -655,9 +654,8 @@ function tracePane(title, body) {
 
 function stepSummary(name, data) {
   if (name === "action_parsed") return `${data.action_parse_result?.atomic_actions?.length || 0} actions`;
-  if (name === "context_questions_done") return `${data.context_questions?.questions?.length || 0} questions`;
-  if (name === "context_answers_done") return `${data.context_answers?.answers?.length || 0} answers`;
-  if (name === "context_qa_failed") return "QA failed";
+  if (name === "context_facts_done") return `${data.context_facts?.facts?.length || 0} facts`;
+  if (name === "context_extract_failed") return "context extract failed";
   if (name === "retrieval_done") return `${data.retrieved_memories?.total_returned || 0} memories`;
   if (name === "rolls_done") return `${data.roll_results?.total_rolls || 0} rolls`;
   if (name === "director_npc_done") return directorNpcStepSummary(data.director_npc_result);
@@ -676,20 +674,37 @@ function renderGeneration() {
   const g = merged("generation");
   if (!state.run.generation.order.length) return `<div class="empty">暂无生成流程。</div>`;
   return `
-    ${card("Context QA", `
-      ${details("Questions", jsonBlock(g.context_questions))}
-      ${details("Answers", jsonBlock(g.context_answers))}
-      ${details("Answer Memories", jsonBlock(g.context_answer_memories))}
+    ${renderContextFacts(g)}
+    ${card("Action / Roll Branch", `
+      ${details("Action Parse", renderAction(g.action_parse_result, g.raw_action_parse_result, g.action_self_check_result), true)}
+      ${details("Action Retrieval", renderRetrieval(g.retrieved_memories))}
+      ${details("Roll", renderRoll(g.roll_results))}
     `)}
-    ${card("Action", renderAction(g.action_parse_result, g.raw_action_parse_result, g.action_self_check_result))}
-    ${card("Retrieval", renderRetrieval(g.retrieved_memories))}
-    ${card("Roll", renderRoll(g.roll_results))}
     ${card("Turn Resolution", renderResolution(g.turn_resolution))}
     ${card("Director NPC", renderDirectorNpcResult(g.director_npc_result))}
     ${card("Outline", renderOutline(g.plot_outline))}
     ${card("Writer", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>` : `<div class="empty">未生成正文</div>`)}
     ${details("Context", jsonBlock(g.context))}
   `;
+}
+
+function renderContextFacts(g) {
+  const facts = g.context_facts?.facts || [];
+  return card("Context Facts Branch", `
+    ${metrics([
+      metric("事实", facts.length, "ok"),
+      metric("事实检索", g.context_fact_memories?.total_returned || 0, "info"),
+    ])}
+    ${details("Facts", facts.length ? facts.map(contextFactCard).join("") : `<div class="empty">无事实</div>`, true)}
+    ${details("Context Retrieval", renderRetrieval(g.context_fact_memories))}
+  `);
+}
+
+function contextFactCard(fact) {
+  return `<div class="section-card">
+    <div class="card-title"><span>${esc(fact.fact_id || "?")}</span></div>
+    <div>${esc(text(fact.fact))}</div>
+  </div>`;
 }
 
 function renderConfirmation() {

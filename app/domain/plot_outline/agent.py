@@ -8,7 +8,7 @@ from app.domain.director_event.views import (
     plot_outline_director_event_instructions,
     project_director_event,
 )
-from app.domain.context_qa.views import project_context_qa
+from app.domain.context_facts.views import project_context_facts
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.plot_outline.views import project_turn_resolution
 from app.domain.views import (
@@ -100,7 +100,7 @@ class PlotOutlineAgent:
                     "current_state_json": project_current_state(context.current_state),
                     "user_input": context.user_input,
                     "turn_resolution_json": project_turn_resolution(context.turn_resolution),
-                    "context_qa_json": project_context_qa(context.context_answers),
+                    "context_facts_json": project_context_facts(context.context_facts),
                     "entity_profiles_json": project_entity_profiles(context.entity_profiles),
                     "npc_profiles_json": project_npc_profiles(context.npc_profiles),
                     "director_event_json": project_director_event(

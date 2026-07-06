@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.context_qa.schemas import ContextAnswerSet
-from app.domain.context_qa.views import project_context_qa
+from app.domain.context_facts.schemas import ContextFactSet
+from app.domain.context_facts.views import project_context_facts
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_event.views import (
@@ -125,7 +125,7 @@ class TurnResolutionAgent:
         action_parse_result: ActionParseResult,
         roll_results: RollResultBatch,
         core_memory: CoreMemory,
-        context_answers: ContextAnswerSet | None = None,
+        context_facts: ContextFactSet | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         director_event: DirectorEvent | None = None,
@@ -155,8 +155,8 @@ class TurnResolutionAgent:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(current_state),
                     "user_input": user_input,
-                    "context_qa_json": project_context_qa(
-                        context_answers or ContextAnswerSet(turn_focus="No Context QA", answers=[])
+                    "context_facts_json": project_context_facts(
+                        context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[])
                     ),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),
                     "npc_profiles_json": project_npc_profiles(npc_profiles or []),

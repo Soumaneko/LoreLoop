@@ -213,8 +213,8 @@ class TestPlotOutlineAgent:
         assert "outline_summary" not in prompt
         assert "state_implications" not in prompt
         assert "tone_notes" not in prompt
-        assert "Context QA" in prompt
-        assert "context_qa_json" in prompt
+        assert "Context Facts" in prompt
+        assert "context_facts_json" in prompt
         assert "SceneSummaries" not in prompt
         assert "scene_summaries_json" not in prompt
         assert "planning_reasoning" in prompt

@@ -52,8 +52,8 @@ def plot_outline_director_event_instructions(
         return ""
     if event.player_involved:
         return (
-            "DirectorEvent 是玩家不可见的后台事件，但玩家已经介入该事件；"
-            "不得再寻找或制造 entry point。根据 backstage_premise 与 driving_tension 理解当前局势，"
+            "玩家已经介入该事件；"
+            "根据 backstage_premise 与 driving_tension 理解当前局势，"
             "只在当前行动、NPC 或结果自然相关时体现其压力、机会或后果；不得把后台事实直接说破。"
         )
     return (
