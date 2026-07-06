@@ -4,7 +4,6 @@ from app.domain.context_facts.extractor import ContextExtractor
 from app.domain.context_facts.schemas import ContextExtractInput, ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEvent
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.recall_memory.store import MemoryStore
@@ -40,8 +39,6 @@ def extract_context_facts_workflow(
     user_input: str,
     core_memory: CoreMemory,
     current_state: CurrentState,
-    director_event: DirectorEvent | None,
-    recent_archived_director_event: DirectorEvent | None,
     scene_summaries: list[SceneSummary],
     memory_store: MemoryStore,
     anchors: list[Anchor],
@@ -60,8 +57,6 @@ def extract_context_facts_workflow(
             user_input=user_input,
             core_memory=core_memory,
             current_state=current_state,
-            director_event=director_event,
-            recent_archived_director_event=recent_archived_director_event,
             scene_summaries=scene_summaries,
             retrieved_memories=retrieved_memories,
             entity_profiles=entity_profiles or [],

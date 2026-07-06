@@ -147,6 +147,7 @@ def test_context_extractor_projects_required_inputs_and_hides_fact_id_schema():
     assert "顾晚棠曾透露账册摹本" in gateway.input_data["scene_summaries_json"]
     assert "麂皮褡裢" in gateway.input_data["entity_profiles_json"]
     assert "顾晚棠" in gateway.input_data["npc_profiles_json"]
+    assert "director_event_json" not in gateway.input_data
     schema = json.loads(gateway.input_data["output_schema_json"])
     draft_def_name = next(
         name

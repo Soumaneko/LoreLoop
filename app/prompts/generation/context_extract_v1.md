@@ -17,12 +17,6 @@
 {current_state_json}
 ```
 
-## DirectorEvent
-
-```json
-{director_event_json}
-```
-
 ## SceneSummaries
 
 ```json
@@ -76,7 +70,7 @@
 # 核心规则
 
 1. 提取“本回合生成可能需要知道的既有事实”，包括：已发生事件、当前已知威胁、旧承诺、关系状态、物品/资源状态、角色已知信息边界、未解决线程、已透露动机或冲突根源。
-2. Retrieved Memories 和 SceneSummaries 是过往剧情事实的主要来源；CurrentState 是当前即时状态；CoreMemory 是长期设定边界；Entity/NPC Profiles 是实体与角色背景边界；DirectorEvent 是后台调度边界。
+2. Retrieved Memories 和 SceneSummaries 是过往剧情事实的主要来源；CurrentState 是当前即时状态；CoreMemory 是长期设定边界；Entity/NPC Profiles 是实体与角色背景边界。
 3. 事实必须与 User Input 的行动、询问对象、涉及人物、地点、物品、组织或威胁有关。
 4. 若某个事实决定“主角/某 NPC 已经知道什么”，必须在 fact 中明确写出已知者。例如“萧云痕已知……”“顾晚棠曾透露……”。
 5. 可以提取“尚未透露具体方式/尚未确认结果”这类信息边界，但必须写成已支持的事实，不要推导成否定事实。
@@ -89,7 +83,7 @@
 2. 不要给出解决方案、行动建议、剧情规划或写作安排。
 3. 不要判定玩家行动成功或失败。
 4. 不要把缺失信息写成“事实不存在”；只能写“上下文未显示/尚未透露”，且必须与本回合明显相关。
-5. 不要臆造 Retrieved Memories、SceneSummaries、CurrentState、CoreMemory、Entity Profiles、NPC Profiles 或 DirectorEvent 中没有的信息。
+5. 不要臆造 Retrieved Memories、SceneSummaries、CurrentState、CoreMemory、Entity Profiles 或 NPC Profiles 中没有的信息。
 6. 不要输出任何 schema 外字段。
 
 

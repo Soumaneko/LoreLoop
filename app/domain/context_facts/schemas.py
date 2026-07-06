@@ -2,7 +2,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEvent
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.retrieval.schemas import CandidateRetrievalResult
@@ -67,8 +66,6 @@ class ContextExtractInput(BaseModel):
     user_input: str = Field(min_length=1)
     core_memory: CoreMemory
     current_state: CurrentState
-    director_event: DirectorEvent | None = None
-    recent_archived_director_event: DirectorEvent | None = None
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
     retrieved_memories: CandidateRetrievalResult
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)

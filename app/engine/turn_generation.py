@@ -146,8 +146,6 @@ def generate_turn_stream(
                     user_input=user_input,
                     core_memory=core_memory,
                     current_state=current_state,
-                    director_event=active_director_event,
-                    recent_archived_director_event=recent_archived_director_event,
                     scene_summaries=scene_summaries,
                     memory_store=mem_store,
                     anchors=matched_anchors,

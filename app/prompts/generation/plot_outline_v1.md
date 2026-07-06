@@ -75,7 +75,7 @@
 
 按以下顺序为每个字段产出期望内容：
 
-- planning_reasoning：规划前的逻辑审计，用 3-6 句自然语言写清楚。必须依次说明 Player Input 的行动顺序、TurnResolutionResult 已允许的确定结果、世界或 NPC 将如何主动回应玩家的行动、哪些信息不能被公开确认。
+- planning_reasoning：规划前的逻辑审计，用 3-6 句自然语言写清楚。必须依次说明 Player Input 的行动顺序、TurnResolutionResult 已允许的确定结果、将使用哪些上下文依据、NPC/世界反应的因果是否成立、哪些信息不能被公开确认。
 - planned_events：1-4 个本回合确定发生的事件，按发生顺序排列。每个事件只写事实，不写镜头、台词、微表情、文风或具体演出。
   - event_fact：本事件确定发生的事实结果。必须具体、可写入正文，但不能替 SceneWriter 写演出方式。
   - linked_outcome_ids：本事件落实的 ActionResolutionFrame.action_id 列表。所有 TurnResolutionResult 中的 action_id 必须按顺序被覆盖。

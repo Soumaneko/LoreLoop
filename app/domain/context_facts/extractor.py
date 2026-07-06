@@ -7,7 +7,6 @@ from app.domain.context_facts.schemas import (
     ContextFactDraftSet,
     ContextFactSet,
 )
-from app.domain.director_event.views import project_director_event
 from app.domain.views import (
     project_current_state,
     project_entity_profiles,
@@ -36,10 +35,6 @@ class ContextExtractor:
                     "user_input": input_data.user_input,
                     "core_memory_json": input_data.core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(input_data.current_state),
-                    "director_event_json": project_director_event(
-                        input_data.director_event,
-                        recent_archived_event=input_data.recent_archived_director_event,
-                    ),
                     "scene_summaries_json": project_scene_summaries(input_data.scene_summaries),
                     "retrieved_memories_json": project_retrieved_memories(
                         input_data.retrieved_memories
