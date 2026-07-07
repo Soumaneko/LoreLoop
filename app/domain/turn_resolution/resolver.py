@@ -9,11 +9,6 @@ from app.domain.core_memory.schemas import CoreMemory
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.context_facts.views import project_context_facts
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEvent
-from app.domain.director_event.views import (
-    project_director_event,
-    turn_resolution_director_event_instructions,
-)
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.roll.schemas import RollResultBatch
@@ -128,8 +123,6 @@ class TurnResolutionAgent:
         context_facts: ContextFactSet | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         npc_profiles: list[NPCProfileDirectorView] | None = None,
-        director_event: DirectorEvent | None = None,
-        recent_archived_director_event: DirectorEvent | None = None,
         trace_id: str | None = None,
     ) -> TurnResolutionResult:
         judgments = build_roll_judgments(action_parse_result, roll_results)
@@ -160,14 +153,6 @@ class TurnResolutionAgent:
                     ),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),
                     "npc_profiles_json": project_npc_profiles(npc_profiles or []),
-                    "director_event_json": project_director_event(
-                        director_event,
-                        recent_archived_event=recent_archived_director_event,
-                    ),
-                    "director_event_instructions": turn_resolution_director_event_instructions(
-                        director_event,
-                        recent_archived_event=recent_archived_director_event,
-                    ),
                     "output_schema_json": json.dumps(
                         schema,
                         ensure_ascii=False,

@@ -766,15 +766,13 @@ function renderDirectorDebug() {
   const directorNpcEntityId = merged("confirmation").director_npc_entity_id;
   const server = state.serverState || {};
   const active = server.active_director_event ? [server.active_director_event] : [];
-  const suspended = server.suspended_director_events || [];
-  const archived = server.archived_director_events || [];
+  const resolved = server.resolved_director_events || [];
   const standbyNpcs = server.standby_director_npcs || [];
   const dispatchedNpcs = server.dispatched_director_npcs || [];
   return `
     ${card("导演库存", metrics([
       metric("Active", active.length, active.length ? "ok" : ""),
-      metric("Suspended", suspended.length, suspended.length ? "warn" : ""),
-      metric("Archived", archived.length, archived.length ? "info" : ""),
+      metric("Resolved", resolved.length, resolved.length ? "info" : ""),
       metric("Standby NPC", standbyNpcs.length, standbyNpcs.length ? "info" : ""),
       metric("Dispatched NPC", dispatchedNpcs.length, dispatchedNpcs.length ? "ok" : ""),
       metric("NPC上次", server.last_director_npc_dispatch_turn || "无"),
@@ -797,8 +795,7 @@ function renderDirectorDebug() {
       ${result.review_result ? details("Review", jsonBlock(result.review_result), true) : ""}
       ${result.selection_result ? details("Select/Create", jsonBlock(result.selection_result), true) : ""}
     `) : card("本轮结果", `<div class="empty">确认正式回合后展示。</div>`)}
-    ${details("Suspended", suspended.map(directorCard).join("") || `<div class="empty">暂无 suspended 事件</div>`)}
-    ${details("Archived", archived.map(directorCard).join("") || `<div class="empty">暂无 archived 事件</div>`)}
+    ${details("Resolved", resolved.map(directorCard).join("") || `<div class="empty">暂无 resolved 事件</div>`)}
   `;
 }
 
@@ -1215,27 +1212,29 @@ function directorCard(event) {
   const entryPointCards = entryPoints.map((entry, index) => `
     <div class="entry-point">
       <div class="muted">入口 ${index + 1}</div>
-      <div style="margin:4px 0 8px">${esc(text(entry.summary))}</div>
       ${kv([
-        ["场合", chips(entry.natural_contexts)],
-        ["NPC", chips(entry.involved_npcs)],
-        ["压力", esc(text(entry.pressure))],
+        ["触发锚点", chips(entry.trigger_anchors)],
+        ["可见征兆", esc(text(entry.visible_sign))],
+        ["即时影响", esc(text(entry.immediate_effect))],
       ])}
     </div>
   `).join("");
   return `<div class="section-card">
     <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.status || "active", entryPoints.length)}</div>
-    ${event.backstage_premise ? `<div style="margin-bottom:8px">${esc(event.backstage_premise)}</div>` : ""}
+    ${event.premise ? `<div style="margin-bottom:8px">${esc(event.premise)}</div>` : ""}
     ${kv([
       ["ID", esc(text(event.event_id))],
       ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
-      ["暂停原因", esc(text(event.suspended_reason))],
       ["解决原因", esc(text(event.resolved_reason))],
-      ["玩家介入", esc(event.player_involved ? "是" : "否")],
-      ["关联NPC", chips(event.related_npcs)],
-      ["地点限制", chips(event.location_constraints)],
-      ["未结束原因", esc(text(event.driving_tension))],
+      ["暴露状态", esc(text(event.exposure))],
+      ["进度", esc(`${text(event.progress_index)} / 2`)],
+      ["下次推进", event.next_progress_clock ? esc(`第${event.next_progress_clock.day}日 ${event.next_progress_clock.phase}`) : `<span class="empty">无</span>`],
+      ["阶段间隔", chips(event.milestone_interval_steps)],
+      ["目标", esc(text(event.objective))],
+      ["参与者", chips(event.actors)],
+      ["桥梁锚点", chips(event.bridge_anchors)],
+      ["阶段", list(event.milestones)],
     ])}
     ${entryPointCards || `<div class="empty">无入口</div>`}
   </div>`;

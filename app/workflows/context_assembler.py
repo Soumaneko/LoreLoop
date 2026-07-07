@@ -23,7 +23,7 @@ class PlotOutlineContext(BaseModel):
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
     director_event: DirectorEvent | None = None
-    recent_archived_director_event: DirectorEvent | None = None
+    recent_resolved_director_event: DirectorEvent | None = None
     director_npc_injection: DirectorNPCPlotInjection | None = None
 
 
@@ -38,7 +38,7 @@ def assemble_context(
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
     director_event: DirectorEvent | None = None,
-    recent_archived_director_event: DirectorEvent | None = None,
+    recent_resolved_director_event: DirectorEvent | None = None,
     director_npc_injection: DirectorNPCPlotInjection | None = None,
 ) -> PlotOutlineContext:
     return PlotOutlineContext(
@@ -51,6 +51,6 @@ def assemble_context(
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
         director_event=director_event,
-        recent_archived_director_event=recent_archived_director_event,
+        recent_resolved_director_event=recent_resolved_director_event,
         director_npc_injection=director_npc_injection,
     )

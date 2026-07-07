@@ -7,7 +7,6 @@ from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.roll.schemas import RollResultBatch
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
-from app.domain.director_event.schemas import DirectorEvent
 
 
 def resolve_turn_workflow(
@@ -20,8 +19,6 @@ def resolve_turn_workflow(
     context_facts: ContextFactSet | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
-    director_event: DirectorEvent | None = None,
-    recent_archived_director_event: DirectorEvent | None = None,
     gateway: LLMGateway,
     resolver: TurnResolutionAgent | None = None,
     trace_id: str | None = None,
@@ -36,7 +33,5 @@ def resolve_turn_workflow(
         context_facts=context_facts,
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
-        director_event=director_event,
-        recent_archived_director_event=recent_archived_director_event,
         trace_id=trace_id,
     )

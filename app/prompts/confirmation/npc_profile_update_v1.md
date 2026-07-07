@@ -72,9 +72,7 @@
 
 1. 只处理 NPC Candidates 中的 NPC。
 2. 公开档案只能记录场景文本明示的信息，禁止写入导演幕后信息。
-3. 严禁写入 hidden_secret、core_motivation、encounter_potentials 等幕后字段；schema 中没有这些字段，也不要夹在 description 里。
-4. 不要把本回合一次性动作写成长期属性；只有稳定公开关系、身份、长期处境或持续目标变化，才可以压缩进 public_summary。
-5. 没有新信息的 NPC 不要输出。
-6. 不要输出 npc_id、source_scene_ids、confidence、active 等底层字段。
-7. 对于 source="existing" 的候选，不要重写姓名、别名、身份、外貌、性格、能力、阵营或 description。`public_summary` 也不是本轮摘要；如果本轮只表现出临时行为、位置变化、态度变化或当前意图，只更新对应字段，不要改 public_summary。
-8. 只输出符合 schema 的 JSON。
+3. 不要把本回合一次性动作写成长期属性；只有稳定公开关系、身份、长期处境或持续目标变化，才可以压缩进 public_summary。
+4. 没有新信息的 NPC 不要输出。
+5. 对于 source="existing" 的候选，不要重写姓名、别名、身份、外貌、性格、能力、阵营或 description。`public_summary` 也不是本轮摘要；如果本轮只表现出临时行为、位置变化、态度变化或当前意图，只更新对应字段，不要改 public_summary。
+6. 只输出符合 schema 的 JSON。

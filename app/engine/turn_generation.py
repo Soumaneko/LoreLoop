@@ -69,10 +69,10 @@ def generate_turn_stream(
 
     with director_event_store() as director_store:
         active_director_event = director_store.get_active()
-        recent_archived_director_event = (
+        recent_resolved_director_event = (
             None
             if active_director_event is not None
-            else director_store.get_recent_archived(
+            else director_store.get_recent_resolved(
                 turn_index=turn_index,
                 cooldown_turns=DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS,
             )
@@ -88,7 +88,7 @@ def generate_turn_stream(
             "scene_summaries": model_data(scene_summaries),
             "recent_summaries": model_data(recent_summaries),
             "active_director_event": model_data(active_director_event),
-            "recent_archived_director_event": model_data(recent_archived_director_event),
+            "recent_resolved_director_event": model_data(recent_resolved_director_event),
         },
     }
 
@@ -270,8 +270,6 @@ def generate_turn_stream(
         context_facts=context_facts,
         entity_profiles=action_entity_profile_views,
         npc_profiles=action_npc_director_views,
-        director_event=active_director_event,
-        recent_archived_director_event=recent_archived_director_event,
         gateway=gateway,
         trace_id=trace_id,
     )
@@ -320,7 +318,7 @@ def generate_turn_stream(
         entity_profiles=action_entity_profile_views,
         npc_profiles=action_npc_director_views,
         director_event=active_director_event,
-        recent_archived_director_event=recent_archived_director_event,
+        recent_resolved_director_event=recent_resolved_director_event,
         director_npc_injection=(
             director_npc_result.plot_injection
             if director_npc_result is not None

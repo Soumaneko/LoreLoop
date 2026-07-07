@@ -5,21 +5,29 @@ from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_npc.schemas import DirectorNPCDraft
+from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.views import project_current_state, project_scene_summaries
+from app.domain.views import (
+    project_current_state,
+    project_entity_profiles,
+    project_npc_profiles,
+    project_scene_summaries,
+)
 
 from .schemas import DirectorEvent, DirectorEventSelectionResult
 
 
-def _archived_event_dedupe_view(event: DirectorEvent) -> dict:
+def _resolved_event_dedupe_view(event: DirectorEvent) -> dict:
     return {
         "title": event.title,
-        "backstage_premise": event.backstage_premise,
-        "player_involved": event.player_involved,
+        "premise": event.premise,
+        "actors": event.actors,
+        "objective": event.objective,
+        "bridge_anchors": event.bridge_anchors,
+        "milestones": event.milestones,
+        "exposure": event.exposure,
         "entry_points": [entry.model_dump(mode="json") for entry in event.entry_points],
-        "related_npcs": event.related_npcs,
-        "location_constraints": event.location_constraints,
-        "driving_tension": event.driving_tension,
     }
 
 
@@ -47,13 +55,13 @@ class DirectorEventSelector:
     def select_or_create(
         self,
         *,
-        suspended_events: list[DirectorEvent],
-        archived_events: list[DirectorEvent],
+        resolved_events: list[DirectorEvent],
         standby_director_npcs: list[DirectorNPCDraft],
-        scene_text: str,
         current_state: CurrentState,
         core_memory: CoreMemory,
-        scene_summaries: list[SceneSummary],
+        recent_summaries: list[SceneSummary] | None = None,
+        entity_profiles: list[EntityProfileUpdateInput] | None = None,
+        npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
     ) -> DirectorEventSelectionResult:
         return cast(
@@ -61,13 +69,8 @@ class DirectorEventSelector:
             self.llm.run(
                 task="director_event_select",
                 input_data={
-                    "suspended_events_json": json.dumps(
-                        [event.model_dump(mode="json") for event in suspended_events],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    "archived_events_json": json.dumps(
-                        [_archived_event_dedupe_view(event) for event in archived_events],
+                    "resolved_events_json": json.dumps(
+                        [_resolved_event_dedupe_view(event) for event in resolved_events],
                         ensure_ascii=False,
                         indent=2,
                     ),
@@ -76,10 +79,11 @@ class DirectorEventSelector:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "scene_text": scene_text,
                     "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "scene_summaries_json": project_scene_summaries(scene_summaries),
+                    "recent_summaries_json": project_scene_summaries(recent_summaries or []),
+                    "entity_profiles_json": project_entity_profiles(entity_profiles or []),
+                    "npc_profiles_json": project_npc_profiles(npc_profiles or []),
                     "output_schema_json": json.dumps(
                         DirectorEventSelectionResult.model_json_schema(),
                         ensure_ascii=False,

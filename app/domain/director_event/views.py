@@ -1,91 +1,219 @@
 import json
 
-from .schemas import DirectorEvent
+from app.domain.context_facts.schemas import ContextFactSet
+from app.domain.current_state.schemas import CurrentState
+
+from .schemas import DirectorEvent, EventUseInstruction
 
 
-def _recent_archived_projection(recent_archived_event: DirectorEvent | None) -> dict | None:
-    if recent_archived_event is None:
+def _recent_resolved_projection(recent_resolved_event: DirectorEvent | None) -> dict | None:
+    if recent_resolved_event is None:
         return None
-    resolved_turn = recent_archived_event.resolved_turn or recent_archived_event.updated_turn
+    resolved_turn = recent_resolved_event.resolved_turn or recent_resolved_event.updated_turn
     if resolved_turn is None:
         return None
     data = {
-        "status": "recently_archived",
-        "event_id": recent_archived_event.event_id,
-        "title": recent_archived_event.title,
+        "status": "recently_resolved",
+        "event_id": recent_resolved_event.event_id,
+        "title": recent_resolved_event.title,
         "resolved_turn": resolved_turn,
-        "message": f"『{recent_archived_event.title}』事件最近已收束。",
+        "message": f"『{recent_resolved_event.title}』事件最近已收束。",
     }
-    if recent_archived_event.resolved_reason:
-        data["resolved_reason"] = recent_archived_event.resolved_reason
+    if recent_resolved_event.resolved_reason:
+        data["resolved_reason"] = recent_resolved_event.resolved_reason
     return data
 
 
 def project_director_event(
     event: DirectorEvent | None,
     *,
-    recent_archived_event: DirectorEvent | None = None,
+    recent_resolved_event: DirectorEvent | None = None,
 ) -> str:
     if event is None:
-        data = _recent_archived_projection(recent_archived_event)
+        data = _recent_resolved_projection(recent_resolved_event)
         if data is not None:
             return json.dumps(data, ensure_ascii=False, indent=2)
         return "null"
     data = event.semantic_view()
-    if event.player_involved:
+    if event.exposure == "engaged":
         data.pop("entry_points", None)
     return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def _context_text(
+    *,
+    user_input: str,
+    current_state: CurrentState,
+    context_facts: ContextFactSet | None = None,
+) -> str:
+    fact_text = " ".join(fact.fact for fact in (context_facts.facts if context_facts else []))
+    scene = current_state.scene
+    player = current_state.player
+    participants = " ".join(scene.participants or [])
+    return " ".join(
+        [
+            user_input or "",
+            scene.location or "",
+            participants,
+            player.position or "",
+            fact_text,
+        ]
+    )
+
+
+def _matches_anchor(text: str, anchors: list[str]) -> bool:
+    return any(anchor and anchor in text for anchor in anchors)
+
+
+def _matching_entry_point(event: DirectorEvent, text: str):
+    for index, entry in enumerate(event.entry_points):
+        if _matches_anchor(text, entry.trigger_anchors):
+            return index, entry
+    return None, None
+
+
+def project_plot_director_event(
+    event: DirectorEvent | None,
+    *,
+    recent_resolved_event: DirectorEvent | None = None,
+    user_input: str,
+    current_state: CurrentState,
+    context_facts: ContextFactSet | None = None,
+) -> str:
+    if event is None:
+        data = _recent_resolved_projection(recent_resolved_event)
+        if data is None:
+            return json.dumps({"event_use_instruction": {"mode": "none", "reason": "没有 active 或 recently resolved 导演事件。"}}, ensure_ascii=False, indent=2)
+        return json.dumps(
+            {
+                "event_use_instruction": {
+                    "mode": "aftermath",
+                    "reason": "最近事件已经收束，只允许自然余波，不得复燃。",
+                },
+                "recent_resolved_event": data,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    if event.status != "active":
+        return json.dumps({"event_use_instruction": {"mode": "none", "reason": "没有 active 导演事件。"}}, ensure_ascii=False, indent=2)
+
+    if event.exposure == "engaged":
+        instruction = EventUseInstruction(
+            mode="foreground",
+            allowed_effect=event.milestones[event.progress_index],
+            reason="玩家已经直接介入该事件，Plot 可在当前行动相关时把当前阶段作为前台局势处理。",
+        )
+        return json.dumps(
+            {
+                "event_use_instruction": instruction.model_dump(mode="json"),
+                "event_hint": {
+                    "event_id": event.event_id,
+                    "title": event.title,
+                    "exposure": event.exposure,
+                    "bridge_anchors": event.bridge_anchors,
+                    "progress_index": event.progress_index,
+                    "current_milestone": event.milestones[event.progress_index],
+                    "next_progress_clock": (
+                        event.next_progress_clock.model_dump(mode="json")
+                        if event.next_progress_clock is not None
+                        else None
+                    ),
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    text = _context_text(
+        user_input=user_input,
+        current_state=current_state,
+        context_facts=context_facts,
+    )
+    entry_index, entry = _matching_entry_point(event, text)
+    current_milestone = event.milestones[event.progress_index]
+    known_hint = {
+        "event_id": event.event_id,
+        "title": event.title,
+        "exposure": event.exposure,
+        "bridge_anchors": event.bridge_anchors,
+        "progress_index": event.progress_index,
+        "current_milestone": current_milestone,
+        "next_progress_clock": (
+            event.next_progress_clock.model_dump(mode="json")
+            if event.next_progress_clock is not None
+            else None
+        ),
+    }
+    if entry is None:
+        instruction = EventUseInstruction(
+            mode="none",
+            reason="本回合稳定锚点没有命中导演事件入口。",
+        )
+        event_hint = (
+            known_hint
+            if event.exposure != "hidden"
+            else None
+        )
+        return json.dumps(
+            {
+                "event_use_instruction": instruction.model_dump(mode="json"),
+                "event_hint": event_hint,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    mode = "intersect" if event.exposure == "foreshadowed" else "foreshadow"
+    allowed_effect = current_milestone if event.exposure != "hidden" else entry.visible_sign
+    instruction = EventUseInstruction(
+        mode=mode,
+        entry_point_id=f"entry_{entry_index + 1}",
+        allowed_effect=allowed_effect,
+        reason="当前输入、场景或上下文事实命中导演事件入口锚点。",
+    )
+    event_hint = (
+        {
+            **known_hint,
+            "visible_sign": entry.visible_sign,
+        }
+        if event.exposure != "hidden"
+        else {
+            "visible_sign": entry.visible_sign,
+        }
+    )
+    return json.dumps(
+        {
+            "event_use_instruction": instruction.model_dump(mode="json"),
+            "event_hint": event_hint,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 def plot_outline_director_event_instructions(
     event: DirectorEvent | None,
     *,
-    recent_archived_event: DirectorEvent | None = None,
+    recent_resolved_event: DirectorEvent | None = None,
 ) -> str:
-    if event is None and _recent_archived_projection(recent_archived_event) is not None:
+    if event is None and _recent_resolved_projection(recent_resolved_event) is not None:
         return (
-            "DirectorEvent 最近已收束。director_event_json 中的 recently_archived 只表示最近事件"
-            "已经结束；不得把它继续当作 active 事件推进，不得复燃同一事件。"
-            "可以自然表现余波、NPC 反应或世界恢复。"
+            "director_event_json 中的 event_use_instruction.mode=aftermath 只允许自然余波，"
+            "不得把已收束事件继续当作 active 事件推进，不得复燃同一事件。"
         )
     if event is None or event.status != "active":
         return ""
-    if event.player_involved:
+    if event.exposure == "engaged":
         return (
             "玩家已经介入该事件；"
-            "根据 backstage_premise 与 driving_tension 理解当前局势，"
-            "只在当前行动、NPC 或结果自然相关时体现其压力、机会或后果；不得把后台事实直接说破。"
+            "foreground 模式只提供当前 milestone 投影；"
+            "只在当前行动、NPC 或结果自然相关时体现其压力、机会或后果。"
         )
     return (
-        "DirectorEvent 是玩家不可见的后台事件，不得原文暴露、写成任务目标或替玩家决定回应。"
-        "只有当前行动、地点、NPC、结果或场景气氛与 entry_points 存在自然交点时，"
-        "才可选择一个入口，把它转译为前台可感知的压力、机会、阻碍或异常。"
-        "没有自然交点时不要强行使用。使用时必须保留玩家选择空间，不得把后台事实直接说破。"
-        "具体前台影响必须融入 planned_events、must_establish_facts 或 must_not_establish_facts；"
-        "director_event_reason 只写使用或未使用的原因。"
-    )
-
-
-def turn_resolution_director_event_instructions(
-    event: DirectorEvent | None,
-    *,
-    recent_archived_event: DirectorEvent | None = None,
-) -> str:
-    if event is None and _recent_archived_projection(recent_archived_event) is not None:
-        return (
-            "DirectorEvent 最近已收束。director_event_json 中的 recently_archived 是已结束事件的"
-            "短期上下文；不得把它作为新的风险来源，只可在结果解释中承认其余波。"
-        )
-    if event is None or event.status != "active":
-        return ""
-    if event.player_involved:
-        return (
-            "DirectorEvent 是玩家不可见的后台事件，但玩家已经介入该事件；"
-            "不得再寻找或制造 entry point，不得改变程序判定的 outcome_band。"
-            "仅当本次行动或结果与该事件已有局势直接相关时，才可把 driving_tension 转译为结果解释中的压力、机会或阻碍。"
-        )
-    return (
-        "DirectorEvent 是玩家不可见的后台事件，不得原文暴露、写成任务目标、改变程序判定的"
-        " outcome_band。仅当本次行动或结果与 entry_points 中某个入口存在直接且自然的因果交点时，"
-        "才可把该入口转译为结果解释中的现实压力、机会或阻碍；否则不要使用 DirectorEvent。"
+        "DirectorEvent 的使用必须服从 director_event_json.event_use_instruction。"
+        "mode=none 时不得使用；mode=foreshadow 时只能展示 allowed_effect 中的 visible_sign，不得形成任务；"
+        "mode=intersect 时只可使用 allowed_effect 中的当前 milestone 投影改变当前场景条件；"
+        "具体前台影响必须融入 planned_events、must_establish_facts 或 must_not_establish_facts。"
     )

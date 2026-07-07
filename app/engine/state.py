@@ -50,8 +50,7 @@ def load_debug_state() -> dict:
 
     with director_event_store() as director_store:
         active_director_event = director_store.get_active()
-        suspended_director_events = director_store.list_suspended()
-        archived_director_events = director_store.list_archived()
+        resolved_director_events = director_store.list_resolved()
 
     with director_npc_store() as npc_store:
         director_npcs = npc_store.list_all()
@@ -81,9 +80,8 @@ def load_debug_state() -> dict:
         "npc_profile_count": npc_profile_count,
         "npc_active_profile_count": npc_active_profile_count,
         "active_director_event": model_data(active_director_event),
-        "suspended_director_events": model_data(suspended_director_events),
-        "archived_director_events": model_data(archived_director_events),
-        "archived_director_event_count": len(archived_director_events),
+        "resolved_director_events": model_data(resolved_director_events),
+        "resolved_director_event_count": len(resolved_director_events),
         "director_npcs": model_data(director_npcs),
         "standby_director_npcs": model_data(standby_director_npcs),
         "dispatched_director_npcs": model_data(dispatched_director_npcs),

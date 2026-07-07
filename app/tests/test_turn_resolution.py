@@ -175,6 +175,8 @@ class TestTurnResolutionAgent:
         input_data = gateway.calls[0]["input_data"]
         assert "user_input" in input_data
         assert "roll_judgments_json" in input_data
+        assert "event_resolution_context_json" not in input_data
+        assert "director_event_json" not in input_data
         assert "action_parse_result_json" not in input_data
         assert "available_types_json" not in input_data
         assert "resolution_reasoning" in input_data["output_schema_json"]

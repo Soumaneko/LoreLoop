@@ -539,8 +539,21 @@ def _confirm_pipeline_locked(
         )
 
     def _do_director_event_update():
-        with director_event_store() as director_store, director_npc_store() as director_npc_repo:
+        with (
+            director_event_store() as director_store,
+            director_npc_store() as director_npc_repo,
+            entity_store() as director_entity_repo,
+            npc_profile_store() as director_npc_profile_repo,
+        ):
             standby_director_npcs = director_npc_repo.list_standby()
+            director_entity_profiles = [
+                profile.semantic_view()
+                for profile in director_entity_repo.list_all()
+            ]
+            director_npc_profiles = [
+                profile.director_view()
+                for profile in director_npc_profile_repo.list_all()
+            ]
             reviewer_gateway = create_gateway()
             reviewer_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
             selector_gateway = create_gateway()
@@ -551,6 +564,9 @@ def _confirm_pipeline_locked(
                 current_state=updated_state,
                 core_memory=core_memory,
                 scene_summaries=scene_summaries,
+                recent_summaries=recent_summaries,
+                entity_profiles=director_entity_profiles,
+                npc_profiles=director_npc_profiles,
                 turn_index=pipeline_input.turn_index,
                 store=director_store,
                 reviewer=DirectorEventReviewer(reviewer_gateway),

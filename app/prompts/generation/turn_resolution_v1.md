@@ -35,15 +35,6 @@
 {npc_profiles_json}
 ```
 
-## DirectorEvent
-
-```json
-{director_event_json}
-```
-
-{director_event_instructions}
-
-
 # 输入
 
 ## 玩家输入
@@ -78,7 +69,7 @@
 
 # 任务逻辑
 
-1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Context Facts 是上游基于记忆、摘要和当前上下文提取出的相关既有事实列表；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍；DirectorEvent 是剧情背景中的导演事件。
+1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Context Facts 是上游基于记忆、摘要和当前上下文提取出的相关既有事实列表；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍。
 2. 第二步，确定信息边界，主角知道什么不知道什么？NPC知道什么不知道什么？
 3. 第三步，你需要在不违背第一第二步的前提下，根据掷骰结果确定行动的直接事实结果；不要替 Plot 或 Scene Writer 设计完整桥段。
 
@@ -95,7 +86,7 @@
    - 低概率但客观可能：critical_success 可以兑现到超出行动者平常能力或概率的水平，但仍应围绕玩家本行动的目标给优势。例如：你本打不过豺狼人，但它脚下一滑，自己撞死在你的匕首上。
    - 客观不可能：任何 band 都不能让它发生，因为它不在可能性之内。例如街头路人不可能掌握世界本源秘密；匕首不可能秒杀远超自身层级的存在；
    - 当玩家想要的结果是客观不可能，应转而兑现低概率但客观可能的结果，而不是强行创造客观不可能。
-4. 若 DirectorEvent 章节提供了额外使用规则，必须遵守。DirectorEvent 只能影响与玩家行动或结果存在自然交点的判定边界，不得被原文暴露。
+4. TR 不接收 DirectorEvent。不得使用、推断或临时发明隐藏导演事件作为判定依据。
 5. 不得把 Context Facts 中未列出的内容作为失败、拒绝、沉默或无方案的理由。询问、交涉、试探是否成功，只能根据 roll_judgments、当前状态、NPC 档案、玩家行动方式和信息边界判断。
 6. TR 输出只负责“判定边界”，不负责“剧情演出”：
    - 可以写：行动是否成功、直接发现了什么层级的信息、关系/风险是否发生直接变化、代价是什么。
@@ -107,7 +98,7 @@
 
 1. outcome_band 永远绑定玩家行动，不绑定 NPC 的应对行动。不得改写或反转 outcome_band，不得让结果偏离程序判定的档位。
 2. 不得将 reported、believed 或 inferred 当作客观真相。
-3. 不得原文暴露 DirectorEvent，不得将其写成任务目标。
+3. 不得原文暴露隐藏 DirectorEvent，不得将其写成任务目标，不得临时发明导演事件作为成败原因。
 4. 不得将 NPCProfile 的 `hidden_secret` 作为奖励情报直接泄露；不得仅因 critical_success 就让 NPC 坦白最深秘密。
 5. 不得写剧情规划结构，不得写小说正文，不得替主角做下一步选择。
 6. resolved_fact 禁止镜头描写、站位描写、表情动作串联，也不得堆砌无关细节或对白，只保留判定后已经成立的事实边界。
