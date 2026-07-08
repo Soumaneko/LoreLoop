@@ -65,7 +65,7 @@ class StateUpdater:
     def update(
         self,
         current_state: CurrentState,
-        scene_text: str,
+        scene_facts: str,
         *,
         core_memory: CoreMemory,
         npc_aliases: dict[str, list[str]] | None = None,
@@ -86,7 +86,7 @@ class StateUpdater:
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_json": json.dumps(state_data, ensure_ascii=False, indent=2),
-                    "scene_text": scene_text,
+                    "scene_facts_json": scene_facts,
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=_CurrentStateUpdate,

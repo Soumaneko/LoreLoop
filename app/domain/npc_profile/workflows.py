@@ -63,7 +63,7 @@ def gather_npc_profiles_from_state_and_anchors(
 
 def update_npc_profiles_from_extraction(
     *,
-    scene_text: str,
+    scene_facts: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
     gateway: LLMGateway,
@@ -112,7 +112,7 @@ def update_npc_profiles_from_extraction(
 
     updater = NPCProfileUpdater(gateway)
     updated = updater.update(
-        scene_text=scene_text,
+        scene_facts=scene_facts,
         current_state=current_state,
         relevant_profiles=relevant_profiles,
         new_npc_hints=new_npc_hints,
@@ -136,7 +136,7 @@ def update_npc_profiles_from_extraction(
                     for npc in npc_store.list_all()
                     if npc.npc_id != saved_id
                 ],
-                scene_text=scene_text,
+                scene_facts=scene_facts,
                 current_state=current_state,
                 core_memory=core_memory,
                 recent_summaries=recent_summaries,
@@ -163,7 +163,7 @@ def _should_backfill_new_npc(profile: NPCProfile, existing_ids: set[str]) -> boo
 
 def update_npc_profiles_workflow(
     *,
-    scene_text: str,
+    scene_facts: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
     gateway: LLMGateway,
@@ -174,13 +174,13 @@ def update_npc_profiles_workflow(
     existing = npc_store.list_all()
     extractor = NPCProfileExtractor(gateway)
     extraction = extractor.extract(
-        scene_text=scene_text,
+        scene_facts=scene_facts,
         existing_profiles=existing,
         core_memory=core_memory,
         trace_id=trace_id,
     )
     return update_npc_profiles_from_extraction(
-        scene_text=scene_text,
+        scene_facts=scene_facts,
         current_state=current_state,
         core_memory=core_memory,
         gateway=gateway,

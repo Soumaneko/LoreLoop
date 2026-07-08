@@ -81,6 +81,13 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(monkeypat
         def set_trace_context(self, **kwargs):
             pass
 
+        def run(self, **kwargs):
+            if kwargs.get("task") == "scene_fact_extract":
+                return kwargs["output_schema"].model_validate(
+                    {"scene_focus": "测试场景事实", "facts": []}
+                )
+            return kwargs["output_schema"].model_validate({})
+
     monkeypatch.setattr(turn_confirmation, "create_gateway", lambda: _FakeGateway())
     monkeypatch.setattr(turn_confirmation, "StateUpdater", _StateUpdater)
     monkeypatch.setattr(
@@ -163,6 +170,13 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
     class _FakeGateway:
         def set_trace_context(self, **_kwargs):
             pass
+
+        def run(self, **kwargs):
+            if kwargs.get("task") == "scene_fact_extract":
+                return kwargs["output_schema"].model_validate(
+                    {"scene_focus": "测试场景事实", "facts": []}
+                )
+            return kwargs["output_schema"].model_validate({})
 
     class _StateUpdater:
         def __init__(self, _gateway):
@@ -318,6 +332,13 @@ def test_opening_confirmation_restocks_director_npc_synchronously(monkeypatch):
     class _FakeGateway:
         def set_trace_context(self, **_kwargs):
             pass
+
+        def run(self, **kwargs):
+            if kwargs.get("task") == "scene_fact_extract":
+                return kwargs["output_schema"].model_validate(
+                    {"scene_focus": "测试场景事实", "facts": []}
+                )
+            return kwargs["output_schema"].model_validate({})
 
     class _StateUpdater:
         def __init__(self, _gateway):

@@ -11,6 +11,8 @@ from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.entity.extractor import EntityExtractor
 from app.domain.npc_profile.extractor import NPCProfileExtractor
 from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
+from app.domain.views import project_scene_facts
 from app.domain.npc_profile.workflows import (
     sync_npc_profile_absence_from_current_state,
     update_npc_profiles_from_extraction,
@@ -383,6 +385,27 @@ def _confirm_pipeline_locked(
 
     core_memory = core_memory_store().load_required()
 
+    scene_facts = cache.get("scene_facts")
+    if scene_facts is None:
+        gateway = create_gateway()
+        gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        scene_facts = SceneFactExtractor(gateway).extract(
+            SceneFactExtractInput(
+                scene_text=effective_scene_text,
+                current_state=state_before_update,
+                core_memory=core_memory,
+            ),
+            trace_id=trace_id,
+        )
+        cache["scene_facts"] = scene_facts
+    yield {
+        "step": "scene_facts_done",
+        "data": {
+            "scene_facts": model_data(scene_facts),
+        },
+    }
+    scene_facts_json = project_scene_facts(scene_facts)
+
     def _do_state_update():
         gateway = create_gateway()
         gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
@@ -394,7 +417,7 @@ def _confirm_pipeline_locked(
         }
         result = updater.update(
             state_before_update,
-            confirmation_scene_text,
+            scene_facts_json,
             core_memory=core_memory,
             npc_aliases=npc_aliases,
             trace_id=trace_id,
@@ -407,7 +430,7 @@ def _confirm_pipeline_locked(
         gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
         extractor = MemoryDraftExtractor(gateway)
         result = extractor.extract(
-            effective_scene_text,
+            scene_facts_json,
             state_before_update,
             core_memory=core_memory,
             turn_index=pipeline_input.turn_index,
@@ -423,7 +446,7 @@ def _confirm_pipeline_locked(
         extractor = EntityExtractor(gateway)
         result = extractor.extract(
             core_memory=core_memory,
-            scene_text=effective_scene_text,
+            scene_facts=scene_facts_json,
             existing_profiles=existing_entity_profiles,
             trace_id=trace_id,
         )
@@ -436,7 +459,7 @@ def _confirm_pipeline_locked(
         extractor = NPCProfileExtractor(gateway)
         result = extractor.extract(
             core_memory=core_memory,
-            scene_text=confirmation_scene_text,
+            scene_facts=scene_facts_json,
             existing_profiles=existing_npc_profiles,
             trace_id=trace_id,
         )
@@ -560,7 +583,7 @@ def _confirm_pipeline_locked(
             selector_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
             return update_director_event_workflow(
                 user_input=pipeline_input.user_input,
-                scene_text=effective_scene_text,
+                scene_facts=scene_facts_json,
                 current_state=updated_state,
                 core_memory=core_memory,
                 scene_summaries=scene_summaries,
@@ -580,7 +603,7 @@ def _confirm_pipeline_locked(
             gateway = create_gateway()
             gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
             entity_result = update_entity_profiles_from_extraction(
-                scene_text=effective_scene_text,
+                scene_facts=scene_facts_json,
                 current_state=updated_state,
                 core_memory=core_memory,
                 gateway=gateway,
@@ -597,7 +620,7 @@ def _confirm_pipeline_locked(
             gateway = create_gateway()
             gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
             npc_result = update_npc_profiles_from_extraction(
-                scene_text=confirmation_scene_text,
+                scene_facts=scene_facts_json,
                 current_state=updated_state,
                 core_memory=core_memory,
                 gateway=gateway,

@@ -79,7 +79,7 @@ def fill_pending_memory_scene_metadata(
 
 def extract_memory_drafts_workflow(
     *,
-    scene_text: str,
+    scene_facts: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
     turn_index: int,
@@ -89,7 +89,7 @@ def extract_memory_drafts_workflow(
     trace_id: str | None = None,
 ) -> ExtractMemoryDraftsWorkflowResult:
     result: MemoryDraftExtractResult = extractor.extract(
-        scene_text,
+        scene_facts,
         current_state,
         core_memory=core_memory,
         turn_index=turn_index,

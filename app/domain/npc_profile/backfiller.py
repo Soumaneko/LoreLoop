@@ -21,7 +21,7 @@ class NPCProfileBackfiller:
         *,
         profile: NPCProfile,
         existing_profiles: list[NPCProfile],
-        scene_text: str,
+        scene_facts: str,
         current_state: CurrentState,
         core_memory: CoreMemory,
         recent_summaries: list[SceneSummary] | None = None,
@@ -35,7 +35,7 @@ class NPCProfileBackfiller:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_summary_json": project_current_state(current_state),
                     "recent_summaries_json": project_scene_summaries(recent_summaries or []),
-                    "scene_text": scene_text,
+                    "scene_facts_json": scene_facts,
                     "new_npc_profile_json": profile.public_view().model_dump_json(indent=2),
                     "existing_npcs_json": json.dumps(
                         [_existing_npc_view(npc) for npc in existing_profiles],

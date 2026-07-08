@@ -12,7 +12,7 @@ class MemoryDraftExtractor:
 
     def extract(
         self,
-        scene_text: str,
+        scene_facts: str,
         current_state: CurrentState,
         *,
         core_memory: CoreMemory,
@@ -27,7 +27,7 @@ class MemoryDraftExtractor:
             task="memory_draft_extract",
             input_data={
                 "core_memory_json": core_memory.model_dump_json(indent=2),
-                "scene_text": scene_text,
+                "scene_facts_json": scene_facts,
                 "current_state_json": project_current_state(current_state),
                 "output_schema_json": json.dumps(
                     MemoryDraftExtractResult.model_json_schema(),

@@ -40,7 +40,7 @@ class EntityProfileUpdater:
 
     def update(
         self,
-        scene_text: str,
+        scene_facts: str,
         current_state: CurrentState,
         relevant_profiles: list[EntityProfile],
         new_entity_hints: list[RetrievedEntity] | None = None,
@@ -49,7 +49,7 @@ class EntityProfileUpdater:
         recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
     ) -> list[EntityProfile]:
-        if not scene_text.strip():
+        if not scene_facts.strip():
             return []
 
         from app.domain.views import project_current_state, project_scene_summaries
@@ -62,7 +62,7 @@ class EntityProfileUpdater:
                 task="entity_profile_update",
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "scene_text": scene_text,
+                    "scene_facts_json": scene_facts,
                     "current_state_summary_json": project_current_state(current_state),
                     "recent_summaries_json": project_scene_summaries(recent_summaries or []),
                     "entity_candidates_json": json.dumps(

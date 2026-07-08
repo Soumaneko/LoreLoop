@@ -173,7 +173,7 @@ class TestMemoryDraftExtractor:
 
         with PendingMemoryStore(":memory:") as pending_store:
             result = extract_memory_drafts_workflow(
-                scene_text="老板压低声音说，钥匙被送往钟楼。",
+                scene_facts="老板压低声音说，钥匙被送往钟楼。",
                 current_state=_state(),
                 core_memory=CoreMemory(items=[]),
                 turn_index=7,

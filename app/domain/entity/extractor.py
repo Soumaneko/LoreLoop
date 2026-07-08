@@ -17,11 +17,11 @@ class EntityExtractor:
         self,
         *,
         core_memory: CoreMemory,
-        scene_text: str,
+        scene_facts: str,
         existing_profiles: list[EntityProfile],
         trace_id: str | None = None,
     ) -> EntityExtractionResult:
-        if not scene_text.strip():
+        if not scene_facts.strip():
             return EntityExtractionResult()
 
         return cast(
@@ -30,7 +30,7 @@ class EntityExtractor:
                 task="entity_extract",
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "scene_text": scene_text,
+                    "scene_facts_json": scene_facts,
                     "existing_profiles_json": json.dumps(
                         [
                             _profile_for_extraction(index, profile)

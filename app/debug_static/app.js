@@ -612,6 +612,7 @@ function stepTasks(scope, stepName) {
     scene_written: ["scene_write"],
   };
   const confirmation = {
+    scene_facts_done: ["scene_fact_extract"],
     state_update_done: ["state_update"],
     memory_draft_extract_done: ["memory_draft_extract"],
     entity_extract_done: ["entity_extract"],
@@ -661,6 +662,7 @@ function stepSummary(name, data) {
   if (name === "director_npc_done") return directorNpcStepSummary(data.director_npc_result);
   if (name === "scene_written") return `turn ${data.turn_index || "?"}`;
   if (name === "state_update_done") return "state updated";
+  if (name === "scene_facts_done") return `${data.scene_facts?.facts?.length || 0} facts`;
   if (name === "memory_draft_extract_done") return `${data.pending_items_count || 0} pending`;
   if (name === "entity_extract_done") return `${data.entity_extraction?.retrieved_entities?.length || 0} entities`;
   if (name === "npc_extract_done") return `${data.npc_extraction?.retrieved_npcs?.length || 0} npcs`;
@@ -710,10 +712,13 @@ function contextFactCard(fact) {
 function renderConfirmation() {
   const c = merged("confirmation");
   if (!state.run.confirmation.order.length) return `<div class="empty">暂无确认流程。</div>`;
+  const sceneFacts = c.scene_facts || step("confirmation", "scene_facts_done")?.scene_facts;
+  const facts = sceneFacts?.facts || [];
   const npcExtraction = c.npc_extraction || step("confirmation", "npc_extract_done")?.npc_extraction;
   const updatedNpcIds = c.updated_npc_profile_ids || step("confirmation", "entity_profiles_updated")?.updated_npc_profile_ids;
   return `
     ${timeline("confirmation", "确认事件")}
+    ${card("Scene Facts", facts.length ? facts.map(contextFactCard).join("") : `<div class="empty">暂无事实</div>`)}
     ${renderStateDiff()}
     ${card("Pending Memories", filterVisiblePending(c.memory_extraction?.pending_items || c.pending_items || []).map(pendingMemoryCard).join("") || `<div class="empty">暂无未分类候选</div>`)}
     ${card("Entity Updates", renderEntityExtraction(c.entity_extraction || step("confirmation", "entity_extract_done")?.entity_extraction, c.updated_entity_ids))}
@@ -1432,6 +1437,7 @@ async function confirmTurn() {
     });
     await readEventStream(response, "confirmation", (event) => {
       if (event.step === "state_update_done") state.activeTab = "diff";
+      if (event.step === "scene_facts_done") state.activeTab = "confirmation";
       if (event.step === "memory_draft_extract_done") state.activeTab = "confirmation";
       if (event.step === "entity_extract_done") state.activeTab = "entity";
       if (event.step === "npc_extract_done") state.activeTab = "npc";

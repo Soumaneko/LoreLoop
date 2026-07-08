@@ -32,7 +32,7 @@ class DirectorEventWorkflowResult(BaseModel):
 def update_director_event_workflow(
     *,
     user_input: str,
-    scene_text: str,
+    scene_facts: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
     scene_summaries: list[SceneSummary],
@@ -51,7 +51,7 @@ def update_director_event_workflow(
         review = reviewer.review(
             active_event=active,
             user_input=user_input,
-            scene_text=scene_text,
+            scene_facts=scene_facts,
             current_state=current_state,
             core_memory=core_memory,
             scene_summaries=scene_summaries,

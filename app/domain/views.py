@@ -73,6 +73,14 @@ def project_scene_summaries(summaries: list[SceneSummary]) -> str:
     )
 
 
+def project_scene_facts(facts: Any) -> str:
+    return json.dumps(
+        strip_empty(facts.model_dump(mode="json")),
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
 def project_action_parse(result: ActionParseResult) -> str:
     actions = []
     for a in result.atomic_actions:

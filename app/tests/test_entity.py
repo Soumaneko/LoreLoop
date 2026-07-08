@@ -199,7 +199,7 @@ class TestEntityExtractor:
 
         result = EntityExtractor(mock.build_gateway()).extract(
             core_memory=CoreMemory(items=[]),
-            scene_text="米莉递来一张破旧羊皮纸。",
+            scene_facts="米莉递来一张破旧羊皮纸。",
             existing_profiles=[existing],
         )
 
@@ -520,7 +520,7 @@ class TestUpdateEntityProfilesWorkflow:
         ])
 
         saved = update_entity_profiles_from_extraction(
-            scene_text="星钟塔的顶层再次亮起蓝光。",
+            scene_facts="星钟塔的顶层再次亮起蓝光。",
             current_state=_make_state(),
             core_memory=CoreMemory(items=[]),
             gateway=mock.build_gateway(),

@@ -14,11 +14,11 @@ class NPCProfileExtractor:
         self,
         *,
         core_memory: CoreMemory,
-        scene_text: str,
+        scene_facts: str,
         existing_profiles: list[NPCProfile],
         trace_id: str | None = None,
     ) -> NPCExtractionResult:
-        if not scene_text.strip():
+        if not scene_facts.strip():
             return NPCExtractionResult()
 
         return cast(
@@ -27,7 +27,7 @@ class NPCProfileExtractor:
                 task="npc_profile_extract",
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "scene_text": scene_text,
+                    "scene_facts_json": scene_facts,
                     "existing_npc_profiles_json": json.dumps(
                         [
                             _profile_for_extraction(index, profile)

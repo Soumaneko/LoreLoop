@@ -130,7 +130,7 @@ def test_new_non_director_npc_triggers_profile_backfill():
     )
 
     result = update_npc_profiles_from_extraction(
-        scene_text="柳莺莺在醉花楼大堂弹琵琶。",
+        scene_facts="柳莺莺在醉花楼大堂弹琵琶。",
         current_state=_state(),
         core_memory=CoreMemory(items=[]),
         gateway=gateway,
@@ -198,7 +198,7 @@ def test_backfill_can_promote_placeholder_name_and_preserve_alias():
     )
 
     result = update_npc_profiles_from_extraction(
-        scene_text="二楼女子正在与李掌柜谈一笔大生意。",
+        scene_facts="二楼女子正在与李掌柜谈一笔大生意。",
         current_state=_state(),
         core_memory=CoreMemory(items=[]),
         gateway=gateway,
@@ -265,7 +265,7 @@ def test_existing_npc_update_does_not_trigger_profile_backfill():
     )
 
     update_npc_profiles_from_extraction(
-        scene_text="裴玉奴在醉花楼观察萧云痕。",
+        scene_facts="裴玉奴在醉花楼观察萧云痕。",
         current_state=_state(),
         core_memory=CoreMemory(items=[]),
         gateway=gateway,

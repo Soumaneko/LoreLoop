@@ -26,7 +26,7 @@ class UpdateEntityProfilesResult:
 
 
 def update_entity_profiles_workflow(
-    scene_text: str,
+    scene_facts: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
     gateway: LLMGateway,
@@ -38,14 +38,14 @@ def update_entity_profiles_workflow(
     existing = entity_store.list_all()
     extractor = EntityExtractor(gateway)
     extraction = extractor.extract(
-        scene_text=scene_text,
+        scene_facts=scene_facts,
         existing_profiles=existing,
         core_memory=core_memory,
         trace_id=trace_id,
     )
 
     return update_entity_profiles_from_extraction(
-        scene_text=scene_text,
+        scene_facts=scene_facts,
         current_state=current_state,
         core_memory=core_memory,
         gateway=gateway,
@@ -59,7 +59,7 @@ def update_entity_profiles_workflow(
 
 def update_entity_profiles_from_extraction(
     *,
-    scene_text: str,
+    scene_facts: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
     gateway: LLMGateway,
@@ -108,7 +108,7 @@ def update_entity_profiles_from_extraction(
 
     updater = EntityProfileUpdater(gateway)
     updated = updater.update(
-        scene_text=scene_text,
+        scene_facts=scene_facts,
         current_state=current_state,
         relevant_profiles=relevant_profiles,
         new_entity_hints=new_entity_hints,

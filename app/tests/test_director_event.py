@@ -144,7 +144,7 @@ def _run_review(store, response, *, turn_index=2):
     gateway = mock.build_gateway()
     return update_director_event_workflow(
         user_input="我继续处理眼前的事情。",
-        scene_text="卢西安完成了本轮行动。",
+        scene_facts="卢西安完成了本轮行动。",
         current_state=_state(),
         core_memory=_core(),
         scene_summaries=[],
@@ -322,7 +322,7 @@ class TestDirectorEventReviewerInput:
         DirectorEventReviewer(spy).review(
             active_event=_event(),
             user_input="我继续行动。",
-            scene_text="卢西安完成了本轮行动。",
+            scene_facts="卢西安完成了本轮行动。",
             current_state=_state(),
             core_memory=_core(),
             scene_summaries=[],
@@ -518,7 +518,7 @@ class TestDirectorEventWorkflow:
 
         result = update_director_event_workflow(
             user_input="继续。",
-            scene_text="没有新事件。",
+            scene_facts="没有新事件。",
             current_state=_state(),
             core_memory=_core(),
             scene_summaries=[],
@@ -541,7 +541,7 @@ class TestDirectorEventWorkflow:
 
         result = update_director_event_workflow(
             user_input="继续。",
-            scene_text="没有新事件。",
+            scene_facts="没有新事件。",
             current_state=_state(),
             core_memory=_core(),
             scene_summaries=[],
@@ -571,7 +571,7 @@ class TestDirectorEventWorkflow:
 
         result = update_director_event_workflow(
             user_input="继续。",
-            scene_text="没有新事件。",
+            scene_facts="没有新事件。",
             current_state=_state(),
             core_memory=_core(),
             scene_summaries=[],

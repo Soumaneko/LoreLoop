@@ -16,7 +16,7 @@
 {current_state_json}
 ```
 
-## SceneSummaries（历史摘要，不包含本轮 scene_text）
+## SceneSummaries（历史摘要，不包含本轮 Scene Facts）
 
 ```json
 {scene_summaries_json}
@@ -36,10 +36,10 @@
 {user_input}
 ```
 
-## 本轮确认剧情原文
+## 本轮 Scene Facts
 
-```text
-{scene_text}
+```json
+{scene_facts_json}
 ```
 
 # 输出规范
@@ -58,16 +58,16 @@
   - advance：本轮确认剧情明确显示事件进入下一 milestone，或玩家行为对事件造成阶段性推进/阻断/公开化结果。
   - resolve：事件已经完成、失败、终结、主要矛盾消失，或已转变为稳定世界状态。
 - exposure：本轮确认剧情结束后，玩家对该事件的接触状态，只能是 `hidden`、`foreshadowed`、`engaged`。
-- evidence：scene_text 中支持判断的具体短句或摘要列表。
+- evidence：Scene Facts 中支持判断的具体 fact 或摘要列表。
 - resolved_reason：仅在 action=resolve 时填写收束理由；其他 action 填 null。
 
 # 核心规则
 
-1. 判断事件是否推进或收束时，优先看 scene_text。
+1. 判断事件是否推进或收束时，优先看 Scene Facts。
 2. premise、objective、milestones、progress_index 描述事件自身路线。当前阶段是 milestones[progress_index]。
-3. 只有本轮剧情明确显示事件从当前阶段进入下一阶段，或玩家行为对事件造成阶段性结果，才选择 advance；不要因为时间过去、玩家忽略、普通对话或轻微信号就 advance。
-4. 如果 progress_index 已经是 2，且本轮剧情明确显示最终阶段形成结果，选择 resolve，不要再 advance。
-5. 只有本轮剧情明确显示事件完成、失败、终结、主要矛盾消失，或已形成稳定世界状态，才选择 resolve。
+3. 只有 Scene Facts 明确显示事件从当前阶段进入下一阶段，或玩家行为对事件造成阶段性结果，才选择 advance；不要因为时间过去、玩家忽略、普通对话或轻微信号就 advance。
+4. 如果 progress_index 已经是 2，且 Scene Facts 明确显示最终阶段形成结果，选择 resolve，不要再 advance。
+5. 只有 Scene Facts 明确显示事件完成、失败、终结、主要矛盾消失，或已形成稳定世界状态，才选择 resolve。
 6. hidden：玩家没有接触到该事件的可见征兆。
 7. foreshadowed：玩家只是听到传闻、路过异常、看到可疑物、感受到价格/秩序/交通/环境变化，或被动收到无名线索。
 8. engaged：玩家已经直接调查、利用、对抗、交易、保护、追踪或明确处理该事件。
@@ -79,3 +79,4 @@
 1. 不要写剧情正文，不要创建新事件，不要更新 CurrentState。
 2. 不要扩写后台因果，不要从局部征兆补全原因、规模和后果。
 3. 不要因为玩家忽略事件就 resolve 或 advance；忽略只影响 exposure，不代表世界事件结束或推进。
+4. 不要要求或假设完整剧情原文；Scene Facts 已经是本模块唯一的本回合剧情输入。
