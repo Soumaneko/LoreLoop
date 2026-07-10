@@ -12,6 +12,8 @@ from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory import ShortTermMemory
 from app.engine.session import PENDING_OPENINGS, PENDING_TURNS, PendingOpening, PendingTurn
 from app.engine import turn_confirmation
+from app.graph import confirmation_helpers
+from app.graph import confirmation_nodes
 
 
 class _ContextStore:
@@ -88,35 +90,35 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(monkeypat
                 )
             return kwargs["output_schema"].model_validate({})
 
-    monkeypatch.setattr(turn_confirmation, "create_gateway", lambda: _FakeGateway())
-    monkeypatch.setattr(turn_confirmation, "StateUpdater", _StateUpdater)
+    monkeypatch.setattr(confirmation_nodes, "create_gateway", lambda: _FakeGateway())
+    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _StateUpdater)
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "MemoryDraftExtractor",
         _MemoryExtractor,
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "generate_action_preview_workflow",
         _preview,
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "core_memory_store",
         lambda: _ContextStore(load_required=lambda: CoreMemory(items=[])),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "scene_summary_store",
         lambda: _ContextStore(list_active=lambda: [], get_recent=lambda _limit=5: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "short_term_memory_store",
         lambda: _ContextStore(get_recent=lambda: ShortTermMemory()),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "memory_store",
         lambda: _ContextStore(count=lambda: 0),
     )
@@ -206,53 +208,53 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
         def extract(self, **_kwargs):
             return NPCExtractionResult()
 
-    monkeypatch.setattr(turn_confirmation, "create_gateway", lambda: _FakeGateway())
-    monkeypatch.setattr(turn_confirmation, "StateUpdater", _StateUpdater)
-    monkeypatch.setattr(turn_confirmation, "MemoryDraftExtractor", _MemoryExtractor)
-    monkeypatch.setattr(turn_confirmation, "EntityExtractor", _EntityExtractor)
-    monkeypatch.setattr(turn_confirmation, "NPCProfileExtractor", _NPCExtractor)
+    monkeypatch.setattr(confirmation_nodes, "create_gateway", lambda: _FakeGateway())
+    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _StateUpdater)
+    monkeypatch.setattr(confirmation_nodes, "MemoryDraftExtractor", _MemoryExtractor)
+    monkeypatch.setattr(confirmation_nodes, "EntityExtractor", _EntityExtractor)
+    monkeypatch.setattr(confirmation_nodes, "NPCProfileExtractor", _NPCExtractor)
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "generate_action_preview_workflow",
         lambda **_kwargs: {"previews": []},
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "update_director_event_workflow",
         lambda **_kwargs: None,
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "update_entity_profiles_from_extraction",
         lambda **_kwargs: SimpleNamespace(saved_ids=[]),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "update_npc_profiles_from_extraction",
         lambda **_kwargs: SimpleNamespace(saved_ids=[]),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "sync_npc_profile_absence_from_current_state",
         lambda **_kwargs: [],
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "core_memory_store",
         lambda: _ContextStore(load_required=lambda: CoreMemory(items=[])),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "current_state_store",
         lambda: _ContextStore(load_or_default=lambda: state, save=lambda _state: None),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "scene_summary_store",
         lambda: _ContextStore(list_active=lambda: [], get_recent=lambda _limit=5: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "short_term_memory_store",
         lambda: _ContextStore(
             add_turn=lambda **_kwargs: None,
@@ -260,7 +262,7 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
         ),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "pending_memory_store",
         lambda: _ContextStore(
             save_many=lambda _items: [],
@@ -269,31 +271,49 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
         ),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "memory_store",
         lambda: _ContextStore(count=lambda: 0, list_all=lambda: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "entity_store",
         lambda: _ContextStore(list_all=lambda: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
+        "entity_store",
+        lambda: _ContextStore(list_all=lambda: []),
+    )
+    monkeypatch.setattr(
+        confirmation_nodes,
         "npc_profile_store",
         lambda: _ContextStore(list_all=lambda: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
+        "npc_profile_store",
+        lambda: _ContextStore(list_all=lambda: []),
+    )
+    monkeypatch.setattr(
+        confirmation_nodes,
         "director_event_store",
         lambda: _ContextStore(),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "director_npc_store",
         lambda: _ContextStore(
             list_standby=lambda: [object()]
-            * turn_confirmation.DIRECTOR_NPC_STANDBY_TARGET
+            * confirmation_helpers.DIRECTOR_NPC_STANDBY_TARGET
+        ),
+    )
+    monkeypatch.setattr(
+        confirmation_helpers,
+        "director_npc_store",
+        lambda: _ContextStore(
+            list_standby=lambda: [object()]
+            * confirmation_helpers.DIRECTOR_NPC_STANDBY_TARGET
         ),
     )
 
@@ -301,7 +321,7 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
         captured["wait_for_summary"] = kwargs.get("wait_for_summary")
         return True
 
-    monkeypatch.setattr(turn_confirmation, "submit_memory_batch_once", _submit_once)
+    monkeypatch.setattr(confirmation_helpers, "submit_memory_batch_once", _submit_once)
 
     try:
         events = list(
@@ -368,48 +388,48 @@ def test_opening_confirmation_restocks_director_npc_synchronously(monkeypatch):
         def extract(self, **_kwargs):
             return NPCExtractionResult()
 
-    monkeypatch.setattr(turn_confirmation, "create_gateway", lambda: _FakeGateway())
-    monkeypatch.setattr(turn_confirmation, "StateUpdater", _StateUpdater)
-    monkeypatch.setattr(turn_confirmation, "MemoryDraftExtractor", _MemoryExtractor)
-    monkeypatch.setattr(turn_confirmation, "EntityExtractor", _EntityExtractor)
-    monkeypatch.setattr(turn_confirmation, "NPCProfileExtractor", _NPCExtractor)
+    monkeypatch.setattr(confirmation_nodes, "create_gateway", lambda: _FakeGateway())
+    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _StateUpdater)
+    monkeypatch.setattr(confirmation_nodes, "MemoryDraftExtractor", _MemoryExtractor)
+    monkeypatch.setattr(confirmation_nodes, "EntityExtractor", _EntityExtractor)
+    monkeypatch.setattr(confirmation_nodes, "NPCProfileExtractor", _NPCExtractor)
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "generate_action_preview_workflow",
         lambda **_kwargs: {"previews": []},
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "update_entity_profiles_from_extraction",
         lambda **_kwargs: SimpleNamespace(saved_ids=[]),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "update_npc_profiles_from_extraction",
         lambda **_kwargs: SimpleNamespace(saved_ids=[]),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "sync_npc_profile_absence_from_current_state",
         lambda **_kwargs: [],
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "core_memory_store",
         lambda: _ContextStore(load_required=lambda: CoreMemory(items=[])),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "current_state_store",
         lambda: _ContextStore(load_or_default=lambda: state, save=lambda _state: None),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "scene_summary_store",
         lambda: _ContextStore(list_active=lambda: [], get_recent=lambda _limit=5: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "short_term_memory_store",
         lambda: _ContextStore(
             clear=lambda: None,
@@ -418,7 +438,7 @@ def test_opening_confirmation_restocks_director_npc_synchronously(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "pending_memory_store",
         lambda: _ContextStore(
             save_many=lambda _items: [],
@@ -427,27 +447,42 @@ def test_opening_confirmation_restocks_director_npc_synchronously(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
         "memory_store",
         lambda: _ContextStore(count=lambda: 0, list_all=lambda: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_nodes,
         "entity_store",
         lambda: _ContextStore(list_all=lambda: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
+        "entity_store",
+        lambda: _ContextStore(list_all=lambda: []),
+    )
+    monkeypatch.setattr(
+        confirmation_nodes,
         "npc_profile_store",
         lambda: _ContextStore(list_all=lambda: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
+        "npc_profile_store",
+        lambda: _ContextStore(list_all=lambda: []),
+    )
+    monkeypatch.setattr(
+        confirmation_nodes,
         "director_npc_store",
         lambda: _ContextStore(list_standby=lambda: []),
     )
     monkeypatch.setattr(
-        turn_confirmation,
+        confirmation_helpers,
+        "director_npc_store",
+        lambda: _ContextStore(list_standby=lambda: []),
+    )
+    monkeypatch.setattr(
+        confirmation_helpers,
         "run_scene_summary_maintenance",
         lambda *_args, **_kwargs: None,
     )
@@ -455,7 +490,7 @@ def test_opening_confirmation_restocks_director_npc_synchronously(monkeypatch):
     def _restock(*_args, **_kwargs):
         calls["restock"] += 1
 
-    monkeypatch.setattr(turn_confirmation, "run_director_npc_restock", _restock)
+    monkeypatch.setattr(confirmation_helpers, "run_director_npc_restock", _restock)
 
     try:
         events = list(

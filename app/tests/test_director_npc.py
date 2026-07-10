@@ -22,7 +22,7 @@ from app.workflows.director_npc import (
     maybe_director_npc_workflow,
     restock_director_npc_standby,
 )
-from app.engine import turn_confirmation
+from app.graph import confirmation_helpers
 
 
 class TestDirectorNPCDispatchPrompt:
@@ -39,7 +39,7 @@ class TestDirectorNPCConfirmationSceneProjection:
         pending = type("Pending", (), {})()
         pending.director_npc_result = None
 
-        projected = turn_confirmation._project_scene_text_for_confirmation(
+        projected = confirmation_helpers.project_scene_text_for_confirmation(
             "巷口有人影一闪。",
             pending=pending,
             confirmed_director_npc_draft=None,
@@ -59,7 +59,7 @@ class TestDirectorNPCConfirmationSceneProjection:
             )
         )
 
-        projected = turn_confirmation._project_scene_text_for_confirmation(
+        projected = confirmation_helpers.project_scene_text_for_confirmation(
             "巷口的暗处站着一个年轻角色。",
             pending=pending,
             confirmed_director_npc_draft=draft,
@@ -525,8 +525,8 @@ class TestDirectorNPCWorkflow:
             finally:
                 store.close()
 
-        monkeypatch.setattr(turn_confirmation, "director_npc_store", director_store_factory)
-        monkeypatch.setattr(turn_confirmation, "npc_profile_store", npc_profile_store_factory)
+        monkeypatch.setattr(confirmation_helpers, "director_npc_store", director_store_factory)
+        monkeypatch.setattr(confirmation_helpers, "npc_profile_store", npc_profile_store_factory)
 
         pending = type("Pending", (), {})()
         pending.director_npc_result = DirectorNPCWorkflowResult(
@@ -538,7 +538,7 @@ class TestDirectorNPCWorkflow:
             )
         )
 
-        confirmation = turn_confirmation._promote_dispatched_director_npc_profile(
+        confirmation = confirmation_helpers.promote_dispatched_director_npc_profile(
             pending,
             turn_index=9,
         )
@@ -572,7 +572,7 @@ class TestDirectorNPCWorkflow:
             npcs=[],
         )
 
-        updated = turn_confirmation._state_with_confirmed_director_npc(state, draft)
+        updated = confirmation_helpers.state_with_confirmed_director_npc(state, draft)
 
         assert updated.scene.participants == ["主角", "柯莱"]
         assert len(updated.npcs) == 1

@@ -328,6 +328,7 @@ class TestDebugCoreMemoryPreview:
         monkeypatch,
     ):
         import app.engine.core_memory as core_memory_engine
+        from app.graph import initialization_helpers
 
         calls = []
 
@@ -351,17 +352,17 @@ class TestDebugCoreMemoryPreview:
         core_store = CoreMemoryStore(tmp_path / "core_memory.json")
         state_path = tmp_path / "current_state.db"
         monkeypatch.setattr(
-            core_memory_engine,
+            initialization_helpers,
             "create_gateway",
             lambda: RecordingGateway(),
         )
         monkeypatch.setattr(
-            core_memory_engine,
+            initialization_helpers,
             "core_memory_store",
             lambda: core_store,
         )
         monkeypatch.setattr(
-            core_memory_engine,
+            initialization_helpers,
             "current_state_store",
             lambda: CurrentStateStore(str(state_path)),
         )
