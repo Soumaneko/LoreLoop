@@ -7,18 +7,18 @@ from app.domain.current_state import NPCState
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
-from app.engine.maintenance import (
+from app.graph.maintenance_graph import (
     run_director_npc_restock,
     run_memory_batch_maintenance,
     run_scene_summary_maintenance,
 )
-from app.engine.serialization import model_data
-from app.engine.session import (
+from app.runtime.serialization import model_data
+from app.runtime.session import (
     BACKGROUND_EXECUTOR,
     release_confirmation_lock,
     submit_memory_batch_once,
 )
-from app.engine.stores import (
+from app.runtime.stores import (
     core_memory_store,
     current_state_store,
     director_npc_store,
@@ -29,7 +29,7 @@ from app.engine.stores import (
     scene_summary_store,
     short_term_memory_store,
 )
-from app.workflows.director_npc import DIRECTOR_NPC_STANDBY_TARGET
+from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
 
 from .confirmation_state import ConfirmationEvent, ConfirmationState
 
@@ -318,7 +318,7 @@ def merge_confirmation_node_update(
 
 
 def prepare_confirmation_second_wave(state: dict[str, Any]) -> ConfirmationState:
-    from app.workflows.extract_memory import fill_pending_memory_scene_metadata
+    from app.domain.recall_memory.maintenance import fill_pending_memory_scene_metadata
 
     cache = state["cache"]
     updated_state = state["updated_state"]

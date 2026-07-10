@@ -15,8 +15,8 @@ from app.domain.core_memory import (
     build_initial_current_state,
 )
 from app.domain.current_state import CurrentStateStore
-from app.engine.core_memory import preview_core_memory
-from app.engine.session import PENDING_OPENINGS
+from app.graph.initialization_helpers import preview_core_memory
+from app.runtime.session import PENDING_OPENINGS
 
 
 class TestCoreMemoryItem:
@@ -327,7 +327,7 @@ class TestDebugCoreMemoryPreview:
         tmp_path,
         monkeypatch,
     ):
-        import app.engine.core_memory as core_memory_engine
+        import app.graph.initialization_graph as core_memory_engine
         from app.graph import initialization_helpers
 
         calls = []

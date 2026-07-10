@@ -4,10 +4,19 @@ import uuid
 from typing import Any
 
 from app.core.llm.config import create_gateway
+from app.domain.context_facts.schemas import ContextFactSet
+from app.domain.core_memory.schemas import CoreMemory
+from app.domain.current_state.schemas import CurrentState
+from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director_npc.schemas import DirectorNPCPlotInjection
+from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfileDirectorView
+from app.domain.plot_outline.schemas import PlotOutlineContext
 from app.domain.roll.schemas import Difficulty
-from app.engine.serialization import model_data
-from app.engine.session import PENDING_TURNS, PendingTurn
-from app.engine.stores import (
+from app.domain.turn_resolution.schemas import TurnResolutionResult
+from app.runtime.serialization import model_data
+from app.runtime.session import PENDING_TURNS, PendingTurn
+from app.runtime.stores import (
     core_memory_store,
     current_state_store,
     director_event_store,
@@ -16,10 +25,38 @@ from app.engine.stores import (
     scene_summary_store,
     short_term_memory_store,
 )
-from app.workflows.select_context_profiles import select_context_profiles
-from app.workflows.update_director_event import DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS
+from app.domain.director_event.workflows import DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS
 
 from .generation_state import GenerationEvent, GenerationState
+from .generation_profile_helpers import select_context_profiles
+
+
+def assemble_context(
+    *,
+    user_input: str,
+    current_state: CurrentState,
+    turn_resolution: TurnResolutionResult,
+    core_memory: CoreMemory,
+    context_facts: ContextFactSet | None = None,
+    entity_profiles: list[EntityProfileUpdateInput] | None = None,
+    npc_profiles: list[NPCProfileDirectorView] | None = None,
+    director_event: DirectorEvent | None = None,
+    recent_resolved_director_event: DirectorEvent | None = None,
+    director_npc_injection: DirectorNPCPlotInjection | None = None,
+) -> PlotOutlineContext:
+    return PlotOutlineContext(
+        user_input=user_input,
+        current_state=current_state,
+        turn_resolution=turn_resolution,
+        core_memory=core_memory,
+        context_facts=context_facts
+        or ContextFactSet(turn_focus="No Context Facts", facts=[]),
+        entity_profiles=entity_profiles or [],
+        npc_profiles=npc_profiles or [],
+        director_event=director_event,
+        recent_resolved_director_event=recent_resolved_director_event,
+        director_npc_injection=director_npc_injection,
+    )
 
 
 def gateway_for(state: GenerationState):
@@ -133,17 +170,6 @@ def finalize_pending_turn(state: GenerationState) -> GenerationState:
         scene_written_event(finalized),
     ]
     return finalized
-
-
-def merge_node_update(state: dict[str, Any], node_update: dict[str, Any]) -> list[GenerationEvent]:
-    events = node_update.get("events", [])
-    state.update({
-        key: value
-        for key, value in node_update.items()
-        if key != "events"
-    })
-    state["events"] = [*state.get("events", []), *events]
-    return events
 
 
 def state_loaded_event(state: dict[str, Any]) -> GenerationEvent:

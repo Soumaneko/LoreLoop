@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.llm.config import create_gateway
+from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.current_state import StateUpdater
 from app.domain.director_event.reviewer import DirectorEventReviewer
 from app.domain.director_event.selector import DirectorEventSelector
@@ -13,16 +14,15 @@ from app.domain.npc_profile.workflows import (
 from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
 from app.domain.views import project_scene_facts
-from app.engine.serialization import model_data
-from app.engine.stores import (
+from app.runtime.serialization import model_data
+from app.runtime.stores import (
     director_event_store,
     director_npc_store,
     entity_store,
     npc_profile_store,
 )
-from app.workflows.generate_action_preview import generate_action_preview_workflow
-from app.workflows.update_director_event import update_director_event_workflow
-from app.workflows.update_entity_profiles import update_entity_profiles_from_extraction
+from app.domain.director_event.workflows import update_director_event_workflow
+from app.domain.entity.workflows import update_entity_profiles_from_extraction
 
 from .confirmation_helpers import merge_unique_ids
 from .confirmation_state import ConfirmationState
@@ -185,13 +185,12 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
     if action_preview is None:
         gateway = create_gateway()
         gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
-        action_preview = generate_action_preview_workflow(
+        action_preview = ActionPreviewAgent(gateway).generate(
             closing_prompt=pipeline_input.scene_result.closing_prompt,
             current_state=state["updated_state"],
             core_memory=state["core_memory"],
             recent_summaries=state.get("recent_summaries", []),
             next_action_directions=pipeline_input.scene_result.next_action_directions,
-            gateway=gateway,
             trace_id=trace_id,
         )
         cache["action_preview"] = action_preview

@@ -9,14 +9,13 @@ from app.domain.director_event.views import (
     project_plot_director_event,
 )
 from app.domain.context_facts.views import project_context_facts
-from app.domain.plot_outline.schemas import PlotOutlineResult
+from app.domain.plot_outline.schemas import PlotOutlineContext, PlotOutlineResult
 from app.domain.plot_outline.views import project_turn_resolution
 from app.domain.views import (
     project_current_state,
     project_entity_profiles,
     project_npc_profiles,
 )
-from app.workflows.context_assembler import PlotOutlineContext
 
 
 class _RuntimePlannedEvent(BaseModel):

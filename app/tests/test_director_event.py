@@ -20,7 +20,7 @@ from app.domain.director_event.views import (
     project_plot_director_event,
 )
 from app.domain.director_npc.schemas import DirectorNPCDraft
-from app.workflows.update_director_event import update_director_event_workflow
+from app.domain.director_event.workflows import update_director_event_workflow
 
 
 def _state() -> CurrentState:
@@ -251,57 +251,6 @@ class TestDirectorEventStore:
         assert resolved.status == "resolved"
         assert resolved.resolved_turn == 5
         assert resolved.resolved_reason == "事件已结束"
-
-    def test_legacy_event_rows_are_projected_to_new_schema(self):
-        store = DirectorEventStore()
-        legacy = {
-            "event_id": "legacy_event",
-            "title": "旧事件",
-            "status": "active",
-            "backstage_premise": "旧势力正在暗中转移账册。",
-            "driving_tension": "账册去向仍未落定。",
-            "entry_points": [
-                {
-                    "summary": "账册交易的边缘人物出现在附近。",
-                    "natural_contexts": ["北郡"],
-                    "involved_npcs": ["旧势力"],
-                    "pressure": "交易外溢出可被察觉的利益冲突。",
-                }
-            ],
-            "related_npcs": ["旧势力"],
-            "location_constraints": ["北郡"],
-            "player_involved": False,
-            "created_turn": 1,
-            "updated_turn": 1,
-            "created_at": "2026-01-01T00:00:00+00:00",
-            "updated_at": "2026-01-01T00:00:00+00:00",
-        }
-        store._conn.execute(
-            """
-            INSERT INTO director_events (
-                event_id, status, event_json, created_turn, updated_turn, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "legacy_event",
-                "active",
-                json.dumps(legacy, ensure_ascii=False),
-                1,
-                1,
-                legacy["created_at"],
-                legacy["updated_at"],
-            ),
-        )
-        store._conn.commit()
-
-        event = store.get_active()
-
-        assert event.event_id == "legacy_event"
-        assert event.premise == "旧势力正在暗中转移账册。"
-        assert event.milestone_interval_steps == [3, 3]
-        assert event.entry_points[0].trigger_anchors
-
 
 class TestDirectorEventReviewSchema:
     def test_resolve_fills_reason_when_missing(self):

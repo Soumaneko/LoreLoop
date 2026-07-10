@@ -15,7 +15,7 @@ from app.domain.entity.schemas import (
 from app.domain.entity.store import EntityStore
 from app.domain.entity.updater import EntityProfileUpdater
 from app.domain.action.schemas import Anchor
-from app.workflows.update_entity_profiles import (
+from app.domain.entity.workflows import (
     gather_entity_profiles_from_state_and_anchors,
     update_entity_profiles_from_extraction,
     update_entity_profiles_workflow,

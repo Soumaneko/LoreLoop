@@ -12,8 +12,7 @@ from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView, NPCProfilePublicView
-from app.domain.plot_outline.schemas import PlotOutlineResult
-from app.domain.recall_memory.schemas import MemoryRecord
+from app.domain.plot_outline.schemas import PlotOutlineContext, PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import Difficulty, RollConfig, RollResultBatch
 from app.domain.roll_modifier.schemas import RollModifierBatch
@@ -21,7 +20,6 @@ from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory.schemas import ShortTermMemory, ShortTermScene
 from app.domain.turn_resolution.schemas import TurnResolutionResult
-from app.workflows.context_assembler import PlotOutlineContext
 
 
 class GenerationEvent(TypedDict, total=False):
@@ -29,24 +27,14 @@ class GenerationEvent(TypedDict, total=False):
     data: dict[str, Any]
 
 
-class TurnInput(TypedDict, total=False):
+class GenerationState(TypedDict, total=False):
+    events: Annotated[list[GenerationEvent], add]
     user_input: str
     difficulty: Difficulty
     max_chars: int
-
-
-class TurnOutput(TypedDict, total=False):
+    trace_id: str
     turn_id: str
-    trace_id: str
-    turn_index: int
-    scene_result: SceneWriterResult
-    context: PlotOutlineContext
     status: str
-
-
-class GenerationState(TurnInput, TurnOutput, total=False):
-    events: Annotated[list[GenerationEvent], add]
-    trace_id: str
 
     core_memory: CoreMemory
     current_state: CurrentState
@@ -90,12 +78,3 @@ class GenerationState(TurnInput, TurnOutput, total=False):
 
     scene_result: SceneWriterResult
     pending_turn_status: str
-
-
-TurnState = GenerationState
-
-
-class GenerationGraphResult(TypedDict, total=False):
-    state: GenerationState
-    events: list[GenerationEvent]
-    retrieved_memories: list[MemoryRecord]

@@ -5,8 +5,8 @@ from concurrent.futures import Future
 
 from langgraph.graph import END, START, StateGraph
 
-from app.engine.serialization import model_data
-from app.engine.stores import pending_memory_store
+from app.runtime.serialization import model_data
+from app.runtime.stores import pending_memory_store
 
 from .maintenance_helpers import (
     memory_batch_route,
@@ -163,8 +163,7 @@ def run_memory_batch_maintenance(
         print(
             "[debug-server] memory batch maintenance "
             f"triggered={result.triggered} pending={result.pending_count} "
-            f"saved={len(result.saved_ids)} classified={len(result.classified_pending_ids)} "
-            f"batch_count={result.batch_classify_count}"
+            f"saved={len(result.saved_ids)} classified={len(result.classified_pending_ids)}"
         )
         if maintenance_result is not None:
             print(
@@ -209,7 +208,6 @@ def batch_classify_stream():
             "final_memories": model_data(result.final_memories),
             "discarded_count": result.discarded_count,
             "self_check_result": model_data(result.self_check_result),
-            "batch_classify_count": result.batch_classify_count,
             "should_maintain": result.should_maintain,
             "entity_links_created": result.entity_links_created,
             "maintenance": model_data(maintenance_result),
@@ -221,7 +219,6 @@ def batch_classify_stream():
             "saved_ids": result.saved_ids,
             "classified_pending_ids": result.classified_pending_ids,
             "pending_count": result.pending_count,
-            "batch_classify_count": result.batch_classify_count,
             "entity_links_created": result.entity_links_created,
             "maintenance": model_data(maintenance_result),
         },
@@ -241,8 +238,6 @@ def memory_maintain_stream():
     }
     graph_state = build_memory_maintenance_graph().invoke(state)
     result = graph_state["maintenance_result"]
-    with pending_memory_store() as pending_store:
-        pending_store.reset_batch_classify_count()
     yield {
         "step": "memory_maintain_done",
         "data": {

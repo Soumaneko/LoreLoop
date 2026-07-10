@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.domain.core_memory import StoryDirectionAgent
 from app.domain.scene_writer.opening import OpeningSceneAgent
-from app.engine.serialization import model_data
+from app.runtime.serialization import model_data
 
 from .initialization_helpers import apply_story_direction, initialization_gateway
 from .initialization_state import InitializationState

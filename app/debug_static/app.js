@@ -863,7 +863,6 @@ function renderRetrieval(result) {
   return `
     ${metrics([metric("扫描", result.total_scanned || 0), metric("返回", result.total_returned || 0, "info")])}
     ${(result.candidates || []).map((c) => memoryCandidateCard(c)).join("") || `<div class="empty">无候选</div>`}
-    ${filterVisiblePending(result.pending_notes || []).length ? details("Pending Notes", filterVisiblePending(result.pending_notes || []).map(pendingMemoryCard).join("")) : ""}
   `;
 }
 
@@ -1000,7 +999,7 @@ function renderBatch(data) {
   return `
     ${card("MemoryBatchClassifier", `
       ${metrics([metric("候选", raw.length, "info"), metric("最终", finalMemories.length, "ok"), metric("丢弃", data.discarded_count || 0, "warn"), metric("实体链接", data.entity_links_created || 0)])}
-      ${kv([["保存ID", chips(data.saved_ids)], ["标记Pending", chips(data.classified_pending_ids)], ["批次数", esc(text(data.batch_classify_count))]])}
+      ${kv([["保存ID", chips(data.saved_ids)], ["标记Pending", chips(data.classified_pending_ids)]])}
     `)}
     ${data.self_check_result ? details("Self Check", checkSummary(data.self_check_result), true) : ""}
     ${details("最终记忆", finalMemories.map(memoryRecordCard).join("") || `<div class="empty">暂无最终记忆</div>`, true)}

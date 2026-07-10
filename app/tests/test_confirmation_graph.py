@@ -2,16 +2,9 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.confirmation_graph import (
     build_confirmation_first_wave_graph,
-    build_confirmation_graph,
     build_confirmation_second_wave_graph,
 )
 from app.graph.confirmation_state import ConfirmationState
-
-
-def test_confirmation_graph_compiles():
-    first_wave, second_wave = build_confirmation_graph()
-    assert first_wave is not None
-    assert second_wave is not None
 
 
 def test_confirmation_first_wave_preserves_parallel_extract_dependencies():

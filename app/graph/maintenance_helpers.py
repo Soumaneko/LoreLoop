@@ -7,7 +7,7 @@ from app.core.llm.config import create_gateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.maintenance import SceneSummaryMaintenanceResult
-from app.engine.stores import (
+from app.runtime.stores import (
     core_memory_store,
     current_state_store,
     memory_store,

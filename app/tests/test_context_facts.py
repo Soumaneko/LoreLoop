@@ -26,8 +26,8 @@ from app.domain.recall_memory.schemas import Memory
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.scene_summary.schemas import SceneSummary
-from app.workflows.extract_context_facts import retrieve_context_fact_memories
-from app.workflows.select_context_profiles import select_context_profiles
+from app.graph.generation_context_helpers import retrieve_context_fact_memories
+from app.graph.generation_profile_helpers import select_context_profiles
 
 
 def _state() -> CurrentState:

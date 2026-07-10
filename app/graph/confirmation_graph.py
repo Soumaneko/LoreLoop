@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
+
+from app.runtime.session import (
+    PENDING_OPENINGS,
+    PENDING_TURNS,
+    confirmation_lock,
+)
 
 from .confirmation_helpers import (
     finalize_confirmation_state,
@@ -22,6 +29,27 @@ from .confirmation_nodes import (
     state_update_node,
 )
 from .confirmation_state import ConfirmationState
+
+
+@dataclass
+class ConfirmationPipelineInput:
+    turn_id: str
+    pending: Any
+    state_before: Any
+    scene_result: Any
+    user_input: str
+    turn_index: int
+    stale_message: str
+    pending_registry: dict[str, Any]
+    update_director_event: bool = True
+    handle_director_npc: bool = True
+    director_npc_restock_sync: bool = False
+    clear_short_term_before_save: bool = False
+    dry_run_memory_reason: str = (
+        "DB writes are disabled; pending memory candidates were extracted but not saved."
+    )
+    confirm_started_extra: dict[str, Any] = field(default_factory=dict)
+    finish_extra: dict[str, Any] = field(default_factory=dict)
 
 
 def build_confirmation_first_wave_graph():
@@ -64,14 +92,8 @@ def build_confirmation_second_wave_graph():
     return graph.compile()
 
 
-def build_confirmation_graph():
-    first_wave = build_confirmation_first_wave_graph()
-    second_wave = build_confirmation_second_wave_graph()
-    return first_wave, second_wave
-
-
 def stream_confirmation_pipeline(
-    pipeline_input: Any,
+    pipeline_input: ConfirmationPipelineInput,
     *,
     write_db: bool = True,
     scene_text: str | None = None,
@@ -86,7 +108,8 @@ def stream_confirmation_pipeline(
         event_count += 1
         yield event
 
-    first_wave_graph, second_wave_graph = build_confirmation_graph()
+    first_wave_graph = build_confirmation_first_wave_graph()
+    second_wave_graph = build_confirmation_second_wave_graph()
     for update in first_wave_graph.stream(state, stream_mode="updates"):
         for node_update in update.values():
             for event in merge_confirmation_node_update(state, node_update):
@@ -108,3 +131,129 @@ def stream_confirmation_pipeline(
     for event in state.get("events", [])[event_count:]:
         event_count += 1
         yield event
+
+
+def confirm_stream(
+    turn_id: str,
+    write_db: bool = True,
+    scene_text: str | None = None,
+):
+    if turn_id in PENDING_OPENINGS:
+        yield from confirm_opening_stream(
+            turn_id,
+            write_db=write_db,
+            scene_text=scene_text,
+        )
+        return
+    yield from confirm_turn_stream(
+        turn_id,
+        write_db=write_db,
+        scene_text=scene_text,
+    )
+
+
+def confirm_turn_stream(
+    turn_id: str,
+    write_db: bool = True,
+    scene_text: str | None = None,
+):
+    lock = confirmation_lock(turn_id)
+    with lock:
+        yield from _confirm_turn_stream_locked(
+            turn_id,
+            write_db=write_db,
+            scene_text=scene_text,
+        )
+
+
+def _confirm_turn_stream_locked(
+    turn_id: str,
+    write_db: bool = True,
+    scene_text: str | None = None,
+):
+    pending = PENDING_TURNS.get(turn_id)
+    if pending is None:
+        raise ValueError("Pending turn not found. Generate a scene before confirming.")
+
+    yield from _confirm_pipeline_locked(
+        ConfirmationPipelineInput(
+            turn_id=turn_id,
+            pending=pending,
+            state_before=pending.state_before,
+            scene_result=pending.scene_result,
+            user_input=pending.user_input,
+            turn_index=pending.turn_index,
+            stale_message=(
+                "Pending turn is stale because CurrentState changed after generation. "
+                "Generate the turn again before confirming."
+            ),
+            pending_registry=PENDING_TURNS,
+            update_director_event=True,
+            handle_director_npc=True,
+        ),
+        write_db=write_db,
+        scene_text=scene_text,
+    )
+
+
+def _confirm_pipeline_locked(
+    pipeline_input: ConfirmationPipelineInput,
+    write_db: bool = True,
+    scene_text: str | None = None,
+):
+    yield from stream_confirmation_pipeline(
+        pipeline_input,
+        write_db=write_db,
+        scene_text=scene_text,
+    )
+
+
+def confirm_opening_stream(
+    turn_id: str,
+    write_db: bool = True,
+    scene_text: str | None = None,
+):
+    lock = confirmation_lock(turn_id)
+    with lock:
+        yield from _confirm_opening_stream_locked(
+            turn_id,
+            write_db=write_db,
+            scene_text=scene_text,
+        )
+
+
+def _confirm_opening_stream_locked(
+    turn_id: str,
+    write_db: bool = True,
+    scene_text: str | None = None,
+):
+    pending = PENDING_OPENINGS.get(turn_id)
+    if pending is None:
+        raise ValueError("Pending opening not found. Initialize again before confirming.")
+
+    yield from _confirm_pipeline_locked(
+        ConfirmationPipelineInput(
+            turn_id=turn_id,
+            pending=pending,
+            state_before=pending.current_state,
+            scene_result=pending.scene_result,
+            user_input="",
+            turn_index=0,
+            stale_message=(
+                "Pending opening is stale because initialization state changed. "
+                "Initialize again before confirming."
+            ),
+            pending_registry=PENDING_OPENINGS,
+            update_director_event=False,
+            handle_director_npc=True,
+            director_npc_restock_sync=True,
+            clear_short_term_before_save=True,
+            dry_run_memory_reason=(
+                "DB writes are disabled; opening scene was not saved."
+            ),
+            confirm_started_extra={"opening": True},
+            finish_extra={"opening": True},
+        ),
+        write_db=write_db,
+        scene_text=scene_text,
+    )

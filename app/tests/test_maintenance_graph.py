@@ -193,7 +193,6 @@ def test_background_memory_batch_waits_for_summary_before_invoking_graph(monkeyp
                     pending_count=0,
                     saved_ids=[],
                     classified_pending_ids=[],
-                    batch_classify_count=0,
                 )
             }
 
@@ -212,3 +211,108 @@ def test_background_memory_batch_waits_for_summary_before_invoking_graph(monkeyp
     )
 
     assert order == ["summary", "memory"]
+
+
+class _TraceGateway:
+    def __init__(self):
+        self.context = {}
+
+    def set_trace_context(self, **kwargs):
+        self.context.update(kwargs)
+
+
+class _TraceStore:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+
+class _TraceSceneSummaryStore(_TraceStore):
+    def save_one(self, summary):
+        return summary.id
+
+    def should_condense(self, _level, *, threshold):
+        return False
+
+
+class _TraceSceneSummarizer:
+    def __init__(self, _gateway):
+        pass
+
+    def summarize_turn(self, **kwargs):
+        return SceneSummary(
+            id="summary-7",
+            level=1,
+            content="摘要",
+            scene_ids=[kwargs["scene_id"]],
+            turn_start=kwargs["turn_index"],
+            turn_end=kwargs["turn_index"],
+        )
+
+
+def test_scene_summary_maintenance_sets_turn_trace_context(monkeypatch):
+    gateway = _TraceGateway()
+    monkeypatch.setattr(maintenance_helpers, "create_gateway", lambda: gateway)
+    monkeypatch.setattr(
+        maintenance_nodes,
+        "scene_summary_store",
+        _TraceSceneSummaryStore,
+    )
+    monkeypatch.setattr(
+        maintenance_helpers,
+        "scene_summary_store",
+        _TraceSceneSummaryStore,
+    )
+    monkeypatch.setattr(
+        maintenance_nodes,
+        "SceneSummarizer",
+        _TraceSceneSummarizer,
+    )
+
+    maintenance_graph.run_scene_summary_maintenance(
+        "正文",
+        _state(),
+        "scene_007",
+        7,
+        "trace-7",
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert gateway.context == {
+        "turn_index": 7,
+        "session_type": "maintenance",
+    }
+
+
+def test_memory_batch_maintenance_sets_turn_trace_context(monkeypatch):
+    gateway = _TraceGateway()
+    monkeypatch.setattr(maintenance_helpers, "create_gateway", lambda: gateway)
+    monkeypatch.setattr(maintenance_nodes, "pending_memory_store", _TraceStore)
+    monkeypatch.setattr(maintenance_nodes, "memory_store", _TraceStore)
+    monkeypatch.setattr(maintenance_nodes, "entity_store", _TraceStore)
+    monkeypatch.setattr(maintenance_nodes, "scene_summary_store", _TraceStore)
+    monkeypatch.setattr(
+        maintenance_nodes,
+        "batch_classify_pending_memories_workflow",
+        lambda **_kwargs: SimpleNamespace(
+            triggered=False,
+            pending_count=0,
+            saved_ids=[],
+            classified_pending_ids=[],
+            should_maintain=False,
+        ),
+    )
+
+    maintenance_graph.run_memory_batch_maintenance(
+        _state(),
+        "trace-8",
+        8,
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert gateway.context == {
+        "turn_index": 8,
+        "session_type": "maintenance",
+    }

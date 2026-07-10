@@ -14,7 +14,6 @@ class TestSceneState:
         state = SceneState(
             scene_id="scene_001",
             location="修道院门口",
-            time_label="清晨",
             participants=["主角", "米莉"],
         )
 
@@ -89,7 +88,6 @@ class TestCurrentState:
             scene=SceneState(
                 scene_id="scene_001",
                 location="修道院门口",
-                time_label="清晨",
                 participants=["卢西安", "米莉", "莎拉"],
                 atmosphere="紧张但暂时安全",
             ),

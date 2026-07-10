@@ -14,9 +14,9 @@ from app.domain.core_memory import (
     build_initial_current_state,
 )
 from app.domain.current_state import CurrentState
-from app.engine.serialization import model_data
-from app.engine.session import PENDING_OPENINGS, PendingOpening
-from app.engine.stores import core_memory_store, current_state_store
+from app.runtime.serialization import model_data
+from app.runtime.session import PENDING_OPENINGS, PendingOpening
+from app.runtime.stores import core_memory_store, current_state_store
 
 from .initialization_state import InitializationState
 

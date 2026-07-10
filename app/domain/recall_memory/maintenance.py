@@ -43,7 +43,6 @@ class BatchClassifyPendingMemoryWorkflowResult:
     saved_ids: list[str] = field(default_factory=list)
     invalidated_believed_ids: list[str] = field(default_factory=list)
     classified_pending_ids: list[str] = field(default_factory=list)
-    batch_classify_count: int = 0
     should_maintain: bool = False
     entity_links_created: int = 0
 
@@ -216,7 +215,6 @@ def _batch_classify_pending_memories_locked(
 
     pending_store.mark_classified(sorted(classified_ids))
     wfr.classified_pending_ids = sorted(classified_ids)
-    wfr.batch_classify_count = pending_store.record_batch_classified()
     wfr.should_maintain = True
     return wfr
 

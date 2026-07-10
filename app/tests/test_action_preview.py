@@ -17,7 +17,6 @@ from app.domain.current_state import (
 )
 from app.domain.scene_writer.schemas import NextActionDirection
 from app.domain.scene_summary.schemas import SceneSummary
-from app.workflows.generate_action_preview import generate_action_preview_workflow
 
 
 def _make_state() -> CurrentState:
@@ -141,27 +140,6 @@ class TestActionPreviewAgent:
             "rationale": "正文结尾公开了米莉的线索，主角仍在酒馆内。",
             "anchors": ["米莉", "仓库区"],
         }]
-
-    def test_workflow_uses_agent(self):
-        mock = MockLLM()
-        mock.set_responses([_build_response()])
-
-        result = generate_action_preview_workflow(
-            closing_prompt="米莉似乎还隐瞒着仓库区的细节，你会怎么做？",
-            current_state=_make_state(),
-            core_memory=_make_core_memory(),
-            recent_summaries=_make_recent_summaries(),
-            next_action_directions=[
-                NextActionDirection(
-                    direction="追问仓库区的夜间出没",
-                    rationale="正文结尾公开了米莉的线索，主角仍在酒馆内。",
-                    anchors=["米莉", "仓库区"],
-                )
-            ],
-            gateway=mock.build_gateway(),
-        )
-
-        assert result.previews[0].label == "立刻追问米莉仓库区的异常。"
 
     def test_prompt_excludes_full_scene_and_structured_action_fields(self):
         prompt = Path("app/prompts/confirmation/action_preview_v1.md").read_text(encoding="utf-8")

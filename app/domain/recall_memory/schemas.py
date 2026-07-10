@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 MemoryKind = Literal[
@@ -78,15 +78,6 @@ class PendingMemoryItem(BaseModel):
     classified: bool = False
     discarded: bool = False
     discard_reason: str | None = None
-
-    @field_validator("source_text_span", mode="before")
-    @classmethod
-    def _coerce_source_text_span(cls, value):
-        if value is None:
-            return []
-        if isinstance(value, str):
-            return [value] if value else []
-        return value
 
 class MemoryDraftExtractResult(BaseModel):
     items: list[PendingMemoryItem] = Field(default_factory=list)

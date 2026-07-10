@@ -1,7 +1,6 @@
 import pytest
 from pydantic import ValidationError
 
-from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
@@ -12,7 +11,8 @@ from app.domain.current_state import (
     SceneState,
 )
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
-from app.workflows.context_assembler import PlotOutlineContext, assemble_context
+from app.domain.plot_outline.schemas import PlotOutlineContext
+from app.graph.generation_helpers import assemble_context
 
 
 def _make_current_state() -> CurrentState:
@@ -42,28 +42,6 @@ def _make_current_state() -> CurrentState:
             ),
         ],
         resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
-    )
-
-
-def _make_action_parse_result() -> ActionParseResult:
-    return ActionParseResult(
-        turn_intent="探索修道院",
-        atomic_actions=[
-            AtomicAction(
-                action_id="a1",
-                sequence=1,
-                actor="主角",
-                action_type="observe",
-                raw_text="环顾四周",
-                verb="观察",
-                target="四周",
-                likely_needs_roll=True,
-                roll_hint="perception",
-                confidence=0.9,
-            ),
-        ],
-        anchors=[],
-        ambiguities=[],
     )
 
 
@@ -101,14 +79,12 @@ class TestAssembleContext:
         ctx = assemble_context(
             user_input="环顾四周观察环境。",
             current_state=_make_current_state(),
-            action_parse_result=_make_action_parse_result(),
             turn_resolution=_make_turn_resolution(),
             core_memory=_make_core_memory(),
         )
 
         assert ctx.user_input == "环顾四周观察环境。"
         assert ctx.current_state.scene.scene_id == "scene_001"
-        assert ctx.action_parse_result.turn_intent == "探索修道院"
         assert ctx.turn_resolution.total_resolutions == 1
         assert len(ctx.core_memory.items) == 1
         assert ctx.context_facts.facts == []
@@ -117,7 +93,6 @@ class TestAssembleContext:
         ctx = assemble_context(
             user_input="测试",
             current_state=_make_current_state(),
-            action_parse_result=_make_action_parse_result(),
             turn_resolution=_make_turn_resolution(),
             core_memory=CoreMemory(items=[]),
         )
@@ -127,7 +102,6 @@ class TestAssembleContext:
         ctx = assemble_context(
             user_input="测试",
             current_state=_make_current_state(),
-            action_parse_result=_make_action_parse_result(),
             turn_resolution=_make_turn_resolution(),
             core_memory=_make_core_memory(),
         )
@@ -145,7 +119,6 @@ class TestAssembleContext:
             PlotOutlineContext(
                 user_input="测试",
                 current_state="not_a_state",  # type: ignore[arg-type]
-                action_parse_result=_make_action_parse_result(),
                 turn_resolution=_make_turn_resolution(),
                 core_memory=_make_core_memory(),
             )

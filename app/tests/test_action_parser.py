@@ -8,7 +8,6 @@ from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, NPCState, PlayerState, ResourcesState, SceneState
-from app.workflows.parse_action import parse_action_workflow
 
 
 def _make_current_state() -> CurrentState:
@@ -597,48 +596,6 @@ class TestActionSelfCheck:
         )
         cleaned = sc.check(result, "nothing", _make_current_state())
         assert cleaned.atomic_actions == []
-
-
-# ══════════════════════════════════════════════════════════════════
-#  Test: Workflow
-# ══════════════════════════════════════════════════════════════════
-
-class TestActionWorkflow:
-    def test_workflow_with_self_check(self):
-        mock = MockLLM()
-        mock.set_responses([
-            _build_response(
-                actions=[
-                    {
-                        "action_id": "A1",
-                        "sequence": 1,
-                        "actor": "",
-                        "action_type": "observe",
-                        "raw_text": "仔细观察仓库门口",
-                        "verb": "观察",
-                        "target": "仓库门口",
-                        "method": None,
-                        "goal": None,
-                        "condition": None,
-                        "likely_needs_roll": True,
-                        "roll_hint": "perception",
-                        "confidence": 0.95,
-                    }
-                ],
-                anchors=[
-                    {"text": "仓库门口", "normalized": "仓库门口", "kind": "location", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                ],
-            )
-        ])
-
-        parser = ActionParser(mock.build_gateway())
-        sc = ActionSelfCheck()
-        result = parse_action_workflow(
-            "我仔细观察仓库门口。", _make_current_state(), parser, sc, core_memory=_core_memory()
-        )
-
-        assert len(result.atomic_actions) == 1
-        assert result.atomic_actions[0].actor == "主角"
 
 
 def AtomicAction_model(**kwargs):

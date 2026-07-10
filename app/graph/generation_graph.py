@@ -44,18 +44,7 @@ def build_generation_graph():
     return graph.compile()
 
 
-def run_generation_graph(
-    user_input: str,
-    difficulty: Difficulty = "困难",
-    max_chars: int = 1500,
-) -> GenerationState:
-    state = prepare_generation_state(user_input, difficulty, max_chars)
-    graph = build_generation_graph()
-    graph_state = graph.invoke(state)
-    return finalize_pending_turn(graph_state)
-
-
-def stream_generation_turn(
+def generate_turn_stream(
     user_input: str,
     difficulty: Difficulty = "困难",
     max_chars: int = 1500,

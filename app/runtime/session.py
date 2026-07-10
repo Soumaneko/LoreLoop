@@ -9,7 +9,7 @@ from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.short_term_memory import ShortTermMemory
-from app.workflows.context_assembler import PlotOutlineContext
+from app.domain.plot_outline.schemas import PlotOutlineContext
 
 
 BACKGROUND_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=2)

@@ -1,20 +1,11 @@
-from dataclasses import dataclass, field
-
 from app.domain.action.schemas import ActionParseResult
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.candidate_retriever import CandidateRetriever
 from app.domain.retrieval.config import RetrievalConfig
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
+from app.domain.retrieval.schemas import CandidateRetrievalResult
 
 
-@dataclass
-class RetrieveCandidatesResult:
-    candidates: list[MemoryCandidate] = field(default_factory=list)
-    total_scanned: int = 0
-    total_returned: int = 0
-
-
-def retrieve_candidates_workflow(
+def retrieve_candidates(
     parse_result: ActionParseResult,
     memory_store: MemoryStore,
     *,

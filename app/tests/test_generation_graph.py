@@ -34,7 +34,7 @@ def test_generation_events_reducer_merges_parallel_branch_events():
     ]
 
 
-def test_stream_generation_turn_forwards_state_events(monkeypatch):
+def test_generate_turn_stream_forwards_state_events(monkeypatch):
     class _FakeGraph:
         def stream(self, _state, stream_mode):
             assert stream_mode == "updates"
@@ -65,7 +65,7 @@ def test_stream_generation_turn_forwards_state_events(monkeypatch):
         },
     )
 
-    events = list(generation_graph.stream_generation_turn("观察"))
+    events = list(generation_graph.generate_turn_stream("观察"))
 
     assert [event["step"] for event in events] == [
         "prepared",
@@ -74,7 +74,7 @@ def test_stream_generation_turn_forwards_state_events(monkeypatch):
     ]
 
 
-def test_stream_generation_buffers_context_events_until_action_parsed(monkeypatch):
+def test_generation_buffers_context_events_until_action_parsed(monkeypatch):
     class _FakeGraph:
         def stream(self, _state, stream_mode):
             assert stream_mode == "updates"
@@ -114,7 +114,7 @@ def test_stream_generation_buffers_context_events_until_action_parsed(monkeypatc
         },
     )
 
-    events = list(generation_graph.stream_generation_turn("观察"))
+    events = list(generation_graph.generate_turn_stream("观察"))
 
     assert [event["step"] for event in events] == [
         "prepared",

@@ -51,14 +51,6 @@ class PendingMemoryStore:
             ON pending_memory_items(classified, discarded, turn_index, created_at)
             """
         )
-        self._conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS pending_memory_meta (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-            """
-        )
         self._conn.commit()
 
     def save_many(self, items: list[PendingMemoryItem]) -> list[str]:
@@ -157,38 +149,6 @@ class PendingMemoryStore:
     def should_trigger_batch(self, *, turn_threshold: int = 5) -> bool:
         return self.unclassified_turn_count() >= turn_threshold
 
-    def batch_classify_count(self) -> int:
-        row = self._conn.execute(
-            "SELECT value FROM pending_memory_meta WHERE key = ?",
-            ("batch_classify_count",),
-        ).fetchone()
-        if row is None:
-            return 0
-        try:
-            return int(row["value"])
-        except (TypeError, ValueError):
-            return 0
-
-    def record_batch_classified(self) -> int:
-        count = self.batch_classify_count() + 1
-        self._conn.execute(
-            """
-            INSERT INTO pending_memory_meta(key, value)
-            VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-            """,
-            ("batch_classify_count", str(count)),
-        )
-        self._conn.commit()
-        return count
-
-    def reset_batch_classify_count(self) -> None:
-        self._conn.execute(
-            "DELETE FROM pending_memory_meta WHERE key = ?",
-            ("batch_classify_count",),
-        )
-        self._conn.commit()
-
     def count(self) -> int:
         row = self._conn.execute("SELECT COUNT(*) FROM pending_memory_items").fetchone()
         return int(row[0])
@@ -234,14 +194,7 @@ class PendingMemoryStore:
 
 
 def _load_source_text_span(value: str) -> list[str]:
-    if not value:
-        return []
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError:
-        return [value]
-    if isinstance(parsed, list):
-        return [str(item) for item in parsed if str(item)]
-    if isinstance(parsed, str):
-        return [parsed] if parsed else []
-    return []
+    parsed = json.loads(value)
+    if not isinstance(parsed, list):
+        raise ValueError("source_text_span must be stored as a JSON list")
+    return [str(item) for item in parsed if str(item)]

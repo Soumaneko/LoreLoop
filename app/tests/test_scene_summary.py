@@ -7,7 +7,7 @@ from app.domain.current_state.schemas import CurrentState, PlayerState, SceneSta
 from app.domain.scene_summary import SceneSummarizer
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.store import SceneSummaryStore
-from app.workflows.scene_summaries import run_scene_summary_maintenance
+from app.domain.scene_summary.maintenance import run_scene_summary_maintenance
 
 
 PROMPT_DIR = Path(__file__).resolve().parents[1] / "prompts"

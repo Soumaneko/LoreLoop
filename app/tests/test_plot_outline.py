@@ -3,7 +3,6 @@ from pathlib import Path
 import json
 
 from app.core.llm import MockLLM
-from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
@@ -13,14 +12,13 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
-from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
+from app.domain.plot_outline.schemas import PlotOutlineContext, PlannedEvent, PlotOutlineResult
 from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.plot_outline.views import project_retrieved_memories
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate, PendingMemoryNote
+from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
-from app.workflows.context_assembler import PlotOutlineContext, assemble_context
-from app.workflows.generate_plot_outline import generate_plot_outline_workflow
+from app.graph.generation_helpers import assemble_context
 
 
 def _make_context() -> PlotOutlineContext:
@@ -52,25 +50,6 @@ def _make_context() -> PlotOutlineContext:
                 ),
             ],
             resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
-        ),
-        action_parse_result=ActionParseResult(
-            turn_intent="观察酒馆里的客人",
-            atomic_actions=[
-                AtomicAction(
-                    action_id="a1",
-                    sequence=1,
-                    actor="主角",
-                    action_type="observe",
-                    raw_text="仔细观察酒馆里的客人",
-                    verb="观察",
-                    target="酒馆客人",
-                    likely_needs_roll=True,
-                    roll_hint="perception",
-                    confidence=0.9,
-                ),
-            ],
-            anchors=[],
-            ambiguities=[],
         ),
         turn_resolution=TurnResolutionResult(
             action_resolutions=[
@@ -251,7 +230,7 @@ class TestPlotOutlineAgent:
 
         assert "行动" in event.event_fact
 
-    def test_retrieved_memory_projection_uses_unified_indices(self):
+    def test_retrieved_memory_projection_adds_indices(self):
         projected = project_retrieved_memories(
             CandidateRetrievalResult(
                 candidates=[
@@ -267,19 +246,8 @@ class TestPlotOutlineAgent:
                         score=0.12,
                     ),
                 ],
-                pending_notes=[
-                    PendingMemoryNote(
-                        pending_id="pending_001",
-                        scene_id="scene_001",
-                        turn_index=1,
-                        memory_kind="open_thread",
-                        subject="调查团异常",
-                        raw_text="米莉刚刚提到调查团异常。",
-                        entities=["米莉", "调查团"],
-                    ),
-                ],
-                total_scanned=2,
-                total_returned=2,
+                total_scanned=1,
+                total_returned=1,
             )
         )
 
@@ -288,9 +256,6 @@ class TestPlotOutlineAgent:
         assert list(data.keys()) == ["memories", "total_scanned", "total_returned"]
         assert data["memories"][0]["memory_index"] == 0
         assert data["memories"][0]["source"] == "classified"
-        assert data["memories"][1]["memory_index"] == 1
-        assert data["memories"][1]["source"] == "pending"
-        assert data["memories"][1]["pending_id"] == "pending_001"
 
     def test_outline_has_fact_boundaries(self):
         context = _make_context()
@@ -393,15 +358,3 @@ class TestPlotOutlineAgent:
 
         assert result.planned_events[0].linked_outcome_ids == ["A2", "A3"]
         assert "挖出浅沟" in result.planned_events[0].event_fact
-
-
-class TestPlotOutlineWorkflow:
-    def test_workflow_with_mock(self):
-        context = _make_context()
-        mock = MockLLM()
-        mock.set_responses([_build_outline_response()])
-
-        result = generate_plot_outline_workflow(context, mock.build_gateway())
-
-        assert isinstance(result, PlotOutlineResult)
-        assert len(result.planned_events) >= 1

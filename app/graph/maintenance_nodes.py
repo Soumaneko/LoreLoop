@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from app.domain.recall_memory.batch_classifier import MemoryBatchClassifier
 from app.domain.recall_memory.maintainer import MemoryMaintainer
+from app.domain.recall_memory.maintenance import (
+    batch_classify_pending_memories_workflow,
+    maintain_memories_workflow,
+)
 from app.domain.scene_summary.maintenance import _CONDENSE_LOCK
 from app.domain.scene_summary.summarizer import SceneSummarizer
-from app.engine.serialization import model_data
-from app.engine.stores import (
+from app.runtime.serialization import model_data
+from app.runtime.stores import (
     director_npc_store,
     entity_store,
     memory_store,
@@ -13,9 +17,7 @@ from app.engine.stores import (
     pending_memory_store,
     scene_summary_store,
 )
-from app.workflows.director_npc import restock_director_npc_standby
-from app.workflows.extract_memory import batch_classify_pending_memories_workflow
-from app.workflows.maintain_memories import maintain_memories_workflow
+from app.domain.director_npc.workflows import restock_director_npc_standby
 
 from .maintenance_helpers import maintenance_gateway
 from .maintenance_state import (

@@ -13,7 +13,7 @@ from app.domain.director_npc.schemas import (
 from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
-from app.workflows.director_npc import (
+from app.domain.director_npc.workflows import (
     DIRECTOR_NPC_FIRST_FORCED_TURN,
     DIRECTOR_NPC_STANDBY_TARGET,
     _director_npc_trigger_reason,

@@ -3,48 +3,51 @@ from __future__ import annotations
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
+from app.domain.context_facts.extractor import ContextExtractor
+from app.domain.context_facts.schemas import ContextExtractInput
 from app.domain.context_facts.schemas import ContextFactSet
+from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
-from app.engine.serialization import model_data
-from app.engine.stores import (
+from app.domain.roll_modifier.evaluator import RollModifierEvaluator
+from app.domain.scene_writer.agent import SceneWriterAgent
+from app.domain.scene_writer.helpers import build_entity_retrieval_anchors
+from app.domain.turn_resolution import TurnResolutionAgent
+from app.runtime.serialization import model_data
+from app.runtime.stores import (
     director_npc_store,
     entity_store,
     memory_store,
     npc_profile_store,
 )
-from app.workflows.context_assembler import assemble_context
-from app.workflows.director_npc import maybe_director_npc_workflow
-from app.workflows.evaluate_roll_modifiers import evaluate_roll_modifiers_workflow
-from app.workflows.extract_context_facts import extract_context_facts_workflow
-from app.workflows.generate_plot_outline import generate_plot_outline_workflow
-from app.workflows.generate_scene import (
-    build_entity_retrieval_anchors,
-    generate_scene_workflow,
-)
-from app.workflows.resolve_rolls import resolve_rolls_workflow
-from app.workflows.resolve_turn import resolve_turn_workflow
-from app.workflows.retrieve_candidates import retrieve_candidates_workflow
-from app.workflows.update_entity_profiles import gather_entity_profiles_from_state_and_anchors
+from app.domain.director_npc.workflows import maybe_director_npc_workflow
+from app.domain.retrieval.service import retrieve_candidates
+from app.domain.entity.workflows import gather_entity_profiles_from_state_and_anchors
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
-from .generation_helpers import gateway_for
+from .generation_context_helpers import retrieve_context_fact_memories
+from .generation_helpers import assemble_context, gateway_for
 from .generation_state import GenerationState
 
 
 def extract_context_facts_node(state: GenerationState) -> GenerationState:
     try:
         with memory_store() as mem_store:
-            context_facts, context_fact_memories = extract_context_facts_workflow(
+            context_fact_memories = retrieve_context_fact_memories(
                 user_input=state["user_input"],
-                core_memory=state["core_memory"],
-                current_state=state["current_state"],
-                scene_summaries=state["scene_summaries"],
                 memory_store=mem_store,
                 anchors=state.get("matched_anchors", []),
-                entity_profiles=state.get("action_entity_profile_views", []),
-                npc_profiles=state.get("action_npc_director_views", []),
-                gateway=gateway_for(state),
+            )
+            context_facts = ContextExtractor(gateway_for(state)).extract(
+                ContextExtractInput(
+                    user_input=state["user_input"],
+                    core_memory=state["core_memory"],
+                    current_state=state["current_state"],
+                    scene_summaries=state["scene_summaries"],
+                    retrieved_memories=context_fact_memories,
+                    entity_profiles=state.get("action_entity_profile_views", []),
+                    npc_profiles=state.get("action_npc_director_views", []),
+                ),
                 trace_id=state["trace_id"],
             )
         return {
@@ -104,7 +107,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
     )
 
     with memory_store() as mem_store:
-        retrieved_memories = retrieve_candidates_workflow(
+        retrieved_memories = retrieve_candidates(
             action_parse_result,
             mem_store,
         )
@@ -138,17 +141,15 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
     roll_config = RollConfig(seed=None, difficulty=state.get("difficulty", "困难"))
     roll_resolver = RollResolver(roll_config)
     roll_actions = roll_resolver.select_roll_actions(state["action_parse_result"])
-    modifier_batch = evaluate_roll_modifiers_workflow(
-        state["action_parse_result"],
-        state["current_state"],
-        gateway_for(state),
+    modifier_batch = RollModifierEvaluator(gateway_for(state)).evaluate(
+        parse_result=state["action_parse_result"],
+        current_state=state["current_state"],
         core_memory=state["core_memory"],
         roll_actions=roll_actions,
         trace_id=state["trace_id"],
     )
-    roll_results = resolve_rolls_workflow(
+    roll_results = roll_resolver.resolve(
         state["action_parse_result"],
-        config=roll_config,
         modifier_batch=modifier_batch,
         roll_actions=roll_actions,
     )
@@ -176,7 +177,7 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
 
 
 def resolve_turn_node(state: GenerationState) -> GenerationState:
-    turn_resolution = resolve_turn_workflow(
+    turn_resolution = TurnResolutionAgent(gateway_for(state)).resolve(
         user_input=state["user_input"],
         current_state=state["current_state"],
         action_parse_result=state["action_parse_result"],
@@ -185,7 +186,6 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
         context_facts=state["context_facts"],
         entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
-        gateway=gateway_for(state),
         trace_id=state["trace_id"],
     )
     return {
@@ -230,7 +230,6 @@ def generate_plot_outline_node(state: GenerationState) -> GenerationState:
     context = assemble_context(
         user_input=state["user_input"],
         current_state=state["current_state"],
-        action_parse_result=state["action_parse_result"],
         turn_resolution=state["turn_resolution"],
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
@@ -244,9 +243,8 @@ def generate_plot_outline_node(state: GenerationState) -> GenerationState:
             else None
         ),
     )
-    outline = generate_plot_outline_workflow(
-        context=context,
-        gateway=gateway_for(state),
+    outline = PlotOutlineAgent(gateway_for(state)).generate(
+        context,
         trace_id=state["trace_id"],
     )
     return {
@@ -302,13 +300,12 @@ def generate_scene_node(state: GenerationState) -> GenerationState:
     )
     next_turn_index = recent_scene.turn_index + 1 if recent_scene else 1
 
-    scene_result = generate_scene_workflow(
+    scene_result = SceneWriterAgent(gateway_for(state)).write(
         outline=state["outline"],
         current_state=state["current_state"],
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
-        short_term_memory=state["short_term_memory"],
-        gateway=gateway_for(state),
+        recent_scene=recent_scene,
         turn_index=next_turn_index,
         entity_profiles=writer_entity_profile_views,
         npc_profiles=writer_npc_public_views,

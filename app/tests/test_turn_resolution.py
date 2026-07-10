@@ -15,7 +15,6 @@ from app.domain.turn_resolution import (
     build_roll_judgments,
     map_roll_to_band,
 )
-from app.workflows.resolve_turn import resolve_turn_workflow
 
 
 def _action(
@@ -224,18 +223,3 @@ class TestTurnResolutionAgent:
         assert frame.actor == "主角"
         assert frame.action_type == "observe"
         assert frame.outcome_band == "critical_success"
-
-    def test_workflow_returns_result(self):
-        mock = MockLLM()
-        mock.set_responses([_response("critical_success")])
-
-        result = resolve_turn_workflow(
-            user_input="观察",
-            current_state=_state(),
-            action_parse_result=_parse(),
-            roll_results=_roll_batch(_roll(20)),
-            core_memory=CoreMemory(items=[]),
-            gateway=mock.build_gateway(),
-        )
-
-        assert result.total_resolutions == 1

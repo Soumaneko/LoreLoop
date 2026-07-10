@@ -10,8 +10,8 @@ from app.domain.npc_profile.schemas import NPCExtractionResult
 from app.domain.recall_memory.schemas import MemoryDraftExtractResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory import ShortTermMemory
-from app.engine.session import PENDING_OPENINGS, PENDING_TURNS, PendingOpening, PendingTurn
-from app.engine import turn_confirmation
+from app.runtime.session import PENDING_OPENINGS, PENDING_TURNS, PendingOpening, PendingTurn
+from app.graph import confirmation_graph as turn_confirmation
 from app.graph import confirmation_helpers
 from app.graph import confirmation_nodes
 
@@ -28,6 +28,14 @@ class _ContextStore:
 
     def close(self):
         return None
+
+
+class _ActionPreviewAgent:
+    def __init__(self, _gateway):
+        pass
+
+    def generate(self, **_kwargs):
+        return {"previews": []}
 
 
 def _state() -> CurrentState:
@@ -79,6 +87,13 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(monkeypat
             raise RuntimeError("preview failed")
         return {"previews": ["ok"]}
 
+    class _RetryingActionPreviewAgent:
+        def __init__(self, _gateway):
+            pass
+
+        def generate(self, **kwargs):
+            return _preview(**kwargs)
+
     class _FakeGateway:
         def set_trace_context(self, **kwargs):
             pass
@@ -99,8 +114,8 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(monkeypat
     )
     monkeypatch.setattr(
         confirmation_nodes,
-        "generate_action_preview_workflow",
-        _preview,
+        "ActionPreviewAgent",
+        _RetryingActionPreviewAgent,
     )
     monkeypatch.setattr(
         confirmation_helpers,
@@ -215,8 +230,8 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
     monkeypatch.setattr(confirmation_nodes, "NPCProfileExtractor", _NPCExtractor)
     monkeypatch.setattr(
         confirmation_nodes,
-        "generate_action_preview_workflow",
-        lambda **_kwargs: {"previews": []},
+        "ActionPreviewAgent",
+        _ActionPreviewAgent,
     )
     monkeypatch.setattr(
         confirmation_nodes,
@@ -395,8 +410,8 @@ def test_opening_confirmation_restocks_director_npc_synchronously(monkeypatch):
     monkeypatch.setattr(confirmation_nodes, "NPCProfileExtractor", _NPCExtractor)
     monkeypatch.setattr(
         confirmation_nodes,
-        "generate_action_preview_workflow",
-        lambda **_kwargs: {"previews": []},
+        "ActionPreviewAgent",
+        _ActionPreviewAgent,
     )
     monkeypatch.setattr(
         confirmation_nodes,

@@ -9,9 +9,8 @@ from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.opening import OpeningSceneAgent
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
 from app.domain.scene_writer.views import project_outline, project_recent_scene
-from app.domain.short_term_memory import ShortTermMemory, ShortTermScene
+from app.domain.short_term_memory import ShortTermScene
 from app.domain.core_memory import InitConfig, build_core_memory, build_initial_current_state
-from app.workflows.generate_scene import generate_scene_workflow
 
 
 def _make_state() -> CurrentState:
@@ -223,47 +222,6 @@ class TestSceneWriterAgent:
 
         assert isinstance(result, SceneWriterResult)
 
-
-class TestSceneWriterWorkflow:
-    def test_workflow_generates_scene(self):
-        mock = MockLLM()
-        mock.set_responses([_build_response()])
-
-        result = generate_scene_workflow(
-            outline=_make_outline(),
-            current_state=_make_state(),
-            core_memory=CoreMemory(items=[]),
-            short_term_memory=ShortTermMemory(recent_scenes=[], max_items=5),
-            gateway=mock.build_gateway(),
-            turn_index=1,
-        )
-
-        assert isinstance(result, SceneWriterResult)
-
-    def test_workflow_with_short_term_memory(self):
-        mock = MockLLM()
-        mock.set_responses([_build_response()])
-
-        result = generate_scene_workflow(
-            outline=_make_outline(),
-            current_state=_make_state(),
-            core_memory=CoreMemory(items=[]),
-            short_term_memory=ShortTermMemory(
-                recent_scenes=[
-                    ShortTermScene(
-                        scene_id="scene_001",
-                        turn_index=1,
-                        user_input="观察四周",
-                        scene_text="主角环顾酒馆。",
-                    ),
-                ],
-                max_items=5,
-            ),
-            gateway=mock.build_gateway(),
-            turn_index=1,
-        )
-
-        assert isinstance(result, SceneWriterResult)
 
 
 class TestOpeningSceneAgent:

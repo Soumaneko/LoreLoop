@@ -7,7 +7,6 @@ from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
-from app.workflows.evaluate_roll_modifiers import evaluate_roll_modifiers_workflow
 
 
 def _make_action(action_id: str, likely_needs_roll: bool) -> AtomicAction:
@@ -92,34 +91,6 @@ class TestRollModifierEvaluator:
         assert len(result.modifiers) == 1
         assert result.modifiers[0].action_id == "a2"
         assert result.modifiers[0].source == "situational"
-
-    def test_workflow_uses_evaluator(self):
-        mock = MockLLM()
-        mock.set_responses([
-            json.dumps(
-                {
-                    "modifiers": [
-                        {
-                            "action_id": "a1",
-                            "label": "清晰视野",
-                            "reason": "庭院开阔，能帮助观察。",
-                            "value": 1,
-                        }
-                    ]
-                },
-                ensure_ascii=False,
-            )
-        ])
-
-        result = evaluate_roll_modifiers_workflow(
-            _make_parse_result(),
-            _make_state(),
-            mock.build_gateway(),
-            core_memory=_make_core_memory(),
-            roll_actions=[_make_action("a1", True)],
-        )
-
-        assert result.modifiers[0].value == 1
 
     def test_rejects_too_many_modifiers_for_one_action(self):
         mock = MockLLM()

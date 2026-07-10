@@ -175,14 +175,19 @@ class ManualFileGateway(LLMGateway):
 
 
 def install_manual_gateway(exchange: FilePromptExchange) -> None:
-    """Redirect engine-local gateway constructors without changing engine code."""
-    from app.engine import core_memory, maintenance, turn_confirmation, turn_generation
+    """Redirect graph-local gateway constructors for manual prompt exchange."""
+    from app.graph import (
+        confirmation_nodes,
+        generation_helpers,
+        initialization_helpers,
+        maintenance_helpers,
+    )
 
     factory = exchange.create_gateway
-    core_memory.create_gateway = factory
-    maintenance.create_gateway = factory
-    turn_confirmation.create_gateway = factory
-    turn_generation.create_gateway = factory
+    confirmation_nodes.create_gateway = factory
+    generation_helpers.create_gateway = factory
+    initialization_helpers.create_gateway = factory
+    maintenance_helpers.create_gateway = factory
 
 
 def run_manual_turn(
@@ -194,8 +199,7 @@ def run_manual_turn(
     confirm: bool = False,
     write_db: bool = False,
 ) -> dict[str, Any]:
-    from app.engine.turn_confirmation import confirm_stream
-    from app.engine.turn_generation import generate_turn_stream
+    from app.api import confirm_stream, generate_turn_stream
 
     install_manual_gateway(exchange)
 

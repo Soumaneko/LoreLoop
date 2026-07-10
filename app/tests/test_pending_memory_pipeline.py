@@ -10,12 +10,12 @@ from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.domain.recall_memory.pending_store import PendingMemoryStore
 from app.domain.recall_memory.schemas import PendingMemoryItem
 from app.domain.recall_memory.store import MemoryStore
-from app.workflows.extract_memory import (
+from app.domain.recall_memory.maintenance import (
     batch_classify_pending_memories_workflow,
     extract_memory_drafts_workflow,
     fill_pending_memory_scene_metadata,
 )
-from app.workflows.retrieve_candidates import retrieve_candidates_workflow
+from app.domain.retrieval.service import retrieve_candidates
 
 
 def _state() -> CurrentState:
@@ -132,19 +132,6 @@ class TestPendingMemoryStore:
                 "老板说钥匙在钟楼。",
                 "侍者也说钥匙在钟楼。",
             ]
-
-    def test_batch_classify_count_persists(self, tmp_path):
-        db_path = str(tmp_path / "pending.db")
-
-        with PendingMemoryStore(db_path) as store:
-            assert store.batch_classify_count() == 0
-            assert store.record_batch_classified() == 1
-            assert store.record_batch_classified() == 2
-            assert store.record_batch_classified() == 3
-
-        with PendingMemoryStore(db_path) as store:
-            assert store.batch_classify_count() == 3
-
 
 class TestMemoryDraftExtractor:
     def test_extracts_pending_items_and_fills_scene_metadata(self):
@@ -350,7 +337,6 @@ class TestBatchClassifyPendingMemories:
             assert result.triggered is True
             assert len(result.saved_ids) == 1
             assert pending_store.unclassified_turn_count() == 0
-            assert result.batch_classify_count == 1
             assert result.should_maintain is True
 
             memory = memory_store.list_all()[0]
@@ -425,38 +411,8 @@ class TestBatchClassifyPendingMemories:
             assert record.status_reason == "believed_evidence_mode_not_retrievable"
             assert memory_store.list_active() == []
 
-            retrieved = retrieve_candidates_workflow(
+            retrieved = retrieve_candidates(
                 _action_parse(),
                 memory_store,
             )
             assert retrieved.candidates == []
-
-class TestRetrievalWithPendingNotes:
-    def test_retrieval_ignores_pending_notes(self):
-        with MemoryStore(":memory:") as memory_store, PendingMemoryStore(":memory:") as pending_store:
-            pending_store.save_many(
-                [
-                    PendingMemoryItem(
-                        scene_id="scene_001",
-                        turn_index=3,
-                        raw_text="老板声称钥匙在钟楼。",
-                        source_text_span=[
-                            "老板声称钥匙在钟楼。",
-                            "他指了指钟楼方向。",
-                        ],
-                        entities=["老板", "钥匙", "钟楼"],
-                        memory_kind="open_thread", subject="钥匙在钟楼的传闻",
-                        importance_hint="high",
-                    )
-                ]
-            )
-
-            result = retrieve_candidates_workflow(
-                _action_parse(),
-                memory_store,
-            )
-
-            assert result.candidates == []
-            assert result.pending_notes == []
-            assert result.total_scanned == 0
-            assert result.total_returned == 0
