@@ -350,7 +350,6 @@ class TestDirectorNPCWorkflow:
         director_store.save(draft)
         for response in _draft_responses("薇拉", "洛珊"):
             director_store.save(DirectorNPCDraft.model_validate(json.loads(response)))
-        creator = MockLLM()
         dispatcher = MockLLM()
         dispatcher.set_responses([_dispatch_response(selected_id=draft.draft_id, selected_name=draft.name)])
 
@@ -362,11 +361,9 @@ class TestDirectorNPCWorkflow:
             user_input="我环顾四周寻找线索",
             turn_index=4,
             director_npc_store=director_store,
-            creator_gateway=creator.build_gateway(),
             dispatcher_gateway=dispatcher.build_gateway(),
         )
 
-        assert result.created_drafts == []
         assert result.dispatch is not None
         assert result.dispatch.action == "dispatch_standby"
         assert result.plot_injection is not None
@@ -390,7 +387,6 @@ class TestDirectorNPCWorkflow:
                 public_summary="剧情中只公开表现为路过的吟游诗人。",
             )
         )
-        creator = MockLLM()
         dispatcher = SpyGateway(_dispatch_response(action="none"))
 
         result = maybe_director_npc_workflow(
@@ -402,7 +398,6 @@ class TestDirectorNPCWorkflow:
             turn_index=4,
             director_npc_store=director_store,
             npc_profile_store=npc_profile_store,
-            creator_gateway=creator.build_gateway(),
             dispatcher_gateway=dispatcher,
         )
 
@@ -436,7 +431,6 @@ class TestDirectorNPCWorkflow:
                 absent_turns=0,
             )
         )
-        creator = MockLLM()
         dispatcher = SpyGateway(_dispatch_response(action="none"))
 
         result = maybe_director_npc_workflow(
@@ -448,7 +442,6 @@ class TestDirectorNPCWorkflow:
             turn_index=4,
             director_npc_store=director_store,
             npc_profile_store=npc_profile_store,
-            creator_gateway=creator.build_gateway(),
             dispatcher_gateway=dispatcher,
         )
 
@@ -466,12 +459,10 @@ class TestDirectorNPCWorkflow:
             }
         ]
 
-    def test_creates_standby_when_pool_is_empty_even_if_not_triggered(self):
+    def test_generation_does_not_create_standby_when_pool_is_empty(self):
         director_store = DirectorNPCStore(":memory:")
         director_store.set_meta_int("last_dispatch_turn", 3)
-        creator = MockLLM()
         dispatcher = MockLLM()
-        creator.set_responses(_draft_responses("艾琳娜", "薇拉", "洛珊"))
 
         result = maybe_director_npc_workflow(
             core_memory=CoreMemory(items=[]),
@@ -481,13 +472,11 @@ class TestDirectorNPCWorkflow:
             user_input="我小心前进",
             turn_index=4,
             director_npc_store=director_store,
-            creator_gateway=creator.build_gateway(),
             dispatcher_gateway=dispatcher.build_gateway(),
         )
 
-        assert len(result.created_drafts) == DIRECTOR_NPC_STANDBY_TARGET
         assert result.dispatch is None
-        assert len(director_store.list_standby()) == DIRECTOR_NPC_STANDBY_TARGET
+        assert director_store.list_standby() == []
 
     def test_store_marks_dispatched(self):
         store = DirectorNPCStore(":memory:")

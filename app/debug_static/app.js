@@ -1141,26 +1141,21 @@ function renderNpcStateGroup(profiles) {
 function directorNpcStepSummary(result) {
   if (!result) return "none";
   if (result.dispatch) return `${result.dispatch.action} · ${result.dispatch.selected_name || "none"}`;
-  const createdDrafts = result.created_drafts || [];
-  if (createdDrafts.length) return `created standby × ${createdDrafts.length}`;
   return result.skipped_reason || "skipped";
 }
 
 function renderDirectorNpcResult(result) {
   if (!result) return `<div class="empty">暂无导演 NPC 结果。</div>`;
   const dispatch = result.dispatch;
-  const createdDrafts = result.created_drafts || [];
   return `
     ${metrics([
       result.trigger_reason ? metric("触发", "是", "ok") : metric("触发", "否"),
-      createdDrafts.length ? metric("新建待命", createdDrafts.length, "info") : "",
       dispatch ? metric("动作", dispatch.action, dispatch.action === "none" ? "" : "ok") : "",
     ])}
     ${kv([
       ["触发原因", esc(text(result.trigger_reason))],
       ["跳过原因", esc(text(result.skipped_reason))],
     ])}
-    ${createdDrafts.length ? details("新建待命 NPC", createdDrafts.map(directorNpcCard).join(""), true) : ""}
     ${dispatch ? details("调度决策", directorNpcDispatchCard(dispatch), true) : ""}
   `;
 }

@@ -33,20 +33,10 @@ def maybe_director_npc_workflow(
     turn_index: int,
     director_npc_store: DirectorNPCStore,
     npc_profile_store: NPCProfileStore | None = None,
-    creator_gateway: LLMGateway,
     dispatcher_gateway: LLMGateway,
     trace_id: str | None = None,
 ) -> DirectorNPCWorkflowResult:
     owned_profile_store = npc_profile_store or NPCProfileStore(":memory:")
-    created_drafts = restock_director_npc_standby(
-        core_memory=core_memory,
-        protagonist_name=current_state.player.name,
-        turn_index=turn_index,
-        director_npc_store=director_npc_store,
-        npc_profile_store=owned_profile_store,
-        creator_gateway=creator_gateway,
-        trace_id=trace_id,
-    )
     standby = director_npc_store.list_standby()
 
     trigger_reason = _director_npc_trigger_reason(
@@ -55,7 +45,6 @@ def maybe_director_npc_workflow(
     )
     if trigger_reason is None:
         return DirectorNPCWorkflowResult(
-            created_drafts=created_drafts,
             skipped_reason="trigger conditions not met",
         )
 
@@ -92,7 +81,6 @@ def maybe_director_npc_workflow(
     if dispatch.action != "none":
         pass  # last_dispatch_turn is persisted during confirmation, not generation
     return DirectorNPCWorkflowResult(
-        created_drafts=created_drafts,
         dispatch=dispatch,
         plot_injection=_build_plot_injection(
             dispatch,

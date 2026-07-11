@@ -10,6 +10,7 @@ from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
+from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.helpers import build_entity_retrieval_anchors
 from app.domain.turn_resolution import TurnResolutionAgent
@@ -141,6 +142,27 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
     roll_config = RollConfig(seed=None, difficulty=state.get("difficulty", "困难"))
     roll_resolver = RollResolver(roll_config)
     roll_actions = roll_resolver.select_roll_actions(state["action_parse_result"])
+    if not roll_actions:
+        modifier_batch = RollModifierBatch()
+        roll_results = roll_resolver.resolve(
+            state["action_parse_result"],
+            modifier_batch=modifier_batch,
+            roll_actions=[],
+        )
+        return {
+            "roll_config": roll_config,
+            "roll_actions": [],
+            "modifier_batch": modifier_batch,
+            "roll_results": roll_results,
+            "events": [{
+                "step": "rolls_skipped",
+                "data": {
+                    "reason": "No actions require a roll.",
+                    "roll_results": model_data(roll_results),
+                },
+            }],
+        }
+
     modifier_batch = RollModifierEvaluator(gateway_for(state)).evaluate(
         parse_result=state["action_parse_result"],
         current_state=state["current_state"],
@@ -210,7 +232,6 @@ def maybe_director_npc_node(state: GenerationState) -> GenerationState:
             turn_index=state["turn_index"],
             director_npc_store=npc_store,
             npc_profile_store=profile_store,
-            creator_gateway=gateway_for(state),
             dispatcher_gateway=gateway_for(state),
             trace_id=state["trace_id"],
         )

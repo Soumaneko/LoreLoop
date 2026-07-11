@@ -16,7 +16,6 @@ DIFFICULTY_DICE_COUNT: dict[Difficulty, int] = {
 class RollConfig(BaseModel):
     dice_sides: int = Field(default=20, ge=2, le=1000)
     roll_only_when_needed: bool = True
-    min_rolls: int = Field(default=2, ge=0)
     seed: int | None = None
     difficulty: Difficulty = "困难"
 

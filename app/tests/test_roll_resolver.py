@@ -40,7 +40,7 @@ class TestDefaultRoll:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=0))
+        resolver = RollResolver(RollConfig())
         result = resolver.resolve(parse_result)
 
         assert result.dice_formula == "1d20"
@@ -60,7 +60,7 @@ class TestDefaultRoll:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(dice_sides=6, min_rolls=0))
+        resolver = RollResolver(RollConfig(dice_sides=6))
         result = resolver.resolve(parse_result)
 
         assert result.dice_formula == "2d6"
@@ -82,7 +82,7 @@ class TestDefaultRoll:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(roll_only_when_needed=True, min_rolls=0))
+        resolver = RollResolver(RollConfig(roll_only_when_needed=True))
         result = resolver.resolve(parse_result)
 
         assert result.dice_formula == "1d20"
@@ -100,7 +100,7 @@ class TestDefaultRoll:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(roll_only_when_needed=False, min_rolls=0))
+        resolver = RollResolver(RollConfig(roll_only_when_needed=False))
         result = resolver.resolve(parse_result)
 
         assert result.dice_formula == "2d20"
@@ -118,8 +118,8 @@ class TestDefaultRoll:
             ambiguities=[],
         )
 
-        resolver_1 = RollResolver(RollConfig(seed=123, min_rolls=0))
-        resolver_2 = RollResolver(RollConfig(seed=123, min_rolls=0))
+        resolver_1 = RollResolver(RollConfig(seed=123))
+        resolver_2 = RollResolver(RollConfig(seed=123))
 
         result_1 = resolver_1.resolve(parse_result)
         result_2 = resolver_2.resolve(parse_result)
@@ -136,7 +136,7 @@ class TestDefaultRoll:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=0))
+        resolver = RollResolver(RollConfig())
         result = resolver.resolve(parse_result)
 
         assert result.dice_formula == "0d20"
@@ -203,7 +203,7 @@ class TestResultFields:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(seed=42, min_rolls=0))
+        resolver = RollResolver(RollConfig(seed=42))
         result = resolver.resolve(parse_result)
 
         assert result.total_rolls == 2
@@ -234,7 +234,7 @@ class TestResultFields:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(dice_sides=100, min_rolls=0))
+        resolver = RollResolver(RollConfig(dice_sides=100))
         result = resolver.resolve(parse_result)
 
         assert result.dice_formula == "3d100"
@@ -252,7 +252,7 @@ class TestResultFields:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(dice_sides=6, min_rolls=0))
+        resolver = RollResolver(RollConfig(dice_sides=6))
         result = resolver.resolve(parse_result)
 
         assert result.dice_formula == "0d6"
@@ -278,7 +278,7 @@ class TestRollModifiers:
             ]
         )
 
-        resolver = RollResolver(RollConfig(seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(seed=1))
         result = resolver.resolve(parse_result, modifier_batch=modifier_batch)
 
         assert result.results[0].raw_value == 5
@@ -303,7 +303,7 @@ class TestRollModifiers:
             ]
         )
 
-        resolver = RollResolver(RollConfig(seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(seed=1))
         result = resolver.resolve(
             parse_result,
             modifier_batch=modifier_batch,
@@ -334,7 +334,7 @@ class TestRollModifiers:
             ]
         )
 
-        resolver = RollResolver(RollConfig(seed=2, min_rolls=0))
+        resolver = RollResolver(RollConfig(seed=2))
         result = resolver.resolve(parse_result, modifier_batch=modifier_batch)
 
         assert result.results[0].raw_value == 2
@@ -348,7 +348,7 @@ class TestRollModifiers:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(seed=1))
         result = resolver.resolve(parse_result)
 
         assert result.results[0].raw_value == 5
@@ -367,7 +367,7 @@ class TestRollModifiers:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=2, seed=42))
+        resolver = RollResolver(RollConfig(seed=42))
         roll_actions = resolver.select_roll_actions(parse_result)
         result = resolver.resolve(parse_result, roll_actions=roll_actions)
 
@@ -390,50 +390,8 @@ class TestConfigValidation:
             RollConfig(dice_sides=1001)
 
 
-class TestMinRolls:
-    def test_default_is_2(self):
-        cfg = RollConfig()
-        assert cfg.min_rolls == 2
-
-    def test_sufficient_needs_no_extra(self):
-        parse_result = ActionParseResult(
-            turn_intent="观察",
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, True),
-                _make_action("a3", 3, False),
-            ],
-            anchors=[],
-            ambiguities=[],
-        )
-
-        resolver = RollResolver(RollConfig(min_rolls=2))
-        result = resolver.resolve(parse_result)
-
-        assert result.total_rolls == 2
-        assert {r.action_id for r in result.results} == {"a1", "a2"}
-
-    def test_supplements_from_false_pool(self):
-        parse_result = ActionParseResult(
-            turn_intent="观察",
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, False),
-                _make_action("a3", 3, False),
-                _make_action("a4", 4, False),
-            ],
-            anchors=[],
-            ambiguities=[],
-        )
-
-        resolver = RollResolver(RollConfig(min_rolls=3, seed=99))
-        result = resolver.resolve(parse_result)
-
-        assert result.total_rolls == 3
-        ids = {r.action_id for r in result.results}
-        assert "a1" in ids
-
-    def test_not_enough_false_caps_at_total(self):
+class TestRollSelection:
+    def test_rolls_only_actions_marked_as_needing_roll(self):
         parse_result = ActionParseResult(
             turn_intent="观察",
             atomic_actions=[
@@ -444,70 +402,29 @@ class TestMinRolls:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=5))
+        resolver = RollResolver()
         result = resolver.resolve(parse_result)
 
-        assert result.total_rolls == 2
-
-    def test_zero_disables_min_rolls(self):
-        parse_result = ActionParseResult(
-            turn_intent="观察",
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, False),
-            ],
-            anchors=[],
-            ambiguities=[],
-        )
-
-        resolver = RollResolver(RollConfig(min_rolls=0))
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "1d20"
         assert result.total_rolls == 1
         assert result.results[0].action_id == "a1"
 
-    def test_all_false_still_rolls_up_to_min(self):
+    def test_all_actions_without_roll_requirement_return_zero_rolls(self):
         parse_result = ActionParseResult(
             turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, False),
                 _make_action("a2", 2, False),
-                _make_action("a3", 3, False),
             ],
             anchors=[],
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=2, seed=42))
+        resolver = RollResolver()
         result = resolver.resolve(parse_result)
 
-        assert result.total_rolls == 2
-
-    def test_seed_covers_forced_selection(self):
-        parse_result = ActionParseResult(
-            turn_intent="观察",
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, False),
-                _make_action("a3", 3, False),
-            ],
-            anchors=[],
-            ambiguities=[],
-        )
-
-        resolver_1 = RollResolver(RollConfig(min_rolls=2, seed=42))
-        resolver_2 = RollResolver(RollConfig(min_rolls=2, seed=42))
-
-        result_1 = resolver_1.resolve(parse_result)
-        result_2 = resolver_2.resolve(parse_result)
-
-        ids_1 = [r.action_id for r in result_1.results]
-        ids_2 = [r.action_id for r in result_2.results]
-        assert ids_1 == ids_2
-        assert [r.value for r in result_1.results] == [
-            r.value for r in result_2.results
-        ]
+        assert result.dice_formula == "0d20"
+        assert result.total_rolls == 0
+        assert result.results == []
 
     def test_results_sorted_by_sequence(self):
         parse_result = ActionParseResult(
@@ -522,7 +439,7 @@ class TestMinRolls:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=0))
+        resolver = RollResolver(RollConfig())
         result = resolver.resolve(parse_result)
 
         sequences = [r.sequence for r in result.results]
@@ -554,7 +471,7 @@ class TestDifficulty:
         assert cfg.difficulty == "困难"
 
     def test_hard_rolls_1d20(self):
-        resolver = RollResolver(RollConfig(difficulty="困难", seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="困难", seed=1))
         result = resolver.resolve(self._single_parse())
 
         assert result.results[0].dice == "1d20"
@@ -563,7 +480,7 @@ class TestDifficulty:
         assert result.dice_formula == "1d20"
 
     def test_normal_rolls_2d20kh(self):
-        resolver = RollResolver(RollConfig(difficulty="普通", seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="普通", seed=1))
         result = resolver.resolve(self._single_parse())
 
         assert result.results[0].dice == "2d20kh"
@@ -572,7 +489,7 @@ class TestDifficulty:
         assert result.dice_formula == "1×2d20kh"
 
     def test_easy_rolls_3d20kh(self):
-        resolver = RollResolver(RollConfig(difficulty="简单", seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="简单", seed=1))
         result = resolver.resolve(self._single_parse())
 
         assert result.results[0].dice == "3d20kh"
@@ -582,7 +499,7 @@ class TestDifficulty:
 
     def test_normal_raw_value_is_max_of_two(self):
         parse = self._multi_parse()
-        resolver = RollResolver(RollConfig(difficulty="普通", seed=42, min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="普通", seed=42))
         result = resolver.resolve(parse)
 
         for r in result.results:
@@ -591,7 +508,7 @@ class TestDifficulty:
 
     def test_easy_raw_value_is_max_of_three(self):
         parse = self._multi_parse()
-        resolver = RollResolver(RollConfig(difficulty="简单", seed=42, min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="简单", seed=42))
         result = resolver.resolve(parse)
 
         for r in result.results:
@@ -600,8 +517,8 @@ class TestDifficulty:
 
     def test_seeded_normal_is_reproducible(self):
         parse = self._multi_parse()
-        r1 = RollResolver(RollConfig(difficulty="普通", seed=99, min_rolls=0))
-        r2 = RollResolver(RollConfig(difficulty="普通", seed=99, min_rolls=0))
+        r1 = RollResolver(RollConfig(difficulty="普通", seed=99))
+        r2 = RollResolver(RollConfig(difficulty="普通", seed=99))
 
         res1 = r1.resolve(parse)
         res2 = r2.resolve(parse)
@@ -611,8 +528,8 @@ class TestDifficulty:
 
     def test_seeded_easy_is_reproducible(self):
         parse = self._multi_parse()
-        r1 = RollResolver(RollConfig(difficulty="简单", seed=99, min_rolls=0))
-        r2 = RollResolver(RollConfig(difficulty="简单", seed=99, min_rolls=0))
+        r1 = RollResolver(RollConfig(difficulty="简单", seed=99))
+        r2 = RollResolver(RollConfig(difficulty="简单", seed=99))
 
         res1 = r1.resolve(parse)
         res2 = r2.resolve(parse)
@@ -633,7 +550,7 @@ class TestDifficulty:
             ]
         )
 
-        resolver = RollResolver(RollConfig(difficulty="普通", seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="普通", seed=1))
         result = resolver.resolve(parse, modifier_batch=modifier_batch)
 
         raw = result.results[0].raw_value
@@ -649,7 +566,7 @@ class TestDifficulty:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(difficulty="普通", min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="普通"))
         result = resolver.resolve(parse)
 
         assert result.dice_formula == "0×2d20kh"
@@ -658,7 +575,7 @@ class TestDifficulty:
     def test_custom_dice_sides_with_difficulty(self):
         parse = self._single_parse()
 
-        resolver = RollResolver(RollConfig(difficulty="简单", dice_sides=6, seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="简单", dice_sides=6, seed=1))
         result = resolver.resolve(parse)
 
         assert result.results[0].dice == "3d6kh"
@@ -670,7 +587,7 @@ class TestDifficulty:
 
     def test_all_raw_values_present_for_hard(self):
         parse = self._single_parse()
-        resolver = RollResolver(RollConfig(difficulty="困难", seed=1, min_rolls=0))
+        resolver = RollResolver(RollConfig(difficulty="困难", seed=1))
         result = resolver.resolve(parse)
 
         assert result.results[0].all_raw_values == [result.results[0].raw_value]
@@ -700,7 +617,7 @@ class TestNeverRolls:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=2, seed=1))
+        resolver = RollResolver(RollConfig(seed=1))
         result = resolver.resolve(parse_result)
 
         assert result.total_rolls == 0
@@ -716,7 +633,7 @@ class TestNeverRolls:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=2, seed=1))
+        resolver = RollResolver(RollConfig(seed=1))
         result = resolver.resolve(parse_result)
 
         assert result.total_rolls == 1
@@ -732,7 +649,7 @@ class TestNeverRolls:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=2, seed=1))
+        resolver = RollResolver(RollConfig(seed=1))
         result = resolver.resolve(parse_result)
 
         assert result.total_rolls == 0
@@ -747,7 +664,7 @@ class TestNeverRolls:
             ambiguities=[],
         )
 
-        resolver = RollResolver(RollConfig(min_rolls=0, seed=1))
+        resolver = RollResolver(RollConfig(seed=1))
         result = resolver.resolve(parse_result)
 
         assert result.total_rolls == 1

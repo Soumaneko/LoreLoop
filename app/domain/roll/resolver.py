@@ -17,20 +17,8 @@ class RollResolver:
 
     def select_roll_actions(self, parse_result: ActionParseResult) -> list[AtomicAction]:
         actions = [a for a in parse_result.atomic_actions if not _never_rolls(a)]
-        rng = random.Random(self.config.seed)
-
         if self.config.roll_only_when_needed:
-            need_actions = [a for a in actions if a.likely_needs_roll]
-            false_actions = [a for a in actions if not a.likely_needs_roll]
-
-            if len(need_actions) >= self.config.min_rolls:
-                actions = need_actions
-            else:
-                extra_needed = self.config.min_rolls - len(need_actions)
-                extra_needed = min(extra_needed, len(false_actions))
-                forced = rng.sample(false_actions, extra_needed) if extra_needed > 0 else []
-                actions = need_actions + forced
-                actions.sort(key=lambda a: a.sequence)
+            actions = [a for a in actions if a.likely_needs_roll]
 
         return list(actions)
 

@@ -124,7 +124,6 @@ class DirectorNPCPlotInjection(BaseModel):
 
 
 class DirectorNPCWorkflowResult(BaseModel):
-    created_drafts: list[DirectorNPCDraft] = Field(default_factory=list)
     dispatch: DirectorNPCDispatchDecision | None = None
     plot_injection: DirectorNPCPlotInjection | None = None
     trigger_reason: str | None = None

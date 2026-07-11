@@ -7,6 +7,7 @@ from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
+from app.graph import generation_nodes
 
 
 def _make_action(action_id: str, likely_needs_roll: bool) -> AtomicAction:
@@ -91,6 +92,36 @@ class TestRollModifierEvaluator:
         assert len(result.modifiers) == 1
         assert result.modifiers[0].action_id == "a2"
         assert result.modifiers[0].source == "situational"
+
+    def test_generation_skips_modifier_llm_when_no_action_requires_roll(self, monkeypatch):
+        parse_result = ActionParseResult(
+            turn_intent="观察庭院",
+            atomic_actions=[_make_action("a1", False)],
+            anchors=[],
+            ambiguities=[],
+        )
+
+        class _UnexpectedEvaluator:
+            def __init__(self, *_args, **_kwargs):
+                raise AssertionError("modifier evaluator must not be created")
+
+        monkeypatch.setattr(
+            generation_nodes,
+            "RollModifierEvaluator",
+            _UnexpectedEvaluator,
+        )
+
+        result = generation_nodes.evaluate_roll_modifiers_node({
+            "action_parse_result": parse_result,
+            "current_state": _make_state(),
+            "core_memory": _make_core_memory(),
+            "difficulty": "困难",
+            "trace_id": "trace_no_roll",
+        })
+
+        assert result["modifier_batch"].modifiers == []
+        assert result["roll_results"].total_rolls == 0
+        assert [event["step"] for event in result["events"]] == ["rolls_skipped"]
 
     def test_rejects_too_many_modifiers_for_one_action(self):
         mock = MockLLM()
