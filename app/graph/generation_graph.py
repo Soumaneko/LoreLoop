@@ -10,6 +10,7 @@ from .generation_helpers import (
     finalize_pending_turn,
     prepare_generation_state,
 )
+from .generation_events import GenerationEventPresenter
 from .generation_nodes import (
     evaluate_roll_modifiers_node,
     extract_context_facts_node,
@@ -19,7 +20,7 @@ from .generation_nodes import (
     parse_action_node,
     resolve_turn_node,
 )
-from .generation_state import GenerationState
+from .generation_state import GenerationEvent, GenerationState
 
 
 def build_generation_graph():
@@ -56,18 +57,13 @@ def generate_turn_stream(
         yield event
 
     graph = build_generation_graph()
-    context_events: list[dict[str, Any]] = []
-    action_events_started = False
+    event_presenter = GenerationEventPresenter()
 
-    def append_and_yield(event: dict[str, Any]):
+    def append_and_yield(event: GenerationEvent):
         nonlocal event_count
         state["events"] = [*state.get("events", []), event]
         event_count += 1
         yield event
-
-    def drain_context_events():
-        while context_events:
-            yield from append_and_yield(context_events.pop(0))
 
     for update in graph.stream(state, stream_mode="updates"):
         for node_name, node_update in update.items():
@@ -78,27 +74,11 @@ def generate_turn_stream(
                 if key != "events"
             })
 
-            if node_name == "extract_context_facts":
-                context_events.extend(events)
-                if action_events_started:
-                    yield from drain_context_events()
-                continue
-
-            for event in events:
-                if event.get("step") == "action_parsed":
-                    action_events_started = True
-                    yield from append_and_yield(event)
-                    yield from drain_context_events()
-                    continue
-                if context_events and event.get("step") not in {
-                    "retrieval_done",
-                    "modifiers_done",
-                    "rolls_done",
-                }:
-                    yield from drain_context_events()
+            for event in event_presenter.present(node_name, events):
                 yield from append_and_yield(event)
 
-    yield from drain_context_events()
+    for event in event_presenter.finish():
+        yield from append_and_yield(event)
 
     state = finalize_pending_turn(state)
     for event in state.get("events", [])[event_count:]:

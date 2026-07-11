@@ -3,7 +3,9 @@ from langgraph.graph import END, START, StateGraph
 from app.graph.confirmation_graph import (
     build_confirmation_first_wave_graph,
     build_confirmation_second_wave_graph,
+    capture_confirmation_node_errors,
 )
+from app.graph.confirmation_helpers import merge_confirmation_node_update
 from app.graph.confirmation_state import ConfirmationState
 
 
@@ -48,3 +50,64 @@ def test_confirmation_events_reducer_appends_node_events():
         "first",
         "second",
     ]
+
+
+def test_node_updates_are_persisted_to_retry_cache_at_merge_boundary():
+    marker = object()
+    state = {"events": [], "cache": {}, "write_db": True}
+
+    merge_confirmation_node_update(
+        state,
+        {
+            "scene_facts": marker,
+            "entity_extraction": marker,
+            "events": [{"step": "done", "data": {}}],
+        },
+    )
+
+    assert state["cache"]["scene_facts"] is marker
+    assert state["cache"]["entity_extraction"] is marker
+    assert state["events"] == [{"step": "done", "data": {}}]
+
+
+def test_dry_run_merge_does_not_cache_write_only_results():
+    marker = object()
+    state = {"events": [], "cache": {}, "write_db": False}
+
+    merge_confirmation_node_update(
+        state,
+        {
+            "entity_extraction": marker,
+            "updated_entity_ids": ["entity_1"],
+        },
+    )
+
+    assert "entity_extraction" not in state["cache"]
+    assert "updated_entity_ids" not in state["cache"]
+
+
+def test_parallel_success_is_cacheable_when_sibling_node_fails():
+    marker = object()
+
+    def succeeds(_state: ConfirmationState) -> ConfirmationState:
+        return {"action_preview": marker}
+
+    def fails(_state: ConfirmationState) -> ConfirmationState:
+        raise RuntimeError("failed")
+
+    graph = StateGraph(ConfirmationState)
+    graph.add_node("succeeds", capture_confirmation_node_errors("succeeds", succeeds))
+    graph.add_node("fails", capture_confirmation_node_errors("fails", fails))
+    graph.add_edge(START, "succeeds")
+    graph.add_edge(START, "fails")
+    graph.add_edge("succeeds", END)
+    graph.add_edge("fails", END)
+
+    state = {"events": [], "node_errors": [], "cache": {}, "write_db": True}
+    for update in graph.compile().stream(state, stream_mode="updates"):
+        for node_update in update.values():
+            merge_confirmation_node_update(state, node_update)
+
+    assert state["cache"]["action_preview"] is marker
+    assert state["node_errors"][0]["node"] == "fails"
+    assert str(state["node_errors"][0]["exception"]) == "failed"

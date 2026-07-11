@@ -34,6 +34,21 @@ from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
 from .confirmation_state import ConfirmationEvent, ConfirmationState
 
 
+_ALWAYS_CACHED_NODE_RESULTS = {
+    "scene_facts",
+    "updated_state",
+    "pending_memory_result",
+    "action_preview",
+}
+_WRITE_CACHED_NODE_RESULTS = {
+    "entity_extraction",
+    "npc_extraction",
+    "director_event_result",
+    "updated_entity_ids",
+    "updated_npc_profile_ids",
+}
+
+
 @dataclass
 class DirectorNPCConfirmation:
     npc_id: str
@@ -284,6 +299,7 @@ def prepare_confirmation_state(
                 **pipeline_input.confirm_started_extra,
             },
         }],
+        "node_errors": [],
         "pipeline_input": pipeline_input,
         "write_db": write_db,
         "scene_text": scene_text,
@@ -304,20 +320,29 @@ def prepare_confirmation_state(
 
 
 def merge_confirmation_node_update(
-    state: dict[str, Any],
-    node_update: dict[str, Any],
+    state: ConfirmationState,
+    node_update: ConfirmationState,
 ) -> list[ConfirmationEvent]:
     events = node_update.get("events", [])
+    node_errors = node_update.get("node_errors", [])
+    cache = state["cache"]
+    cache_keys = set(_ALWAYS_CACHED_NODE_RESULTS)
+    if state.get("write_db", True):
+        cache_keys.update(_WRITE_CACHED_NODE_RESULTS)
+    for key in cache_keys & node_update.keys():
+        cache[key] = node_update[key]
+
     state.update({
         key: value
         for key, value in node_update.items()
-        if key != "events"
+        if key not in {"events", "node_errors"}
     })
     state["events"] = [*state.get("events", []), *events]
+    state["node_errors"] = [*state.get("node_errors", []), *node_errors]
     return events
 
 
-def prepare_confirmation_second_wave(state: dict[str, Any]) -> ConfirmationState:
+def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationState:
     from app.domain.recall_memory.maintenance import fill_pending_memory_scene_metadata
 
     cache = state["cache"]
@@ -354,7 +379,7 @@ def prepare_confirmation_second_wave(state: dict[str, Any]) -> ConfirmationState
     return state
 
 
-def finalize_confirmation_state(state: dict[str, Any]) -> ConfirmationState:
+def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     write_db = state.get("write_db", True)
     scene_text = state.get("scene_text")

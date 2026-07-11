@@ -45,7 +45,6 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
             ),
             trace_id=trace_id,
         )
-        cache["scene_facts"] = scene_facts
     return {
         "scene_facts": scene_facts,
         "scene_facts_json": project_scene_facts(scene_facts),
@@ -79,7 +78,6 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
             npc_aliases=npc_aliases,
             trace_id=trace_id,
         )
-        cache["updated_state"] = updated_state
     return {
         "updated_state": updated_state,
         "events": [{
@@ -106,7 +104,6 @@ def memory_draft_extract_node(state: ConfirmationState) -> ConfirmationState:
             scene_id=state["state_before_update"].scene.scene_id,
             trace_id=trace_id,
         )
-        cache["pending_memory_result"] = pending_memory_result
     return {
         "pending_memory_result": pending_memory_result,
         "events": [{
@@ -136,7 +133,6 @@ def entity_extract_node(state: ConfirmationState) -> ConfirmationState:
             existing_profiles=state["existing_entity_profiles"],
             trace_id=trace_id,
         )
-        cache["entity_extraction"] = entity_extraction
     return {
         "entity_extraction": entity_extraction,
         "events": [{
@@ -165,7 +161,6 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
             existing_profiles=state["existing_npc_profiles"],
             trace_id=trace_id,
         )
-        cache["npc_extraction"] = npc_extraction
     return {
         "npc_extraction": npc_extraction,
         "events": [{
@@ -193,7 +188,6 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
             next_action_directions=pipeline_input.scene_result.next_action_directions,
             trace_id=trace_id,
         )
-        cache["action_preview"] = action_preview
     return {
         "action_preview": action_preview,
         "events": [{
@@ -253,7 +247,6 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                 standby_director_npcs=standby_director_npcs,
                 trace_id=trace_id,
             )
-        cache["director_event_result"] = director_event_result
     return {"director_event_result": director_event_result}
 
 
@@ -280,7 +273,6 @@ def entity_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 trace_id=trace_id,
             )
             updated_entity_ids = entity_result.saved_ids
-        cache["updated_entity_ids"] = updated_entity_ids
     return {"updated_entity_ids": updated_entity_ids}
 
 
@@ -311,5 +303,4 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 current_state=state["updated_state"],
             )
             updated_npc_profile_ids = merge_unique_ids([*npc_result.saved_ids, *absence_synced_ids])
-        cache["updated_npc_profile_ids"] = updated_npc_profile_ids
     return {"updated_npc_profile_ids": updated_npc_profile_ids}

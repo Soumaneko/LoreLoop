@@ -1,6 +1,7 @@
 from langgraph.graph import END, START, StateGraph
 
 from app.graph import generation_graph
+from app.graph.generation_events import GenerationEventPresenter
 from app.graph.generation_state import GenerationState
 
 
@@ -123,3 +124,20 @@ def test_generation_buffers_context_events_until_action_parsed(monkeypatch):
         "retrieval_done",
         "finalized",
     ]
+
+
+def test_generation_event_presenter_flushes_context_before_later_nodes():
+    presenter = GenerationEventPresenter()
+
+    assert presenter.present(
+        "extract_context_facts",
+        [{"step": "context_facts_done", "data": {}}],
+    ) == []
+    assert [event["step"] for event in presenter.present(
+        "parse_action",
+        [
+            {"step": "action_parsed", "data": {}},
+            {"step": "retrieval_done", "data": {}},
+        ],
+    )] == ["action_parsed", "context_facts_done", "retrieval_done"]
+    assert presenter.finish() == []

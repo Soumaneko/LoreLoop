@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from functools import wraps
+from typing import Callable
 
 from langgraph.graph import END, START, StateGraph
 
@@ -28,37 +28,50 @@ from .confirmation_nodes import (
     scene_fact_extract_node,
     state_update_node,
 )
-from .confirmation_state import ConfirmationState
+from .confirmation_state import ConfirmationPipelineInput, ConfirmationState
 
 
-@dataclass
-class ConfirmationPipelineInput:
-    turn_id: str
-    pending: Any
-    state_before: Any
-    scene_result: Any
-    user_input: str
-    turn_index: int
-    stale_message: str
-    pending_registry: dict[str, Any]
-    update_director_event: bool = True
-    handle_director_npc: bool = True
-    director_npc_restock_sync: bool = False
-    clear_short_term_before_save: bool = False
-    dry_run_memory_reason: str = (
-        "DB writes are disabled; pending memory candidates were extracted but not saved."
-    )
-    confirm_started_extra: dict[str, Any] = field(default_factory=dict)
-    finish_extra: dict[str, Any] = field(default_factory=dict)
+ConfirmationNode = Callable[[ConfirmationState], ConfirmationState]
+
+
+def capture_confirmation_node_errors(
+    node_name: str,
+    node: ConfirmationNode,
+) -> ConfirmationNode:
+    @wraps(node)
+    def wrapped(state: ConfirmationState) -> ConfirmationState:
+        try:
+            return node(state)
+        except Exception as exc:
+            return {
+                "node_errors": [{"node": node_name, "exception": exc}],
+            }
+
+    return wrapped
 
 
 def build_confirmation_first_wave_graph():
     graph = StateGraph(ConfirmationState)
-    graph.add_node("scene_fact_extract", scene_fact_extract_node)
-    graph.add_node("state_update", state_update_node)
-    graph.add_node("memory_draft_extract", memory_draft_extract_node)
-    graph.add_node("entity_extract", entity_extract_node)
-    graph.add_node("npc_profile_extract", npc_profile_extract_node)
+    graph.add_node(
+        "scene_fact_extract",
+        capture_confirmation_node_errors("scene_fact_extract", scene_fact_extract_node),
+    )
+    graph.add_node(
+        "state_update",
+        capture_confirmation_node_errors("state_update", state_update_node),
+    )
+    graph.add_node(
+        "memory_draft_extract",
+        capture_confirmation_node_errors("memory_draft_extract", memory_draft_extract_node),
+    )
+    graph.add_node(
+        "entity_extract",
+        capture_confirmation_node_errors("entity_extract", entity_extract_node),
+    )
+    graph.add_node(
+        "npc_profile_extract",
+        capture_confirmation_node_errors("npc_profile_extract", npc_profile_extract_node),
+    )
 
     graph.add_edge(START, "scene_fact_extract")
     graph.add_edge("scene_fact_extract", "state_update")
@@ -75,10 +88,31 @@ def build_confirmation_first_wave_graph():
 
 def build_confirmation_second_wave_graph():
     graph = StateGraph(ConfirmationState)
-    graph.add_node("action_preview", action_preview_node)
-    graph.add_node("director_event_update", director_event_update_node)
-    graph.add_node("entity_profile_update", entity_profile_update_node)
-    graph.add_node("npc_profile_update", npc_profile_update_node)
+    graph.add_node(
+        "action_preview",
+        capture_confirmation_node_errors("action_preview", action_preview_node),
+    )
+    graph.add_node(
+        "director_event_update",
+        capture_confirmation_node_errors(
+            "director_event_update",
+            director_event_update_node,
+        ),
+    )
+    graph.add_node(
+        "entity_profile_update",
+        capture_confirmation_node_errors(
+            "entity_profile_update",
+            entity_profile_update_node,
+        ),
+    )
+    graph.add_node(
+        "npc_profile_update",
+        capture_confirmation_node_errors(
+            "npc_profile_update",
+            npc_profile_update_node,
+        ),
+    )
 
     graph.add_edge(START, "action_preview")
     graph.add_edge(START, "director_event_update")
@@ -92,13 +126,21 @@ def build_confirmation_second_wave_graph():
     return graph.compile()
 
 
+def stream_confirmation_graph(graph, state: ConfirmationState):
+    for update in graph.stream(state, stream_mode="updates"):
+        for node_update in update.values():
+            yield from merge_confirmation_node_update(state, node_update)
+    if state.get("node_errors"):
+        raise state["node_errors"][0]["exception"]
+
+
 def stream_confirmation_pipeline(
     pipeline_input: ConfirmationPipelineInput,
     *,
     write_db: bool = True,
     scene_text: str | None = None,
 ):
-    state: dict[str, Any] = prepare_confirmation_state(
+    state: ConfirmationState = prepare_confirmation_state(
         pipeline_input,
         write_db=write_db,
         scene_text=scene_text,
@@ -110,22 +152,19 @@ def stream_confirmation_pipeline(
 
     first_wave_graph = build_confirmation_first_wave_graph()
     second_wave_graph = build_confirmation_second_wave_graph()
-    for update in first_wave_graph.stream(state, stream_mode="updates"):
-        for node_update in update.values():
-            for event in merge_confirmation_node_update(state, node_update):
-                event_count += 1
-                yield event
+    for event in stream_confirmation_graph(first_wave_graph, state):
+        event_count += 1
+        yield event
 
     state = prepare_confirmation_second_wave(state)
+    state["node_errors"] = []
     for event in state.get("events", [])[event_count:]:
         event_count += 1
         yield event
 
-    for update in second_wave_graph.stream(state, stream_mode="updates"):
-        for node_update in update.values():
-            for event in merge_confirmation_node_update(state, node_update):
-                event_count += 1
-                yield event
+    for event in stream_confirmation_graph(second_wave_graph, state):
+        event_count += 1
+        yield event
 
     state = finalize_confirmation_state(state)
     for event in state.get("events", [])[event_count:]:
