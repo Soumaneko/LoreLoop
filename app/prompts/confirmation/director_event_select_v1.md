@@ -59,16 +59,14 @@
 
 按以下顺序为每个字段产出期望内容：
 
-- bridge_evaluation：从 CoreMemory 与 CurrentState 中找稳定桥梁。不要使用当前具体行动作为事件起因。
-- world_undercurrent：仅在 action="create_new" 时填写。写清一个独立世界事件正在发生什么、谁/什么在推动、目标是什么、它通过哪些稳定桥梁能接近玩家世界；如果 action="none"，填 null。
+- reason：简述创建或不创建的判断依据，包括是否存在稳定桥梁、是否独立于当前局部剧情、是否与已有内容重复。
 - action：只能是 `create_new` 或 `none`。
-- reason：简述创建或不创建的最终理由。
 - new_event：仅在 action="create_new" 时填写；如果 action="none"，填 null。
 
 如果创建新事件，new_event 必须填写：
 
 - title：事件标题。
-- premise：可持久化的独立世界事实，只回答发生了什么、参与者是谁、目标是什么、在哪里或通过什么资源/结构行动。
+- premise：可持久化的独立世界事实，只回答发生了什么、参与者是谁、目标是什么、在哪里或通过什么资源/结构行动。此处严禁出现主角的互动。
 - actors：事件参与者，可以是 NPC、组织、地点、资源系统、环境变化或交通路线相关方。
 - objective：事件自身目标，不是玩家目标。
 - bridge_anchors：可与玩家世界连接的稳定锚点，至少 1 个。

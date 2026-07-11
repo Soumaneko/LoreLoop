@@ -5,6 +5,12 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from app.domain.roll.schemas import Difficulty
+from app.runtime.session import (
+    PENDING_TURNS,
+    confirmation_lock,
+    pending_turn_variants,
+)
+from app.runtime.stores import current_state_store
 
 from .generation_helpers import (
     finalize_pending_turn,
@@ -50,6 +56,53 @@ def generate_turn_stream(
     difficulty: Difficulty = "困难",
     max_chars: int = 1500,
 ):
+    yield from _generate_turn_stream(user_input, difficulty, max_chars)
+
+
+def retry_turn_stream(turn_id: str):
+    lock = confirmation_lock(turn_id)
+    with lock:
+        pending = PENDING_TURNS.get(turn_id)
+        if pending is None:
+            raise ValueError("Pending turn not found. Generate a scene before retrying.")
+
+        with current_state_store() as state_store:
+            current_state = state_store.load_or_default()
+        if current_state != pending.state_before:
+            raise ValueError(
+                "Pending turn is stale because CurrentState changed after generation. "
+                "Generate a new turn from the current state."
+            )
+
+        version_index = max(
+            variant.version_index
+            for variant in pending_turn_variants(pending.group_id)
+        ) + 1
+        yield {
+            "step": "retry_started",
+            "data": {
+                "turn_id": turn_id,
+                "group_id": pending.group_id,
+                "version_index": version_index,
+            },
+        }
+        yield from _generate_turn_stream(
+            pending.user_input,
+            pending.difficulty,
+            pending.max_chars,
+            group_id=pending.group_id,
+            version_index=version_index,
+        )
+
+
+def _generate_turn_stream(
+    user_input: str,
+    difficulty: Difficulty,
+    max_chars: int,
+    *,
+    group_id: str | None = None,
+    version_index: int = 1,
+):
     state: dict[str, Any] = prepare_generation_state(user_input, difficulty, max_chars)
     event_count = 0
     for event in state.get("events", []):
@@ -80,7 +133,11 @@ def generate_turn_stream(
     for event in event_presenter.finish():
         yield from append_and_yield(event)
 
-    state = finalize_pending_turn(state)
+    state = finalize_pending_turn(
+        state,
+        group_id=group_id,
+        version_index=version_index,
+    )
     for event in state.get("events", [])[event_count:]:
         event_count += 1
         yield event

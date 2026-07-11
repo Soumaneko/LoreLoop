@@ -1,5 +1,5 @@
 from .serialization import model_data
-from .session import PENDING_OPENINGS, PENDING_TURNS
+from .session import PENDING_OPENINGS, PENDING_TURNS, pending_turn_variants
 from .settings import load_settings
 from .stores import (
     core_memory_store,
@@ -60,6 +60,28 @@ def load_debug_state() -> dict:
 
     settings = load_settings()
     core_memory = core_memory_store().load()
+    group_ids = list(dict.fromkeys(
+        pending.group_id for pending in PENDING_TURNS.values()
+    ))
+    pending_turn_groups = [
+        {
+            "group_id": group_id,
+            "user_input": variants[0].user_input,
+            "difficulty": variants[0].difficulty,
+            "max_chars": variants[0].max_chars,
+            "variants": [
+                {
+                    "turn_id": variant.turn_id,
+                    "version_index": variant.version_index,
+                    "turn_index": variant.turn_index,
+                    "scene_text": variant.scene_result.scene_text,
+                }
+                for variant in variants
+            ],
+        }
+        for group_id in group_ids
+        if (variants := pending_turn_variants(group_id))
+    ]
     return {
         "needs_init": core_memory is None,
         "current_state": model_data(current_state),
@@ -89,5 +111,6 @@ def load_debug_state() -> dict:
         "chat_history": model_data(chat_history),
         "difficulty": settings.get("difficulty", "困难"),
         "max_chars": int(settings.get("max_chars", 1500)),
-        "pending_turn_ids": [*PENDING_TURNS.keys(), *PENDING_OPENINGS.keys()],
+        "pending_turn_groups": pending_turn_groups,
+        "pending_opening_ids": [*PENDING_OPENINGS.keys()],
     }

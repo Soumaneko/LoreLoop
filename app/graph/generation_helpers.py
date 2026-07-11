@@ -145,11 +145,21 @@ def prepare_generation_state(
     return state
 
 
-def finalize_pending_turn(state: GenerationState) -> GenerationState:
+def finalize_pending_turn(
+    state: GenerationState,
+    *,
+    group_id: str | None = None,
+    version_index: int = 1,
+) -> GenerationState:
     turn_id = str(uuid.uuid4())
+    group_id = group_id or turn_id
     PENDING_TURNS[turn_id] = PendingTurn(
         turn_id=turn_id,
+        group_id=group_id,
+        version_index=version_index,
         user_input=state["user_input"],
+        difficulty=state["difficulty"],
+        max_chars=state["max_chars"],
         state_before=state["current_state"],
         context=state["context"],
         outline=state["outline"],
@@ -161,6 +171,8 @@ def finalize_pending_turn(state: GenerationState) -> GenerationState:
     finalized = {
         **state,
         "turn_id": turn_id,
+        "group_id": group_id,
+        "version_index": version_index,
         "turn_index": state["next_turn_index"],
         "status": "awaiting_confirm",
         "pending_turn_status": "awaiting_confirm",
@@ -210,6 +222,8 @@ def scene_written_event(state: dict[str, Any]) -> GenerationEvent:
         "step": "scene_written",
         "data": {
             "turn_id": state["turn_id"],
+            "group_id": state["group_id"],
+            "version_index": state["version_index"],
             "trace_id": state["trace_id"],
             "turn_index": state["turn_index"],
             "writer_entity_profiles": model_data(

@@ -49,14 +49,23 @@ class StoryDirectionAgent:
         if not expectation:
             raise ValueError("story_expectation is required")
 
+        filtered_items = [
+            item for item in base_core_memory.items
+            if item.id not in ("core_tone",)
+        ]
+        filtered_memory = base_core_memory.model_copy(update={"items": filtered_items})
+
         return cast(
             StoryDirectionResult,
             self.llm.run(
                 task="story_direction",
                 input_data={
                     "story_expectation": expectation,
-                    "init_config_json": config.model_dump_json(indent=2),
-                    "base_core_memory_json": base_core_memory.model_dump_json(indent=2),
+                    "init_config_json": config.model_dump_json(
+                        indent=2,
+                        exclude={"narrative_tone"},
+                    ),
+                    "base_core_memory_json": filtered_memory.model_dump_json(indent=2),
                     "output_schema_json": json.dumps(
                         StoryDirectionResult.model_json_schema(),
                         ensure_ascii=False,

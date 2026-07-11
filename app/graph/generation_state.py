@@ -34,6 +34,8 @@ class GenerationState(TypedDict, total=False):
     max_chars: int
     trace_id: str
     turn_id: str
+    group_id: str
+    version_index: int
     status: str
 
     core_memory: CoreMemory

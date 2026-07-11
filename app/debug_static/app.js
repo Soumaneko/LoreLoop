@@ -51,6 +51,9 @@ const state = {
   traces: {},
   traceRequests: {},
   pendingTurnId: null,
+  pendingGroupId: null,
+  pendingVariants: [],
+  pendingVariantIndex: -1,
   pendingSceneText: null,
   chatRestored: false,
   coreMemoryInitialized: true,
@@ -215,10 +218,18 @@ async function readEventStream(response, scope, onEvent) {
 function setStatus(label, busy = false) {
   state.operationStatus = label;
   els.statusText.textContent = label;
-  els.generateBtn.disabled = busy || !state.coreMemoryInitialized;
+  els.generateBtn.disabled = busy || !state.coreMemoryInitialized || Boolean(state.pendingTurnId);
   els.confirmBtn.disabled = busy || !state.pendingTurnId;
-  els.input.disabled = !state.coreMemoryInitialized;
+  els.input.disabled = busy || !state.coreMemoryInitialized || Boolean(state.pendingTurnId);
   els.writeDbToggle.disabled = busy || !state.coreMemoryInitialized;
+  const previous = document.querySelector(".scene-version-prev");
+  const next = document.querySelector(".scene-version-next");
+  const retry = document.querySelector(".scene-retry");
+  if (previous) previous.disabled = busy || state.pendingVariantIndex <= 0;
+  if (next) next.disabled = busy || state.pendingVariantIndex >= state.pendingVariants.length - 1;
+  if (retry) retry.disabled = busy;
+  const edit = document.querySelector(".scene-edit");
+  if (edit) edit.disabled = busy;
 }
 
 function setDebugStatus(label) {
@@ -251,6 +262,7 @@ function addEditableScene(textValue, meta) {
     <div class="bubble scene-bubble">
       <div class="bubble-meta">
         <span class="scene-meta">${esc(meta)}</span>
+        ${pendingVersionControls()}
         <button class="scene-edit">编辑</button>
       </div>
       <div class="scene-display"></div>
@@ -268,6 +280,12 @@ function addEditableScene(textValue, meta) {
   const editor = wrap.querySelector(".scene-editor");
   display.textContent = textValue;
   editor.value = textValue;
+  const previous = wrap.querySelector(".scene-version-prev");
+  const next = wrap.querySelector(".scene-version-next");
+  const retry = wrap.querySelector(".scene-retry");
+  if (previous) previous.onclick = () => selectPendingVariant(state.pendingVariantIndex - 1);
+  if (next) next.onclick = () => selectPendingVariant(state.pendingVariantIndex + 1);
+  if (retry) retry.onclick = retryTurn;
   wrap.querySelector(".scene-edit").onclick = () => {
     editor.value = state.pendingSceneText || "";
     display.style.display = "none";
@@ -276,6 +294,7 @@ function addEditableScene(textValue, meta) {
   };
   wrap.querySelector(".scene-save").onclick = () => {
     state.pendingSceneText = editor.value;
+    updateSelectedVariantText(state.pendingSceneText);
     display.textContent = editor.value;
     editorWrap.style.display = "none";
     display.style.display = "block";
@@ -298,12 +317,67 @@ function markPendingSceneConfirmed() {
   bubble.removeAttribute("id");
   bubble.querySelector(".scene-edit")?.remove();
   bubble.querySelector(".scene-editor-wrap")?.remove();
+  bubble.querySelector(".scene-version-controls")?.remove();
   const meta = bubble.querySelector(".scene-meta");
   if (meta) meta.insertAdjacentHTML("afterend", ` <span class="scene-confirmed">已确认</span>`);
 }
 
 function getSceneText() {
+  capturePendingSceneText();
   return state.pendingSceneText || null;
+}
+
+function pendingVersionControls() {
+  if (!state.pendingGroupId || !state.pendingVariants.length) return "";
+  const position = state.pendingVariantIndex + 1;
+  return `<span class="scene-version-controls">
+    <button class="icon-button scene-version-prev" title="上一个版本" ${position <= 1 ? "disabled" : ""}>‹</button>
+    <span>${position} / ${state.pendingVariants.length}</span>
+    <button class="icon-button scene-version-next" title="下一个版本" ${position >= state.pendingVariants.length ? "disabled" : ""}>›</button>
+    <button class="scene-retry" title="重新运行完整生成管线">Retry</button>
+  </span>`;
+}
+
+function capturePendingSceneText() {
+  const editor = document.querySelector("#pendingSceneBubble .scene-editor");
+  const editorWrap = document.querySelector("#pendingSceneBubble .scene-editor-wrap");
+  if (editor && editorWrap?.style.display !== "none") {
+    state.pendingSceneText = editor.value;
+  }
+  updateSelectedVariantText(state.pendingSceneText);
+}
+
+function updateSelectedVariantText(sceneText) {
+  const variant = state.pendingVariants[state.pendingVariantIndex];
+  if (variant && sceneText != null) variant.scene_text = sceneText;
+}
+
+function selectPendingVariant(index) {
+  if (index < 0 || index >= state.pendingVariants.length) return;
+  capturePendingSceneText();
+  state.pendingVariantIndex = index;
+  const variant = state.pendingVariants[index];
+  state.pendingTurnId = variant.turn_id;
+  addEditableScene(
+    variant.scene_text,
+    `待确认 · Turn ${variant.turn_index} · 版本 ${index + 1}`,
+  );
+  els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
+  setStatus("正文已生成 - 待确认");
+}
+
+function appendPendingVariant(data) {
+  state.pendingGroupId = data.group_id;
+  state.pendingVariants.push({
+    turn_id: data.turn_id,
+    version_index: data.version_index,
+    turn_index: data.turn_index,
+    scene_text: data.scene_result.scene_text,
+  });
+  state.pendingVariants.sort((a, b) => a.version_index - b.version_index);
+  selectPendingVariant(
+    state.pendingVariants.findIndex((variant) => variant.turn_id === data.turn_id),
+  );
 }
 
 function readInitConfig() {
@@ -405,6 +479,9 @@ async function applyInit() {
     const data = await api("/api/init/apply", { method: "POST", body: JSON.stringify(readInitConfig()) });
     state.coreMemoryInitialized = true;
     state.pendingTurnId = data.turn_id || null;
+    state.pendingGroupId = null;
+    state.pendingVariants = [];
+    state.pendingVariantIndex = -1;
     await refreshState({ preserveStatus: true });
     if (data.opening_scene?.scene_text) addEditableScene(data.opening_scene.scene_text, "开场 · 待确认");
     setStatus(state.pendingTurnId ? "开场已生成 - 待确认" : "Core Memory 已初始化");
@@ -1356,8 +1433,13 @@ async function refreshState({ preserveStatus = false } = {}) {
   }
   if (!data.needs_init) {
     state.coreMemoryInitialized = true;
-    if (!state.pendingTurnId && data.pending_turn_ids?.length) {
-      state.pendingTurnId = data.pending_turn_ids[0];
+    if (!state.pendingTurnId && data.pending_turn_groups?.length) {
+      const group = data.pending_turn_groups[0];
+      state.pendingGroupId = group.group_id;
+      state.pendingVariants = group.variants || [];
+      selectPendingVariant(state.pendingVariants.length - 1);
+    } else if (!state.pendingTurnId && data.pending_opening_ids?.length) {
+      state.pendingTurnId = data.pending_opening_ids[0];
       els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
     }
     setStatus(preserveStatus ? previousStatus : (state.pendingTurnId ? "正文已生成 - 待确认" : "Ready"));
@@ -1374,6 +1456,9 @@ async function generateTurn() {
   addMessage("user", userInput, "玩家行动");
   resetRun("all");
   state.pendingTurnId = null;
+  state.pendingGroupId = null;
+  state.pendingVariants = [];
+  state.pendingVariantIndex = -1;
   state.pendingSceneText = null;
   removePendingScene();
   setStatus("正在执行管线...", true);
@@ -1396,9 +1481,7 @@ async function generateTurn() {
       if (event.step === "state_loaded") setDebugStatus("状态加载完成");
       if (event.step === "action_parsed") state.activeTab = "generation";
       if (event.step === "scene_written") {
-        state.pendingTurnId = data.turn_id;
-        addEditableScene(data.scene_result.scene_text, `待确认 · Turn ${data.turn_index}`);
-        els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
+        appendPendingVariant(data);
         setStatus("正文已生成 - 待确认");
         setDebugStatus("等待确认");
       }
@@ -1408,6 +1491,41 @@ async function generateTurn() {
     setStatus("生成失败");
     setDebugStatus("生成失败");
     state.pendingTurnId = null;
+    state.pendingGroupId = null;
+    state.pendingVariants = [];
+    state.pendingVariantIndex = -1;
+    renderError(err);
+  }
+}
+
+async function retryTurn() {
+  if (!state.pendingTurnId || !state.pendingGroupId) return;
+  capturePendingSceneText();
+  const retryFromTurnId = state.pendingTurnId;
+  resetRun("generation");
+  setStatus("正在重新生成...", true);
+  setDebugStatus("Retry 生成中");
+  state.activeTab = "overview";
+  renderDebug();
+  try {
+    const response = await fetch("/api/retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ turn_id: retryFromTurnId }),
+    });
+    await readEventStream(response, "generation", (event) => {
+      const data = event.data || {};
+      if (event.step === "action_parsed") state.activeTab = "generation";
+      if (event.step === "scene_written") {
+        appendPendingVariant(data);
+        setStatus("新版本已生成 - 待确认");
+        setDebugStatus("等待确认");
+      }
+    });
+  } catch (err) {
+    state.run.errors.push(err);
+    setStatus("重新生成失败，原版本仍可确认");
+    setDebugStatus("Retry 失败");
     renderError(err);
   }
 }
@@ -1438,13 +1556,23 @@ async function confirmTurn() {
       if (event.step === "action_preview_done") state.activeTab = "preview";
       if (event.step === "finish") {
         const data = event.data || {};
-        state.pendingTurnId = null;
-        markPendingSceneConfirmed();
-        els.input.value = "";
-        addMessage("assistant", data.write_db ? "已确认采用，并写入状态、短期记忆和记忆流程。" : "Dry Run 完成，未写入数据库。", "系统");
-        setStatus(data.memory_extraction?.batch_queued ? "确认完成 · 后台维护中" : "确认完成");
+        if (data.write_db) {
+          markPendingSceneConfirmed();
+          state.pendingTurnId = null;
+          state.pendingGroupId = null;
+          state.pendingVariants = [];
+          state.pendingVariantIndex = -1;
+          state.pendingSceneText = null;
+          els.input.value = "";
+          addMessage("assistant", "已确认采用，并写入状态、短期记忆和记忆流程。", "系统");
+          setStatus(data.memory_extraction?.batch_queued ? "确认完成 · 后台维护中" : "确认完成");
+          els.turnInfo.textContent = data.memory_extraction?.batch_queued ? "后台维护中" : "等待玩家行动";
+        } else {
+          addMessage("assistant", "Dry Run 完成，候选版本仍可切换和确认。", "系统");
+          setStatus("Dry Run 完成 - 仍待确认");
+          els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
+        }
         setDebugStatus(data.status || "committed");
-        els.turnInfo.textContent = data.memory_extraction?.batch_queued ? "后台维护中" : "等待玩家行动";
         state.activeTab = "diff";
       }
     });

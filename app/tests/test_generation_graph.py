@@ -1,8 +1,13 @@
+from types import SimpleNamespace
+
 from langgraph.graph import END, START, StateGraph
 
 from app.graph import generation_graph
 from app.graph.generation_events import GenerationEventPresenter
 from app.graph.generation_state import GenerationState
+from app.domain.scene_writer.schemas import SceneWriterResult
+from app.domain.short_term_memory.schemas import ShortTermMemory
+from app.runtime.session import PENDING_TURNS, PendingTurn
 
 
 def test_generation_graph_compiles():
@@ -57,7 +62,7 @@ def test_generate_turn_stream_forwards_state_events(monkeypatch):
     monkeypatch.setattr(
         generation_graph,
         "finalize_pending_turn",
-        lambda state: {
+        lambda state, **_kwargs: {
             **state,
             "events": [
                 *state["events"],
@@ -106,7 +111,7 @@ def test_generation_buffers_context_events_until_action_parsed(monkeypatch):
     monkeypatch.setattr(
         generation_graph,
         "finalize_pending_turn",
-        lambda state: {
+        lambda state, **_kwargs: {
             **state,
             "events": [
                 *state["events"],
@@ -141,3 +146,63 @@ def test_generation_event_presenter_flushes_context_before_later_nodes():
         ],
     )] == ["action_parsed", "context_facts_done", "retrieval_done"]
     assert presenter.finish() == []
+
+
+def test_retry_creates_next_version_in_same_group(monkeypatch):
+    turn_id = "turn_v1"
+    group_id = "group_1"
+    state_before = object()
+    PENDING_TURNS[turn_id] = PendingTurn(
+        turn_id=turn_id,
+        group_id=group_id,
+        version_index=1,
+        user_input="观察门外",
+        difficulty="普通",
+        max_chars=900,
+        state_before=state_before,
+        context=SimpleNamespace(),
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="版本一"),
+        turn_index=3,
+        short_term_memory=ShortTermMemory(),
+    )
+    captured = {}
+
+    class _StateStore:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def load_or_default(self):
+            return state_before
+
+    def _retry_stream(user_input, difficulty, max_chars, **kwargs):
+        captured.update({
+            "user_input": user_input,
+            "difficulty": difficulty,
+            "max_chars": max_chars,
+            **kwargs,
+        })
+        yield {"step": "scene_written", "data": {"turn_id": "turn_v2"}}
+
+    monkeypatch.setattr(generation_graph, "current_state_store", _StateStore)
+    monkeypatch.setattr(generation_graph, "_generate_turn_stream", _retry_stream)
+
+    try:
+        events = list(generation_graph.retry_turn_stream(turn_id))
+        old_version_retained = turn_id in PENDING_TURNS
+    finally:
+        PENDING_TURNS.pop(turn_id, None)
+
+    assert events[0]["step"] == "retry_started"
+    assert captured == {
+        "user_input": "观察门外",
+        "difficulty": "普通",
+        "max_chars": 900,
+        "group_id": group_id,
+        "version_index": 2,
+    }
+    assert old_version_retained is True
+    assert events[-1]["data"]["turn_id"] == "turn_v2"

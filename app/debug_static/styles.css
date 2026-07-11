@@ -200,6 +200,18 @@ button:disabled {
   white-space: normal;
 }
 
+.scene-version-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.scene-version-controls .icon-button {
+  width: 26px;
+  height: 26px;
+}
+
 .scene-bubble {
   width: 100%;
   max-width: 100%;

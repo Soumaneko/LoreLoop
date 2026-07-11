@@ -10,6 +10,7 @@ from app.domain.director_event import (
     DirectorEventDraft,
     DirectorEventEntryPoint,
     DirectorEventReviewResult,
+    DirectorEventSelectionResult,
     DirectorEventReviewer,
     DirectorEventSelector,
     DirectorEventStore,
@@ -128,10 +129,8 @@ def _review_response(**updates):
 
 def _selection_response(**updates):
     response = {
-        "bridge_evaluation": "北郡、商路和账册都能作为稳定桥梁。",
-        "world_undercurrent": "旧教团残党正在转移账册。",
-        "action": "create_new",
         "reason": "该事件有独立目标，并共享北郡商路锚点。",
+        "action": "create_new",
         "new_event": _event_draft().model_dump(mode="json"),
     }
     response.update(updates)
@@ -511,7 +510,6 @@ class TestDirectorEventWorkflow:
         store = DirectorEventStore()
         selection = _selection_response(
             action="none",
-            world_undercurrent=None,
             new_event=None,
             reason="没有足够稳定桥梁。",
         )
@@ -533,6 +531,18 @@ class TestDirectorEventWorkflow:
 
         assert result.changed_event_id is None
         assert store.get_active() is None
+
+    def test_selection_schema_orders_fields_and_rejects_unknown_fields(self):
+        properties = DirectorEventSelectionResult.model_json_schema()["properties"]
+
+        assert list(properties) == ["reason", "action", "new_event"]
+        with pytest.raises(ValueError):
+            DirectorEventSelectionResult.model_validate({
+                "reason": "存在稳定桥梁。",
+                "action": "none",
+                "new_event": None,
+                "unexpected_field": "不应接受",
+            })
 
 
 class TestDirectorEventSelector:

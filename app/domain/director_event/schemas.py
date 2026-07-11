@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.current_state.schemas import WorldClock
 
@@ -240,26 +240,17 @@ class EventUseInstruction(BaseModel):
 
 
 class DirectorEventSelectionResult(BaseModel):
-    bridge_evaluation: str = Field(min_length=1)
-    world_undercurrent: str | None = None
-    action: SelectionAction
-    reason: str = Field(min_length=1)
-    new_event: DirectorEventDraft | None = None
+    model_config = ConfigDict(extra="forbid")
 
-    @field_validator("world_undercurrent")
-    @classmethod
-    def _validate_world_undercurrent_no_time_anchors(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        return _reject_time_anchors(value)
+    reason: str = Field(min_length=1)
+    action: SelectionAction
+    new_event: DirectorEventDraft | None = None
 
     @model_validator(mode="after")
     def _validate_action_payload(self):
         if self.action == "create_new":
             if self.new_event is None:
                 raise ValueError("new_event is required when action is create_new")
-            if not (self.world_undercurrent or "").strip():
-                raise ValueError("world_undercurrent is required when action is create_new")
         if self.action == "none" and self.new_event is not None:
             raise ValueError("new_event must be null when action is none")
         return self

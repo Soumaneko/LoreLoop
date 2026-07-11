@@ -5,6 +5,7 @@ from typing import Any
 
 from app.domain.core_memory import InitConfig
 from app.domain.current_state import CurrentState
+from app.domain.roll.schemas import Difficulty
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
@@ -21,7 +22,11 @@ _MEMORY_BATCH_RERUN: tuple | None = None
 @dataclass
 class PendingTurn:
     turn_id: str
+    group_id: str
+    version_index: int
     user_input: str
+    difficulty: Difficulty
+    max_chars: int
     state_before: CurrentState
     context: PlotOutlineContext
     outline: PlotOutlineResult
@@ -43,6 +48,22 @@ class PendingOpening:
 
 PENDING_TURNS: dict[str, PendingTurn] = {}
 PENDING_OPENINGS: dict[str, PendingOpening] = {}
+
+
+def pending_turn_variants(group_id: str) -> list[PendingTurn]:
+    return sorted(
+        (pending for pending in PENDING_TURNS.values() if pending.group_id == group_id),
+        key=lambda pending: pending.version_index,
+    )
+
+
+def discard_pending_turn_group(group_id: str) -> None:
+    for turn_id in [
+        pending.turn_id
+        for pending in PENDING_TURNS.values()
+        if pending.group_id == group_id
+    ]:
+        PENDING_TURNS.pop(turn_id, None)
 
 _CONFIRM_SERIAL_LOCK = threading.Lock()
 

@@ -1,4 +1,5 @@
 from concurrent.futures import Future
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -54,7 +55,11 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(monkeypat
     state = _state()
     pending = PendingTurn(
         turn_id=turn_id,
+        group_id=turn_id,
+        version_index=1,
         user_input="观察四周",
+        difficulty="困难",
+        max_chars=1500,
         state_before=state,
         context=SimpleNamespace(turn_resolution=SimpleNamespace()),
         outline=SimpleNamespace(),
@@ -168,7 +173,11 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
     summary_future.set_result(None)
     pending = PendingTurn(
         turn_id=turn_id,
+        group_id=turn_id,
+        version_index=1,
         user_input="继续观察",
+        difficulty="困难",
+        max_chars=1500,
         state_before=state,
         context=SimpleNamespace(turn_resolution=SimpleNamespace()),
         outline=SimpleNamespace(),
@@ -182,6 +191,13 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
         },
     )
     PENDING_TURNS[turn_id] = pending
+    sibling_turn_id = "summary-future-turn-v2"
+    PENDING_TURNS[sibling_turn_id] = replace(
+        pending,
+        turn_id=sibling_turn_id,
+        version_index=2,
+        confirmation_cache={},
+    )
     captured = {}
 
     class _FakeGateway:
@@ -345,11 +361,17 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
                 write_db=True,
             )
         )
+        group_removed = (
+            turn_id not in PENDING_TURNS
+            and sibling_turn_id not in PENDING_TURNS
+        )
     finally:
         PENDING_TURNS.pop(turn_id, None)
+        PENDING_TURNS.pop(sibling_turn_id, None)
 
     assert events[-1]["data"]["status"] == "committed"
     assert captured["wait_for_summary"] is summary_future
+    assert group_removed is True
 
 
 def test_opening_confirmation_restocks_director_npc_synchronously(monkeypatch):
