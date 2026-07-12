@@ -1,7 +1,11 @@
 import json
+from pathlib import Path
 
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state.schemas import CurrentState, NPCState, PlayerState, SceneState
+from app.domain.director_event.schemas import DirectorEvent
+from app.domain.npc_profile.extractor import NPCProfileExtractor
+from app.domain.npc_profile.updater import NPCProfileUpdater
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile, RetrievedNPC
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.workflows import (
@@ -28,6 +32,79 @@ def _state() -> CurrentState:
         scene=SceneState(scene_id="scene_001", location="醉花楼", participants=["萧云痕"]),
         player=PlayerState(name="萧云痕", position="醉花楼"),
     )
+
+
+def _director_event() -> DirectorEvent:
+    return DirectorEvent(
+        title="失窃旧书",
+        premise="希尔达寻找自己失窃的旧书。",
+        objective="找回旧书。",
+        bridge_anchors=["旧书"],
+        milestones=[
+            "希尔达留下寻物便条。",
+            "希尔达追查旧书去向。",
+            "旧书事件形成结果。",
+        ],
+        milestone_interval_steps=[2, 2],
+        created_turn=1,
+    )
+
+
+def test_npc_agents_receive_director_event_identity_context():
+    event = _director_event()
+    extractor_gateway = _Gateway([{"alias_matches": [], "retrieved_npcs": []}])
+    NPCProfileExtractor(extractor_gateway).extract(
+        core_memory=CoreMemory(items=[]),
+        scene_facts="寻物便条张贴者是一名女性。",
+        existing_profiles=[],
+        director_event=event,
+    )
+
+    updater_gateway = _Gateway([{"npcs": []}])
+    NPCProfileUpdater(updater_gateway).update(
+        scene_facts="寻物便条张贴者是一名女性。",
+        current_state=_state(),
+        relevant_profiles=[],
+        new_npc_hints=[],
+        core_memory=CoreMemory(items=[]),
+        director_event=event,
+    )
+
+    expected = {"premise": event.premise, "milestones": event.milestones}
+    assert json.loads(
+        extractor_gateway.calls[0]["input_data"]["director_event_identity_json"]
+    ) == expected
+    assert json.loads(
+        updater_gateway.calls[0]["input_data"]["director_event_identity_json"]
+    ) == expected
+
+
+def test_npc_updater_prompt_treats_new_hints_as_optional_candidates():
+    prompt = Path("app/prompts/confirmation/npc_profile_update_v1.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "未经任何准入筛选" in prompt
+    assert "拒绝是默认行为，创建是例外" in prompt
+    assert "反例（不得创建档案）" in prompt
+
+
+def test_store_adds_unambiguous_given_name_alias():
+    store = NPCProfileStore(":memory:")
+    npc_id = store.upsert(NPCProfile(name="希尔达·布拉斯科特"))
+
+    saved = store.get_by_id(npc_id)
+    assert saved.aliases == ["希尔达"]
+    assert store.get_by_name("希尔达").npc_id == npc_id
+
+
+def test_store_skips_conflicting_given_name_alias():
+    store = NPCProfileStore(":memory:")
+    store.upsert(NPCProfile(name="希尔达"))
+    npc_id = store.upsert(NPCProfile(name="希尔达·布拉斯科特"))
+
+    saved = store.get_by_id(npc_id)
+    assert "希尔达" not in saved.aliases
 
 
 def test_sync_npc_profile_absence_resets_current_state_hits_and_increments_misses():

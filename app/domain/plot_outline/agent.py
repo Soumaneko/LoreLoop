@@ -4,10 +4,7 @@ from typing import cast
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
-from app.domain.director_event.views import (
-    plot_outline_director_event_instructions,
-    project_plot_director_event,
-)
+from app.domain.director_event.views import project_plot_director_event
 from app.domain.context_facts.views import project_context_facts
 from app.domain.plot_outline.schemas import PlotOutlineContext, PlotOutlineResult
 from app.domain.plot_outline.views import project_turn_resolution
@@ -40,6 +37,8 @@ class PlotOutlineAgent:
         ]
 
         class RuntimePlotOutlineResult(BaseModel):
+            director_event_reason: str | None = None
+            director_npc_reason: str | None = None
             planning_reasoning: str = Field(min_length=1)
             planned_events: list[_RuntimePlannedEvent] = Field(default_factory=list)
             must_establish_facts: list[str] = Field(default_factory=list)
@@ -47,8 +46,6 @@ class PlotOutlineAgent:
             information_boundaries: list[str] = Field(default_factory=list)
             required_entities: list[str] = Field(default_factory=list)
             scene_stopping_point: str = Field(min_length=1)
-            director_event_reason: str | None = None
-            director_npc_reason: str | None = None
 
             @model_validator(mode="after")
             def _require_all_turn_resolution_outcomes(self):
@@ -108,10 +105,6 @@ class PlotOutlineAgent:
                         user_input=context.user_input,
                         current_state=context.current_state,
                         context_facts=context.context_facts,
-                    ),
-                    "director_event_instructions": plot_outline_director_event_instructions(
-                        context.director_event,
-                        recent_resolved_event=context.recent_resolved_director_event,
                     ),
                     "director_npc_injection_json": json.dumps(
                         (

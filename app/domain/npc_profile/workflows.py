@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import Anchor
@@ -14,6 +17,9 @@ from app.domain.npc_profile.schemas import (
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.updater import NPCProfileUpdater
 from app.domain.scene_summary.schemas import SceneSummary
+
+if TYPE_CHECKING:
+    from app.domain.director_event.schemas import DirectorEvent
 
 
 @dataclass
@@ -70,6 +76,7 @@ def update_npc_profiles_from_extraction(
     npc_store: NPCProfileStore,
     existing_profiles: list[NPCProfile],
     extraction: NPCExtractionResult,
+    director_event: DirectorEvent | None = None,
     recent_summaries: list[SceneSummary] | None = None,
     trace_id: str | None = None,
 ) -> UpdateNPCProfilesResult:
@@ -117,6 +124,7 @@ def update_npc_profiles_from_extraction(
         relevant_profiles=relevant_profiles,
         new_npc_hints=new_npc_hints,
         core_memory=core_memory,
+        director_event=director_event,
         recent_summaries=recent_summaries,
         trace_id=trace_id,
     )
@@ -169,6 +177,7 @@ def update_npc_profiles_workflow(
     gateway: LLMGateway,
     npc_store: NPCProfileStore,
     recent_summaries: list[SceneSummary] | None = None,
+    director_event: DirectorEvent | None = None,
     trace_id: str | None = None,
 ) -> UpdateNPCProfilesResult:
     existing = npc_store.list_all()
@@ -187,6 +196,7 @@ def update_npc_profiles_workflow(
         npc_store=npc_store,
         existing_profiles=existing,
         extraction=extraction,
+        director_event=director_event,
         recent_summaries=recent_summaries,
         trace_id=trace_id,
     )

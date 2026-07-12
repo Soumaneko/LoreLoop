@@ -36,6 +36,8 @@ class PlannedEvent(BaseModel):
 
 
 class PlotOutlineResult(BaseModel):
+    director_event_reason: str | None = None
+    director_npc_reason: str | None = None
     planning_reasoning: str = Field(min_length=1)
     planned_events: list[PlannedEvent] = Field(default_factory=list)
     must_establish_facts: list[str] = Field(default_factory=list)
@@ -43,5 +45,3 @@ class PlotOutlineResult(BaseModel):
     information_boundaries: list[str] = Field(default_factory=list)
     required_entities: list[str] = Field(default_factory=list)
     scene_stopping_point: str = Field(min_length=1)
-    director_event_reason: str | None = None
-    director_npc_reason: str | None = None

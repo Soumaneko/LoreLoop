@@ -14,11 +14,14 @@ NPCProfile 用于保存人物长期公开信息与导演幕后信息；本任务
 
 ## Existing NPC Profiles
 
-如果该列表为 null 或空，表示当前世界尚无已知 NPCProfile。
-如果存在档案，则每条包含其 npc_index、name、aliases、role。
-
 ```json
 {existing_npc_profiles_json}
+```
+
+## DirectorEvent
+
+```json
+{director_event_identity_json}
 ```
 
 
@@ -58,8 +61,9 @@ NPCProfile 用于保存人物长期公开信息与导演幕后信息；本任务
 2. alias_match：Scene Facts 的称呼可明确归入某个已有 NPC，但该称呼尚未被收录。
 3. new：Scene Facts 中的具体 NPC 无法合理匹配给任何已有 NPC。
 4. 应提取：有专有名字、明确个人身份、或已经被塑造成会长期复用的具体个体。
-5. 不提取：物种/族群/怪物类型、临时敌人、职业泛称、未命名路人、未塑造的登记员/镇长/守卫/民兵/猎人/铁匠/文书。
+5. 严禁提取：物种/族群/怪物类型、临时敌人、职业泛称、未命名路人、未塑造的登记员/镇长/守卫/民兵/猎人/铁匠/文书。
 6. 严禁通过上帝视角匹配：Scene Facts 仅写“那女子”“女侠”时，除非当前 facts 或 Existing NPC Profiles 的别名能 100% 对应，否则不要强行匹配。
+7. DirectorEvent 明确说明某个描述性身份对应 Existing NPC 时，应映射到该已有 NPC，不得为同一人物创建占位档案。
 
 
 # 禁止事项

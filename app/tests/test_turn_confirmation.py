@@ -329,7 +329,7 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
     monkeypatch.setattr(
         confirmation_nodes,
         "director_event_store",
-        lambda: _ContextStore(),
+        lambda: _ContextStore(get_active=lambda: None),
     )
     monkeypatch.setattr(
         confirmation_nodes,

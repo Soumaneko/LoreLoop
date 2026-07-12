@@ -42,9 +42,9 @@
   - participants：当前场景在场的参与者名单。
   - atmosphere：当前场景氛围的简短词汇（如“紧张”“肃杀压抑”），无明显氛围时填 null。
 - world_clock：剧情结束后的最终时间。
+  - reason：在填写最终时间前，先说明 Scene Facts 是否支持时间推进以及支持何种推进；无变化时可简述或填 null。不得先改变时间再寻找理由。
   - day：最终日数（≥1）。
   - phase_index：最终时段索引（0-5）。
-  - reason：时间变化的简短理由，无变化时可简述或填 null。
 - player：更新后的玩家状态，包含 name、condition、position、visible_status；name 保持不变。
 - npcs：更新后的 NPC 列表，每个 NPC 包含 name、role、location、condition、attitude_to_player、current_intent；不确定的字段保持 null。
 - resources：更新后的资源。inventory 每项为 {{"name": "物品名", "quantity": 正整数}}；另含 money、money_unit、fixed_assets、temporary_assets。
@@ -98,9 +98,9 @@
     "atmosphere": "幽闭压抑"
   }},
   "world_clock": {{
+    "reason": "仅数分钟的探索，时间未明显流逝",
     "day": 1,
-    "phase_index": 5,
-    "reason": "仅数分钟的探索，时间未明显流逝"
+    "phase_index": 5
   }},
   "player": {{
     "name": "艾伦",

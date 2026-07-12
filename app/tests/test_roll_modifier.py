@@ -6,6 +6,7 @@ from app.core.llm import MockLLM
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
+from app.domain.roll.schemas import RollResultBatch
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
 from app.graph import generation_nodes
 
@@ -123,7 +124,29 @@ class TestRollModifierEvaluator:
         assert result["roll_results"].total_rolls == 0
         assert [event["step"] for event in result["events"]] == ["rolls_skipped"]
 
-    def test_rejects_too_many_modifiers_for_one_action(self):
+    def test_generation_skips_turn_resolution_llm_without_rolls(self, monkeypatch):
+        class _UnexpectedAgent:
+            def __init__(self, *_args, **_kwargs):
+                raise AssertionError("turn resolution agent must not be created")
+
+        monkeypatch.setattr(generation_nodes, "TurnResolutionAgent", _UnexpectedAgent)
+
+        result = generation_nodes.resolve_turn_node({
+            "roll_results": RollResultBatch(
+                dice_formula="0d20",
+                dice_sides=20,
+                total_rolls=0,
+                results=[],
+            ),
+        })
+
+        assert result["turn_resolution"].action_resolutions == []
+        assert result["turn_resolution"].total_resolutions == 0
+        assert [event["step"] for event in result["events"]] == [
+            "turn_resolution_skipped"
+        ]
+
+    def test_trims_excess_modifiers_to_top_two(self):
         mock = MockLLM()
         mock.set_responses([
             json.dumps(
@@ -131,20 +154,22 @@ class TestRollModifierEvaluator:
                     "modifiers": [
                         {"action_id": "a1", "label": "一", "reason": "原因一", "value": 3},
                         {"action_id": "a1", "label": "二", "reason": "原因二", "value": 3},
-                        {"action_id": "a1", "label": "三", "reason": "原因三", "value": 3},
+                        {"action_id": "a1", "label": "三", "reason": "原因三", "value": 1},
                     ]
                 },
                 ensure_ascii=False,
             )
         ])
 
-        with pytest.raises(ValueError):
-            RollModifierEvaluator(mock.build_gateway()).evaluate(
-                _make_parse_result(),
-                _make_state(),
-                _make_core_memory(),
-                roll_actions=[_make_action("a1", True)],
-            )
+        batch = RollModifierEvaluator(mock.build_gateway()).evaluate(
+            _make_parse_result(),
+            _make_state(),
+            _make_core_memory(),
+            roll_actions=[_make_action("a1", True)],
+        )
+        assert len(batch.modifiers) == 2
+        labels = {m.label for m in batch.modifiers}
+        assert labels == {"一", "二"}
 
     def test_rejects_total_modifier_over_eight(self):
         mock = MockLLM()

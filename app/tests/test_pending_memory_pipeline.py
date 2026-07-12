@@ -8,7 +8,7 @@ from app.domain.current_state import CurrentState, PlayerState, SceneState, Worl
 from app.domain.recall_memory.batch_classifier import MemoryBatchClassifier
 from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.domain.recall_memory.pending_store import PendingMemoryStore
-from app.domain.recall_memory.schemas import PendingMemoryItem
+from app.domain.recall_memory.schemas import ClassifiedMemoryCandidate, PendingMemoryItem
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.recall_memory.maintenance import (
     batch_classify_pending_memories_workflow,
@@ -28,6 +28,12 @@ def _state() -> CurrentState:
         world_clock=WorldClock(day=2, phase="晚上"),
         player=PlayerState(name="主角"),
     )
+
+
+def test_batch_classification_reason_precedes_decision_in_schema():
+    properties = ClassifiedMemoryCandidate.model_json_schema()["properties"]
+    assert list(properties)[:2] == ["reason", "keep"]
+    assert "discard_reason" not in properties
 
 
 def _action_parse() -> ActionParseResult:
@@ -297,6 +303,7 @@ class TestBatchClassifyPendingMemories:
                     {
                         "candidates": [
                             {
+                                "reason": "该约定仍会约束后续行动。",
                                 "keep": True,
                                 "memory_kind": "open_thread", "evidence_mode": "reported",
                                 "subject": "钥匙在钟楼的传闻",
@@ -365,6 +372,7 @@ class TestBatchClassifyPendingMemories:
                     {
                         "candidates": [
                             {
+                                "reason": "该线索仍未解决，会约束后续调查。",
                                 "keep": True,
                                 "memory_kind": "open_thread",
                                 "evidence_mode": "believed",

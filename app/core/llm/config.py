@@ -26,6 +26,15 @@ class LLMConfig:
         return _get_env("OPENAI_MODEL", "gpt-4o")
 
     @staticmethod
+    def thinking() -> str | None:
+        value = _get_env("OPENAI_THINKING").strip().lower()
+        if not value:
+            return None
+        if value not in {"enabled", "disabled"}:
+            raise ValueError("OPENAI_THINKING must be 'enabled' or 'disabled'")
+        return value
+
+    @staticmethod
     def is_configured() -> bool:
         return bool(LLMConfig.api_key())
 
@@ -55,6 +64,7 @@ def create_gateway(
             api_key=LLMConfig.api_key(),
             base_url=LLMConfig.base_url(),
             default_model=model or LLMConfig.default_model(),
+            thinking=LLMConfig.thinking(),
         ),
         prompt_loader=PromptLoader(prompts_dir=prompts_dir),
         tracer=TraceLogger(**tracer_kwargs),

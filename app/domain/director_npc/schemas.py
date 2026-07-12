@@ -102,10 +102,10 @@ class ExistingNPCCandidate(BaseModel):
 
 
 class DirectorNPCDispatchDecision(BaseModel):
+    reason: str = ""
     action: DirectorNPCDispatchAction
     selected_id: str | None = None
     selected_name: str | None = None
-    reason: str = ""
 
     @model_validator(mode="after")
     def _validate_payload(self):

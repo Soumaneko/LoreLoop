@@ -90,6 +90,11 @@ class DirectorEvent(BaseModel):
     next_progress_clock: WorldClock | None = None
     progress_index: int = Field(default=0, ge=0, le=2)
     exposure: DirectorEventExposure = "hidden"
+    player_contact_state: str = Field(
+        default="玩家尚未接触该事件的任何前台征兆。",
+        min_length=1,
+        max_length=50,
+    )
     entry_points: list[DirectorEventEntryPoint] = Field(default_factory=list)
     last_presented_turn: int | None = Field(default=None, ge=0)
     resolved_reason: str | None = None
@@ -133,6 +138,7 @@ class DirectorEvent(BaseModel):
             ),
             "progress_index": self.progress_index,
             "exposure": self.exposure,
+            "player_contact_state": self.player_contact_state,
             "entry_points": [entry.model_dump(mode="json") for entry in self.entry_points],
             "last_presented_turn": self.last_presented_turn,
         }
@@ -219,6 +225,7 @@ class DirectorEventReviewResult(BaseModel):
     reason: str = Field(min_length=1)
     action: ReviewAction
     exposure: DirectorEventExposure
+    player_contact_state: str = Field(min_length=1, max_length=50)
     evidence: list[str] = Field(default_factory=list)
     resolved_reason: str | None = None
 

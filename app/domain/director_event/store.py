@@ -123,13 +123,21 @@ class DirectorEventStore:
         self.save(updated)
         return True
 
-    def set_exposure(self, event_id: str, exposure: str, *, turn_index: int) -> bool:
+    def replace_player_contact(
+        self,
+        event_id: str,
+        *,
+        exposure: str,
+        player_contact_state: str,
+        turn_index: int,
+    ) -> bool:
         event = self.get_by_id(event_id)
         if event is None:
             return False
         updated = event.model_copy(
             update={
                 "exposure": exposure,
+                "player_contact_state": player_contact_state,
                 "last_presented_turn": turn_index if exposure != "hidden" else event.last_presented_turn,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),

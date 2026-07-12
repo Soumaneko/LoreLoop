@@ -9,6 +9,7 @@ from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.workflows import DirectorEventWorkflowResult
+from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.entity.schemas import EntityExtractionResult, EntityProfile
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
@@ -57,6 +58,7 @@ class ConfirmationCache(TypedDict, total=False):
     pending_memory_result: MemoryDraftExtractResult
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
+    npc_director_event: DirectorEvent | None
     action_preview: ActionPreviewResult
     director_event_result: DirectorEventWorkflowResult | None
     updated_entity_ids: list[str]
@@ -105,6 +107,7 @@ class ConfirmationState(TypedDict, total=False):
     pending_memory_result: MemoryDraftExtractResult
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
+    npc_director_event: DirectorEvent | None
     action_preview: ActionPreviewResult
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]

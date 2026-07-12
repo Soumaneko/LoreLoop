@@ -85,7 +85,11 @@ class RollModifierEvaluator:
         for action_id in sorted(grouped):
             action_modifiers = grouped[action_id]
             if len(action_modifiers) > 2:
-                raise ValueError(f"too many modifiers for action {action_id}")
+                action_modifiers = sorted(
+                    action_modifiers,
+                    key=lambda m: abs(m.value),
+                    reverse=True,
+                )[:2]
             total = sum(modifier.value for modifier in action_modifiers)
             if abs(total) > 8:
                 raise ValueError(f"modifier total for action {action_id} exceeds 8")

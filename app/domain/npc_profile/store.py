@@ -71,6 +71,7 @@ class NPCProfileStore:
         return profile
 
     def upsert(self, profile: NPCProfile) -> str:
+        self._ensure_given_name_alias(profile)
         self._maybe_promote_alias(profile)
         now = profile.updated_at or utc_now()
         profile.updated_at = now
@@ -203,6 +204,15 @@ class NPCProfileStore:
             )
             profile.alias_hit_counts.pop(alias, None)
             break
+
+    def _ensure_given_name_alias(self, profile: NPCProfile) -> None:
+        given_name = profile.name.split("·", 1)[0].strip()
+        if given_name == profile.name or not given_name:
+            return
+        known_names = {_norm(profile.name), *[_norm(alias) for alias in profile.aliases]}
+        if _norm(given_name) in known_names or self._name_conflicts(profile, given_name):
+            return
+        profile.aliases.append(given_name)
 
     def _name_conflicts(self, profile: NPCProfile, name: str) -> bool:
         key = _norm(name)

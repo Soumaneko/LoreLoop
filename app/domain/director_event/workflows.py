@@ -58,8 +58,12 @@ def update_director_event_workflow(
             trace_id=trace_id,
         )
         changed_event_id = active.event_id
-        if review.exposure != active.exposure:
-            store.set_exposure(active.event_id, review.exposure, turn_index=turn_index)
+        store.replace_player_contact(
+            active.event_id,
+            exposure=review.exposure,
+            player_contact_state=review.player_contact_state,
+            turn_index=turn_index,
+        )
         manual_progress = False
         if review.action == "resolve":
             store.resolve_active(

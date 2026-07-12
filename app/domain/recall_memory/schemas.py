@@ -84,6 +84,7 @@ class MemoryDraftExtractResult(BaseModel):
 
 
 class ClassifiedMemoryCandidate(BaseModel):
+    reason: str = Field(min_length=1)
     keep: bool = True
     memory_kind: MemoryKind | None = None
     evidence_mode: EvidenceMode | None = None
@@ -100,7 +101,6 @@ class ClassifiedMemoryCandidate(BaseModel):
     source_pending_ids: list[str] = Field(default_factory=list)
     source_scene_id: str | None = None
     source_text_span: list[str] = Field(default_factory=list)
-    discard_reason: str | None = None
 
     @model_validator(mode="after")
     def _validate_kept_candidate(self):
@@ -116,8 +116,6 @@ class ClassifiedMemoryCandidate(BaseModel):
                 )
             if not self.source_pending_ids:
                 raise ValueError("kept memory candidate requires source_pending_ids")
-        elif not (self.discard_reason or "").strip():
-            raise ValueError("discarded candidate requires discard_reason")
         return self
 
     def to_memory(self) -> Memory:

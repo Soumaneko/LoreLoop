@@ -64,13 +64,13 @@
 ```
 
 字段期望：
+- `reason`：在选择动作和候选人之前，先判断当前回合是否需要导演 NPC，以及哪些候选人与场景、玩家行动和既有关系存在自然交点。选择 NPC 时说明为什么该候选适合；选择 `none` 时说明为什么当前不适合。不得先选人再为选择寻找理由。
 - `action`：调度动作。
   - `dispatch_standby`：选择一个待命 NPC。
   - `recall_existing`：召回一个可召回旧 NPC，或一个已调度导演 NPC 候选。
   - `none`：当前没有合适人选，不插入导演 NPC。
 - `selected_id`：当 `action=dispatch_standby` 时填候选的 `draft_id`；当 `action=recall_existing` 且选择普通旧 NPC 时填该 NPC 的 `name`；当选择已调度导演 NPC 时填该候选的 `selected_id`；当 `action=none` 时填 `null`。
 - `selected_name`：被选择 NPC 的显示姓名；必须与候选列表中的姓名一致；当 `action=none` 时填 `null`。
-- `reason`：只写给调试看的内部理由。选择 NPC 时只说明为什么是此候选适合导入；选择 `none` 时说明为什么当前不适合导入。
 
 
 # 核心规则

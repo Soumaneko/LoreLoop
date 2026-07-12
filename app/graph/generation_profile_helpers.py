@@ -51,12 +51,16 @@ def _select_entities(
     entity_store: EntityStore,
     limit: int,
 ) -> list[EntityProfile]:
-    explicit_names = set(_state_entity_names(current_state))
+    explicit_names = {_norm(name) for name in _state_entity_names(current_state)}
     selected: list[EntityProfile] = []
     seen: set[str] = set()
 
     for profile in entity_store.list_all():
-        matched = profile.name in explicit_names or _profile_mentioned(user_input, profile.name, profile.aliases)
+        matched = _profile_in_names(
+            explicit_names,
+            profile.name,
+            profile.aliases,
+        ) or _profile_mentioned(user_input, profile.name, profile.aliases)
         if not matched or profile.entity_id in seen:
             continue
         selected.append(profile)
@@ -73,12 +77,16 @@ def _select_npcs(
     npc_store: NPCProfileStore,
     limit: int,
 ) -> list[NPCProfile]:
-    explicit_names = set(_state_npc_names(current_state))
+    explicit_names = {_norm(name) for name in _state_npc_names(current_state)}
     selected: list[NPCProfile] = []
     seen: set[str] = set()
 
     for profile in npc_store.list_all():
-        matched = profile.name in explicit_names or _profile_mentioned(user_input, profile.name, profile.aliases)
+        matched = _profile_in_names(
+            explicit_names,
+            profile.name,
+            profile.aliases,
+        ) or _profile_mentioned(user_input, profile.name, profile.aliases)
         if not matched or profile.npc_id in seen:
             continue
         selected.append(profile)
@@ -140,6 +148,14 @@ def _append_anchor(
 def _profile_mentioned(user_input: str, name: str, aliases: list[str]) -> bool:
     variants = [name, *aliases]
     return any(_norm(value) and _norm(value) in user_input for value in variants)
+
+
+def _profile_in_names(names: set[str], name: str, aliases: list[str]) -> bool:
+    return any(
+        normalized and normalized in names
+        for value in [name, *aliases]
+        if (normalized := _norm(value))
+    )
 
 
 def _state_entity_names(current_state: CurrentState) -> list[str]:

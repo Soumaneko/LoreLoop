@@ -13,7 +13,7 @@ from app.domain.roll_modifier.evaluator import RollModifierEvaluator
 from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.helpers import build_entity_retrieval_anchors
-from app.domain.turn_resolution import TurnResolutionAgent
+from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.runtime.serialization import model_data
 from app.runtime.stores import (
     director_npc_store,
@@ -199,6 +199,19 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
 
 
 def resolve_turn_node(state: GenerationState) -> GenerationState:
+    if state["roll_results"].total_rolls == 0:
+        turn_resolution = TurnResolutionResult()
+        return {
+            "turn_resolution": turn_resolution,
+            "events": [{
+                "step": "turn_resolution_skipped",
+                "data": {
+                    "reason": "No roll results require interpretation.",
+                    "turn_resolution": model_data(turn_resolution),
+                },
+            }],
+        }
+
     turn_resolution = TurnResolutionAgent(gateway_for(state)).resolve(
         user_input=state["user_input"],
         current_state=state["current_state"],

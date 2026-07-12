@@ -1,5 +1,7 @@
 import json
+from pathlib import Path
 
+from app.domain.current_state.updater import _WorldClockUpdate
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import (
@@ -83,6 +85,17 @@ def _deep_update(target: dict, source: dict) -> None:
             _deep_update(target[key], value)
         else:
             target[key] = value
+
+
+def test_world_clock_reason_precedes_time_fields_in_schema():
+    assert list(_WorldClockUpdate.model_json_schema()["properties"]) == [
+        "reason",
+        "day",
+        "phase_index",
+    ]
+    prompt = Path("app/prompts/confirmation/state_update_v1.md").read_text(encoding="utf-8")
+    example_clock = prompt.split('"world_clock"', 1)[1]
+    assert example_clock.index('"reason"') < example_clock.index('"day"')
 
 
 class TestStateUpdaterNoChange:

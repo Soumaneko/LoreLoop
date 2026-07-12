@@ -26,9 +26,9 @@ class _SceneStateUpdate(BaseModel):
 
 
 class _WorldClockUpdate(BaseModel):
+    reason: str | None = None
     day: int = Field(default=1, ge=1)
     phase_index: int = Field(default=1, ge=0, le=5)
-    reason: str | None = None
 
 
 class _NPCStateUpdate(BaseModel):

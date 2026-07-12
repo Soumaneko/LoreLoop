@@ -158,6 +158,9 @@ class TestTurnResolutionAgent:
         assert "resolved_fact" in prompt
         assert "本行动判定后的权威事实结论" in prompt
         assert "不能写成具体的细节描写" in prompt
+        assert "让其后果失控" in prompt
+        assert "保留 Player Input 明确指定的方式、路径和控制条件" in prompt
+        assert "行动失败、问题转移或局势恶化" in prompt
         assert "resolved_effect" not in prompt
 
     def test_prompt_input_omits_action_parse_result(self):

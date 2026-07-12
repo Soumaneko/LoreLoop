@@ -151,6 +151,8 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
     trace_id = state["trace_id"]
     cache = state["cache"]
     npc_extraction = cache.get("npc_extraction")
+    with director_event_store() as event_store:
+        active_director_event = event_store.get_active()
     if npc_extraction is None:
         gateway = create_gateway()
         gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
@@ -159,10 +161,12 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
             core_memory=state["core_memory"],
             scene_facts=state["scene_facts_json"],
             existing_profiles=state["existing_npc_profiles"],
+            director_event=active_director_event,
             trace_id=trace_id,
         )
     return {
         "npc_extraction": npc_extraction,
+        "npc_director_event": active_director_event,
         "events": [{
             "step": "npc_extract_done",
             "data": {
@@ -295,6 +299,7 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 npc_store=npc_store,
                 existing_profiles=state["existing_npc_profiles"],
                 extraction=state["npc_extraction"],
+                director_event=state.get("npc_director_event"),
                 recent_summaries=state.get("recent_summaries", []),
                 trace_id=trace_id,
             )

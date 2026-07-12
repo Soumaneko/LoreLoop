@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import json
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
+
+if TYPE_CHECKING:
+    from app.domain.director_event.schemas import DirectorEvent
 
 
 class NPCProfileExtractor:
@@ -16,6 +21,7 @@ class NPCProfileExtractor:
         core_memory: CoreMemory,
         scene_facts: str,
         existing_profiles: list[NPCProfile],
+        director_event: DirectorEvent | None = None,
         trace_id: str | None = None,
     ) -> NPCExtractionResult:
         if not scene_facts.strip():
@@ -28,6 +34,18 @@ class NPCProfileExtractor:
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_facts_json": scene_facts,
+                    "director_event_identity_json": json.dumps(
+                        (
+                            {
+                                "premise": director_event.premise,
+                                "milestones": director_event.milestones,
+                            }
+                            if director_event is not None
+                            else None
+                        ),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "existing_npc_profiles_json": json.dumps(
                         [
                             _profile_for_extraction(index, profile)

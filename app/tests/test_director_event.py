@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
@@ -16,7 +18,6 @@ from app.domain.director_event import (
     DirectorEventStore,
 )
 from app.domain.director_event.views import (
-    plot_outline_director_event_instructions,
     project_director_event,
     project_plot_director_event,
 )
@@ -120,6 +121,7 @@ def _review_response(**updates):
         "action": "hold",
         "reason": "事件仍在世界中发展。",
         "exposure": "hidden",
+        "player_contact_state": "玩家尚未接触该事件的任何前台征兆。",
         "evidence": ["本轮没有显示事件完成。"],
         "resolved_reason": None,
     }
@@ -182,6 +184,7 @@ class TestDirectorEventSchema:
             "next_progress_clock",
             "progress_index",
             "exposure",
+            "player_contact_state",
             "entry_points",
             "last_presented_turn",
             "resolved_reason",
@@ -241,8 +244,14 @@ class TestDirectorEventStore:
 
         assert store.touch(event.event_id, turn_index=2) is True
         assert store.get_active().updated_turn == 2
-        assert store.set_exposure(event.event_id, "foreshadowed", turn_index=3) is True
+        assert store.replace_player_contact(
+            event.event_id,
+            exposure="foreshadowed",
+            player_contact_state="玩家已经看见驿站拒收无印信件。",
+            turn_index=3,
+        ) is True
         assert store.get_active().exposure == "foreshadowed"
+        assert store.get_active().player_contact_state == "玩家已经看见驿站拒收无印信件。"
         assert store.get_active().last_presented_turn == 3
         assert store.resolve_active(event.event_id, turn_index=5, resolved_reason="事件已结束")
 
@@ -290,6 +299,7 @@ class TestDirectorEventReviewerInput:
             "next_progress_clock",
             "progress_index",
             "exposure",
+            "player_contact_state",
             "entry_points",
             "last_presented_turn",
             "status",
@@ -311,14 +321,19 @@ class TestDirectorEventViews:
         assert data["exposure"] == "engaged"
         assert "entry_points" not in data
 
-    def test_recent_resolved_projection_uses_resolution_reason(self):
+    def test_recent_resolved_projection_uses_player_contact_not_internal_reason(self):
         event = _event(status="resolved").model_copy(
-            update={"resolved_turn": 3, "resolved_reason": "事件已被确认收束"}
+            update={
+                "resolved_turn": 3,
+                "resolved_reason": "内部审计理由",
+                "player_contact_state": "玩家已阻止信件被截留。",
+            }
         )
         data = json.loads(project_director_event(None, recent_resolved_event=event))
 
         assert data["status"] == "recently_resolved"
-        assert data["resolved_reason"] == "事件已被确认收束"
+        assert data["player_contact_state"] == "玩家已阻止信件被截留。"
+        assert "resolved_reason" not in data
 
     def test_plot_payload_uses_instruction_for_hidden_event(self):
         data = json.loads(
@@ -350,26 +365,45 @@ class TestDirectorEventViews:
         assert data["event_use_instruction"]["mode"] == "none"
         assert data["event_hint"] is None
 
-    def test_plot_payload_uses_current_milestone_after_foreshadowed(self):
+    def test_plot_payload_intersect_includes_current_milestone(self):
+        contact_state = "玩家已经看见驿站拒收无印信件。"
         data = json.loads(
             project_plot_director_event(
-                _event().model_copy(update={"exposure": "foreshadowed"}),
-                user_input="我经过北郡驿站。",
+                _event().model_copy(update={
+                    "exposure": "foreshadowed",
+                    "player_contact_state": contact_state,
+                }),
+                user_input="我经过北郡驿站并查看拒收的信件。",
                 current_state=_state(),
             )
         )
 
         assert data["event_use_instruction"]["mode"] == "intersect"
         assert data["event_use_instruction"]["allowed_effect"] == _milestones()[0]
+        assert data["event_hint"]["player_contact_state"] == contact_state
         assert data["event_hint"]["current_milestone"] == _milestones()[0]
+        assert "premise" not in data["event_hint"]
+        assert "visible_sign" not in data["event_hint"]
 
-    def test_instructions_are_empty_without_active_or_recent_event(self):
-        assert plot_outline_director_event_instructions(None) == ""
+    def test_plot_payload_foreground_includes_current_state_and_contact(self):
+        contact_state = "玩家正在调查被截留的信件。"
+        data = json.loads(
+            project_plot_director_event(
+                _event().model_copy(update={
+                    "exposure": "engaged",
+                    "player_contact_state": contact_state,
+                }),
+                user_input="继续调查信件。",
+                current_state=_state(),
+            )
+        )
 
-    def test_plot_instructions_reference_use_instruction_for_unengaged_event(self):
-        plot_text = plot_outline_director_event_instructions(_event())
-
-        assert "event_use_instruction" in plot_text
+        assert data["event_use_instruction"]["mode"] == "foreground"
+        assert data["event_use_instruction"]["allowed_effect"] == _milestones()[0]
+        assert data["event_hint"]["current_milestone"] == _milestones()[0]
+        assert data["event_hint"]["player_contact_state"] == contact_state
+        assert data["event_hint"]["canonical_premise"] == _event().premise
+        assert "premise" not in data["event_hint"]
 
 
 class TestDirectorEventWorkflow:
@@ -393,6 +427,7 @@ class TestDirectorEventWorkflow:
             store,
             _review_response(
                 exposure="engaged",
+                player_contact_state="玩家已直接询问暗拍请柬的来源。",
                 reason="玩家已经直接调查该事件。",
                 evidence=["玩家询问暗拍请柬来源。"],
             ),
@@ -401,6 +436,43 @@ class TestDirectorEventWorkflow:
 
         assert result.review_result.exposure == "engaged"
         assert store.get_active().exposure == "engaged"
+
+    def test_review_replaces_complete_player_contact_state(self):
+        store = DirectorEventStore()
+        event = _event().model_copy(update={
+            "exposure": "foreshadowed",
+            "player_contact_state": "玩家看见驿站拒收无印信件。",
+        })
+        store.save(event)
+
+        complete_state = "玩家看见驿站拒收无印信件，并已向驿站职员询问原因。"
+        _run_review(
+            store,
+            _review_response(
+                exposure="engaged",
+                player_contact_state=complete_state,
+                reason="玩家开始直接调查。",
+            ),
+            turn_index=2,
+        )
+
+        assert store.get_active().player_contact_state == complete_state
+
+    def test_player_contact_state_is_bounded_to_current_snapshot(self):
+        with pytest.raises(ValidationError):
+            DirectorEventReviewResult(
+                reason="测试长度限制。",
+                action="hold",
+                exposure="engaged",
+                player_contact_state="过" * 51,
+            )
+
+        prompt = Path("app/prompts/confirmation/director_event_review_v1.md").read_text(
+            encoding="utf-8"
+        )
+        assert "50 个汉字" in prompt
+        assert "不是发生过什么的流水账" in prompt
+        assert "当前接触情况" in prompt
 
     def test_review_resolves_active_event(self):
         store = DirectorEventStore()
@@ -418,6 +490,25 @@ class TestDirectorEventWorkflow:
         assert resolved.resolved_reason == "事件已经完成。"
         assert resolved.resolved_turn == 2
 
+    def test_player_intervention_resolves_without_entering_default_ending(self):
+        store = DirectorEventStore()
+        event = _event().model_copy(update={"progress_index": 1})
+        store.save(event)
+
+        _run_review(
+            store,
+            _review_response(
+                action="resolve",
+                reason="玩家销毁关键对象，后续默认结局已不可能发生。",
+            ),
+            turn_index=2,
+        )
+
+        resolved = store.get_by_id(event.event_id)
+        assert resolved.status == "resolved"
+        assert resolved.progress_index == 1
+        assert resolved.resolved_reason == "玩家销毁关键对象，后续默认结局已不可能发生。"
+
     def test_review_advances_active_event_progress(self):
         store = DirectorEventStore()
         event = _event()
@@ -425,13 +516,32 @@ class TestDirectorEventWorkflow:
 
         result = _run_review(
             store,
-            _review_response(action="advance", reason="事件进入下一阶段。"),
+            _review_response(action="advance", reason="玩家提前推动下一状态成立。"),
             turn_index=2,
         )
 
         assert result.notes == ["reviewed_existing_active_event", "advanced_active_event"]
         assert store.get_active().progress_index == 1
         assert store.get_active().next_progress_clock == _state().world_clock.advance_phase(3)
+
+    def test_default_route_advance_to_final_state_resolves(self):
+        store = DirectorEventStore()
+        event = _event().model_copy(update={"progress_index": 1})
+        store.save(event)
+
+        _run_review(
+            store,
+            _review_response(
+                action="advance",
+                reason="无人阻止，默认最终状态已经形成。",
+            ),
+            turn_index=2,
+        )
+
+        resolved = store.get_by_id(event.event_id)
+        assert resolved.status == "resolved"
+        assert resolved.progress_index == 2
+        assert resolved.resolved_reason == "无人阻止，默认最终状态已经形成。"
 
     def test_review_hold_auto_advances_when_due(self):
         store = DirectorEventStore()
@@ -546,6 +656,20 @@ class TestDirectorEventWorkflow:
 
 
 class TestDirectorEventSelector:
+    def test_milestones_are_state_checkpoints_not_scripts(self):
+        selector_prompt = Path(
+            "app/prompts/confirmation/director_event_select_v1.md"
+        ).read_text(encoding="utf-8")
+        reviewer_prompt = Path(
+            "app/prompts/confirmation/director_event_review_v1.md"
+        ).read_text(encoding="utf-8")
+
+        assert "世界状态检查点" in selector_prompt
+        assert "不得绑定唯一执行者、唯一方法" in selector_prompt
+        assert "玩家推动下一状态成立应 advance" in reviewer_prompt
+        assert "不受 progress_index 限制" in reviewer_prompt
+        assert "不得把“玩家介入”本身作为 resolve 依据" in reviewer_prompt
+
     def test_selector_receives_resolved_events_and_standby_secrets_without_scene_text(self):
         spy = _SpyGateway(_selection_response())
         DirectorEventSelector(spy).select_or_create(

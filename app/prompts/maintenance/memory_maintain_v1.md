@@ -40,11 +40,11 @@
 按以下顺序为每个字段产出期望内容：
 
 - proposals：对输入 active memories 的生命周期判断列表。列表中每个 MemoryMaintenanceProposal 按以下字段填写：
+  - reason：在决定 action 和生成 replacement 前，先根据 active memory 与 L1 summaries 说明判断依据，不得先决定维护动作再寻找理由。
+  - evidence_summary_ids：支撑本提案的 L1 summary ID 列表；非 keep 操作必填。
   - action：keep / invalidate / supersede / merge / discard_summary_like 之一。
   - source_memory_ids：本提案涉及的 active memory ID 列表，必须非空；merge 至少包含两条。
   - replacement：仅 supersede/merge 必填的替代记忆（ReplacementMemory），其它 action 必须为 null。其字段为：memory_kind、evidence_mode、subject、content、entities、owner、visibility、tags、confidence（0-1）、salience（0-1）、location、time_label。
-  - reason：本提案的具体原因，非空。
-  - evidence_summary_ids：支撑本提案的 L1 summary ID 列表；非 keep 操作必填。
 
 
 # 核心规则
@@ -88,13 +88,15 @@
 {{
   "proposals": [
     {{
+      "reason": "玩家已在午夜从未上锁的后门潜入，这一一次性机会已被使用并结束。",
+      "evidence_summary_ids": ["sum_12"],
       "action": "invalidate",
       "source_memory_ids": ["mem_1"],
-      "replacement": null,
-      "reason": "玩家已在午夜从未上锁的后门潜入，这一一次性机会已被使用并结束。",
-      "evidence_summary_ids": ["sum_12"]
+      "replacement": null
     }},
     {{
+      "reason": "原记忆记录守卫态度中立，但摘要显示其已转为敌意，存在更准确的新版本。",
+      "evidence_summary_ids": ["sum_15"],
       "action": "supersede",
       "source_memory_ids": ["mem_3"],
       "replacement": {{
@@ -110,9 +112,7 @@
         "salience": 0.7,
         "location": null,
         "time_label": null
-      }},
-      "reason": "原记忆记录守卫态度中立，但摘要显示其已转为敌意，存在更准确的新版本。",
-      "evidence_summary_ids": ["sum_15"]
+      }}
     }}
   ]
 }}

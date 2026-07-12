@@ -41,11 +41,11 @@ class ReplacementMemory(BaseModel):
 
 
 class MemoryMaintenanceProposal(BaseModel):
+    reason: str = Field(min_length=1)
+    evidence_summary_ids: list[str] = Field(default_factory=list)
     action: MaintenanceAction
     source_memory_ids: list[str] = Field(default_factory=list)
     replacement: ReplacementMemory | None = None
-    reason: str = Field(min_length=1)
-    evidence_summary_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_action(self):

@@ -67,10 +67,12 @@ class OpenAICompatibleProvider(LLMProvider):
         api_key: str,
         base_url: str,
         default_model: str = "gpt-4o",
+        thinking: str | None = None,
     ):
         self._api_key = api_key
         self._base_url = base_url
         self._default_model = default_model
+        self._thinking = thinking
 
     @property
     def _client(self) -> Any:
@@ -94,10 +96,17 @@ class OpenAICompatibleProvider(LLMProvider):
         from .errors import LLMProviderError
 
         try:
+            request: dict[str, Any] = {
+                "model": model or self._default_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+            }
+            if self._thinking is not None:
+                request["extra_body"] = {
+                    "thinking": {"type": self._thinking},
+                }
             response = self._client.chat.completions.create(
-                model=model or self._default_model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
+                **request,
             )
         except Exception as e:
             raise LLMProviderError(f"OpenAI-compatible API call failed: {e}") from e

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
-from app.domain.recall_memory.maintainer import MemoryMaintainer
+from app.domain.recall_memory.maintainer import MemoryMaintainer, MemoryMaintenanceProposal
 from app.domain.recall_memory.maintenance import maintain_memories_workflow
 from app.domain.recall_memory.schemas import Memory
 from app.domain.recall_memory.store import MemoryStore
@@ -156,3 +156,11 @@ def test_maintainer_prompt_can_narrow_overbroad_memories():
     assert "合伙人、潜在合伙人、盟友、根本转变、完全信任" in prompt
     assert "即使 memory_kind 不同" in prompt
     assert "不得分别 keep" in prompt
+    assert "不得先决定维护动作再寻找理由" in prompt
+    example = prompt.split("# 例子", 1)[1]
+    assert example.index('"reason"') < example.index('"action"')
+
+
+def test_maintenance_reason_and_evidence_precede_action_in_schema():
+    properties = MemoryMaintenanceProposal.model_json_schema()["properties"]
+    assert list(properties)[:3] == ["reason", "evidence_summary_ids", "action"]

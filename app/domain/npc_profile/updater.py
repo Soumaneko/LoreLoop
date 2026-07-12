@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import json
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
@@ -14,6 +16,9 @@ from app.domain.npc_profile.schemas import (
     utc_now,
 )
 from app.domain.scene_summary.schemas import SceneSummary
+
+if TYPE_CHECKING:
+    from app.domain.director_event.schemas import DirectorEvent
 
 
 class _NPCUpdateCandidate:
@@ -43,6 +48,7 @@ class NPCProfileUpdater:
         new_npc_hints: list[RetrievedNPC] | None = None,
         *,
         core_memory: CoreMemory,
+        director_event: DirectorEvent | None = None,
         recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
     ) -> list[NPCProfile]:
@@ -60,6 +66,18 @@ class NPCProfileUpdater:
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_facts_json": scene_facts,
+                    "director_event_identity_json": json.dumps(
+                        (
+                            {
+                                "premise": director_event.premise,
+                                "milestones": director_event.milestones,
+                            }
+                            if director_event is not None
+                            else None
+                        ),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "current_state_summary_json": project_current_state(current_state),
                     "recent_summaries_json": project_scene_summaries(recent_summaries or []),
                     "npc_candidates_json": json.dumps(

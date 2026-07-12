@@ -121,6 +121,18 @@ class _SpyGateway:
 
 
 class TestPlotOutlineAgent:
+    def test_runtime_schema_puts_director_decisions_before_planning(self):
+        gateway = _SpyGateway(json.loads(_build_outline_response()))
+
+        PlotOutlineAgent(gateway).generate(_make_context())
+
+        properties = json.loads(gateway.calls[0]["input_data"]["output_schema_json"])["properties"]
+        assert list(properties)[:3] == [
+            "director_event_reason",
+            "director_npc_reason",
+            "planning_reasoning",
+        ]
+
     def test_prompt_input_omits_action_parse_result(self):
         context = _make_context()
         gateway = _SpyGateway(json.loads(_build_outline_response()))
@@ -132,6 +144,7 @@ class TestPlotOutlineAgent:
         assert "turn_resolution_json" in input_data
         assert "resolution_reasoning" not in input_data["turn_resolution_json"]
         assert "action_parse_result_json" not in input_data
+        assert "director_event_instructions" not in input_data
         schema_json = input_data["output_schema_json"]
         assert "outline_summary" not in schema_json
         assert "event_id" not in schema_json
@@ -180,6 +193,27 @@ class TestPlotOutlineAgent:
         assert "ActionParseResult" not in prompt
         assert "根据 Player Input 和 TurnResolutionResult 规划本回合确定事件" in prompt
         assert "不得把 Player Input 简化成只移动、只观察或只等待下一回合" in prompt
+        assert "不得追加负面后果把 success 实质写成 failure" in prompt
+        assert "不得追加有利结果把 failure 实质写成 success" in prompt
+        assert "这属于落实判定，不属于擅自扩展结果" in prompt
+        assert "系统确认客观事实" in prompt
+        assert "不是玩家选择" in prompt
+        assert "不得确认是不是目标" in prompt
+        assert "避免替玩家判断" in prompt
+        assert "must_establish_facts" in prompt
+        assert "判断当前剧情是否适合使用 DirectorEvent 的可选前台影响" in prompt
+        assert "输入未提供可用前台影响时，必须拒绝使用" in prompt
+        assert "若要求角色披露信息，必须写出本回合允许披露的具体事实" in prompt
+        assert "不得使用未携带事实内容的占位描述" in prompt
+        assert "依据不足时必须保持未知" in prompt
+        assert "canonical_premise" in prompt
+        assert "不得规划与其矛盾的事件原因、人物行为、线索内容或物品流转" in prompt
+        assert "在规划任何事件前，先审计 DirectorEvent" in prompt
+        example = prompt.split("# 例子", 1)[1]
+        assert example.index('"director_event_reason"') < example.index('"planning_reasoning"')
+        assert example.index('"director_npc_reason"') < example.index('"planning_reasoning"')
+        assert "mode=foreshadow" not in prompt
+        assert "mode=intersect" not in prompt
         assert "narrative_goal" not in prompt
         assert "ActionResolutionFrame" in prompt
         assert "已经确定发生的事实" in prompt
@@ -200,7 +234,7 @@ class TestPlotOutlineAgent:
         assert "规划前的逻辑审计" in prompt
         assert "不得把上下文中存在的设定直接变成 NPC 或世界公开确认" in prompt
         assert "NPC/世界反应的因果是否成立" in prompt
-        assert "哪些信息不能被公开确认" in prompt
+        assert "哪些后台信息不能在本回合被角色知晓" in prompt
         assert "hidden_secret" in prompt
         assert "只写抽象边界" in prompt
         assert "不得在原因字段里藏具体剧情影响" in prompt

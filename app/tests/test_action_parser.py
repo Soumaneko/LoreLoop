@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -8,6 +9,16 @@ from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, NPCState, PlayerState, ResourcesState, SceneState
+
+
+def test_prompt_requires_complete_explicit_action_coverage():
+    prompt = Path("app/prompts/generation/action_extract_v1.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "覆盖审计" in prompt
+    assert "A、B、C 都必须被 atomic_actions 覆盖" in prompt
+    assert "擅自推迟到下一回合" in prompt
 
 
 def _make_current_state() -> CurrentState:

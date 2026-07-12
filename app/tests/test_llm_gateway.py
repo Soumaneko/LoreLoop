@@ -15,6 +15,7 @@ from app.core.llm.gateway import LLMGateway
 from app.core.llm.mock import MockLLM
 from app.core.llm.providers import (
     MockProvider,
+    OpenAICompatibleProvider,
     ProviderResult,
     _extract_usage,
 )
@@ -349,6 +350,51 @@ class TestMockProviderFeatures:
 
 
 class TestProviderCompatibility:
+    @pytest.mark.parametrize(
+        ("thinking", "expected_extra_body"),
+        [
+            (None, None),
+            ("disabled", {"thinking": {"type": "disabled"}}),
+            ("enabled", {"thinking": {"type": "enabled"}}),
+        ],
+    )
+    def test_openai_compatible_provider_sends_configured_thinking_mode(
+        self,
+        monkeypatch,
+        thinking,
+        expected_extra_body,
+    ):
+        captured = {}
+
+        class _Completions:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))],
+                    usage=None,
+                )
+
+        client = SimpleNamespace(
+            chat=SimpleNamespace(completions=_Completions()),
+        )
+        monkeypatch.setattr(
+            OpenAICompatibleProvider,
+            "_client",
+            property(lambda _self: client),
+        )
+        provider = OpenAICompatibleProvider(
+            api_key="test",
+            base_url="https://example.test",
+            thinking=thinking,
+        )
+
+        provider.generate("prompt", model="model", temperature=0.2)
+
+        if expected_extra_body is None:
+            assert "extra_body" not in captured
+        else:
+            assert captured["extra_body"] == expected_extra_body
+
     def test_file_prompt_provider_returns_provider_result(self):
         class _Exchange:
             def request(self, **_kwargs):

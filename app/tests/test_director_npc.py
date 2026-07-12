@@ -26,12 +26,21 @@ from app.graph import confirmation_helpers
 
 
 class TestDirectorNPCDispatchPrompt:
+    def test_reason_precedes_dispatch_decision_in_schema(self):
+        assert list(DirectorNPCDispatchDecision.model_json_schema()["properties"]) == [
+            "reason",
+            "action",
+            "selected_id",
+            "selected_name",
+        ]
+
     def test_location_is_soft_anchor_not_hard_block(self):
         prompt = Path("app/prompts/generation/director_npc_dispatch_v1.md").read_text(encoding="utf-8")
 
         assert "地理位置不是硬锁定" in prompt
         assert "默认选择 `none`" in prompt
         assert "你不负责设计出场桥段" in prompt
+        assert "不得先选人再为选择寻找理由" in prompt
 
 
 class TestDirectorNPCConfirmationSceneProjection:

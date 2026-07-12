@@ -18,9 +18,8 @@ def _recent_resolved_projection(recent_resolved_event: DirectorEvent | None) -> 
         "title": recent_resolved_event.title,
         "resolved_turn": resolved_turn,
         "message": f"『{recent_resolved_event.title}』事件最近已收束。",
+        "player_contact_state": recent_resolved_event.player_contact_state,
     }
-    if recent_resolved_event.resolved_reason:
-        data["resolved_reason"] = recent_resolved_event.resolved_reason
     return data
 
 
@@ -112,8 +111,10 @@ def project_plot_director_event(
                     "event_id": event.event_id,
                     "title": event.title,
                     "exposure": event.exposure,
+                    "canonical_premise": event.premise,
                     "bridge_anchors": event.bridge_anchors,
                     "progress_index": event.progress_index,
+                    "player_contact_state": event.player_contact_state,
                     "current_milestone": event.milestones[event.progress_index],
                     "next_progress_clock": (
                         event.next_progress_clock.model_dump(mode="json")
@@ -126,94 +127,59 @@ def project_plot_director_event(
             indent=2,
         )
 
+    if event.exposure == "foreshadowed":
+        current_milestone = event.milestones[event.progress_index]
+        instruction = EventUseInstruction(
+            mode="intersect",
+            allowed_effect=current_milestone,
+            reason="玩家已经接触事件线索但尚未正式介入，本轮可按当前 milestone 回应玩家的相关行动。",
+        )
+        return json.dumps(
+            {
+                "event_use_instruction": instruction.model_dump(mode="json"),
+                "event_hint": {
+                    "event_id": event.event_id,
+                    "title": event.title,
+                    "exposure": event.exposure,
+                    "player_contact_state": event.player_contact_state,
+                    "current_milestone": current_milestone,
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
     text = _context_text(
         user_input=user_input,
         current_state=current_state,
         context_facts=context_facts,
     )
     entry_index, entry = _matching_entry_point(event, text)
-    current_milestone = event.milestones[event.progress_index]
-    known_hint = {
-        "event_id": event.event_id,
-        "title": event.title,
-        "exposure": event.exposure,
-        "bridge_anchors": event.bridge_anchors,
-        "progress_index": event.progress_index,
-        "current_milestone": current_milestone,
-        "next_progress_clock": (
-            event.next_progress_clock.model_dump(mode="json")
-            if event.next_progress_clock is not None
-            else None
-        ),
-    }
     if entry is None:
         instruction = EventUseInstruction(
             mode="none",
             reason="本回合稳定锚点没有命中导演事件入口。",
         )
-        event_hint = (
-            known_hint
-            if event.exposure != "hidden"
-            else None
-        )
         return json.dumps(
             {
                 "event_use_instruction": instruction.model_dump(mode="json"),
-                "event_hint": event_hint,
+                "event_hint": None,
             },
             ensure_ascii=False,
             indent=2,
         )
 
-    mode = "intersect" if event.exposure == "foreshadowed" else "foreshadow"
-    allowed_effect = current_milestone if event.exposure != "hidden" else entry.visible_sign
     instruction = EventUseInstruction(
-        mode=mode,
+        mode="foreshadow",
         entry_point_id=f"entry_{entry_index + 1}",
-        allowed_effect=allowed_effect,
+        allowed_effect=entry.visible_sign,
         reason="当前输入、场景或上下文事实命中导演事件入口锚点。",
-    )
-    event_hint = (
-        {
-            **known_hint,
-            "visible_sign": entry.visible_sign,
-        }
-        if event.exposure != "hidden"
-        else {
-            "visible_sign": entry.visible_sign,
-        }
     )
     return json.dumps(
         {
             "event_use_instruction": instruction.model_dump(mode="json"),
-            "event_hint": event_hint,
+            "event_hint": {"visible_sign": entry.visible_sign},
         },
         ensure_ascii=False,
         indent=2,
-    )
-
-
-def plot_outline_director_event_instructions(
-    event: DirectorEvent | None,
-    *,
-    recent_resolved_event: DirectorEvent | None = None,
-) -> str:
-    if event is None and _recent_resolved_projection(recent_resolved_event) is not None:
-        return (
-            "director_event_json 中的 event_use_instruction.mode=aftermath 只允许自然余波，"
-            "不得把已收束事件继续当作 active 事件推进，不得复燃同一事件。"
-        )
-    if event is None or event.status != "active":
-        return ""
-    if event.exposure == "engaged":
-        return (
-            "玩家已经介入该事件；"
-            "foreground 模式只提供当前 milestone 投影；"
-            "只在当前行动、NPC 或结果自然相关时体现其压力、机会或后果。"
-        )
-    return (
-        "DirectorEvent 的使用必须服从 director_event_json.event_use_instruction。"
-        "mode=none 时不得使用；mode=foreshadow 时只能展示 allowed_effect 中的 visible_sign，不得形成任务；"
-        "mode=intersect 时只可使用 allowed_effect 中的当前 milestone 投影改变当前场景条件；"
-        "具体前台影响必须融入 planned_events、must_establish_facts 或 must_not_establish_facts。"
     )

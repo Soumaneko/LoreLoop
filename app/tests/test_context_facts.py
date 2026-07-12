@@ -252,3 +252,58 @@ def test_select_context_profiles_matches_state_and_user_input(tmp_path):
     assert {profile.name for profile in result.entity_profiles} >= {"麂皮褡裢", "盐帮"}
     assert [profile.name for profile in result.npc_profiles] == ["顾晚棠"]
     assert {anchor.text for anchor in result.anchors} >= {"顾晚棠", "麂皮褡裢", "盐帮"}
+
+
+def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
+    entity_store = EntityStore(str(tmp_path / "entities.db"))
+    npc_store = NPCProfileStore(str(tmp_path / "npcs.db"))
+    try:
+        entity_store.upsert(
+            EntityProfile(
+                entity_type="item",
+                name="棕色皮面旧书",
+                aliases=["失窃旧书"],
+            )
+        )
+        npc_store.upsert(
+            NPCProfile(
+                name="希尔达·布拉斯科特",
+                aliases=["委托人"],
+                role="藏书修复师与情报商人",
+            )
+        )
+        state = CurrentState(
+            scene=SceneState(
+                scene_id="scene_005",
+                location="镇西废弃小屋",
+                participants=["莱尔", "委托人"],
+            ),
+            player=PlayerState(name="莱尔", position="镇西废弃小屋"),
+            npcs=[
+                NPCState(
+                    name="委托人",
+                    role="委托人",
+                    location="镇西废弃小屋",
+                )
+            ],
+            resources=ResourcesState(
+                inventory=[InventoryItem(name="失窃旧书", quantity=1)]
+            ),
+        )
+
+        result = select_context_profiles(
+            user_input="我继续追问她。",
+            current_state=state,
+            entity_store=entity_store,
+            npc_store=npc_store,
+        )
+    finally:
+        entity_store.close()
+        npc_store.close()
+
+    assert [profile.name for profile in result.npc_profiles] == [
+        "希尔达·布拉斯科特"
+    ]
+    assert [profile.name for profile in result.entity_profiles] == [
+        "棕色皮面旧书"
+    ]
