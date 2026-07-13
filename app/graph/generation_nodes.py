@@ -361,7 +361,6 @@ def generate_scene_node(state: GenerationState) -> GenerationState:
         outline=state["outline"],
         current_state=state["current_state"],
         core_memory=state["core_memory"],
-        context_facts=state["context_facts"],
         recent_scene=recent_scene,
         turn_index=next_turn_index,
         entity_profiles=writer_entity_profile_views,

@@ -4,8 +4,6 @@ from typing import cast
 from pydantic import Field, create_model
 
 from app.core.llm import LLMGateway
-from app.domain.context_facts.schemas import ContextFactSet
-from app.domain.context_facts.views import project_context_facts
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
@@ -31,7 +29,6 @@ class SceneWriterAgent:
         outline: PlotOutlineResult,
         current_state: CurrentState,
         core_memory: CoreMemory,
-        context_facts: ContextFactSet | None = None,
         recent_scene: ShortTermScene | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         npc_profiles: list[NPCProfilePublicView] | None = None,
@@ -60,9 +57,6 @@ class SceneWriterAgent:
                     "outline_json": project_outline(outline),
                     "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "context_facts_json": project_context_facts(
-                        context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[])
-                    ),
                     "entity_profiles_json": project_entity_profiles(entity_profiles or []),
                     "npc_profiles_json": project_npc_profiles(npc_profiles or []),
                     "recent_scene_json": project_recent_scene(recent_scene),

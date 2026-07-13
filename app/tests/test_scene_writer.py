@@ -83,6 +83,7 @@ class TestSceneWriterAgent:
         assert "tone_notes" not in projected["planned_events"][0]
         assert "outline_summary" not in projected
         assert "planning_reasoning" not in projected
+        assert "director_npc_reason" not in projected
         assert projected["planned_events"][0]["event_fact"] == "主角走向吧台与米莉打招呼。"
 
     def test_recent_scene_projection_omits_user_input(self):
@@ -119,6 +120,36 @@ class TestSceneWriterAgent:
         assert "不得在 scene_text 中自行补出具体机构、专有名词、功能物品" in prompt
         assert "Entity Profiles" in prompt
         assert "绝对不得出现在 scene_text 中" in prompt
+        assert "## Context Facts" not in prompt
+        assert "只有 Plot Outline 明确存在冲突时才写冲突" in prompt
+        assert "不得重开判定" in prompt
+        assert "发言权与行动所有权必须严格保持" in prompt
+        assert "不得仅为解释当前行动而由接收者反过来逐条讲解给信息来源" in prompt
+        assert "绝对不得转译为角色对白" in prompt
+
+    def test_writer_input_does_not_receive_context_facts_or_plot_reasoning(self):
+        class SpyGateway:
+            def __init__(self):
+                self.input_data = None
+
+            def run(self, **kwargs):
+                self.input_data = kwargs["input_data"]
+                return kwargs["output_schema"].model_validate(
+                    json.loads(_build_response())
+                )
+
+        gateway = SpyGateway()
+        SceneWriterAgent(gateway).write(
+            outline=_make_outline(),
+            current_state=_make_state(),
+            core_memory=CoreMemory(items=[]),
+            recent_scene=None,
+        )
+
+        assert "context_facts_json" not in gateway.input_data
+        outline = json.loads(gateway.input_data["outline_json"])
+        assert "planning_reasoning" not in outline
+        assert "director_npc_reason" not in outline
 
     def test_generates_scene_text(self):
         mock = MockLLM()
