@@ -208,9 +208,10 @@ async function readEventStream(response, scope, onEvent) {
       if (!part.startsWith("data: ")) continue;
       const event = JSON.parse(part.slice(6));
       if (!event.ok) throw event;
-      recordStep(scope, event);
+      const transient = event.step === "scene_stream_started" || event.step === "scene_text_delta";
+      if (!transient) recordStep(scope, event);
       onEvent(event);
-      renderDebug();
+      if (!transient) renderDebug();
     }
   }
 }
@@ -253,6 +254,7 @@ function restoreChat(history) {
 }
 
 function addEditableScene(textValue, meta, closingPrompt = "") {
+  removeStreamingScene();
   removePendingScene();
   state.pendingSceneText = textValue;
   const wrap = document.createElement("div");
@@ -309,6 +311,55 @@ function addEditableScene(textValue, meta, closingPrompt = "") {
   };
   els.messages.appendChild(wrap);
   els.messages.scrollTop = els.messages.scrollHeight;
+}
+
+function messagesNearBottom() {
+  const distance = els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight;
+  return distance <= 48;
+}
+
+function startStreamingScene(attempt, versionIndex = null) {
+  let wrap = document.getElementById("streamingSceneBubble");
+  const resolvedVersion = versionIndex || Number(wrap?.dataset.versionIndex) || state.pendingVariants.length + 1;
+  if (!wrap) {
+    removePendingScene();
+    wrap = document.createElement("div");
+    wrap.className = "message assistant";
+    wrap.id = "streamingSceneBubble";
+    wrap.innerHTML = `
+      <div class="bubble scene-bubble">
+        <div class="bubble-meta">
+          <span class="scene-meta"></span>
+          <span class="scene-version-controls">
+            <button class="icon-button" disabled>‹</button>
+            <span class="streaming-version-position"></span>
+            <button class="icon-button" disabled>›</button>
+            <button disabled>Retry</button>
+          </span>
+        </div>
+        <div class="scene-display"></div>
+      </div>
+    `;
+    els.messages.appendChild(wrap);
+  }
+  wrap.dataset.versionIndex = resolvedVersion;
+  wrap.querySelector(".scene-meta").textContent = attempt > 1 ? `正在重新生成正文 · 第 ${attempt} 次尝试` : "正在生成正文";
+  wrap.querySelector(".streaming-version-position").textContent = `${resolvedVersion} / ${resolvedVersion}`;
+  wrap.querySelector(".scene-display").textContent = "";
+  els.messages.scrollTop = els.messages.scrollHeight;
+}
+
+function appendStreamingScene(delta) {
+  if (!delta) return;
+  if (!document.getElementById("streamingSceneBubble")) startStreamingScene(1);
+  const display = document.querySelector("#streamingSceneBubble .scene-display");
+  const shouldFollow = messagesNearBottom();
+  display.textContent += delta;
+  if (shouldFollow) els.messages.scrollTop = els.messages.scrollHeight;
+}
+
+function removeStreamingScene() {
+  document.getElementById("streamingSceneBubble")?.remove();
 }
 
 function removePendingScene() {
@@ -372,6 +423,7 @@ function selectPendingVariant(index) {
 }
 
 function appendPendingVariant(data) {
+  removeStreamingScene();
   state.pendingGroupId = data.group_id;
   state.pendingVariants.push({
     turn_id: data.turn_id,
@@ -1510,6 +1562,8 @@ async function generateTurn() {
       const data = event.data || {};
       if (event.step === "state_loaded") setDebugStatus("状态加载完成");
       if (event.step === "action_parsed") state.activeTab = "generation";
+      if (event.step === "scene_stream_started") startStreamingScene(data.attempt || 1);
+      if (event.step === "scene_text_delta") appendStreamingScene(data.delta || "");
       if (event.step === "scene_written") {
         appendPendingVariant(data);
         setStatus("正文已生成 - 待确认");
@@ -1517,6 +1571,7 @@ async function generateTurn() {
       }
     });
   } catch (err) {
+    removeStreamingScene();
     state.run.errors.push(err);
     setStatus("生成失败");
     setDebugStatus("生成失败");
@@ -1532,6 +1587,7 @@ async function retryTurn() {
   if (!state.pendingTurnId || !state.pendingGroupId) return;
   capturePendingSceneText();
   const retryFromTurnId = state.pendingTurnId;
+  const retryFromVariantIndex = state.pendingVariantIndex;
   resetRun("generation");
   setStatus("正在重新生成...", true);
   setDebugStatus("Retry 生成中");
@@ -1545,7 +1601,10 @@ async function retryTurn() {
     });
     await readEventStream(response, "generation", (event) => {
       const data = event.data || {};
+      if (event.step === "retry_started") startStreamingScene(1, data.version_index || state.pendingVariants.length + 1);
       if (event.step === "action_parsed") state.activeTab = "generation";
+      if (event.step === "scene_stream_started") startStreamingScene(data.attempt || 1);
+      if (event.step === "scene_text_delta") appendStreamingScene(data.delta || "");
       if (event.step === "scene_written") {
         appendPendingVariant(data);
         setStatus("新版本已生成 - 待确认");
@@ -1553,6 +1612,8 @@ async function retryTurn() {
       }
     });
   } catch (err) {
+    removeStreamingScene();
+    selectPendingVariant(retryFromVariantIndex);
     state.run.errors.push(err);
     setStatus("重新生成失败，原版本仍可确认");
     setDebugStatus("Retry 失败");

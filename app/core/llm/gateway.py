@@ -1,6 +1,7 @@
 import json
 import time
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
@@ -55,6 +56,8 @@ class LLMGateway:
         temperature: float = 0.2,
         max_retries: int = 2,
         trace_id: str | None = None,
+        on_chunk: Callable[[str], None] | None = None,
+        on_attempt_start: Callable[[int], None] | None = None,
     ) -> BaseModel:
         prompt_template, prompt_version = self._prompt_loader.load(task)
         model = model or self._default_model
@@ -68,9 +71,19 @@ class LLMGateway:
         for attempt in range(1, max_retries + 2):
             latency_ms = 0.0
             try:
-                raw_output, latency_ms, token_usage = self._call_provider(
-                    current_prompt, model=model, temperature=temperature
-                )
+                if on_attempt_start is not None:
+                    on_attempt_start(attempt)
+                if on_chunk is None:
+                    raw_output, latency_ms, token_usage = self._call_provider(
+                        current_prompt, model=model, temperature=temperature
+                    )
+                else:
+                    raw_output, latency_ms, token_usage = self._call_provider_stream(
+                        current_prompt,
+                        model=model,
+                        temperature=temperature,
+                        on_chunk=on_chunk,
+                    )
                 last_raw_output = raw_output
 
                 parsed = self._parse_json(raw_output)
@@ -206,6 +219,35 @@ class LLMGateway:
             raise LLMProviderError(f"Provider call failed: {e}") from e
         latency = (time.time() - start) * 1000
         return result.content, latency, result.usage
+
+    def _call_provider_stream(
+        self,
+        prompt: str,
+        *,
+        model: str,
+        temperature: float,
+        on_chunk: Callable[[str], None],
+    ) -> tuple[str, float, dict | None]:
+        start = time.time()
+        parts: list[str] = []
+        token_usage: dict | None = None
+        try:
+            for result in self._provider.stream_generate(
+                prompt,
+                model=model,
+                temperature=temperature,
+            ):
+                if result.content:
+                    parts.append(result.content)
+                    on_chunk(result.content)
+                if result.usage is not None:
+                    token_usage = result.usage
+        except LLMError:
+            raise
+        except Exception as e:
+            raise LLMProviderError(f"Provider streaming call failed: {e}") from e
+        latency = (time.time() - start) * 1000
+        return "".join(parts), latency, token_usage
 
     def _parse_json(self, raw_output: str) -> Any:
         cleaned = raw_output.strip()

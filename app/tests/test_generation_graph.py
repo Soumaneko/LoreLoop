@@ -53,8 +53,12 @@ def test_generation_events_reducer_merges_parallel_branch_events():
 def test_generate_turn_stream_forwards_state_events(monkeypatch):
     class _FakeGraph:
         def stream(self, _state, stream_mode):
-            assert stream_mode == "updates"
-            yield {
+            assert stream_mode == ["updates", "custom"]
+            yield "custom", {
+                "step": "scene_text_delta",
+                "data": {"delta": "正文"},
+            }
+            yield "updates", {
                 "fake_node": {
                     "value": 1,
                     "events": [{"step": "node_done", "data": {"value": 1}}],
@@ -85,6 +89,7 @@ def test_generate_turn_stream_forwards_state_events(monkeypatch):
 
     assert [event["step"] for event in events] == [
         "prepared",
+        "scene_text_delta",
         "node_done",
         "finalized",
     ]
@@ -93,14 +98,14 @@ def test_generate_turn_stream_forwards_state_events(monkeypatch):
 def test_generation_buffers_context_events_until_action_parsed(monkeypatch):
     class _FakeGraph:
         def stream(self, _state, stream_mode):
-            assert stream_mode == "updates"
-            yield {
+            assert stream_mode == ["updates", "custom"]
+            yield "updates", {
                 "extract_context_facts": {
                     "context_facts": object(),
                     "events": [{"step": "context_facts_done", "data": {}}],
                 }
             }
-            yield {
+            yield "updates", {
                 "parse_action": {
                     "action_parse_result": object(),
                     "events": [

@@ -124,7 +124,13 @@ def _generate_turn_stream(
         event_count += 1
         yield event
 
-    for update in graph.stream(state, stream_mode="updates"):
+    for stream_mode, update in graph.stream(
+        state,
+        stream_mode=["updates", "custom"],
+    ):
+        if stream_mode == "custom":
+            yield update
+            continue
         for node_name, node_update in update.items():
             events = node_update.get("events", [])
             state.update({

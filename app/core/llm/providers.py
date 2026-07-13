@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from collections.abc import Iterator
 from typing import Any
 
 
@@ -19,6 +20,15 @@ class LLMProvider(ABC):
         temperature: float,
     ) -> ProviderResult:
         pass
+
+    def stream_generate(
+        self,
+        prompt: str,
+        *,
+        model: str,
+        temperature: float,
+    ) -> Iterator[ProviderResult]:
+        yield self.generate(prompt, model=model, temperature=temperature)
 
 
 class MockProvider(LLMProvider):
@@ -118,6 +128,40 @@ class OpenAICompatibleProvider(LLMProvider):
         usage = _extract_usage(getattr(response, "usage", None))
 
         return ProviderResult(content=content, usage=usage)
+
+    def stream_generate(
+        self,
+        prompt: str,
+        *,
+        model: str = "",
+        temperature: float = 0.2,
+    ) -> Iterator[ProviderResult]:
+        from .errors import LLMProviderError
+
+        try:
+            request: dict[str, Any] = {
+                "model": model or self._default_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "stream": True,
+                "stream_options": {"include_usage": True},
+            }
+            if self._thinking is not None:
+                request["extra_body"] = {
+                    "thinking": {"type": self._thinking},
+                }
+            response = self._client.chat.completions.create(**request)
+            for chunk in response:
+                usage = _extract_usage(getattr(chunk, "usage", None))
+                content = ""
+                if getattr(chunk, "choices", None):
+                    content = chunk.choices[0].delta.content or ""
+                if content or usage:
+                    yield ProviderResult(content=content, usage=usage)
+        except Exception as e:
+            raise LLMProviderError(
+                f"OpenAI-compatible streaming API call failed: {e}"
+            ) from e
 
 
 def _extract_usage(usage_obj: Any) -> dict | None:

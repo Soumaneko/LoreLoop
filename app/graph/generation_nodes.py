@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from langgraph.config import get_stream_writer
+
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
@@ -325,6 +327,7 @@ def generate_plot_outline_node(state: GenerationState) -> GenerationState:
 
 
 def generate_scene_node(state: GenerationState) -> GenerationState:
+    stream_writer = get_stream_writer()
     beat_entity_anchors = build_entity_retrieval_anchors(state["outline"])
     anchors = [
         *state["action_parse_result"].anchors,
@@ -367,6 +370,14 @@ def generate_scene_node(state: GenerationState) -> GenerationState:
         npc_profiles=writer_npc_public_views,
         max_chars=state.get("max_chars", 1500),
         trace_id=state["trace_id"],
+        on_stream_start=lambda attempt: stream_writer({
+            "step": "scene_stream_started",
+            "data": {"attempt": attempt, "trace_id": state["trace_id"]},
+        }),
+        on_scene_text_delta=lambda delta: stream_writer({
+            "step": "scene_text_delta",
+            "data": {"delta": delta, "trace_id": state["trace_id"]},
+        }),
     )
     return {
         "beat_entity_anchors": beat_entity_anchors,

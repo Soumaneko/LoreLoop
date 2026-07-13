@@ -61,6 +61,33 @@ class TestLLMGatewayNormalFlow:
         assert result.text == "hi"
         assert result.length == 2
 
+    def test_streaming_output_forwards_chunks_and_returns_validated_result(self):
+        class _StreamingProvider(MockProvider):
+            def stream_generate(self, *_args, **_kwargs):
+                yield ProviderResult(content='{"text": "hel')
+                yield ProviderResult(content='lo", "length": 5}')
+                yield ProviderResult(content="", usage={"total_tokens": 12})
+
+        gateway = LLMGateway(
+            provider=_StreamingProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=NullTraceLogger(),
+        )
+        chunks = []
+        attempts = []
+
+        result = gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+            on_chunk=chunks.append,
+            on_attempt_start=attempts.append,
+        )
+
+        assert result == EchoResult(text="hello", length=5)
+        assert chunks == ['{"text": "hel', 'lo", "length": 5}']
+        assert attempts == [1]
+
 
 class TestLLMGatewayRetryFlow:
     def test_json_parse_failure_retries_then_succeeds(self):
@@ -394,6 +421,40 @@ class TestProviderCompatibility:
             assert "extra_body" not in captured
         else:
             assert captured["extra_body"] == expected_extra_body
+
+    def test_openai_compatible_provider_streams_content_and_usage(self, monkeypatch):
+        captured = {}
+
+        class _Completions:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                return iter([
+                    SimpleNamespace(
+                        choices=[SimpleNamespace(delta=SimpleNamespace(content="一段"))],
+                        usage=None,
+                    ),
+                    SimpleNamespace(
+                        choices=[],
+                        usage=SimpleNamespace(total_tokens=9),
+                    ),
+                ])
+
+        client = SimpleNamespace(chat=SimpleNamespace(completions=_Completions()))
+        monkeypatch.setattr(
+            OpenAICompatibleProvider,
+            "_client",
+            property(lambda _self: client),
+        )
+        provider = OpenAICompatibleProvider("key", "https://example.test")
+
+        chunks = list(provider.stream_generate("prompt", model="model", temperature=0.8))
+
+        assert captured["stream"] is True
+        assert captured["stream_options"] == {"include_usage": True}
+        assert chunks == [
+            ProviderResult(content="一段", usage=None),
+            ProviderResult(content="", usage={"total_tokens": 9}),
+        ]
 
     def test_file_prompt_provider_returns_provider_result(self):
         class _Exchange:

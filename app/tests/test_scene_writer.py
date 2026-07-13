@@ -5,7 +5,7 @@ from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
 from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
-from app.domain.scene_writer.agent import SceneWriterAgent
+from app.domain.scene_writer.agent import SceneWriterAgent, _JSONStringFieldStream
 from app.domain.scene_writer.opening import OpeningSceneAgent
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
 from app.domain.scene_writer.views import project_outline, project_recent_scene
@@ -75,6 +75,25 @@ def _build_response(
 
 
 class TestSceneWriterAgent:
+    def test_scene_text_stream_handles_chunk_boundaries_and_json_escapes(self):
+        stream = _JSONStringFieldStream("scene_text")
+
+        deltas = [
+            stream.feed('{"scene_reasoning":"略","scene_'),
+            stream.feed('text":"第一行\\n她说：\\"走吧\\"。'),
+            stream.feed('","closing_prompt":"继续？"}'),
+        ]
+
+        assert "".join(deltas) == '第一行\n她说："走吧"。'
+
+    def test_scene_text_stream_can_reset_for_retry(self):
+        stream = _JSONStringFieldStream("scene_text")
+        assert stream.feed('{"scene_text":"失败版本') == "失败版本"
+
+        stream.reset()
+
+        assert stream.feed('{"scene_text":"有效版本"}') == "有效版本"
+
     def test_outline_projection_uses_planned_events(self):
         projected = json.loads(project_outline(_make_outline()))
 

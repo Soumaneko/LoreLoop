@@ -1,4 +1,6 @@
 import json
+import re
+from collections.abc import Callable
 from typing import cast
 
 from pydantic import Field, create_model
@@ -35,6 +37,8 @@ class SceneWriterAgent:
         turn_index: int = 1,
         max_chars: int = 1500,
         trace_id: str | None = None,
+        on_scene_text_delta: Callable[[str], None] | None = None,
+        on_stream_start: Callable[[int], None] | None = None,
     ) -> SceneWriterResult:
         if max_chars < 1:
             raise ValueError("max_chars must be >= 1")
@@ -46,6 +50,17 @@ class SceneWriterAgent:
             closing_prompt=(str, Field(min_length=1)),
         )
         schema = runtime_schema.model_json_schema()
+        scene_stream = _JSONStringFieldStream("scene_text")
+
+        def start_attempt(attempt: int) -> None:
+            scene_stream.reset()
+            if on_stream_start is not None:
+                on_stream_start(attempt)
+
+        def consume_chunk(chunk: str) -> None:
+            delta = scene_stream.feed(chunk)
+            if delta and on_scene_text_delta is not None:
+                on_scene_text_delta(delta)
 
         result = cast(
             SceneWriterResult,
@@ -65,6 +80,8 @@ class SceneWriterAgent:
                 output_schema=runtime_schema,
                 temperature=0.8,
                 trace_id=trace_id,
+                on_chunk=consume_chunk if on_scene_text_delta is not None else None,
+                on_attempt_start=start_attempt if on_scene_text_delta is not None else None,
             ),
         )
         closing_prompt = result.closing_prompt.strip()
@@ -77,3 +94,54 @@ class SceneWriterAgent:
             closing_prompt=closing_prompt,
             next_action_directions=result.next_action_directions,
         )
+
+
+class _JSONStringFieldStream:
+    def __init__(self, field: str):
+        self._marker = re.compile(rf'"{re.escape(field)}"\s*:\s*"')
+        self.reset()
+
+    def reset(self) -> None:
+        self._prefix = ""
+        self._started = False
+        self._finished = False
+        self._escape = ""
+
+    def feed(self, chunk: str) -> str:
+        if self._finished or not chunk:
+            return ""
+        if not self._started:
+            self._prefix += chunk
+            match = self._marker.search(self._prefix)
+            if match is None:
+                return ""
+            chunk = self._prefix[match.end():]
+            self._prefix = ""
+            self._started = True
+
+        output: list[str] = []
+        for char in chunk:
+            if self._escape:
+                self._escape += char
+                if self._escape == "\\u" or (
+                    self._escape.startswith("\\u") and len(self._escape) < 6
+                ):
+                    continue
+                output.append(self._decode_escape(self._escape))
+                self._escape = ""
+                continue
+            if char == "\\":
+                self._escape = "\\"
+            elif char == '"':
+                self._finished = True
+                break
+            else:
+                output.append(char)
+        return "".join(output)
+
+    @staticmethod
+    def _decode_escape(value: str) -> str:
+        try:
+            return json.loads(f'"{value}"')
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return value
