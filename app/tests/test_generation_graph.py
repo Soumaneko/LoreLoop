@@ -16,6 +16,16 @@ def test_generation_graph_compiles():
     assert graph is not None
 
 
+def test_director_event_consumer_runs_after_context_and_before_plot():
+    graph = generation_graph.build_generation_graph().get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+
+    assert ("extract_context_facts", "consume_director_events") in edges
+    assert ("consume_director_events", "generate_plot_outline") in edges
+    assert ("maybe_director_npc", "generate_plot_outline") in edges
+    assert ("consume_director_events", "resolve_turn") not in edges
+
+
 def test_generation_events_reducer_merges_parallel_branch_events():
     def left(_state: GenerationState) -> GenerationState:
         return {"events": [{"step": "left", "data": {}}]}

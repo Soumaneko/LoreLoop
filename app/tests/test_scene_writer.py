@@ -57,7 +57,6 @@ def _make_outline() -> PlotOutlineResult:
         information_boundaries=["主角只能知道米莉公开说出的暴风城消息。"],
         required_entities=["米莉", "暴风城"],
         scene_stopping_point="主角停在吧台前，米莉的话题仍可继续追问。",
-        director_event_reason="本测试未使用。",
         director_npc_reason="本测试未使用。",
     )
 

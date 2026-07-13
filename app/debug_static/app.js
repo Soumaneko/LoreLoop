@@ -504,7 +504,9 @@ function renderStatePanel() {
   const player = current.player || {};
   const resources = current.resources || {};
   const npcs = current.npcs || [];
-  const activeEvent = data.active_director_event;
+  const activeDirectorEvents = data.active_director_events || [];
+  const activeArcEvent = activeDirectorEvents.find((event) => event.role === "arc");
+  const activeAmbientEvent = activeDirectorEvents.find((event) => event.role === "ambient");
   const standbyDirectorNpcs = data.standby_director_npcs || [];
   const dispatchedDirectorNpcs = data.dispatched_director_npcs || [];
   const memories = data.memories || [];
@@ -537,12 +539,14 @@ function renderStatePanel() {
     ${details(`NPC 档案 (${data.npc_active_profile_count ?? 0}/${data.npc_profile_count ?? 0})`, renderNpcStateGroup(data.npc_profiles || []))}
     ${details("导演", `
       ${metrics([
-        metric("事件", activeEvent ? "active" : "none", activeEvent ? "ok" : ""),
+        metric("事件", activeDirectorEvents.length, activeDirectorEvents.length ? "ok" : ""),
+        metric("Arc", activeArcEvent ? "active" : "none", activeArcEvent ? "ok" : ""),
+        metric("Ambient", activeAmbientEvent ? "active" : "none", activeAmbientEvent ? "ok" : ""),
         metric("待命NPC", standbyDirectorNpcs.length, standbyDirectorNpcs.length ? "info" : ""),
         metric("已调度NPC", dispatchedDirectorNpcs.length, dispatchedDirectorNpcs.length ? "ok" : ""),
         metric("NPC上次", data.last_director_npc_dispatch_turn || "无"),
       ])}
-      ${activeEvent ? directorCard(activeEvent) : `<div class="empty">暂无 active 事件</div>`}
+      ${activeDirectorEvents.length ? sortDirectorEvents(activeDirectorEvents).map(directorCard).join("") : `<div class="empty">暂无 active 事件</div>`}
       ${standbyDirectorNpcs.slice(0, 3).map(directorNpcCard).join("")}
     `)}
     ${details(`场景摘要 (${summaries.length})`, `
@@ -681,6 +685,7 @@ function stepTasks(scope, stepName) {
     entity_profiles_loaded: [],
     context_facts_done: ["context_extract"],
     context_extract_failed: ["context_extract"],
+    director_events_consumed: ["director_event_consume"],
     action_parsed: ["action_extract"],
     modifiers_done: ["roll_modifier"],
     turn_resolution_done: ["turn_resolution"],
@@ -695,7 +700,7 @@ function stepTasks(scope, stepName) {
     entity_extract_done: ["entity_extract"],
     npc_extract_done: ["npc_profile_extract"],
     action_preview_done: ["action_preview"],
-    entity_profiles_updated: ["entity_profile_update", "npc_profile_update", "director_event_review", "director_event_select"],
+    entity_profiles_updated: ["entity_profile_update", "npc_profile_update", "director_event_review", "director_event_select_arc", "director_event_select_ambient"],
     finish: ["*"],
   };
   const maintenance = {
@@ -734,6 +739,7 @@ function stepSummary(name, data) {
   if (name === "action_parsed") return `${data.action_parse_result?.atomic_actions?.length || 0} actions`;
   if (name === "context_facts_done") return `${data.context_facts?.facts?.length || 0} facts`;
   if (name === "context_extract_failed") return "context extract failed";
+  if (name === "director_events_consumed") return `${data.director_event_consumptions?.length || 0} events`;
   if (name === "retrieval_done") return `${data.retrieved_memories?.total_returned || 0} memories`;
   if (name === "rolls_done") return `${data.roll_results?.total_rolls || 0} rolls`;
   if (name === "director_npc_done") return directorNpcStepSummary(data.director_npc_result);
@@ -754,6 +760,7 @@ function renderGeneration() {
   if (!state.run.generation.order.length) return `<div class="empty">暂无生成流程。</div>`;
   return `
     ${renderContextFacts(g)}
+    ${card("Director Event Consumer", g.director_event_consumptions?.length ? g.director_event_consumptions.map((item) => details(item.use_event ? "使用" : "不使用", jsonBlock(item), item.use_event)).join("") : `<div class="empty">没有 active 导演事件</div>`)}
     ${card("Action / Roll Branch", `
       ${details("Action Parse", renderAction(g.action_parse_result, g.raw_action_parse_result, g.action_self_check_result), true)}
       ${details("Action Retrieval", renderRetrieval(g.retrieved_memories))}
@@ -847,13 +854,17 @@ function renderDirectorDebug() {
   const npcConfirmation = merged("confirmation").director_npc_result;
   const directorNpcEntityId = merged("confirmation").director_npc_entity_id;
   const server = state.serverState || {};
-  const active = server.active_director_event ? [server.active_director_event] : [];
+  const active = sortDirectorEvents(server.active_director_events || []);
   const resolved = server.resolved_director_events || [];
+  const activeArc = active.find((event) => event.role === "arc");
+  const activeAmbient = active.find((event) => event.role === "ambient");
   const standbyNpcs = server.standby_director_npcs || [];
   const dispatchedNpcs = server.dispatched_director_npcs || [];
   return `
     ${card("导演库存", metrics([
       metric("Active", active.length, active.length ? "ok" : ""),
+      metric("Arc", activeArc ? "active" : "none", activeArc ? "ok" : ""),
+      metric("Ambient", activeAmbient ? "active" : "none", activeAmbient ? "ok" : ""),
       metric("Resolved", resolved.length, resolved.length ? "info" : ""),
       metric("Standby NPC", standbyNpcs.length, standbyNpcs.length ? "info" : ""),
       metric("Dispatched NPC", dispatchedNpcs.length, dispatchedNpcs.length ? "ok" : ""),
@@ -868,15 +879,7 @@ function renderDirectorDebug() {
     ${details("Standby NPC", standbyNpcs.map(directorNpcCard).join("") || `<div class="empty">暂无 standby NPC</div>`, true)}
     ${details("Dispatched NPC", dispatchedNpcs.map(directorNpcCard).join("") || `<div class="empty">暂无 dispatched NPC</div>`)}
     ${details("Active", active.map(directorCard).join("") || `<div class="empty">暂无 active 事件</div>`, true)}
-    ${result ? card("本轮结果", `
-      ${kv([
-        ["模式", esc(text(result.mode))],
-        ["变更事件", esc(text(result.changed_event_id))],
-        ["备注", chips(result.notes)],
-      ])}
-      ${result.review_result ? details("Review", jsonBlock(result.review_result), true) : ""}
-      ${result.selection_result ? details("Select/Create", jsonBlock(result.selection_result), true) : ""}
-    `) : card("本轮结果", `<div class="empty">确认正式回合后展示。</div>`)}
+    ${result ? card("本轮结果", ["arc", "ambient"].map((role) => directorWorkflowResultCard(role, result[role])).join("")) : card("本轮结果", `<div class="empty">确认正式回合后展示。</div>`)}
     ${details("Resolved", resolved.map(directorCard).join("") || `<div class="empty">暂无 resolved 事件</div>`)}
   `;
 }
@@ -993,10 +996,7 @@ function renderOutline(outline) {
     ${details("信息边界", list(outline.information_boundaries))}
     ${details("必要实体", chips(outline.required_entities))}
     ${card("停点", esc(text(outline.scene_stopping_point)))}
-    ${details("导演原因", kv([
-      ["DirectorEvent", esc(text(outline.director_event_reason))],
-      ["DirectorNPC", esc(text(outline.director_npc_reason))],
-    ]))}
+    ${details("导演 NPC 原因", esc(text(outline.director_npc_reason)))}
   `;
 }
 
@@ -1296,7 +1296,7 @@ function directorCard(event) {
     </div>
   `).join("");
   return `<div class="section-card">
-    <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.status || "active", entryPoints.length)}</div>
+    <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.role || "role?", event.status || "active", event.status === "active" ? "ok" : "info")}</div>
     ${event.premise ? `<div style="margin-bottom:8px">${esc(event.premise)}</div>` : ""}
     ${kv([
       ["ID", esc(text(event.event_id))],
@@ -1304,6 +1304,8 @@ function directorCard(event) {
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
       ["解决原因", esc(text(event.resolved_reason))],
       ["暴露状态", esc(text(event.exposure))],
+      ["当前接触", esc(text(event.player_contact_state))],
+      ["最近呈现", event.last_presented_turn === null || event.last_presented_turn === undefined ? `<span class="empty">无</span>` : esc(`T${event.last_presented_turn}`)],
       ["进度", esc(`${text(event.progress_index)} / 2`)],
       ["下次推进", event.next_progress_clock ? esc(`第${event.next_progress_clock.day}日 ${event.next_progress_clock.phase}`) : `<span class="empty">无</span>`],
       ["阶段间隔", chips(event.milestone_interval_steps)],
@@ -1313,6 +1315,28 @@ function directorCard(event) {
       ["阶段", list(event.milestones)],
     ])}
     ${entryPointCards || `<div class="empty">无入口</div>`}
+  </div>`;
+}
+
+function sortDirectorEvents(events) {
+  const roleOrder = { arc: 0, ambient: 1 };
+  return [...events].sort((a, b) => (roleOrder[a.role] ?? 2) - (roleOrder[b.role] ?? 2));
+}
+
+function directorWorkflowResultCard(role, result) {
+  if (!result) {
+    return `<div class="section-card"><div class="card-title"><span>${esc(role)}</span>${metric("result", "none")}</div><div class="empty">本轮无结果</div></div>`;
+  }
+  return `<div class="section-card">
+    <div class="card-title"><span>${esc(role)}</span>${metric("模式", result.mode || "unknown", result.mode === "select_or_create" ? "ok" : "info")}</div>
+    ${kv([
+      ["变更事件", esc(text(result.changed_event_id))],
+      ["备注", chips(result.notes)],
+    ])}
+    ${result.active_before ? details("更新前", directorCard(result.active_before)) : ""}
+    ${result.active_after ? details("更新后", directorCard(result.active_after), true) : ""}
+    ${result.review_result ? details("Review", jsonBlock(result.review_result), true) : ""}
+    ${result.selection_result ? details("Select/Create", jsonBlock(result.selection_result), true) : ""}
   </div>`;
 }
 

@@ -7,7 +7,7 @@ from app.core.llm.config import create_gateway
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director_event.schemas import DirectorEventConsumption
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
@@ -25,7 +25,6 @@ from app.runtime.stores import (
     scene_summary_store,
     short_term_memory_store,
 )
-from app.domain.director_event.workflows import DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS
 
 from .generation_state import GenerationEvent, GenerationState
 from .generation_profile_helpers import select_context_profiles
@@ -40,8 +39,7 @@ def assemble_context(
     context_facts: ContextFactSet | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
-    director_events: list[DirectorEvent] | None = None,
-    recent_resolved_director_event: DirectorEvent | None = None,
+    director_event_consumptions: list[DirectorEventConsumption] | None = None,
     director_npc_injection: DirectorNPCPlotInjection | None = None,
 ) -> PlotOutlineContext:
     return PlotOutlineContext(
@@ -53,8 +51,7 @@ def assemble_context(
         or ContextFactSet(turn_focus="No Context Facts", facts=[]),
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
-        director_events=director_events or [],
-        recent_resolved_director_event=recent_resolved_director_event,
+        director_event_consumptions=director_event_consumptions or [],
         director_npc_injection=director_npc_injection,
     )
 
@@ -93,14 +90,6 @@ def prepare_generation_state(
 
     with director_event_store() as director_store:
         active_director_events = director_store.list_active()
-        recent_resolved_director_event = (
-            None
-            if active_director_events
-            else director_store.get_recent_resolved(
-                turn_index=turn_index,
-                cooldown_turns=DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS,
-            )
-        )
 
     state: GenerationState = {
         "events": [],
@@ -116,7 +105,6 @@ def prepare_generation_state(
         "scene_summaries": scene_summaries,
         "recent_summaries": recent_summaries,
         "active_director_events": active_director_events,
-        "recent_resolved_director_event": recent_resolved_director_event,
     }
 
     with entity_store() as ent_store, npc_profile_store() as npc_store:
@@ -195,9 +183,6 @@ def state_loaded_event(state: dict[str, Any]) -> GenerationEvent:
             "scene_summaries": model_data(state["scene_summaries"]),
             "recent_summaries": model_data(state["recent_summaries"]),
             "active_director_events": model_data(state["active_director_events"]),
-            "recent_resolved_director_event": model_data(
-                state["recent_resolved_director_event"]
-            ),
         },
     }
 

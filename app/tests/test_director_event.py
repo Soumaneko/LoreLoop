@@ -9,6 +9,7 @@ from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.director_event import (
     DirectorEvent,
+    DirectorEventConsumption,
     DirectorEventEntryPoint,
     DirectorEventReviewResult,
     DirectorEventSelectionResult,
@@ -16,11 +17,12 @@ from app.domain.director_event import (
     DirectorEventSelector,
     DirectorEventStore,
 )
+from app.domain.director_event.consumer import DirectorEventConsumer
 from app.domain.director_event.views import (
     project_director_event,
-    project_plot_director_event,
-    project_plot_director_events,
+    project_director_event_consumptions,
 )
+from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.director_event.workflows import update_director_event_workflow
 
@@ -336,23 +338,12 @@ class TestDirectorEventReviewerInput:
 
 
 class TestDirectorEventViews:
-    def test_plot_projection_keeps_both_roles_in_one_uniform_list(self):
-        data = json.loads(
-            project_plot_director_events(
-                [_event("主线事件", role="arc"), _event("环境事件", role="ambient")],
-                user_input="继续观察。",
-                current_state=_state(),
-            )
-        )
-
-        assert [item["role"] for item in data] == ["arc", "ambient"]
-        assert all("event_use_instruction" in item for item in data)
-
-    def test_active_projection_uses_semantic_view_only(self):
+    def test_active_projection_hides_progress_deadline(self):
         data = json.loads(project_director_event(_event()))
 
         assert data["entry_points"]
         assert data["exposure"] == "hidden"
+        assert "next_progress_clock" not in data
 
     def test_active_projection_omits_entry_points_after_engaged(self):
         data = json.loads(project_director_event(_event().model_copy(update={"exposure": "engaged"})))
@@ -360,89 +351,113 @@ class TestDirectorEventViews:
         assert data["exposure"] == "engaged"
         assert "entry_points" not in data
 
-    def test_recent_resolved_projection_uses_player_contact_not_internal_reason(self):
-        event = _event(status="resolved").model_copy(
-            update={
-                "resolved_turn": 3,
-                "resolved_reason": "内部审计理由",
-                "player_contact_state": "玩家已阻止信件被截留。",
-            }
+    def test_plot_projection_exposes_only_consumption_boundaries(self):
+        consumptions = [
+            DirectorEventConsumption(
+                event_id="event_arc",
+                reason="当前位置没有真实接触，仅保留相关事实边界。",
+                use_event=False,
+                immutable_constraints=["公告仍位于冒险者工会告示板。"],
+                forbidden_inferences=["不得改成希尔达随身持有公告。"],
+            ),
+            DirectorEventConsumption(
+                event_id="event_ambient",
+                reason="当前位于旅店，可以自然看见留言板。",
+                use_event=True,
+                allowed_facts=["旅店留言板上有一张木偶师便条。"],
+                immutable_constraints=["便条固定在旅店留言板上。"],
+                forbidden_inferences=["不得推断张贴者身份。"],
+            ),
+        ]
+
+        data = json.loads(project_director_event_consumptions(consumptions))
+
+        assert len(data) == 1
+        assert all(set(item) == {
+            "allowed_facts",
+            "immutable_constraints",
+            "forbidden_inferences",
+        } for item in data)
+        assert data[0]["allowed_facts"] == ["旅店留言板上有一张木偶师便条。"]
+        assert "event_arc" not in json.dumps(data, ensure_ascii=False)
+        assert "reason" not in json.dumps(data, ensure_ascii=False)
+
+
+class TestDirectorEventConsumer:
+    def test_consumption_schema_keeps_use_decision_consistent(self):
+        with pytest.raises(ValidationError):
+            DirectorEventConsumption(
+                event_id="event_1",
+                reason="决定使用。",
+                use_event=True,
+            )
+        with pytest.raises(ValidationError):
+            DirectorEventConsumption(
+                event_id="event_1",
+                reason="决定不使用。",
+                use_event=False,
+                allowed_facts=["不应存在的前台事实"],
+            )
+
+    def test_consumer_receives_tr_context_and_returns_one_result_per_event(self):
+        arc = _event("主线事件", role="arc")
+        ambient = _event("环境事件", role="ambient")
+        spy = _SpyGateway({
+            "consumptions": [
+                {
+                    "event_id": arc.event_id,
+                    "reason": "仅提到目标地点，没有真实接触。",
+                    "use_event": False,
+                    "allowed_facts": [],
+                    "immutable_constraints": [],
+                    "forbidden_inferences": ["不得表现远方现场征兆。"],
+                },
+                {
+                    "event_id": ambient.event_id,
+                    "reason": "当前场景存在自然接触。",
+                    "use_event": True,
+                    "allowed_facts": ["驿站开始拒收部分无印信件。"],
+                    "immutable_constraints": ["征兆发生在北郡驿站。"],
+                    "forbidden_inferences": ["不得确认幕后势力。"],
+                },
+            ]
+        })
+
+        result = DirectorEventConsumer(spy).consume(
+            events=[arc, ambient],
+            user_input="我询问北郡的消息。",
+            current_state=_state(),
+            core_memory=_core(),
+            context_facts=ContextFactSet(turn_focus="询问消息", facts=[]),
+            entity_profiles=[],
+            npc_profiles=[],
         )
-        data = json.loads(project_director_event(None, recent_resolved_event=event))
 
-        assert data["status"] == "recently_resolved"
-        assert data["player_contact_state"] == "玩家已阻止信件被截留。"
-        assert "resolved_reason" not in data
+        assert [item.event_id for item in result] == [arc.event_id, ambient.event_id]
+        input_data = spy.calls[0]["input_data"]
+        assert set(input_data) == {
+            "core_memory_json",
+            "current_state_json",
+            "user_input",
+            "context_facts_json",
+            "entity_profiles_json",
+            "npc_profiles_json",
+            "director_events_json",
+            "output_schema_json",
+        }
 
-    def test_plot_payload_uses_instruction_for_hidden_event(self):
-        data = json.loads(
-            project_plot_director_event(
-                _event(),
-                user_input="我经过北郡驿站。",
+    def test_consumer_rejects_missing_event_result(self):
+        event = _event()
+        spy = _SpyGateway({"consumptions": []})
+
+        with pytest.raises(ValueError, match="exactly one result"):
+            DirectorEventConsumer(spy).consume(
+                events=[event],
+                user_input="继续。",
                 current_state=_state(),
+                core_memory=_core(),
+                context_facts=ContextFactSet(turn_focus="继续", facts=[]),
             )
-        )
-
-        assert data["event_use_instruction"]["mode"] == "foreshadow"
-        assert data["event_use_instruction"]["allowed_effect"] == _entry_points()[0].visible_sign
-        assert data["event_hint"] == {"visible_sign": _entry_points()[0].visible_sign}
-
-    def test_plot_payload_hides_hidden_event_when_not_matched(self):
-        data = json.loads(
-            project_plot_director_event(
-                _event(),
-                user_input="我整理随身物品。",
-                current_state=_state().model_copy(
-                    update={
-                        "scene": _state().scene.model_copy(update={"location": "别处"}),
-                        "player": _state().player.model_copy(update={"position": "别处"}),
-                    }
-                ),
-            )
-        )
-
-        assert data["event_use_instruction"]["mode"] == "none"
-        assert data["event_hint"] is None
-
-    def test_plot_payload_intersect_includes_current_milestone(self):
-        contact_state = "玩家已经看见驿站拒收无印信件。"
-        data = json.loads(
-            project_plot_director_event(
-                _event().model_copy(update={
-                    "exposure": "foreshadowed",
-                    "player_contact_state": contact_state,
-                }),
-                user_input="我经过北郡驿站并查看拒收的信件。",
-                current_state=_state(),
-            )
-        )
-
-        assert data["event_use_instruction"]["mode"] == "intersect"
-        assert data["event_use_instruction"]["allowed_effect"] == _milestones()[0]
-        assert data["event_hint"]["player_contact_state"] == contact_state
-        assert data["event_hint"]["current_milestone"] == _milestones()[0]
-        assert "premise" not in data["event_hint"]
-        assert "visible_sign" not in data["event_hint"]
-
-    def test_plot_payload_foreground_includes_current_state_and_contact(self):
-        contact_state = "玩家正在调查被截留的信件。"
-        data = json.loads(
-            project_plot_director_event(
-                _event().model_copy(update={
-                    "exposure": "engaged",
-                    "player_contact_state": contact_state,
-                }),
-                user_input="继续调查信件。",
-                current_state=_state(),
-            )
-        )
-
-        assert data["event_use_instruction"]["mode"] == "foreground"
-        assert data["event_use_instruction"]["allowed_effect"] == _milestones()[0]
-        assert data["event_hint"]["current_milestone"] == _milestones()[0]
-        assert data["event_hint"]["player_contact_state"] == contact_state
-        assert data["event_hint"]["canonical_premise"] == _event().premise
-        assert "premise" not in data["event_hint"]
 
 
 class TestDirectorEventWorkflow:

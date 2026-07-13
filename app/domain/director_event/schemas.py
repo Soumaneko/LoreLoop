@@ -189,11 +189,20 @@ class DirectorEventReviewResult(BaseModel):
         return self
 
 
-EventUseMode = Literal["none", "foreshadow", "intersect", "foreground", "aftermath"]
+class DirectorEventConsumption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-
-class EventUseInstruction(BaseModel):
-    mode: EventUseMode
-    entry_point_id: str | None = None
-    allowed_effect: str | None = None
+    event_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
+    use_event: bool
+    allowed_facts: list[str] = Field(default_factory=list)
+    immutable_constraints: list[str] = Field(default_factory=list)
+    forbidden_inferences: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_use_decision(self):
+        if self.use_event and not self.allowed_facts:
+            raise ValueError("use_event=true requires at least one allowed_fact")
+        if not self.use_event and self.allowed_facts:
+            raise ValueError("use_event=false requires allowed_facts to be empty")
+        return self

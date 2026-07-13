@@ -8,7 +8,7 @@ from typing import Annotated, Any, TypedDict
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.workflows import DirectorEventWorkflowResult
+from app.domain.director_event.workflows import DirectorEventWorkflowBatchResult
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.entity.schemas import EntityExtractionResult, EntityProfile
@@ -60,7 +60,7 @@ class ConfirmationCache(TypedDict, total=False):
     npc_extraction: NPCExtractionResult | None
     npc_director_events: list[DirectorEvent]
     action_preview: ActionPreviewResult
-    director_event_result: DirectorEventWorkflowResult | None
+    director_event_result: DirectorEventWorkflowBatchResult | None
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
     existing_entity_profiles: list[EntityProfile]
@@ -111,4 +111,4 @@ class ConfirmationState(TypedDict, total=False):
     action_preview: ActionPreviewResult
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
-    director_event_result: DirectorEventWorkflowResult | None
+    director_event_result: DirectorEventWorkflowBatchResult | None

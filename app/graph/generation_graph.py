@@ -18,6 +18,7 @@ from .generation_helpers import (
 )
 from .generation_events import GenerationEventPresenter
 from .generation_nodes import (
+    consume_director_events_node,
     evaluate_roll_modifiers_node,
     extract_context_facts_node,
     generate_plot_outline_node,
@@ -32,6 +33,7 @@ from .generation_state import GenerationEvent, GenerationState
 def build_generation_graph():
     graph = StateGraph(GenerationState)
     graph.add_node("extract_context_facts", extract_context_facts_node)
+    graph.add_node("consume_director_events", consume_director_events_node)
     graph.add_node("parse_action", parse_action_node)
     graph.add_node("evaluate_roll_modifiers", evaluate_roll_modifiers_node)
     graph.add_node("resolve_turn", resolve_turn_node)
@@ -41,10 +43,14 @@ def build_generation_graph():
 
     graph.add_edge(START, "extract_context_facts")
     graph.add_edge(START, "parse_action")
+    graph.add_edge("extract_context_facts", "consume_director_events")
     graph.add_edge("parse_action", "evaluate_roll_modifiers")
     graph.add_edge(["extract_context_facts", "evaluate_roll_modifiers"], "resolve_turn")
     graph.add_edge("resolve_turn", "maybe_director_npc")
-    graph.add_edge("maybe_director_npc", "generate_plot_outline")
+    graph.add_edge(
+        ["maybe_director_npc", "consume_director_events"],
+        "generate_plot_outline",
+    )
     graph.add_edge("generate_plot_outline", "generate_scene")
     graph.add_edge("generate_scene", END)
 

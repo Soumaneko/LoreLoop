@@ -16,6 +16,7 @@ from app.domain.plot_outline.schemas import PlotOutlineContext, PlannedEvent, Pl
 from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.plot_outline.views import project_retrieved_memories
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
+from app.domain.director_event.schemas import DirectorEventConsumption
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
 from app.graph.generation_helpers import assemble_context
@@ -105,7 +106,6 @@ def _build_outline_response(
         "information_boundaries": ["主角只能确认可见行为异常，不能确认幕后原因。"],
         "required_entities": ["酒馆客人"],
         "scene_stopping_point": "主角发现可疑行为后仍留在酒馆大厅，可以继续互动。",
-        "director_event_reason": "本回合没有自然交点，未使用。",
         "director_npc_reason": "本回合没有自然交点，未使用。",
     }, ensure_ascii=False)
 
@@ -127,8 +127,7 @@ class TestPlotOutlineAgent:
         PlotOutlineAgent(gateway).generate(_make_context())
 
         properties = json.loads(gateway.calls[0]["input_data"]["output_schema_json"])["properties"]
-        assert list(properties)[:3] == [
-            "director_event_reason",
+        assert list(properties)[:2] == [
             "director_npc_reason",
             "planning_reasoning",
         ]
@@ -145,12 +144,45 @@ class TestPlotOutlineAgent:
         assert "resolution_reasoning" not in input_data["turn_resolution_json"]
         assert "action_parse_result_json" not in input_data
         assert "director_event_instructions" not in input_data
+        assert "director_events_json" not in input_data
         schema_json = input_data["output_schema_json"]
         assert "outline_summary" not in schema_json
         assert "event_id" not in schema_json
         assert "protagonist_response_guidance" not in schema_json
         assert "state_implications" not in schema_json
         assert "tone_notes" not in schema_json
+
+    def test_director_event_input_contains_only_consumption_fields(self):
+        context = _make_context()
+        context.director_event_consumptions = [
+            DirectorEventConsumption(
+                event_id="unused_event_id",
+                reason="本回合没有自然接触面。",
+                use_event=False,
+                immutable_constraints=["不会传给 Plot 的内部约束。"],
+                forbidden_inferences=["不会传给 Plot 的内部边界。"],
+            ),
+            DirectorEventConsumption(
+                event_id="private_event_id",
+                reason="private reasoning",
+                use_event=True,
+                allowed_facts=["旅店留言板上有一张木偶师便条。"],
+                immutable_constraints=["便条位于旅店留言板。"],
+                forbidden_inferences=["不得推断张贴者。"],
+            )
+        ]
+        gateway = _SpyGateway(json.loads(_build_outline_response()))
+
+        PlotOutlineAgent(gateway).generate(context)
+
+        payload = json.loads(
+            gateway.calls[0]["input_data"]["director_event_consumptions_json"]
+        )
+        assert payload == [{
+            "allowed_facts": ["旅店留言板上有一张木偶师便条。"],
+            "immutable_constraints": ["便条位于旅店留言板。"],
+            "forbidden_inferences": ["不得推断张贴者。"],
+        }]
 
     def test_director_npc_candidate_input_omits_dispatch_reason(self):
         context = _make_context()
@@ -201,19 +233,17 @@ class TestPlotOutlineAgent:
         assert "不得确认是不是目标" in prompt
         assert "避免替玩家判断" in prompt
         assert "must_establish_facts" in prompt
-        assert "可包含多个并行事件" in prompt
-        assert "不得因 `role` 设置消费优先级或推断额外规则" in prompt
-        assert "某个事件未提供可用前台影响时" in prompt
+        assert "可包含多个彼此分开的材料项" in prompt
+        assert "不得猜测其事件 ID、role、premise、milestone" in prompt
         assert "arc 负责" not in prompt
         assert "ambient 负责" not in prompt
         assert "若要求角色披露信息，必须写出本回合允许披露的具体事实" in prompt
         assert "不得使用未携带事实内容的占位描述" in prompt
         assert "依据不足时必须保持未知" in prompt
-        assert "canonical_premise" in prompt
-        assert "不得规划与其矛盾的事件原因、人物行为、线索内容或物品流转" in prompt
-        assert "在规划任何事件前，先审计 DirectorEvent" in prompt
+        assert "canonical_premise" not in prompt
+        assert "allowed_effect" not in prompt
+        assert "三个字段以外的导演事件内容一律视为不存在" in prompt
         example = prompt.split("# 例子", 1)[1]
-        assert example.index('"director_event_reason"') < example.index('"planning_reasoning"')
         assert example.index('"director_npc_reason"') < example.index('"planning_reasoning"')
         assert "mode=foreshadow" not in prompt
         assert "mode=intersect" not in prompt

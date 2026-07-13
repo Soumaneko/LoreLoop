@@ -6,6 +6,7 @@ from app.domain.action.self_check import ActionSelfCheck
 from app.domain.context_facts.extractor import ContextExtractor
 from app.domain.context_facts.schemas import ContextExtractInput
 from app.domain.context_facts.schemas import ContextFactSet
+from app.domain.director_event.consumer import DirectorEventConsumer
 from app.domain.plot_outline.agent import PlotOutlineAgent
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
@@ -135,6 +136,28 @@ def parse_action_node(state: GenerationState) -> GenerationState:
                 },
             },
         ],
+    }
+
+
+def consume_director_events_node(state: GenerationState) -> GenerationState:
+    consumptions = DirectorEventConsumer(gateway_for(state)).consume(
+        events=state.get("active_director_events", []),
+        user_input=state["user_input"],
+        current_state=state["current_state"],
+        core_memory=state["core_memory"],
+        context_facts=state["context_facts"],
+        entity_profiles=state.get("action_entity_profile_views", []),
+        npc_profiles=state.get("action_npc_director_views", []),
+        trace_id=state["trace_id"],
+    )
+    return {
+        "director_event_consumptions": consumptions,
+        "events": [{
+            "step": "director_events_consumed",
+            "data": {
+                "director_event_consumptions": model_data(consumptions),
+            },
+        }],
     }
 
 
@@ -270,8 +293,7 @@ def generate_plot_outline_node(state: GenerationState) -> GenerationState:
         context_facts=state["context_facts"],
         entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
-        director_events=state.get("active_director_events", []),
-        recent_resolved_director_event=state.get("recent_resolved_director_event"),
+        director_event_consumptions=state.get("director_event_consumptions", []),
         director_npc_injection=(
             director_npc_result.plot_injection
             if director_npc_result is not None

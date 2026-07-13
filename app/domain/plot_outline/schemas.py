@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director_event.schemas import DirectorEventConsumption
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
@@ -23,8 +23,7 @@ class PlotOutlineContext(BaseModel):
     )
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
-    director_events: list[DirectorEvent] = Field(default_factory=list)
-    recent_resolved_director_event: DirectorEvent | None = None
+    director_event_consumptions: list[DirectorEventConsumption] = Field(default_factory=list)
     director_npc_injection: DirectorNPCPlotInjection | None = None
 
 
@@ -36,7 +35,6 @@ class PlannedEvent(BaseModel):
 
 
 class PlotOutlineResult(BaseModel):
-    director_event_reason: str | None = None
     director_npc_reason: str | None = None
     planning_reasoning: str = Field(min_length=1)
     planned_events: list[PlannedEvent] = Field(default_factory=list)

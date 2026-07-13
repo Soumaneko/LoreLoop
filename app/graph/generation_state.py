@@ -8,7 +8,7 @@ from app.domain.action.self_check import SelfCheckResult
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director_event.schemas import DirectorEvent, DirectorEventConsumption
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView, NPCProfilePublicView
@@ -47,7 +47,7 @@ class GenerationState(TypedDict, total=False):
     scene_summaries: list[SceneSummary]
     recent_summaries: list[SceneSummary]
     active_director_events: list[DirectorEvent]
-    recent_resolved_director_event: DirectorEvent | None
+    director_event_consumptions: list[DirectorEventConsumption]
 
     matched_anchors: list[Anchor]
     action_entity_profile_views: list[EntityProfileUpdateInput]

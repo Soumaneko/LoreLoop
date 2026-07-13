@@ -4,7 +4,7 @@ from typing import cast
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
-from app.domain.director_event.views import project_plot_director_events
+from app.domain.director_event.views import project_director_event_consumptions
 from app.domain.context_facts.views import project_context_facts
 from app.domain.plot_outline.schemas import PlotOutlineContext, PlotOutlineResult
 from app.domain.plot_outline.views import project_turn_resolution
@@ -37,7 +37,6 @@ class PlotOutlineAgent:
         ]
 
         class RuntimePlotOutlineResult(BaseModel):
-            director_event_reason: str | None = None
             director_npc_reason: str | None = None
             planning_reasoning: str = Field(min_length=1)
             planned_events: list[_RuntimePlannedEvent] = Field(default_factory=list)
@@ -99,11 +98,8 @@ class PlotOutlineAgent:
                     "context_facts_json": project_context_facts(context.context_facts),
                     "entity_profiles_json": project_entity_profiles(context.entity_profiles),
                     "npc_profiles_json": project_npc_profiles(context.npc_profiles),
-                    "director_events_json": project_plot_director_events(
-                        context.director_events,
-                        user_input=context.user_input,
-                        current_state=context.current_state,
-                        context_facts=context.context_facts,
+                    "director_event_consumptions_json": project_director_event_consumptions(
+                        context.director_event_consumptions,
                     ),
                     "director_npc_injection_json": json.dumps(
                         (
