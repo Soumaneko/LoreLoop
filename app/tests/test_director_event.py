@@ -9,7 +9,6 @@ from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.director_event import (
     DirectorEvent,
-    DirectorEventDraft,
     DirectorEventEntryPoint,
     DirectorEventReviewResult,
     DirectorEventSelectionResult,
@@ -20,6 +19,7 @@ from app.domain.director_event import (
 from app.domain.director_event.views import (
     project_director_event,
     project_plot_director_event,
+    project_plot_director_events,
 )
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.director_event.workflows import update_director_event_workflow
@@ -54,8 +54,9 @@ def _milestones() -> list[str]:
     ]
 
 
-def _event(title="失踪的信使", status="active") -> DirectorEvent:
+def _event(title="失踪的信使", status="active", role="ambient") -> DirectorEvent:
     return DirectorEvent(
+        role=role,
         title=title,
         status=status,
         premise="一名信使被地方势力扣押，其随身信件正被用于牵动北郡关系网。",
@@ -73,8 +74,10 @@ def _event(title="失踪的信使", status="active") -> DirectorEvent:
     )
 
 
-def _event_draft() -> DirectorEventDraft:
-    return DirectorEventDraft(
+def _selection_result() -> DirectorEventSelectionResult:
+    return DirectorEventSelectionResult(
+        current_story_direction="卢西安正在处理北郡眼前事务。",
+        reason="不能生成的内容：不得延续卢西安眼前事务。",
         title="旧教团的账册",
         premise="旧教团残党暗中转移一本能撬动地方商路的账册。",
         actors=["旧教团残党", "地方商人"],
@@ -88,7 +91,7 @@ def _event_draft() -> DirectorEventDraft:
         milestone_interval_days=[0.5, 0.5],
         entry_points=[
             DirectorEventEntryPoint(
-                trigger_anchors=["商铺", "客栈", "账册"],
+                trigger_anchors=["北郡", "商路", "账册"],
                 visible_sign="几名商人突然回避公开记账。",
                 immediate_effect="交易场合出现可被利用或旁观的利益冲突。",
             )
@@ -130,11 +133,7 @@ def _review_response(**updates):
 
 
 def _selection_response(**updates):
-    response = {
-        "reason": "该事件有独立目标，并共享北郡商路锚点。",
-        "action": "create_new",
-        "new_event": _event_draft().model_dump(mode="json"),
-    }
+    response = _selection_result().model_dump(mode="json")
     response.update(updates)
     return response
 
@@ -144,6 +143,7 @@ def _run_review(store, response, *, turn_index=2):
     mock.set_responses([json.dumps(response, ensure_ascii=False)])
     gateway = mock.build_gateway()
     return update_director_event_workflow(
+        role="ambient",
         user_input="我继续处理眼前的事情。",
         scene_facts="卢西安完成了本轮行动。",
         current_state=_state(),
@@ -173,6 +173,7 @@ class TestDirectorEventSchema:
         assert data["entry_points"]
         assert set(data) == {
             "event_id",
+            "role",
             "title",
             "status",
             "premise",
@@ -196,33 +197,58 @@ class TestDirectorEventSchema:
         }
 
     def test_draft_requires_three_milestones(self):
-        data = _event_draft().model_dump(mode="json")
+        data = _selection_result().model_dump(mode="json")
         data["milestones"] = ["阶段一", "阶段二"]
         with pytest.raises(ValueError):
-            DirectorEventDraft.model_validate(data)
+            DirectorEventSelectionResult.model_validate(data)
 
-    def test_draft_rejects_time_anchors_in_premise_and_entry_points(self):
+    def test_draft_requires_actor_and_allows_semantic_entry_point_anchors(self):
+        data = _selection_result().model_dump(mode="json")
+        data["actors"] = []
         with pytest.raises(ValueError):
-            DirectorEventDraft(
-                title="带时间锚点的事件",
-                premise="旧教团残党三日后转移账册。",
-                actors=["旧教团残党"],
-                objective="控制账册。",
-                bridge_anchors=["北郡"],
-                milestones=_milestones(),
-                milestone_interval_days=[0.5, 0.5],
-                entry_points=_entry_points(),
-            )
+            DirectorEventSelectionResult.model_validate(data)
 
-        with pytest.raises(ValueError):
-            DirectorEventEntryPoint(
-                trigger_anchors=["北郡"],
-                visible_sign="入夜后有人接触主角。",
-                immediate_effect="产生短暂压力。",
-            )
+        data = _selection_result().model_dump(mode="json")
+        data["entry_points"][0]["trigger_anchors"] = ["临时出现的信使"]
+        result = DirectorEventSelectionResult.model_validate(data)
+        assert result.entry_points[0].trigger_anchors == ["临时出现的信使"]
+
+    def test_schema_allows_time_language_for_prompt_level_review(self):
+        result = DirectorEventSelectionResult(
+            current_story_direction="当前剧情走向。",
+            reason="禁止升级内容。",
+            title="带时间表达的事件",
+            premise="旧教团残党三日后转移账册。",
+            actors=["旧教团残党"],
+            objective="控制账册。",
+            bridge_anchors=["北郡"],
+            milestones=_milestones(),
+            milestone_interval_days=[0.5, 0.5],
+            entry_points=[
+                DirectorEventEntryPoint(
+                    trigger_anchors=["北郡"],
+                    visible_sign="入夜后有人接触主角。",
+                    immediate_effect="产生短暂压力。",
+                )
+            ],
+        )
+
+        assert result.premise == "旧教团残党三日后转移账册。"
 
 
 class TestDirectorEventStore:
+    def test_arc_and_ambient_active_events_coexist(self):
+        store = DirectorEventStore()
+        arc = _event("主线事件", role="arc")
+        ambient = _event("环境事件", role="ambient")
+
+        store.save(arc)
+        store.save(ambient)
+
+        assert store.get_active("arc").event_id == arc.event_id
+        assert store.get_active("ambient").event_id == ambient.event_id
+        assert {event.role for event in store.list_active()} == {"arc", "ambient"}
+
     def test_only_one_active_event_and_previous_active_resolves(self):
         store = DirectorEventStore()
         first = _event("第一事件")
@@ -231,7 +257,7 @@ class TestDirectorEventStore:
         store.save(first)
         store.save(second)
 
-        assert store.get_active().event_id == second.event_id
+        assert store.get_active("ambient").event_id == second.event_id
         resolved = store.list_resolved()
         assert len(resolved) == 1
         assert resolved[0].event_id == first.event_id
@@ -243,16 +269,16 @@ class TestDirectorEventStore:
         store.save(event)
 
         assert store.touch(event.event_id, turn_index=2) is True
-        assert store.get_active().updated_turn == 2
+        assert store.get_active("ambient").updated_turn == 2
         assert store.replace_player_contact(
             event.event_id,
             exposure="foreshadowed",
             player_contact_state="玩家已经看见驿站拒收无印信件。",
             turn_index=3,
         ) is True
-        assert store.get_active().exposure == "foreshadowed"
-        assert store.get_active().player_contact_state == "玩家已经看见驿站拒收无印信件。"
-        assert store.get_active().last_presented_turn == 3
+        assert store.get_active("ambient").exposure == "foreshadowed"
+        assert store.get_active("ambient").player_contact_state == "玩家已经看见驿站拒收无印信件。"
+        assert store.get_active("ambient").last_presented_turn == 3
         assert store.resolve_active(event.event_id, turn_index=5, resolved_reason="事件已结束")
 
         resolved = store.get_by_id(event.event_id)
@@ -274,7 +300,7 @@ class TestDirectorEventReviewSchema:
 
 
 class TestDirectorEventReviewerInput:
-    def test_reviewer_receives_new_event_fields(self):
+    def test_reviewer_receives_event_fields(self):
         spy = _SpyGateway(_review_response())
         DirectorEventReviewer(spy).review(
             active_event=_event(),
@@ -289,6 +315,7 @@ class TestDirectorEventReviewerInput:
         assert event_json["entry_points"]
         assert set(event_json) == {
             "event_id",
+            "role",
             "title",
             "premise",
             "actors",
@@ -309,6 +336,18 @@ class TestDirectorEventReviewerInput:
 
 
 class TestDirectorEventViews:
+    def test_plot_projection_keeps_both_roles_in_one_uniform_list(self):
+        data = json.loads(
+            project_plot_director_events(
+                [_event("主线事件", role="arc"), _event("环境事件", role="ambient")],
+                user_input="继续观察。",
+                current_state=_state(),
+            )
+        )
+
+        assert [item["role"] for item in data] == ["arc", "ambient"]
+        assert all("event_use_instruction" in item for item in data)
+
     def test_active_projection_uses_semantic_view_only(self):
         data = json.loads(project_director_event(_event()))
 
@@ -416,7 +455,7 @@ class TestDirectorEventWorkflow:
 
         assert result.mode == "review_active"
         assert result.notes == ["reviewed_existing_active_event", "kept_active_event"]
-        assert store.get_active().updated_turn == 2
+        assert store.get_active("ambient").updated_turn == 2
 
     def test_review_updates_exposure(self):
         store = DirectorEventStore()
@@ -435,7 +474,7 @@ class TestDirectorEventWorkflow:
         )
 
         assert result.review_result.exposure == "engaged"
-        assert store.get_active().exposure == "engaged"
+        assert store.get_active("ambient").exposure == "engaged"
 
     def test_review_replaces_complete_player_contact_state(self):
         store = DirectorEventStore()
@@ -456,7 +495,7 @@ class TestDirectorEventWorkflow:
             turn_index=2,
         )
 
-        assert store.get_active().player_contact_state == complete_state
+        assert store.get_active("ambient").player_contact_state == complete_state
 
     def test_player_contact_state_is_bounded_to_current_snapshot(self):
         with pytest.raises(ValidationError):
@@ -521,8 +560,8 @@ class TestDirectorEventWorkflow:
         )
 
         assert result.notes == ["reviewed_existing_active_event", "advanced_active_event"]
-        assert store.get_active().progress_index == 1
-        assert store.get_active().next_progress_clock == _state().world_clock.advance_phase(3)
+        assert store.get_active("ambient").progress_index == 1
+        assert store.get_active("ambient").next_progress_clock == _state().world_clock.advance_phase(3)
 
     def test_default_route_advance_to_final_state_resolves(self):
         store = DirectorEventStore()
@@ -551,7 +590,7 @@ class TestDirectorEventWorkflow:
         result = _run_review(store, _review_response(), turn_index=2)
 
         assert "auto_advanced_active_event" in result.notes
-        assert store.get_active().progress_index == 1
+        assert store.get_active("ambient").progress_index == 1
 
     def test_auto_advance_to_final_resolves_event(self):
         store = DirectorEventStore()
@@ -575,6 +614,7 @@ class TestDirectorEventWorkflow:
         store.resolve_active(event.event_id, turn_index=5, resolved_reason="已结束")
 
         result = update_director_event_workflow(
+            role="ambient",
             user_input="继续。",
             scene_facts="没有新事件。",
             current_state=_state(),
@@ -584,20 +624,88 @@ class TestDirectorEventWorkflow:
             store=store,
             reviewer=DirectorEventReviewer(MockLLM().build_gateway()),
             selector=DirectorEventSelector(MockLLM().build_gateway()),
-            standby_director_npcs=[],
         )
 
         assert result.mode == "cooldown"
         assert result.changed_event_id == event.event_id
 
-    def test_select_creates_new_event_without_required_standby_npc_binding(self):
+    def test_cooldown_is_isolated_by_role(self):
         store = DirectorEventStore()
-        draft = _event_draft().model_copy(update={"actors": ["税务官"], "bridge_anchors": ["北郡", "粮车"]})
-        selection = _selection_response(new_event=draft.model_dump(mode="json"))
+        ambient = _event(role="ambient")
+        store.save(ambient)
+        store.resolve_active(ambient.event_id, turn_index=5, resolved_reason="已结束")
+        mock = MockLLM()
+        mock.set_responses([json.dumps(_selection_response(), ensure_ascii=False)])
+
+        result = update_director_event_workflow(
+            role="arc",
+            user_input="继续。",
+            scene_facts="没有新事件。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+            turn_index=6,
+            store=store,
+            reviewer=DirectorEventReviewer(MockLLM().build_gateway()),
+            selector=DirectorEventSelector(mock.build_gateway()),
+        )
+
+        assert result.mode == "select_or_create"
+        assert store.get_active("arc") is not None
+
+    def test_later_role_receives_event_created_by_earlier_role(self):
+        store = DirectorEventStore()
+
+        class _RecordingSelector:
+            def __init__(self):
+                self.calls = []
+
+            def select_or_create(self, *, role, events, **_kwargs):
+                self.calls.append((role, list(events)))
+                return _selection_result()
+
+        selector = _RecordingSelector()
+        for role in ("arc", "ambient"):
+            update_director_event_workflow(
+                role=role,
+                user_input="继续。",
+                scene_facts="没有新事件。",
+                current_state=_state(),
+                core_memory=_core(),
+                scene_summaries=[],
+                turn_index=2,
+                store=store,
+                reviewer=DirectorEventReviewer(MockLLM().build_gateway()),
+                selector=selector,
+            )
+
+        assert selector.calls[0] == ("arc", [])
+        ambient_events = selector.calls[1][1]
+        assert len(ambient_events) == 1
+        assert ambient_events[0].role == "arc"
+        assert ambient_events[0].status == "active"
+
+    def test_select_creates_event_without_required_standby_npc_binding(self):
+        store = DirectorEventStore()
+        draft = _selection_result().model_copy(
+            update={
+                "actors": ["税务官"],
+                "bridge_anchors": ["北郡", "粮车"],
+                "entry_points": [
+                    DirectorEventEntryPoint(
+                        trigger_anchors=["北郡", "粮车"],
+                        visible_sign="粮车在北郡入口被税务官集中查验。",
+                        immediate_effect="北郡粮食交易出现可见迟滞。",
+                    )
+                ],
+            }
+        )
+        selection = draft.model_dump(mode="json")
         mock = MockLLM()
         mock.set_responses([json.dumps(selection, ensure_ascii=False)])
 
         result = update_director_event_workflow(
+            role="ambient",
             user_input="继续。",
             scene_facts="没有新事件。",
             current_state=_state(),
@@ -607,87 +715,156 @@ class TestDirectorEventWorkflow:
             store=store,
             reviewer=DirectorEventReviewer(mock.build_gateway()),
             selector=DirectorEventSelector(mock.build_gateway()),
-            standby_director_npcs=[],
         )
 
-        active = store.get_active()
+        active = store.get_active("ambient")
         assert result.mode == "select_or_create"
         assert active.title == "旧教团的账册"
         assert active.milestones and len(active.milestones) == 3
         assert active.bridge_anchors == ["北郡", "粮车"]
 
-    def test_selector_can_skip_creation(self):
-        store = DirectorEventStore()
-        selection = _selection_response(
-            action="none",
-            new_event=None,
-            reason="没有足够稳定桥梁。",
-        )
-        mock = MockLLM()
-        mock.set_responses([json.dumps(selection, ensure_ascii=False)])
-
-        result = update_director_event_workflow(
-            user_input="继续。",
-            scene_facts="没有新事件。",
-            current_state=_state(),
-            core_memory=_core(),
-            scene_summaries=[],
-            turn_index=2,
-            store=store,
-            reviewer=DirectorEventReviewer(mock.build_gateway()),
-            selector=DirectorEventSelector(mock.build_gateway()),
-            standby_director_npcs=[],
-        )
-
-        assert result.changed_event_id is None
-        assert store.get_active() is None
-
     def test_selection_schema_orders_fields_and_rejects_unknown_fields(self):
         properties = DirectorEventSelectionResult.model_json_schema()["properties"]
 
-        assert list(properties) == ["reason", "action", "new_event"]
+        assert list(properties) == [
+            "current_story_direction",
+            "reason",
+            "title",
+            "actors",
+            "objective",
+            "bridge_anchors",
+            "milestones",
+            "milestone_interval_days",
+            "premise",
+            "entry_points",
+        ]
         with pytest.raises(ValueError):
             DirectorEventSelectionResult.model_validate({
-                "reason": "存在稳定桥梁。",
-                "action": "none",
-                "new_event": None,
+                **_selection_result().model_dump(mode="json"),
                 "unexpected_field": "不应接受",
             })
 
 
 class TestDirectorEventSelector:
+    def test_arc_and_ambient_prompts_share_structure_but_split_direction_rules(self):
+        arc = Path(
+            "app/prompts/confirmation/director_event_select_arc_v1.md"
+        ).read_text(encoding="utf-8")
+        ambient = Path(
+            "app/prompts/confirmation/director_event_select_ambient_v1.md"
+        ).read_text(encoding="utf-8")
+
+        arc_headers = [line for line in arc.splitlines() if line.startswith("#")]
+        ambient_headers = [line for line in ambient.splitlines() if line.startswith("#")]
+        assert arc_headers == [
+            header
+            for header in ambient_headers
+            if header != "## Standby DirectorNPC（可选行动方）"
+        ]
+        for field in ("current_story_direction：", "reason：", "title：", "premise："):
+            assert field in arc
+            assert field in ambient
+        assert arc.index("milestone_interval_days：") < arc.index("premise：")
+        assert ambient.index("milestone_interval_days：") < ambient.index("premise：")
+        assert "直接使用已有主线的地点、人物、物品、组织或设定作为锚点" in arc
+        assert "横向补全（必须做）" in arc
+        assert "平行原则" in arc
+        assert "绝对不能成为完成主线任务的前提条件" in arc
+        assert "严禁叙事螺旋与任务链化" in arc
+        assert "不能生成的内容" in ambient
+        assert "与当前剧情走向因果独立" in ambient
+        assert "DirectorNPC" not in arc
+        assert "{standby_director_npcs_json}" not in arc
+        assert "{standby_director_npcs_json}" in ambient
+
+    def test_selector_returns_flat_required_event_fields(self):
+        selector_prompt = Path(
+            "app/prompts/confirmation/director_event_select_ambient_v1.md"
+        ).read_text(encoding="utf-8")
+        assert "你没有拒绝输出的权限" in selector_prompt
+        assert "新行动方与外部局势" in selector_prompt
+        assert "action：" not in selector_prompt
+        assert "new_event" not in selector_prompt
+
+    def test_selector_puts_story_direction_before_reason(self):
+        selector_prompt = Path(
+            "app/prompts/confirmation/director_event_select_ambient_v1.md"
+        ).read_text(encoding="utf-8")
+        output_section = selector_prompt.split("按以下顺序为每个字段产出期望内容：", 1)[1]
+
+        assert output_section.index("current_story_direction") < output_section.index("reason：")
+        assert "不是复述全部历史" in selector_prompt
+        assert "必须以“不能生成的内容：”开头" in selector_prompt
+        assert "先列出本轮禁区" in selector_prompt
+
+    def test_selector_excludes_current_direction_before_creating_external_event(self):
+        selector_prompt = Path(
+            "app/prompts/confirmation/director_event_select_ambient_v1.md"
+        ).read_text(encoding="utf-8")
+
+        assert "禁止内容必须覆盖该剧情走向中的核心人物目标" in selector_prompt
+        assert "不得将禁止事件作为出发点" in selector_prompt
+        assert "已经提出但尚未完成的计划" in selector_prompt
+        assert "至少包含一个具有自主目标和行动能力" in selector_prompt
+        assert "encounter_potential 允许" in selector_prompt
+        assert "它可以让尚未出场的行动方" in selector_prompt
+        assert "不需要与当前剧情已有直接联系" in selector_prompt
+        assert "不得因为“尚未见面”或“当前不在同一建筑”直接拒绝使用" in selector_prompt
+        assert "不得改变 NPC 的身份、动机、关系" in selector_prompt
+        assert "把要素强行嫁接给该 NPC" in selector_prompt
+        assert "不得使用 current_story_direction 已列入禁区的核心内容" in selector_prompt
+        assert "trigger_anchors 必须来自 bridge_anchors" in selector_prompt
+        assert "不得另造与事件无关的中间人或巧合链条" in selector_prompt
+
     def test_milestones_are_state_checkpoints_not_scripts(self):
         selector_prompt = Path(
-            "app/prompts/confirmation/director_event_select_v1.md"
+            "app/prompts/confirmation/director_event_select_ambient_v1.md"
         ).read_text(encoding="utf-8")
         reviewer_prompt = Path(
             "app/prompts/confirmation/director_event_review_v1.md"
         ).read_text(encoding="utf-8")
 
         assert "世界状态检查点" in selector_prompt
-        assert "不得绑定唯一执行者、唯一方法" in selector_prompt
+        assert "不得限定唯一执行者、唯一方法" in selector_prompt
         assert "玩家推动下一状态成立应 advance" in reviewer_prompt
         assert "不受 progress_index 限制" in reviewer_prompt
         assert "不得把“玩家介入”本身作为 resolve 依据" in reviewer_prompt
 
-    def test_selector_receives_resolved_events_and_standby_secrets_without_scene_text(self):
+    def test_selector_receives_event_list_and_standby_without_scene_text(self):
         spy = _SpyGateway(_selection_response())
         DirectorEventSelector(spy).select_or_create(
-            resolved_events=[_event(status="resolved")],
+            role="ambient",
+            events=[_event(status="resolved", role="arc"), _event(role="ambient")],
             standby_director_npcs=[_standby_npc()],
             current_state=_state(),
             core_memory=_core(),
         )
 
         input_data = spy.calls[0]["input_data"]
-        resolved_events = json.loads(input_data["resolved_events_json"])
+        events = json.loads(input_data["events_json"])
         standby_npcs = json.loads(input_data["standby_director_npcs_json"])
 
-        assert resolved_events[0]["entry_points"]
-        assert resolved_events[0]["exposure"] == "hidden"
+        assert [(event["role"], event["status"]) for event in events] == [
+            ("arc", "resolved"),
+            ("ambient", "active"),
+        ]
+        assert events[0]["entry_points"]
+        assert events[0]["exposure"] == "hidden"
         assert standby_npcs[0]["hidden_secret"]
         assert "recent_summaries_json" in input_data
         assert "entity_profiles_json" in input_data
         assert "npc_profiles_json" in input_data
         assert "scene_text" not in input_data
         assert "scene_summaries_json" not in input_data
+
+    def test_arc_selector_does_not_receive_standby_director_npcs(self):
+        spy = _SpyGateway(_selection_response())
+        DirectorEventSelector(spy).select_or_create(
+            role="arc",
+            events=[],
+            standby_director_npcs=[_standby_npc()],
+            current_state=_state(),
+            core_memory=_core(),
+        )
+
+        assert "standby_director_npcs_json" not in spy.calls[0]["input_data"]

@@ -4,7 +4,7 @@ from typing import cast
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
-from app.domain.director_event.views import project_plot_director_event
+from app.domain.director_event.views import project_plot_director_events
 from app.domain.context_facts.views import project_context_facts
 from app.domain.plot_outline.schemas import PlotOutlineContext, PlotOutlineResult
 from app.domain.plot_outline.views import project_turn_resolution
@@ -99,9 +99,8 @@ class PlotOutlineAgent:
                     "context_facts_json": project_context_facts(context.context_facts),
                     "entity_profiles_json": project_entity_profiles(context.entity_profiles),
                     "npc_profiles_json": project_npc_profiles(context.npc_profiles),
-                    "director_event_json": project_plot_director_event(
-                        context.director_event,
-                        recent_resolved_event=context.recent_resolved_director_event,
+                    "director_events_json": project_plot_director_events(
+                        context.director_events,
                         user_input=context.user_input,
                         current_state=context.current_state,
                         context_facts=context.context_facts,

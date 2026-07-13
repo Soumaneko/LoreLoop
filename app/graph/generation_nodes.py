@@ -235,12 +235,13 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
 
 
 def maybe_director_npc_node(state: GenerationState) -> GenerationState:
+    active_events = state.get("active_director_events", [])
     with director_npc_store() as npc_store, npc_profile_store() as profile_store:
         director_npc_result = maybe_director_npc_workflow(
             core_memory=state["core_memory"],
             current_state=state["current_state"],
             recent_summaries=state.get("recent_summaries", []),
-            director_event=state.get("active_director_event"),
+            director_events=active_events,
             user_input=state["user_input"],
             turn_index=state["turn_index"],
             director_npc_store=npc_store,
@@ -269,7 +270,7 @@ def generate_plot_outline_node(state: GenerationState) -> GenerationState:
         context_facts=state["context_facts"],
         entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
-        director_event=state.get("active_director_event"),
+        director_events=state.get("active_director_events", []),
         recent_resolved_director_event=state.get("recent_resolved_director_event"),
         director_npc_injection=(
             director_npc_result.plot_injection

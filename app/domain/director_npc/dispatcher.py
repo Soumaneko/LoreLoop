@@ -5,7 +5,7 @@ from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
-from app.domain.director_event.views import project_director_event
+from app.domain.director_event.views import project_director_events
 from app.domain.director_npc.schemas import (
     DispatchedDirectorNPCCandidate,
     DirectorNPCDispatchDecision,
@@ -26,7 +26,7 @@ class DirectorNPCDispatcher:
         core_memory: CoreMemory,
         current_state: CurrentState,
         recent_summaries: list[SceneSummary],
-        director_event: DirectorEvent | None,
+        director_events: list[DirectorEvent],
         standby_npcs: list[DirectorNPCDraft],
         existing_candidates: list[ExistingNPCCandidate],
         dispatched_director_npc_candidates: list[DispatchedDirectorNPCCandidate],
@@ -41,7 +41,7 @@ class DirectorNPCDispatcher:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(current_state),
                     "scene_summaries_json": project_scene_summaries(recent_summaries),
-                    "director_event_json": project_director_event(director_event),
+                    "director_events_json": project_director_events(director_events),
                     "standby_npcs_json": json.dumps(
                         [npc.model_dump(mode="json") for npc in standby_npcs],
                         ensure_ascii=False,

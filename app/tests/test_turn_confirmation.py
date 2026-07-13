@@ -7,6 +7,7 @@ import pytest
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.entity.schemas import EntityExtractionResult
+from app.domain.director_event.workflows import DirectorEventWorkflowResult
 from app.domain.npc_profile.schemas import NPCExtractionResult
 from app.domain.recall_memory.schemas import MemoryDraftExtractResult
 from app.domain.scene_writer.schemas import SceneWriterResult
@@ -252,7 +253,10 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
     monkeypatch.setattr(
         confirmation_nodes,
         "update_director_event_workflow",
-        lambda **_kwargs: None,
+        lambda **kwargs: DirectorEventWorkflowResult(
+            role=kwargs["role"],
+            mode="test",
+        ),
     )
     monkeypatch.setattr(
         confirmation_nodes,
@@ -329,7 +333,7 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(monkeypatc
     monkeypatch.setattr(
         confirmation_nodes,
         "director_event_store",
-        lambda: _ContextStore(get_active=lambda: None),
+        lambda: _ContextStore(list_active=lambda: []),
     )
     monkeypatch.setattr(
         confirmation_nodes,
@@ -504,14 +508,14 @@ def test_opening_confirmation_restocks_director_npc_synchronously(monkeypatch):
         lambda: _ContextStore(list_all=lambda: []),
     )
     monkeypatch.setattr(
-        confirmation_helpers,
-        "npc_profile_store",
-        lambda: _ContextStore(list_all=lambda: []),
-    )
-    monkeypatch.setattr(
         confirmation_nodes,
         "director_npc_store",
         lambda: _ContextStore(list_standby=lambda: []),
+    )
+    monkeypatch.setattr(
+        confirmation_helpers,
+        "npc_profile_store",
+        lambda: _ContextStore(list_all=lambda: []),
     )
     monkeypatch.setattr(
         confirmation_helpers,

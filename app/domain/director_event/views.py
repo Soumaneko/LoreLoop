@@ -39,6 +39,14 @@ def project_director_event(
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def project_director_events(events: list[DirectorEvent]) -> str:
+    return json.dumps(
+        [json.loads(project_director_event(event)) for event in events],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
 def _context_text(
     *,
     user_input: str,
@@ -183,3 +191,24 @@ def project_plot_director_event(
         ensure_ascii=False,
         indent=2,
     )
+
+
+def project_plot_director_events(
+    events: list[DirectorEvent],
+    *,
+    user_input: str,
+    current_state: CurrentState,
+    context_facts: ContextFactSet | None = None,
+) -> str:
+    projected = []
+    for event in events:
+        projection = json.loads(
+            project_plot_director_event(
+                event,
+                user_input=user_input,
+                current_state=current_state,
+                context_facts=context_facts,
+            )
+        )
+        projected.append({"role": event.role, **projection})
+    return json.dumps(projected, ensure_ascii=False, indent=2)

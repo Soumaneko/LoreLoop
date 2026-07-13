@@ -23,7 +23,7 @@ class PlotOutlineContext(BaseModel):
     )
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
-    director_event: DirectorEvent | None = None
+    director_events: list[DirectorEvent] = Field(default_factory=list)
     recent_resolved_director_event: DirectorEvent | None = None
     director_npc_injection: DirectorNPCPlotInjection | None = None
 

@@ -58,7 +58,7 @@ class ConfirmationCache(TypedDict, total=False):
     pending_memory_result: MemoryDraftExtractResult
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
-    npc_director_event: DirectorEvent | None
+    npc_director_events: list[DirectorEvent]
     action_preview: ActionPreviewResult
     director_event_result: DirectorEventWorkflowResult | None
     updated_entity_ids: list[str]
@@ -107,7 +107,7 @@ class ConfirmationState(TypedDict, total=False):
     pending_memory_result: MemoryDraftExtractResult
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
-    npc_director_event: DirectorEvent | None
+    npc_director_events: list[DirectorEvent]
     action_preview: ActionPreviewResult
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]

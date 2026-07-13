@@ -1,4 +1,3 @@
-import re
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
@@ -9,9 +8,9 @@ from app.domain.current_state.schemas import WorldClock
 
 
 DirectorEventStatus = Literal["active", "resolved"]
+DirectorEventRole = Literal["arc", "ambient"]
 DirectorEventExposure = Literal["hidden", "foreshadowed", "engaged"]
 ReviewAction = Literal["hold", "advance", "resolve"]
-SelectionAction = Literal["create_new", "none"]
 
 
 def _new_id() -> str:
@@ -20,29 +19,6 @@ def _new_id() -> str:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-_TIME_ANCHOR_RE = re.compile(
-    r"("
-    r"\d+\s*(?:日|天|个月|月|年|时辰|小时|分钟)(?:内|后|前)?"
-    r"|[一二三四五六七八九十百半数几两]\s*(?:日|天|个月|月|年|时辰)(?:内|后|前)?"
-    r"|[一二三四五六七八九十百数几两]\s*刻钟(?:内|后|前)?"
-    r"|月圆|月相|朔月|满月|新月|半月"
-    r"|子时|丑时|寅时|卯时|辰时|巳时|午时|未时|申时|酉时|戌时|亥时"
-    r"|入夜|夜间|夜半|清晨|黎明|黄昏|傍晚|正午|午后|昨夜|明日|前夕"
-    r"|节庆|节前|节后|期限|截止|倒计时|日期|时日"
-    r")"
-)
-
-
-def _reject_time_anchors(value: str) -> str:
-    if _TIME_ANCHOR_RE.search(value):
-        raise ValueError("director event text must not contain time anchors")
-    return value
-
-
-def _reject_time_anchors_in_list(values: list[str]) -> list[str]:
-    return [_reject_time_anchors(value) for value in values]
 
 
 class DirectorEventEntryPoint(BaseModel):
@@ -56,19 +32,9 @@ class DirectorEventEntryPoint(BaseModel):
         min_length=1,
     )
 
-    @field_validator("visible_sign", "immediate_effect")
-    @classmethod
-    def _validate_no_time_anchors(cls, value: str) -> str:
-        return _reject_time_anchors(value)
-
-    @field_validator("trigger_anchors")
-    @classmethod
-    def _validate_list_no_time_anchors(cls, values: list[str]) -> list[str]:
-        return _reject_time_anchors_in_list(values)
-
-
 class DirectorEvent(BaseModel):
     event_id: str = Field(default_factory=_new_id)
+    role: DirectorEventRole
     title: str = Field(min_length=1)
     status: DirectorEventStatus = "active"
     premise: str = Field(
@@ -104,16 +70,6 @@ class DirectorEvent(BaseModel):
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
 
-    @field_validator("premise", "objective")
-    @classmethod
-    def _validate_no_time_anchors(cls, value: str) -> str:
-        return _reject_time_anchors(value)
-
-    @field_validator("actors", "bridge_anchors", "milestones")
-    @classmethod
-    def _validate_lists_no_time_anchors(cls, values: list[str]) -> list[str]:
-        return _reject_time_anchors_in_list(values)
-
     @field_validator("milestone_interval_steps")
     @classmethod
     def _validate_positive_intervals(cls, values: list[int]) -> list[int]:
@@ -124,6 +80,7 @@ class DirectorEvent(BaseModel):
     def semantic_view(self) -> dict:
         return {
             "event_id": self.event_id,
+            "role": self.role,
             "title": self.title,
             "premise": self.premise,
             "actors": self.actors,
@@ -151,12 +108,13 @@ def _float_days_to_steps(days: float) -> int:
     return max(1, round(days * _PHASES_PER_DAY))
 
 
-class DirectorEventDraft(BaseModel):
+class DirectorEventSelectionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_story_direction: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
     title: str = Field(min_length=1)
-    premise: str = Field(
-        min_length=1,
-    )
-    actors: list[str] = Field(default_factory=list)
+    actors: list[str] = Field(min_length=1)
     objective: str = Field(min_length=1)
     bridge_anchors: list[str] = Field(min_length=1)
     milestones: list[str] = Field(
@@ -167,23 +125,16 @@ class DirectorEventDraft(BaseModel):
         min_length=2,
         max_length=2,
     )
+    premise: str = Field(
+        min_length=1,
+    )
     entry_points: list[DirectorEventEntryPoint] = Field(min_length=1)
-
-    @field_validator("premise", "objective")
-    @classmethod
-    def _validate_no_time_anchors(cls, value: str) -> str:
-        return _reject_time_anchors(value)
-
-    @field_validator("actors", "bridge_anchors", "milestones")
-    @classmethod
-    def _validate_lists_no_time_anchors(cls, values: list[str]) -> list[str]:
-        return _reject_time_anchors_in_list(values)
 
     @field_validator("milestone_interval_days")
     @classmethod
-    def _validate_non_negative_days(cls, values: list[float]) -> list[float]:
-        if any(value < 0 for value in values):
-            raise ValueError("milestone_interval_days must contain non-negative floats")
+    def _validate_positive_days(cls, values: list[float]) -> list[float]:
+        if any(value <= 0 for value in values):
+            raise ValueError("milestone_interval_days must contain positive floats")
         return values
 
     def _compute_interval_steps(self) -> list[int]:
@@ -195,6 +146,7 @@ class DirectorEventDraft(BaseModel):
     def to_event(
         self,
         *,
+        role: DirectorEventRole,
         turn_index: int,
         current_clock: WorldClock,
         status: DirectorEventStatus = "active",
@@ -202,6 +154,7 @@ class DirectorEventDraft(BaseModel):
         interval_steps = self._compute_interval_steps()
         now = utc_now()
         return DirectorEvent(
+            role=role,
             title=self.title,
             status=status,
             premise=self.premise,
@@ -244,20 +197,3 @@ class EventUseInstruction(BaseModel):
     entry_point_id: str | None = None
     allowed_effect: str | None = None
     reason: str = Field(min_length=1)
-
-
-class DirectorEventSelectionResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    reason: str = Field(min_length=1)
-    action: SelectionAction
-    new_event: DirectorEventDraft | None = None
-
-    @model_validator(mode="after")
-    def _validate_action_payload(self):
-        if self.action == "create_new":
-            if self.new_event is None:
-                raise ValueError("new_event is required when action is create_new")
-        if self.action == "none" and self.new_event is not None:
-            raise ValueError("new_event must be null when action is none")
-        return self

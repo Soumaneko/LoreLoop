@@ -201,8 +201,11 @@ class TestPlotOutlineAgent:
         assert "不得确认是不是目标" in prompt
         assert "避免替玩家判断" in prompt
         assert "must_establish_facts" in prompt
-        assert "判断当前剧情是否适合使用 DirectorEvent 的可选前台影响" in prompt
-        assert "输入未提供可用前台影响时，必须拒绝使用" in prompt
+        assert "可包含多个并行事件" in prompt
+        assert "不得因 `role` 设置消费优先级或推断额外规则" in prompt
+        assert "某个事件未提供可用前台影响时" in prompt
+        assert "arc 负责" not in prompt
+        assert "ambient 负责" not in prompt
         assert "若要求角色披露信息，必须写出本回合允许披露的具体事实" in prompt
         assert "不得使用未携带事实内容的占位描述" in prompt
         assert "依据不足时必须保持未知" in prompt
@@ -232,7 +235,6 @@ class TestPlotOutlineAgent:
         assert "scene_summaries_json" not in prompt
         assert "planning_reasoning" in prompt
         assert "规划前的逻辑审计" in prompt
-        assert "不得把上下文中存在的设定直接变成 NPC 或世界公开确认" in prompt
         assert "NPC/世界反应的因果是否成立" in prompt
         assert "哪些后台信息不能在本回合被角色知晓" in prompt
         assert "hidden_secret" in prompt

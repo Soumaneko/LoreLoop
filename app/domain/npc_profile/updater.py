@@ -16,10 +16,10 @@ from app.domain.npc_profile.schemas import (
     utc_now,
 )
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.npc_profile.views import project_director_event_identities
 
 if TYPE_CHECKING:
     from app.domain.director_event.schemas import DirectorEvent
-
 
 class _NPCUpdateCandidate:
     def __init__(
@@ -48,7 +48,7 @@ class NPCProfileUpdater:
         new_npc_hints: list[RetrievedNPC] | None = None,
         *,
         core_memory: CoreMemory,
-        director_event: DirectorEvent | None = None,
+        director_events: list[DirectorEvent] | None = None,
         recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
     ) -> list[NPCProfile]:
@@ -66,17 +66,8 @@ class NPCProfileUpdater:
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_facts_json": scene_facts,
-                    "director_event_identity_json": json.dumps(
-                        (
-                            {
-                                "premise": director_event.premise,
-                                "milestones": director_event.milestones,
-                            }
-                            if director_event is not None
-                            else None
-                        ),
-                        ensure_ascii=False,
-                        indent=2,
+                    "director_events_identity_json": project_director_event_identities(
+                        director_events or []
                     ),
                     "current_state_summary_json": project_current_state(current_state),
                     "recent_summaries_json": project_scene_summaries(recent_summaries or []),

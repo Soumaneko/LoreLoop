@@ -36,6 +36,7 @@ def _state() -> CurrentState:
 
 def _director_event() -> DirectorEvent:
     return DirectorEvent(
+        role="arc",
         title="失窃旧书",
         premise="希尔达寻找自己失窃的旧书。",
         objective="找回旧书。",
@@ -50,14 +51,18 @@ def _director_event() -> DirectorEvent:
     )
 
 
-def test_npc_agents_receive_director_event_identity_context():
-    event = _director_event()
+def test_npc_agents_receive_all_director_event_identity_contexts():
+    arc = _director_event()
+    ambient = _director_event().model_copy(
+        update={"role": "ambient", "title": "城外商队"}
+    )
+    events = [arc, ambient]
     extractor_gateway = _Gateway([{"alias_matches": [], "retrieved_npcs": []}])
     NPCProfileExtractor(extractor_gateway).extract(
         core_memory=CoreMemory(items=[]),
         scene_facts="寻物便条张贴者是一名女性。",
         existing_profiles=[],
-        director_event=event,
+        director_events=events,
     )
 
     updater_gateway = _Gateway([{"npcs": []}])
@@ -67,15 +72,18 @@ def test_npc_agents_receive_director_event_identity_context():
         relevant_profiles=[],
         new_npc_hints=[],
         core_memory=CoreMemory(items=[]),
-        director_event=event,
+        director_events=events,
     )
 
-    expected = {"premise": event.premise, "milestones": event.milestones}
+    expected = [
+        {"role": event.role, "premise": event.premise, "milestones": event.milestones}
+        for event in events
+    ]
     assert json.loads(
-        extractor_gateway.calls[0]["input_data"]["director_event_identity_json"]
+        extractor_gateway.calls[0]["input_data"]["director_events_identity_json"]
     ) == expected
     assert json.loads(
-        updater_gateway.calls[0]["input_data"]["director_event_identity_json"]
+        updater_gateway.calls[0]["input_data"]["director_events_identity_json"]
     ) == expected
 
 

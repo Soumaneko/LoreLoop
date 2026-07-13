@@ -40,7 +40,7 @@ def assemble_context(
     context_facts: ContextFactSet | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
-    director_event: DirectorEvent | None = None,
+    director_events: list[DirectorEvent] | None = None,
     recent_resolved_director_event: DirectorEvent | None = None,
     director_npc_injection: DirectorNPCPlotInjection | None = None,
 ) -> PlotOutlineContext:
@@ -53,7 +53,7 @@ def assemble_context(
         or ContextFactSet(turn_focus="No Context Facts", facts=[]),
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
-        director_event=director_event,
+        director_events=director_events or [],
         recent_resolved_director_event=recent_resolved_director_event,
         director_npc_injection=director_npc_injection,
     )
@@ -92,10 +92,10 @@ def prepare_generation_state(
         recent_summaries = summary_store.get_recent(5)
 
     with director_event_store() as director_store:
-        active_director_event = director_store.get_active()
+        active_director_events = director_store.list_active()
         recent_resolved_director_event = (
             None
-            if active_director_event is not None
+            if active_director_events
             else director_store.get_recent_resolved(
                 turn_index=turn_index,
                 cooldown_turns=DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS,
@@ -115,7 +115,7 @@ def prepare_generation_state(
         "next_turn_index": turn_index,
         "scene_summaries": scene_summaries,
         "recent_summaries": recent_summaries,
-        "active_director_event": active_director_event,
+        "active_director_events": active_director_events,
         "recent_resolved_director_event": recent_resolved_director_event,
     }
 
@@ -194,7 +194,7 @@ def state_loaded_event(state: dict[str, Any]) -> GenerationEvent:
             "short_term_memory": model_data(state["short_term_memory"]),
             "scene_summaries": model_data(state["scene_summaries"]),
             "recent_summaries": model_data(state["recent_summaries"]),
-            "active_director_event": model_data(state["active_director_event"]),
+            "active_director_events": model_data(state["active_director_events"]),
             "recent_resolved_director_event": model_data(
                 state["recent_resolved_director_event"]
             ),

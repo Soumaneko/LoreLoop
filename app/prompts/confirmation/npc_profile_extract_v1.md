@@ -18,10 +18,12 @@ NPCProfile 用于保存人物长期公开信息与导演幕后信息；本任务
 {existing_npc_profiles_json}
 ```
 
-## DirectorEvent
+## Active DirectorEvent Identity Contexts
+
+这里只提供 active 导演事件的 `role`、premise 和 milestones，用于识别候选是否对应已有事件角色。所有事件采用相同消费规则，`role` 仅作为事件标识。
 
 ```json
-{director_event_identity_json}
+{director_events_identity_json}
 ```
 
 

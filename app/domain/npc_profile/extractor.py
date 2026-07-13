@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
+from app.domain.npc_profile.views import project_director_event_identities
 
 if TYPE_CHECKING:
     from app.domain.director_event.schemas import DirectorEvent
@@ -21,7 +22,7 @@ class NPCProfileExtractor:
         core_memory: CoreMemory,
         scene_facts: str,
         existing_profiles: list[NPCProfile],
-        director_event: DirectorEvent | None = None,
+        director_events: list[DirectorEvent] | None = None,
         trace_id: str | None = None,
     ) -> NPCExtractionResult:
         if not scene_facts.strip():
@@ -34,17 +35,8 @@ class NPCProfileExtractor:
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_facts_json": scene_facts,
-                    "director_event_identity_json": json.dumps(
-                        (
-                            {
-                                "premise": director_event.premise,
-                                "milestones": director_event.milestones,
-                            }
-                            if director_event is not None
-                            else None
-                        ),
-                        ensure_ascii=False,
-                        indent=2,
+                    "director_events_identity_json": project_director_event_identities(
+                        director_events or []
                     ),
                     "existing_npc_profiles_json": json.dumps(
                         [

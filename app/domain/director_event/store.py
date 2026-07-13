@@ -30,7 +30,11 @@ class DirectorEventStore:
 
     def save(self, event: DirectorEvent) -> str:
         if event.status == "active":
-            self._resolve_other_active(event.event_id, event.updated_turn or event.created_turn)
+            self._resolve_other_active(
+                event.event_id,
+                event.role,
+                event.updated_turn or event.created_turn,
+            )
         now = utc_now()
         event = event.model_copy(update={"updated_at": now})
         self._conn.execute(
@@ -53,33 +57,28 @@ class DirectorEventStore:
         self._conn.commit()
         return event.event_id
 
-    def get_active(self) -> DirectorEvent | None:
-        row = self._conn.execute(
-            "SELECT event_json FROM director_events WHERE status = 'active' ORDER BY updated_at DESC LIMIT 1"
-        ).fetchone()
-        return self._event_from_row(row) if row else None
+    def get_active(self, role: str) -> DirectorEvent | None:
+        return next((event for event in self.list_active() if event.role == role), None)
 
-    def list_resolved(self) -> list[DirectorEvent]:
-        return self._list_by_statuses(["resolved"])
+    def list_active(self) -> list[DirectorEvent]:
+        return self._list_by_statuses(["active"])
 
-    def get_latest_resolved(self) -> DirectorEvent | None:
-        row = self._conn.execute(
-            """
-            SELECT event_json FROM director_events
-            WHERE status = 'resolved'
-            ORDER BY COALESCE(updated_turn, created_turn) DESC, updated_at DESC
-            LIMIT 1
-            """
-        ).fetchone()
-        return self._event_from_row(row) if row else None
+    def list_resolved(self, role: str | None = None) -> list[DirectorEvent]:
+        events = self._list_by_statuses(["resolved"])
+        return [event for event in events if role is None or event.role == role]
+
+    def get_latest_resolved(self, role: str | None = None) -> DirectorEvent | None:
+        events = self.list_resolved(role)
+        return events[0] if events else None
 
     def get_recent_resolved(
         self,
         *,
+        role: str | None = None,
         turn_index: int,
         cooldown_turns: int,
     ) -> DirectorEvent | None:
-        event = self.get_latest_resolved()
+        event = self.get_latest_resolved(role)
         if event is None:
             return None
         resolved_turn = event.resolved_turn or event.updated_turn
@@ -234,8 +233,8 @@ class DirectorEventStore:
         ).fetchall()
         return [self._event_from_row(row) for row in rows]
 
-    def _resolve_other_active(self, event_id: str, turn_index: int) -> None:
-        active = self.get_active()
+    def _resolve_other_active(self, event_id: str, role: str, turn_index: int) -> None:
+        active = self.get_active(role)
         if active is None or active.event_id == event_id:
             return
         updated = active.model_copy(

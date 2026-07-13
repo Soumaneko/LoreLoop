@@ -46,7 +46,7 @@ class GenerationState(TypedDict, total=False):
 
     scene_summaries: list[SceneSummary]
     recent_summaries: list[SceneSummary]
-    active_director_event: DirectorEvent | None
+    active_director_events: list[DirectorEvent]
     recent_resolved_director_event: DirectorEvent | None
 
     matched_anchors: list[Anchor]

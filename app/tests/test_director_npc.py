@@ -5,6 +5,7 @@ from pathlib import Path
 from app.core.llm import MockLLM
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState, NPCState, PlayerState, SceneState
+from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.schemas import (
     DirectorNPCDispatchDecision,
     DirectorNPCDraft,
@@ -98,6 +99,20 @@ def _state() -> CurrentState:
         scene=SceneState(scene_id="scene_001", location="北郡修道院"),
         player=PlayerState(name="主角"),
         npcs=[NPCState(name="米莉", role="酒馆老板", absent_turns=1)],
+    )
+
+
+def _director_event(role: str, title: str) -> DirectorEvent:
+    return DirectorEvent(
+        role=role,
+        title=title,
+        premise=f"{title}正在形成独立局势。",
+        actors=["外部行动方"],
+        objective="推进自身目标。",
+        bridge_anchors=["北郡修道院"],
+        milestones=["局势形成。", "局势发展。", "局势收束。"],
+        milestone_interval_steps=[1, 1],
+        created_turn=1,
     )
 
 
@@ -362,11 +377,15 @@ class TestDirectorNPCWorkflow:
         dispatcher = MockLLM()
         dispatcher.set_responses([_dispatch_response(selected_id=draft.draft_id, selected_name=draft.name)])
 
+        events = [
+            _director_event("arc", "修道院旧档"),
+            _director_event("ambient", "城外商队"),
+        ]
         result = maybe_director_npc_workflow(
             core_memory=CoreMemory(items=[]),
             current_state=_state(),
             recent_summaries=[],
-            director_event=None,
+            director_events=events,
             user_input="我环顾四周寻找线索",
             turn_index=4,
             director_npc_store=director_store,
@@ -397,12 +416,16 @@ class TestDirectorNPCWorkflow:
             )
         )
         dispatcher = SpyGateway(_dispatch_response(action="none"))
+        events = [
+            _director_event("arc", "修道院旧档"),
+            _director_event("ambient", "城外商队"),
+        ]
 
         result = maybe_director_npc_workflow(
             core_memory=CoreMemory(items=[]),
             current_state=_state(),
             recent_summaries=[],
-            director_event=None,
+            director_events=events,
             user_input="我走向广场中心",
             turn_index=4,
             director_npc_store=director_store,
@@ -411,6 +434,10 @@ class TestDirectorNPCWorkflow:
         )
 
         assert result.dispatch is not None
+        projected_events = json.loads(
+            dispatcher.calls[0]["input_data"]["director_events_json"]
+        )
+        assert [event["role"] for event in projected_events] == ["arc", "ambient"]
         candidates = json.loads(
             dispatcher.calls[0]["input_data"]["dispatched_director_npc_candidates_json"]
         )
@@ -446,7 +473,7 @@ class TestDirectorNPCWorkflow:
             core_memory=CoreMemory(items=[]),
             current_state=_state(),
             recent_summaries=[],
-            director_event=None,
+            director_events=[],
             user_input="我走向广场中心",
             turn_index=4,
             director_npc_store=director_store,
@@ -477,7 +504,7 @@ class TestDirectorNPCWorkflow:
             core_memory=CoreMemory(items=[]),
             current_state=_state(),
             recent_summaries=[],
-            director_event=None,
+            director_events=[],
             user_input="我小心前进",
             turn_index=4,
             director_npc_store=director_store,

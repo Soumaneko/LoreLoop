@@ -15,11 +15,13 @@ from app.domain.views import (
     project_scene_summaries,
 )
 
-from .schemas import DirectorEvent, DirectorEventSelectionResult
+from .schemas import DirectorEvent, DirectorEventRole, DirectorEventSelectionResult
 
 
-def _resolved_event_dedupe_view(event: DirectorEvent) -> dict:
+def _event_list_view(event: DirectorEvent) -> dict:
     return {
+        "role": event.role,
+        "status": event.status,
         "title": event.title,
         "premise": event.premise,
         "actors": event.actors,
@@ -55,7 +57,8 @@ class DirectorEventSelector:
     def select_or_create(
         self,
         *,
-        resolved_events: list[DirectorEvent],
+        role: DirectorEventRole,
+        events: list[DirectorEvent],
         standby_director_npcs: list[DirectorNPCDraft],
         current_state: CurrentState,
         core_memory: CoreMemory,
@@ -64,32 +67,35 @@ class DirectorEventSelector:
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
     ) -> DirectorEventSelectionResult:
+        input_data = {
+            "events_json": json.dumps(
+                [_event_list_view(event) for event in events],
+                ensure_ascii=False,
+                indent=2,
+            ),
+            "current_state_json": project_current_state(current_state),
+            "core_memory_json": core_memory.model_dump_json(indent=2),
+            "recent_summaries_json": project_scene_summaries(recent_summaries or []),
+            "entity_profiles_json": project_entity_profiles(entity_profiles or []),
+            "npc_profiles_json": project_npc_profiles(npc_profiles or []),
+            "output_schema_json": json.dumps(
+                DirectorEventSelectionResult.model_json_schema(),
+                ensure_ascii=False,
+                indent=2,
+            ),
+        }
+        if role == "ambient":
+            input_data["standby_director_npcs_json"] = json.dumps(
+                [_standby_director_npc_view(npc) for npc in standby_director_npcs],
+                ensure_ascii=False,
+                indent=2,
+            )
+
         return cast(
             DirectorEventSelectionResult,
             self.llm.run(
-                task="director_event_select",
-                input_data={
-                    "resolved_events_json": json.dumps(
-                        [_resolved_event_dedupe_view(event) for event in resolved_events],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    "standby_director_npcs_json": json.dumps(
-                        [_standby_director_npc_view(npc) for npc in standby_director_npcs],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    "current_state_json": project_current_state(current_state),
-                    "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "recent_summaries_json": project_scene_summaries(recent_summaries or []),
-                    "entity_profiles_json": project_entity_profiles(entity_profiles or []),
-                    "npc_profiles_json": project_npc_profiles(npc_profiles or []),
-                    "output_schema_json": json.dumps(
-                        DirectorEventSelectionResult.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                },
+                task=f"director_event_select_{role}",
+                input_data=input_data,
                 output_schema=DirectorEventSelectionResult,
                 temperature=0.3,
                 trace_id=trace_id,

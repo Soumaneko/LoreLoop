@@ -24,10 +24,10 @@
 {scene_summaries_json}
 ```
 
-## DirectorEvent
+## DirectorEvents
 
 ```json
-{director_event_json}
+{director_events_json}
 ```
 
 ## 待命 NPC
@@ -75,7 +75,7 @@
 
 # 核心规则
 
-1. 默认选择 `none`。只有当候选 NPC 与当前场景、玩家输入、已有关系或 DirectorEvent 存在自然交点，且不会打断本回合核心行动时，才选择 NPC。
+1. 默认选择 `none`。只有当候选 NPC 与当前场景、玩家输入、已有关系或任一 DirectorEvent 存在自然交点，且不会打断本回合核心行动时，才选择 NPC。每个事件的 `role` 仅作为事件自身标识，不代表消费优先级或特殊处理规则。
 2. 你不负责设计出场桥段。不得编写具体剧情，也不得下剧情命令。
 3. 不得创造新的外部事实。
 4. 地理位置不是硬锁定：候选档案中的 `current_location`、常驻地或最近位置只代表 TA 平时/上次待的地方，不代表 TA 绝对不能移动。

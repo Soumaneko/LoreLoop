@@ -31,12 +31,12 @@
 {npc_candidates_json}
 ```
 
-## Active DirectorEvent Identity Context
+## Active DirectorEvent Identity Contexts
 
-这里只提供 active 导演事件的 premise 和 milestones，用于识别候选是否对应已有事件角色，并判断其是否承担持续剧情作用。它不是玩家已知信息，不得写入公开档案。
+这里只提供 active 导演事件的 `role`、premise 和 milestones，用于识别候选是否对应已有事件角色，并判断其是否承担持续剧情作用。所有事件采用相同消费规则，`role` 仅作为事件标识。它不是玩家已知信息，不得写入公开档案。
 
 ```json
-{director_event_identity_json}
+{director_events_identity_json}
 ```
 
 

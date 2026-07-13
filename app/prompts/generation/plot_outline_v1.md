@@ -40,7 +40,7 @@
 ## DirectorEvent
 
 ```json
-{director_event_json}
+{director_events_json}
 ```
 
 
@@ -92,10 +92,10 @@
 
 # 任务逻辑
 
-1. 先理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是本轮前的即时状态；Context Facts 是上游基于记忆、摘要和当前上下文提取出的相关既有事实列表；Entity Profiles 和 NPC Profiles 是实体与角色依据；DirectorEvent 和 Director NPC Candidate 是可选的后台调度输入。
+1. 先理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是本轮前的即时状态；Context Facts 是上游基于记忆、摘要和当前上下文提取出的相关既有事实列表；Entity Profiles 和 NPC Profiles 是实体与角色依据；DirectorEvents 和 Director NPC Candidate 是可选的后台调度输入。
 2. 明确角色层面的信息边界：主角能感知什么，NPC 各自知道什么，旁白能确认什么。后台事实只能转译为前台可观察的信号——压力、线索、异常、机会。**但这不限制你作为创作者使用这些后台信息来驱动剧情走向。**
 3. 根据 Player Input 和 TurnResolutionResult 规划本回合确定事件。TurnResolutionResult 是行动结果边界；当它只规定“获得可靠线索”“确认目标位置”等抽象结果时，Plot 必须结合上下文和 DirectorEvent 确定该结果的具体事实内容，这属于落实判定，不属于擅自扩展结果。
-4. 判断当前剧情是否适合使用 DirectorEvent 的可选前台影响；无论是否使用，都必须遵守其 `canonical_premise`，不得创造与其互相矛盾的剧情。
+4. `director_events_json` 可包含多个并行事件。对每个事件分别遵守其 `event_use_instruction`；不得因 `role` 设置消费优先级或推断额外规则。无论是否使用某个事件的前台影响，都必须遵守其 `canonical_premise`。
 5. 设定 scene_stopping_point，让正文停在当前行动结果刚成立后的可交互状态，不替玩家做下一步选择。
 6. event_fact 必须完整包含“动作发起（玩家做了什么/说了什么意图）”与“动作结果”的因果链。如果玩家有具体发言或质问，必须将该发言的核心意图作为事实写明，不得直接跳到 NPC 的反应。
 7. 如果 Player Input 中包含玩家的语言表述，must_establish_facts 或 planned_events 中必须包含“主角表达了 [核心意图]”的事实。
@@ -113,7 +113,7 @@
    - hidden_secret 只能通过 NPC 的行为、暗示、回避、矛盾等前台可观察方式间接体现，不得以旁白形式直接公开给玩家（除非 TurnResolutionResult 明确揭示）。
    - core_motivation 只能转译为可观察的倾向、压力或行为模式，不得作为旁白真相直接陈述。
    - **创作自由与角色约束的区别**：你可以基于 hidden_secret 决定"这个 NPC 本回合会暗中破坏某个线索"（这是创作），但你不能让旁白直接说"这个 NPC 暗中破坏了线索"（这是公开隐秘）。前台表现和后台驱动是两回事。
-7. DirectorEvent 是后台事件，不得原文暴露、写成任务目标或替玩家决定回应。`canonical_premise` 是不可违背的后台事实约束，不是可选素材；即使本回合不使用 `allowed_effect`，也不得规划与其矛盾的事件原因、人物行为、线索内容或物品流转。`player_contact_state` 是玩家既有认知，只用于维持连续性，不得由 Plot 再次表现或推进。输入未提供可用前台影响时，必须拒绝使用该前台影响，但仍须遵守后台事实。
+7. DirectorEvent 是后台事件，不得原文暴露或替玩家决定回应。每个事件的 `canonical_premise` 都是不可违背的后台事实约束，不是可选素材；即使本回合不使用其 `allowed_effect`，也不得规划与其矛盾的事件原因、人物行为、线索内容或物品流转。`player_contact_state` 是玩家既有认知，只用于维持连续性，不得由 Plot 再次表现或推进。某个事件未提供可用前台影响时，必须拒绝使用该事件的前台影响，但仍须遵守其后台事实。
 8. Director NPC Candidate 不为 null 时，你有二次裁量权：自然、轻量、有因果交点时可使用；若会打断当前行动、要求创造未建立事实或破坏节奏，应拒绝。不能为了省事每次都拒绝。
 9. 不得把 Context Facts 中未列出的内容当作否定事实或失败理由；Plot 只能落实 TurnResolutionResult 已经确定的结果，并用 Context Facts 中存在的既有事实维持连续性。
 10. NPC 与世界拥有独立意志。在不替玩家做决定的前提下，本回合必须包含至少一个‘世界的回击或主动响应’。NPC 可以主动攀谈、试探、阻拦、递出物品或改变态度；环境可以发生变化。不要把‘不替玩家做决定’误解为‘NPC 不能主动说话或做事’。世界响应不得改变 TurnResolutionResult 的结果方向：不得追加负面后果把 success 实质写成 failure，也不得追加有利结果把 failure 实质写成 success。

@@ -21,7 +21,10 @@ from app.runtime.stores import (
     entity_store,
     npc_profile_store,
 )
-from app.domain.director_event.workflows import update_director_event_workflow
+from app.domain.director_event.workflows import (
+    DirectorEventWorkflowBatchResult,
+    update_director_event_workflow,
+)
 from app.domain.entity.workflows import update_entity_profiles_from_extraction
 
 from .confirmation_helpers import merge_unique_ids
@@ -152,7 +155,7 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     npc_extraction = cache.get("npc_extraction")
     with director_event_store() as event_store:
-        active_director_event = event_store.get_active()
+        active_events = event_store.list_active()
     if npc_extraction is None:
         gateway = create_gateway()
         gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
@@ -161,12 +164,12 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
             core_memory=state["core_memory"],
             scene_facts=state["scene_facts_json"],
             existing_profiles=state["existing_npc_profiles"],
-            director_event=active_director_event,
+            director_events=active_events,
             trace_id=trace_id,
         )
     return {
         "npc_extraction": npc_extraction,
-        "npc_director_event": active_director_event,
+        "npc_director_events": active_events,
         "events": [{
             "step": "npc_extract_done",
             "data": {
@@ -231,26 +234,30 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                 profile.director_view()
                 for profile in director_npc_profile_repo.list_all()
             ]
-            reviewer_gateway = create_gateway()
-            reviewer_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
-            selector_gateway = create_gateway()
-            selector_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
-            director_event_result = update_director_event_workflow(
-                user_input=pipeline_input.user_input,
-                scene_facts=state["scene_facts_json"],
-                current_state=state["updated_state"],
-                core_memory=state["core_memory"],
-                scene_summaries=state.get("scene_summaries", []),
-                recent_summaries=state.get("recent_summaries", []),
-                entity_profiles=director_entity_profiles,
-                npc_profiles=director_npc_profiles,
-                turn_index=pipeline_input.turn_index,
-                store=director_store,
-                reviewer=DirectorEventReviewer(reviewer_gateway),
-                selector=DirectorEventSelector(selector_gateway),
-                standby_director_npcs=standby_director_npcs,
-                trace_id=trace_id,
-            )
+            results = {}
+            for role in ("arc", "ambient"):
+                reviewer_gateway = create_gateway()
+                reviewer_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+                selector_gateway = create_gateway()
+                selector_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+                results[role] = update_director_event_workflow(
+                    role=role,
+                    user_input=pipeline_input.user_input,
+                    scene_facts=state["scene_facts_json"],
+                    current_state=state["updated_state"],
+                    core_memory=state["core_memory"],
+                    scene_summaries=state.get("scene_summaries", []),
+                    recent_summaries=state.get("recent_summaries", []),
+                    entity_profiles=director_entity_profiles,
+                    npc_profiles=director_npc_profiles,
+                    turn_index=pipeline_input.turn_index,
+                    store=director_store,
+                    reviewer=DirectorEventReviewer(reviewer_gateway),
+                    selector=DirectorEventSelector(selector_gateway),
+                    standby_director_npcs=standby_director_npcs,
+                    trace_id=trace_id,
+                )
+            director_event_result = DirectorEventWorkflowBatchResult(**results)
     return {"director_event_result": director_event_result}
 
 
@@ -299,7 +306,7 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 npc_store=npc_store,
                 existing_profiles=state["existing_npc_profiles"],
                 extraction=state["npc_extraction"],
-                director_event=state.get("npc_director_event"),
+                director_events=state.get("npc_director_events", []),
                 recent_summaries=state.get("recent_summaries", []),
                 trace_id=trace_id,
             )

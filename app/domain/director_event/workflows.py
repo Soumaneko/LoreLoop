@@ -9,6 +9,7 @@ from app.domain.director_event.reviewer import DirectorEventReviewer
 from app.domain.director_event.schemas import (
     DirectorEvent,
     DirectorEventReviewResult,
+    DirectorEventRole,
     DirectorEventSelectionResult,
 )
 from app.domain.director_event.selector import DirectorEventSelector
@@ -20,6 +21,7 @@ DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS = 3
 
 
 class DirectorEventWorkflowResult(BaseModel):
+    role: DirectorEventRole
     mode: str
     active_before: DirectorEvent | None = None
     active_after: DirectorEvent | None = None
@@ -29,8 +31,14 @@ class DirectorEventWorkflowResult(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class DirectorEventWorkflowBatchResult(BaseModel):
+    arc: DirectorEventWorkflowResult
+    ambient: DirectorEventWorkflowResult
+
+
 def update_director_event_workflow(
     *,
+    role: DirectorEventRole,
     user_input: str,
     scene_facts: str,
     current_state: CurrentState,
@@ -39,14 +47,14 @@ def update_director_event_workflow(
     recent_summaries: list[SceneSummary] | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
+    standby_director_npcs: list[DirectorNPCDraft] | None = None,
     turn_index: int,
     store: DirectorEventStore,
     reviewer: DirectorEventReviewer,
     selector: DirectorEventSelector,
-    standby_director_npcs: list[DirectorNPCDraft] | None = None,
     trace_id: str | None = None,
 ) -> DirectorEventWorkflowResult:
-    active = store.get_active()
+    active = store.get_active(role)
     if active is not None:
         review = reviewer.review(
             active_event=active,
@@ -103,7 +111,7 @@ def update_director_event_workflow(
                 current_clock=current_state.world_clock,
             )
 
-        active_after = store.get_active()
+        active_after = store.get_active(role)
         notes = ["reviewed_existing_active_event"]
         if review.action == "resolve":
             notes.append("resolved_active_event")
@@ -116,6 +124,7 @@ def update_director_event_workflow(
         elif auto_progress_result == "resolved":
             notes.append("auto_resolved_active_event")
         return DirectorEventWorkflowResult(
+            role=role,
             mode="review_active",
             active_before=active,
             active_after=active_after,
@@ -124,7 +133,7 @@ def update_director_event_workflow(
             notes=notes,
         )
 
-    latest_resolved = store.get_latest_resolved()
+    latest_resolved = store.get_latest_resolved(role)
     if latest_resolved is not None:
         resolved_turn = (
             latest_resolved.resolved_turn
@@ -133,6 +142,7 @@ def update_director_event_workflow(
         )
         if turn_index <= resolved_turn + DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS:
             return DirectorEventWorkflowResult(
+                role=role,
                 mode="cooldown",
                 active_before=None,
                 active_after=None,
@@ -140,11 +150,11 @@ def update_director_event_workflow(
                 notes=["director_event_resolved_cooldown"],
             )
 
-    resolved = store.list_resolved()
+    events = store.list_all()
     standby_director_npcs = standby_director_npcs or []
-
     selection = selector.select_or_create(
-        resolved_events=resolved,
+        role=role,
+        events=events,
         standby_director_npcs=standby_director_npcs,
         current_state=current_state,
         core_memory=core_memory,
@@ -154,33 +164,22 @@ def update_director_event_workflow(
         trace_id=trace_id,
     )
 
-    changed_event_id = None
-    if selection.action == "none":
-        return DirectorEventWorkflowResult(
-            mode="select_or_create",
-            active_before=None,
-            active_after=None,
-            selection_result=selection,
-            changed_event_id=None,
-            notes=["director_event_creation_skipped_by_selector"],
-        )
-
-    if selection.new_event is None:
-        raise ValueError("DirectorEventSelector action=create_new requires new_event")
-    if not selection.new_event.bridge_anchors:
+    if not selection.bridge_anchors:
         raise ValueError("DirectorEventSelector created a new event without bridge_anchors")
-    if len(selection.new_event.milestones) != 3:
+    if len(selection.milestones) != 3:
         raise ValueError("DirectorEventSelector created a new event without exactly three milestones")
-    event = selection.new_event.to_event(
+    event = selection.to_event(
+        role=role,
         turn_index=turn_index,
         current_clock=current_state.world_clock,
     )
     changed_event_id = store.save(event)
 
     return DirectorEventWorkflowResult(
+        role=role,
         mode="select_or_create",
         active_before=None,
-        active_after=store.get_active(),
+        active_after=store.get_active(role),
         selection_result=selection,
         changed_event_id=changed_event_id,
         notes=["selected_or_created_active_event"],
