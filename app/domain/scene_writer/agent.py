@@ -73,17 +73,13 @@ class SceneWriterAgent:
                 trace_id=trace_id,
             ),
         )
-        return _append_closing_prompt(result)
-
-
-def _append_closing_prompt(result: SceneWriterResult) -> SceneWriterResult:
-    scene_text = result.scene_text.strip()
-    closing_prompt = result.closing_prompt.strip()
-    if closing_prompt and not scene_text.endswith(closing_prompt):
-        scene_text = f"{scene_text}\n\n{closing_prompt}" if scene_text else closing_prompt
-    return SceneWriterResult(
-        scene_reasoning=result.scene_reasoning,
-        scene_text=scene_text,
-        closing_prompt=closing_prompt,
-        next_action_directions=result.next_action_directions,
-    )
+        closing_prompt = result.closing_prompt.strip()
+        scene_text = result.scene_text.strip()
+        if closing_prompt and scene_text.endswith(closing_prompt):
+            scene_text = scene_text[:-len(closing_prompt)].rstrip()
+        return SceneWriterResult(
+            scene_reasoning=result.scene_reasoning,
+            scene_text=scene_text,
+            closing_prompt=closing_prompt,
+            next_action_directions=result.next_action_directions,
+        )

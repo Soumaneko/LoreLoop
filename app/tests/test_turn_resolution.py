@@ -12,7 +12,7 @@ from app.domain.roll_modifier.schemas import RollModifier
 from app.domain.turn_resolution import (
     ActionResolutionFrame,
     TurnResolutionAgent,
-    build_roll_judgments,
+    build_action_judgments,
     map_roll_to_band,
 )
 
@@ -76,7 +76,7 @@ def _state() -> CurrentState:
 
 def _response(outcome_band: str = "critical_success") -> str:
     return json.dumps({
-        "resolution_reasoning": "本回合只有观察行动，roll_judgment 为给定 outcome_band。CurrentState 支持主角处在当前场景中，因此结果应兑现为发现环境异常。",
+        "resolution_reasoning": "本回合只有观察行动，action_judgment 提供给定 outcome_band。CurrentState 支持主角处在当前场景中，因此结果应兑现为发现环境异常。",
         "action_resolutions": [
             {
                 "action_id": "a1",
@@ -97,13 +97,13 @@ class _SpyGateway:
         return kwargs["output_schema"].model_validate(self.response)
 
 
-class TestRollJudgment:
+class TestActionJudgment:
     def test_roll_band_mapping_stays_programmatic(self):
         assert map_roll_to_band(1, 20) == "critical_failure"
         assert map_roll_to_band(20, 20) == "critical_success"
         assert map_roll_to_band(10, 20) == "partial_success"
 
-    def test_build_roll_judgments_uses_adjusted_value(self):
+    def test_build_action_judgments_uses_adjusted_roll_value(self):
         roll = RollResult(
             action_id="a1",
             sequence=1,
@@ -123,11 +123,22 @@ class TestRollJudgment:
             ],
         )
 
-        judgments = build_roll_judgments(_parse(), _roll_batch(roll))
+        judgments = build_action_judgments(_parse(), _roll_batch(roll))
 
+        assert judgments[0].resolution_source == "roll"
         assert judgments[0].roll_value == 12
         assert judgments[0].raw_value == 7
         assert judgments[0].outcome_band == "partial_success"
+
+    def test_build_action_judgments_marks_no_roll_action_automatic_success(self):
+        action = _action().model_copy(update={"likely_needs_roll": False})
+
+        judgments = build_action_judgments(_parse(action), _roll_batch())
+
+        assert len(judgments) == 1
+        assert judgments[0].resolution_source == "automatic"
+        assert judgments[0].outcome_band == "success"
+        assert judgments[0].dice is None
 
     def test_action_resolution_fact_is_length_limited(self):
         with pytest.raises(ValueError):
@@ -161,6 +172,10 @@ class TestTurnResolutionAgent:
         assert "让其后果失控" in prompt
         assert "保留 Player Input 明确指定的方式、路径和控制条件" in prompt
         assert "行动失败、问题转移或局势恶化" in prompt
+        assert "resolution_source=automatic" in prompt
+        assert "不得重新制造立场冲突" in prompt
+        assert "不得改成主角陪同" in prompt
+        assert "roll_judgments" not in prompt
         assert "resolved_effect" not in prompt
 
     def test_prompt_input_omits_action_parse_result(self):
@@ -176,7 +191,8 @@ class TestTurnResolutionAgent:
 
         input_data = gateway.calls[0]["input_data"]
         assert "user_input" in input_data
-        assert "roll_judgments_json" in input_data
+        assert "action_judgments_json" in input_data
+        assert "roll_judgments_json" not in input_data
         assert "event_resolution_context_json" not in input_data
         assert "director_event_json" not in input_data
         assert "action_parse_result_json" not in input_data
@@ -208,6 +224,22 @@ class TestTurnResolutionAgent:
         assert "观察行动" in result.resolution_reasoning
         assert result.action_resolutions[0].outcome_band == "critical_success"
         assert "异常" in result.action_resolutions[0].resolved_fact
+
+    def test_llm_resolves_action_without_roll(self):
+        mock = MockLLM()
+        mock.set_responses([_response("success")])
+        action = _action().model_copy(update={"likely_needs_roll": False})
+
+        result = TurnResolutionAgent(mock.build_gateway()).resolve(
+            user_input="观察",
+            current_state=_state(),
+            action_parse_result=_parse(action),
+            roll_results=_roll_batch(),
+            core_memory=CoreMemory(items=[]),
+        )
+
+        assert result.total_resolutions == 1
+        assert result.action_resolutions[0].outcome_band == "success"
 
     def test_fills_action_resolution_identity_from_roll_judgment(self):
         mock = MockLLM()

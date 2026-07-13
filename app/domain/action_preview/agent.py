@@ -17,7 +17,6 @@ class ActionPreviewAgent:
     def generate(
         self,
         *,
-        closing_prompt: str,
         current_state: CurrentState,
         core_memory: CoreMemory,
         recent_summaries: list[SceneSummary],
@@ -31,7 +30,6 @@ class ActionPreviewAgent:
             self.llm.run(
                 task="action_preview",
                 input_data={
-                    "closing_prompt": closing_prompt,
                     "next_action_directions_json": json.dumps(
                         [
                             direction.model_dump(mode="json")

@@ -89,7 +89,6 @@ class ConfirmationState(TypedDict, total=False):
     turn_id: str
     trace_id: str
     effective_scene_text: str
-    confirmation_closing_prompt: str
     cache: ConfirmationCache
     director_npc_profile_id: str | None
     confirmed_director_npc_draft: DirectorNPCDraft | None

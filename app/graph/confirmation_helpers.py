@@ -231,11 +231,6 @@ def prepare_confirmation_state(
     turn_id = pipeline_input.turn_id
     trace_id = str(uuid.uuid4())
     effective_scene_text = scene_text if scene_text is not None else pipeline_input.scene_result.scene_text
-    confirmation_closing_prompt = (
-        _last_nonempty_block(effective_scene_text)
-        if scene_text is not None
-        else pipeline_input.scene_result.closing_prompt
-    )
     cache_key = effective_scene_text
     cache = pending.confirmation_cache
     if cache.get("key") != cache_key:
@@ -314,7 +309,6 @@ def prepare_confirmation_state(
         "turn_id": turn_id,
         "trace_id": trace_id,
         "effective_scene_text": effective_scene_text,
-        "confirmation_closing_prompt": confirmation_closing_prompt,
         "cache": cache,
         "director_npc_profile_id": director_npc_profile_id,
         "confirmed_director_npc_draft": confirmed_director_npc_draft,
@@ -590,8 +584,3 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
         },
     ]
     return state
-
-
-def _last_nonempty_block(scene_text: str) -> str:
-    blocks = [block.strip() for block in scene_text.split("\n\n") if block.strip()]
-    return blocks[-1] if blocks else scene_text.strip()

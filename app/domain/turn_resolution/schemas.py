@@ -12,14 +12,17 @@ OutcomeBand = Literal[
 ]
 
 RiskLevel = Literal["low", "medium", "high"]
+ResolutionSource = Literal["automatic", "roll"]
 
-class RollJudgment(BaseModel):
+
+class ActionJudgment(BaseModel):
     action_id: str
     sequence: int
     actor: str
     action_type: str
     action_text: str
     intended_goal: str | None = None
+    resolution_source: ResolutionSource
     dice: str | None = None
     roll_value: int | None = None
     raw_value: int | None = None

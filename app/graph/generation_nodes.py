@@ -222,14 +222,14 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
 
 
 def resolve_turn_node(state: GenerationState) -> GenerationState:
-    if state["roll_results"].total_rolls == 0:
+    if not state["action_parse_result"].atomic_actions:
         turn_resolution = TurnResolutionResult()
         return {
             "turn_resolution": turn_resolution,
             "events": [{
                 "step": "turn_resolution_skipped",
                 "data": {
-                    "reason": "No roll results require interpretation.",
+                    "reason": "No atomic actions require resolution.",
                     "turn_resolution": model_data(turn_resolution),
                 },
             }],

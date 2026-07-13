@@ -75,6 +75,7 @@ def load_debug_state() -> dict:
                     "version_index": variant.version_index,
                     "turn_index": variant.turn_index,
                     "scene_text": variant.scene_result.scene_text,
+                    "closing_prompt": variant.scene_result.closing_prompt,
                 }
                 for variant in variants
             ],

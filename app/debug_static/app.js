@@ -252,7 +252,7 @@ function restoreChat(history) {
   }
 }
 
-function addEditableScene(textValue, meta) {
+function addEditableScene(textValue, meta, closingPrompt = "") {
   removePendingScene();
   state.pendingSceneText = textValue;
   const wrap = document.createElement("div");
@@ -266,6 +266,7 @@ function addEditableScene(textValue, meta) {
         <button class="scene-edit">编辑</button>
       </div>
       <div class="scene-display"></div>
+      <div class="scene-closing-prompt"></div>
       <div class="scene-editor-wrap" style="display:none">
         <textarea class="scene-editor"></textarea>
         <div class="scene-actions">
@@ -276,9 +277,12 @@ function addEditableScene(textValue, meta) {
     </div>
   `;
   const display = wrap.querySelector(".scene-display");
+  const closing = wrap.querySelector(".scene-closing-prompt");
   const editorWrap = wrap.querySelector(".scene-editor-wrap");
   const editor = wrap.querySelector(".scene-editor");
   display.textContent = textValue;
+  closing.textContent = closingPrompt;
+  closing.style.display = closingPrompt ? "block" : "none";
   editor.value = textValue;
   const previous = wrap.querySelector(".scene-version-prev");
   const next = wrap.querySelector(".scene-version-next");
@@ -361,6 +365,7 @@ function selectPendingVariant(index) {
   addEditableScene(
     variant.scene_text,
     `待确认 · Turn ${variant.turn_index} · 版本 ${index + 1}`,
+    variant.closing_prompt || "",
   );
   els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
   setStatus("正文已生成 - 待确认");
@@ -373,6 +378,7 @@ function appendPendingVariant(data) {
     version_index: data.version_index,
     turn_index: data.turn_index,
     scene_text: data.scene_result.scene_text,
+    closing_prompt: data.scene_result.closing_prompt,
   });
   state.pendingVariants.sort((a, b) => a.version_index - b.version_index);
   selectPendingVariant(
@@ -483,7 +489,7 @@ async function applyInit() {
     state.pendingVariants = [];
     state.pendingVariantIndex = -1;
     await refreshState({ preserveStatus: true });
-    if (data.opening_scene?.scene_text) addEditableScene(data.opening_scene.scene_text, "开场 · 待确认");
+    if (data.opening_scene?.scene_text) addEditableScene(data.opening_scene.scene_text, "开场 · 待确认", data.opening_scene.closing_prompt || "");
     setStatus(state.pendingTurnId ? "开场已生成 - 待确认" : "Core Memory 已初始化");
     els.turnInfo.textContent = state.pendingTurnId ? `Pending ${state.pendingTurnId}` : "等待玩家行动";
   } catch (err) {
@@ -769,7 +775,7 @@ function renderGeneration() {
     ${card("Turn Resolution", renderResolution(g.turn_resolution))}
     ${card("Director NPC", renderDirectorNpcResult(g.director_npc_result))}
     ${card("Outline", renderOutline(g.plot_outline))}
-    ${card("Writer", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>` : `<div class="empty">未生成正文</div>`)}
+    ${card("Writer", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>${g.scene_result.closing_prompt ? `<div class="section-card muted">${esc(g.scene_result.closing_prompt)}</div>` : ""}` : `<div class="empty">未生成正文</div>`)}
     ${details("Context", jsonBlock(g.context))}
   `;
 }

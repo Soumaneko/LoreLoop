@@ -96,7 +96,6 @@ class TestActionPreviewAgent:
         mock.set_responses([_build_response()])
 
         result = ActionPreviewAgent(mock.build_gateway()).generate(
-            closing_prompt="米莉似乎还隐瞒着仓库区的细节，你会怎么做？",
             current_state=_make_state(),
             core_memory=_make_core_memory(),
             recent_summaries=_make_recent_summaries(),
@@ -107,7 +106,7 @@ class TestActionPreviewAgent:
         assert {preview.level for preview in result.previews} == {"冒险举动", "保守举动", "信息获取", "奇招"}
         assert all(preview.label for preview in result.previews)
 
-    def test_passes_closing_prompt_and_next_action_directions_to_llm(self):
+    def test_passes_next_action_directions_without_closing_prompt(self):
         class SpyGateway:
             def __init__(self):
                 self.input_data = None
@@ -119,7 +118,6 @@ class TestActionPreviewAgent:
         gateway = SpyGateway()
 
         ActionPreviewAgent(gateway).generate(
-            closing_prompt="米莉似乎还隐瞒着仓库区的细节，你会怎么做？",
             current_state=_make_state(),
             core_memory=_make_core_memory(),
             recent_summaries=_make_recent_summaries(),
@@ -132,7 +130,7 @@ class TestActionPreviewAgent:
             ],
         )
 
-        assert gateway.input_data["closing_prompt"] == "米莉似乎还隐瞒着仓库区的细节，你会怎么做？"
+        assert "closing_prompt" not in gateway.input_data
         assert "scene_text" not in gateway.input_data
         directions = json.loads(gateway.input_data["next_action_directions_json"])
         assert directions == [{
@@ -144,7 +142,7 @@ class TestActionPreviewAgent:
     def test_prompt_excludes_full_scene_and_structured_action_fields(self):
         prompt = Path("app/prompts/confirmation/action_preview_v1.md").read_text(encoding="utf-8")
 
-        assert "Closing Prompt" in prompt
+        assert "Closing Prompt" not in prompt
         assert "Scene Text" not in prompt
         assert "不能被当作下一回合的结构化输入" in prompt
         assert "禁止输出 schema 以外的任何字段" in prompt

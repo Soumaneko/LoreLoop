@@ -62,7 +62,7 @@
 
 - scene_reasoning：正文生成前的逻辑审计，用 2-4 句自然语言写清楚你将如何在不违反 Plot Outline、CurrentState、Context Facts、Entity/NPC Profiles 和 Recent Scene 的前提下落实本回合正文。
 - scene_text：以第二人称撰写的文字冒险剧情正文，自然流畅、逻辑严密地落实 Plot Outline。`planned_events` 是事实清单，不是必须逐条扩写的剧情节拍；关键行动、必要对话和因果转折必须写清楚，不要写过多慢镜头、长铺陈或无功能的生活细节。不得包含“你会怎么做？”式控制权归还句；正文写到 scene_stopping_point 指定的当前互动状态即可。
-- closing_prompt：只写一句话，必须使用“[玩家当前面临的选择或压力]，你会怎么做？”格式，供程序拼接到正文末尾；不得加入环境描写、气氛描写、镜头收束、额外动作、邀约、地点或任务。
+- closing_prompt：只写一句话，必须使用“[玩家当前面临的选择或压力]，你会怎么做？”格式，仅作为独立 UI 文本展示，不会拼接进 scene_text，也不会进入确认、记忆或摘要管线；不得加入环境描写、气氛描写、镜头收束、额外动作、邀约、地点或任务。
 - next_action_directions：2-5 条下一回合可自然展开的行动方向，供 ActionPreviewAgent 使用；每条包含 direction、rationale、anchors。它们不是正文内容，不得写入 scene_text。
 
 
@@ -101,3 +101,4 @@
 10. 不得自主新增会被状态或记忆持久化的结果，例如获得物品/文件、建立承诺、敲定合同、暴露身份、改变关系阶段；除非 Plot Outline 明确要求。
 11. 不得使用“不是……而是……”的自我纠正句式，以避免AI风过重。
 12. 不得对动作和细节进行违反人类正常观察尺度的机械化拆解；不得进行过于啰嗦的描写；禁止用回顾式对话重新搭建上下文。
+13. `CoreMemory`、`CurrentState`、`Context Facts`、`Entity Profiles`、`NPC Profiles`、`Plot Outline`、`Recent Scene` 等是系统输入名称，绝对不得出现在 scene_text 中，也不得写成主角读过、看过或知道的文档。只能使用其中承载的世界事实进行自然叙述。

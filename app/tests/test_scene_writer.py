@@ -117,6 +117,8 @@ class TestSceneWriterAgent:
         assert "closing_prompt" in prompt
         assert "正文生成前的逻辑审计" in prompt
         assert "不得在 scene_text 中自行补出具体机构、专有名词、功能物品" in prompt
+        assert "Entity Profiles" in prompt
+        assert "绝对不得出现在 scene_text 中" in prompt
 
     def test_generates_scene_text(self):
         mock = MockLLM()
@@ -139,7 +141,8 @@ class TestSceneWriterAgent:
         assert isinstance(result, SceneWriterResult)
 
         assert len(result.scene_text) > 0
-        assert result.scene_text.endswith(result.closing_prompt)
+        assert not result.scene_text.endswith(result.closing_prompt)
+        assert result.closing_prompt not in result.scene_text
         assert result.closing_prompt == "米莉似乎知道暴风城的更多消息，你会怎么做？"
 
     def test_preserves_next_action_directions(self):
@@ -167,6 +170,24 @@ class TestSceneWriterAgent:
             )
         ]
 
+    def test_strips_duplicate_closing_prompt_from_scene_text(self):
+        closing_prompt = "米莉似乎知道更多消息，你会怎么做？"
+        mock = MockLLM()
+        mock.set_responses([_build_response(
+            scene_text=f"米莉放下酒杯。\n\n{closing_prompt}",
+            closing_prompt=closing_prompt,
+        )])
+
+        result = SceneWriterAgent(mock.build_gateway()).write(
+            outline=_make_outline(),
+            current_state=_make_state(),
+            core_memory=CoreMemory(items=[]),
+            recent_scene=None,
+        )
+
+        assert result.scene_text == "米莉放下酒杯。"
+        assert result.closing_prompt == closing_prompt
+
     def test_accepts_scene_text_beyond_max_chars_interface_hint(self):
         mock = MockLLM()
         mock.set_responses([
@@ -182,7 +203,7 @@ class TestSceneWriterAgent:
             max_chars=10,
         )
 
-        assert result.scene_text == f"{'过' * 11}\n\n米莉似乎知道暴风城的更多消息，你会怎么做？"
+        assert result.scene_text == "过" * 11
 
     def test_handles_no_recent_scene(self):
         mock = MockLLM()

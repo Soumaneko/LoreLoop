@@ -19,10 +19,10 @@ from app.domain.views import (
 )
 
 from .schemas import (
+    ActionJudgment,
     ActionResolutionFrame,
     OutcomeBand,
     RiskLevel,
-    RollJudgment,
     TurnResolutionResult,
 )
 
@@ -74,33 +74,37 @@ def infer_risk_level(action: AtomicAction, band: OutcomeBand) -> RiskLevel:
     return base
 
 
-def build_roll_judgments(
+def build_action_judgments(
     parse_result: ActionParseResult,
     roll_results: RollResultBatch,
-) -> list[RollJudgment]:
-    action_by_id = {
-        action.action_id: action
-        for action in parse_result.atomic_actions
-    }
-    judgments: list[RollJudgment] = []
+) -> list[ActionJudgment]:
+    roll_by_id = {roll.action_id: roll for roll in roll_results.results}
+    judgments: list[ActionJudgment] = []
 
-    for roll in roll_results.results:
-        action = action_by_id.get(roll.action_id)
-        if action is None:
-            continue
-        band = map_roll_to_band(roll.value, roll.dice_sides)
+    for action in parse_result.atomic_actions:
+        roll = roll_by_id.get(action.action_id)
+        if roll is None and action.likely_needs_roll:
+            raise ValueError(
+                f"Missing roll result for action requiring a roll: {action.action_id}"
+            )
+        band: OutcomeBand = (
+            map_roll_to_band(roll.value, roll.dice_sides)
+            if roll is not None
+            else "success"
+        )
         judgments.append(
-            RollJudgment(
-                action_id=roll.action_id,
-                sequence=roll.sequence,
-                actor=roll.actor,
-                action_type=roll.action_type,
+            ActionJudgment(
+                action_id=action.action_id,
+                sequence=action.sequence,
+                actor=action.actor,
+                action_type=action.action_type,
                 action_text=action.raw_text,
                 intended_goal=action.goal,
-                dice=roll.dice,
-                roll_value=roll.value,
-                raw_value=roll.raw_value,
-                dice_sides=roll.dice_sides,
+                resolution_source="roll" if roll is not None else "automatic",
+                dice=roll.dice if roll is not None else None,
+                roll_value=roll.value if roll is not None else None,
+                raw_value=roll.raw_value if roll is not None else None,
+                dice_sides=roll.dice_sides if roll is not None else None,
                 outcome_band=band,
                 risk_level=infer_risk_level(action, band),
             )
@@ -125,11 +129,11 @@ class TurnResolutionAgent:
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
     ) -> TurnResolutionResult:
-        judgments = build_roll_judgments(action_parse_result, roll_results)
+        judgments = build_action_judgments(action_parse_result, roll_results)
 
         if not judgments:
             return TurnResolutionResult(
-                resolution_reasoning="本回合没有需要掷骰解释的行动，回合判定回退为默认推进。",
+                resolution_reasoning="本回合没有可判定的原子行动。",
                 action_resolutions=[],
             )
 
@@ -140,7 +144,7 @@ class TurnResolutionAgent:
             self.llm.run(
                 task="turn_resolution",
                 input_data={
-                    "roll_judgments_json": json.dumps(
+                    "action_judgments_json": json.dumps(
                         [judgment.model_dump(mode="json") for judgment in judgments],
                         ensure_ascii=False,
                         indent=2,
@@ -177,7 +181,7 @@ class TurnResolutionAgent:
 
 def _validate_action_resolutions(
     resolutions: list[_ActionResolutionOutput],
-    judgments: list[RollJudgment],
+    judgments: list[ActionJudgment],
 ) -> list[ActionResolutionFrame]:
     judgment_by_id = {judgment.action_id: judgment for judgment in judgments}
     seen: set[str] = set()

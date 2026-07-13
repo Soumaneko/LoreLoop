@@ -217,6 +217,13 @@ button:disabled {
   max-width: 100%;
 }
 
+.scene-closing-prompt {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+
 .composer {
   border-top: 1px solid var(--line);
   background: #fff;

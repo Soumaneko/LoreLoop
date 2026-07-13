@@ -188,7 +188,6 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
         gateway = create_gateway()
         gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
         action_preview = ActionPreviewAgent(gateway).generate(
-            closing_prompt=state["confirmation_closing_prompt"],
             current_state=state["updated_state"],
             core_memory=state["core_memory"],
             recent_summaries=state.get("recent_summaries", []),
