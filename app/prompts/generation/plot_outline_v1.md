@@ -76,6 +76,7 @@
 
 按以下顺序为每个字段产出期望内容：
 
+- director_event_reason：50字左右，在规划任何事件前，先决定是否使用 DirectorEvent Consumptions 中已授权的事件材料；没有可用材料时明确说明不使用。
 - director_npc_reason：50字左右，在规划任何事件前，先决定是否使用 Director NPC Candidate。
 - planning_reasoning：规划前的逻辑审计，用 3-6 句自然语言写清楚。必须依次说明行动顺序、已允许的确定结果、将使用哪些上下文依据来推动剧情、NPC/世界反应的因果是否成立、角色层面的信息隔离边界（哪些后台信息不能在本回合被角色知晓）。
 - planned_events：1-4 个本回合确定发生的事件，按发生顺序排列。每个事件只写事实，不写镜头、台词、微表情、文风或具体演出。
@@ -93,10 +94,9 @@
 
 1. 先理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是本轮前的即时状态；Context Facts 是上游基于记忆、摘要和当前上下文提取出的相关既有事实列表；Entity Profiles 和 NPC Profiles 是实体与角色依据；DirectorEvent Consumptions 是可选的导演事件材料；Director NPC Candidate 是可选的后台调度输入。
 2. 明确角色层面的信息边界：主角能感知什么，NPC 各自知道什么，旁白能确认什么。后台事实只能转译为前台可观察的信号——压力、线索、异常、机会。**但这不限制你作为创作者使用这些后台信息来驱动剧情走向。**
-3. 根据 Player Input 和 TurnResolutionResult 规划本回合确定事件。TurnResolutionResult 是行动结果边界；当它只规定“获得可靠线索”“确认目标位置”等抽象结果时，Plot 必须结合上下文和 DirectorEvent Consumptions 确定该结果的具体事实内容，这属于落实判定，不属于擅自扩展结果。
-4. 设定 scene_stopping_point，让正文停在当前行动结果刚成立后的可交互状态，不替玩家做下一步选择。
-5. event_fact 必须完整包含“动作发起（玩家做了什么/说了什么意图）”与“动作结果”的因果链。如果玩家有具体发言或质问，必须将该发言的核心意图作为事实写明，不得直接跳到 NPC 的反应。
-6. 如果 Player Input 中包含玩家的语言表述，must_establish_facts 或 planned_events 中必须包含“主角表达了 [核心意图]”的事实。
+3. 如有 DirectorEvent 或 Director NPC，分别判断本回合是否适合采用，如果采用，判断如何使用，如何融入当前剧情。
+4. 规划本回合确定事件。TurnResolutionResult 是行动结果边界；当它只规定“获得可靠线索”“确认目标位置”等抽象结果时，Plot 必须结合上下文确定该结果的具体事实内容，这属于落实判定，不属于擅自扩展结果。
+5. 设定 scene_stopping_point，让正文停在当前行动结果刚成立后的可交互状态，不替玩家做下一步选择。
 
 
 # 核心规则
@@ -118,6 +118,8 @@
 11. NPC 与世界拥有独立意志。在不替玩家做决定的前提下，本回合必须包含至少一个‘世界的回击或主动响应’。NPC 可以主动攀谈、试探、阻拦、递出物品或改变态度；环境可以发生变化。不要把‘不替玩家做决定’误解为‘NPC 不能主动说话或做事’。世界响应不得改变 TurnResolutionResult 的结果方向：不得追加负面后果把 success 实质写成 failure，也不得追加有利结果把 failure 实质写成 success。
 12. “替玩家做决定”只指替主角选择自愿行动、目标、立场、承诺、资源支出或下一步方向。系统确认客观事实、确认调查目标身份、判断两件物品是否为同一物、确定线索指向或确定行动结果，不是玩家选择，不得以“避免替玩家判断”为由拒绝确认。
 13. must_not_establish_facts 不得否定 TurnResolutionResult 已允许的目标成果。禁止无依据加入“不得确认是不是目标”“不得获得精确位置”“只能得到下一位询问对象”等限制；信息边界只能保护尚未判定成功的内容和真正的后台隐秘。
+14. event_fact 必须完整包含“动作发起（玩家做了什么/说了什么意图）”与“动作结果”的因果链。如果玩家有具体发言或质问，必须将该发言的核心意图作为事实写明，不得直接跳到 NPC 的反应。
+15. 如果 Player Input 中包含玩家的语言表述，must_establish_facts 或 planned_events 中必须包含“主角表达了 [核心意图]”的事实。
 
 # 禁止事项
 
@@ -138,6 +140,7 @@
 
 ```json
 {{
+  "director_event_reason": "本回合没有 DirectorEvent Consumption 输入，无需采用导演事件材料。",
   "director_npc_reason": "本回合没有 Director NPC Candidate 输入，无需进行角色调度。",
   "planning_reasoning": "本回合 Player Input 包含推门进入与举火照明两个连续行动，TurnResolutionResult 已判定二者均成功，因此规划必须先落实进入密室，再落实照明观察。Context Facts 只支持密室入口与旧石门的既有事实，不支持额外敌人或宝物，因此后续发现应保持为环境线索。主角能确认房间布局和暗道入口，但不能确认暗道内部情况。场景应停在主角看见暗道入口后的可交互状态，不替主角进入暗道。",
   "planned_events": [

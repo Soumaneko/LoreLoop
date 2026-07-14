@@ -106,6 +106,7 @@ def _build_outline_response(
         "information_boundaries": ["主角只能确认可见行为异常，不能确认幕后原因。"],
         "required_entities": ["酒馆客人"],
         "scene_stopping_point": "主角发现可疑行为后仍留在酒馆大厅，可以继续互动。",
+        "director_event_reason": "本回合没有自然交点，未使用。",
         "director_npc_reason": "本回合没有自然交点，未使用。",
     }, ensure_ascii=False)
 
@@ -127,7 +128,8 @@ class TestPlotOutlineAgent:
         PlotOutlineAgent(gateway).generate(_make_context())
 
         properties = json.loads(gateway.calls[0]["input_data"]["output_schema_json"])["properties"]
-        assert list(properties)[:2] == [
+        assert list(properties)[:3] == [
+            "director_event_reason",
             "director_npc_reason",
             "planning_reasoning",
         ]
@@ -225,7 +227,7 @@ class TestPlotOutlineAgent:
 
         assert "TurnResolutionResult" in prompt
         assert "ActionParseResult" not in prompt
-        assert "根据 Player Input 和 TurnResolutionResult 规划本回合确定事件" in prompt
+        assert "规划本回合确定事件。TurnResolutionResult 是行动结果边界" in prompt
         assert "不得把 Player Input 简化成只移动、只观察或只等待下一回合" in prompt
         assert "不得追加负面后果把 success 实质写成 failure" in prompt
         assert "不得追加有利结果把 failure 实质写成 success" in prompt
@@ -235,8 +237,7 @@ class TestPlotOutlineAgent:
         assert "不得确认是不是目标" in prompt
         assert "避免替玩家判断" in prompt
         assert "must_establish_facts" in prompt
-        assert "可包含多个彼此分开的材料项" in prompt
-        assert "不得猜测其事件 ID、role、premise、milestone" in prompt
+        assert "DirectorEvent Consumptions 是可选的导演事件材料" in prompt
         assert "arc 负责" not in prompt
         assert "ambient 负责" not in prompt
         assert "若要求角色披露信息，必须写出本回合允许披露的具体事实" in prompt
@@ -245,9 +246,10 @@ class TestPlotOutlineAgent:
         assert "canonical_premise" not in prompt
         assert "allowed_effect" not in prompt
         assert "上述四个字段以外的导演事件内容一律视为不存在" in prompt
-        assert "不是需要重新演出的新发现" in prompt
+        assert "player_contact_state`是已经发生的事情，不能重复发生" in prompt
         assert "不得再次规划为“注意到、发现、首次得知”" in prompt
         example = prompt.split("# 例子", 1)[1]
+        assert example.index('"director_event_reason"') < example.index('"director_npc_reason"')
         assert example.index('"director_npc_reason"') < example.index('"planning_reasoning"')
         assert "mode=foreshadow" not in prompt
         assert "mode=intersect" not in prompt

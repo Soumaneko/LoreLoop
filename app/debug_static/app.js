@@ -1040,6 +1040,8 @@ function renderResolution(result) {
 function renderOutline(outline) {
   if (!outline) return `<div class="empty">暂无大纲。</div>`;
   return `
+    ${details("导演事件原因", esc(text(outline.director_event_reason)), true)}
+    ${details("导演 NPC 原因", esc(text(outline.director_npc_reason)), true)}
     ${card("规划审计", esc(text(outline.planning_reasoning)))}
     ${(outline.planned_events || []).map((e) => `<div class="section-card">
       <div class="card-title"><span>${esc(e.event_id)}</span></div>
@@ -1054,7 +1056,6 @@ function renderOutline(outline) {
     ${details("信息边界", list(outline.information_boundaries))}
     ${details("必要实体", chips(outline.required_entities))}
     ${card("停点", esc(text(outline.scene_stopping_point)))}
-    ${details("导演 NPC 原因", esc(text(outline.director_npc_reason)))}
   `;
 }
 
@@ -1358,6 +1359,7 @@ function directorCard(event) {
     ${event.premise ? `<div style="margin-bottom:8px">${esc(event.premise)}</div>` : ""}
     ${kv([
       ["ID", esc(text(event.event_id))],
+      ["绑定导演NPC", esc(text(event.director_npc_id))],
       ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
       ["解决原因", esc(text(event.resolved_reason))],

@@ -5,7 +5,11 @@ from app.domain.short_term_memory.schemas import ShortTermScene
 
 
 _PLANNED_EVENT_EXCLUDE: set[str] = {"linked_outcome_ids"}
-_OUTLINE_EXCLUDE: set[str] = {"director_npc_reason", "planning_reasoning"}
+_OUTLINE_EXCLUDE: set[str] = {
+    "director_event_reason",
+    "director_npc_reason",
+    "planning_reasoning",
+}
 
 
 def project_outline(result: PlotOutlineResult) -> str:

@@ -58,6 +58,7 @@ def _make_outline() -> PlotOutlineResult:
         required_entities=["米莉", "暴风城"],
         scene_stopping_point="主角停在吧台前，米莉的话题仍可继续追问。",
         director_npc_reason="本测试未使用。",
+        director_event_reason="本测试未使用。",
     )
 
 
@@ -103,6 +104,7 @@ class TestSceneWriterAgent:
         assert "outline_summary" not in projected
         assert "planning_reasoning" not in projected
         assert "director_npc_reason" not in projected
+        assert "director_event_reason" not in projected
         assert projected["planned_events"][0]["event_fact"] == "主角走向吧台与米莉打招呼。"
 
     def test_recent_scene_projection_omits_user_input(self):
@@ -173,6 +175,7 @@ class TestSceneWriterAgent:
         outline = json.loads(gateway.input_data["outline_json"])
         assert "planning_reasoning" not in outline
         assert "director_npc_reason" not in outline
+        assert "director_event_reason" not in outline
 
     def test_generates_scene_text(self):
         mock = MockLLM()
