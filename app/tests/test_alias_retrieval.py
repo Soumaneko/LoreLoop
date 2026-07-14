@@ -9,7 +9,7 @@ from app.domain.retrieval.candidate_retriever import CandidateRetriever
 
 def _make_action(action_id="A1", action_type="observe", raw_text="测试", **overrides):
     defaults = {
-        "action_id": action_id, "sequence": 1, "actor": "主角",
+        "action_id": action_id, "sequence": 1, "actor": ["主角"],
         "action_type": action_type, "raw_text": raw_text, "verb": raw_text[:4],
         "likely_needs_roll": False, "confidence": 0.9,
     }

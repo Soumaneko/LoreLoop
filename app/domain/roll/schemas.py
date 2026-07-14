@@ -23,7 +23,7 @@ class RollConfig(BaseModel):
 class RollRequest(BaseModel):
     action_id: str
     sequence: int
-    actor: str
+    actor: list[str]
     action_type: str
     roll_hint: str | None = None
 
@@ -31,7 +31,7 @@ class RollRequest(BaseModel):
 class RollResult(BaseModel):
     action_id: str
     sequence: int
-    actor: str
+    actor: list[str]
     action_type: str
     dice: str
     value: int

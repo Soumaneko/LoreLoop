@@ -51,7 +51,7 @@ def _make_turn_resolution() -> TurnResolutionResult:
             ActionResolutionFrame(
                 action_id="a1",
                 sequence=1,
-                actor="主角",
+                actor=["主角"],
                 action_type="observe",
                 outcome_band="success",
                 effect_reasoning="调查属于 A 类，玩家意图查看大厅，success 给出清晰发现。",

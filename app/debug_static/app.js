@@ -978,7 +978,7 @@ function renderAction(result, raw, selfCheck) {
     ${(result.atomic_actions || []).map((a) => `<div class="section-card">
       <div class="card-title"><span>${esc(a.action_id)} · #${esc(a.sequence)}</span>${metric(a.action_type, a.risk_level || "risk?")}</div>
       ${kv([
-        ["行动者", esc(text(a.actor))],
+        ["行动者", chips(a.actor)],
         ["原文", esc(text(a.raw_text))],
         ["动词", esc(text(a.verb))],
         ["目标", esc(text(a.target))],
@@ -1011,7 +1011,7 @@ function renderRoll(result) {
     ${(result.results || []).map((r) => `<div class="section-card">
       <div class="card-title"><span>${esc(r.action_id)} · ${esc(r.action_type)}</span>${metric("最终", r.value, r.raw_value !== r.value ? "warn" : "")}</div>
       ${kv([
-        ["行动者", esc(r.actor)],
+        ["行动者", chips(r.actor)],
         ["骰子", esc(r.dice)],
         ["原始", esc((r.all_raw_values || []).join(", ") || r.raw_value)],
         ["修正", chips((r.modifiers || []).map((m) => `${m.label} ${m.value > 0 ? "+" : ""}${m.value}`))],
@@ -1029,7 +1029,7 @@ function renderResolution(result) {
     ${(result.action_resolutions || []).map((o) => `<div class="section-card">
       <div class="card-title"><span>${esc(o.action_id)} · ${esc(o.outcome_band)}</span>${metric("type", o.action_type)}</div>
       ${kv([
-        ["行动者", esc(text(o.actor))],
+        ["行动者", chips(o.actor)],
         ["序号", esc(text(o.sequence))],
         ["事实结论", esc(text(o.resolved_fact))],
       ])}

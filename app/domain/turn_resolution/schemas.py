@@ -18,7 +18,7 @@ ResolutionSource = Literal["automatic", "roll"]
 class ActionJudgment(BaseModel):
     action_id: str
     sequence: int
-    actor: str
+    actor: list[str]
     action_type: str
     action_text: str
     intended_goal: str | None = None
@@ -34,7 +34,7 @@ class ActionJudgment(BaseModel):
 class ActionResolutionFrame(BaseModel):
     action_id: str
     sequence: int
-    actor: str
+    actor: list[str]
     action_type: str
     outcome_band: OutcomeBand
     effect_reasoning: str = Field(min_length=1, max_length=120)

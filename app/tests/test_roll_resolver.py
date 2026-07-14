@@ -15,7 +15,7 @@ def _make_action(
     return AtomicAction(
         action_id=action_id,
         sequence=sequence,
-        actor="主角",
+        actor=["主角"],
         action_type="observe",
         raw_text="观察四周",
         verb="观察",
@@ -156,7 +156,7 @@ class TestResultFields:
                 AtomicAction(
                     action_id="a1",
                     sequence=1,
-                    actor="主角",
+                    actor=["主角"],
                     action_type="hide_or_stealth",
                     raw_text="躲进阴影",
                     verb="躲藏",
@@ -171,7 +171,7 @@ class TestResultFields:
                 AtomicAction(
                     action_id="a2",
                     sequence=2,
-                    actor="主角",
+                    actor=["主角"],
                     action_type="observe",
                     raw_text="观察守卫动向",
                     verb="观察",
@@ -186,7 +186,7 @@ class TestResultFields:
                 AtomicAction(
                     action_id="a3",
                     sequence=3,
-                    actor="主角",
+                    actor=["主角"],
                     action_type="wait",
                     raw_text="等他们走远",
                     verb="等待",
@@ -211,14 +211,14 @@ class TestResultFields:
         a1_result = result.results[0]
         assert a1_result.action_id == "a1"
         assert a1_result.sequence == 1
-        assert a1_result.actor == "主角"
+        assert a1_result.actor == ["主角"]
         assert a1_result.action_type == "hide_or_stealth"
         assert a1_result.roll_hint is None
 
         a2_result = result.results[1]
         assert a2_result.action_id == "a2"
         assert a2_result.sequence == 2
-        assert a2_result.actor == "主角"
+        assert a2_result.actor == ["主角"]
         assert a2_result.action_type == "observe"
         assert a2_result.roll_hint is None
 
@@ -598,7 +598,7 @@ class TestNeverRolls:
         return AtomicAction(
             action_id=action_id,
             sequence=sequence,
-            actor="主角",
+            actor=["主角"],
             action_type=action_type,
             raw_text="行动",
             verb="行动",

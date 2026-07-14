@@ -22,6 +22,9 @@ def test_prompt_requires_complete_explicit_action_coverage():
     assert "完成型命令必须完整提取" in prompt
     assert "接取任务并快速完成" in prompt
     assert "不得只提取接取、准备、前往或讨论等前置步骤" in prompt
+    assert "行动者姓名列表" in prompt
+    assert "多人共同执行同一个原子行动" in prompt
+    assert "仅仅在场、同行、旁观、受益、被保护或作为 target" in prompt
 
 
 def _make_current_state() -> CurrentState:
@@ -81,7 +84,7 @@ class TestSimpleSingleAction:
                     {
                         "action_id": "A1",
                         "sequence": 1,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "observe",
                         "raw_text": "仔细观察仓库门口有没有守卫",
                         "verb": "观察",
@@ -128,7 +131,7 @@ class TestMultiAction:
                     {
                         "action_id": "A1",
                         "sequence": 1,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "move",
                         "raw_text": "先绕到仓库侧面",
                         "verb": "绕",
@@ -143,7 +146,7 @@ class TestMultiAction:
                     {
                         "action_id": "A2",
                         "sequence": 2,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "inspect_object",
                         "raw_text": "检查窗户有没有锁",
                         "verb": "检查",
@@ -183,7 +186,7 @@ class TestPastReference:
                     {
                         "action_id": "A1",
                         "sequence": 1,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "signal_ally",
                         "raw_text": "用之前和伊莱娜约好的暗号提醒她别说话",
                         "verb": "提醒",
@@ -225,7 +228,7 @@ class TestPastReference:
                     {
                         "action_id": "A1",
                         "sequence": 1,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "signal_ally",
                         "raw_text": "用之前和伊莱娜约好的暗号提醒她别说话",
                         "verb": "提醒",
@@ -261,7 +264,7 @@ class TestConditionalAction:
                     {
                         "action_id": "A1",
                         "sequence": 1,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "hide_or_stealth",
                         "raw_text": "如果守卫靠近，我就假装喝醉",
                         "verb": "假装",
@@ -276,7 +279,7 @@ class TestConditionalAction:
                     {
                         "action_id": "A2",
                         "sequence": 2,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "move",
                         "raw_text": "如果没人注意，我继续往仓库门口走",
                         "verb": "走",
@@ -318,7 +321,7 @@ class TestInstructAlly:
                     {
                         "action_id": "A1",
                         "sequence": 1,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "instruct_ally",
                         "raw_text": "我让马洛守在巷口，如果看到黑帆帮的人就吹哨",
                         "verb": "让",
@@ -365,7 +368,7 @@ class TestComplexAction:
                     {
                         "action_id": "A1",
                         "sequence": 1,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "hide_or_stealth",
                         "raw_text": "假装没看见守卫，低头整理斗篷，从码头边绕过去",
                         "verb": "绕",
@@ -380,7 +383,7 @@ class TestComplexAction:
                     {
                         "action_id": "A2",
                         "sequence": 2,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "observe",
                         "raw_text": "观察门口有没有黑帆帮的人",
                         "verb": "观察",
@@ -395,7 +398,7 @@ class TestComplexAction:
                     {
                         "action_id": "A3",
                         "sequence": 3,
-                        "actor": "主角",
+                        "actor": ["主角"],
                         "action_type": "inspect_object",
                         "raw_text": "看看门锁是不是和旧城区见过的那种一样",
                         "verb": "看看",
@@ -444,13 +447,35 @@ class TestComplexAction:
 # ══════════════════════════════════════════════════════════════════
 
 class TestActionSelfCheck:
+    def test_joint_actor_list_is_deduplicated_without_losing_ownership(self):
+        sc = ActionSelfCheck()
+        result = ActionParseResult(
+            turn_intent="共同推门",
+            atomic_actions=[
+                AtomicAction_model(
+                    action_id="A1",
+                    sequence=1,
+                    actor=["主角", "希尔达", "主角"],
+                    action_type="interact_object",
+                    raw_text="我和希尔达一起推门",
+                    verb="推门",
+                    target="石门",
+                    likely_needs_roll=True,
+                )
+            ],
+        )
+
+        cleaned = sc.check(result, "我和希尔达一起推门", _make_current_state())
+
+        assert cleaned.atomic_actions[0].actor == ["主角", "希尔达"]
+
     def test_auto_fill_actor_from_viewpoint(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
             turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
-                    action_id="A1", sequence=1, actor="", action_type="observe",
+                    action_id="A1", sequence=1, actor=[""], action_type="observe",
                     raw_text="观察四周", verb="观察", target="四周",
                     likely_needs_roll=True, confidence=0.9,
                 )
@@ -458,7 +483,7 @@ class TestActionSelfCheck:
             anchors=[],
         )
         cleaned = sc.check(result, "观察四周", _make_current_state())
-        assert cleaned.atomic_actions[0].actor == "主角"
+        assert cleaned.atomic_actions[0].actor == ["主角"]
 
     def test_fix_sequence(self):
         sc = ActionSelfCheck()
@@ -466,12 +491,12 @@ class TestActionSelfCheck:
             turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
-                    action_id="A1", sequence=5, actor="主角", action_type="move",
+                    action_id="A1", sequence=5, actor=["主角"], action_type="move",
                     raw_text="绕到侧面", verb="绕", target="侧面",
                     likely_needs_roll=False, confidence=0.9,
                 ),
                 AtomicAction_model(
-                    action_id="A2", sequence=3, actor="主角", action_type="observe",
+                    action_id="A2", sequence=3, actor=["主角"], action_type="observe",
                     raw_text="观察四周", verb="观察", target="四周",
                     likely_needs_roll=True, confidence=0.9,
                 ),
@@ -488,7 +513,7 @@ class TestActionSelfCheck:
             turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
-                    action_id="A1", sequence=1, actor="主角", action_type="observe",
+                    action_id="A1", sequence=1, actor=["主角"], action_type="observe",
                     raw_text="观察守卫", verb="观察", target="守卫",
                     likely_needs_roll=True, confidence=0.9,
                 ),
@@ -510,7 +535,7 @@ class TestActionSelfCheck:
             turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
-                    action_id="A1", sequence=1, actor="主角", action_type="observe",
+                    action_id="A1", sequence=1, actor=["主角"], action_type="observe",
                     raw_text="观察守卫", verb="观察", target="守卫",
                     likely_needs_roll=True, confidence=0.9,
                 ),
@@ -529,7 +554,7 @@ class TestActionSelfCheck:
             turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
-                    action_id="A1", sequence=1, actor="主角", action_type="observe",
+                    action_id="A1", sequence=1, actor=["主角"], action_type="observe",
                     raw_text="观察守卫", verb="观察", target="守卫",
                     likely_needs_roll=True, confidence=0.9,
                 ),
@@ -551,12 +576,12 @@ class TestActionSelfCheck:
             turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
-                    action_id="A1", sequence=1, actor="主角", action_type="move",
+                    action_id="A1", sequence=1, actor=["主角"], action_type="move",
                     raw_text="绕到侧面", verb="绕", target="侧面",
                     likely_needs_roll=False, confidence=0.9,
                 ),
                 AtomicAction_model(
-                    action_id="A1", sequence=2, actor="主角", action_type="observe",
+                    action_id="A1", sequence=2, actor=["主角"], action_type="observe",
                     raw_text="观察四周", verb="观察", target="四周",
                     likely_needs_roll=True, confidence=0.9,
                 ),
@@ -574,12 +599,12 @@ class TestActionSelfCheck:
             turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
-                    action_id="A1", sequence=1, actor="主角", action_type="move",
+                    action_id="A1", sequence=1, actor=["主角"], action_type="move",
                     raw_text="绕到侧面", verb="绕", target="侧面",
                     likely_needs_roll=False, confidence=0.9,
                 ),
                 AtomicAction_model(
-                    action_id="A1", sequence=2, actor="主角", action_type="observe",
+                    action_id="A1", sequence=2, actor=["主角"], action_type="observe",
                     raw_text="观察四周", verb="观察", target="四周",
                     likely_needs_roll=True, confidence=0.9,
                 ),

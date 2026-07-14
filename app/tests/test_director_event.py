@@ -419,9 +419,9 @@ class TestDirectorEventConsumer:
         assert "already_happened" in prompt
         assert "currently_happening" in prompt
         assert "player_contact_state：原样复制" not in prompt
-        assert "不得直接复制进 allowed_facts" in prompt
+        assert "不能再次成为 allowed_facts" in prompt
         assert "allowed_facts 必须完成前台投影" in prompt
-        assert "可以确定必要的公开载体、在场群体、可观察行为" in prompt
+        assert "通过什么地点、人物、公开行为、环境变化或可观察征兆具体表现" in prompt
         assert "这是照抄 already_happened" in prompt
 
     def test_consumption_schema_keeps_use_decision_consistent(self):

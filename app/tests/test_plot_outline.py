@@ -57,7 +57,7 @@ def _make_context() -> PlotOutlineContext:
                 ActionResolutionFrame(
                     action_id="a1",
                     sequence=1,
-                    actor="主角",
+                    actor=["主角"],
                     action_type="observe",
                     outcome_band="success",
                     effect_reasoning="观察属于 A 类，玩家意图打量客人，success 给出可疑线索。",
@@ -388,7 +388,7 @@ class TestPlotOutlineAgent:
                 ActionResolutionFrame(
                     action_id="A2",
                     sequence=2,
-                    actor="主角",
+                    actor=["主角"],
                     action_type="interact_object",
                     outcome_band="success",
                     effect_reasoning="挖沟属于 A 类，玩家主动挖掘，success 让浅沟拖慢主蔓。",
@@ -397,7 +397,7 @@ class TestPlotOutlineAgent:
                 ActionResolutionFrame(
                     action_id="A3",
                     sequence=3,
-                    actor="主角",
+                    actor=["主角"],
                     action_type="move",
                     outcome_band="success",
                     effect_reasoning="绕行属于 A 类，玩家沿路返回，success 让其顺利抵达。",

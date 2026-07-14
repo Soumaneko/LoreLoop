@@ -25,7 +25,7 @@ def _action(
     return AtomicAction(
         action_id=action_id,
         sequence=1,
-        actor="主角",
+        actor=["主角"],
         action_type=action_type,
         raw_text="观察四周",
         verb="观察",
@@ -48,7 +48,7 @@ def _roll(value: int = 20, action_id: str = "a1") -> RollResult:
     return RollResult(
         action_id=action_id,
         sequence=1,
-        actor="主角",
+        actor=["主角"],
         action_type="observe",
         dice="1d20",
         value=value,
@@ -107,7 +107,7 @@ class TestActionJudgment:
         roll = RollResult(
             action_id="a1",
             sequence=1,
-            actor="主角",
+            actor=["主角"],
             action_type="observe",
             dice="1d20",
             value=12,
@@ -145,7 +145,7 @@ class TestActionJudgment:
             ActionResolutionFrame(
                 action_id="a1",
                 sequence=1,
-                actor="主角",
+                actor=["主角"],
                 action_type="observe",
                 outcome_band="success",
                 effect_reasoning="支点：当前场景可观察；边界：只给克制发现。",
@@ -255,6 +255,25 @@ class TestTurnResolutionAgent:
 
         frame = result.action_resolutions[0]
         assert frame.sequence == 1
-        assert frame.actor == "主角"
+        assert frame.actor == ["主角"]
         assert frame.action_type == "observe"
         assert frame.outcome_band == "critical_success"
+
+    def test_joint_actors_are_preserved_through_resolution(self):
+        action = _action().model_copy(update={
+            "actor": ["主角", "希尔达"],
+            "likely_needs_roll": False,
+            "raw_text": "我和希尔达一起推开石门",
+        })
+        mock = MockLLM()
+        mock.set_responses([_response("success")])
+
+        result = TurnResolutionAgent(mock.build_gateway()).resolve(
+            user_input="我和希尔达一起推开石门",
+            current_state=_state(),
+            action_parse_result=_parse(action),
+            roll_results=_roll_batch(),
+            core_memory=CoreMemory(items=[]),
+        )
+
+        assert result.action_resolutions[0].actor == ["主角", "希尔达"]

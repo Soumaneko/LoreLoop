@@ -35,7 +35,7 @@ class AtomicAction(BaseModel):
     action_id: str
     sequence: int
 
-    actor: str
+    actor: list[str]
     action_type: ActionType
 
     raw_text: str

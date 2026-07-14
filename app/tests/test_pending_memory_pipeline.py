@@ -43,7 +43,7 @@ def _action_parse() -> ActionParseResult:
             AtomicAction(
                 action_id="act_1",
                 sequence=1,
-                actor="主角",
+                actor=["主角"],
                 action_type="speak",
                 raw_text="询问老板钥匙的传闻",
                 verb="询问",

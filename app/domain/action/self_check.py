@@ -96,11 +96,18 @@ class ActionSelfCheck:
                     f"action '{action.action_id}' has invalid type: {action.action_type}"
                 )
 
-            if not action.actor and viewpoint:
-                updates["actor"] = viewpoint
+            cleaned_actors = list(dict.fromkeys(
+                actor.strip()
+                for actor in action.actor
+                if actor and actor.strip()
+            ))
+            if not cleaned_actors and viewpoint:
+                cleaned_actors = [viewpoint]
                 result.fixes.append(
                     f"action '{action.action_id}' actor filled from viewpoint: '{viewpoint}'"
                 )
+            if cleaned_actors != action.actor:
+                updates["actor"] = cleaned_actors
 
             normalized_input = user_input.replace(" ", "").replace("\n", "")
             normalized_raw = (action.raw_text or "").replace(" ", "").replace("\n", "")

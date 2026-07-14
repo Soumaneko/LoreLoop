@@ -41,7 +41,7 @@ def _make_action(
     defaults = {
         "action_id": action_id,
         "sequence": 1,
-        "actor": "主角",
+        "actor": ["主角"],
         "action_type": action_type,
         "raw_text": raw_text,
         "verb": raw_text[:4],

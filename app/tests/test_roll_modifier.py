@@ -17,7 +17,7 @@ def _make_action(action_id: str, likely_needs_roll: bool) -> AtomicAction:
     return AtomicAction(
         action_id=action_id,
         sequence=1,
-        actor="卢西安",
+        actor=["卢西安"],
         action_type="observe",
         raw_text="观察",
         verb="观察",
@@ -139,7 +139,7 @@ class TestRollModifierEvaluator:
                     ActionResolutionFrame(
                         action_id="a1",
                         sequence=1,
-                        actor="卢西安",
+                        actor=["卢西安"],
                         action_type="observe",
                         outcome_band="success",
                         effect_reasoning="无需随机判定。",
