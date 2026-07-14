@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 
 _STALE_NPC_THRESHOLD = 3
+_MAX_WORLD_CLOCK_RETRIES = 2
 
 
 class _SceneStateUpdate(BaseModel):
@@ -79,26 +80,54 @@ class StateUpdater:
 
         schema = _CurrentStateUpdate.model_json_schema()
 
-        llm_result = cast(
-            _CurrentStateUpdate,
-            self.llm.run(
-                task="state_update",
-                input_data={
-                    "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "current_state_json": json.dumps(state_data, ensure_ascii=False, indent=2),
-                    "scene_facts_json": scene_facts,
-                    "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
-                },
-                output_schema=_CurrentStateUpdate,
-                trace_id=trace_id,
-            ),
-        )
+        clock_validation_feedback = "无；这是首次输出。"
+        llm_result: _CurrentStateUpdate | None = None
+        world_clock: WorldClock | None = None
+        for attempt in range(_MAX_WORLD_CLOCK_RETRIES + 1):
+            llm_result = cast(
+                _CurrentStateUpdate,
+                self.llm.run(
+                    task="state_update",
+                    input_data={
+                        "core_memory_json": core_memory.model_dump_json(indent=2),
+                        "current_state_json": json.dumps(
+                            state_data, ensure_ascii=False, indent=2
+                        ),
+                        "scene_facts_json": scene_facts,
+                        "clock_validation_feedback": clock_validation_feedback,
+                        "output_schema_json": json.dumps(
+                            schema, ensure_ascii=False, indent=2
+                        ),
+                    },
+                    output_schema=_CurrentStateUpdate,
+                    trace_id=trace_id,
+                ),
+            )
+            proposed_clock = _world_clock_from_update(llm_result.world_clock)
+            if not _clock_moves_backward(current_state.world_clock, proposed_clock):
+                world_clock = proposed_clock
+                break
+            if attempt == _MAX_WORLD_CLOCK_RETRIES:
+                world_clock = WorldClock(
+                    day=current_state.world_clock.day + 1,
+                    phase=proposed_clock.phase,
+                )
+                break
+            clock_validation_feedback = (
+                f"上一次输出 day={llm_result.world_clock.day}, "
+                f"phase_index={llm_result.world_clock.phase_index}，对应"
+                f"{proposed_clock.label}，早于当前时间"
+                f"{current_state.world_clock.label}。这是非法倒退；请重新检查跨日，"
+                "输出不早于 CurrentState 的最终 day 和 phase_index。"
+            )
+
+        assert llm_result is not None
+        assert world_clock is not None
 
         if llm_result.scene.location != current_state.scene.location:
             scene_id = _increment_scene_id(current_state.scene.scene_id)
         else:
             scene_id = current_state.scene.scene_id
-        world_clock = _apply_world_clock_update(current_state.world_clock, llm_result.world_clock)
         npcs = _apply_absent_turns(
             current_npcs=current_state.npcs,
             updated_npcs=llm_result.npcs,
@@ -176,14 +205,12 @@ def _build_alias_variant_map(
     return variant_map
 
 
-def _apply_world_clock_update(
-    current_clock: WorldClock,
-    update: _WorldClockUpdate,
-) -> WorldClock:
-    proposed = WorldClock(day=update.day, phase=PHASE_ORDER[update.phase_index])
-    if _clock_index(proposed) < _clock_index(current_clock):
-        return current_clock
-    return proposed
+def _world_clock_from_update(update: _WorldClockUpdate) -> WorldClock:
+    return WorldClock(day=update.day, phase=PHASE_ORDER[update.phase_index])
+
+
+def _clock_moves_backward(current_clock: WorldClock, proposed_clock: WorldClock) -> bool:
+    return _clock_index(proposed_clock) < _clock_index(current_clock)
 
 
 def _clock_index(clock: WorldClock) -> int:

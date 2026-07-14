@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
@@ -71,3 +72,12 @@ def test_scene_fact_extractor_sends_scene_text_and_assigns_fact_ids():
     assert result.scene_focus == "卢西安进入酒馆。"
     assert [fact.fact_id for fact in result.facts] == ["f1", "f2"]
     assert result.facts[0].fact == "卢西安刚刚进入酒馆。"
+
+
+def test_prompt_requires_explicit_time_progression_to_be_preserved():
+    prompt = Path("app/prompts/confirmation/scene_fact_extract_v1.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "应当准确提取时间流逝" in prompt
+    assert "不得压缩成只描述早餐、出发、抵达等事件而丢失时间变化" in prompt

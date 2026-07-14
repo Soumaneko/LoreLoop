@@ -19,6 +19,9 @@ def test_prompt_requires_complete_explicit_action_coverage():
     assert "覆盖审计" in prompt
     assert "A、B、C 都必须被 atomic_actions 覆盖" in prompt
     assert "擅自推迟到下一回合" in prompt
+    assert "完成型命令必须完整提取" in prompt
+    assert "接取任务并快速完成" in prompt
+    assert "不得只提取接取、准备、前往或讨论等前置步骤" in prompt
 
 
 def _make_current_state() -> CurrentState:

@@ -85,4 +85,12 @@ class DirectorEventConsumer:
             ),
         )
         by_id = {item.event_id: item for item in result.consumptions}
-        return [by_id[event_id] for event_id in expected_ids]
+        events_by_id = {event.event_id: event for event in events}
+        return [
+            by_id[event_id].model_copy(
+                update={
+                    "player_contact_state": events_by_id[event_id].player_contact_state,
+                }
+            )
+            for event_id in expected_ids
+        ]

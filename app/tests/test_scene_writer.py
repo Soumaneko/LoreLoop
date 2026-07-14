@@ -145,6 +145,10 @@ class TestSceneWriterAgent:
         assert "发言权与行动所有权必须严格保持" in prompt
         assert "不得仅为解释当前行动而由接收者反过来逐条讲解给信息来源" in prompt
         assert "绝对不得转译为角色对白" in prompt
+        assert "不得在结尾再由角色归纳总结" in prompt
+        assert "不得仅为呼应连续性而引用、改写或提醒" in prompt
+        assert "NPC 不得充当场景总结器或控制权归还器" in prompt
+        assert "选择与控制权只由 closing_prompt 表达" in prompt
 
     def test_writer_input_does_not_receive_context_facts_or_plot_reasoning(self):
         class SpyGateway:

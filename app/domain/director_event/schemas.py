@@ -40,6 +40,7 @@ class DirectorEvent(BaseModel):
     premise: str = Field(
         min_length=1,
     )
+    director_npc_id: str | None = None
     actors: list[str] = Field(default_factory=list)
     objective: str = Field(min_length=1)
     bridge_anchors: list[str] = Field(
@@ -83,6 +84,7 @@ class DirectorEvent(BaseModel):
             "role": self.role,
             "title": self.title,
             "premise": self.premise,
+            "director_npc_id": self.director_npc_id,
             "actors": self.actors,
             "objective": self.objective,
             "bridge_anchors": self.bridge_anchors,
@@ -114,6 +116,13 @@ class DirectorEventSelectionResult(BaseModel):
     current_story_direction: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     title: str = Field(min_length=1)
+    director_npc_id: str | None = Field(
+        default=None,
+        description=(
+            "Exact draft_id when an ambient event uses one supplied standby "
+            "DirectorNPC; otherwise null."
+        ),
+    )
     actors: list[str] = Field(min_length=1)
     objective: str = Field(min_length=1)
     bridge_anchors: list[str] = Field(min_length=1)
@@ -158,6 +167,7 @@ class DirectorEventSelectionResult(BaseModel):
             title=self.title,
             status=status,
             premise=self.premise,
+            director_npc_id=self.director_npc_id,
             actors=self.actors,
             objective=self.objective,
             bridge_anchors=self.bridge_anchors,
@@ -195,6 +205,7 @@ class DirectorEventConsumption(BaseModel):
     event_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     use_event: bool
+    player_contact_state: str = Field(default="", max_length=50)
     allowed_facts: list[str] = Field(default_factory=list)
     immutable_constraints: list[str] = Field(default_factory=list)
     forbidden_inferences: list[str] = Field(default_factory=list)

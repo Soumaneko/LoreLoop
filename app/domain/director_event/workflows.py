@@ -164,6 +164,24 @@ def update_director_event_workflow(
         trace_id=trace_id,
     )
 
+    if selection.director_npc_id is not None:
+        if role != "ambient":
+            raise ValueError("Arc DirectorEvent cannot use a standby DirectorNPC")
+        selected_director_npc = next(
+            (
+                npc
+                for npc in standby_director_npcs
+                if npc.draft_id == selection.director_npc_id
+            ),
+            None,
+        )
+        if selected_director_npc is None:
+            raise ValueError("DirectorEventSelector selected an unknown DirectorNPC")
+        if selected_director_npc.name not in selection.actors:
+            raise ValueError(
+                "DirectorEventSelector must include the selected DirectorNPC in actors"
+            )
+
     if not selection.bridge_anchors:
         raise ValueError("DirectorEventSelector created a new event without bridge_anchors")
     if len(selection.milestones) != 3:

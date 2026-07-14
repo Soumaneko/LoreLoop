@@ -166,6 +166,7 @@ class TestPlotOutlineAgent:
                 event_id="private_event_id",
                 reason="private reasoning",
                 use_event=True,
+                player_contact_state="玩家已经看过旅店留言板上的木偶师便条。",
                 allowed_facts=["旅店留言板上有一张木偶师便条。"],
                 immutable_constraints=["便条位于旅店留言板。"],
                 forbidden_inferences=["不得推断张贴者。"],
@@ -179,6 +180,7 @@ class TestPlotOutlineAgent:
             gateway.calls[0]["input_data"]["director_event_consumptions_json"]
         )
         assert payload == [{
+            "player_contact_state": "玩家已经看过旅店留言板上的木偶师便条。",
             "allowed_facts": ["旅店留言板上有一张木偶师便条。"],
             "immutable_constraints": ["便条位于旅店留言板。"],
             "forbidden_inferences": ["不得推断张贴者。"],
@@ -242,7 +244,9 @@ class TestPlotOutlineAgent:
         assert "依据不足时必须保持未知" in prompt
         assert "canonical_premise" not in prompt
         assert "allowed_effect" not in prompt
-        assert "三个字段以外的导演事件内容一律视为不存在" in prompt
+        assert "上述四个字段以外的导演事件内容一律视为不存在" in prompt
+        assert "不是需要重新演出的新发现" in prompt
+        assert "不得再次规划为“注意到、发现、首次得知”" in prompt
         example = prompt.split("# 例子", 1)[1]
         assert example.index('"director_npc_reason"') < example.index('"planning_reasoning"')
         assert "mode=foreshadow" not in prompt

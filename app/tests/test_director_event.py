@@ -179,6 +179,7 @@ class TestDirectorEventSchema:
             "title",
             "status",
             "premise",
+            "director_npc_id",
             "actors",
             "objective",
             "bridge_anchors",
@@ -320,6 +321,7 @@ class TestDirectorEventReviewerInput:
             "role",
             "title",
             "premise",
+            "director_npc_id",
             "actors",
             "objective",
             "bridge_anchors",
@@ -364,6 +366,7 @@ class TestDirectorEventViews:
                 event_id="event_ambient",
                 reason="当前位于旅店，可以自然看见留言板。",
                 use_event=True,
+                player_contact_state="玩家已经看过旅店留言板上的木偶师便条。",
                 allowed_facts=["旅店留言板上有一张木偶师便条。"],
                 immutable_constraints=["便条固定在旅店留言板上。"],
                 forbidden_inferences=["不得推断张贴者身份。"],
@@ -374,10 +377,12 @@ class TestDirectorEventViews:
 
         assert len(data) == 1
         assert all(set(item) == {
+            "player_contact_state",
             "allowed_facts",
             "immutable_constraints",
             "forbidden_inferences",
         } for item in data)
+        assert data[0]["player_contact_state"] == "玩家已经看过旅店留言板上的木偶师便条。"
         assert data[0]["allowed_facts"] == ["旅店留言板上有一张木偶师便条。"]
         assert "event_arc" not in json.dumps(data, ensure_ascii=False)
         assert "reason" not in json.dumps(data, ensure_ascii=False)
@@ -408,6 +413,7 @@ class TestDirectorEventConsumer:
                     "event_id": arc.event_id,
                     "reason": "仅提到目标地点，没有真实接触。",
                     "use_event": False,
+                    "player_contact_state": "模型擅自改写的主线接触状态。",
                     "allowed_facts": [],
                     "immutable_constraints": [],
                     "forbidden_inferences": ["不得表现远方现场征兆。"],
@@ -416,6 +422,7 @@ class TestDirectorEventConsumer:
                     "event_id": ambient.event_id,
                     "reason": "当前场景存在自然接触。",
                     "use_event": True,
+                    "player_contact_state": "模型擅自改写的环境接触状态。",
                     "allowed_facts": ["驿站开始拒收部分无印信件。"],
                     "immutable_constraints": ["征兆发生在北郡驿站。"],
                     "forbidden_inferences": ["不得确认幕后势力。"],
@@ -434,6 +441,10 @@ class TestDirectorEventConsumer:
         )
 
         assert [item.event_id for item in result] == [arc.event_id, ambient.event_id]
+        assert [item.player_contact_state for item in result] == [
+            arc.player_contact_state,
+            ambient.player_contact_state,
+        ]
         input_data = spy.calls[0]["input_data"]
         assert set(input_data) == {
             "core_memory_json",
@@ -738,6 +749,62 @@ class TestDirectorEventWorkflow:
         assert active.milestones and len(active.milestones) == 3
         assert active.bridge_anchors == ["北郡", "粮车"]
 
+    def test_ambient_event_persists_selected_standby_director_npc(self):
+        store = DirectorEventStore()
+        standby = _standby_npc()
+        selection = _selection_result().model_copy(
+            update={
+                "director_npc_id": standby.draft_id,
+                "actors": [standby.name, "地方商人"],
+            }
+        )
+
+        result = update_director_event_workflow(
+            role="ambient",
+            user_input="继续。",
+            scene_facts="没有新事件。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+            standby_director_npcs=[standby],
+            turn_index=2,
+            store=store,
+            reviewer=DirectorEventReviewer(MockLLM().build_gateway()),
+            selector=DirectorEventSelector(
+                _SpyGateway(selection.model_dump(mode="json"))
+            ),
+        )
+
+        assert result.active_after is not None
+        assert result.active_after.director_npc_id == standby.draft_id
+
+    def test_event_rejects_unknown_or_arc_director_npc_binding(self):
+        standby = _standby_npc()
+        selection = _selection_result().model_copy(
+            update={
+                "director_npc_id": standby.draft_id,
+                "actors": [standby.name],
+            }
+        )
+
+        for role, candidates in (("ambient", []), ("arc", [standby])):
+            with pytest.raises(ValueError):
+                update_director_event_workflow(
+                    role=role,
+                    user_input="继续。",
+                    scene_facts="没有新事件。",
+                    current_state=_state(),
+                    core_memory=_core(),
+                    scene_summaries=[],
+                    standby_director_npcs=candidates,
+                    turn_index=2,
+                    store=DirectorEventStore(),
+                    reviewer=DirectorEventReviewer(MockLLM().build_gateway()),
+                    selector=DirectorEventSelector(
+                        _SpyGateway(selection.model_dump(mode="json"))
+                    ),
+                )
+
     def test_selection_schema_orders_fields_and_rejects_unknown_fields(self):
         properties = DirectorEventSelectionResult.model_json_schema()["properties"]
 
@@ -745,6 +812,7 @@ class TestDirectorEventWorkflow:
             "current_story_direction",
             "reason",
             "title",
+            "director_npc_id",
             "actors",
             "objective",
             "bridge_anchors",

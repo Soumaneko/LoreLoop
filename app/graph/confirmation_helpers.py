@@ -69,12 +69,25 @@ def promote_dispatched_director_npc_profile(
         or result.dispatch.action != "dispatch_standby"
     ):
         return None
+    return ensure_director_npc_profile(
+        result.dispatch.selected_id,
+        turn_index=turn_index,
+    )
 
-    dispatch = result.dispatch
+
+def ensure_director_npc_profile(
+    draft_id: str,
+    *,
+    turn_index: int,
+) -> DirectorNPCConfirmation | None:
     with director_npc_store() as director_store, npc_profile_store() as npc_store:
-        draft = director_store.mark_dispatched(dispatch.selected_id, turn_index=turn_index)
-        if draft is None:
+        draft = director_store.get_by_id(draft_id)
+        if draft is None or draft.status == "discarded":
             return None
+        if draft.status == "standby":
+            draft = director_store.mark_dispatched(draft_id, turn_index=turn_index)
+            if draft is None:
+                return None
         npc_profile = npc_profile_from_director_draft(draft)
         existing_npc = npc_store.get_by_source_director_npc_id(draft.draft_id) or npc_store.get_by_name(draft.name)
         if existing_npc is not None:
@@ -108,19 +121,25 @@ def npc_profile_from_director_draft(draft: DirectorNPCDraft) -> NPCProfile:
 def merge_director_draft_into_npc_profile(profile: NPCProfile, draft: DirectorNPCDraft) -> NPCProfile:
     merged = profile.model_copy(deep=True)
     merged.public_summary = merged.public_summary or draft.role
-    merged.role = merged.role or draft.role
-    merged.appearance = merged.appearance or draft.appearance
-    if not merged.personality_traits:
+    if merged.source_director_npc_id:
+        merged.role = merged.role or draft.role
+        merged.appearance = merged.appearance or draft.appearance
+        if not merged.personality_traits:
+            merged.personality_traits = list(draft.personality_traits)
+        if not merged.known_abilities:
+            merged.known_abilities = list(draft.known_abilities)
+        merged.faction = merged.faction or draft.faction
+    else:
+        merged.role = draft.role
+        merged.appearance = draft.appearance
         merged.personality_traits = list(draft.personality_traits)
-    if not merged.known_abilities:
         merged.known_abilities = list(draft.known_abilities)
-    merged.faction = merged.faction or draft.faction
-    merged.core_motivation = merged.core_motivation or draft.core_motivation
-    merged.hidden_secret = merged.hidden_secret or draft.hidden_secret
-    merged.conflict_style = merged.conflict_style or draft.conflict_style
-    merged.social_style = merged.social_style or draft.social_style
-    if not merged.encounter_potentials:
-        merged.encounter_potentials = list(draft.encounter_potentials)
+        merged.faction = draft.faction
+    merged.core_motivation = draft.core_motivation
+    merged.hidden_secret = draft.hidden_secret
+    merged.conflict_style = draft.conflict_style
+    merged.social_style = draft.social_style
+    merged.encounter_potentials = list(draft.encounter_potentials)
     merged.source_director_npc_id = merged.source_director_npc_id or draft.draft_id
     merged.created_turn = merged.created_turn or draft.created_turn
     merged.dispatched_turn = draft.dispatched_turn

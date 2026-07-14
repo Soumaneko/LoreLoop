@@ -27,7 +27,7 @@ from app.domain.director_event.workflows import (
 )
 from app.domain.entity.workflows import update_entity_profiles_from_extraction
 
-from .confirmation_helpers import merge_unique_ids
+from .confirmation_helpers import ensure_director_npc_profile, merge_unique_ids
 from .confirmation_state import ConfirmationState
 
 
@@ -256,6 +256,16 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                     standby_director_npcs=standby_director_npcs,
                     trace_id=trace_id,
                 )
+                active_after = results[role].active_after
+                if active_after is not None and active_after.director_npc_id:
+                    promoted = ensure_director_npc_profile(
+                        active_after.director_npc_id,
+                        turn_index=pipeline_input.turn_index,
+                    )
+                    if promoted is None:
+                        raise ValueError(
+                            "DirectorEvent references an unavailable DirectorNPC"
+                        )
             director_event_result = DirectorEventWorkflowBatchResult(**results)
     return {"director_event_result": director_event_result}
 

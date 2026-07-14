@@ -27,6 +27,7 @@ def project_director_event_consumptions(
     return json.dumps(
         [
             {
+                "player_contact_state": consumption.player_contact_state,
                 "allowed_facts": consumption.allowed_facts,
                 "immutable_constraints": consumption.immutable_constraints,
                 "forbidden_inferences": consumption.forbidden_inferences,

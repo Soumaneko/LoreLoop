@@ -14,6 +14,7 @@ from app.domain.current_state import (
     StateUpdater,
     WorldClock,
 )
+from app.domain.current_state.schemas import PHASE_ORDER
 from app.domain.views import project_current_state
 
 
@@ -63,6 +64,11 @@ def _make_state() -> CurrentState:
 def _build_updated_state_json(overrides: dict | None = None) -> str:
     state = _make_state()
     data = json.loads(state.model_dump_json())
+    data["world_clock"] = {
+        "reason": None,
+        "day": state.world_clock.day,
+        "phase_index": PHASE_ORDER.index(state.world_clock.phase),
+    }
     data["mentioned_npcs"] = [npc["name"] for npc in data.get("npcs", [])]
     if overrides:
         _deep_update(data, overrides)
@@ -73,6 +79,11 @@ def _build_updated_state_json_without_scene_id(overrides: dict | None = None) ->
     state = _make_state()
     data = json.loads(state.model_dump_json())
     data["scene"].pop("scene_id", None)
+    data["world_clock"] = {
+        "reason": None,
+        "day": state.world_clock.day,
+        "phase_index": PHASE_ORDER.index(state.world_clock.phase),
+    }
     data["mentioned_npcs"] = [npc["name"] for npc in data.get("npcs", [])]
     if overrides:
         _deep_update(data, overrides)
@@ -143,22 +154,51 @@ class TestStateUpdaterNoChange:
         assert result.world_clock.day == 2
         assert result.world_clock.phase == "凌晨"
 
-    def test_world_clock_does_not_move_backward(self):
+    def test_world_clock_retries_backward_output_and_accepts_correction(self):
         state = _make_state()
-        updated_json = _build_updated_state_json_without_scene_id({
+        backward_json = _build_updated_state_json_without_scene_id({
             "world_clock": {
                 "day": 1,
                 "phase_index": 1,
                 "reason": "LLM accidentally returned an earlier time",
             }
         })
+        corrected_json = _build_updated_state_json_without_scene_id({
+            "world_clock": {
+                "day": 2,
+                "phase_index": 1,
+                "reason": "早餐发生在第二天上午",
+            }
+        })
         mock = MockLLM()
-        mock.set_responses([updated_json])
+        mock.set_responses([backward_json, corrected_json])
 
         updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "回忆起上午发生的事。", core_memory=CoreMemory(items=[]))
+        result = updater.update(state, "第二天早上，主角吃完早餐。", core_memory=CoreMemory(items=[]))
 
-        assert result.world_clock == state.world_clock
+        assert result.world_clock == WorldClock(day=2, phase="上午")
+        assert mock.provider._index == 2
+
+    def test_world_clock_falls_back_to_next_day_after_three_total_attempts(self):
+        state = _make_state()
+        backward_json = _build_updated_state_json_without_scene_id({
+            "world_clock": {
+                "day": 1,
+                "phase_index": 1,
+                "reason": "错误地保持同一天",
+            }
+        })
+        mock = MockLLM()
+        mock.set_responses([backward_json])
+
+        result = StateUpdater(mock.build_gateway()).update(
+            state,
+            "第二天早上，主角吃完早餐。",
+            core_memory=CoreMemory(items=[]),
+        )
+
+        assert result.world_clock == WorldClock(day=2, phase="上午")
+        assert mock.provider._index == 3
 
 
 class TestStateUpdaterPlayerChange:

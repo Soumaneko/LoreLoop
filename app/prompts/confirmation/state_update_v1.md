@@ -26,6 +26,12 @@
 {scene_facts_json}
 ```
 
+## World Clock 校验反馈
+
+{clock_validation_feedback}
+
+若这里记录了上一次输出发生时间倒退，必须重新检查 CurrentState、Scene Facts 中的跨日信息以及 day/phase_index 组合，并纠正本次输出。
+
 
 # 输出规范
 
@@ -83,7 +89,7 @@
 5. 物品仅被提及、展示、佩戴或使用时（如“你用钥匙开门”），不得作为新物品添加。
 6. 不要要求或假设完整剧情原文；Scene Facts 已经是本模块唯一的本回合剧情输入。
 7. world_clock 不要返回自然语言时间，不要返回推进了几个 phase，也不要输出早于当前状态的时间。
-8. 只输出 JSON，不要任何前缀、后缀或解释。
+8. location 不能颗粒度过细。
 
 
 # 例子

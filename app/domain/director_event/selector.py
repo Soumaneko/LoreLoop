@@ -24,6 +24,7 @@ def _event_list_view(event: DirectorEvent) -> dict:
         "status": event.status,
         "title": event.title,
         "premise": event.premise,
+        "director_npc_id": event.director_npc_id,
         "actors": event.actors,
         "objective": event.objective,
         "bridge_anchors": event.bridge_anchors,

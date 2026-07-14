@@ -533,6 +533,16 @@ class TestDirectorNPCWorkflow:
         draft = DirectorNPCDraft.model_validate(json.loads(_draft_response("柯莱")))
         with DirectorNPCStore(str(director_db)) as store:
             store.save(draft)
+        with NPCProfileStore(str(npc_profile_db)) as store:
+            store.upsert(NPCProfile(
+                name=draft.name,
+                role="错误普通档案",
+                appearance="未知",
+                core_motivation="错误动机",
+                hidden_secret="错误秘密",
+                conflict_style="错误冲突方式",
+                social_style="错误社交方式",
+            ))
 
         @contextmanager
         def director_store_factory():
@@ -576,6 +586,8 @@ class TestDirectorNPCWorkflow:
         assert npc_profile.name == "柯莱"
         assert npc_profile.role == "流浪药剂师"
         assert npc_profile.public_summary == "流浪药剂师"
+        assert npc_profile.appearance == draft.appearance
+        assert npc_profile.core_motivation == draft.core_motivation
         assert npc_profile.hidden_secret == draft.hidden_secret
         assert npc_profile.source_director_npc_id == draft.draft_id
 
@@ -584,6 +596,8 @@ class TestDirectorNPCWorkflow:
         assert updated is not None
         assert updated.status == "dispatched"
         assert updated.hidden_secret == draft.hidden_secret
+        with DirectorNPCStore(str(director_db)) as store:
+            assert store.get_meta_int("last_dispatch_turn") == 9
 
     def test_confirmed_director_npc_is_forced_into_state_before_update(self):
         draft = DirectorNPCDraft.model_validate(json.loads(_draft_response("柯莱")))
