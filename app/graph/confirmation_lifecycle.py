@@ -7,6 +7,7 @@ from typing import Any, Callable
 from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, PendingTurn
+from app.runtime.services import RuntimeServices
 
 from .confirmation_state import ConfirmationState
 
@@ -21,6 +22,7 @@ class ConfirmationPreparationServices:
     promote_dispatched_director_npc_profile: Callable
     state_with_confirmed_director_npc: Callable
     project_scene_text_for_confirmation: Callable
+    runtime_services: RuntimeServices | None = None
 
 
 class ConfirmationPreparer:
@@ -119,6 +121,7 @@ class ConfirmationPreparer:
 
         core_memory = services.core_memory_store().load_required()
         return {
+            "runtime_services": services.runtime_services,
             "events": [{
                 "step": "confirm_started",
                 "data": {

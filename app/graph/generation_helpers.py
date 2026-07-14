@@ -15,7 +15,8 @@ from app.domain.plot_outline.schemas import PlotOutlineContext
 from app.domain.roll.schemas import Difficulty
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.serialization import model_data
-from app.runtime.session import PendingTurn, get_campaign_runtime
+from app.runtime.services import RuntimeServices
+from app.runtime.session import CampaignRuntime, PendingTurn, get_campaign_runtime
 from app.runtime.stores import (
     core_memory_store,
     current_state_store,
@@ -57,8 +58,14 @@ def assemble_context(
 
 
 def gateway_for(state: GenerationState):
-    gateway = create_gateway()
+    services = state.get("runtime_services")
     turn_index = state.get("turn_index") or state.get("next_turn_index")
+    if services is not None:
+        return services.gateway(
+            turn_index=turn_index,
+            session_type="generation",
+        )
+    gateway = create_gateway()
     if turn_index is not None:
         gateway.set_trace_context(turn_index=turn_index, session_type="generation")
     return gateway
@@ -68,14 +75,19 @@ def prepare_generation_state(
     user_input: str,
     difficulty: Difficulty = "困难",
     max_chars: int = 1500,
+    *,
+    runtime: CampaignRuntime | None = None,
 ) -> GenerationState:
+    runtime = runtime or get_campaign_runtime()
+    services = runtime.services
+    stores = services.stores
     trace_id = str(uuid.uuid4())
-    core_memory = core_memory_store().load_required()
+    core_memory = stores.core_memory().load_required()
 
-    with current_state_store() as state_store:
+    with stores.current_state() as state_store:
         current_state = state_store.load_or_default()
 
-    with short_term_memory_store() as short_store:
+    with stores.short_term() as short_store:
         short_term_memory = short_store.get_recent()
 
     turn_index = (
@@ -84,15 +96,17 @@ def prepare_generation_state(
         else 1
     )
 
-    with scene_summary_store() as summary_store:
+    with stores.scene_summary() as summary_store:
         scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)
 
-    with director_event_store() as director_store:
+    with stores.director_event() as director_store:
         active_director_events = director_store.list_active()
 
     state: GenerationState = {
         "events": [],
+        "runtime_services": services,
+        "runtime": runtime,
         "user_input": user_input,
         "difficulty": difficulty,
         "max_chars": max_chars,
@@ -107,7 +121,7 @@ def prepare_generation_state(
         "active_director_events": active_director_events,
     }
 
-    with entity_store() as ent_store, npc_profile_store() as npc_store:
+    with stores.entity() as ent_store, stores.npc_profile() as npc_store:
         selection = select_context_profiles(
             user_input=user_input,
             current_state=current_state,
@@ -141,7 +155,8 @@ def finalize_pending_turn(
 ) -> GenerationState:
     turn_id = str(uuid.uuid4())
     group_id = group_id or turn_id
-    get_campaign_runtime().pending_turns.add(PendingTurn(
+    runtime = state.get("runtime") or get_campaign_runtime()
+    runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
         group_id=group_id,
         version_index=version_index,

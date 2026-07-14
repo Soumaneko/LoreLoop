@@ -20,6 +20,8 @@ from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory.schemas import ShortTermMemory, ShortTermScene
 from app.domain.turn_resolution.schemas import TurnResolutionResult
+from app.runtime.services import RuntimeServices
+from app.runtime.session import CampaignRuntime
 
 
 class GenerationEvent(TypedDict, total=False):
@@ -28,6 +30,8 @@ class GenerationEvent(TypedDict, total=False):
 
 
 class GenerationState(TypedDict, total=False):
+    runtime_services: RuntimeServices
+    runtime: CampaignRuntime
     events: Annotated[list[GenerationEvent], add]
     user_input: str
     difficulty: Difficulty

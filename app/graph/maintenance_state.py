@@ -12,6 +12,7 @@ from app.domain.recall_memory.maintenance import (
 )
 from app.domain.recall_memory.schemas import PendingMemoryItem
 from app.domain.scene_summary.maintenance import SceneSummaryMaintenanceResult
+from app.runtime.services import RuntimeServices
 
 
 class MaintenanceEvent(TypedDict, total=False):
@@ -20,6 +21,7 @@ class MaintenanceEvent(TypedDict, total=False):
 
 
 class SceneSummaryMaintenanceState(TypedDict, total=False):
+    runtime_services: RuntimeServices
     events: Annotated[list[MaintenanceEvent], add]
     trace_id: str
     turn_index: int
@@ -32,6 +34,7 @@ class SceneSummaryMaintenanceState(TypedDict, total=False):
 
 
 class MemoryMaintenanceState(TypedDict, total=False):
+    runtime_services: RuntimeServices
     events: Annotated[list[MaintenanceEvent], add]
     trace_id: str
     turn_index: int
@@ -48,6 +51,7 @@ class MemoryMaintenanceState(TypedDict, total=False):
 
 
 class DirectorNPCRestockState(TypedDict, total=False):
+    runtime_services: RuntimeServices
     events: Annotated[list[MaintenanceEvent], add]
     trace_id: str
     turn_index: int

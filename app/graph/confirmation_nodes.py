@@ -31,6 +31,29 @@ from .confirmation_helpers import ensure_director_npc_profile, merge_unique_ids
 from .confirmation_state import ConfirmationState
 
 
+def _gateway_for(state: ConfirmationState):
+    pipeline_input = state["pipeline_input"]
+    services = state.get("runtime_services")
+    if services is not None:
+        return services.gateway(
+            turn_index=pipeline_input.turn_index,
+            session_type="confirmation",
+        )
+    gateway = create_gateway()
+    gateway.set_trace_context(
+        turn_index=pipeline_input.turn_index,
+        session_type="confirmation",
+    )
+    return gateway
+
+
+def _store_factory(state: ConfirmationState, name: str, legacy):
+    services = state.get("runtime_services")
+    if services is None:
+        return legacy
+    return getattr(services.stores, name)
+
+
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
@@ -38,8 +61,7 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
     core_memory = state["core_memory"]
     scene_facts = cache.get("scene_facts")
     if scene_facts is None:
-        gateway = create_gateway()
-        gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        gateway = _gateway_for(state)
         scene_facts = SceneFactExtractor(gateway).extract(
             SceneFactExtractInput(
                 scene_text=state["effective_scene_text"],
@@ -66,8 +88,7 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     updated_state = cache.get("updated_state")
     if updated_state is None:
-        gateway = create_gateway()
-        gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        gateway = _gateway_for(state)
         updater = StateUpdater(gateway)
         npc_aliases = {
             profile.name: list(profile.aliases)
@@ -96,8 +117,7 @@ def memory_draft_extract_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     pending_memory_result = cache.get("pending_memory_result")
     if pending_memory_result is None:
-        gateway = create_gateway()
-        gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        gateway = _gateway_for(state)
         extractor = MemoryDraftExtractor(gateway)
         pending_memory_result = extractor.extract(
             state["scene_facts_json"],
@@ -127,8 +147,7 @@ def entity_extract_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     entity_extraction = cache.get("entity_extraction")
     if entity_extraction is None:
-        gateway = create_gateway()
-        gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        gateway = _gateway_for(state)
         extractor = EntityExtractor(gateway)
         entity_extraction = extractor.extract(
             core_memory=state["core_memory"],
@@ -154,11 +173,10 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
     trace_id = state["trace_id"]
     cache = state["cache"]
     npc_extraction = cache.get("npc_extraction")
-    with director_event_store() as event_store:
+    with _store_factory(state, "director_event", director_event_store)() as event_store:
         active_events = event_store.list_active()
     if npc_extraction is None:
-        gateway = create_gateway()
-        gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        gateway = _gateway_for(state)
         extractor = NPCProfileExtractor(gateway)
         npc_extraction = extractor.extract(
             core_memory=state["core_memory"],
@@ -189,8 +207,7 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
             state["effective_scene_text"]
             != pipeline_input.scene_result.scene_text
         )
-        gateway = create_gateway()
-        gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        gateway = _gateway_for(state)
         action_preview = ActionPreviewAgent(gateway).generate(
             current_state=state["updated_state"],
             core_memory=state["core_memory"],
@@ -228,10 +245,10 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
     director_event_result = cache.get("director_event_result")
     if director_event_result is None and "director_event_result" not in cache:
         with (
-            director_event_store() as director_store,
-            director_npc_store() as director_npc_repo,
-            entity_store() as director_entity_repo,
-            npc_profile_store() as director_npc_profile_repo,
+            _store_factory(state, "director_event", director_event_store)() as director_store,
+            _store_factory(state, "director_npc", director_npc_store)() as director_npc_repo,
+            _store_factory(state, "entity", entity_store)() as director_entity_repo,
+            _store_factory(state, "npc_profile", npc_profile_store)() as director_npc_profile_repo,
         ):
             standby_director_npcs = director_npc_repo.list_standby()
             director_entity_profiles = [
@@ -244,10 +261,8 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
             ]
             results = {}
             for role in ("arc", "ambient"):
-                reviewer_gateway = create_gateway()
-                reviewer_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
-                selector_gateway = create_gateway()
-                selector_gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+                reviewer_gateway = _gateway_for(state)
+                selector_gateway = _gateway_for(state)
                 results[role] = update_director_event_workflow(
                     role=role,
                     user_input=pipeline_input.user_input,
@@ -287,9 +302,8 @@ def entity_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     updated_entity_ids = cache.get("updated_entity_ids", [])
     if "updated_entity_ids" not in cache:
-        with entity_store() as ent_store:
-            gateway = create_gateway()
-            gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        with _store_factory(state, "entity", entity_store)() as ent_store:
+            gateway = _gateway_for(state)
             entity_result = update_entity_profiles_from_extraction(
                 scene_facts=state["scene_facts_json"],
                 current_state=state["updated_state"],
@@ -313,9 +327,8 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     updated_npc_profile_ids = cache.get("updated_npc_profile_ids", [])
     if "updated_npc_profile_ids" not in cache:
-        with npc_profile_store() as npc_store:
-            gateway = create_gateway()
-            gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
+        with _store_factory(state, "npc_profile", npc_profile_store)() as npc_store:
+            gateway = _gateway_for(state)
             npc_result = update_npc_profiles_from_extraction(
                 scene_facts=state["scene_facts_json"],
                 current_state=state["updated_state"],

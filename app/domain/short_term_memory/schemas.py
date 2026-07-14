@@ -2,6 +2,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
+from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
 
 
 class ShortTermScene(BaseModel):
@@ -23,8 +24,7 @@ class ShortTermMemoryStore:
             raise ValueError("max_items must be >= 1")
         self.max_items = max_items
         self._db_path = db_path
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        self._conn = connect_sqlite(db_path)
         self._init_table()
 
     def _init_table(self) -> None:
@@ -40,6 +40,7 @@ class ShortTermMemoryStore:
             )
             """
         )
+        ensure_schema_version(self._conn, "short_term_memory", 1)
         self._conn.commit()
 
     def add_turn(
@@ -50,20 +51,20 @@ class ShortTermMemoryStore:
         scene_text: str,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
-            "DELETE FROM short_term_scenes WHERE turn_index = ?",
-            (turn_index,),
-        )
-        self._conn.execute(
-            """
-            INSERT INTO short_term_scenes (
-                scene_id, turn_index, user_input, scene_text, created_at
+        with transaction(self._conn):
+            self._conn.execute(
+                "DELETE FROM short_term_scenes WHERE turn_index = ?",
+                (turn_index,),
             )
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (scene_id, turn_index, user_input, scene_text, now),
-        )
-        self._conn.commit()
+            self._conn.execute(
+                """
+                INSERT INTO short_term_scenes (
+                    scene_id, turn_index, user_input, scene_text, created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (scene_id, turn_index, user_input, scene_text, now),
+            )
 
     def get_recent(self) -> ShortTermMemory:
         rows = self._conn.execute(

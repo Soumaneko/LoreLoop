@@ -6,6 +6,7 @@ from typing import Annotated, Any, TypedDict
 from app.domain.core_memory import CoreMemory, InitConfig, StoryDirectionResult
 from app.domain.current_state import CurrentState
 from app.domain.scene_writer.schemas import SceneWriterResult
+from app.runtime.services import RuntimeServices
 
 
 class InitializationEvent(TypedDict, total=False):
@@ -14,6 +15,7 @@ class InitializationEvent(TypedDict, total=False):
 
 
 class InitializationState(TypedDict, total=False):
+    runtime_services: RuntimeServices
     events: Annotated[list[InitializationEvent], add]
     trace_id: str
     config: InitConfig

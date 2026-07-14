@@ -6,6 +6,7 @@ from concurrent.futures import Future
 from langgraph.graph import END, START, StateGraph
 
 from app.runtime.serialization import model_data
+from app.runtime.session import get_campaign_runtime
 from app.runtime.stores import pending_memory_store
 
 from .maintenance_helpers import (
@@ -92,6 +93,7 @@ def run_director_npc_restock(
     try:
         state: DirectorNPCRestockState = {
             "events": [],
+            "runtime_services": get_campaign_runtime().services,
             "trace_id": trace_id,
             "turn_index": turn_index,
             "core_memory": core_memory,

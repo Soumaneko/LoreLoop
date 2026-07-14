@@ -9,7 +9,7 @@ from .initialization_state import InitializationState
 
 
 def story_direction_node(state: InitializationState) -> InitializationState:
-    story_direction = StoryDirectionAgent(initialization_gateway()).generate(
+    story_direction = StoryDirectionAgent(initialization_gateway(state)).generate(
         config=state["config"],
         base_core_memory=state["core_memory"],
         trace_id=state["trace_id"],
@@ -32,7 +32,7 @@ def story_direction_node(state: InitializationState) -> InitializationState:
 
 
 def opening_scene_node(state: InitializationState) -> InitializationState:
-    opening_scene = OpeningSceneAgent(initialization_gateway()).generate(
+    opening_scene = OpeningSceneAgent(initialization_gateway(state)).generate(
         config=state["config"],
         current_state=state["current_state"],
         core_memory=state["core_memory"],

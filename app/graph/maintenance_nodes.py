@@ -27,11 +27,34 @@ from .maintenance_state import (
 )
 
 
+_DEFAULT_STORES = {
+    "director_npc": director_npc_store,
+    "entity": entity_store,
+    "memory": memory_store,
+    "npc_profile": npc_profile_store,
+    "pending_memory": pending_memory_store,
+    "scene_summary": scene_summary_store,
+}
+
+
+def _services(state):
+    return state.get("runtime_services")
+
+
+def _store_factory(state, name: str, legacy):
+    services = _services(state)
+    if services is not None and legacy is _DEFAULT_STORES[name]:
+        return getattr(services.stores, name)
+    return legacy
+
+
 def scene_summarize_node(
     state: SceneSummaryMaintenanceState,
 ) -> SceneSummaryMaintenanceState:
     summarizer = SceneSummarizer(
-        maintenance_gateway(turn_index=state["turn_index"])
+        maintenance_gateway(
+            turn_index=state["turn_index"], services=_services(state)
+        )
     )
     summary = summarizer.summarize_turn(
         scene_text=state["scene_text"],
@@ -41,7 +64,7 @@ def scene_summarize_node(
         turn_index=state["turn_index"],
         trace_id=state["trace_id"],
     )
-    with scene_summary_store() as store:
+    with _store_factory(state, "scene_summary", scene_summary_store)() as store:
         saved_id = store.save_one(summary)
 
     result = state["result"]
@@ -62,13 +85,17 @@ def scene_summary_condense_node(
     state: SceneSummaryMaintenanceState,
 ) -> SceneSummaryMaintenanceState:
     summarizer = SceneSummarizer(
-        maintenance_gateway(turn_index=state["turn_index"])
+        maintenance_gateway(
+            turn_index=state["turn_index"], services=_services(state)
+        )
     )
     result = state["result"]
     threshold = state.get("threshold", 10)
 
     # Preserve the original lock scope across recursive levels and their LLM calls.
-    with _CONDENSE_LOCK, scene_summary_store() as store:
+    with _CONDENSE_LOCK, _store_factory(
+        state, "scene_summary", scene_summary_store
+    )() as store:
         level = 1
         while store.should_condense(level, threshold=threshold):
             sources = store.list_uncondensed(level, limit=threshold)
@@ -106,13 +133,15 @@ def memory_batch_classify_node(
     state: MemoryMaintenanceState,
 ) -> MemoryMaintenanceState:
     classifier = MemoryBatchClassifier(
-        maintenance_gateway(turn_index=state["turn_index"])
+        maintenance_gateway(
+            turn_index=state["turn_index"], services=_services(state)
+        )
     )
     with (
-        pending_memory_store() as pending_store,
-        memory_store() as mem_store,
-        entity_store() as ent_store,
-        scene_summary_store() as summary_store,
+        _store_factory(state, "pending_memory", pending_memory_store)() as pending_store,
+        _store_factory(state, "memory", memory_store)() as mem_store,
+        _store_factory(state, "entity", entity_store)() as ent_store,
+        _store_factory(state, "scene_summary", scene_summary_store)() as summary_store,
     ):
         result = batch_classify_pending_memories_workflow(
             current_state=state["current_state"],
@@ -146,9 +175,15 @@ def memory_maintain_node(
     state: MemoryMaintenanceState,
 ) -> MemoryMaintenanceState:
     maintainer = MemoryMaintainer(
-        maintenance_gateway(turn_index=state.get("turn_index") or None)
+        maintenance_gateway(
+            turn_index=state.get("turn_index") or None,
+            services=_services(state),
+        )
     )
-    with memory_store() as mem_store, scene_summary_store() as summary_store:
+    with (
+        _store_factory(state, "memory", memory_store)() as mem_store,
+        _store_factory(state, "scene_summary", scene_summary_store)() as summary_store,
+    ):
         result = maintain_memories_workflow(
             store=mem_store,
             summary_store=summary_store,
@@ -177,8 +212,13 @@ def memory_maintain_node(
 def director_npc_restock_node(
     state: DirectorNPCRestockState,
 ) -> DirectorNPCRestockState:
-    gateway = maintenance_gateway(turn_index=state["turn_index"])
-    with director_npc_store() as npc_store, npc_profile_store() as profile_store:
+    gateway = maintenance_gateway(
+        turn_index=state["turn_index"], services=_services(state)
+    )
+    with (
+        _store_factory(state, "director_npc", director_npc_store)() as npc_store,
+        _store_factory(state, "npc_profile", npc_profile_store)() as profile_store,
+    ):
         created_drafts = restock_director_npc_standby(
             core_memory=state["core_memory"],
             protagonist_name=state["protagonist_name"],

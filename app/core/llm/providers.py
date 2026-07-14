@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from collections.abc import Iterator
+import threading
 from typing import Any
 
 
@@ -83,9 +84,13 @@ class OpenAICompatibleProvider(LLMProvider):
         self._base_url = base_url
         self._default_model = default_model
         self._thinking = thinking
+        self._client_instance: Any | None = None
+        self._client_lock = threading.Lock()
 
     @property
     def _client(self) -> Any:
+        if self._client_instance is not None:
+            return self._client_instance
         try:
             from openai import OpenAI
         except ImportError:
@@ -94,7 +99,13 @@ class OpenAICompatibleProvider(LLMProvider):
                 "Install it with: pip install openai"
             )
 
-        return OpenAI(api_key=self._api_key, base_url=self._base_url)
+        with self._client_lock:
+            if self._client_instance is None:
+                self._client_instance = OpenAI(
+                    api_key=self._api_key,
+                    base_url=self._base_url,
+                )
+        return self._client_instance
 
     def generate(
         self,

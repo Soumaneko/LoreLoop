@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
 
 from app.domain.recall_memory.schemas import PendingMemoryItem
 
@@ -7,8 +8,7 @@ from app.domain.recall_memory.schemas import PendingMemoryItem
 class PendingMemoryStore:
     def __init__(self, db_path: str = ":memory:"):
         self._db_path = db_path
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        self._conn = connect_sqlite(db_path)
         self._init_table()
 
     def _init_table(self) -> None:
@@ -51,42 +51,43 @@ class PendingMemoryStore:
             ON pending_memory_items(classified, discarded, turn_index, created_at)
             """
         )
+        ensure_schema_version(self._conn, "pending_memory", 1)
         self._conn.commit()
 
     def save_many(self, items: list[PendingMemoryItem]) -> list[str]:
         saved_ids: list[str] = []
-        for item in items:
-            cursor = self._conn.execute(
-                """
-                INSERT OR IGNORE INTO pending_memory_items (
-                    id, scene_id, turn_index, memory_kind, subject,
-                    raw_text, source_text_span, entities_json, owner,
-                    location, time_label, importance_hint, created_at,
-                    classified, discarded, discard_reason
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    item.id,
-                    item.scene_id,
-                    item.turn_index,
-                    item.memory_kind,
-                    item.subject,
-                    item.raw_text,
-                    json.dumps(item.source_text_span, ensure_ascii=False),
-                    json.dumps(item.entities, ensure_ascii=False),
-                    item.owner,
-                    item.location,
-                    item.time_label,
-                    item.importance_hint,
-                    item.created_at,
-                    int(item.classified),
-                    int(item.discarded),
-                    item.discard_reason,
-                ),
-            )
-            if cursor.rowcount > 0:
-                saved_ids.append(item.id)
-        self._conn.commit()
+        with transaction(self._conn):
+            for item in items:
+                cursor = self._conn.execute(
+                    """
+                    INSERT OR IGNORE INTO pending_memory_items (
+                        id, scene_id, turn_index, memory_kind, subject,
+                        raw_text, source_text_span, entities_json, owner,
+                        location, time_label, importance_hint, created_at,
+                        classified, discarded, discard_reason
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        item.id,
+                        item.scene_id,
+                        item.turn_index,
+                        item.memory_kind,
+                        item.subject,
+                        item.raw_text,
+                        json.dumps(item.source_text_span, ensure_ascii=False),
+                        json.dumps(item.entities, ensure_ascii=False),
+                        item.owner,
+                        item.location,
+                        item.time_label,
+                        item.importance_hint,
+                        item.created_at,
+                        int(item.classified),
+                        int(item.discarded),
+                        item.discard_reason,
+                    ),
+                )
+                if cursor.rowcount > 0:
+                    saved_ids.append(item.id)
         return saved_ids
 
     def list_unclassified(self, *, limit: int | None = None) -> list[PendingMemoryItem]:

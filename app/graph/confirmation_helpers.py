@@ -56,6 +56,29 @@ _WRITE_CACHED_NODE_RESULTS = {
     "updated_npc_profile_ids",
 }
 
+_DEFAULT_DEPENDENCIES = {
+    "core_memory_store": core_memory_store,
+    "current_state_store": current_state_store,
+    "director_npc_store": director_npc_store,
+    "entity_store": entity_store,
+    "memory_store": memory_store,
+    "npc_profile_store": npc_profile_store,
+    "pending_memory_store": pending_memory_store,
+    "scene_summary_store": scene_summary_store,
+    "short_term_memory_store": short_term_memory_store,
+    "run_director_npc_restock": run_director_npc_restock,
+    "run_scene_summary_maintenance": run_scene_summary_maintenance,
+    "run_memory_batch_maintenance": run_memory_batch_maintenance,
+    "submit_memory_batch_once": submit_memory_batch_once,
+}
+
+
+def _legacy_dependencies_overridden() -> bool:
+    return any(
+        globals()[name] is not original
+        for name, original in _DEFAULT_DEPENDENCIES.items()
+    )
+
 
 @dataclass
 class DirectorNPCConfirmation:
@@ -250,6 +273,10 @@ def prepare_confirmation_state(
     write_db: bool = True,
     scene_text: str | None = None,
 ) -> ConfirmationState:
+    runtime = get_campaign_runtime()
+    runtime_services = (
+        None if _legacy_dependencies_overridden() else runtime.services
+    )
     services = ConfirmationPreparationServices(
         current_state_store=current_state_store,
         director_npc_store=director_npc_store,
@@ -261,6 +288,7 @@ def prepare_confirmation_state(
         ),
         state_with_confirmed_director_npc=state_with_confirmed_director_npc,
         project_scene_text_for_confirmation=project_scene_text_for_confirmation,
+        runtime_services=runtime_services,
     )
     return ConfirmationPreparer(services).prepare(
         pipeline_input,
@@ -311,7 +339,11 @@ def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationSt
         cache["pending_memory_metadata_filled"] = True
         state["pending_memory_result"] = pending_memory_result
 
-    with scene_summary_store() as summary_store:
+    services = state.get("runtime_services")
+    summary_factory = (
+        services.stores.scene_summary if services is not None else scene_summary_store
+    )
+    with summary_factory() as summary_store:
         state["scene_summaries"] = summary_store.list_active()
         state["recent_summaries"] = summary_store.get_recent(5)
 
@@ -331,18 +363,28 @@ def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationSt
 
 def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
     runtime = get_campaign_runtime()
+    services = state.get("runtime_services")
+    stores = services.stores if services is not None else None
     committer = ConfirmationCommitter(
         ConfirmationCommitServices(
-            current_state_store=current_state_store,
-            short_term_memory_store=short_term_memory_store,
-            pending_memory_store=pending_memory_store,
-            memory_store=memory_store,
+            current_state_store=(
+                stores.current_state if stores is not None else current_state_store
+            ),
+            short_term_memory_store=(
+                stores.short_term if stores is not None else short_term_memory_store
+            ),
+            pending_memory_store=(
+                stores.pending_memory if stores is not None else pending_memory_store
+            ),
+            memory_store=(stores.memory if stores is not None else memory_store),
         )
     )
     scheduler = ConfirmationMaintenanceScheduler(
         runtime,
         ConfirmationMaintenanceServices(
-            director_npc_store=director_npc_store,
+            director_npc_store=(
+                stores.director_npc if stores is not None else director_npc_store
+            ),
             run_director_npc_restock=run_director_npc_restock,
             run_scene_summary_maintenance=run_scene_summary_maintenance,
             run_memory_batch_maintenance=run_memory_batch_maintenance,

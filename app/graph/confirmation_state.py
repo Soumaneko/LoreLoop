@@ -18,6 +18,7 @@ from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.runtime.session import PendingOpening, PendingTurn
+from app.runtime.services import RuntimeServices
 
 
 class ConfirmationEvent(TypedDict, total=False):
@@ -79,6 +80,7 @@ class ConfirmationCache(TypedDict, total=False):
 
 
 class ConfirmationState(TypedDict, total=False):
+    runtime_services: RuntimeServices
     events: Annotated[list[ConfirmationEvent], add]
     node_errors: Annotated[list[ConfirmationNodeError], add]
     pipeline_input: ConfirmationPipelineInput

@@ -8,6 +8,7 @@ from app.domain.recall_memory.schemas import (
     MemoryRecord,
     MemoryStatus,
 )
+from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
 
 
 def _utc_now() -> str:
@@ -17,8 +18,7 @@ def _utc_now() -> str:
 class MemoryStore:
     def __init__(self, db_path: str = ":memory:"):
         self._db_path = db_path
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        self._conn = connect_sqlite(db_path)
         self._init_table()
 
     def _init_table(self) -> None:
@@ -46,6 +46,7 @@ class MemoryStore:
             )
             """
         )
+        ensure_schema_version(self._conn, "recall_memory", 1)
         self._conn.commit()
 
     def _create_table(self) -> None:
@@ -105,11 +106,11 @@ class MemoryStore:
     def save_many(self, memories: list[Memory]) -> list[str]:
         saved_ids: list[str] = []
         now = _utc_now()
-        for memory in memories:
-            memory_id = self._insert_memory(memory, now=now)
-            if memory_id is not None:
-                saved_ids.append(memory_id)
-        self._conn.commit()
+        with transaction(self._conn):
+            for memory in memories:
+                memory_id = self._insert_memory(memory, now=now)
+                if memory_id is not None:
+                    saved_ids.append(memory_id)
         return saved_ids
 
     def _insert_memory(self, memory: Memory, *, now: str) -> str | None:

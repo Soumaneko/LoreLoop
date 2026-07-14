@@ -1,13 +1,13 @@
 import json
 import sqlite3
+from app.runtime.sqlite import connect_sqlite, ensure_schema_version
 
 from .schemas import DirectorNPCDraft, utc_now
 
 
 class DirectorNPCStore:
     def __init__(self, db_path: str = ":memory:"):
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        self._conn = connect_sqlite(db_path)
         self._init_table()
 
     def _init_table(self) -> None:
@@ -32,6 +32,7 @@ class DirectorNPCStore:
             )
             """
         )
+        ensure_schema_version(self._conn, "director_npc", 1)
         self._conn.commit()
 
     def save(self, draft: DirectorNPCDraft) -> str:

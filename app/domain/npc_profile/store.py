@@ -7,13 +7,13 @@ from app.domain.npc_profile.schemas import (
     profile_from_update,
     utc_now,
 )
+from app.runtime.sqlite import connect_sqlite, ensure_column, ensure_schema_version
 
 
 class NPCProfileStore:
     def __init__(self, db_path: str = "data/npc_profiles.db"):
         self._db_path = db_path
-        self._db = sqlite3.connect(db_path, check_same_thread=False)
-        self._db.row_factory = sqlite3.Row
+        self._db = connect_sqlite(db_path)
         self._create_tables()
 
     def _create_tables(self) -> None:
@@ -33,12 +33,25 @@ class NPCProfileStore:
             )
             """
         )
+        ensure_column(
+            self._db,
+            "npc_profiles",
+            "name_hit_count",
+            "INTEGER NOT NULL DEFAULT 1",
+        )
+        ensure_column(
+            self._db,
+            "npc_profiles",
+            "alias_hit_counts_json",
+            "TEXT NOT NULL DEFAULT '{}'",
+        )
         self._db.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_npc_profiles_name
             ON npc_profiles(active, name)
             """
         )
+        ensure_schema_version(self._db, "npc_profile", 2)
         self._db.commit()
 
     def _row_to_profile(self, row: sqlite3.Row) -> NPCProfile:

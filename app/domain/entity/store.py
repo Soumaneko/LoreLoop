@@ -8,13 +8,13 @@ from app.domain.entity.schemas import (
     profile_from_semantic,
     utc_now,
 )
+from app.runtime.sqlite import connect_sqlite, ensure_column, ensure_schema_version
 
 
 class EntityStore:
     def __init__(self, db_path: str = "data/entities.db"):
         self._db_path = db_path
-        self._db = sqlite3.connect(db_path, check_same_thread=False)
-        self._db.row_factory = sqlite3.Row
+        self._db = connect_sqlite(db_path)
         self._create_tables()
 
     def _create_tables(self) -> None:
@@ -36,12 +36,14 @@ class EntityStore:
             )
             """
         )
-        self._ensure_column(
+        ensure_column(
+            self._db,
             "entity_profiles",
             "name_hit_count",
             "INTEGER NOT NULL DEFAULT 1",
         )
-        self._ensure_column(
+        ensure_column(
+            self._db,
             "entity_profiles",
             "alias_hit_counts_json",
             "TEXT NOT NULL DEFAULT '{}'",
@@ -69,13 +71,8 @@ class EntityStore:
             )
             """
         )
+        ensure_schema_version(self._db, "entity_profile", 2)
         self._db.commit()
-
-    def _ensure_column(self, table: str, column: str, definition: str) -> None:
-        rows = self._db.execute(f"PRAGMA table_info({table})").fetchall()
-        if column in {str(row["name"]) for row in rows}:
-            return
-        self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def _row_to_profile(self, row: sqlite3.Row) -> EntityProfile:
         semantic = EntityProfileUpdateInput.model_validate(json.loads(row["profile_json"]))

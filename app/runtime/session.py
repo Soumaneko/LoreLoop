@@ -11,8 +11,9 @@ from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.short_term_memory import ShortTermMemory
 from app.domain.plot_outline.schemas import PlotOutlineContext
-from app.core.llm.config import create_gateway
+from app.core.llm.config import SharedGatewayFactory
 from app.runtime.paths import CampaignPaths, DEFAULT_CAMPAIGN_PATHS
+from app.runtime.services import RuntimeServices
 from app.runtime.stores import StoreBundle
 
 
@@ -160,16 +161,21 @@ class CampaignRuntime:
         *,
         paths: CampaignPaths | None = None,
         stores: StoreBundle | None = None,
-        gateway_factory: Callable = create_gateway,
+        gateway_factory: Callable | None = None,
         max_workers: int = 2,
     ) -> None:
         self.campaign_id = campaign_id
         self.paths = paths or DEFAULT_CAMPAIGN_PATHS
         self.stores = stores or StoreBundle(self.paths)
-        self.gateway_factory = gateway_factory
+        self.gateway_factory = gateway_factory or SharedGatewayFactory()
         self.pending_turns = PendingTurnRepository()
         self.pending_openings = PendingOpeningRepository()
         self.jobs = MaintenanceJobCoordinator(max_workers=max_workers)
+        self.services = RuntimeServices(
+            stores=self.stores,
+            gateway_factory=self.gateway_factory,
+            jobs=self.jobs,
+        )
         self._confirmation_lock = threading.Lock()
 
     @property

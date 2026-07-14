@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
 
 from app.domain.current_state.schemas import WorldClock
 
@@ -15,8 +16,7 @@ _EXPOSURE_RANK: dict[DirectorEventExposure, int] = {
 
 class DirectorEventStore:
     def __init__(self, db_path: str = ":memory:"):
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        self._conn = connect_sqlite(db_path)
         self._init_table()
 
     def _init_table(self) -> None:
@@ -33,35 +33,20 @@ class DirectorEventStore:
             )
             """
         )
+        ensure_schema_version(self._conn, "director_event", 1)
         self._conn.commit()
 
     def save(self, event: DirectorEvent) -> str:
-        if event.status == "active":
-            self._resolve_other_active(
-                event.event_id,
-                event.role,
-                event.updated_turn or event.created_turn,
-            )
         now = utc_now()
         event = event.model_copy(update={"updated_at": now})
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO director_events (
-                event_id, status, event_json, created_turn, updated_turn, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                event.event_id,
-                event.status,
-                event.model_dump_json(),
-                event.created_turn,
-                event.updated_turn,
-                event.created_at,
-                event.updated_at,
-            ),
-        )
-        self._conn.commit()
+        with transaction(self._conn):
+            if event.status == "active":
+                self._resolve_other_active(
+                    event.event_id,
+                    event.role,
+                    event.updated_turn or event.created_turn,
+                )
+            self._write_without_active_guard(event)
         return event.event_id
 
     def get_active(self, role: str) -> DirectorEvent | None:
@@ -285,7 +270,6 @@ class DirectorEventStore:
                 event.updated_at,
             ),
         )
-        self._conn.commit()
 
     @staticmethod
     def _event_from_row(row) -> DirectorEvent:

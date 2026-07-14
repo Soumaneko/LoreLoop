@@ -21,7 +21,15 @@ from app.runtime.stores import core_memory_store, current_state_store
 from .initialization_state import InitializationState
 
 
-def initialization_gateway():
+_DEFAULT_CREATE_GATEWAY = create_gateway
+_DEFAULT_CORE_MEMORY_STORE = core_memory_store
+_DEFAULT_CURRENT_STATE_STORE = current_state_store
+
+
+def initialization_gateway(state: InitializationState | None = None):
+    services = state.get("runtime_services") if state is not None else None
+    if services is not None and create_gateway is _DEFAULT_CREATE_GATEWAY:
+        return services.gateway(session_type="init")
     gateway = create_gateway()
     gateway.set_trace_context(session_type="init")
     return gateway
@@ -52,9 +60,18 @@ def preview_core_memory(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def prepare_initialization_state(payload: dict[str, Any]) -> InitializationState:
+    runtime = get_campaign_runtime()
+    services = runtime.services
+    if (
+        create_gateway is not _DEFAULT_CREATE_GATEWAY
+        or core_memory_store is not _DEFAULT_CORE_MEMORY_STORE
+        or current_state_store is not _DEFAULT_CURRENT_STATE_STORE
+    ):
+        services = None
     config, core_memory = build_core_memory_from_payload(payload)
     return {
         "events": [],
+        "runtime_services": services,
         "trace_id": str(uuid.uuid4()),
         "config": config,
         "core_memory": core_memory,
@@ -95,8 +112,12 @@ def apply_story_direction(
 def finalize_initialization_state(
     state: InitializationState,
 ) -> InitializationState:
-    core_memory_store().save(state["core_memory"])
-    with current_state_store() as state_store:
+    services = state.get("runtime_services")
+    stores = services.stores if services is not None else None
+    core_factory = stores.core_memory if stores is not None else core_memory_store
+    state_factory = stores.current_state if stores is not None else current_state_store
+    core_factory().save(state["core_memory"])
+    with state_factory() as state_store:
         state_store.save(state["current_state"])
 
     turn_id = f"opening:{uuid.uuid4()}"
