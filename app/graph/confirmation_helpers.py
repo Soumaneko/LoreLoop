@@ -7,17 +7,9 @@ from app.domain.current_state import NPCState
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
-from app.graph.maintenance_graph import (
-    run_director_npc_restock,
-    run_memory_batch_maintenance,
-    run_scene_summary_maintenance,
-)
 from app.runtime.serialization import model_data
 from app.runtime.session import (
-    BACKGROUND_EXECUTOR,
-    PendingTurn,
-    discard_pending_turn_group,
-    release_confirmation_lock,
+    get_campaign_runtime,
     submit_memory_batch_once,
 )
 from app.runtime.stores import (
@@ -31,8 +23,22 @@ from app.runtime.stores import (
     scene_summary_store,
     short_term_memory_store,
 )
+from app.graph.maintenance_graph import (
+    run_director_npc_restock,
+    run_memory_batch_maintenance,
+    run_scene_summary_maintenance,
+)
 from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
-
+from .confirmation_lifecycle import (
+    ConfirmationCommitServices,
+    ConfirmationCommitter,
+    ConfirmationEventBuilder,
+    ConfirmationFinalizer,
+    ConfirmationMaintenanceScheduler,
+    ConfirmationMaintenanceServices,
+    ConfirmationPreparationServices,
+    ConfirmationPreparer,
+)
 from .confirmation_state import ConfirmationEvent, ConfirmationState
 
 
@@ -244,100 +250,23 @@ def prepare_confirmation_state(
     write_db: bool = True,
     scene_text: str | None = None,
 ) -> ConfirmationState:
-    import uuid
-
-    pending = pipeline_input.pending
-    turn_id = pipeline_input.turn_id
-    trace_id = str(uuid.uuid4())
-    effective_scene_text = scene_text if scene_text is not None else pipeline_input.scene_result.scene_text
-    cache_key = effective_scene_text
-    cache = pending.confirmation_cache
-    if cache.get("key") != cache_key:
-        cache.clear()
-        cache["key"] = cache_key
-    if write_db and not cache.get("state_saved"):
-        with current_state_store() as state_store:
-            persisted_state = state_store.load_or_default()
-        if persisted_state != pipeline_input.state_before:
-            raise ValueError(pipeline_input.stale_message)
-
-    director_npc_profile_id = cache.get("director_npc_profile_id")
-    confirmed_director_npc_draft = cache.get("confirmed_director_npc_draft")
-    director_npc_restock_scheduled = bool(cache.get("director_npc_restock_scheduled"))
-    if (
-        pipeline_input.handle_director_npc
-        and write_db
-        and director_npc_profile_id is None
-        and "director_npc_profile_id" not in cache
-    ):
-        director_npc_confirmation = promote_dispatched_director_npc_profile(
-            pending,
-            turn_index=pipeline_input.turn_index,
-        )
-        if director_npc_confirmation is not None:
-            director_npc_profile_id = director_npc_confirmation.npc_id
-            confirmed_director_npc_draft = director_npc_confirmation.draft
-        cache["director_npc_profile_id"] = director_npc_profile_id
-        cache["confirmed_director_npc_draft"] = confirmed_director_npc_draft
-
-    if (
-        pipeline_input.handle_director_npc
-        and write_db
-        and getattr(pending, "director_npc_result", None) is not None
-        and pending.director_npc_result.dispatch is not None
-        and pending.director_npc_result.dispatch.action != "none"
-        and not cache.get("director_npc_last_dispatch_turn_set")
-    ):
-        with director_npc_store() as npc_store:
-            npc_store.set_meta_int("last_dispatch_turn", pipeline_input.turn_index)
-        cache["director_npc_last_dispatch_turn_set"] = True
-
-    state_before_update = state_with_confirmed_director_npc(
-        pipeline_input.state_before,
-        confirmed_director_npc_draft,
+    services = ConfirmationPreparationServices(
+        current_state_store=current_state_store,
+        director_npc_store=director_npc_store,
+        entity_store=entity_store,
+        npc_profile_store=npc_profile_store,
+        core_memory_store=core_memory_store,
+        promote_dispatched_director_npc_profile=(
+            promote_dispatched_director_npc_profile
+        ),
+        state_with_confirmed_director_npc=state_with_confirmed_director_npc,
+        project_scene_text_for_confirmation=project_scene_text_for_confirmation,
     )
-    confirmation_scene_text = project_scene_text_for_confirmation(
-        effective_scene_text,
-        pending=pending,
-        confirmed_director_npc_draft=confirmed_director_npc_draft,
+    return ConfirmationPreparer(services).prepare(
+        pipeline_input,
+        write_db=write_db,
+        scene_text=scene_text,
     )
-
-    existing_entity_profiles = cache.get("existing_entity_profiles", [])
-    existing_npc_profiles = cache.get("existing_npc_profiles", [])
-    if write_db and "existing_entity_profiles" not in cache:
-        with entity_store() as ent_store, npc_profile_store() as npc_store:
-            existing_entity_profiles = ent_store.list_all()
-            existing_npc_profiles = npc_store.list_all()
-        cache["existing_entity_profiles"] = existing_entity_profiles
-        cache["existing_npc_profiles"] = existing_npc_profiles
-
-    core_memory = core_memory_store().load_required()
-    return {
-        "events": [{
-            "step": "confirm_started",
-            "data": {
-                "trace_id": trace_id,
-                **pipeline_input.confirm_started_extra,
-            },
-        }],
-        "node_errors": [],
-        "pipeline_input": pipeline_input,
-        "write_db": write_db,
-        "scene_text": scene_text,
-        "pending": pending,
-        "turn_id": turn_id,
-        "trace_id": trace_id,
-        "effective_scene_text": effective_scene_text,
-        "cache": cache,
-        "director_npc_profile_id": director_npc_profile_id,
-        "confirmed_director_npc_draft": confirmed_director_npc_draft,
-        "director_npc_restock_scheduled": director_npc_restock_scheduled,
-        "state_before_update": state_before_update,
-        "confirmation_scene_text": confirmation_scene_text,
-        "existing_entity_profiles": existing_entity_profiles,
-        "existing_npc_profiles": existing_npc_profiles,
-        "core_memory": core_memory,
-    }
 
 
 def merge_confirmation_node_update(
@@ -401,205 +330,28 @@ def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationSt
 
 
 def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
-    pipeline_input = state["pipeline_input"]
-    write_db = state.get("write_db", True)
-    scene_text = state.get("scene_text")
-    pending = state["pending"]
-    turn_id = state["turn_id"]
-    trace_id = state["trace_id"]
-    cache = state["cache"]
-    core_memory = state["core_memory"]
-    updated_state = state["updated_state"]
-    pending_memory_result = state["pending_memory_result"]
-    effective_scene_text = state["effective_scene_text"]
-    confirmation_scene_text = state["confirmation_scene_text"]
-    action_preview = state.get("action_preview")
-    updated_entity_ids = state.get("updated_entity_ids", [])
-    updated_npc_profile_ids = state.get("updated_npc_profile_ids", [])
-    npc_extraction = state.get("npc_extraction")
-    director_npc_profile_id = state.get("director_npc_profile_id")
-    director_npc_restock_scheduled = bool(state.get("director_npc_restock_scheduled"))
-    director_event_result = state.get("director_event_result")
-
-    if write_db:
-        if (
-            pipeline_input.handle_director_npc
-            and not cache.get("director_npc_restock_scheduled")
-        ):
-            with director_npc_store() as npc_store:
-                should_restock_director_npc = (
-                    len(npc_store.list_standby()) < DIRECTOR_NPC_STANDBY_TARGET
-                )
-            if should_restock_director_npc:
-                if pipeline_input.director_npc_restock_sync:
-                    run_director_npc_restock(
-                        trace_id,
-                        pipeline_input.turn_index,
-                        core_memory=core_memory,
-                        protagonist_name=updated_state.player.name,
-                    )
-                else:
-                    BACKGROUND_EXECUTOR.submit(
-                        run_director_npc_restock,
-                        trace_id,
-                        pipeline_input.turn_index,
-                        core_memory=core_memory,
-                        protagonist_name=updated_state.player.name,
-                    )
-                director_npc_restock_scheduled = True
-                cache["director_npc_restock_scheduled"] = True
-                state["director_npc_restock_scheduled"] = True
-
-    entity_update_data = {
-        "updated_entity_ids": updated_entity_ids,
-        "updated_npc_profile_ids": updated_npc_profile_ids,
-    }
-    if pipeline_input.handle_director_npc or pipeline_input.update_director_event:
-        entity_update_data.update(
-            {
-                "director_npc_profile_id": director_npc_profile_id,
-                "director_npc_restock_scheduled": director_npc_restock_scheduled,
-                "director_npc_result": model_data(
-                    getattr(pending, "director_npc_result", None)
-                ),
-                "director_event_result": model_data(director_event_result),
-            }
+    runtime = get_campaign_runtime()
+    committer = ConfirmationCommitter(
+        ConfirmationCommitServices(
+            current_state_store=current_state_store,
+            short_term_memory_store=short_term_memory_store,
+            pending_memory_store=pending_memory_store,
+            memory_store=memory_store,
         )
-
-    saved_pending_ids: list[str] = []
-    store_count_before = 0
-    store_count_after = 0
-    store_total = 0
-    pending_count_after = 0
-    batch_queued = bool(cache.get("memory_batch_scheduled"))
-
-    if write_db:
-        if not cache.get("state_saved"):
-            with current_state_store() as state_store:
-                state_store.save(updated_state)
-            cache["state_saved"] = True
-
-        with short_term_memory_store() as short_store:
-            if not cache.get("short_term_saved"):
-                if pipeline_input.clear_short_term_before_save:
-                    short_store.clear()
-                short_store.add_turn(
-                    scene_id=updated_state.scene.scene_id,
-                    turn_index=pipeline_input.turn_index,
-                    user_input=pipeline_input.user_input,
-                    scene_text=effective_scene_text,
-                )
-                cache["short_term_saved"] = True
-            short_term_after = short_store.get_recent()
-
-        with pending_memory_store() as pending_store:
-            if not cache.get("pending_memories_saved"):
-                saved_pending_ids = pending_store.save_many(pending_memory_result.items)
-                cache["saved_pending_ids"] = saved_pending_ids
-                cache["pending_memories_saved"] = True
-            else:
-                saved_pending_ids = cache.get("saved_pending_ids", [])
-            pending_count_after = pending_store.count()
-            should_batch = pending_store.should_trigger_batch(turn_threshold=5)
-
-        with memory_store() as mem_store:
-            store_count_before = mem_store.count()
-            store_count_after = store_count_before
-            store_total = len(mem_store.list_all())
-
-        summary_future = cache.get("scene_summary_future")
-        if not cache.get("scene_summary_scheduled"):
-            summary_future = BACKGROUND_EXECUTOR.submit(
-                run_scene_summary_maintenance,
-                confirmation_scene_text,
-                updated_state,
-                updated_state.scene.scene_id,
-                pipeline_input.turn_index,
-                trace_id,
-                core_memory=core_memory,
-            )
-            cache["scene_summary_future"] = summary_future
-            cache["scene_summary_scheduled"] = True
-        if should_batch and not cache.get("memory_batch_scheduled"):
-            batch_queued = submit_memory_batch_once(
-                run_memory_batch_maintenance,
-                updated_state,
-                trace_id,
-                pipeline_input.turn_index,
-                core_memory=core_memory,
-                wait_for_summary=summary_future,
-            )
-            cache["memory_batch_scheduled"] = batch_queued
-    else:
-        with short_term_memory_store() as short_store:
-            short_term_after = short_store.get_recent()
-
-        with memory_store() as mem_store:
-            store_total = mem_store.count()
-
-    if write_db:
-        if isinstance(pending, PendingTurn):
-            discard_pending_turn_group(pending.group_id)
-        else:
-            pipeline_input.pending_registry.pop(turn_id, None)
-        release_confirmation_lock(turn_id)
-
-    memory_data: dict = {
-        "pending_items": model_data(pending_memory_result.items),
-        "saved_pending_ids": saved_pending_ids,
-        "pending_count_after": pending_count_after,
-        "batch_queued": batch_queued,
-        "final_memories": [],
-        "saved_ids": [],
-        "store_count_before": store_count_before,
-        "store_count_after": store_count_after,
-        "store_total": store_total,
-    }
-    if not write_db:
-        memory_data["dry_run"] = True
-        memory_data["reason"] = pipeline_input.dry_run_memory_reason
-
-    scene_result_data = model_data(pipeline_input.scene_result)
-    if scene_text is not None:
-        scene_result_data["scene_text"] = scene_text
-
-    finish_data = {
-        "turn_id": turn_id,
-        "trace_id": trace_id,
-        "write_db": write_db,
-        **pipeline_input.finish_extra,
-        "state_before": model_data(pipeline_input.state_before),
-        "state_after": model_data(updated_state),
-        "scene_result": scene_result_data,
-        "action_preview": model_data(action_preview),
-        "short_term_memory_after": model_data(short_term_after),
-        "memory_extraction": memory_data,
-        "updated_entity_ids": updated_entity_ids,
-        "updated_npc_profile_ids": updated_npc_profile_ids,
-        "npc_extraction": model_data(npc_extraction) if npc_extraction is not None else None,
-        "status": "committed" if write_db else "dry_run",
-    }
-    if pipeline_input.handle_director_npc or pipeline_input.update_director_event:
-        finish_data.update(
-            {
-                "director_npc_profile_id": director_npc_profile_id,
-                "director_npc_restock_scheduled": director_npc_restock_scheduled,
-                "director_npc_result": model_data(
-                    getattr(pending, "director_npc_result", None)
-                ),
-                "director_event_result": model_data(director_event_result),
-            }
-        )
-
-    state["events"] = [
-        *state.get("events", []),
-        {
-            "step": "entity_profiles_updated",
-            "data": entity_update_data,
-        },
-        {
-            "step": "finish",
-            "data": finish_data,
-        },
-    ]
-    return state
+    )
+    scheduler = ConfirmationMaintenanceScheduler(
+        runtime,
+        ConfirmationMaintenanceServices(
+            director_npc_store=director_npc_store,
+            run_director_npc_restock=run_director_npc_restock,
+            run_scene_summary_maintenance=run_scene_summary_maintenance,
+            run_memory_batch_maintenance=run_memory_batch_maintenance,
+            submit_memory_batch_once=submit_memory_batch_once,
+        ),
+    )
+    return ConfirmationFinalizer(
+        runtime,
+        committer,
+        scheduler,
+        ConfirmationEventBuilder(),
+    ).finalize(state)

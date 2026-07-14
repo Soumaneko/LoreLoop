@@ -6,8 +6,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.domain.roll.schemas import Difficulty
 from app.runtime.session import (
-    PENDING_TURNS,
-    confirmation_lock,
+    get_campaign_runtime,
     pending_turn_variants,
 )
 from app.runtime.stores import current_state_store
@@ -66,9 +65,9 @@ def generate_turn_stream(
 
 
 def retry_turn_stream(turn_id: str):
-    lock = confirmation_lock(turn_id)
+    lock = get_campaign_runtime().confirmation_lock
     with lock:
-        pending = PENDING_TURNS.get(turn_id)
+        pending = get_campaign_runtime().pending_turns.get(turn_id)
         if pending is None:
             raise ValueError("Pending turn not found. Generate a scene before retrying.")
 

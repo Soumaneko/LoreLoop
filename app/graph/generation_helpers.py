@@ -15,7 +15,7 @@ from app.domain.plot_outline.schemas import PlotOutlineContext
 from app.domain.roll.schemas import Difficulty
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.serialization import model_data
-from app.runtime.session import PENDING_TURNS, PendingTurn
+from app.runtime.session import PendingTurn, get_campaign_runtime
 from app.runtime.stores import (
     core_memory_store,
     current_state_store,
@@ -141,7 +141,7 @@ def finalize_pending_turn(
 ) -> GenerationState:
     turn_id = str(uuid.uuid4())
     group_id = group_id or turn_id
-    PENDING_TURNS[turn_id] = PendingTurn(
+    get_campaign_runtime().pending_turns.add(PendingTurn(
         turn_id=turn_id,
         group_id=group_id,
         version_index=version_index,
@@ -155,7 +155,7 @@ def finalize_pending_turn(
         director_npc_result=state.get("director_npc_result"),
         turn_index=state["next_turn_index"],
         short_term_memory=state["short_term_memory"],
-    )
+    ))
     finalized = {
         **state,
         "turn_id": turn_id,

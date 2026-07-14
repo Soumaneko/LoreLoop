@@ -39,7 +39,6 @@ class ConfirmationPipelineInput:
     user_input: str
     turn_index: int
     stale_message: str
-    pending_registry: dict[str, PendingTurn] | dict[str, PendingOpening]
     update_director_event: bool = True
     handle_director_npc: bool = True
     director_npc_restock_sync: bool = False

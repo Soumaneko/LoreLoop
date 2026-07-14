@@ -15,7 +15,7 @@ from app.domain.core_memory import (
 )
 from app.domain.current_state import CurrentState
 from app.runtime.serialization import model_data
-from app.runtime.session import PENDING_OPENINGS, PendingOpening
+from app.runtime.session import PendingOpening, get_campaign_runtime
 from app.runtime.stores import core_memory_store, current_state_store
 
 from .initialization_state import InitializationState
@@ -100,12 +100,12 @@ def finalize_initialization_state(
         state_store.save(state["current_state"])
 
     turn_id = f"opening:{uuid.uuid4()}"
-    PENDING_OPENINGS[turn_id] = PendingOpening(
+    get_campaign_runtime().pending_openings.add(PendingOpening(
         turn_id=turn_id,
         config=state["config"],
         current_state=state["current_state"],
         scene_result=state["opening_scene"],
-    )
+    ))
     return {
         **state,
         "turn_id": turn_id,

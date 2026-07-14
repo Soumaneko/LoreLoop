@@ -6,9 +6,7 @@ from typing import Callable
 from langgraph.graph import END, START, StateGraph
 
 from app.runtime.session import (
-    PENDING_OPENINGS,
-    PENDING_TURNS,
-    confirmation_lock,
+    get_campaign_runtime,
 )
 
 from .confirmation_helpers import (
@@ -177,7 +175,8 @@ def confirm_stream(
     write_db: bool = True,
     scene_text: str | None = None,
 ):
-    if turn_id in PENDING_OPENINGS:
+    runtime = get_campaign_runtime()
+    if runtime.pending_openings.get(turn_id) is not None:
         yield from confirm_opening_stream(
             turn_id,
             write_db=write_db,
@@ -196,7 +195,7 @@ def confirm_turn_stream(
     write_db: bool = True,
     scene_text: str | None = None,
 ):
-    lock = confirmation_lock(turn_id)
+    lock = get_campaign_runtime().confirmation_lock
     with lock:
         yield from _confirm_turn_stream_locked(
             turn_id,
@@ -210,7 +209,8 @@ def _confirm_turn_stream_locked(
     write_db: bool = True,
     scene_text: str | None = None,
 ):
-    pending = PENDING_TURNS.get(turn_id)
+    runtime = get_campaign_runtime()
+    pending = runtime.pending_turns.get(turn_id)
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before confirming.")
 
@@ -226,7 +226,6 @@ def _confirm_turn_stream_locked(
                 "Pending turn is stale because CurrentState changed after generation. "
                 "Generate the turn again before confirming."
             ),
-            pending_registry=PENDING_TURNS,
             update_director_event=True,
             handle_director_npc=True,
         ),
@@ -252,7 +251,7 @@ def confirm_opening_stream(
     write_db: bool = True,
     scene_text: str | None = None,
 ):
-    lock = confirmation_lock(turn_id)
+    lock = get_campaign_runtime().confirmation_lock
     with lock:
         yield from _confirm_opening_stream_locked(
             turn_id,
@@ -266,7 +265,8 @@ def _confirm_opening_stream_locked(
     write_db: bool = True,
     scene_text: str | None = None,
 ):
-    pending = PENDING_OPENINGS.get(turn_id)
+    runtime = get_campaign_runtime()
+    pending = runtime.pending_openings.get(turn_id)
     if pending is None:
         raise ValueError("Pending opening not found. Initialize again before confirming.")
 
@@ -282,7 +282,6 @@ def _confirm_opening_stream_locked(
                 "Pending opening is stale because initialization state changed. "
                 "Initialize again before confirming."
             ),
-            pending_registry=PENDING_OPENINGS,
             update_director_event=False,
             handle_director_npc=True,
             director_npc_restock_sync=True,
