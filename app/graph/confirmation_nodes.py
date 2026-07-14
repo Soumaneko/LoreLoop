@@ -185,13 +185,22 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     action_preview = cache.get("action_preview")
     if action_preview is None:
+        scene_was_edited = (
+            state["effective_scene_text"]
+            != pipeline_input.scene_result.scene_text
+        )
         gateway = create_gateway()
         gateway.set_trace_context(turn_index=pipeline_input.turn_index, session_type="confirmation")
         action_preview = ActionPreviewAgent(gateway).generate(
             current_state=state["updated_state"],
             core_memory=state["core_memory"],
             recent_summaries=state.get("recent_summaries", []),
-            next_action_directions=pipeline_input.scene_result.next_action_directions,
+            next_action_directions=(
+                []
+                if scene_was_edited
+                else pipeline_input.scene_result.next_action_directions
+            ),
+            scene_facts=state["scene_facts"],
             trace_id=trace_id,
         )
     return {

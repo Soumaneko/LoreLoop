@@ -289,6 +289,30 @@ class TestDirectorEventStore:
         assert resolved.resolved_turn == 5
         assert resolved.resolved_reason == "事件已结束"
 
+    def test_exposure_and_contact_state_never_regress(self):
+        store = DirectorEventStore()
+        event = _event().model_copy(
+            update={
+                "exposure": "engaged",
+                "player_contact_state": "玩家正在追查事件核心线索。",
+                "last_presented_turn": 4,
+            }
+        )
+        store.save(event)
+
+        assert store.replace_player_contact(
+            event.event_id,
+            exposure="hidden",
+            player_contact_state="玩家尚未接触事件。",
+            turn_index=5,
+        ) is True
+
+        persisted = store.get_active("ambient")
+        assert persisted.exposure == "engaged"
+        assert persisted.player_contact_state == "玩家正在追查事件核心线索。"
+        assert persisted.last_presented_turn == 4
+        assert persisted.updated_turn == 5
+
 class TestDirectorEventReviewSchema:
     def test_resolve_fills_reason_when_missing(self):
         result = DirectorEventReviewResult.model_validate(

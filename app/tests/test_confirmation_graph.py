@@ -1,5 +1,12 @@
+from types import SimpleNamespace
+
 from langgraph.graph import END, START, StateGraph
 
+from app.domain.core_memory import CoreMemory
+from app.domain.current_state import CurrentState, PlayerState, SceneState
+from app.domain.scene_facts.schemas import SceneFactSet
+from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
+from app.graph import confirmation_nodes
 from app.graph.confirmation_graph import (
     build_confirmation_first_wave_graph,
     build_confirmation_second_wave_graph,
@@ -111,3 +118,51 @@ def test_parallel_success_is_cacheable_when_sibling_node_fails():
     assert state["cache"]["action_preview"] is marker
     assert state["node_errors"][0]["node"] == "fails"
     assert str(state["node_errors"][0]["exception"]) == "failed"
+
+
+def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(monkeypatch):
+    captured = {}
+    scene_facts = SceneFactSet(scene_focus="编辑后的场景", facts=[])
+    scene_result = SceneWriterResult(
+        scene_text="原始正文",
+        next_action_directions=[
+            NextActionDirection(
+                direction="继续原稿中的追逐",
+                rationale="原稿保留了追逐。",
+            )
+        ],
+    )
+
+    class _Gateway:
+        def set_trace_context(self, **_kwargs):
+            return None
+
+    class _PreviewAgent:
+        def __init__(self, _gateway):
+            pass
+
+        def generate(self, **kwargs):
+            captured.update(kwargs)
+            return {"previews": []}
+
+    monkeypatch.setattr(confirmation_nodes, "create_gateway", _Gateway)
+    monkeypatch.setattr(confirmation_nodes, "ActionPreviewAgent", _PreviewAgent)
+
+    state = {
+        "pipeline_input": SimpleNamespace(turn_index=1, scene_result=scene_result),
+        "trace_id": "trace",
+        "cache": {},
+        "effective_scene_text": "编辑后的正文",
+        "updated_state": CurrentState(
+            scene=SceneState(scene_id="scene_001", location="新地点"),
+            player=PlayerState(name="主角"),
+        ),
+        "core_memory": CoreMemory(items=[]),
+        "recent_summaries": [],
+        "scene_facts": scene_facts,
+    }
+
+    confirmation_nodes.action_preview_node(state)
+
+    assert captured["next_action_directions"] == []
+    assert captured["scene_facts"] is scene_facts

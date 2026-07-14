@@ -5,7 +5,8 @@ from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.roll.schemas import DIFFICULTY_DICE_COUNT, RollConfig, RollResult, RollResultBatch
 
 
-def _never_rolls(action: AtomicAction) -> bool:
+def action_never_rolls(action: AtomicAction) -> bool:
+    """Return whether program rules force an action to resolve automatically."""
     if action.action_type == "wait":
         return True
     return action.action_type == "move" and action.risk_level == "low"
@@ -16,7 +17,7 @@ class RollResolver:
         self.config = config or RollConfig()
 
     def select_roll_actions(self, parse_result: ActionParseResult) -> list[AtomicAction]:
-        actions = [a for a in parse_result.atomic_actions if not _never_rolls(a)]
+        actions = [a for a in parse_result.atomic_actions if not action_never_rolls(a)]
         if self.config.roll_only_when_needed:
             actions = [a for a in actions if a.likely_needs_roll]
 
@@ -30,7 +31,7 @@ class RollResolver:
         roll_actions: list[AtomicAction] | None = None,
     ) -> RollResultBatch:
         actions = roll_actions if roll_actions is not None else self.select_roll_actions(parse_result)
-        actions = [a for a in actions if not _never_rolls(a)]
+        actions = [a for a in actions if not action_never_rolls(a)]
         rng = random.Random(self.config.seed)
         mods_by_action = {}
         if modifier_batch is not None:

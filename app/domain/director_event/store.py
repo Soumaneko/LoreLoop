@@ -3,7 +3,14 @@ import sqlite3
 
 from app.domain.current_state.schemas import WorldClock
 
-from .schemas import DirectorEvent, utc_now
+from .schemas import DirectorEvent, DirectorEventExposure, utc_now
+
+
+_EXPOSURE_RANK: dict[DirectorEventExposure, int] = {
+    "hidden": 0,
+    "foreshadowed": 1,
+    "engaged": 2,
+}
 
 
 class DirectorEventStore:
@@ -126,18 +133,30 @@ class DirectorEventStore:
         self,
         event_id: str,
         *,
-        exposure: str,
+        exposure: DirectorEventExposure,
         player_contact_state: str,
         turn_index: int,
     ) -> bool:
         event = self.get_by_id(event_id)
         if event is None:
             return False
-        updated = event.model_copy(
-            update={
-                "exposure": exposure,
-                "player_contact_state": player_contact_state,
-                "last_presented_turn": turn_index if exposure != "hidden" else event.last_presented_turn,
+        exposure_regressed = _EXPOSURE_RANK[exposure] < _EXPOSURE_RANK[event.exposure]
+        effective_exposure = event.exposure if exposure_regressed else exposure
+        effective_contact_state = (
+            event.player_contact_state
+            if exposure_regressed
+            else player_contact_state
+        )
+        updated = DirectorEvent.model_validate(
+            {
+                **event.model_dump(mode="python"),
+                "exposure": effective_exposure,
+                "player_contact_state": effective_contact_state,
+                "last_presented_turn": (
+                    turn_index
+                    if effective_exposure != "hidden" and not exposure_regressed
+                    else event.last_presented_turn
+                ),
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
             }

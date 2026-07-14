@@ -11,6 +11,7 @@ from app.domain.context_facts.views import project_context_facts
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
+from app.domain.roll.resolver import action_never_rolls
 from app.domain.roll.schemas import RollResultBatch
 from app.domain.views import (
     project_current_state,
@@ -83,7 +84,11 @@ def build_action_judgments(
 
     for action in parse_result.atomic_actions:
         roll = roll_by_id.get(action.action_id)
-        if roll is None and action.likely_needs_roll:
+        if (
+            roll is None
+            and action.likely_needs_roll
+            and not action_never_rolls(action)
+        ):
             raise ValueError(
                 f"Missing roll result for action requiring a roll: {action.action_id}"
             )

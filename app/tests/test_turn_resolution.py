@@ -140,6 +140,16 @@ class TestActionJudgment:
         assert judgments[0].outcome_band == "success"
         assert judgments[0].dice is None
 
+    def test_low_risk_move_forced_without_roll_is_automatic_success(self):
+        action = _action(action_type="move", risk_level="low")
+
+        judgments = build_action_judgments(_parse(action), _roll_batch())
+
+        assert len(judgments) == 1
+        assert judgments[0].resolution_source == "automatic"
+        assert judgments[0].outcome_band == "success"
+        assert judgments[0].dice is None
+
     def test_action_resolution_fact_is_length_limited(self):
         with pytest.raises(ValueError):
             ActionResolutionFrame(

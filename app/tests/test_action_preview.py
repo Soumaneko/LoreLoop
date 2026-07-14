@@ -16,6 +16,7 @@ from app.domain.current_state import (
     SceneState,
 )
 from app.domain.scene_writer.schemas import NextActionDirection
+from app.domain.scene_facts.schemas import SceneFact, SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 
 
@@ -128,6 +129,10 @@ class TestActionPreviewAgent:
                     anchors=["米莉", "仓库区"],
                 )
             ],
+            scene_facts=SceneFactSet(
+                scene_focus="米莉公开了仓库区线索。",
+                facts=[SceneFact(fact_id="f1", fact="米莉指出仓库区夜间有异常。")],
+            ),
         )
 
         assert "closing_prompt" not in gateway.input_data
@@ -138,12 +143,16 @@ class TestActionPreviewAgent:
             "rationale": "正文结尾公开了米莉的线索，主角仍在酒馆内。",
             "anchors": ["米莉", "仓库区"],
         }]
+        scene_facts = json.loads(gateway.input_data["scene_facts_json"])
+        assert scene_facts["scene_focus"] == "米莉公开了仓库区线索。"
+        assert scene_facts["facts"][0]["fact"] == "米莉指出仓库区夜间有异常。"
 
     def test_prompt_excludes_full_scene_and_structured_action_fields(self):
         prompt = Path("app/prompts/confirmation/action_preview_v1.md").read_text(encoding="utf-8")
 
         assert "Closing Prompt" not in prompt
         assert "Scene Text" not in prompt
+        assert "Scene Facts" in prompt
         assert "不能被当作下一回合的结构化输入" in prompt
         assert "禁止输出 schema 以外的任何字段" in prompt
 

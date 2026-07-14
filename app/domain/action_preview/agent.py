@@ -5,9 +5,10 @@ from app.core.llm import LLMGateway
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_writer.schemas import NextActionDirection
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.views import project_current_state, project_scene_summaries
+from app.domain.views import project_current_state, project_scene_facts, project_scene_summaries
 
 
 class ActionPreviewAgent:
@@ -21,6 +22,7 @@ class ActionPreviewAgent:
         core_memory: CoreMemory,
         recent_summaries: list[SceneSummary],
         next_action_directions: list[NextActionDirection] | None = None,
+        scene_facts: SceneFactSet | None = None,
         trace_id: str | None = None,
     ) -> ActionPreviewResult:
         schema = ActionPreviewResult.model_json_schema()
@@ -37,6 +39,11 @@ class ActionPreviewAgent:
                         ],
                         ensure_ascii=False,
                         indent=2,
+                    ),
+                    "scene_facts_json": (
+                        project_scene_facts(scene_facts)
+                        if scene_facts is not None
+                        else "{}"
                     ),
                     "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),

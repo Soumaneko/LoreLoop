@@ -30,6 +30,12 @@
 {next_action_directions_json}
 ```
 
+## Scene Facts
+
+```json
+{scene_facts_json}
+```
+
 
 # 输出规范
 
@@ -51,8 +57,8 @@
 
 # 核心规则
 
-1. 预览必须从 Next Action Directions 和近期场景摘要所反映的当前选择或压力自然延展，并受到 CurrentState 中地点、在场角色、资源和状态约束。
-2. Next Action Directions 是 SceneWriter 给出的方向参考。优先吸收与当前状态和近期摘要相符的方向，但必须改写为具体可选行动，不得机械照抄。
+1. 预览必须从 Scene Facts、Next Action Directions 和近期场景摘要所反映的当前选择或压力自然延展，并受到 CurrentState 中地点、在场角色、资源和状态约束。
+2. Scene Facts 是最终确认正文的权威投影。Next Action Directions 只是 SceneWriter 给出的方向参考；当它为空时，应从 Scene Facts 与 CurrentState 推导具体可选行动。有冲突时始终以 Scene Facts 和 CurrentState 为准，且不得机械照抄方向原句。
 3. 四个选项之间必须有真实差异，覆盖不同目标、手段、风险或叙事功能。
 4. 选项必须是玩家下一步可以主动发起的行动，不是世界自动发生的事件，也不是剧情总结。
 5. 所有玩家可见字段只能基于公开信息制造选择张力，不得泄露隐藏真相、幕后设定、DirectorEvent、NPC 私密字段或模型推理过程。
