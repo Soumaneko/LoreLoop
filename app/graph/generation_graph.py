@@ -6,11 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
 
 from app.domain.roll.schemas import Difficulty
-from app.runtime.session import (
-    get_campaign_runtime,
-    pending_turn_variants,
-)
-from app.runtime.stores import current_state_store
+from app.runtime.session import get_campaign_runtime
 
 from .generation_helpers import (
     finalize_pending_turn,
@@ -91,7 +87,7 @@ def retry_turn_stream(turn_id: str):
         if pending is None:
             raise ValueError("Pending turn not found. Generate a scene before retrying.")
 
-        with current_state_store() as state_store:
+        with get_campaign_runtime().services.stores.current_state() as state_store:
             current_state = state_store.load_or_default()
         if current_state != pending.state_before:
             raise ValueError(
@@ -101,7 +97,7 @@ def retry_turn_stream(turn_id: str):
 
         version_index = max(
             variant.version_index
-            for variant in pending_turn_variants(pending.group_id)
+            for variant in get_campaign_runtime().pending_turns.variants(pending.group_id)
         ) + 1
         yield {
             "step": "retry_started",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -11,8 +10,6 @@ from typing import Any
 from .paths import (
     ACTIVE_SAVE_FILE,
     DEFAULT_SAVE_NAME,
-    LEGACY_APP_SAVES_DIR,
-    LEGACY_DATA_DIR,
     SAVES_DIR,
     CampaignPaths,
     validate_save_name,
@@ -40,34 +37,15 @@ class SaveManager:
         *,
         runtime: CampaignRuntime | None = None,
         active_file: str | Path | None = None,
-        legacy_data_dir: str | Path | None = None,
-        legacy_saves_dir: str | Path | None = None,
     ) -> None:
         self.root = Path(root)
         self.runtime = runtime or get_campaign_runtime()
         self.active_file = Path(active_file) if active_file else self.root / ACTIVE_SAVE_FILE.name
-        self.legacy_data_dir = (
-            Path(legacy_data_dir) if legacy_data_dir is not None else LEGACY_DATA_DIR
-        )
-        self.legacy_saves_dir = (
-            Path(legacy_saves_dir)
-            if legacy_saves_dir is not None
-            else LEGACY_APP_SAVES_DIR
-        )
-        is_default_root = self.root.resolve() == SAVES_DIR.resolve()
-        self._legacy_data_import_enabled = (
-            legacy_data_dir is not None or is_default_root
-        )
-        self._legacy_saves_import_enabled = (
-            legacy_saves_dir is not None or is_default_root
-        )
         self._lock = threading.RLock()
         self.root.mkdir(parents=True, exist_ok=True)
-        self._import_legacy_saves()
-        active_path = self._ensure_save_directory(
+        self._ensure_save_directory(
             self.runtime.campaign_id or DEFAULT_SAVE_NAME
         )
-        self._import_legacy_default(active_path)
         self._write_active_name(self.runtime.campaign_id)
 
     @property
@@ -150,67 +128,6 @@ class SaveManager:
         temporary = self.active_file.with_name(f"{self.active_file.name}.tmp")
         temporary.write_text(name, encoding="utf-8")
         os.replace(temporary, self.active_file)
-
-    def _import_legacy_default(self, active_path: Path) -> None:
-        """Copy the pre-save-layout data directory once without deleting it."""
-        if (
-            not self._legacy_data_import_enabled
-            or self.runtime.campaign_id != DEFAULT_SAVE_NAME
-            or active_path.name != DEFAULT_SAVE_NAME
-        ):
-            return
-        marker = active_path / ".legacy_imported"
-        if marker.exists() or not (self.legacy_data_dir / "core_memory.json").is_file():
-            return
-        for source in self.legacy_data_dir.iterdir():
-            if source.is_file() and not source.is_symlink():
-                shutil.copy2(source, active_path / source.name)
-        marker.write_text(
-            "Copied from the legacy data directory; the source was preserved.\n",
-            encoding="utf-8",
-        )
-
-    def _import_legacy_saves(self) -> None:
-        """Copy saves from the former app/saves location without overwriting."""
-        marker = self.root / ".app_saves_imported"
-        if (
-            not self._legacy_saves_import_enabled
-            or marker.exists()
-            or not self.legacy_saves_dir.is_dir()
-            or self.legacy_saves_dir.resolve() == self.root.resolve()
-        ):
-            return
-        for source in self.legacy_saves_dir.iterdir():
-            if source.is_symlink() or source.name.startswith(".") or not source.is_dir():
-                continue
-            try:
-                validate_save_name(source.name)
-            except ValueError:
-                continue
-            destination = self.root / source.name
-            if not destination.exists():
-                shutil.copytree(source, destination)
-                continue
-            if destination.is_dir() and not destination.is_symlink():
-                for item in source.iterdir():
-                    target = destination / item.name
-                    if item.is_file() and not item.is_symlink() and not target.exists():
-                        shutil.copy2(item, target)
-
-        legacy_active = self.legacy_saves_dir / self.active_file.name
-        if not self.active_file.exists() and legacy_active.is_file():
-            try:
-                active_name = validate_save_name(
-                    legacy_active.read_text(encoding="utf-8")
-                )
-                if (self.root / active_name).is_dir():
-                    self._write_active_name(active_name)
-            except (OSError, ValueError):
-                pass
-        marker.write_text(
-            "Copied missing saves from app/saves; the source was preserved.\n",
-            encoding="utf-8",
-        )
 
     def _describe(self, path: Path) -> SaveInfo:
         try:

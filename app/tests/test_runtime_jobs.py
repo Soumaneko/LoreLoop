@@ -40,7 +40,7 @@ def test_job_coordinator_records_success_and_failure():
         coordinator.shutdown()
 
 
-def test_compatibility_submit_forwards_all_keyword_arguments():
+def test_submit_forwards_all_keyword_arguments():
     coordinator = MaintenanceJobCoordinator(max_workers=1)
     try:
         future = coordinator.submit(

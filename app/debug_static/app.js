@@ -16,6 +16,8 @@ const els = {
   refreshBtn: $("refreshBtn"),
   saveSelect: $("saveSelect"),
   createSaveBtn: $("createSaveBtn"),
+  undoBtn: $("undoBtn"),
+  redoBtn: $("redoBtn"),
   turnInfo: $("turnInfo"),
 };
 
@@ -230,6 +232,9 @@ function setStatus(label, busy = false) {
   els.writeDbToggle.disabled = busy || !state.coreMemoryInitialized;
   els.saveSelect.disabled = busy;
   els.createSaveBtn.disabled = busy;
+  const history = state.serverState?.turn_history || {};
+  els.undoBtn.disabled = busy || Boolean(state.pendingTurnId) || !history.can_undo;
+  els.redoBtn.disabled = busy || Boolean(state.pendingTurnId) || !history.can_redo;
   const previous = document.querySelector(".scene-version-prev");
   const next = document.querySelector(".scene-version-next");
   const retry = document.querySelector(".scene-retry");
@@ -339,6 +344,20 @@ async function createSave() {
       setStatus("存档创建失败");
     }
     window.alert(err.message || (created ? "状态加载失败" : "存档创建失败"));
+  }
+}
+
+async function changeHistory(action) {
+  if (state.pendingTurnId) return;
+  setStatus(action === "undo" ? "正在撤销回合..." : "正在重做回合...", true);
+  try {
+    await api(`/api/history/${action}`, { method: "POST", body: "{}" });
+    resetClientForSave();
+    await refreshState();
+    setStatus(action === "undo" ? "已撤销上一回合" : "已重做回合");
+  } catch (err) {
+    setStatus(action === "undo" ? "撤销失败" : "重做失败");
+    window.alert(err.message || "历史操作失败");
   }
 }
 
@@ -1971,6 +1990,8 @@ els.confirmBtn.onclick = confirmTurn;
 els.refreshBtn.onclick = () => refreshState();
 els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
 els.createSaveBtn.onclick = createSave;
+els.undoBtn.onclick = () => changeHistory("undo");
+els.redoBtn.onclick = () => changeHistory("redo");
 els.difficultySelect.onchange = () => api("/api/difficulty", { method: "POST", body: JSON.stringify({ difficulty: els.difficultySelect.value }) }).catch(console.error);
 els.maxCharsInput.onchange = () => api("/api/max-chars", { method: "POST", body: JSON.stringify({ max_chars: parseInt(els.maxCharsInput.value, 10) || 1500 }) }).catch(console.error);
 

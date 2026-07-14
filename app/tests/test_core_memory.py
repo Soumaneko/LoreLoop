@@ -16,7 +16,7 @@ from app.domain.core_memory import (
 )
 from app.domain.current_state import CurrentStateStore
 from app.graph.initialization_helpers import preview_core_memory
-from app.runtime.session import PENDING_OPENINGS
+from app.runtime.session import get_campaign_runtime
 
 
 class TestCoreMemoryItem:
@@ -326,10 +326,9 @@ class TestDebugCoreMemoryPreview:
         self,
         tmp_path,
         monkeypatch,
+        configure_runtime_services,
     ):
         import app.graph.initialization_graph as core_memory_engine
-        from app.graph import initialization_helpers
-
         calls = []
 
         class RecordingGateway:
@@ -349,23 +348,8 @@ class TestDebugCoreMemoryPreview:
             def set_trace_context(self, **kwargs):
                 pass
 
-        core_store = CoreMemoryStore(tmp_path / "core_memory.json")
-        state_path = tmp_path / "current_state.db"
-        monkeypatch.setattr(
-            initialization_helpers,
-            "create_gateway",
-            lambda: RecordingGateway(),
-        )
-        monkeypatch.setattr(
-            initialization_helpers,
-            "core_memory_store",
-            lambda: core_store,
-        )
-        monkeypatch.setattr(
-            initialization_helpers,
-            "current_state_store",
-            lambda: CurrentStateStore(str(state_path)),
-        )
+        runtime = get_campaign_runtime()
+        configure_runtime_services(gateway_factory=RecordingGateway)
 
         result = core_memory_engine.apply_core_memory_init({
             "version": 1,
@@ -389,6 +373,8 @@ class TestDebugCoreMemoryPreview:
                 for item in opening_core["items"]
             )
             assert result["current_state"]["resources"]["money_unit"] == "美元"
-            assert core_store.load() == CoreMemory.model_validate(result["core_memory"])
+            assert runtime.stores.core_memory().load() == CoreMemory.model_validate(
+                result["core_memory"]
+            )
         finally:
-            PENDING_OPENINGS.pop(result["turn_id"], None)
+            get_campaign_runtime().pending_openings.remove(result["turn_id"])

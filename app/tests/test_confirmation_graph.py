@@ -120,7 +120,10 @@ def test_parallel_success_is_cacheable_when_sibling_node_fails():
     assert str(state["node_errors"][0]["exception"]) == "failed"
 
 
-def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(monkeypatch):
+def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(
+    monkeypatch,
+    configure_runtime_services,
+):
     captured = {}
     scene_facts = SceneFactSet(scene_focus="编辑后的场景", facts=[])
     scene_result = SceneWriterResult(
@@ -145,11 +148,12 @@ def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(mon
             captured.update(kwargs)
             return {"previews": []}
 
-    monkeypatch.setattr(confirmation_nodes, "create_gateway", _Gateway)
+    services = configure_runtime_services(gateway_factory=_Gateway)
     monkeypatch.setattr(confirmation_nodes, "ActionPreviewAgent", _PreviewAgent)
 
     state = {
         "pipeline_input": SimpleNamespace(turn_index=1, scene_result=scene_result),
+        "runtime_services": services,
         "trace_id": "trace",
         "cache": {},
         "effective_scene_text": "编辑后的正文",

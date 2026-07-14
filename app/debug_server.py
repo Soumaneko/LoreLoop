@@ -21,10 +21,12 @@ from app.api import (
     load_debug_state,
     memory_maintain_stream,
     preview_core_memory,
+    redo_last_turn,
     retry_turn_stream,
     save_difficulty,
     save_max_chars,
     switch_save,
+    undo_last_turn,
 )
 from app.runtime.session import get_campaign_runtime
 
@@ -107,6 +109,12 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/saves/switch":
             self._handle_json(lambda: switch_save(_read_json(self)))
+            return
+        if path == "/api/history/undo":
+            self._handle_json(undo_last_turn)
+            return
+        if path == "/api/history/redo":
+            self._handle_json(redo_last_turn)
             return
         self.send_error(404)
 

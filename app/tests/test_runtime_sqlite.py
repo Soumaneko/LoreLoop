@@ -33,7 +33,7 @@ def test_schema_version_rejects_newer_database():
 
 
 def test_npc_profile_store_migrates_pre_versioned_columns(tmp_path):
-    db_path = tmp_path / "legacy.db"
+    db_path = tmp_path / "pre_versioned.db"
     connection = sqlite3.connect(db_path)
     connection.execute(
         """

@@ -5,7 +5,6 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
-from app.core.llm.config import create_gateway
 from app.domain.core_memory import (
     CoreMemory,
     InitConfig,
@@ -16,23 +15,12 @@ from app.domain.core_memory import (
 from app.domain.current_state import CurrentState
 from app.runtime.serialization import model_data
 from app.runtime.session import PendingOpening, get_campaign_runtime
-from app.runtime.stores import core_memory_store, current_state_store
 
 from .initialization_state import InitializationState
 
 
-_DEFAULT_CREATE_GATEWAY = create_gateway
-_DEFAULT_CORE_MEMORY_STORE = core_memory_store
-_DEFAULT_CURRENT_STATE_STORE = current_state_store
-
-
-def initialization_gateway(state: InitializationState | None = None):
-    services = state.get("runtime_services") if state is not None else None
-    if services is not None and create_gateway is _DEFAULT_CREATE_GATEWAY:
-        return services.gateway(session_type="init")
-    gateway = create_gateway()
-    gateway.set_trace_context(session_type="init")
-    return gateway
+def initialization_gateway(state: InitializationState):
+    return state["runtime_services"].gateway(session_type="init")
 
 
 def build_core_memory_from_payload(payload: dict[str, Any]):
@@ -62,12 +50,6 @@ def preview_core_memory(payload: dict[str, Any]) -> dict[str, Any]:
 def prepare_initialization_state(payload: dict[str, Any]) -> InitializationState:
     runtime = get_campaign_runtime()
     services = runtime.services
-    if (
-        create_gateway is not _DEFAULT_CREATE_GATEWAY
-        or core_memory_store is not _DEFAULT_CORE_MEMORY_STORE
-        or current_state_store is not _DEFAULT_CURRENT_STATE_STORE
-    ):
-        services = None
     config, core_memory = build_core_memory_from_payload(payload)
     return {
         "events": [],
@@ -112,12 +94,9 @@ def apply_story_direction(
 def finalize_initialization_state(
     state: InitializationState,
 ) -> InitializationState:
-    services = state.get("runtime_services")
-    stores = services.stores if services is not None else None
-    core_factory = stores.core_memory if stores is not None else core_memory_store
-    state_factory = stores.current_state if stores is not None else current_state_store
-    core_factory().save(state["core_memory"])
-    with state_factory() as state_store:
+    stores = state["runtime_services"].stores
+    stores.core_memory().save(state["core_memory"])
+    with stores.current_state() as state_store:
         state_store.save(state["current_state"])
 
     turn_id = f"opening:{uuid.uuid4()}"

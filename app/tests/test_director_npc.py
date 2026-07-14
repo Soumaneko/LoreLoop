@@ -1,6 +1,7 @@
 import json
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 from app.core.llm import MockLLM
 from app.domain.core_memory.schemas import CoreMemory
@@ -527,7 +528,7 @@ class TestDirectorNPCWorkflow:
         assert store.list_standby() == []
         assert store.get_meta_int("last_dispatch_turn") == 9
 
-    def test_confirm_promotion_creates_npc_profile(self, monkeypatch, tmp_path):
+    def test_confirm_promotion_creates_npc_profile(self, tmp_path):
         director_db = tmp_path / "director_npcs.db"
         npc_profile_db = tmp_path / "npc_profiles.db"
         draft = DirectorNPCDraft.model_validate(json.loads(_draft_response("柯莱")))
@@ -560,9 +561,6 @@ class TestDirectorNPCWorkflow:
             finally:
                 store.close()
 
-        monkeypatch.setattr(confirmation_helpers, "director_npc_store", director_store_factory)
-        monkeypatch.setattr(confirmation_helpers, "npc_profile_store", npc_profile_store_factory)
-
         pending = type("Pending", (), {})()
         pending.director_npc_result = DirectorNPCWorkflowResult(
             dispatch=DirectorNPCDispatchDecision(
@@ -576,6 +574,10 @@ class TestDirectorNPCWorkflow:
         confirmation = confirmation_helpers.promote_dispatched_director_npc_profile(
             pending,
             turn_index=9,
+            stores=SimpleNamespace(
+                director_npc=director_store_factory,
+                npc_profile=npc_profile_store_factory,
+            ),
         )
         assert confirmation is not None
         assert confirmation.draft.name == "柯莱"

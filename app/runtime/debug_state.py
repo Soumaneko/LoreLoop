@@ -1,23 +1,6 @@
 from .serialization import model_data
-from .session import (
-    PENDING_OPENINGS,
-    PENDING_TURNS,
-    get_campaign_runtime,
-    pending_turn_variants,
-)
+from .session import get_campaign_runtime
 from .settings import load_settings
-from .stores import (
-    core_memory_store,
-    current_state_store,
-    director_event_store,
-    director_npc_store,
-    entity_store,
-    memory_store,
-    npc_profile_store,
-    pending_memory_store,
-    scene_summary_store,
-    short_term_memory_store,
-)
 
 
 def load_debug_state() -> dict:
@@ -27,52 +10,53 @@ def load_debug_state() -> dict:
 
 
 def _load_debug_state(runtime) -> dict:
-    with current_state_store() as state_store:
+    stores = runtime.stores
+    with stores.current_state() as state_store:
         current_state = state_store.load_or_default()
 
-    with short_term_memory_store() as short_store:
+    with stores.short_term() as short_store:
         short_term = short_store.get_recent()
         chat_history = short_store.list_all()
 
-    with memory_store() as mem_store:
+    with stores.memory() as mem_store:
         memory_count = mem_store.count()
         memories = mem_store.list_all()
         active_memory_count = len(mem_store.list_active())
         inactive_memory_count = memory_count - active_memory_count
 
-    with pending_memory_store() as pending_store:
+    with stores.pending_memory() as pending_store:
         pending_count = pending_store.count()
         pending_unclassified_count = pending_store.count_unclassified()
         pending_unclassified = pending_store.list_recent_unclassified(limit=20)
         pending_unclassified_turn_count = pending_store.unclassified_turn_count()
 
-    with scene_summary_store() as summary_store:
+    with stores.scene_summary() as summary_store:
         scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)
 
-    with entity_store() as ent_store:
+    with stores.entity() as ent_store:
         entity_profiles = ent_store.list_all()
 
-    with npc_profile_store() as npc_store:
+    with stores.npc_profile() as npc_store:
         npc_profiles = npc_store.list_all()
         npc_profiles_active = npc_store.list_all(active_only=True)
         npc_profile_count = len(npc_profiles)
         npc_active_profile_count = len(npc_profiles_active)
 
-    with director_event_store() as director_store:
+    with stores.director_event() as director_store:
         active_director_events = director_store.list_active()
         resolved_director_events = director_store.list_resolved()
 
-    with director_npc_store() as npc_store:
+    with stores.director_npc() as npc_store:
         director_npcs = npc_store.list_all()
         standby_director_npcs = [npc for npc in director_npcs if npc.status == "standby"]
         dispatched_director_npcs = [npc for npc in director_npcs if npc.status == "dispatched"]
         last_director_npc_dispatch_turn = npc_store.get_meta_int("last_dispatch_turn", 0)
 
     settings = load_settings()
-    core_memory = core_memory_store().load()
+    core_memory = stores.core_memory().load()
     group_ids = list(dict.fromkeys(
-        pending.group_id for pending in PENDING_TURNS.values()
+        pending.group_id for pending in runtime.pending_turns.values()
     ))
     pending_turn_groups = [
         {
@@ -92,7 +76,7 @@ def _load_debug_state(runtime) -> dict:
             ],
         }
         for group_id in group_ids
-        if (variants := pending_turn_variants(group_id))
+        if (variants := runtime.pending_turns.variants(group_id))
     ]
     pending_openings = [
         {
@@ -101,11 +85,12 @@ def _load_debug_state(runtime) -> dict:
             "current_state": model_data(opening.current_state),
             "scene_result": model_data(opening.scene_result),
         }
-        for opening in PENDING_OPENINGS.values()
+        for opening in runtime.pending_openings.values()
     ]
     return {
         "save_name": runtime.campaign_id,
         "save_path": str(runtime.paths.data_dir.resolve()),
+        "turn_history": runtime.history.status(),
         "needs_init": core_memory is None,
         "current_state": model_data(current_state),
         "core_memory": model_data(core_memory) if core_memory is not None else None,
@@ -135,7 +120,9 @@ def _load_debug_state(runtime) -> dict:
         "difficulty": settings.get("difficulty", "困难"),
         "max_chars": int(settings.get("max_chars", 1500)),
         "pending_turn_groups": pending_turn_groups,
-        "pending_opening_ids": [*PENDING_OPENINGS.keys()],
+        "pending_opening_ids": [
+            opening.turn_id for opening in runtime.pending_openings.values()
+        ],
         "pending_openings": pending_openings,
         "maintenance_jobs": [
             job.as_dict() for job in runtime.jobs.list(limit=100)

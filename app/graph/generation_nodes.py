@@ -18,12 +18,6 @@ from app.domain.scene_writer.agent import SceneWriterAgent
 from app.domain.scene_writer.helpers import build_entity_retrieval_anchors
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.runtime.serialization import model_data
-from app.runtime.stores import (
-    director_npc_store,
-    entity_store,
-    memory_store,
-    npc_profile_store,
-)
 from app.domain.director_npc.workflows import maybe_director_npc_workflow
 from app.domain.retrieval.service import retrieve_candidates
 from app.domain.entity.workflows import gather_entity_profiles_from_state_and_anchors
@@ -34,16 +28,13 @@ from .generation_helpers import assemble_context, gateway_for
 from .generation_state import GenerationState
 
 
-def _store_factory(state: GenerationState, name: str, legacy):
-    services = state.get("runtime_services")
-    if services is None:
-        return legacy
-    return getattr(services.stores, name)
+def _store_factory(state: GenerationState, name: str):
+    return getattr(state["runtime_services"].stores, name)
 
 
 def extract_context_facts_node(state: GenerationState) -> GenerationState:
     try:
-        with _store_factory(state, "memory", memory_store)() as mem_store:
+        with _store_factory(state, "memory")() as mem_store:
             context_fact_memories = retrieve_context_fact_memories(
                 user_input=state["user_input"],
                 memory_store=mem_store,
@@ -117,7 +108,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         state["current_state"],
     )
 
-    with _store_factory(state, "memory", memory_store)() as mem_store:
+    with _store_factory(state, "memory")() as mem_store:
         retrieved_memories = retrieve_candidates(
             action_parse_result,
             mem_store,
@@ -269,8 +260,8 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
 def maybe_director_npc_node(state: GenerationState) -> GenerationState:
     active_events = state.get("active_director_events", [])
     with (
-        _store_factory(state, "director_npc", director_npc_store)() as npc_store,
-        _store_factory(state, "npc_profile", npc_profile_store)() as profile_store,
+        _store_factory(state, "director_npc")() as npc_store,
+        _store_factory(state, "npc_profile")() as profile_store,
     ):
         director_npc_result = maybe_director_npc_workflow(
             core_memory=state["core_memory"],
@@ -344,8 +335,8 @@ def generate_scene_node(state: GenerationState) -> GenerationState:
         *beat_entity_anchors,
     ]
     with (
-        _store_factory(state, "entity", entity_store)() as ent_store,
-        _store_factory(state, "npc_profile", npc_profile_store)() as npc_store,
+        _store_factory(state, "entity")() as ent_store,
+        _store_factory(state, "npc_profile")() as npc_store,
     ):
         writer_entity_profiles = gather_entity_profiles_from_state_and_anchors(
             current_state=state["current_state"],

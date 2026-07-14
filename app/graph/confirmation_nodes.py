@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from app.core.llm.config import create_gateway
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.current_state import StateUpdater
 from app.domain.director_event.reviewer import DirectorEventReviewer
@@ -15,12 +14,6 @@ from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
 from app.domain.views import project_scene_facts
 from app.runtime.serialization import model_data
-from app.runtime.stores import (
-    director_event_store,
-    director_npc_store,
-    entity_store,
-    npc_profile_store,
-)
 from app.domain.director_event.workflows import (
     DirectorEventWorkflowBatchResult,
     update_director_event_workflow,
@@ -33,25 +26,14 @@ from .confirmation_state import ConfirmationState
 
 def _gateway_for(state: ConfirmationState):
     pipeline_input = state["pipeline_input"]
-    services = state.get("runtime_services")
-    if services is not None:
-        return services.gateway(
-            turn_index=pipeline_input.turn_index,
-            session_type="confirmation",
-        )
-    gateway = create_gateway()
-    gateway.set_trace_context(
+    return state["runtime_services"].gateway(
         turn_index=pipeline_input.turn_index,
         session_type="confirmation",
     )
-    return gateway
 
 
-def _store_factory(state: ConfirmationState, name: str, legacy):
-    services = state.get("runtime_services")
-    if services is None:
-        return legacy
-    return getattr(services.stores, name)
+def _store_factory(state: ConfirmationState, name: str):
+    return getattr(state["runtime_services"].stores, name)
 
 
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
@@ -173,7 +155,7 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
     trace_id = state["trace_id"]
     cache = state["cache"]
     npc_extraction = cache.get("npc_extraction")
-    with _store_factory(state, "director_event", director_event_store)() as event_store:
+    with _store_factory(state, "director_event")() as event_store:
         active_events = event_store.list_active()
     if npc_extraction is None:
         gateway = _gateway_for(state)
@@ -245,10 +227,10 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
     director_event_result = cache.get("director_event_result")
     if director_event_result is None and "director_event_result" not in cache:
         with (
-            _store_factory(state, "director_event", director_event_store)() as director_store,
-            _store_factory(state, "director_npc", director_npc_store)() as director_npc_repo,
-            _store_factory(state, "entity", entity_store)() as director_entity_repo,
-            _store_factory(state, "npc_profile", npc_profile_store)() as director_npc_profile_repo,
+            _store_factory(state, "director_event")() as director_store,
+            _store_factory(state, "director_npc")() as director_npc_repo,
+            _store_factory(state, "entity")() as director_entity_repo,
+            _store_factory(state, "npc_profile")() as director_npc_profile_repo,
         ):
             standby_director_npcs = director_npc_repo.list_standby()
             director_entity_profiles = [
@@ -285,6 +267,7 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                     promoted = ensure_director_npc_profile(
                         active_after.director_npc_id,
                         turn_index=pipeline_input.turn_index,
+                        stores=state["runtime_services"].stores,
                     )
                     if promoted is None:
                         raise ValueError(
@@ -302,7 +285,7 @@ def entity_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     updated_entity_ids = cache.get("updated_entity_ids", [])
     if "updated_entity_ids" not in cache:
-        with _store_factory(state, "entity", entity_store)() as ent_store:
+        with _store_factory(state, "entity")() as ent_store:
             gateway = _gateway_for(state)
             entity_result = update_entity_profiles_from_extraction(
                 scene_facts=state["scene_facts_json"],
@@ -327,7 +310,7 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     updated_npc_profile_ids = cache.get("updated_npc_profile_ids", [])
     if "updated_npc_profile_ids" not in cache:
-        with _store_factory(state, "npc_profile", npc_profile_store)() as npc_store:
+        with _store_factory(state, "npc_profile")() as npc_store:
             gateway = _gateway_for(state)
             npc_result = update_npc_profiles_from_extraction(
                 scene_facts=state["scene_facts_json"],

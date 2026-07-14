@@ -4,8 +4,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SAVES_DIR = PROJECT_ROOT / "saves"
-LEGACY_DATA_DIR = PROJECT_ROOT / "data"
-LEGACY_APP_SAVES_DIR = PROJECT_ROOT / "app" / "saves"
 ACTIVE_SAVE_FILE = SAVES_DIR / ".active_save"
 DEFAULT_SAVE_NAME = "default"
 
@@ -24,17 +22,12 @@ def validate_save_name(name: str) -> str:
 
 
 def configured_save_name() -> str:
-    candidates = (
-        (ACTIVE_SAVE_FILE, SAVES_DIR),
-        (LEGACY_APP_SAVES_DIR / ACTIVE_SAVE_FILE.name, LEGACY_APP_SAVES_DIR),
-    )
-    for active_file, saves_dir in candidates:
-        try:
-            name = validate_save_name(active_file.read_text(encoding="utf-8"))
-            if (saves_dir / name).is_dir():
-                return name
-        except (FileNotFoundError, OSError, ValueError):
-            continue
+    try:
+        name = validate_save_name(ACTIVE_SAVE_FILE.read_text(encoding="utf-8"))
+        if (SAVES_DIR / name).is_dir():
+            return name
+    except (FileNotFoundError, OSError, ValueError):
+        pass
     return DEFAULT_SAVE_NAME
 
 
@@ -94,17 +87,3 @@ class CampaignPaths:
 DEFAULT_CAMPAIGN_PATHS = CampaignPaths.from_data_dir(
     SAVES_DIR / configured_save_name()
 )
-
-# Stable compatibility constants for existing callers.
-DATA_DIR = DEFAULT_CAMPAIGN_PATHS.data_dir
-STATE_DB = DEFAULT_CAMPAIGN_PATHS.state_db
-MEMORY_DB = DEFAULT_CAMPAIGN_PATHS.memory_db
-PENDING_MEMORY_DB = DEFAULT_CAMPAIGN_PATHS.pending_memory_db
-SHORT_TERM_DB = DEFAULT_CAMPAIGN_PATHS.short_term_db
-SCENE_SUMMARY_DB = DEFAULT_CAMPAIGN_PATHS.scene_summary_db
-ENTITY_DB = DEFAULT_CAMPAIGN_PATHS.entity_db
-NPC_PROFILE_DB = DEFAULT_CAMPAIGN_PATHS.npc_profile_db
-DIRECTOR_EVENT_DB = DEFAULT_CAMPAIGN_PATHS.director_event_db
-DIRECTOR_NPC_DB = DEFAULT_CAMPAIGN_PATHS.director_npc_db
-CORE_MEMORY_JSON = DEFAULT_CAMPAIGN_PATHS.core_memory_json
-SETTINGS_JSON = DEFAULT_CAMPAIGN_PATHS.settings_json

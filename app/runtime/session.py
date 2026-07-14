@@ -19,6 +19,8 @@ from app.runtime.paths import (
 from app.runtime.services import RuntimeServices
 from app.runtime.stores import StoreBundle
 from app.runtime.jobs import MaintenanceJobCoordinator
+from app.runtime.serialization import model_data
+from app.runtime.turn_history import CampaignHistory
 
 
 @dataclass
@@ -54,19 +56,25 @@ class PendingTurnRepository:
     def __init__(self) -> None:
         self._items: dict[str, PendingTurn] = {}
         self._lock = threading.RLock()
+        self._on_add = None
+        self._on_remove = None
 
-    @property
-    def mapping(self) -> dict[str, PendingTurn]:
-        """Compatibility view for existing API and debug callers."""
-        return self._items
+    def configure_callbacks(self, *, on_add=None, on_remove=None) -> None:
+        self._on_add = on_add
+        self._on_remove = on_remove
 
     def get(self, turn_id: str) -> PendingTurn | None:
         with self._lock:
             return self._items.get(turn_id)
 
+    def __contains__(self, turn_id: str) -> bool:
+        return self.get(turn_id) is not None
+
     def add(self, pending: PendingTurn) -> None:
         with self._lock:
             self._items[pending.turn_id] = pending
+        if self._on_add:
+            self._on_add(pending)
 
     def variants(self, group_id: str) -> list[PendingTurn]:
         with self._lock:
@@ -79,6 +87,14 @@ class PendingTurnRepository:
                 key=lambda pending: pending.version_index,
             )
 
+    def values(self) -> list[PendingTurn]:
+        with self._lock:
+            return list(self._items.values())
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._items)
+
     def discard_group(self, group_id: str) -> None:
         with self._lock:
             turn_ids = [
@@ -88,6 +104,25 @@ class PendingTurnRepository:
             ]
             for turn_id in turn_ids:
                 self._items.pop(turn_id, None)
+        if self._on_remove:
+            self._on_remove(turn_ids)
+
+    def remove(self, turn_id: str) -> None:
+        with self._lock:
+            removed = self._items.pop(turn_id, None)
+        if removed is not None and self._on_remove:
+            self._on_remove([turn_id])
+
+    def restore(self, pending: PendingTurn) -> None:
+        with self._lock:
+            self._items[pending.turn_id] = pending
+
+    def clear(self, *, discard: bool = False) -> None:
+        with self._lock:
+            turn_ids = list(self._items)
+            self._items.clear()
+        if discard and self._on_remove:
+            self._on_remove(turn_ids)
 
 
 class PendingOpeningRepository:
@@ -96,22 +131,50 @@ class PendingOpeningRepository:
     def __init__(self) -> None:
         self._items: dict[str, PendingOpening] = {}
         self._lock = threading.RLock()
+        self._on_add = None
+        self._on_remove = None
 
-    @property
-    def mapping(self) -> dict[str, PendingOpening]:
-        return self._items
+    def configure_callbacks(self, *, on_add=None, on_remove=None) -> None:
+        self._on_add = on_add
+        self._on_remove = on_remove
 
     def get(self, turn_id: str) -> PendingOpening | None:
         with self._lock:
             return self._items.get(turn_id)
 
+    def __contains__(self, turn_id: str) -> bool:
+        return self.get(turn_id) is not None
+
     def add(self, pending: PendingOpening) -> None:
         with self._lock:
             self._items[pending.turn_id] = pending
+        if self._on_add:
+            self._on_add(pending)
 
     def remove(self, turn_id: str) -> None:
         with self._lock:
             self._items.pop(turn_id, None)
+        if self._on_remove:
+            self._on_remove([turn_id])
+
+    def restore(self, pending: PendingOpening) -> None:
+        with self._lock:
+            self._items[pending.turn_id] = pending
+
+    def values(self) -> list[PendingOpening]:
+        with self._lock:
+            return list(self._items.values())
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._items)
+
+    def clear(self, *, discard: bool = False) -> None:
+        with self._lock:
+            turn_ids = list(self._items)
+            self._items.clear()
+        if discard and self._on_remove:
+            self._on_remove(turn_ids)
 
 
 class CampaignRuntime:
@@ -140,6 +203,10 @@ class CampaignRuntime:
             jobs=self.jobs,
         )
         self._confirmation_lock = threading.RLock()
+        self.history = CampaignHistory(self.paths.data_dir)
+        self.history.recover_interrupted()
+        self._configure_pending_persistence()
+        self._restore_pending_transactions()
 
     @property
     def confirmation_lock(self) -> threading.RLock:
@@ -147,7 +214,170 @@ class CampaignRuntime:
         return self._confirmation_lock
 
     def has_pending_content(self) -> bool:
-        return bool(self.pending_turns.mapping or self.pending_openings.mapping)
+        return bool(len(self.pending_turns) or len(self.pending_openings))
+
+    def _configure_pending_persistence(self) -> None:
+        self.pending_turns.configure_callbacks(
+            on_add=self._persist_pending_turn,
+            on_remove=self.history.discard,
+        )
+        self.pending_openings.configure_callbacks(
+            on_add=self._persist_pending_opening,
+            on_remove=self.history.discard,
+        )
+
+    def _persist_pending_turn(self, pending: PendingTurn) -> bool:
+        # Some unit-level callers intentionally use lightweight stand-ins for
+        # graph inputs.  Only durable, schema-backed pending turns can safely be
+        # reconstructed after a process restart.
+        if not (
+            isinstance(pending, PendingTurn)
+            and isinstance(pending.state_before, CurrentState)
+            and isinstance(pending.context, PlotOutlineContext)
+            and isinstance(pending.outline, PlotOutlineResult)
+            and isinstance(pending.scene_result, SceneWriterResult)
+        ):
+            return False
+        payload = {
+            "turn_id": pending.turn_id,
+            "group_id": pending.group_id,
+            "version_index": pending.version_index,
+            "user_input": pending.user_input,
+            "difficulty": model_data(pending.difficulty),
+            "max_chars": pending.max_chars,
+            "state_before": model_data(pending.state_before),
+            "context": model_data(pending.context),
+            "outline": model_data(pending.outline),
+            "scene_result": model_data(pending.scene_result),
+            "director_npc_result": model_data(pending.director_npc_result),
+            "turn_index": pending.turn_index,
+            "short_term_memory": model_data(pending.short_term_memory),
+            # Futures and locks in the in-process cache are deliberately not
+            # durable. Confirmation will rebuild these values after restart.
+            "confirmation_cache": {},
+        }
+        self.history.save_pending(
+            turn_id=pending.turn_id,
+            kind="turn",
+            group_id=pending.group_id,
+            turn_index=pending.turn_index,
+            payload=payload,
+        )
+        return True
+
+    def _persist_pending_opening(self, pending: PendingOpening) -> bool:
+        if not (
+            isinstance(pending, PendingOpening)
+            and isinstance(pending.config, InitConfig)
+            and isinstance(pending.current_state, CurrentState)
+            and isinstance(pending.scene_result, SceneWriterResult)
+        ):
+            return False
+        payload = {
+            "turn_id": pending.turn_id,
+            "config": model_data(pending.config),
+            "current_state": model_data(pending.current_state),
+            "scene_result": model_data(pending.scene_result),
+            "confirmation_cache": {},
+        }
+        self.history.save_pending(
+            turn_id=pending.turn_id,
+            kind="opening",
+            group_id=None,
+            turn_index=0,
+            payload=payload,
+        )
+        return True
+
+    def _restore_pending_transactions(self) -> None:
+        for record in self.history.pending_records():
+            payload = record["payload_json"]
+            import json
+
+            data = json.loads(payload)
+            if record["kind"] == "turn":
+                self.pending_turns.restore(PendingTurn(
+                    turn_id=data["turn_id"],
+                    group_id=data["group_id"],
+                    version_index=data["version_index"],
+                    user_input=data["user_input"],
+                    difficulty=data["difficulty"],
+                    max_chars=data["max_chars"],
+                    state_before=CurrentState.model_validate(data["state_before"]),
+                    context=PlotOutlineContext.model_validate(data["context"]),
+                    outline=PlotOutlineResult.model_validate(data["outline"]),
+                    scene_result=SceneWriterResult.model_validate(data["scene_result"]),
+                    director_npc_result=(
+                        DirectorNPCWorkflowResult.model_validate(data["director_npc_result"])
+                        if data.get("director_npc_result") else None
+                    ),
+                    turn_index=data["turn_index"],
+                    short_term_memory=(
+                        ShortTermMemory.model_validate(data["short_term_memory"])
+                        if data.get("short_term_memory") else None
+                    ),
+                ))
+            else:
+                self.pending_openings.restore(PendingOpening(
+                    turn_id=data["turn_id"],
+                    config=InitConfig.model_validate(data["config"]),
+                    current_state=CurrentState.model_validate(data["current_state"]),
+                    scene_result=SceneWriterResult.model_validate(data["scene_result"]),
+                ))
+
+    def begin_confirmation(
+        self,
+        pending: PendingTurn | PendingOpening,
+        *,
+        write_db: bool,
+        scene_text: str | None,
+    ) -> bool:
+        if not write_db:
+            return False
+        if isinstance(pending, PendingTurn):
+            journaled = self._persist_pending_turn(pending)
+        else:
+            journaled = self._persist_pending_opening(pending)
+        if not journaled:
+            return False
+        self.jobs.wait_for_idle()
+        self.history.begin_confirmation(
+            pending.turn_id,
+            write_db=write_db,
+            scene_text=scene_text,
+        )
+        return True
+
+    def complete_confirmation(self, pending: PendingTurn | PendingOpening) -> None:
+        group_id = pending.group_id if isinstance(pending, PendingTurn) else None
+        self.history.complete_confirmation(pending.turn_id, group_id)
+
+    def undo(self) -> dict[str, Any]:
+        with self._confirmation_lock:
+            if self.has_pending_content():
+                raise RuntimeError("Confirm or discard pending content before undo")
+            self.jobs.wait_for_idle()
+            result = self.history.undo()
+            self._restart_jobs()
+            return result
+
+    def redo(self) -> dict[str, Any]:
+        with self._confirmation_lock:
+            if self.has_pending_content():
+                raise RuntimeError("Confirm or discard pending content before redo")
+            self.jobs.wait_for_idle()
+            result = self.history.redo()
+            self._restart_jobs()
+            return result
+
+    def _restart_jobs(self) -> None:
+        self.jobs.shutdown(wait=True)
+        self.jobs = MaintenanceJobCoordinator(max_workers=self._max_workers)
+        self.services = RuntimeServices(
+            stores=self.stores,
+            gateway_factory=self.gateway_factory,
+            jobs=self.jobs,
+        )
 
     def reconfigure(
         self,
@@ -164,8 +394,8 @@ class CampaignRuntime:
                     "discard pending content before switching saves."
                 )
             self.jobs.shutdown(wait=True)
-            self.pending_turns.mapping.clear()
-            self.pending_openings.mapping.clear()
+            self.pending_turns.clear(discard=discard_pending)
+            self.pending_openings.clear(discard=discard_pending)
             self.campaign_id = campaign_id
             self.paths = paths
             self.stores = StoreBundle(paths)
@@ -175,6 +405,10 @@ class CampaignRuntime:
                 gateway_factory=self.gateway_factory,
                 jobs=self.jobs,
             )
+            self.history = CampaignHistory(paths.data_dir)
+            self.history.recover_interrupted()
+            self._configure_pending_persistence()
+            self._restore_pending_transactions()
 
     def close(self, *, wait_for_jobs: bool = True) -> None:
         self.jobs.shutdown(wait=wait_for_jobs)
@@ -185,29 +419,5 @@ DEFAULT_CAMPAIGN_RUNTIME = CampaignRuntime(
     paths=DEFAULT_CAMPAIGN_PATHS,
 )
 
-# Compatibility aliases for the stable API and existing local tooling. New code
-# should access these collections through get_campaign_runtime().
-PENDING_TURNS = DEFAULT_CAMPAIGN_RUNTIME.pending_turns.mapping
-PENDING_OPENINGS = DEFAULT_CAMPAIGN_RUNTIME.pending_openings.mapping
-BACKGROUND_EXECUTOR = DEFAULT_CAMPAIGN_RUNTIME.jobs.executor
-
-
 def get_campaign_runtime() -> CampaignRuntime:
     return DEFAULT_CAMPAIGN_RUNTIME
-
-
-def pending_turn_variants(group_id: str) -> list[PendingTurn]:
-    return get_campaign_runtime().pending_turns.variants(group_id)
-
-
-def discard_pending_turn_group(group_id: str) -> None:
-    get_campaign_runtime().pending_turns.discard_group(group_id)
-
-
-def confirmation_lock(turn_id: str) -> threading.Lock:
-    """Compatibility wrapper; confirmation is serialized per campaign runtime."""
-    return get_campaign_runtime().confirmation_lock
-
-
-def submit_memory_batch_once(fn, /, *args, **kwargs) -> bool:
-    return get_campaign_runtime().jobs.submit_memory_batch_once(fn, *args, **kwargs)

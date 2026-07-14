@@ -269,11 +269,26 @@ def _confirm_pipeline_locked(
     write_db: bool = True,
     scene_text: str | None = None,
 ):
-    yield from stream_confirmation_pipeline(
-        pipeline_input,
+    runtime = get_campaign_runtime()
+    journaled = runtime.begin_confirmation(
+        pipeline_input.pending,
         write_db=write_db,
         scene_text=scene_text,
     )
+    try:
+        yield from stream_confirmation_pipeline(
+            pipeline_input,
+            write_db=write_db,
+            scene_text=scene_text,
+        )
+    except BaseException as exc:
+        if journaled:
+            runtime.jobs.wait_for_idle()
+            runtime.history.fail_confirmation(pipeline_input.turn_id, exc)
+        raise
+    else:
+        if journaled:
+            runtime.complete_confirmation(pipeline_input.pending)
 
 
 def confirm_opening_stream(

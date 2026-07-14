@@ -38,7 +38,10 @@ def test_scene_summary_graph_has_only_llm_workflow_nodes():
     }
 
 
-def test_scene_summary_graph_preserves_recursive_condensation(monkeypatch):
+def test_scene_summary_graph_preserves_recursive_condensation(
+    monkeypatch,
+    configure_runtime_services,
+):
     mock = MockLLM()
     mock.set_responses(
         [
@@ -77,8 +80,7 @@ def test_scene_summary_graph_preserves_recursive_condensation(monkeypatch):
         def __exit__(self, *_args):
             return None
 
-    monkeypatch.setattr(maintenance_nodes, "scene_summary_store", _StoreContext)
-    monkeypatch.setattr(maintenance_helpers, "scene_summary_store", _StoreContext)
+    configure_runtime_services(scene_summary=_StoreContext)
     monkeypatch.setattr(
         maintenance_nodes,
         "maintenance_gateway",
@@ -252,18 +254,14 @@ class _TraceSceneSummarizer:
         )
 
 
-def test_scene_summary_maintenance_sets_turn_trace_context(monkeypatch):
+def test_scene_summary_maintenance_sets_turn_trace_context(
+    monkeypatch,
+    configure_runtime_services,
+):
     gateway = _TraceGateway()
-    monkeypatch.setattr(maintenance_helpers, "create_gateway", lambda: gateway)
-    monkeypatch.setattr(
-        maintenance_nodes,
-        "scene_summary_store",
-        _TraceSceneSummaryStore,
-    )
-    monkeypatch.setattr(
-        maintenance_helpers,
-        "scene_summary_store",
-        _TraceSceneSummaryStore,
+    configure_runtime_services(
+        gateway_factory=lambda: gateway,
+        scene_summary=_TraceSceneSummaryStore,
     )
     monkeypatch.setattr(
         maintenance_nodes,
@@ -286,13 +284,18 @@ def test_scene_summary_maintenance_sets_turn_trace_context(monkeypatch):
     }
 
 
-def test_memory_batch_maintenance_sets_turn_trace_context(monkeypatch):
+def test_memory_batch_maintenance_sets_turn_trace_context(
+    monkeypatch,
+    configure_runtime_services,
+):
     gateway = _TraceGateway()
-    monkeypatch.setattr(maintenance_helpers, "create_gateway", lambda: gateway)
-    monkeypatch.setattr(maintenance_nodes, "pending_memory_store", _TraceStore)
-    monkeypatch.setattr(maintenance_nodes, "memory_store", _TraceStore)
-    monkeypatch.setattr(maintenance_nodes, "entity_store", _TraceStore)
-    monkeypatch.setattr(maintenance_nodes, "scene_summary_store", _TraceStore)
+    configure_runtime_services(
+        gateway_factory=lambda: gateway,
+        pending_memory=_TraceStore,
+        memory=_TraceStore,
+        entity=_TraceStore,
+        scene_summary=_TraceStore,
+    )
     monkeypatch.setattr(
         maintenance_nodes,
         "batch_classify_pending_memories_workflow",

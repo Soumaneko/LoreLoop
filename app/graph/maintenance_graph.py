@@ -8,7 +8,6 @@ from app.runtime.graph_cache import get_cached_graph
 
 from app.runtime.serialization import model_data
 from app.runtime.session import get_campaign_runtime
-from app.runtime.stores import pending_memory_store
 
 from .maintenance_helpers import (
     memory_batch_route,

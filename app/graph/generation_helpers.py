@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from app.core.llm.config import create_gateway
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -17,15 +16,6 @@ from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.serialization import model_data
 from app.runtime.services import RuntimeServices
 from app.runtime.session import CampaignRuntime, PendingTurn, get_campaign_runtime
-from app.runtime.stores import (
-    core_memory_store,
-    current_state_store,
-    director_event_store,
-    entity_store,
-    npc_profile_store,
-    scene_summary_store,
-    short_term_memory_store,
-)
 
 from .generation_state import GenerationEvent, GenerationState
 from .generation_profile_helpers import select_context_profiles
@@ -58,17 +48,11 @@ def assemble_context(
 
 
 def gateway_for(state: GenerationState):
-    services = state.get("runtime_services")
     turn_index = state.get("turn_index") or state.get("next_turn_index")
-    if services is not None:
-        return services.gateway(
-            turn_index=turn_index,
-            session_type="generation",
-        )
-    gateway = create_gateway()
-    if turn_index is not None:
-        gateway.set_trace_context(turn_index=turn_index, session_type="generation")
-    return gateway
+    return state["runtime_services"].gateway(
+        turn_index=turn_index,
+        session_type="generation",
+    )
 
 
 def prepare_generation_state(

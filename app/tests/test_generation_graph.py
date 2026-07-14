@@ -7,7 +7,7 @@ from app.graph.generation_events import GenerationEventPresenter
 from app.graph.generation_state import GenerationState
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory.schemas import ShortTermMemory
-from app.runtime.session import PENDING_TURNS, PendingTurn
+from app.runtime.session import PendingTurn, get_campaign_runtime
 
 
 def test_generation_graph_compiles():
@@ -163,11 +163,15 @@ def test_generation_event_presenter_flushes_context_before_later_nodes():
     assert presenter.finish() == []
 
 
-def test_retry_creates_next_version_in_same_group(monkeypatch):
+def test_retry_creates_next_version_in_same_group(
+    monkeypatch,
+    configure_runtime_services,
+):
     turn_id = "turn_v1"
     group_id = "group_1"
     state_before = object()
-    PENDING_TURNS[turn_id] = PendingTurn(
+    runtime = get_campaign_runtime()
+    runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
         group_id=group_id,
         version_index=1,
@@ -180,7 +184,7 @@ def test_retry_creates_next_version_in_same_group(monkeypatch):
         scene_result=SceneWriterResult(scene_text="版本一"),
         turn_index=3,
         short_term_memory=ShortTermMemory(),
-    )
+    ))
     captured = {}
 
     class _StateStore:
@@ -202,14 +206,14 @@ def test_retry_creates_next_version_in_same_group(monkeypatch):
         })
         yield {"step": "scene_written", "data": {"turn_id": "turn_v2"}}
 
-    monkeypatch.setattr(generation_graph, "current_state_store", _StateStore)
+    configure_runtime_services(current_state=_StateStore)
     monkeypatch.setattr(generation_graph, "_generate_turn_stream", _retry_stream)
 
     try:
         events = list(generation_graph.retry_turn_stream(turn_id))
-        old_version_retained = turn_id in PENDING_TURNS
+        old_version_retained = turn_id in runtime.pending_turns
     finally:
-        PENDING_TURNS.pop(turn_id, None)
+        runtime.pending_turns.remove(turn_id)
 
     assert events[0]["step"] == "retry_started"
     assert captured == {

@@ -103,7 +103,7 @@ def ensure_column(
     column: str,
     declaration: str,
 ) -> None:
-    """Idempotently add a column for compatibility with pre-versioned DBs."""
+    """Idempotently add a column while applying a schema migration."""
     columns = {
         row["name"] for row in connection.execute(f"PRAGMA table_info({table})")
     }

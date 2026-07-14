@@ -33,6 +33,14 @@ def list_maintenance_jobs(
     ]
 
 
+def undo_last_turn() -> dict:
+    return get_campaign_runtime().undo()
+
+
+def redo_last_turn() -> dict:
+    return get_campaign_runtime().redo()
+
+
 __all__ = [
     "apply_core_memory_init",
     "batch_classify_stream",
@@ -45,8 +53,10 @@ __all__ = [
     "list_saves",
     "memory_maintain_stream",
     "preview_core_memory",
+    "redo_last_turn",
     "retry_turn_stream",
     "save_difficulty",
     "save_max_chars",
     "switch_save",
+    "undo_last_turn",
 ]

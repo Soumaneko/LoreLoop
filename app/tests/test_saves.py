@@ -58,7 +58,6 @@ def test_save_manager_creates_lists_switches_and_isolates_state(tmp_path):
     finally:
         runtime.close()
 
-
 def test_switch_requires_explicitly_discarding_pending_content(tmp_path):
     root = tmp_path / "saves"
     runtime = CampaignRuntime(
@@ -104,70 +103,5 @@ def test_save_manager_ignores_hidden_directories_and_symlinks(tmp_path):
         assert [save.name for save in manager.list()] == ["default"]
         with pytest.raises(ValueError, match="not found"):
             manager.switch("linked")
-    finally:
-        runtime.close()
-
-
-def test_default_save_imports_legacy_data_once_without_removing_source(tmp_path):
-    root = tmp_path / "saves"
-    legacy = tmp_path / "data"
-    legacy.mkdir()
-    (legacy / "core_memory.json").write_text('{"items": []}', encoding="utf-8")
-    (legacy / "settings.json").write_text('{"difficulty": "普通"}', encoding="utf-8")
-    runtime = CampaignRuntime(
-        "default",
-        paths=CampaignPaths.from_data_dir(root / "default"),
-        max_workers=1,
-    )
-    try:
-        SaveManager(root, runtime=runtime, legacy_data_dir=legacy)
-
-        assert (root / "default" / "core_memory.json").read_text(encoding="utf-8") == '{"items": []}'
-        assert (root / "default" / "settings.json").is_file()
-        assert (root / "default" / ".legacy_imported").is_file()
-        assert (legacy / "core_memory.json").is_file()
-
-        (legacy / "settings.json").write_text('{"difficulty": "简单"}', encoding="utf-8")
-        SaveManager(root, runtime=runtime, legacy_data_dir=legacy)
-        assert "普通" in (root / "default" / "settings.json").read_text(encoding="utf-8")
-    finally:
-        runtime.close()
-
-
-def test_save_manager_imports_missing_app_saves_without_overwriting(tmp_path):
-    root = tmp_path / "saves"
-    legacy_saves = tmp_path / "app" / "saves"
-    (legacy_saves / "default").mkdir(parents=True)
-    (legacy_saves / "default" / "core_memory.json").write_text(
-        '{"source": "legacy"}', encoding="utf-8"
-    )
-    (legacy_saves / "another").mkdir()
-    (legacy_saves / "another" / "settings.json").write_text(
-        '{"difficulty": "普通"}', encoding="utf-8"
-    )
-    (root / "default").mkdir(parents=True)
-    (root / "default" / "core_memory.json").write_text(
-        '{"source": "root"}', encoding="utf-8"
-    )
-    runtime = CampaignRuntime(
-        "default",
-        paths=CampaignPaths.from_data_dir(root / "default"),
-        max_workers=1,
-    )
-    try:
-        SaveManager(
-            root,
-            runtime=runtime,
-            legacy_saves_dir=legacy_saves,
-            legacy_data_dir=tmp_path / "missing-data",
-        )
-
-        assert "root" in (root / "default" / "core_memory.json").read_text(
-            encoding="utf-8"
-        )
-        assert (root / "another" / "settings.json").is_file()
-        assert (root / ".app_saves_imported").is_file()
-        assert (legacy_saves / "another" / "settings.json").is_file()
-        assert (root / ".active_save").read_text(encoding="utf-8") == "default"
     finally:
         runtime.close()

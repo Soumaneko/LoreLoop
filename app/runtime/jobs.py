@@ -87,6 +87,7 @@ class MaintenanceJobCoordinator:
         self._memory_batch_future: concurrent.futures.Future | None = None
         self._memory_batch_job_id: str | None = None
         self._memory_batch_rerun: tuple[str, Callable, tuple, dict] | None = None
+        self._active_futures: set[concurrent.futures.Future] = set()
 
     def submit(self, fn, /, *args, **kwargs) -> concurrent.futures.Future:
         job_id = self._create_record(
@@ -175,6 +176,15 @@ class MaintenanceJobCoordinator:
     def shutdown(self, *, wait: bool = True) -> None:
         self.executor.shutdown(wait=wait)
 
+    def wait_for_idle(self) -> None:
+        """Wait until current work and any queued single-flight rerun finish."""
+        while True:
+            with self._guard:
+                futures = list(self._active_futures)
+            if not futures:
+                return
+            concurrent.futures.wait(futures)
+
     def _create_record(
         self,
         job_type: str,
@@ -201,11 +211,18 @@ class MaintenanceJobCoordinator:
 
     def _submit_record(self, job_id, fn, args, kwargs):
         future = self.executor.submit(self._run_record, job_id, fn, args, kwargs)
+        with self._guard:
+            self._active_futures.add(future)
         setattr(future, "job_id", job_id)
         future.add_done_callback(
             lambda completed: self._mark_cancelled(job_id) if completed.cancelled() else None
         )
+        future.add_done_callback(self._forget_future)
         return future
+
+    def _forget_future(self, future) -> None:
+        with self._guard:
+            self._active_futures.discard(future)
 
     def _run_record(self, job_id, fn, args, kwargs):
         with self._guard:

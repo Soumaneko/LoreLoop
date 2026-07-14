@@ -3,17 +3,9 @@ from __future__ import annotations
 import uuid
 from typing import Any, Literal
 
-from app.core.llm.config import create_gateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.maintenance import SceneSummaryMaintenanceResult
-from app.runtime.stores import (
-    core_memory_store,
-    current_state_store,
-    memory_store,
-    pending_memory_store,
-    scene_summary_store,
-)
 from app.runtime.services import RuntimeServices
 from app.runtime.session import get_campaign_runtime
 
@@ -23,26 +15,15 @@ from .maintenance_state import (
 )
 
 
-_DEFAULT_CREATE_GATEWAY = create_gateway
-_DEFAULT_SCENE_SUMMARY_STORE = scene_summary_store
-
-
 def maintenance_gateway(
     *,
     turn_index: int | None = None,
-    services: RuntimeServices | None = None,
+    services: RuntimeServices,
 ):
-    if services is not None and create_gateway is _DEFAULT_CREATE_GATEWAY:
-        return services.gateway(
-            turn_index=turn_index,
-            session_type="maintenance",
-        )
-    gateway = create_gateway()
-    context: dict[str, Any] = {"session_type": "maintenance"}
-    if turn_index is not None:
-        context["turn_index"] = turn_index
-    gateway.set_trace_context(**context)
-    return gateway
+    return services.gateway(
+        turn_index=turn_index,
+        session_type="maintenance",
+    )
 
 
 def prepare_scene_summary_state(
@@ -73,13 +54,7 @@ def prepare_scene_summary_state(
 def scene_summary_route(
     state: SceneSummaryMaintenanceState,
 ) -> Literal["scene_summary_condense", "done"]:
-    services = state.get("runtime_services")
-    factory = (
-        services.stores.scene_summary
-        if services and scene_summary_store is _DEFAULT_SCENE_SUMMARY_STORE
-        else scene_summary_store
-    )
-    with factory() as store:
+    with state["runtime_services"].stores.scene_summary() as store:
         if store.should_condense(1, threshold=state.get("threshold", 10)):
             return "scene_summary_condense"
     return "done"
