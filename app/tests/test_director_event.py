@@ -340,18 +340,38 @@ class TestDirectorEventReviewerInput:
 
 
 class TestDirectorEventViews:
-    def test_active_projection_hides_progress_deadline(self):
-        data = json.loads(project_director_event(_event()))
+    def test_hidden_projection_exposes_only_current_progress_and_entry_points(self):
+        event = _event()
+        data = json.loads(project_director_event(event))
 
         assert data["entry_points"]
         assert data["exposure"] == "hidden"
+        assert data["already_happened"] == [
+            f"主角当前接触情况：{event.player_contact_state}"
+        ]
+        assert data["currently_happening"] == event.milestones[0]
+        assert "milestones" not in data
+        assert "progress_index" not in data
+        assert "player_contact_state" not in data
+        assert "milestone_interval_steps" not in data
         assert "next_progress_clock" not in data
 
-    def test_active_projection_omits_entry_points_after_engaged(self):
-        data = json.loads(project_director_event(_event().model_copy(update={"exposure": "engaged"})))
+    @pytest.mark.parametrize("exposure", ["foreshadowed", "engaged"])
+    def test_visible_projection_omits_entry_points_and_merges_past_state(self, exposure):
+        event = _event().model_copy(update={
+            "exposure": exposure,
+            "progress_index": 1,
+            "player_contact_state": "玩家已经看过驿站公告。",
+        })
+        data = json.loads(project_director_event(event))
 
-        assert data["exposure"] == "engaged"
+        assert data["exposure"] == exposure
         assert "entry_points" not in data
+        assert data["already_happened"] == [
+            event.milestones[0],
+            "主角当前接触情况：玩家已经看过驿站公告。",
+        ]
+        assert data["currently_happening"] == event.milestones[1]
 
     def test_plot_projection_exposes_only_consumption_boundaries(self):
         consumptions = [
@@ -389,6 +409,21 @@ class TestDirectorEventViews:
 
 
 class TestDirectorEventConsumer:
+    def test_prompt_distinguishes_private_facts_from_forbidden_conclusions(self):
+        prompt = Path(
+            "app/prompts/generation/director_event_consume_v1.md"
+        ).read_text(encoding="utf-8")
+
+        assert "已经成立、真实存在，但本回合不应向角色或玩家公开" in prompt
+        assert "防止下游 Plot 发生知识泄露" in prompt
+        assert "already_happened" in prompt
+        assert "currently_happening" in prompt
+        assert "player_contact_state：原样复制" not in prompt
+        assert "不得直接复制进 allowed_facts" in prompt
+        assert "allowed_facts 必须完成前台投影" in prompt
+        assert "可以确定必要的公开载体、在场群体、可观察行为" in prompt
+        assert "这是照抄 already_happened" in prompt
+
     def test_consumption_schema_keeps_use_decision_consistent(self):
         with pytest.raises(ValidationError):
             DirectorEventConsumption(
@@ -413,7 +448,6 @@ class TestDirectorEventConsumer:
                     "event_id": arc.event_id,
                     "reason": "仅提到目标地点，没有真实接触。",
                     "use_event": False,
-                    "player_contact_state": "模型擅自改写的主线接触状态。",
                     "allowed_facts": [],
                     "immutable_constraints": [],
                     "forbidden_inferences": ["不得表现远方现场征兆。"],
@@ -422,7 +456,6 @@ class TestDirectorEventConsumer:
                     "event_id": ambient.event_id,
                     "reason": "当前场景存在自然接触。",
                     "use_event": True,
-                    "player_contact_state": "模型擅自改写的环境接触状态。",
                     "allowed_facts": ["驿站开始拒收部分无印信件。"],
                     "immutable_constraints": ["征兆发生在北郡驿站。"],
                     "forbidden_inferences": ["不得确认幕后势力。"],
@@ -446,6 +479,9 @@ class TestDirectorEventConsumer:
             ambient.player_contact_state,
         ]
         input_data = spy.calls[0]["input_data"]
+        output_schema = json.loads(input_data["output_schema_json"])
+        consumption_schema = output_schema["$defs"]["_DirectorEventConsumptionDraft"]
+        assert "player_contact_state" not in consumption_schema["properties"]
         assert set(input_data) == {
             "core_memory_json",
             "current_state_json",

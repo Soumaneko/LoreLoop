@@ -7,8 +7,23 @@ def project_director_event(
     event: DirectorEvent,
 ) -> str:
     data = event.semantic_view()
-    data.pop("next_progress_clock", None)
-    if event.exposure == "engaged":
+    past_milestones = event.milestones[:event.progress_index]
+    current_milestone = event.milestones[event.progress_index]
+    for key in (
+        "milestones",
+        "milestone_interval_steps",
+        "next_progress_clock",
+        "progress_index",
+        "player_contact_state",
+        "last_presented_turn",
+    ):
+        data.pop(key, None)
+    data["already_happened"] = [
+        *past_milestones,
+        f"主角当前接触情况：{event.player_contact_state}",
+    ]
+    data["currently_happening"] = current_milestone
+    if event.exposure != "hidden":
         data.pop("entry_points", None)
     return json.dumps(data, ensure_ascii=False, indent=2)
 

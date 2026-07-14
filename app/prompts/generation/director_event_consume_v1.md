@@ -64,34 +64,43 @@
 - event_id：原样复制对应事件 ID。
 - reason：先说明本回合是否存在真实接触、因果关联和叙事空间，再作使用决定。
 - use_event：本回合是否允许 Plot 使用该事件的前台材料。`true` 只代表授权，不代表 Plot 必须使用。
-- player_contact_state：原样复制对应 DirectorEvent 的 player_contact_state。这是此前确认回合结束后，主角对该事件当前接触与认知程度的完整快照；不得增量续写、概括或改动。程序会以事件原值强制覆盖。
-- allowed_facts：Plot 本回合可以明确写入剧情的前台事实。`use_event=false` 时必须为空。
-- immutable_constraints：即使不直接公开，也不得被 Plot 矛盾、搬移或改写的相关事实。
-- forbidden_inferences：Plot 不得从现有材料继续推导或补造的内容。
+- allowed_facts：根据 already_happened、currently_happening、CurrentState 与 Player Input 共同规划出的“本回合可以具体表现什么”。它必须是适合当前接触点的新前台投影，而不是对输入字段或历史事实的摘要。`use_event=false` 时必须为空。
+- immutable_constraints：已经成立、真实存在，但本回合不应向角色或玩家公开的世界事实。提供它们是为了让下游 Plot 避免生成与真实世界状态矛盾的内容，不代表 Plot 可以公开这些事实。
+- forbidden_inferences：角色或 Plot 目前不得从前台材料得出的结论。该字段用于防止下游 Plot 发生知识泄露，或替玩家过早识破身份、幕后原因、隐藏关系与其他尚无充分依据的结论。
 
 
 # 判断规则
 
 1. 分别判断每个事件，不得根据 role 设置优先级，也不得强制至少使用一个事件。
-2. 当前地点、在场人物、玩家明确接触的对象和 Context Facts 中已成立的接触，是判断前台可用性的主要依据。
-3. 玩家仅仅提到、计划前往、回忆或询问某个地点，不等于已经身处该地点，也不等于能看见该地点的现场征兆。
-4. hidden 事件只能通过当前真正可接触的 entry_point 进入前台。trigger_anchors 只是候选关联，不能覆盖物理位置、载体和观察条件。
-5. foreshadowed 事件只能使用玩家已经接触的线索和当前 milestone 中与本回合直接相关的部分，不得重新使用 entry_point 制造重复引入。
-6. engaged 事件可以使用 premise 和当前 milestone 维持正在发生的前台局势，但不得擅自推进到下一 milestone。
-7. allowed_facts 必须忠实来自事件输入。必须保留原有地点、行动方、持有人、载体、时间状态和可见方式，不得把“工会告示板上的公告”改成“某人随身携带的公告”。
-8. 必须结合 player_contact_state 区分新接触与既有认知。已经记录为主角看过、听过或知道的线索，不得在 allowed_facts 中伪装成本回合首次发现；若本回合只是继续谈论、利用或追踪该线索，应明确保持其“已经知道”的状态。
-9. 可以压缩措辞，但不得新增专有名词、历史、法律条文、组织结构、人物关系、物品来源、动机或幕后因果。
-10. immutable_constraints 只保留本回合确实可能发生冲突的后台事实。它们是私下创作边界，不代表角色已经知道，也不得直接公开。
-11. forbidden_inferences 只保护根据 allowed_facts 不能得出的结论，例如张贴者身份、幕后原因、未公开知识或征兆与其他事件的隐藏关系。不得否定、延后或改写事件输入中已经成立的世界事实。
-12. `use_event=true` 只是把一组可选前台材料授权给 Plot，不代表该事件必须出现在本回合。因此只要存在自然接触面且材料本身不会改变玩家行动，就应允许使用，不得因为玩家没有主动调查、担心 Plot 一定使用或材料并非本回合核心而拒绝。
-13. 若材料本身会打断玩家行动、要求改变地点或载体、需要角色获得未建立的知识、造成叙事螺旋或强行加戏，才应 `use_event=false`。
-14. `use_event=false` 的 consumption 不会传给 Plot。此时不得在 allowed_facts 中留下任何事件前台内容，也不需要为 Plot 罗列与本回合无关的约束。
+2. 先从 CurrentState 和 Player Input 确定本回合可能形成的接触点，包括当前位置、在场人物、玩家明确操作的对象，以及玩家本回合明确要前往或接触的地点与人物；再判断 currently_happening 可以通过该接触点表现出什么。
+3. allowed_facts 必须完成前台投影，而不是摘抄 currently_happening。每条应说明当前事件状态在本回合接触点可以通过什么地点、人物、公开行为、环境变化或可观察征兆具体表现。不得只复述等后台摘要。
+4. 必须结合 already_happened 区分新接触与既有认知。已经记录为主角看过、听过或知道的线索，只能作为本轮行动的认知起点，不能再次成为 allowed_facts；
+5. immutable_constraints 只保留本回合确实可能发生冲突的真实后台事实。它们约束 Plot 不得写出相反事实，但不得被当作角色知识或旁白公开内容。
+6. forbidden_inferences 只限制根据 allowed_facts 目前不能得出的结论，例如身份、幕后原因、未公开知识或征兆与其他事件的隐藏关系。它不是世界事实，也不得用来否定、延后或改写 already_happened 与 currently_happening 中已经成立的状态。
+7. `use_event=true` 只是把一组可选前台材料授权给 Plot，不代表该事件必须出现在本回合。因此只要存在自然接触面且材料本身不会改变玩家行动，就应允许使用，不得因为玩家没有主动调查、担心 Plot 一定使用或材料并非本回合核心而拒绝。
+8. 若材料本身会打断玩家行动、要求改变地点或载体、需要角色获得未建立的知识、造成叙事螺旋或强行加戏，才应 `use_event=false`。
+
+
+# 前台投影示例
+
+假设 already_happened 记录“莱尔看过木偶师驻留便条”，currently_happening 记录“木偶怪谈在镇民间发酵，埃利奥调整表演并继续滞留”，而玩家本回合明确前往镇广场：
+
+- 不合格的 allowed_facts：“莱尔看过一张木偶师驻留便条。”这是照抄 already_happened，没有规划本回合的新表现。
+- 合格的 allowed_facts：“镇广场木偶戏台附近的镇民态度明显分化：有人刻意绕开，也有人因‘木偶会自己说话’的传闻专程围观；埃利奥仍在本镇安排演出，并公开调整表演以应对这场怪谈。”这是 currently_happening 在本回合接触点的具体前台投影，没有新增幕后原因或下一阶段。
+
+
+# 字段区分示例
+
+假设 allowed_facts 是“发现一具尸体，脖子上有两个细小的血洞”：
+
+- 合格的 immutable_constraints：“凶手是吸血鬼男爵，他用魔法冰锥刺穿了死者，并不是用牙齿咬的。”这是已经成立但本轮不应公开的世界事实；Plot 就不会写成：“你在现场发现了一颗断裂的毒蛇牙齿”（破坏了冰锥的设定）
+- 合格的 forbidden_inferences：“不得描写为“咬痕”，不得让主角推断这是吸血鬼干的，不得让主角得出“死者是被吸干血而死”的结论。”这是当前证据不足以支持的角色结论，用于防止知识泄露和过早破案；Plot 就不会写成：“这两个血洞一看就是吸血鬼留下的咬痕”（被表象误导，且替玩家完成了推理，甚至推理还是错的）。
 
 
 # 禁止事项
 
 1. 不得输出候选剧情、完整 planned event、台词、镜头、氛围或 SceneWriter 指令。
-2. 不得修改事件 premise、milestones、player_contact_state 或 entry_points。
+2. 不得修改事件 premise、already_happened、currently_happening 或 entry_points。
 3. 不得因为锚点字符串出现在 User Input 或 Context Facts 中，就自动判断入口已经可见。
 4. 不得把后台事实伪装成角色已知事实。
 5. 不得把多个事件合并成一个 consumption。

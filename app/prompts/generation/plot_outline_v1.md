@@ -112,7 +112,7 @@
    - hidden_secret 只能通过 NPC 的行为、暗示、回避、矛盾等前台可观察方式间接体现，不得以旁白形式直接公开给玩家（除非 TurnResolutionResult 明确揭示）。
    - core_motivation 只能转译为可观察的倾向、压力或行为模式，不得作为旁白真相直接陈述。
    - **创作自由与角色约束的区别**：你可以基于 hidden_secret 决定"这个 NPC 本回合会暗中破坏某个线索"（这是创作），但你不能让旁白直接说"这个 NPC 暗中破坏了线索"（这是公开隐秘）。前台表现和后台驱动是两回事。
-7. DirectorEvent Consumer 已经完成是否使用和信息裁剪。`allowed_facts` 是本回合唯一可写入前台的导演事件事实，可以不用，但使用时必须保持其人物、地点、持有人、载体、时间状态和可见方式；`immutable_constraints` 必须遵守但不得因此主动公开后台信息；`forbidden_inferences` 中的内容绝对不得补造。上述四个字段以外的导演事件内容一律视为不存在。
+7. DirectorEvent：`player_contact_state`是已经发生的事情，不能重复发生；`allowed_facts` 是本回合唯一可写入前台的导演事件事实，可以不用，但使用时必须保持其人物、地点、持有人、载体、时间状态和可见方式；`immutable_constraints` 必须遵守但不得因此主动公开后台信息；`forbidden_inferences` 中的内容绝对不得补造。上述四个字段以外的导演事件内容一律视为不存在。
 8. 必须以 `player_contact_state` 判断线索的新旧。主角已经看过、听过、确认或知晓的内容，不得再次规划为“注意到、发现、首次得知”；可以直接让角色基于既有认知继续讨论、行动或调查。只有 allowed_facts 明确提供了新的接触结果时，才能规划新的发现。
 9. Director NPC Candidate 不为 null 时，你有二次裁量权：自然、轻量、有因果交点时可使用；若会打断当前行动、要求创造未建立事实或破坏节奏，应拒绝。不能为了省事每次都拒绝。
 10. 不得把 Context Facts 中未列出的内容当作否定事实或失败理由；Plot 只能落实 TurnResolutionResult 已经确定的结果，并用 Context Facts 中存在的既有事实维持连续性。

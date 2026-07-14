@@ -23,6 +23,25 @@ from .schemas import (
 from .views import project_director_events
 
 
+class _DirectorEventConsumptionDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    use_event: bool
+    allowed_facts: list[str] = Field(default_factory=list)
+    immutable_constraints: list[str] = Field(default_factory=list)
+    forbidden_inferences: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_use_decision(self):
+        if self.use_event and not self.allowed_facts:
+            raise ValueError("use_event=true requires at least one allowed_fact")
+        if not self.use_event and self.allowed_facts:
+            raise ValueError("use_event=false requires allowed_facts to be empty")
+        return self
+
+
 class DirectorEventConsumer:
     def __init__(self, llm: LLMGateway):
         self.llm = llm
@@ -47,7 +66,9 @@ class DirectorEventConsumer:
         class RuntimeDirectorEventConsumptionBatch(BaseModel):
             model_config = ConfigDict(extra="forbid")
 
-            consumptions: list[DirectorEventConsumption] = Field(default_factory=list)
+            consumptions: list[_DirectorEventConsumptionDraft] = Field(
+                default_factory=list
+            )
 
             @model_validator(mode="after")
             def _require_one_result_per_event(self):
@@ -87,10 +108,9 @@ class DirectorEventConsumer:
         by_id = {item.event_id: item for item in result.consumptions}
         events_by_id = {event.event_id: event for event in events}
         return [
-            by_id[event_id].model_copy(
-                update={
-                    "player_contact_state": events_by_id[event_id].player_contact_state,
-                }
+            DirectorEventConsumption(
+                **by_id[event_id].model_dump(),
+                player_contact_state=events_by_id[event_id].player_contact_state,
             )
             for event_id in expected_ids
         ]
