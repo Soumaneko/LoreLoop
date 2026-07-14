@@ -1,0 +1,285 @@
+from __future__ import annotations
+
+import concurrent.futures
+import threading
+import uuid
+from collections import Counter, OrderedDict
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Callable, Literal
+
+
+JobStatus = Literal[
+    "queued",
+    "running",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "superseded",
+]
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass(frozen=True)
+class MaintenanceJobSnapshot:
+    job_id: str
+    job_type: str
+    status: JobStatus
+    submitted_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    trace_id: str | None = None
+    turn_index: int | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    rerun_of: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class _MaintenanceJobRecord:
+    job_id: str
+    job_type: str
+    status: JobStatus
+    submitted_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    trace_id: str | None = None
+    turn_index: int | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    rerun_of: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def snapshot(self) -> MaintenanceJobSnapshot:
+        return MaintenanceJobSnapshot(
+            job_id=self.job_id,
+            job_type=self.job_type,
+            status=self.status,
+            submitted_at=self.submitted_at,
+            started_at=self.started_at,
+            finished_at=self.finished_at,
+            trace_id=self.trace_id,
+            turn_index=self.turn_index,
+            error_type=self.error_type,
+            error_message=self.error_message,
+            rerun_of=self.rerun_of,
+            metadata=dict(self.metadata),
+        )
+
+
+class MaintenanceJobCoordinator:
+    """Run maintenance work and retain bounded, queryable job state."""
+
+    def __init__(self, *, max_workers: int = 2, max_history: int = 200) -> None:
+        if max_history < 1:
+            raise ValueError("max_history must be >= 1")
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+        self._max_history = max_history
+        self._guard = threading.RLock()
+        self._records: OrderedDict[str, _MaintenanceJobRecord] = OrderedDict()
+        self._memory_batch_future: concurrent.futures.Future | None = None
+        self._memory_batch_job_id: str | None = None
+        self._memory_batch_rerun: tuple[str, Callable, tuple, dict] | None = None
+
+    def submit(self, fn, /, *args, **kwargs) -> concurrent.futures.Future:
+        job_id = self._create_record(
+            getattr(fn, "__name__", "maintenance"),
+        )
+        return self._submit_record(job_id, fn, args, kwargs)
+
+    def submit_job(
+        self,
+        job_type: str,
+        fn,
+        /,
+        *args,
+        trace_id: str | None = None,
+        turn_index: int | None = None,
+        metadata: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> concurrent.futures.Future:
+        job_id = self._create_record(
+            job_type,
+            trace_id=trace_id,
+            turn_index=turn_index,
+            metadata=metadata,
+        )
+        return self._submit_record(job_id, fn, args, kwargs)
+
+    def submit_memory_batch_once(self, fn, /, *args, **kwargs) -> bool:
+        trace_id = str(args[1]) if len(args) > 1 and args[1] is not None else None
+        turn_index = args[2] if len(args) > 2 and isinstance(args[2], int) else None
+        with self._guard:
+            rerun_of = self._memory_batch_job_id
+            job_id = self._create_record(
+                "memory_batch",
+                trace_id=trace_id,
+                turn_index=turn_index,
+                rerun_of=rerun_of,
+            )
+            if (
+                self._memory_batch_future is not None
+                and not self._memory_batch_future.done()
+            ):
+                if self._memory_batch_rerun is not None:
+                    self._finish_record(
+                        self._memory_batch_rerun[0],
+                        status="superseded",
+                    )
+                self._memory_batch_rerun = (job_id, fn, args, kwargs)
+                return True
+            self._memory_batch_job_id = job_id
+            self._memory_batch_future = self._submit_memory_batch(
+                job_id,
+                fn,
+                args,
+                kwargs,
+            )
+            return True
+
+    def get(self, job_id: str) -> MaintenanceJobSnapshot | None:
+        with self._guard:
+            record = self._records.get(job_id)
+            return record.snapshot() if record is not None else None
+
+    def list(
+        self,
+        *,
+        status: JobStatus | None = None,
+        job_type: str | None = None,
+        limit: int = 100,
+    ) -> list[MaintenanceJobSnapshot]:
+        if limit < 1:
+            return []
+        with self._guard:
+            records = reversed(self._records.values())
+            snapshots = [
+                record.snapshot()
+                for record in records
+                if (status is None or record.status == status)
+                and (job_type is None or record.job_type == job_type)
+            ]
+        return snapshots[:limit]
+
+    def status_counts(self) -> dict[str, int]:
+        with self._guard:
+            return dict(Counter(record.status for record in self._records.values()))
+
+    def shutdown(self, *, wait: bool = True) -> None:
+        self.executor.shutdown(wait=wait)
+
+    def _create_record(
+        self,
+        job_type: str,
+        *,
+        trace_id: str | None = None,
+        turn_index: int | None = None,
+        metadata: dict[str, Any] | None = None,
+        rerun_of: str | None = None,
+    ) -> str:
+        job_id = uuid.uuid4().hex
+        with self._guard:
+            self._records[job_id] = _MaintenanceJobRecord(
+                job_id=job_id,
+                job_type=job_type,
+                status="queued",
+                submitted_at=_utc_now(),
+                trace_id=trace_id,
+                turn_index=turn_index,
+                rerun_of=rerun_of,
+                metadata=dict(metadata or {}),
+            )
+            self._trim_history()
+        return job_id
+
+    def _submit_record(self, job_id, fn, args, kwargs):
+        future = self.executor.submit(self._run_record, job_id, fn, args, kwargs)
+        setattr(future, "job_id", job_id)
+        future.add_done_callback(
+            lambda completed: self._mark_cancelled(job_id) if completed.cancelled() else None
+        )
+        return future
+
+    def _run_record(self, job_id, fn, args, kwargs):
+        with self._guard:
+            record = self._records[job_id]
+            record.status = "running"
+            record.started_at = _utc_now()
+        try:
+            result = fn(*args, **kwargs)
+        except BaseException as exc:
+            self._finish_record(
+                job_id,
+                status="failed",
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            raise
+        self._finish_record(job_id, status="succeeded")
+        return result
+
+    def _finish_record(
+        self,
+        job_id: str,
+        *,
+        status: JobStatus,
+        error_type: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        with self._guard:
+            record = self._records.get(job_id)
+            if record is None:
+                return
+            record.status = status
+            record.finished_at = _utc_now()
+            record.error_type = error_type
+            record.error_message = error_message
+            self._trim_history()
+
+    def _mark_cancelled(self, job_id: str) -> None:
+        self._finish_record(job_id, status="cancelled")
+
+    def _submit_memory_batch(self, job_id, fn, args, kwargs):
+        future = self._submit_record(job_id, fn, args, kwargs)
+        future.add_done_callback(self._memory_batch_finished)
+        return future
+
+    def _memory_batch_finished(self, completed_future) -> None:
+        with self._guard:
+            if completed_future is not self._memory_batch_future:
+                return
+            rerun = self._memory_batch_rerun
+            self._memory_batch_rerun = None
+            if rerun is None:
+                self._memory_batch_future = None
+                self._memory_batch_job_id = None
+                return
+            job_id, fn, args, kwargs = rerun
+            self._memory_batch_job_id = job_id
+            self._memory_batch_future = self._submit_memory_batch(
+                job_id,
+                fn,
+                args,
+                kwargs,
+            )
+
+    def _trim_history(self) -> None:
+        while len(self._records) > self._max_history:
+            removable_id = next(
+                (
+                    job_id
+                    for job_id, record in self._records.items()
+                    if record.status not in {"queued", "running"}
+                ),
+                None,
+            )
+            if removable_id is None:
+                return
+            self._records.pop(removable_id, None)

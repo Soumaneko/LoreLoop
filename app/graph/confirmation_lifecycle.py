@@ -299,10 +299,19 @@ class ConfirmationMaintenanceScheduler:
         if pipeline_input.director_npc_restock_sync:
             self.services.run_director_npc_restock(*args, **kwargs)
         else:
-            self.runtime.jobs.submit(
+            future = self.runtime.jobs.submit_job(
+                "director_npc_restock",
                 self.services.run_director_npc_restock,
                 *args,
+                trace_id=state["trace_id"],
+                turn_index=pipeline_input.turn_index,
+                metadata={"campaign_id": self.runtime.campaign_id},
                 **kwargs,
+            )
+            cache["director_npc_restock_job_id"] = getattr(
+                future,
+                "job_id",
+                None,
             )
         cache["director_npc_restock_scheduled"] = True
         state["director_npc_restock_scheduled"] = True
@@ -326,16 +335,28 @@ class ConfirmationMaintenanceScheduler:
         updated_state = state["updated_state"]
         summary_future = cache.get("scene_summary_future")
         if not cache.get("scene_summary_scheduled"):
-            summary_future = self.runtime.jobs.submit(
+            summary_future = self.runtime.jobs.submit_job(
+                "scene_summary",
                 self.services.run_scene_summary_maintenance,
                 state["confirmation_scene_text"],
                 updated_state,
                 updated_state.scene.scene_id,
                 pipeline_input.turn_index,
                 state["trace_id"],
+                trace_id=state["trace_id"],
+                turn_index=pipeline_input.turn_index,
+                metadata={
+                    "campaign_id": self.runtime.campaign_id,
+                    "scene_id": updated_state.scene.scene_id,
+                },
                 core_memory=state["core_memory"],
             )
             cache["scene_summary_future"] = summary_future
+            cache["scene_summary_job_id"] = getattr(
+                summary_future,
+                "job_id",
+                None,
+            )
             cache["scene_summary_scheduled"] = True
 
         batch_queued = bool(cache.get("memory_batch_scheduled"))

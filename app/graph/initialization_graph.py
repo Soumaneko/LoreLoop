@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
+from app.runtime.graph_cache import get_cached_graph
 
 from .initialization_helpers import (
     finalize_initialization_state,
@@ -15,6 +16,19 @@ from .initialization_state import InitializationState
 
 
 def build_initialization_graph():
+    dependencies = (
+        story_direction_node,
+        opening_scene_node,
+        initialization_route,
+    )
+    return get_cached_graph(
+        "initialization",
+        dependencies,
+        _compile_initialization_graph,
+    )
+
+
+def _compile_initialization_graph():
     graph = StateGraph(InitializationState)
     graph.add_node("story_direction", story_direction_node)
     graph.add_node("opening_scene", opening_scene_node)

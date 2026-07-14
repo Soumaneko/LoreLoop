@@ -4,6 +4,7 @@ import traceback
 from concurrent.futures import Future
 
 from langgraph.graph import END, START, StateGraph
+from app.runtime.graph_cache import get_cached_graph
 
 from app.runtime.serialization import model_data
 from app.runtime.session import get_campaign_runtime
@@ -32,6 +33,19 @@ from .maintenance_state import (
 
 
 def build_scene_summary_maintenance_graph():
+    dependencies = (
+        scene_summarize_node,
+        scene_summary_condense_node,
+        scene_summary_route,
+    )
+    return get_cached_graph(
+        "maintenance_scene_summary",
+        dependencies,
+        _compile_scene_summary_maintenance_graph,
+    )
+
+
+def _compile_scene_summary_maintenance_graph():
     graph = StateGraph(SceneSummaryMaintenanceState)
     graph.add_node("scene_summarize", scene_summarize_node)
     graph.add_node("scene_summary_condense", scene_summary_condense_node)
@@ -50,6 +64,19 @@ def build_scene_summary_maintenance_graph():
 
 
 def build_memory_batch_maintenance_graph():
+    dependencies = (
+        memory_batch_classify_node,
+        memory_maintain_node,
+        memory_batch_route,
+    )
+    return get_cached_graph(
+        "maintenance_memory_batch",
+        dependencies,
+        _compile_memory_batch_maintenance_graph,
+    )
+
+
+def _compile_memory_batch_maintenance_graph():
     graph = StateGraph(MemoryMaintenanceState)
     graph.add_node("memory_batch_classify", memory_batch_classify_node)
     graph.add_node("memory_maintain", memory_maintain_node)
@@ -68,6 +95,14 @@ def build_memory_batch_maintenance_graph():
 
 
 def build_memory_maintenance_graph():
+    return get_cached_graph(
+        "maintenance_memory",
+        (memory_maintain_node,),
+        _compile_memory_maintenance_graph,
+    )
+
+
+def _compile_memory_maintenance_graph():
     graph = StateGraph(MemoryMaintenanceState)
     graph.add_node("memory_maintain", memory_maintain_node)
     graph.add_edge(START, "memory_maintain")
@@ -76,6 +111,14 @@ def build_memory_maintenance_graph():
 
 
 def build_director_npc_restock_graph():
+    return get_cached_graph(
+        "maintenance_director_npc_restock",
+        (director_npc_restock_node,),
+        _compile_director_npc_restock_graph,
+    )
+
+
+def _compile_director_npc_restock_graph():
     graph = StateGraph(DirectorNPCRestockState)
     graph.add_node("director_npc_restock", director_npc_restock_node)
     graph.add_edge(START, "director_npc_restock")
@@ -109,6 +152,7 @@ def run_director_npc_restock(
     except Exception:
         print("[debug-server] director npc restock failed")
         traceback.print_exc()
+        raise
 
 
 def run_scene_summary_maintenance(
@@ -139,6 +183,7 @@ def run_scene_summary_maintenance(
     except Exception:
         print("[debug-server] scene summary maintenance failed")
         traceback.print_exc()
+        raise
 
 
 def run_memory_batch_maintenance(
@@ -177,6 +222,7 @@ def run_memory_batch_maintenance(
     except Exception:
         print("[debug-server] memory batch maintenance failed")
         traceback.print_exc()
+        raise
 
 
 def batch_classify_stream():

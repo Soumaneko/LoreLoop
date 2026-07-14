@@ -1,4 +1,3 @@
-import concurrent.futures
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -15,6 +14,7 @@ from app.core.llm.config import SharedGatewayFactory
 from app.runtime.paths import CampaignPaths, DEFAULT_CAMPAIGN_PATHS
 from app.runtime.services import RuntimeServices
 from app.runtime.stores import StoreBundle
+from app.runtime.jobs import MaintenanceJobCoordinator
 
 
 @dataclass
@@ -108,48 +108,6 @@ class PendingOpeningRepository:
     def remove(self, turn_id: str) -> None:
         with self._lock:
             self._items.pop(turn_id, None)
-
-
-class MaintenanceJobCoordinator:
-    """Own background execution and memory-batch single-flight state."""
-
-    def __init__(self, *, max_workers: int = 2) -> None:
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
-        self._guard = threading.RLock()
-        self._memory_batch_future: concurrent.futures.Future | None = None
-        self._memory_batch_rerun: tuple[Callable, tuple, dict] | None = None
-
-    def submit(self, fn, /, *args, **kwargs) -> concurrent.futures.Future:
-        return self.executor.submit(fn, *args, **kwargs)
-
-    def submit_memory_batch_once(self, fn, /, *args, **kwargs) -> bool:
-        with self._guard:
-            if (
-                self._memory_batch_future is not None
-                and not self._memory_batch_future.done()
-            ):
-                self._memory_batch_rerun = (fn, args, kwargs)
-                return True
-            self._memory_batch_future = self._submit_memory_batch(fn, args, kwargs)
-            return True
-
-    def _submit_memory_batch(self, fn, args, kwargs):
-        future = self.executor.submit(fn, *args, **kwargs)
-        future.add_done_callback(self._memory_batch_finished)
-        return future
-
-    def _memory_batch_finished(self, _future) -> None:
-        with self._guard:
-            rerun = self._memory_batch_rerun
-            self._memory_batch_rerun = None
-            if rerun is None:
-                self._memory_batch_future = None
-                return
-            fn, args, kwargs = rerun
-            self._memory_batch_future = self._submit_memory_batch(fn, args, kwargs)
-
-    def shutdown(self, *, wait: bool = True) -> None:
-        self.executor.shutdown(wait=wait)
 
 
 class CampaignRuntime:

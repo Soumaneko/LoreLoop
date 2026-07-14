@@ -4,6 +4,7 @@ from functools import wraps
 from typing import Callable
 
 from langgraph.graph import END, START, StateGraph
+from app.runtime.graph_cache import get_cached_graph
 
 from app.runtime.session import (
     get_campaign_runtime,
@@ -49,6 +50,21 @@ def capture_confirmation_node_errors(
 
 
 def build_confirmation_first_wave_graph():
+    dependencies = (
+        scene_fact_extract_node,
+        state_update_node,
+        memory_draft_extract_node,
+        entity_extract_node,
+        npc_profile_extract_node,
+    )
+    return get_cached_graph(
+        "confirmation_first_wave",
+        dependencies,
+        _compile_confirmation_first_wave_graph,
+    )
+
+
+def _compile_confirmation_first_wave_graph():
     graph = StateGraph(ConfirmationState)
     graph.add_node(
         "scene_fact_extract",
@@ -85,6 +101,20 @@ def build_confirmation_first_wave_graph():
 
 
 def build_confirmation_second_wave_graph():
+    dependencies = (
+        action_preview_node,
+        director_event_update_node,
+        entity_profile_update_node,
+        npc_profile_update_node,
+    )
+    return get_cached_graph(
+        "confirmation_second_wave",
+        dependencies,
+        _compile_confirmation_second_wave_graph,
+    )
+
+
+def _compile_confirmation_second_wave_graph():
     graph = StateGraph(ConfirmationState)
     graph.add_node(
         "action_preview",

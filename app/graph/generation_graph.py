@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
+from app.runtime.graph_cache import get_cached_graph
 
 from app.domain.roll.schemas import Difficulty
 from app.runtime.session import (
@@ -30,6 +31,24 @@ from .generation_state import GenerationEvent, GenerationState
 
 
 def build_generation_graph():
+    dependencies = (
+        extract_context_facts_node,
+        consume_director_events_node,
+        parse_action_node,
+        evaluate_roll_modifiers_node,
+        resolve_turn_node,
+        maybe_director_npc_node,
+        generate_plot_outline_node,
+        generate_scene_node,
+    )
+    return get_cached_graph(
+        "generation",
+        dependencies,
+        _compile_generation_graph,
+    )
+
+
+def _compile_generation_graph():
     graph = StateGraph(GenerationState)
     graph.add_node("extract_context_facts", extract_context_facts_node)
     graph.add_node("consume_director_events", consume_director_events_node)

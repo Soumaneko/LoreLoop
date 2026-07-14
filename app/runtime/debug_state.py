@@ -1,5 +1,10 @@
 from .serialization import model_data
-from .session import PENDING_OPENINGS, PENDING_TURNS, pending_turn_variants
+from .session import (
+    PENDING_OPENINGS,
+    PENDING_TURNS,
+    get_campaign_runtime,
+    pending_turn_variants,
+)
 from .settings import load_settings
 from .stores import (
     core_memory_store,
@@ -16,6 +21,7 @@ from .stores import (
 
 
 def load_debug_state() -> dict:
+    runtime = get_campaign_runtime()
     with current_state_store() as state_store:
         current_state = state_store.load_or_default()
 
@@ -114,4 +120,8 @@ def load_debug_state() -> dict:
         "max_chars": int(settings.get("max_chars", 1500)),
         "pending_turn_groups": pending_turn_groups,
         "pending_opening_ids": [*PENDING_OPENINGS.keys()],
+        "maintenance_jobs": [
+            job.as_dict() for job in runtime.jobs.list(limit=100)
+        ],
+        "maintenance_job_status_counts": runtime.jobs.status_counts(),
     }

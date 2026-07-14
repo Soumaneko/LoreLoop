@@ -68,6 +68,7 @@ class ConfirmationCache(TypedDict, total=False):
     director_npc_profile_id: str | None
     confirmed_director_npc_draft: DirectorNPCDraft | None
     director_npc_restock_scheduled: bool
+    director_npc_restock_job_id: str | None
     director_npc_last_dispatch_turn_set: bool
     pending_memory_metadata_filled: bool
     state_saved: bool
@@ -75,6 +76,7 @@ class ConfirmationCache(TypedDict, total=False):
     pending_memories_saved: bool
     saved_pending_ids: list[str]
     scene_summary_future: Future[Any]
+    scene_summary_job_id: str | None
     scene_summary_scheduled: bool
     memory_batch_scheduled: bool
 
