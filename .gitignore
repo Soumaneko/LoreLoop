@@ -9,6 +9,7 @@ data/
 docs/
 debug_py/
 tools/
-saves/
-debug_server.py
+/saves/
+/app/saves/
+/debug_server.py
 SPEC.md

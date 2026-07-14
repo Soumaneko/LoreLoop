@@ -80,7 +80,8 @@ def generate_turn_stream(
     difficulty: Difficulty = "困难",
     max_chars: int = 1500,
 ):
-    yield from _generate_turn_stream(user_input, difficulty, max_chars)
+    with get_campaign_runtime().confirmation_lock:
+        yield from _generate_turn_stream(user_input, difficulty, max_chars)
 
 
 def retry_turn_stream(turn_id: str):

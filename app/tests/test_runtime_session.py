@@ -2,7 +2,18 @@ from types import SimpleNamespace
 
 from app.domain.current_state import PlayerState, make_default_state
 from app.runtime.paths import CampaignPaths
-from app.runtime.session import CampaignRuntime, PendingTurnRepository
+from app.runtime.session import (
+    CampaignRuntime,
+    PendingTurnRepository,
+    get_campaign_runtime,
+)
+
+
+def test_pytest_default_runtime_is_always_scoped_to_tmp_path(tmp_path):
+    runtime = get_campaign_runtime()
+
+    assert runtime.campaign_id == "pytest"
+    assert runtime.paths.data_dir == tmp_path / "campaign-runtime"
 
 
 def test_pending_turn_repository_orders_and_discards_variants():

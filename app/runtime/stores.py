@@ -67,42 +67,48 @@ class StoreBundle:
 DEFAULT_STORE_BUNDLE = StoreBundle(DEFAULT_CAMPAIGN_PATHS)
 
 
+def _active_stores() -> StoreBundle:
+    from .session import get_campaign_runtime
+
+    return get_campaign_runtime().stores
+
+
 def current_state_store() -> CurrentStateStore:
-    return DEFAULT_STORE_BUNDLE.current_state()
+    return _active_stores().current_state()
 
 
 def memory_store() -> MemoryStore:
-    return DEFAULT_STORE_BUNDLE.memory()
+    return _active_stores().memory()
 
 
 def pending_memory_store() -> PendingMemoryStore:
-    return DEFAULT_STORE_BUNDLE.pending_memory()
+    return _active_stores().pending_memory()
 
 
 def short_term_memory_store() -> ShortTermMemoryStore:
-    return DEFAULT_STORE_BUNDLE.short_term()
+    return _active_stores().short_term()
 
 
 def scene_summary_store() -> SceneSummaryStore:
-    return DEFAULT_STORE_BUNDLE.scene_summary()
+    return _active_stores().scene_summary()
 
 
 def entity_store() -> EntityStore:
-    return DEFAULT_STORE_BUNDLE.entity()
+    return _active_stores().entity()
 
 
 def npc_profile_store() -> NPCProfileStore:
-    return DEFAULT_STORE_BUNDLE.npc_profile()
+    return _active_stores().npc_profile()
 
 
 def core_memory_store() -> CoreMemoryStore:
-    return DEFAULT_STORE_BUNDLE.core_memory()
+    return _active_stores().core_memory()
 
 
 def director_event_store() -> DirectorEventStore:
-    return DEFAULT_STORE_BUNDLE.director_event()
+    return _active_stores().director_event()
 
 
 def director_npc_store() -> DirectorNPCStore:
-    return DEFAULT_STORE_BUNDLE.director_npc()
+    return _active_stores().director_npc()
 from dataclasses import dataclass

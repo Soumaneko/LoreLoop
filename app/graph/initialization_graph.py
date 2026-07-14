@@ -4,6 +4,7 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
+from app.runtime.session import get_campaign_runtime
 
 from .initialization_helpers import (
     finalize_initialization_state,
@@ -47,7 +48,8 @@ def _compile_initialization_graph():
 
 
 def apply_core_memory_init(payload: dict[str, Any]) -> dict[str, Any]:
-    state = prepare_initialization_state(payload)
-    graph_state = build_initialization_graph().invoke(state)
-    finalized = finalize_initialization_state(graph_state)
-    return initialization_result(finalized)
+    with get_campaign_runtime().confirmation_lock:
+        state = prepare_initialization_state(payload)
+        graph_state = build_initialization_graph().invoke(state)
+        finalized = finalize_initialization_state(graph_state)
+        return initialization_result(finalized)

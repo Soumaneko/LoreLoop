@@ -1,19 +1,25 @@
 import json
 from typing import Any
 
-from .paths import DATA_DIR, SETTINGS_JSON
+
+
+def _settings_path():
+    from .session import get_campaign_runtime
+
+    return get_campaign_runtime().paths.settings_json
 
 
 def load_settings() -> dict[str, Any]:
     try:
-        return json.loads(SETTINGS_JSON.read_text(encoding="utf-8"))
+        return json.loads(_settings_path().read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, ValueError):
         return {}
 
 
 def save_settings(settings: dict[str, Any]) -> None:
-    DATA_DIR.mkdir(exist_ok=True)
-    SETTINGS_JSON.write_text(
+    settings_path = _settings_path()
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
         json.dumps(settings, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )

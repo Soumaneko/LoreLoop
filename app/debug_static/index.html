@@ -14,7 +14,11 @@
           <div class="eyebrow">Runtime</div>
           <h1>State</h1>
         </div>
-        <button id="refreshBtn" class="icon-button" title="刷新状态">↻</button>
+        <div class="header-actions">
+          <select id="saveSelect" class="save-select" title="切换存档" aria-label="当前存档"></select>
+          <button id="createSaveBtn" class="icon-button" title="新建存档" aria-label="新建存档">＋</button>
+          <button id="refreshBtn" class="icon-button" title="刷新状态">↻</button>
+        </div>
       </header>
       <div id="statePanel" class="panel-scroll"></div>
     </aside>

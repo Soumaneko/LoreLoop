@@ -22,6 +22,11 @@ from .stores import (
 
 def load_debug_state() -> dict:
     runtime = get_campaign_runtime()
+    with runtime.confirmation_lock:
+        return _load_debug_state(runtime)
+
+
+def _load_debug_state(runtime) -> dict:
     with current_state_store() as state_store:
         current_state = state_store.load_or_default()
 
@@ -89,7 +94,18 @@ def load_debug_state() -> dict:
         for group_id in group_ids
         if (variants := pending_turn_variants(group_id))
     ]
+    pending_openings = [
+        {
+            "turn_id": opening.turn_id,
+            "config": model_data(opening.config),
+            "current_state": model_data(opening.current_state),
+            "scene_result": model_data(opening.scene_result),
+        }
+        for opening in PENDING_OPENINGS.values()
+    ]
     return {
+        "save_name": runtime.campaign_id,
+        "save_path": str(runtime.paths.data_dir.resolve()),
         "needs_init": core_memory is None,
         "current_state": model_data(current_state),
         "core_memory": model_data(core_memory) if core_memory is not None else None,
@@ -120,6 +136,7 @@ def load_debug_state() -> dict:
         "max_chars": int(settings.get("max_chars", 1500)),
         "pending_turn_groups": pending_turn_groups,
         "pending_opening_ids": [*PENDING_OPENINGS.keys()],
+        "pending_openings": pending_openings,
         "maintenance_jobs": [
             job.as_dict() for job in runtime.jobs.list(limit=100)
         ],

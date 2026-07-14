@@ -14,11 +14,14 @@ const els = {
   difficultySelect: $("difficultySelect"),
   maxCharsInput: $("maxCharsInput"),
   refreshBtn: $("refreshBtn"),
+  saveSelect: $("saveSelect"),
+  createSaveBtn: $("createSaveBtn"),
   turnInfo: $("turnInfo"),
 };
 
 const tabs = [
   ["overview", "总览"],
+  ["jobs", "后台任务"],
   ["diff", "状态变化"],
   ["generation", "生成"],
   ["confirmation", "确认"],
@@ -58,6 +61,8 @@ const state = {
   chatRestored: false,
   coreMemoryInitialized: true,
   operationStatus: "Ready",
+  saves: [],
+  activeSave: null,
   run: emptyRun(),
 };
 
@@ -223,6 +228,8 @@ function setStatus(label, busy = false) {
   els.confirmBtn.disabled = busy || !state.pendingTurnId;
   els.input.disabled = busy || !state.coreMemoryInitialized || Boolean(state.pendingTurnId);
   els.writeDbToggle.disabled = busy || !state.coreMemoryInitialized;
+  els.saveSelect.disabled = busy;
+  els.createSaveBtn.disabled = busy;
   const previous = document.querySelector(".scene-version-prev");
   const next = document.querySelector(".scene-version-next");
   const retry = document.querySelector(".scene-retry");
@@ -231,6 +238,108 @@ function setStatus(label, busy = false) {
   if (retry) retry.disabled = busy;
   const edit = document.querySelector(".scene-edit");
   if (edit) edit.disabled = busy;
+}
+
+function renderSaveOptions() {
+  els.saveSelect.replaceChildren();
+  for (const save of state.saves) {
+    const option = document.createElement("option");
+    option.value = save.name;
+    option.textContent = `${save.name}${save.initialized ? "" : " · 未初始化"}`;
+    option.selected = save.name === state.activeSave;
+    els.saveSelect.appendChild(option);
+  }
+}
+
+async function loadSaves() {
+  const data = await api("/api/saves");
+  state.saves = data.saves || [];
+  state.activeSave = data.active || null;
+  renderSaveOptions();
+  return data;
+}
+
+function resetClientForSave() {
+  state.serverState = null;
+  state.traces = {};
+  state.traceRequests = {};
+  state.pendingTurnId = null;
+  state.pendingGroupId = null;
+  state.pendingVariants = [];
+  state.pendingVariantIndex = -1;
+  state.pendingSceneText = null;
+  state.chatRestored = false;
+  state.coreMemoryInitialized = true;
+  state.activeTab = "overview";
+  resetRun("all");
+  els.messages.innerHTML = "";
+  els.turnInfo.textContent = "正在加载存档";
+  renderDebug();
+}
+
+function approvePendingDiscard() {
+  if (!state.pendingTurnId) return true;
+  return window.confirm("当前存档有尚未确认的内容。切换后这些内容会被丢弃，是否继续？");
+}
+
+async function switchSave(name) {
+  if (!name || name === state.activeSave) return;
+  const previous = state.activeSave;
+  if (!approvePendingDiscard()) {
+    els.saveSelect.value = previous || "";
+    return;
+  }
+  const discardPending = Boolean(state.pendingTurnId);
+  let switched = false;
+  setStatus("正在切换存档...", true);
+  try {
+    await api("/api/saves/switch", {
+      method: "POST",
+      body: JSON.stringify({ name, discard_pending: discardPending }),
+    });
+    switched = true;
+    resetClientForSave();
+    await loadSaves();
+    await refreshState();
+  } catch (err) {
+    if (switched) {
+      await loadSaves().catch(() => {});
+      setStatus("存档已切换，但状态加载失败");
+    } else {
+      els.saveSelect.value = previous || "";
+      setStatus("存档切换失败");
+    }
+    window.alert(err.message || (switched ? "状态加载失败" : "存档切换失败"));
+  }
+}
+
+async function createSave() {
+  const rawName = window.prompt("请输入新存档名称（名称同时也是文件夹名）");
+  if (rawName === null) return;
+  const name = rawName.trim();
+  if (!name) return;
+  if (!approvePendingDiscard()) return;
+  const discardPending = Boolean(state.pendingTurnId);
+  let created = false;
+  setStatus("正在创建存档...", true);
+  try {
+    await api("/api/saves/create", {
+      method: "POST",
+      body: JSON.stringify({ name, activate: true, discard_pending: discardPending }),
+    });
+    created = true;
+    resetClientForSave();
+    await loadSaves();
+    await refreshState();
+  } catch (err) {
+    if (created) {
+      await loadSaves().catch(() => {});
+      setStatus("存档已创建，但状态加载失败");
+    } else {
+      setStatus("存档创建失败");
+    }
+    window.alert(err.message || (created ? "状态加载失败" : "存档创建失败"));
+  }
 }
 
 function setDebugStatus(label) {
@@ -573,6 +682,9 @@ function renderStatePanel() {
   const recentSummaries = data.recent_summaries || [];
   const pendingVisible = filterVisiblePending(data.pending_memory_items || []);
   const pendingStats = pendingMemoryStats(data);
+  const coreItems = data.core_memory?.items || [];
+  const jobs = data.maintenance_jobs || [];
+  const jobCounts = data.maintenance_job_status_counts || {};
   els.statePanel.innerHTML = `
     ${card("当前场景", kv([
       ["场景", esc(text(scene.scene_id))],
@@ -593,6 +705,7 @@ function renderStatePanel() {
       ["资产", chips(resources.fixed_assets)],
       ["临时", chips(resources.temporary_assets)],
     ]))}
+    ${details(`Core Memory (${coreItems.length})`, coreItems.map(coreMemoryItemCard).join("") || `<div class="empty">暂无 Core Memory</div>`)}
     ${details(`NPC (${npcs.length})`, npcs.length ? npcs.map(npcCard).join("") : `<div class="empty">暂无 NPC</div>`)}
     ${details(`NPC 档案 (${data.npc_active_profile_count ?? 0}/${data.npc_profile_count ?? 0})`, renderNpcStateGroup(data.npc_profiles || []))}
     ${details("导演", `
@@ -628,9 +741,25 @@ function renderStatePanel() {
       </div>
       ${pendingVisible.map(pendingMemoryCard).join("") || `<div class="empty">暂无未分类待定记忆</div>`}
     `)}
+    ${details(`后台任务 (${jobs.length})`, `
+      ${metrics([
+        metric("排队", jobCounts.queued || 0, jobCounts.queued ? "info" : ""),
+        metric("运行", jobCounts.running || 0, jobCounts.running ? "warn" : ""),
+        metric("失败", jobCounts.failed || 0, jobCounts.failed ? "bad" : ""),
+      ])}
+      ${jobs.slice(0, 5).map(maintenanceJobCard).join("") || `<div class="empty">暂无后台任务</div>`}
+    `, (jobCounts.queued || 0) + (jobCounts.running || 0) + (jobCounts.failed || 0) > 0)}
   `;
   $("batchBtn")?.addEventListener("click", triggerBatchClassify);
   $("maintainBtn")?.addEventListener("click", triggerMemoryMaintain);
+}
+
+function coreMemoryItemCard(item) {
+  return `<div class="section-card">
+    <div class="card-title"><span>${esc(item.category || "core")}</span>${metric("priority", item.priority ?? 100)}</div>
+    <div>${esc(text(item.content))}</div>
+    <div class="muted" style="margin-top:6px">${esc(text(item.id))}</div>
+  </div>`;
 }
 
 function npcCard(npc) {
@@ -657,6 +786,7 @@ function renderDebug() {
   renderTabs();
   const renderers = {
     overview: renderOverview,
+    jobs: renderJobs,
     diff: renderStateDiff,
     generation: renderGeneration,
     confirmation: renderConfirmation,
@@ -668,6 +798,7 @@ function renderDebug() {
     raw: renderRaw,
   };
   els.debugBody.innerHTML = (renderers[state.activeTab] || renderOverview)();
+  $("refreshJobsBtn")?.addEventListener("click", refreshMaintenanceJobs);
 }
 
 function renderOverview() {
@@ -676,12 +807,15 @@ function renderOverview() {
   const maint = state.run.maintenance;
   const finish = step("confirmation", "finish");
   const scene = step("generation", "scene_written");
+  const jobCounts = state.serverState?.maintenance_job_status_counts || {};
   return `
     ${card("运行总览", `
       ${metrics([
         metric("生成", gen.order.length, gen.order.length ? "info" : ""),
         metric("确认", conf.order.length, finish ? "ok" : ""),
         metric("维护", maint.order.length, maint.order.length ? "warn" : ""),
+        metric("后台运行", (jobCounts.queued || 0) + (jobCounts.running || 0), (jobCounts.failed || 0) ? "bad" : "info"),
+        jobCounts.failed ? metric("后台失败", jobCounts.failed, "bad") : "",
       ])}
       ${kv([
         ["Trace", esc(text(scene?.trace_id || finish?.trace_id || step("generation", "state_loaded")?.trace_id))],
@@ -694,6 +828,55 @@ function renderOverview() {
     ${timeline("confirmation", "确认流程")}
     ${timeline("maintenance", "维护流程")}
   `;
+}
+
+function renderJobs() {
+  const server = state.serverState || {};
+  const jobs = server.maintenance_jobs || [];
+  const counts = server.maintenance_job_status_counts || {};
+  const active = jobs.filter((job) => job.status === "queued" || job.status === "running");
+  const failed = jobs.filter((job) => job.status === "failed");
+  return `
+    ${card("后台任务状态", `
+      ${metrics([
+        metric("排队", counts.queued || 0, counts.queued ? "info" : ""),
+        metric("运行", counts.running || 0, counts.running ? "warn" : ""),
+        metric("成功", counts.succeeded || 0, "ok"),
+        metric("失败", counts.failed || 0, counts.failed ? "bad" : ""),
+        metric("覆盖", counts.superseded || 0),
+      ])}
+      <div class="button-row" style="margin-top:10px">
+        <button id="refreshJobsBtn">刷新任务</button>
+      </div>
+    `)}
+    ${active.length ? card("进行中", active.map(maintenanceJobCard).join("")) : ""}
+    ${failed.length ? card("失败", failed.map(maintenanceJobCard).join(""), "bad") : ""}
+    ${details(`任务历史 (${jobs.length})`, jobs.map(maintenanceJobCard).join("") || `<div class="empty">暂无后台任务。</div>`, !active.length && !failed.length)}
+  `;
+}
+
+function maintenanceJobCard(job) {
+  const tone = job.status === "succeeded" ? "ok" : job.status === "failed" ? "bad" : job.status === "running" ? "warn" : job.status === "queued" ? "info" : "";
+  const error = job.error_message ? `<div class="job-error">${esc(`${job.error_type || "Error"}: ${job.error_message}`)}</div>` : "";
+  return `<div class="section-card job-card">
+    <div class="card-title"><span>${esc(job.job_type || "maintenance")}</span>${metric(job.status || "unknown", job.turn_index == null ? "" : `T${job.turn_index}`, tone)}</div>
+    ${kv([
+      ["Job ID", `<code>${esc(text(job.job_id))}</code>`],
+      ["Trace", `<code>${esc(text(job.trace_id))}</code>`],
+      ["提交", esc(formatTimestamp(job.submitted_at))],
+      ["开始", esc(formatTimestamp(job.started_at))],
+      ["结束", esc(formatTimestamp(job.finished_at))],
+      ["重跑自", job.rerun_of ? `<code>${esc(job.rerun_of)}</code>` : `<span class="empty">无</span>`],
+    ])}
+    ${error}
+    ${Object.keys(job.metadata || {}).length ? details("Metadata", jsonBlock(job.metadata)) : ""}
+  </div>`;
+}
+
+function formatTimestamp(value) {
+  if (!value) return "无";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
 }
 
 function timeline(scope, title) {
@@ -828,6 +1011,17 @@ function renderGeneration() {
     ${card("Director NPC", renderDirectorNpcResult(g.director_npc_result))}
     ${card("Outline", renderOutline(g.plot_outline))}
     ${card("Writer", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>${g.scene_result.closing_prompt ? `<div class="section-card muted">${esc(g.scene_result.closing_prompt)}</div>` : ""}` : `<div class="empty">未生成正文</div>`)}
+    ${card("上下文档案", `
+      ${metrics([
+        metric("行动实体", g.entity_profiles?.length || 0),
+        metric("行动NPC", g.npc_profiles?.length || 0),
+        metric("Writer实体", g.writer_entity_profiles?.length || 0, "info"),
+        metric("Writer NPC", g.writer_npc_profiles?.length || 0, "info"),
+      ])}
+      ${details("Writer 实体", (g.writer_entity_profiles || []).map(entityCard).join("") || `<div class="empty">无</div>`)}
+      ${details("Writer NPC", (g.writer_npc_profiles || []).map(npcProfileCard).join("") || `<div class="empty">无</div>`)}
+      ${g.recent_scene ? details("最近场景", jsonBlock(g.recent_scene)) : ""}
+    `)}
     ${details("Context", jsonBlock(g.context))}
   `;
 }
@@ -873,6 +1067,11 @@ function renderMemory() {
   const batchDone = step("maintenance", "batch_classify_done") || {};
   const maintain = step("maintenance", "memory_maintain_done") || batch?.maintenance;
   const confirm = step("confirmation", "finish")?.memory_extraction;
+  const server = state.serverState || {};
+  const stored = server.memories || [];
+  const active = stored.filter((memory) => (memory.status || "active") === "active");
+  const inactive = stored.filter((memory) => memory.status && memory.status !== "active");
+  const pending = filterVisiblePending(server.pending_memory_items || []);
   return `
     ${timeline("maintenance", "维护事件")}
     ${confirm ? card("本轮待定记忆", `
@@ -881,6 +1080,16 @@ function renderMemory() {
     `) : ""}
     ${batch ? renderBatch({...batch, ...batchDone}) : card("MemoryBatchClassifier", `<div class="empty">尚未触发批分类。</div>`)}
     ${maintain ? renderMaintainer(maintain) : card("MemoryMaintainer", `<div class="empty">尚未触发生命周期维护。</div>`)}
+    ${card("持久化记忆快照", `
+      ${metrics([
+        metric("Active", active.length, "ok"),
+        metric("Inactive", inactive.length, inactive.length ? "warn" : ""),
+        metric("Pending", pending.length, pending.length ? "info" : ""),
+      ])}
+      ${details(`Active (${active.length})`, active.map(memoryRecordCard).join("") || `<div class="empty">暂无活跃记忆</div>`, true)}
+      ${details(`Inactive (${inactive.length})`, inactive.map(memoryRecordCard).join("") || `<div class="empty">暂无失效记忆</div>`)}
+      ${details(`Pending (${pending.length})`, pending.map(pendingMemoryCard).join("") || `<div class="empty">暂无待分类记忆</div>`)}
+    `)}
   `;
 }
 
@@ -910,7 +1119,7 @@ function renderDirectorDebug() {
   const result = merged("confirmation").director_event_result;
   const npcGeneration = merged("generation").director_npc_result;
   const npcConfirmation = merged("confirmation").director_npc_result;
-  const directorNpcEntityId = merged("confirmation").director_npc_entity_id;
+  const directorNpcEntityId = merged("confirmation").director_npc_profile_id;
   const server = state.serverState || {};
   const active = sortDirectorEvents(server.active_director_events || []);
   const resolved = server.resolved_director_events || [];
@@ -1439,7 +1648,15 @@ function memoryRecordCard(mem) {
       ["标签", chips(mem.tags)],
       ["地点", esc(text(mem.location))],
       ["时间", esc(text(mem.time_label))],
+      ["状态", esc(text(mem.status, "active"))],
+      ["状态原因", esc(text(mem.status_reason))],
+      ["替代者", esc(text(mem.superseded_by))],
+      ["Owner", esc(text(mem.owner))],
+      ["置信/显著", esc(`${fmt(mem.confidence)} / ${fmt(mem.salience)}`)],
+      ["来源场景", esc(text(mem.source_scene_id))],
+      ["来源Pending", chips(mem.source_pending_ids)],
       ["证据", list(mem.source_text_span)],
+      ["创建/更新", esc(`${text(mem.created_at)} / ${text(mem.updated_at)}`)],
     ])}
   </div>`;
 }
@@ -1454,6 +1671,10 @@ function pendingMemoryCard(item) {
       ["实体", chips(item.entities)],
       ["地点", esc(text(item.location))],
       ["时间", esc(text(item.time_label))],
+      ["Owner", esc(text(item.owner))],
+      ["状态", esc(item.discarded ? "discarded" : item.classified ? "classified" : "pending")],
+      ["舍弃原因", esc(text(item.discard_reason))],
+      ["创建", esc(text(item.created_at))],
       ["证据", list(item.source_text_span)],
     ])}
   </div>`;
@@ -1522,11 +1743,34 @@ async function refreshState({ preserveStatus = false } = {}) {
       state.pendingGroupId = group.group_id;
       state.pendingVariants = group.variants || [];
       selectPendingVariant(state.pendingVariants.length - 1);
-    } else if (!state.pendingTurnId && data.pending_opening_ids?.length) {
-      state.pendingTurnId = data.pending_opening_ids[0];
+    } else if (!state.pendingTurnId && (data.pending_openings?.length || data.pending_opening_ids?.length)) {
+      const opening = data.pending_openings?.[0];
+      state.pendingTurnId = opening?.turn_id || data.pending_opening_ids[0];
+      state.pendingSceneText = opening?.scene_result?.scene_text || null;
+      if (opening?.scene_result?.scene_text) {
+        addEditableScene(
+          opening.scene_result.scene_text,
+          "开场 · 待确认",
+          opening.scene_result.closing_prompt || "",
+        );
+      }
       els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
     }
     setStatus(preserveStatus ? previousStatus : (state.pendingTurnId ? "正文已生成 - 待确认" : "Ready"));
+  }
+}
+
+async function refreshMaintenanceJobs() {
+  if (!state.serverState) return;
+  try {
+    const data = await api("/api/maintenance-jobs?limit=100");
+    state.serverState.maintenance_jobs = data.jobs || [];
+    state.serverState.maintenance_job_status_counts = data.status_counts || {};
+    if (state.activeTab === "jobs" || state.activeTab === "overview") renderDebug();
+  } catch (err) {
+    if (state.activeTab === "jobs") {
+      els.debugBody.insertAdjacentHTML("afterbegin", `<div class="job-error">${esc(err.message || "后台任务刷新失败")}</div>`);
+    }
   }
 }
 
@@ -1725,11 +1969,14 @@ function renderError(err) {
 els.generateBtn.onclick = generateTurn;
 els.confirmBtn.onclick = confirmTurn;
 els.refreshBtn.onclick = () => refreshState();
+els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
+els.createSaveBtn.onclick = createSave;
 els.difficultySelect.onchange = () => api("/api/difficulty", { method: "POST", body: JSON.stringify({ difficulty: els.difficultySelect.value }) }).catch(console.error);
 els.maxCharsInput.onchange = () => api("/api/max-chars", { method: "POST", body: JSON.stringify({ max_chars: parseInt(els.maxCharsInput.value, 10) || 1500 }) }).catch(console.error);
 
 renderTabs();
 renderDebug();
-refreshState().catch((err) => {
+Promise.all([loadSaves(), refreshState()]).catch((err) => {
   els.statePanel.innerHTML = card("状态加载失败", esc(err.message || "Unknown"));
 });
+window.setInterval(refreshMaintenanceJobs, 2000);

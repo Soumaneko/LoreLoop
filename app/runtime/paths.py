@@ -2,6 +2,42 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SAVES_DIR = PROJECT_ROOT / "saves"
+LEGACY_DATA_DIR = PROJECT_ROOT / "data"
+LEGACY_APP_SAVES_DIR = PROJECT_ROOT / "app" / "saves"
+ACTIVE_SAVE_FILE = SAVES_DIR / ".active_save"
+DEFAULT_SAVE_NAME = "default"
+
+
+def validate_save_name(name: str) -> str:
+    clean = str(name).strip()
+    if not clean or len(clean) > 80:
+        raise ValueError("Save name must contain 1-80 characters")
+    if clean in {".", ".."} or clean.startswith("."):
+        raise ValueError("Save name cannot be hidden or relative")
+    if any(char in clean for char in ("/", "\\", "\0")):
+        raise ValueError("Save name cannot contain path separators")
+    if any(ord(char) < 32 for char in clean):
+        raise ValueError("Save name cannot contain control characters")
+    return clean
+
+
+def configured_save_name() -> str:
+    candidates = (
+        (ACTIVE_SAVE_FILE, SAVES_DIR),
+        (LEGACY_APP_SAVES_DIR / ACTIVE_SAVE_FILE.name, LEGACY_APP_SAVES_DIR),
+    )
+    for active_file, saves_dir in candidates:
+        try:
+            name = validate_save_name(active_file.read_text(encoding="utf-8"))
+            if (saves_dir / name).is_dir():
+                return name
+        except (FileNotFoundError, OSError, ValueError):
+            continue
+    return DEFAULT_SAVE_NAME
+
+
 @dataclass(frozen=True)
 class CampaignPaths:
     data_dir: Path
@@ -55,7 +91,9 @@ class CampaignPaths:
         return self.data_dir / "settings.json"
 
 
-DEFAULT_CAMPAIGN_PATHS = CampaignPaths.from_data_dir("data")
+DEFAULT_CAMPAIGN_PATHS = CampaignPaths.from_data_dir(
+    SAVES_DIR / configured_save_name()
+)
 
 # Stable compatibility constants for existing callers.
 DATA_DIR = DEFAULT_CAMPAIGN_PATHS.data_dir

@@ -112,6 +112,24 @@ button:disabled {
   letter-spacing: 0;
 }
 
+.header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.save-select {
+  width: min(132px, 34vw);
+  min-width: 84px;
+  height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  padding: 0 8px;
+  color: var(--text);
+}
+
 .eyebrow {
   font-size: 11px;
   color: var(--muted);
@@ -352,6 +370,25 @@ select:focus {
   background: #fff;
   padding: 10px;
   margin-top: 10px;
+}
+
+.job-card code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.job-error {
+  margin-top: 10px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: var(--red-bg);
+  color: var(--red);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .card-title {

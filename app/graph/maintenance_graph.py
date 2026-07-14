@@ -226,6 +226,11 @@ def run_memory_batch_maintenance(
 
 
 def batch_classify_stream():
+    with get_campaign_runtime().confirmation_lock:
+        yield from _batch_classify_stream()
+
+
+def _batch_classify_stream():
     state = prepare_manual_batch_state()
     pending_items = state.get("pending_items", [])
     yield {
@@ -274,6 +279,11 @@ def batch_classify_stream():
 
 
 def memory_maintain_stream():
+    with get_campaign_runtime().confirmation_lock:
+        yield from _memory_maintain_stream()
+
+
+def _memory_maintain_stream():
     state, active_count, total_count = prepare_manual_memory_maintenance_state()
     yield {
         "step": "memory_maintain_started",

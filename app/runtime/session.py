@@ -11,7 +11,11 @@ from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.short_term_memory import ShortTermMemory
 from app.domain.plot_outline.schemas import PlotOutlineContext
 from app.core.llm.config import SharedGatewayFactory
-from app.runtime.paths import CampaignPaths, DEFAULT_CAMPAIGN_PATHS
+from app.runtime.paths import (
+    CampaignPaths,
+    DEFAULT_CAMPAIGN_PATHS,
+    configured_save_name,
+)
 from app.runtime.services import RuntimeServices
 from app.runtime.stores import StoreBundle
 from app.runtime.jobs import MaintenanceJobCoordinator
@@ -126,6 +130,7 @@ class CampaignRuntime:
         self.paths = paths or DEFAULT_CAMPAIGN_PATHS
         self.stores = stores or StoreBundle(self.paths)
         self.gateway_factory = gateway_factory or SharedGatewayFactory()
+        self._max_workers = max_workers
         self.pending_turns = PendingTurnRepository()
         self.pending_openings = PendingOpeningRepository()
         self.jobs = MaintenanceJobCoordinator(max_workers=max_workers)
@@ -134,18 +139,51 @@ class CampaignRuntime:
             gateway_factory=self.gateway_factory,
             jobs=self.jobs,
         )
-        self._confirmation_lock = threading.Lock()
+        self._confirmation_lock = threading.RLock()
 
     @property
-    def confirmation_lock(self) -> threading.Lock:
+    def confirmation_lock(self) -> threading.RLock:
         """Serialize commits inside this campaign while allowing other runtimes."""
         return self._confirmation_lock
+
+    def has_pending_content(self) -> bool:
+        return bool(self.pending_turns.mapping or self.pending_openings.mapping)
+
+    def reconfigure(
+        self,
+        campaign_id: str,
+        paths: CampaignPaths,
+        *,
+        discard_pending: bool = False,
+    ) -> None:
+        """Switch this runtime to another persisted campaign directory."""
+        with self._confirmation_lock:
+            if self.has_pending_content() and not discard_pending:
+                raise RuntimeError(
+                    "Current save has pending content. Confirm it or explicitly "
+                    "discard pending content before switching saves."
+                )
+            self.jobs.shutdown(wait=True)
+            self.pending_turns.mapping.clear()
+            self.pending_openings.mapping.clear()
+            self.campaign_id = campaign_id
+            self.paths = paths
+            self.stores = StoreBundle(paths)
+            self.jobs = MaintenanceJobCoordinator(max_workers=self._max_workers)
+            self.services = RuntimeServices(
+                stores=self.stores,
+                gateway_factory=self.gateway_factory,
+                jobs=self.jobs,
+            )
 
     def close(self, *, wait_for_jobs: bool = True) -> None:
         self.jobs.shutdown(wait=wait_for_jobs)
 
 
-DEFAULT_CAMPAIGN_RUNTIME = CampaignRuntime()
+DEFAULT_CAMPAIGN_RUNTIME = CampaignRuntime(
+    configured_save_name(),
+    paths=DEFAULT_CAMPAIGN_PATHS,
+)
 
 # Compatibility aliases for the stable API and existing local tooling. New code
 # should access these collections through get_campaign_runtime().
