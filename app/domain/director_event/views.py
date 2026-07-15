@@ -8,8 +8,12 @@ def project_director_event(
 ) -> str:
     data = event.semantic_view()
     current_offset = event.progress_index - 1
-    past_milestones = event.milestones[:current_offset]
-    current_milestone = event.milestones[current_offset]
+    if event.route_mode == "intervention" and event.intervention_route is not None:
+        past_milestones = event.milestones[:event.progress_index]
+        current_milestone = event.intervention_route.goal
+    else:
+        past_milestones = event.milestones[:current_offset]
+        current_milestone = event.milestones[current_offset]
     for key in (
         "milestones",
         "milestone_interval_steps",
@@ -17,6 +21,8 @@ def project_director_event(
         "progress_index",
         "player_contact_state",
         "last_presented_turn",
+        "route_mode",
+        "intervention_route",
     ):
         data.pop(key, None)
     data["already_happened"] = [

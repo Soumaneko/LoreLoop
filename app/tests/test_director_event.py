@@ -12,6 +12,10 @@ from app.domain.director_event import (
     DirectorEvent,
     DirectorEventConsumption,
     DirectorEventEntryPoint,
+    DirectorEventInterventionPlan,
+    DirectorEventInterventionPlanner,
+    DirectorEventInterventionReviewer,
+    DirectorEventInterventionReviewResult,
     DirectorEventReviewResult,
     DirectorEventSelectionResult,
     DirectorEventReviewer,
@@ -25,6 +29,8 @@ from app.domain.director_event.views import (
 )
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.director_npc.schemas import DirectorNPCDraft
+from app.domain.entity.schemas import EntityProfileUpdateInput
+from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.director_event.workflows import update_director_event_workflow
 
 
@@ -135,16 +141,59 @@ def _review_response(**updates):
     return response
 
 
+def _plan_response(**updates):
+    response = {
+        "reason": "玩家已改变事件因果，需要有限期介入目标。",
+        "goal": "在局势失控前保护信使并处理被截信件。",
+        "success_state": "信使得到保护，被截信件安全归还。",
+        "failure_state": "信使被转移，被截信件落入地方势力手中。",
+        "duration_phases": 3,
+    }
+    response.update(updates)
+    return response
+
+
 def _selection_response(**updates):
     response = _selection_result().model_dump(mode="json")
     response.update(updates)
     return response
 
 
-def _run_review(store, response, *, turn_index=2):
+def _intervention_review_response(**updates):
+    response = {
+        "status": "ongoing",
+        "reason": "介入目标的成败条件均未成立。",
+        "player_contact_state": "玩家正在介入该事件。",
+        "evidence": ["本轮尚不足以确认介入结果。"],
+    }
+    response.update(updates)
+    return response
+
+
+def _run_review(
+    store,
+    response,
+    *,
+    turn_index=2,
+    plan_response=None,
+    intervention_response=None,
+):
     mock = MockLLM()
     mock.set_responses([json.dumps(response, ensure_ascii=False)])
     gateway = mock.build_gateway()
+    planner_mock = MockLLM()
+    planner_mock.set_responses(
+        [json.dumps(plan_response or _plan_response(), ensure_ascii=False)]
+    )
+    intervention_mock = MockLLM()
+    intervention_mock.set_responses(
+        [
+            json.dumps(
+                intervention_response or _intervention_review_response(),
+                ensure_ascii=False,
+            )
+        ]
+    )
     return update_director_event_workflow(
         role="ambient",
         user_input="我继续处理眼前的事情。",
@@ -155,7 +204,32 @@ def _run_review(store, response, *, turn_index=2):
         turn_index=turn_index,
         store=store,
         reviewer=DirectorEventReviewer(gateway),
+        intervention_reviewer=DirectorEventInterventionReviewer(
+            intervention_mock.build_gateway()
+        ),
+        intervention_planner=DirectorEventInterventionPlanner(
+            planner_mock.build_gateway()
+        ),
         selector=DirectorEventSelector(gateway),
+    )
+
+
+def _intervention_event(*, duration_phases=3) -> DirectorEvent:
+    plan = DirectorEventInterventionPlan.model_validate(
+        _plan_response(duration_phases=duration_phases)
+    )
+    route = plan.to_route(
+        triggered_turn=2,
+        redirect_reason="玩家已使默认路线不可能。",
+        evidence=["f1"],
+        current_clock=_state().world_clock,
+    )
+    return _event().model_copy(
+        update={
+            "route_mode": "intervention",
+            "intervention_route": route,
+            "next_progress_clock": None,
+        }
     )
 
 
@@ -192,6 +266,10 @@ class TestDirectorEventSchema:
             "player_contact_state",
             "entry_points",
             "last_presented_turn",
+            "route_mode",
+            "intervention_route",
+            "resolution_kind",
+            "resolved_state",
             "resolved_reason",
             "resolved_turn",
             "created_turn",
@@ -249,7 +327,8 @@ class TestDirectorEventSchema:
 
 
 class TestDirectorEventStore:
-    def test_rejects_unsupported_database_schema(self, tmp_path):
+    @pytest.mark.parametrize("schema_version", [1, 2, 3])
+    def test_rejects_unsupported_database_schema(self, tmp_path, schema_version):
         db_path = tmp_path / "director_events.db"
         connection = sqlite3.connect(db_path)
         connection.execute(
@@ -263,12 +342,15 @@ class TestDirectorEventStore:
         )
         connection.execute(
             "INSERT INTO schema_versions(component, version) VALUES (?, ?)",
-            ("director_event", 1),
+            ("director_event", schema_version),
         )
         connection.commit()
         connection.close()
 
-        with pytest.raises(RuntimeError, match="expected 2, got 1"):
+        with pytest.raises(
+            RuntimeError,
+            match=f"expected 4, got {schema_version}",
+        ):
             DirectorEventStore(str(db_path))
 
     def test_arc_and_ambient_active_events_coexist(self):
@@ -356,6 +438,117 @@ class TestDirectorEventReviewSchema:
 
         assert result.resolved_reason == "事件已经完成。"
 
+    def test_redirect_requires_evidence(self):
+        with pytest.raises(ValidationError, match="redirect requires evidence"):
+            DirectorEventReviewResult.model_validate(
+                _review_response(action="redirect", evidence=[])
+            )
+
+    def test_intervention_review_rejects_action_contract(self):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            DirectorEventInterventionReviewResult.model_validate(
+                _intervention_review_response(action="redirect")
+            )
+
+    def test_resolved_intervention_review_requires_evidence(self):
+        with pytest.raises(ValidationError, match="requires evidence"):
+            DirectorEventInterventionReviewResult.model_validate(
+                _intervention_review_response(status="success", evidence=[])
+            )
+
+    @pytest.mark.parametrize("duration_phases", [0, 61])
+    def test_intervention_duration_is_finite(self, duration_phases):
+        with pytest.raises(ValidationError):
+            DirectorEventInterventionPlan.model_validate(
+                _plan_response(duration_phases=duration_phases)
+            )
+
+
+class TestDirectorEventInterventionPlanner:
+    def test_planner_receives_redirect_context(self):
+        spy = _SpyGateway(_plan_response())
+        review = DirectorEventReviewResult.model_validate(
+            _review_response(
+                action="redirect",
+                reason="玩家使默认路线失效。",
+                evidence=["f1"],
+                exposure="engaged",
+            )
+        )
+
+        result = DirectorEventInterventionPlanner(spy).plan(
+            active_event=_event(),
+            redirect_review=review,
+            user_input="我保护信使。",
+            scene_facts='{"facts":[{"fact_id":"f1","fact":"信使被保护。"}]}',
+            current_state=_state(),
+            core_memory=_core(),
+            recent_summaries=[],
+        )
+
+        assert result.duration_phases == 3
+        call = spy.calls[0]
+        assert call["task"] == "director_event_intervention_plan"
+        redirect_review = json.loads(call["input_data"]["redirect_review_json"])
+        assert redirect_review["reason"] == "玩家使默认路线失效。"
+        assert redirect_review["evidence"] == ["f1"]
+        assert redirect_review["player_contact_state"]
+        assert "recent_summaries_json" in call["input_data"]
+        assert "entity_profiles_json" in call["input_data"]
+        assert "milestones" in call["input_data"]["active_event_json"]
+
+    def test_planner_filters_profiles_by_required_anchor_sources(self):
+        spy = _SpyGateway(_plan_response())
+        review = DirectorEventReviewResult.model_validate(
+            _review_response(
+                action="redirect",
+                evidence=["f1"],
+                exposure="engaged",
+            )
+        )
+        entities = [
+            EntityProfileUpdateInput(
+                entity_type="organization",
+                name="北郡地方势力",
+                aliases=["地方势力"],
+            ),
+            EntityProfileUpdateInput(
+                entity_type="item",
+                name="银钥匙",
+                aliases=["银匙"],
+            ),
+            EntityProfileUpdateInput(entity_type="location", name="无关矿山"),
+        ]
+        npcs = [
+            NPCProfileDirectorView(name="北郡信使", aliases=["信使"]),
+            NPCProfileDirectorView(name="卢西安"),
+            NPCProfileDirectorView(name="木偶师埃利奥", aliases=["埃利奥"]),
+            NPCProfileDirectorView(name="无关旅人"),
+        ]
+
+        DirectorEventInterventionPlanner(spy).plan(
+            active_event=_event(),
+            redirect_review=review,
+            user_input="继续介入。",
+            scene_facts='{"facts":[{"fact_id":"f1","fact":"局势改变。"}]}',
+            current_state=_state(),
+            core_memory=_core(),
+            entity_profiles=entities,
+            npc_profiles=npcs,
+            entity_mentions=["银匙"],
+            npc_mentions=["埃利奥"],
+        )
+
+        input_data = spy.calls[0]["input_data"]
+        entity_names = {
+            item["name"] for item in json.loads(input_data["entity_profiles_json"])
+        }
+        npc_names = {
+            item["name"] for item in json.loads(input_data["npc_profiles_json"])
+        }
+        assert entity_names == {"北郡地方势力", "银钥匙"}
+        assert npc_names == {"北郡信使", "卢西安", "木偶师埃利奥"}
+
 
 class TestDirectorEventReviewerInput:
     def test_reviewer_receives_event_fields(self):
@@ -388,6 +581,8 @@ class TestDirectorEventReviewerInput:
             "player_contact_state",
             "entry_points",
             "last_presented_turn",
+            "route_mode",
+            "intervention_route",
             "status",
             "created_turn",
             "updated_turn",
@@ -400,6 +595,51 @@ class TestDirectorEventReviewerInput:
         assert event_json["current_milestone"] == _milestones()[0]
         assert event_json["next_milestone_number"] == 2
         assert event_json["next_milestone"] == _milestones()[1]
+
+    def test_default_reviewer_rejects_intervention_route(self):
+        with pytest.raises(ValueError, match="requires the default route"):
+            DirectorEventReviewer(_SpyGateway(_review_response())).review(
+                active_event=_intervention_event(),
+                user_input="继续。",
+                scene_facts="没有新变化。",
+                current_state=_state(),
+                core_memory=_core(),
+                scene_summaries=[],
+            )
+
+
+class TestDirectorEventInterventionReviewerInput:
+    def test_intervention_reviewer_runs_as_separate_task(self):
+        spy = _SpyGateway(_intervention_review_response())
+
+        result = DirectorEventInterventionReviewer(spy).review(
+            active_event=_intervention_event(),
+            user_input="我继续安抚她。",
+            scene_facts="罗丝仍在挣扎，但尚未恢复平静。",
+            current_state=_state(),
+            core_memory=_core(),
+        )
+
+        assert result.status == "ongoing"
+        assert spy.calls[0]["task"] == "director_event_intervention_review"
+        assert "scene_summaries_json" not in spy.calls[0]["input_data"]
+        assert "success_state" in spy.calls[0]["input_data"]["active_event_json"]
+        output_schema = json.loads(
+            spy.calls[0]["input_data"]["output_schema_json"]
+        )
+        assert "exposure" not in output_schema["properties"]
+
+    def test_intervention_reviewer_rejects_default_route(self):
+        with pytest.raises(ValueError, match="requires an intervention route"):
+            DirectorEventInterventionReviewer(
+                _SpyGateway(_intervention_review_response())
+            ).review(
+                active_event=_event(),
+                user_input="继续。",
+                scene_facts="没有新变化。",
+                current_state=_state(),
+                core_memory=_core(),
+            )
 
 
 class TestDirectorEventViews:
@@ -435,6 +675,20 @@ class TestDirectorEventViews:
             "主角当前接触情况：玩家已经看过驿站公告。",
         ]
         assert data["currently_happening"] == event.milestones[1]
+
+    def test_intervention_projection_uses_goal_without_leaking_outcomes(self):
+        event = _intervention_event().model_copy(
+            update={"exposure": "engaged", "progress_index": 2}
+        )
+
+        projected = project_director_event(event)
+        data = json.loads(projected)
+
+        assert data["already_happened"][:2] == event.milestones[:2]
+        assert data["currently_happening"] == event.intervention_route.goal
+        assert event.intervention_route.success_state not in projected
+        assert event.intervention_route.failure_state not in projected
+        assert "intervention_route" not in data
 
     def test_plot_projection_exposes_only_consumption_boundaries(self):
         consumptions = [
@@ -740,6 +994,155 @@ class TestDirectorEventWorkflow:
         assert "auto_resolved_active_event" in result.notes
         assert store.get_by_id(event.event_id).status == "resolved"
 
+    def test_redirect_preserves_event_and_creates_finite_intervention(self):
+        store = DirectorEventStore()
+        event = _event().model_copy(update={"progress_index": 2})
+        store.save(event)
+
+        result = _run_review(
+            store,
+            _review_response(
+                action="redirect",
+                reason="玩家的介入已使默认最终状态不可能。",
+                evidence=["f1"],
+                exposure="engaged",
+            ),
+            plan_response=_plan_response(duration_phases=4),
+        )
+
+        active = store.get_active("ambient")
+        assert result.notes == [
+            "reviewed_existing_active_event",
+            "redirected_active_event",
+        ]
+        assert result.intervention_plan_result.duration_phases == 4
+        assert active.event_id == event.event_id
+        assert active.milestones == event.milestones
+        assert active.progress_index == 2
+        assert active.route_mode == "intervention"
+        assert active.next_progress_clock is None
+        assert active.intervention_route.redirect_reason == (
+            "玩家的介入已使默认最终状态不可能。"
+        )
+        assert active.intervention_route.deadline_clock == (
+            _state().world_clock.advance_phase(4)
+        )
+
+    @pytest.mark.parametrize(
+        ("outcome", "kind", "state_key"),
+        [
+            ("success", "intervention_success", "success_state"),
+            ("failure", "intervention_failure", "failure_state"),
+        ],
+    )
+    def test_intervention_outcome_resolves_without_default_advance(
+        self, outcome, kind, state_key
+    ):
+        store = DirectorEventStore()
+        event = _intervention_event()
+        store.save(event)
+
+        _run_review(
+            store,
+            _review_response(),
+            intervention_response=_intervention_review_response(
+                status=outcome,
+                reason=f"介入路线{outcome}结果已成立。",
+            ),
+        )
+
+        resolved = store.get_by_id(event.event_id)
+        assert resolved.status == "resolved"
+        assert resolved.progress_index == event.progress_index
+        assert resolved.resolution_kind == kind
+        assert resolved.resolved_state == getattr(
+            event.intervention_route, state_key
+        )
+        assert resolved.intervention_route.status == (
+            "succeeded" if outcome == "success" else "failed"
+        )
+
+    def test_intervention_hold_does_not_advance_default_route(self):
+        store = DirectorEventStore()
+        event = _intervention_event(duration_phases=3)
+        store.save(event)
+
+        result = _run_review(
+            store,
+            _review_response(),
+            intervention_response=_intervention_review_response(),
+        )
+
+        active = store.get_active("ambient")
+        assert result.notes == [
+            "reviewed_existing_active_event",
+            "kept_active_event",
+        ]
+        assert result.review_result is None
+        assert result.intervention_review_result.status == "ongoing"
+        assert active.progress_index == event.progress_index
+        assert active.intervention_route.status == "active"
+
+    def test_intervention_hold_at_deadline_resolves_failure(self):
+        store = DirectorEventStore()
+        event = _intervention_event()
+        due_route = event.intervention_route.model_copy(
+            update={"deadline_clock": _state().world_clock}
+        )
+        event = event.model_copy(update={"intervention_route": due_route})
+        store.save(event)
+
+        result = _run_review(
+            store,
+            _review_response(),
+            intervention_response=_intervention_review_response(),
+        )
+
+        resolved = store.get_by_id(event.event_id)
+        assert "auto_failed_intervention" in result.notes
+        assert resolved.status == "resolved"
+        assert resolved.resolution_kind == "intervention_failure"
+        assert resolved.resolved_state == due_route.failure_state
+
+    def test_success_at_deadline_beats_timeout(self):
+        store = DirectorEventStore()
+        event = _intervention_event()
+        due_route = event.intervention_route.model_copy(
+            update={"deadline_clock": _state().world_clock}
+        )
+        event = event.model_copy(update={"intervention_route": due_route})
+        store.save(event)
+
+        result = _run_review(
+            store,
+            _review_response(),
+            intervention_response=_intervention_review_response(
+                status="success",
+            ),
+        )
+
+        resolved = store.get_by_id(event.event_id)
+        assert "auto_failed_intervention" not in result.notes
+        assert resolved.resolution_kind == "intervention_success"
+
+    def test_store_rejects_second_redirect(self):
+        store = DirectorEventStore()
+        event = _intervention_event()
+        store.save(event)
+
+        redirected = store.redirect_active(
+            event.event_id,
+            turn_index=3,
+            current_clock=_state().world_clock,
+            redirect_reason="不允许的二次改道。",
+            evidence=["f2"],
+            plan=DirectorEventInterventionPlan.model_validate(_plan_response()),
+        )
+
+        active = store.get_active("ambient")
+        assert redirected is False
+        assert active.intervention_route == event.intervention_route
+
     def test_cooldown_after_resolve_skips_selection(self):
         store = DirectorEventStore()
         event = _event()
@@ -1016,7 +1419,8 @@ class TestDirectorEventSelector:
 
         assert "世界状态检查点" in selector_prompt
         assert "不得限定唯一执行者、唯一方法" in selector_prompt
-        assert "玩家推动下一状态成立应 advance" in reviewer_prompt
+        assert "玩家推动默认下一状态成立应 advance" in reviewer_prompt
+        assert "预定路线失效但冲突仍在应 redirect" in reviewer_prompt
         assert "不受 progress_index 限制" in reviewer_prompt
         assert "不得把“玩家介入”本身作为 resolve 依据" in reviewer_prompt
 

@@ -25,6 +25,8 @@ class DirectorEventReviewer:
         scene_summaries: list[SceneSummary],
         trace_id: str | None = None,
     ) -> DirectorEventReviewResult:
+        if active_event.route_mode != "default":
+            raise ValueError("DirectorEventReviewer requires the default route")
         event_view = active_event.semantic_view()
         current_offset = active_event.progress_index - 1
         next_offset = current_offset + 1

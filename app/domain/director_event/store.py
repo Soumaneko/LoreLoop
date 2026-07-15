@@ -4,7 +4,14 @@ from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transactio
 
 from app.domain.current_state.schemas import WorldClock
 
-from .schemas import DirectorEvent, DirectorEventExposure, utc_now
+from .schemas import (
+    DirectorEvent,
+    DirectorEventExposure,
+    DirectorEventInterventionPlan,
+    DirectorEventResolutionKind,
+    InterventionOutcome,
+    utc_now,
+)
 
 
 _EXPOSURE_RANK: dict[DirectorEventExposure, int] = {
@@ -42,12 +49,12 @@ class DirectorEventStore:
                 "SELECT version FROM schema_versions WHERE component = ?",
                 ("director_event",),
             ).fetchone()
-            if version_row is not None and int(version_row["version"]) != 2:
+            if version_row is not None and int(version_row["version"]) != 4:
                 raise RuntimeError(
                     "Unsupported DirectorEvent database schema: "
-                    f"expected 2, got {version_row['version']}"
+                    f"expected 4, got {version_row['version']}"
                 )
-        ensure_schema_version(self._conn, "director_event", 2)
+        ensure_schema_version(self._conn, "director_event", 4)
         self._conn.commit()
 
     def save(self, event: DirectorEvent) -> str:
@@ -104,6 +111,8 @@ class DirectorEventStore:
         *,
         turn_index: int,
         resolved_reason: str | None = None,
+        resolution_kind: DirectorEventResolutionKind | None = None,
+        resolved_state: str | None = None,
     ) -> bool:
         event = self.get_by_id(event_id)
         if event is None or event.status != "active":
@@ -112,6 +121,8 @@ class DirectorEventStore:
             update={
                 "status": "resolved",
                 "resolved_reason": resolved_reason or event.resolved_reason,
+                "resolution_kind": resolution_kind or event.resolution_kind,
+                "resolved_state": resolved_state or event.resolved_state,
                 "resolved_turn": turn_index,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
@@ -119,6 +130,114 @@ class DirectorEventStore:
         )
         self.save(updated)
         return True
+
+    def redirect_active(
+        self,
+        event_id: str,
+        *,
+        turn_index: int,
+        current_clock: WorldClock,
+        redirect_reason: str,
+        evidence: list[str],
+        plan: DirectorEventInterventionPlan,
+    ) -> bool:
+        event = self.get_by_id(event_id)
+        if event is None or event.status != "active":
+            return False
+
+        if event.route_mode != "default" or event.intervention_route is not None:
+            return False
+        route = plan.to_route(
+            triggered_turn=turn_index,
+            redirect_reason=redirect_reason,
+            evidence=evidence,
+            current_clock=current_clock,
+        )
+        updated = event.model_copy(
+            update={
+                "route_mode": "intervention",
+                "intervention_route": route,
+                "next_progress_clock": None,
+                "updated_turn": turn_index,
+                "updated_at": utc_now(),
+            }
+        )
+        self.save(updated)
+        return True
+
+    def resolve_intervention(
+        self,
+        event_id: str,
+        *,
+        outcome: InterventionOutcome,
+        turn_index: int,
+        resolved_reason: str,
+    ) -> bool:
+        event = self.get_by_id(event_id)
+        route = event.intervention_route if event is not None else None
+        if (
+            event is None
+            or event.status != "active"
+            or event.route_mode != "intervention"
+            or route is None
+            or route.status != "active"
+        ):
+            return False
+
+        succeeded = outcome == "success"
+        resolved_state = route.success_state if succeeded else route.failure_state
+        updated_route = route.model_copy(
+            update={
+                "status": "succeeded" if succeeded else "failed",
+                "resolved_turn": turn_index,
+            }
+        )
+        updated = event.model_copy(
+            update={
+                "status": "resolved",
+                "intervention_route": updated_route,
+                "resolution_kind": (
+                    "intervention_success"
+                    if succeeded
+                    else "intervention_failure"
+                ),
+                "resolved_state": resolved_state,
+                "resolved_reason": resolved_reason,
+                "resolved_turn": turn_index,
+                "updated_turn": turn_index,
+                "updated_at": utc_now(),
+            }
+        )
+        self.save(updated)
+        return True
+
+    def auto_fail_intervention_due(
+        self,
+        event_id: str,
+        *,
+        turn_index: int,
+        current_clock: WorldClock,
+    ) -> bool:
+        event = self.get_by_id(event_id)
+        route = event.intervention_route if event is not None else None
+        if (
+            event is None
+            or event.status != "active"
+            or event.route_mode != "intervention"
+            or route is None
+            or route.status != "active"
+            or _clock_index(current_clock) < _clock_index(route.deadline_clock)
+        ):
+            return False
+        return self.resolve_intervention(
+            event_id,
+            outcome="failure",
+            turn_index=turn_index,
+            resolved_reason=(
+                f"介入目标在 {route.duration_phases} 个时段内未达成："
+                f"{route.failure_state}"
+            ),
+        )
 
     def touch(self, event_id: str, *, turn_index: int) -> bool:
         event = self.get_by_id(event_id)
@@ -171,7 +290,11 @@ class DirectorEventStore:
         current_clock: WorldClock,
     ) -> bool:
         event = self.get_by_id(event_id)
-        if event is None or event.status != "active":
+        if (
+            event is None
+            or event.status != "active"
+            or event.route_mode != "default"
+        ):
             return False
         next_index = min(event.progress_index + 1, 3)
         next_clock = self._next_progress_clock(event, next_index, current_clock)
@@ -194,7 +317,12 @@ class DirectorEventStore:
         current_clock: WorldClock,
     ) -> str | None:
         event = self.get_by_id(event_id)
-        if event is None or event.status != "active" or event.next_progress_clock is None:
+        if (
+            event is None
+            or event.status != "active"
+            or event.route_mode != "default"
+            or event.next_progress_clock is None
+        ):
             return None
         if _clock_index(current_clock) < _clock_index(event.next_progress_clock):
             return None
@@ -203,6 +331,8 @@ class DirectorEventStore:
                 event_id,
                 turn_index=turn_index,
                 resolved_reason="事件后台演进抵达最终阶段并自动收束。",
+                resolution_kind="default",
+                resolved_state=event.milestones[2],
             )
             return "resolved"
         self.advance_progress(
@@ -216,6 +346,8 @@ class DirectorEventStore:
                 event_id,
                 turn_index=turn_index,
                 resolved_reason="事件后台演进抵达最终阶段并自动收束。",
+                resolution_kind="default",
+                resolved_state=advanced.milestones[2],
             )
             return "resolved"
         return "advanced"

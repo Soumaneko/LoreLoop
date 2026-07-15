@@ -10,7 +10,17 @@ from app.domain.current_state.schemas import WorldClock
 DirectorEventStatus = Literal["active", "resolved"]
 DirectorEventRole = Literal["arc", "ambient"]
 DirectorEventExposure = Literal["hidden", "foreshadowed", "engaged"]
-ReviewAction = Literal["hold", "advance", "resolve"]
+DirectorEventRouteMode = Literal["default", "intervention"]
+InterventionRouteStatus = Literal["active", "succeeded", "failed"]
+DirectorEventResolutionKind = Literal[
+    "default",
+    "alternate",
+    "intervention_success",
+    "intervention_failure",
+]
+InterventionOutcome = Literal["success", "failure"]
+ReviewAction = Literal["hold", "advance", "redirect", "resolve"]
+InterventionReviewStatus = Literal["ongoing", "success", "failure"]
 PLAYER_CONTACT_STATE_MAX_LENGTH = 200
 
 
@@ -33,7 +43,56 @@ class DirectorEventEntryPoint(BaseModel):
         min_length=1,
     )
 
+
+class DirectorEventInterventionRoute(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    triggered_turn: int = Field(ge=0)
+    redirect_reason: str = Field(min_length=1)
+    evidence: list[str] = Field(min_length=1)
+    plan_reason: str = Field(min_length=1)
+    goal: str = Field(min_length=1)
+    success_state: str = Field(min_length=1)
+    failure_state: str = Field(min_length=1)
+    duration_phases: int = Field(ge=1, le=60)
+    deadline_clock: WorldClock
+    status: InterventionRouteStatus = "active"
+    resolved_turn: int | None = Field(default=None, ge=0)
+
+
+class DirectorEventInterventionPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+    goal: str = Field(min_length=1)
+    success_state: str = Field(min_length=1)
+    failure_state: str = Field(min_length=1)
+    duration_phases: int = Field(ge=1, le=60)
+
+    def to_route(
+        self,
+        *,
+        triggered_turn: int,
+        redirect_reason: str,
+        evidence: list[str],
+        current_clock: WorldClock,
+    ) -> DirectorEventInterventionRoute:
+        return DirectorEventInterventionRoute(
+            triggered_turn=triggered_turn,
+            redirect_reason=redirect_reason,
+            evidence=list(evidence),
+            plan_reason=self.reason,
+            goal=self.goal,
+            success_state=self.success_state,
+            failure_state=self.failure_state,
+            duration_phases=self.duration_phases,
+            deadline_clock=current_clock.advance_phase(self.duration_phases),
+        )
+
+
 class DirectorEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     event_id: str = Field(default_factory=_new_id)
     role: DirectorEventRole
     title: str = Field(min_length=1)
@@ -65,6 +124,10 @@ class DirectorEvent(BaseModel):
     )
     entry_points: list[DirectorEventEntryPoint] = Field(default_factory=list)
     last_presented_turn: int | None = Field(default=None, ge=0)
+    route_mode: DirectorEventRouteMode = "default"
+    intervention_route: DirectorEventInterventionRoute | None = None
+    resolution_kind: DirectorEventResolutionKind | None = None
+    resolved_state: str | None = None
     resolved_reason: str | None = None
     resolved_turn: int | None = Field(default=None, ge=0)
     created_turn: int = Field(ge=0)
@@ -78,6 +141,20 @@ class DirectorEvent(BaseModel):
         if any(value < 1 for value in values):
             raise ValueError("milestone_interval_steps must contain positive phase counts")
         return values
+
+    @model_validator(mode="after")
+    def _validate_route_state(self):
+        if self.route_mode == "default" and self.intervention_route is not None:
+            raise ValueError("default route cannot have an intervention_route")
+        if self.route_mode == "intervention" and self.intervention_route is None:
+            raise ValueError("intervention route requires intervention_route")
+        if (
+            self.status == "active"
+            and self.intervention_route is not None
+            and self.intervention_route.status != "active"
+        ):
+            raise ValueError("active intervention event requires an active route")
+        return self
 
     def semantic_view(self) -> dict:
         return {
@@ -101,6 +178,12 @@ class DirectorEvent(BaseModel):
             "player_contact_state": self.player_contact_state,
             "entry_points": [entry.model_dump(mode="json") for entry in self.entry_points],
             "last_presented_turn": self.last_presented_turn,
+            "route_mode": self.route_mode,
+            "intervention_route": (
+                self.intervention_route.model_dump(mode="json")
+                if self.intervention_route is not None
+                else None
+            ),
         }
 
 
@@ -198,8 +281,30 @@ class DirectorEventReviewResult(BaseModel):
 
     @model_validator(mode="after")
     def _validate_resolved_reason(self):
+        if self.action == "redirect" and not self.evidence:
+            raise ValueError("redirect requires evidence")
+        if self.action == "redirect" and self.exposure != "engaged":
+            raise ValueError("redirect requires engaged exposure")
         if self.action == "resolve" and not (self.resolved_reason or "").strip():
             self.resolved_reason = self.reason
+        return self
+
+
+class DirectorEventInterventionReviewResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1)
+    status: InterventionReviewStatus
+    player_contact_state: str = Field(
+        min_length=1,
+        max_length=PLAYER_CONTACT_STATE_MAX_LENGTH,
+    )
+    evidence: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_evidence(self):
+        if self.status in {"success", "failure"} and not self.evidence:
+            raise ValueError("resolved intervention review requires evidence")
         return self
 
 

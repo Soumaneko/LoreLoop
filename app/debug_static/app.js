@@ -1583,6 +1583,7 @@ function entityCard(profile) {
 function directorCard(event) {
   if (!event) return `<div class="empty">无</div>`;
   const entryPoints = event.entry_points || [];
+  const intervention = event.intervention_route || null;
   const entryPointCards = entryPoints.map((entry, index) => `
     <div class="entry-point">
       <div class="muted">入口 ${index + 1}</div>
@@ -1602,10 +1603,18 @@ function directorCard(event) {
       ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
       ["解决原因", esc(text(event.resolved_reason))],
+      ["结算类型", esc(text(event.resolution_kind))],
+      ["结算状态", esc(text(event.resolved_state))],
       ["暴露状态", esc(text(event.exposure))],
       ["当前接触", esc(text(event.player_contact_state))],
       ["最近呈现", event.last_presented_turn === null || event.last_presented_turn === undefined ? `<span class="empty">无</span>` : esc(`T${event.last_presented_turn}`)],
       ["进度", esc(`${text(event.progress_index)} / 3`)],
+      ["路线模式", esc(text(event.route_mode || "default"))],
+      ["Redirect 原因", esc(text(intervention && intervention.redirect_reason))],
+      ["介入目标", esc(text(intervention && intervention.goal))],
+      ["成功状态", esc(text(intervention && intervention.success_state))],
+      ["失败状态", esc(text(intervention && intervention.failure_state))],
+      ["介入期限", intervention ? esc(`${intervention.duration_phases} 时段 / 第${intervention.deadline_clock.day}日 ${intervention.deadline_clock.phase}`) : `<span class="empty">无</span>`],
       ["下次推进", event.next_progress_clock ? esc(`第${event.next_progress_clock.day}日 ${event.next_progress_clock.phase}`) : `<span class="empty">无</span>`],
       ["阶段间隔", chips(event.milestone_interval_steps)],
       ["目标", esc(text(event.objective))],
@@ -1635,6 +1644,8 @@ function directorWorkflowResultCard(role, result) {
     ${result.active_before ? details("更新前", directorCard(result.active_before)) : ""}
     ${result.active_after ? details("更新后", directorCard(result.active_after), true) : ""}
     ${result.review_result ? details("Review", jsonBlock(result.review_result), true) : ""}
+    ${result.intervention_review_result ? details("Intervention Review", jsonBlock(result.intervention_review_result), true) : ""}
+    ${result.intervention_plan_result ? details("Intervention Plan", jsonBlock(result.intervention_plan_result), true) : ""}
     ${result.selection_result ? details("Select/Create", jsonBlock(result.selection_result), true) : ""}
   </div>`;
 }

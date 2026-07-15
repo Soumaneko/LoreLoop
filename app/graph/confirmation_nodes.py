@@ -3,9 +3,17 @@ from __future__ import annotations
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.current_state import StateChangeSet, StateUpdater
 from app.domain.director_event.reviewer import DirectorEventReviewer
+from app.domain.director_event.intervention_planner import (
+    DirectorEventInterventionPlanner,
+)
+from app.domain.director_event.intervention_reviewer import (
+    DirectorEventInterventionReviewer,
+)
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.entity.extractor import EntityExtractor
+from app.domain.entity.schemas import EntityExtractionResult
 from app.domain.npc_profile.extractor import NPCProfileExtractor
+from app.domain.npc_profile.schemas import NPCExtractionResult
 from app.domain.npc_profile.workflows import (
     sync_npc_profile_absence_from_current_state,
     update_npc_profiles_from_extraction,
@@ -34,6 +42,52 @@ def _gateway_for(state: ConfirmationState):
 
 def _store_factory(state: ConfirmationState, name: str):
     return getattr(state["runtime_services"].stores, name)
+
+
+def _entity_extraction_mentions(
+    extraction: EntityExtractionResult | None,
+) -> list[str]:
+    if extraction is None:
+        return []
+    values = [
+        value
+        for match in extraction.alias_matches
+        for value in (
+            match.extracted_text,
+            match.matched_entity_name,
+            match.new_alias,
+        )
+        if value
+    ]
+    values.extend(
+        value
+        for entity in extraction.retrieved_entities
+        for value in (entity.name, entity.matched_entity_name)
+        if value
+    )
+    return list(dict.fromkeys(values))
+
+
+def _npc_extraction_mentions(extraction: NPCExtractionResult | None) -> list[str]:
+    if extraction is None:
+        return []
+    values = [
+        value
+        for match in extraction.alias_matches
+        for value in (
+            match.extracted_text,
+            match.matched_npc_name,
+            match.new_alias,
+        )
+        if value
+    ]
+    values.extend(
+        value
+        for npc in extraction.retrieved_npcs
+        for value in (npc.name, npc.matched_npc_name)
+        if value
+    )
+    return list(dict.fromkeys(values))
 
 
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
@@ -249,9 +303,15 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                 profile.director_view()
                 for profile in director_npc_profile_repo.list_all()
             ]
+            entity_mentions = _entity_extraction_mentions(
+                state.get("entity_extraction")
+            )
+            npc_mentions = _npc_extraction_mentions(state.get("npc_extraction"))
             results = {}
             for role in ("arc", "ambient"):
                 reviewer_gateway = _gateway_for(state)
+                intervention_review_gateway = _gateway_for(state)
+                intervention_plan_gateway = _gateway_for(state)
                 selector_gateway = _gateway_for(state)
                 results[role] = update_director_event_workflow(
                     role=role,
@@ -263,9 +323,17 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                     recent_summaries=state.get("recent_summaries", []),
                     entity_profiles=director_entity_profiles,
                     npc_profiles=director_npc_profiles,
+                    entity_mentions=entity_mentions,
+                    npc_mentions=npc_mentions,
                     turn_index=pipeline_input.turn_index,
                     store=director_store,
                     reviewer=DirectorEventReviewer(reviewer_gateway),
+                    intervention_reviewer=DirectorEventInterventionReviewer(
+                        intervention_review_gateway
+                    ),
+                    intervention_planner=DirectorEventInterventionPlanner(
+                        intervention_plan_gateway
+                    ),
                     selector=DirectorEventSelector(selector_gateway),
                     standby_director_npcs=standby_director_npcs,
                     trace_id=trace_id,
