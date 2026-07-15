@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 
 from app.domain.current_state.schemas import (
     CurrentState,
-    NPCState,
     PlayerState,
     ResourcesState,
     SceneState,
@@ -19,16 +18,13 @@ def make_default_state(scene_id: str = "scene_001") -> CurrentState:
             scene_id=scene_id,
             location="",
             participants=[],
-            atmosphere=None,
         ),
         world_clock=WorldClock(day=1, phase="上午"),
         player=PlayerState(
             name="",
             condition=[],
-            position=None,
             visible_status=None,
         ),
-        npcs=[],
         resources=ResourcesState(
             inventory=[],
             money=None,
@@ -54,7 +50,7 @@ class CurrentStateStore:
             )
             """
         )
-        ensure_schema_version(self._conn, "current_state", 1)
+        ensure_schema_version(self._conn, "current_state", 3)
         self._conn.commit()
 
     def save(self, state: CurrentState) -> None:

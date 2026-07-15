@@ -438,6 +438,7 @@ class ConfirmationEventBuilder:
             **pipeline_input.finish_extra,
             "state_before": model_data(pipeline_input.state_before),
             "state_after": model_data(state["updated_state"]),
+            "state_changes": model_data(state["state_change_set"]),
             "scene_result": scene_result_data,
             "action_preview": model_data(action_preview),
             "short_term_memory_after": model_data(commit_result.short_term_after),
@@ -494,6 +495,13 @@ class ConfirmationFinalizer:
         )
 
         if state.get("write_db", True):
+            pipeline_input = state["pipeline_input"]
+            self.runtime.history.record_state_audit(
+                state["turn_id"],
+                state_changes=model_data(state["state_change_set"]),
+                state_before=model_data(pipeline_input.state_before),
+                state_after=model_data(state["updated_state"]),
+            )
             pending = state["pending"]
             if isinstance(pending, PendingTurn):
                 self.runtime.pending_turns.discard_group(pending.group_id)

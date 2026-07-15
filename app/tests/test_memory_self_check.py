@@ -9,7 +9,7 @@ def _cs(scene_id="test", location="", time_label="", participants=None, viewpoin
     if "第2日" in time_label:
         world_clock = WorldClock(day=2, phase="晚上" if "夜" in time_label else "上午")
     return CurrentState(
-        scene=SceneState(scene_id=scene_id, location=location, time_label=time_label, participants=participants or []),
+        scene=SceneState(scene_id=scene_id, location=location, participants=participants or []),
         world_clock=world_clock,
         player=PlayerState(name=viewpoint),
         resources=ResourcesState(),

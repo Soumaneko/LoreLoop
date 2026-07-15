@@ -51,7 +51,7 @@ def _state() -> CurrentState:
             location="测试地点",
             participants=["主角"],
         ),
-        player=PlayerState(name="主角", position="测试地点"),
+        player=PlayerState(name="主角"),
     )
 
 

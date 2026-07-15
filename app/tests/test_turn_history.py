@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 from app.domain.core_memory import InitConfig, build_initial_current_state
@@ -70,6 +71,30 @@ def test_interrupted_confirmation_restores_pre_turn_database(tmp_path):
     assert restarted.recover_interrupted() is True
     assert _read_value(game_db) == "before"
     assert restarted.pending_records()[0]["status"] == "awaiting_confirm"
+
+
+def test_turn_journal_persists_incremental_state_audit(tmp_path):
+    history = CampaignHistory(tmp_path / "save")
+    history.save_pending(
+        turn_id="turn-audit",
+        kind="turn",
+        group_id="turn-audit",
+        turn_index=3,
+        payload={"turn_id": "turn-audit"},
+    )
+
+    history.record_state_audit(
+        "turn-audit",
+        state_changes={"operations": [{"type": "money_delta", "delta": -2}]},
+        state_before={"resources": {"money": 10}},
+        state_after={"resources": {"money": 8}},
+    )
+
+    row = history.get_transaction("turn-audit")
+    assert row is not None
+    assert json.loads(row["state_changes_json"])["operations"][0]["delta"] == -2
+    assert json.loads(row["state_before_json"])["resources"]["money"] == 10
+    assert json.loads(row["state_after_json"])["resources"]["money"] == 8
 
 
 def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):

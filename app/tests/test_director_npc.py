@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from app.core.llm import MockLLM
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.current_state.schemas import CurrentState, NPCState, PlayerState, SceneState
+from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.schemas import (
     DirectorNPCDispatchDecision,
@@ -97,9 +97,12 @@ class SpyGateway:
 
 def _state() -> CurrentState:
     return CurrentState(
-        scene=SceneState(scene_id="scene_001", location="北郡修道院"),
+        scene=SceneState(
+            scene_id="scene_001",
+            location="北郡修道院",
+            participants=["米莉"],
+        ),
         player=PlayerState(name="主角"),
-        npcs=[NPCState(name="米莉", role="酒馆老板", absent_turns=1)],
     )
 
 
@@ -610,14 +613,9 @@ class TestDirectorNPCWorkflow:
                 participants=["主角"],
             ),
             player=PlayerState(name="主角"),
-            npcs=[],
         )
 
         updated = confirmation_helpers.state_with_confirmed_director_npc(state, draft)
 
-        assert updated.scene.participants == ["主角", "柯莱"]
-        assert len(updated.npcs) == 1
-        assert updated.npcs[0].name == "柯莱"
-        assert updated.npcs[0].role == "流浪药剂师"
-        assert updated.npcs[0].location == "旧桥"
-        assert updated.npcs[0].absent_turns == 0
+        assert updated.scene.participant_names == ["主角", "柯莱"]
+        assert updated.scene.participants[1].attitude_to_player is None

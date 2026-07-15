@@ -13,7 +13,6 @@ from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
     InventoryItem,
-    NPCState,
     PlayerState,
     ResourcesState,
     SceneState,
@@ -37,8 +36,7 @@ def _state() -> CurrentState:
             location="客栈上房",
             participants=["萧云痕", "顾晚棠"],
         ),
-        player=PlayerState(name="萧云痕", position="床沿边"),
-        npcs=[NPCState(name="顾晚棠", location="客栈上房")],
+        player=PlayerState(name="萧云痕"),
         resources=ResourcesState(inventory=[InventoryItem(name="麂皮褡裢")]),
     )
 
@@ -278,14 +276,7 @@ def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
                 location="镇西废弃小屋",
                 participants=["莱尔", "委托人"],
             ),
-            player=PlayerState(name="莱尔", position="镇西废弃小屋"),
-            npcs=[
-                NPCState(
-                    name="委托人",
-                    role="委托人",
-                    location="镇西废弃小屋",
-                )
-            ],
+            player=PlayerState(name="莱尔"),
             resources=ResourcesState(
                 inventory=[InventoryItem(name="失窃旧书", quantity=1)]
             ),

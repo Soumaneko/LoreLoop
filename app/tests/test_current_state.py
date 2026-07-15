@@ -1,10 +1,13 @@
+import pytest
+
 from app.domain.current_state import (
     CurrentState,
     InventoryItem,
-    NPCState,
+    ParticipantState,
     PlayerState,
     ResourcesState,
     SceneState,
+    TimedCondition,
     WorldClock,
 )
 
@@ -17,8 +20,8 @@ class TestSceneState:
             participants=["主角", "米莉"],
         )
 
-        assert state.atmosphere is None
-        assert state.participants == ["主角", "米莉"]
+        assert state.participant_names == ["主角", "米莉"]
+        assert not hasattr(state, "atmosphere")
         assert not hasattr(state, "time_label")
 
 
@@ -38,23 +41,26 @@ class TestPlayerState:
         state = PlayerState(name="卢西安")
 
         assert state.condition == []
-        assert state.position is None
         assert state.visible_status is None
+        assert not hasattr(state, "position")
 
 
-class TestNPCState:
-    def test_current_npc_state(self):
-        state = NPCState(
+class TestParticipantState:
+    def test_current_participant_state(self):
+        state = ParticipantState(
             name="米莉",
-            role="被救助者",
             condition=["疲惫"],
             attitude_to_player="感激主角",
-            current_intent="准备回葡萄园",
         )
 
-        assert state.location is None
-        assert state.condition == ["疲惫"]
-        assert state.absent_turns == 0
+        assert state.npc_conditions == [
+            TimedCondition(condition="疲惫", expires_after_phases=-1)
+        ]
+        assert state.attitude_to_player == "感激主角"
+
+    def test_timed_condition_rejects_zero_expiry(self):
+        with pytest.raises(ValueError, match="expires_after_phases"):
+            TimedCondition(condition="中毒", expires_after_phases=0)
 
 
 class TestResourcesState:
@@ -88,28 +94,62 @@ class TestCurrentState:
             scene=SceneState(
                 scene_id="scene_001",
                 location="修道院门口",
-                participants=["卢西安", "米莉", "莎拉"],
-                atmosphere="紧张但暂时安全",
+                participants=[
+                    "卢西安",
+                    "米莉",
+                    {
+                        "name": "莎拉",
+                        "attitude_to_player": "仍警惕但开始认可主角",
+                    },
+                ],
             ),
             world_clock=WorldClock(day=1, phase="上午"),
             player=PlayerState(
                 name="卢西安",
                 condition=["疲惫"],
-                position="修道院门口",
                 visible_status="衣袍沾着泥水",
             ),
-            npcs=[
-                NPCState(
-                    name="莎拉",
-                    attitude_to_player="仍警惕但开始认可主角",
-                    current_intent="关心明日安排",
-                )
-            ],
             resources=ResourcesState(fixed_assets=["葡萄园"]),
         )
 
         assert state.scene.scene_id == "scene_001"
         assert state.world_clock.phase == "上午"
         assert state.player.name == "卢西安"
-        assert state.npcs[0].name == "莎拉"
+        assert state.scene.participants[2].name == "莎拉"
         assert state.resources.fixed_assets == ["葡萄园"]
+
+    def test_upgrades_legacy_in_scene_npc_data_without_retaining_removed_fields(self):
+        state = CurrentState.model_validate({
+            "scene": {
+                "scene_id": "scene_003",
+                "location": "酒馆",
+                "participants": ["主角", "米莉"],
+                "atmosphere": "紧张",
+            },
+            "player": {
+                "name": "主角",
+                "position": "吧台前",
+                "condition": [],
+            },
+            "npcs": [
+                {
+                    "name": "米莉",
+                    "condition": ["疲惫"],
+                    "attitude_to_player": "友好",
+                    "current_intent": "擦杯子",
+                },
+                {
+                    "name": "不在场的人",
+                    "condition": ["受伤"],
+                },
+            ],
+        })
+
+        assert state.scene.participant_names == ["主角", "米莉"]
+        assert state.scene.participants[1].npc_conditions == [
+            TimedCondition(condition="疲惫", expires_after_phases=-1)
+        ]
+        assert state.scene.participants[1].attitude_to_player == "友好"
+        assert not hasattr(state.scene, "atmosphere")
+        assert not hasattr(state.player, "position")
+        assert not hasattr(state, "npcs")

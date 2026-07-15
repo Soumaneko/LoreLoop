@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from app.domain.core_memory import CoreMemory
-from app.domain.current_state.schemas import CurrentState, NPCState, PlayerState, SceneState
+from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.npc_profile.extractor import NPCProfileExtractor
 from app.domain.npc_profile.updater import NPCProfileUpdater
@@ -30,7 +30,7 @@ class _Gateway:
 def _state() -> CurrentState:
     return CurrentState(
         scene=SceneState(scene_id="scene_001", location="醉花楼", participants=["萧云痕"]),
-        player=PlayerState(name="萧云痕", position="醉花楼"),
+        player=PlayerState(name="萧云痕"),
     )
 
 
@@ -129,8 +129,7 @@ def test_sync_npc_profile_absence_resets_current_state_hits_and_increments_misse
             location="鸣玉坊里间",
             participants=["萧云痕", "裴姑娘"],
         ),
-        player=PlayerState(name="萧云痕", position="鸣玉坊里间"),
-        npcs=[NPCState(name="裴玉奴", role="琵琶名手")],
+        player=PlayerState(name="萧云痕"),
     )
 
     saved_ids = sync_npc_profile_absence_from_current_state(
@@ -157,11 +156,7 @@ def test_sync_npc_profile_absence_ignores_absent_current_state_npcs():
             location="白鹤巷第三进院外墙下",
             participants=["萧云痕", "花想容"],
         ),
-        player=PlayerState(name="萧云痕", position="白鹤巷第三进院外墙下"),
-        npcs=[
-            NPCState(name="裴玉奴", role="琵琶名手", absent_turns=1),
-            NPCState(name="花想容", role="胭脂铺掌柜", absent_turns=0),
-        ],
+        player=PlayerState(name="萧云痕"),
     )
 
     saved_ids = sync_npc_profile_absence_from_current_state(

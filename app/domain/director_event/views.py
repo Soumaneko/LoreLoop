@@ -7,8 +7,9 @@ def project_director_event(
     event: DirectorEvent,
 ) -> str:
     data = event.semantic_view()
-    past_milestones = event.milestones[:event.progress_index]
-    current_milestone = event.milestones[event.progress_index]
+    current_offset = event.progress_index - 1
+    past_milestones = event.milestones[:current_offset]
+    current_milestone = event.milestones[current_offset]
     for key in (
         "milestones",
         "milestone_interval_steps",

@@ -8,7 +8,7 @@ from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
 from app.domain.core_memory import CoreMemory
-from app.domain.current_state import CurrentState, NPCState, PlayerState, ResourcesState, SceneState
+from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
 
 
 def test_prompt_requires_complete_explicit_action_coverage():
@@ -32,7 +32,6 @@ def _make_current_state() -> CurrentState:
         scene=SceneState(
             scene_id="scene_010",
             location="码头仓库区",
-            time_label="第4日深夜",
             participants=["主角", "伊莱娜", "马洛"],
         ),
         player=PlayerState(name="主角"),

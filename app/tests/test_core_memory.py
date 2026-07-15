@@ -267,9 +267,9 @@ class TestBuildInitialCurrentState:
 
         assert state.scene.scene_id == "scene_001"
         assert state.scene.location == "北郡修道院"
-        assert state.scene.participants == ["卢西安"]
+        assert state.scene.participant_names == ["卢西安"]
         assert state.player.name == "卢西安"
-        assert state.player.position == "北郡修道院"
+        assert not hasattr(state.player, "position")
         assert state.player.visible_status == "男性，18岁"
         assert state.world_clock.label == "第1日上午"
 

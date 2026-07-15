@@ -10,7 +10,6 @@ from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
     InventoryItem,
-    NPCState,
     PlayerState,
     ResourcesState,
     SceneState,
@@ -25,22 +24,15 @@ def _make_state() -> CurrentState:
         scene=SceneState(
             scene_id="scene_001",
             location="北郡修道院酒馆",
-            participants=["卢西安", "米莉"],
-            atmosphere="紧张",
+            participants=[
+                "卢西安",
+                {"name": "米莉", "attitude_to_player": "谨慎友善"},
+            ],
         ),
         player=PlayerState(
             name="卢西安",
             condition=[],
-            position="酒馆吧台旁",
         ),
-        npcs=[
-            NPCState(
-                name="米莉",
-                role="酒馆侍者",
-                location="吧台后",
-                attitude_to_player="谨慎友善",
-            )
-        ],
         resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
     )
 

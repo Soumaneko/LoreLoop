@@ -1,28 +1,34 @@
 from .schemas import (
     CurrentState,
     InventoryItem,
-    NPCState,
+    ParticipantState,
     PHASE_ORDER,
     PlayerState,
     ResourcesState,
     SceneState,
+    TimedCondition,
     WorldClock,
     WorldPhase,
 )
 from .updater import StateUpdater
+from .changes import StateChangeSet, StateOperation, apply_state_changes
 from .store import CurrentStateStore, make_default_state
 
 __all__ = [
     "CurrentState",
     "CurrentStateStore",
     "InventoryItem",
-    "NPCState",
+    "ParticipantState",
     "PHASE_ORDER",
     "PlayerState",
     "ResourcesState",
     "SceneState",
     "StateUpdater",
+    "StateChangeSet",
+    "StateOperation",
+    "apply_state_changes",
     "WorldClock",
     "WorldPhase",
+    "TimedCondition",
     "make_default_state",
 ]

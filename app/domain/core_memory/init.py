@@ -87,17 +87,14 @@ def build_initial_current_state(
         scene=SceneState(
             scene_id=scene_id,
             location=location,
-            participants=[protagonist_name],
-            atmosphere=None,
+            participants=[{"name": protagonist_name}],
         ),
         world_clock=WorldClock(day=1, phase="上午"),
         player=PlayerState(
             name=protagonist_name,
             condition=[],
-            position=location,
             visible_status="，".join(visible_parts),
         ),
-        npcs=[],
         resources=ResourcesState(
             inventory=[],
             money=None,

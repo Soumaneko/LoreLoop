@@ -33,7 +33,21 @@ class DirectorEventStore:
             )
             """
         )
-        ensure_schema_version(self._conn, "director_event", 1)
+        versions_table_exists = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ("schema_versions",),
+        ).fetchone()
+        if versions_table_exists is not None:
+            version_row = self._conn.execute(
+                "SELECT version FROM schema_versions WHERE component = ?",
+                ("director_event",),
+            ).fetchone()
+            if version_row is not None and int(version_row["version"]) != 2:
+                raise RuntimeError(
+                    "Unsupported DirectorEvent database schema: "
+                    f"expected 2, got {version_row['version']}"
+                )
+        ensure_schema_version(self._conn, "director_event", 2)
         self._conn.commit()
 
     def save(self, event: DirectorEvent) -> str:
@@ -159,7 +173,7 @@ class DirectorEventStore:
         event = self.get_by_id(event_id)
         if event is None or event.status != "active":
             return False
-        next_index = min(event.progress_index + 1, 2)
+        next_index = min(event.progress_index + 1, 3)
         next_clock = self._next_progress_clock(event, next_index, current_clock)
         updated = event.model_copy(
             update={
@@ -184,7 +198,7 @@ class DirectorEventStore:
             return None
         if _clock_index(current_clock) < _clock_index(event.next_progress_clock):
             return None
-        if event.progress_index >= 2:
+        if event.progress_index >= 3:
             self.resolve_active(
                 event_id,
                 turn_index=turn_index,
@@ -197,7 +211,7 @@ class DirectorEventStore:
             current_clock=current_clock,
         )
         advanced = self.get_by_id(event_id)
-        if advanced is not None and advanced.progress_index >= 2:
+        if advanced is not None and advanced.progress_index >= 3:
             self.resolve_active(
                 event_id,
                 turn_index=turn_index,
@@ -282,9 +296,12 @@ class DirectorEventStore:
         progress_index: int,
         current_clock: WorldClock,
     ) -> WorldClock | None:
-        if progress_index >= 2:
+        if progress_index >= 3:
             return current_clock
-        interval_index = min(progress_index, len(event.milestone_interval_steps) - 1)
+        interval_index = min(
+            progress_index - 1,
+            len(event.milestone_interval_steps) - 1,
+        )
         return current_clock.advance_phase(event.milestone_interval_steps[interval_index])
 
 

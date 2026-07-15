@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.domain.current_state import NPCState
+from app.domain.current_state import ParticipantState
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
@@ -33,6 +33,7 @@ from .confirmation_state import ConfirmationEvent, ConfirmationState
 _ALWAYS_CACHED_NODE_RESULTS = {
     "scene_facts",
     "updated_state",
+    "state_change_set",
     "pending_memory_result",
     "action_preview",
 }
@@ -163,40 +164,18 @@ def state_with_confirmed_director_npc(
         return state
 
     participants = list(state.scene.participants)
-    if draft.name not in participants:
-        participants.append(draft.name)
-
-    npcs = []
-    matched = False
-    for npc in state.npcs:
-        if npc.name == draft.name:
-            matched = True
-            npcs.append(
-                npc.model_copy(
-                    update={
-                        "role": npc.role or draft.role,
-                        "location": npc.location or state.scene.location,
-                        "absent_turns": 0,
-                    }
-                )
-            )
-        else:
-            npcs.append(npc)
-
-    if not matched:
-        npcs.append(
-            NPCState(
+    if draft.name.casefold() not in {
+        participant.name.casefold() for participant in participants
+    }:
+        participants.append(
+            ParticipantState(
                 name=draft.name,
-                role=draft.role,
-                location=state.scene.location,
-                absent_turns=0,
             )
         )
 
     return state.model_copy(
         update={
             "scene": state.scene.model_copy(update={"participants": participants}),
-            "npcs": npcs,
         }
     )
 

@@ -81,7 +81,7 @@ def update_director_event_workflow(
             )
         elif review.action == "advance":
             manual_progress = True
-            if active.progress_index >= 2:
+            if active.progress_index >= 3:
                 store.resolve_active(
                     active.event_id,
                     turn_index=turn_index,
@@ -94,7 +94,7 @@ def update_director_event_workflow(
                     current_clock=current_state.world_clock,
                 )
                 advanced = store.get_by_id(active.event_id)
-                if advanced is not None and advanced.progress_index >= 2:
+                if advanced is not None and advanced.progress_index >= 3:
                     store.resolve_active(
                         active.event_id,
                         turn_index=turn_index,

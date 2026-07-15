@@ -18,14 +18,11 @@ def _make_state() -> CurrentState:
         scene=SceneState(
             scene_id="scene_001",
             location="北郡修道院酒馆",
-            time_label="第1日深夜",
             participants=["主角", "米莉"],
-            atmosphere="宁静",
         ),
         player=PlayerState(
             name="主角",
             condition=[],
-            position="酒馆吧台",
         ),
         resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
     )

@@ -7,7 +7,6 @@ from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
     InventoryItem,
-    NPCState,
     PlayerState,
     ResourcesState,
     SceneState,
@@ -29,27 +28,16 @@ def _make_context() -> PlotOutlineContext:
             scene=SceneState(
                 scene_id="scene_001",
                 location="北郡修道院",
-                time_label="第1日深夜",
-                participants=["主角", "米莉"],
-                atmosphere="宁静",
+                participants=[
+                    "主角",
+                    {"name": "米莉", "attitude_to_player": "友好"},
+                ],
             ),
             player=PlayerState(
                 name="主角",
                 condition=[],
-                position="酒馆大厅",
                 visible_status="正常",
-                intent="调查可疑人物",
             ),
-            npcs=[
-                NPCState(
-                    name="米莉",
-                    role="酒馆老板",
-                    location="酒馆吧台",
-                    condition=[],
-                    attitude_to_player="友好",
-                    current_intent="招待客人",
-                ),
-            ],
             resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
         ),
         turn_resolution=TurnResolutionResult(

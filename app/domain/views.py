@@ -29,8 +29,6 @@ MEMORY_CANDIDATE_EXCLUDE: set[str] = {
 
 def project_current_state(state: CurrentState) -> str:
     data = state.model_dump(mode="json")
-    for npc in data.get("npcs", []):
-        npc.pop("absent_turns", None)
     return json.dumps(
         strip_empty(data),
         ensure_ascii=False,

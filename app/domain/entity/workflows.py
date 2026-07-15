@@ -379,12 +379,8 @@ def _gather_names(
 ) -> list[str]:
     names: list[str] = []
     names.append(current_state.scene.location)
-    names.extend(current_state.scene.participants)
+    names.extend(current_state.scene.participant_names)
     names.append(current_state.player.name)
-    for npc in current_state.npcs:
-        names.append(npc.name)
-        if npc.location:
-            names.append(npc.location)
 
     resources = current_state.resources
     for collection in [

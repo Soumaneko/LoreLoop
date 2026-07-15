@@ -340,14 +340,7 @@ def _profile_matches_any_name(profile: NPCProfile, names: set[str]) -> bool:
 
 
 def _gather_current_state_npc_names(current_state: CurrentState) -> set[str]:
-    names = [
-        *current_state.scene.participants,
-        *[
-            npc.name
-            for npc in current_state.npcs
-            if npc.absent_turns == 0
-        ],
-    ]
+    names = current_state.scene.participant_names
     return {
         _norm(name)
         for name in names
@@ -357,10 +350,8 @@ def _gather_current_state_npc_names(current_state: CurrentState) -> set[str]:
 
 def _gather_names(current_state: CurrentState, anchors: list[Anchor]) -> list[str]:
     names: list[str] = []
-    names.extend(current_state.scene.participants)
+    names.extend(current_state.scene.participant_names)
     names.append(current_state.player.name)
-    for npc in current_state.npcs:
-        names.append(npc.name)
     for anchor in anchors:
         if anchor.kind == "character":
             names.append(anchor.normalized or anchor.text)

@@ -23,7 +23,7 @@ class _SpyGateway:
 def _state() -> CurrentState:
     return CurrentState(
         scene=SceneState(scene_id="scene_001", location="酒馆", participants=["卢西安"]),
-        player=PlayerState(name="卢西安", position="酒馆"),
+        player=PlayerState(name="卢西安"),
     )
 
 

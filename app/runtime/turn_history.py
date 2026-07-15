@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .sqlite import connect_sqlite
+from .sqlite import connect_sqlite, ensure_column
 
 
 def _now() -> str:
@@ -63,6 +63,9 @@ class CampaignHistory:
                 );
                 """
             )
+            ensure_column(conn, "turn_transactions", "state_changes_json", "TEXT")
+            ensure_column(conn, "turn_transactions", "state_before_json", "TEXT")
+            ensure_column(conn, "turn_transactions", "state_after_json", "TEXT")
             conn.commit()
 
     def save_pending(
@@ -108,6 +111,41 @@ class CampaignHistory:
                 """
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def record_state_audit(
+        self,
+        turn_id: str,
+        *,
+        state_changes: dict[str, Any],
+        state_before: dict[str, Any],
+        state_after: dict[str, Any],
+    ) -> None:
+        """Attach the accepted incremental state plan to its turn journal."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE turn_transactions
+                SET state_changes_json=?, state_before_json=?, state_after_json=?,
+                    updated_at=?
+                WHERE turn_id=?
+                """,
+                (
+                    json.dumps(state_changes, ensure_ascii=False),
+                    json.dumps(state_before, ensure_ascii=False),
+                    json.dumps(state_after, ensure_ascii=False),
+                    _now(),
+                    turn_id,
+                ),
+            )
+            conn.commit()
+
+    def get_transaction(self, turn_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM turn_transactions WHERE turn_id=?",
+                (turn_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
 
     def begin_confirmation(
         self,

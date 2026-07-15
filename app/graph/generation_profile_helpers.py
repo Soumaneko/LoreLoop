@@ -161,12 +161,9 @@ def _profile_in_names(names: set[str], name: str, aliases: list[str]) -> bool:
 def _state_entity_names(current_state: CurrentState) -> list[str]:
     names = [
         current_state.scene.location,
-        *current_state.scene.participants,
+        *current_state.scene.participant_names,
         current_state.player.name,
-        current_state.player.position or "",
     ]
-    for npc in current_state.npcs:
-        names.extend([npc.name, npc.location or ""])
     resources = current_state.resources
     for item in resources.inventory:
         names.append(item.name)
@@ -177,9 +174,8 @@ def _state_entity_names(current_state: CurrentState) -> list[str]:
 
 def _state_npc_names(current_state: CurrentState) -> list[str]:
     names = [
-        *current_state.scene.participants,
+        *current_state.scene.participant_names,
         current_state.player.name,
-        *[npc.name for npc in current_state.npcs],
     ]
     return _unique(names)
 

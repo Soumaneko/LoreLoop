@@ -26,10 +26,24 @@ class DirectorEventReviewer:
         trace_id: str | None = None,
     ) -> DirectorEventReviewResult:
         event_view = active_event.semantic_view()
+        current_offset = active_event.progress_index - 1
+        next_offset = current_offset + 1
         event_view.update(
             status=active_event.status,
             created_turn=active_event.created_turn,
             updated_turn=active_event.updated_turn,
+            current_milestone_number=active_event.progress_index,
+            current_milestone=active_event.milestones[current_offset],
+            next_milestone_number=(
+                active_event.progress_index + 1
+                if next_offset < len(active_event.milestones)
+                else None
+            ),
+            next_milestone=(
+                active_event.milestones[next_offset]
+                if next_offset < len(active_event.milestones)
+                else None
+            ),
         )
         return cast(
             DirectorEventReviewResult,

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
-from app.domain.current_state import CurrentState, InventoryItem, NPCState, PlayerState, ResourcesState, SceneState
+from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
 from app.domain.entity.linker import EntityMemoryLinker
 from app.domain.entity.extractor import EntityExtractor, _profile_for_extraction
 from app.domain.entity.schemas import (
@@ -30,7 +30,6 @@ def _make_state() -> CurrentState:
             participants=["卢西安", "米莉"],
         ),
         player=PlayerState(name="卢西安"),
-        npcs=[NPCState(name="米莉", role="酒馆侍者")],
         resources=ResourcesState(inventory=[InventoryItem(name="旧地图")]),
     )
 

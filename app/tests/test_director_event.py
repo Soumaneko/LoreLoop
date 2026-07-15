@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ from app.domain.director_event.workflows import update_director_event_workflow
 def _state() -> CurrentState:
     return CurrentState(
         scene=SceneState(scene_id="scene_001", location="北郡", participants=["卢西安"]),
-        player=PlayerState(name="卢西安", position="北郡"),
+        player=PlayerState(name="卢西安"),
     )
 
 
@@ -68,7 +69,7 @@ def _event(title="失踪的信使", status="active", role="ambient") -> Director
         milestones=_milestones(),
         milestone_interval_steps=[2, 3],
         next_progress_clock=_state().world_clock.advance_phase(2),
-        progress_index=0,
+        progress_index=1,
         exposure="hidden",
         entry_points=_entry_points(),
         created_turn=1,
@@ -205,6 +206,14 @@ class TestDirectorEventSchema:
         with pytest.raises(ValueError):
             DirectorEventSelectionResult.model_validate(data)
 
+    @pytest.mark.parametrize("progress_index", [0, 4])
+    def test_progress_index_uses_natural_milestone_numbers(self, progress_index):
+        data = _event().model_dump(mode="json")
+        data["progress_index"] = progress_index
+
+        with pytest.raises(ValidationError):
+            DirectorEvent.model_validate(data)
+
     def test_draft_requires_actor_and_allows_semantic_entry_point_anchors(self):
         data = _selection_result().model_dump(mode="json")
         data["actors"] = []
@@ -240,6 +249,28 @@ class TestDirectorEventSchema:
 
 
 class TestDirectorEventStore:
+    def test_rejects_unsupported_database_schema(self, tmp_path):
+        db_path = tmp_path / "director_events.db"
+        connection = sqlite3.connect(db_path)
+        connection.execute(
+            """
+            CREATE TABLE schema_versions (
+                component TEXT PRIMARY KEY,
+                version INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO schema_versions(component, version) VALUES (?, ?)",
+            ("director_event", 1),
+        )
+        connection.commit()
+        connection.close()
+
+        with pytest.raises(RuntimeError, match="expected 2, got 1"):
+            DirectorEventStore(str(db_path))
+
     def test_arc_and_ambient_active_events_coexist(self):
         store = DirectorEventStore()
         arc = _event("主线事件", role="arc")
@@ -360,7 +391,15 @@ class TestDirectorEventReviewerInput:
             "status",
             "created_turn",
             "updated_turn",
+            "current_milestone_number",
+            "current_milestone",
+            "next_milestone_number",
+            "next_milestone",
         }
+        assert event_json["current_milestone_number"] == 1
+        assert event_json["current_milestone"] == _milestones()[0]
+        assert event_json["next_milestone_number"] == 2
+        assert event_json["next_milestone"] == _milestones()[1]
 
 
 class TestDirectorEventViews:
@@ -384,7 +423,7 @@ class TestDirectorEventViews:
     def test_visible_projection_omits_entry_points_and_merges_past_state(self, exposure):
         event = _event().model_copy(update={
             "exposure": exposure,
-            "progress_index": 1,
+            "progress_index": 2,
             "player_contact_state": "玩家已经看过驿站公告。",
         })
         data = json.loads(project_director_event(event))
@@ -584,18 +623,26 @@ class TestDirectorEventWorkflow:
         assert store.get_active("ambient").player_contact_state == complete_state
 
     def test_player_contact_state_is_bounded_to_current_snapshot(self):
+        accepted = DirectorEventReviewResult(
+            reason="测试放宽后的长度限制。",
+            action="hold",
+            exposure="engaged",
+            player_contact_state="过" * 120,
+        )
+        assert len(accepted.player_contact_state) == 120
+
         with pytest.raises(ValidationError):
             DirectorEventReviewResult(
                 reason="测试长度限制。",
                 action="hold",
                 exposure="engaged",
-                player_contact_state="过" * 51,
+                player_contact_state="过" * 201,
             )
 
         prompt = Path("app/prompts/confirmation/director_event_review_v1.md").read_text(
             encoding="utf-8"
         )
-        assert "50 个汉字" in prompt
+        assert "硬性上限 200 个字符" in prompt
         assert "不是发生过什么的流水账" in prompt
         assert "当前接触情况" in prompt
 
@@ -617,7 +664,7 @@ class TestDirectorEventWorkflow:
 
     def test_player_intervention_resolves_without_entering_default_ending(self):
         store = DirectorEventStore()
-        event = _event().model_copy(update={"progress_index": 1})
+        event = _event().model_copy(update={"progress_index": 2})
         store.save(event)
 
         _run_review(
@@ -631,7 +678,7 @@ class TestDirectorEventWorkflow:
 
         resolved = store.get_by_id(event.event_id)
         assert resolved.status == "resolved"
-        assert resolved.progress_index == 1
+        assert resolved.progress_index == 2
         assert resolved.resolved_reason == "玩家销毁关键对象，后续默认结局已不可能发生。"
 
     def test_review_advances_active_event_progress(self):
@@ -646,12 +693,12 @@ class TestDirectorEventWorkflow:
         )
 
         assert result.notes == ["reviewed_existing_active_event", "advanced_active_event"]
-        assert store.get_active("ambient").progress_index == 1
+        assert store.get_active("ambient").progress_index == 2
         assert store.get_active("ambient").next_progress_clock == _state().world_clock.advance_phase(3)
 
     def test_default_route_advance_to_final_state_resolves(self):
         store = DirectorEventStore()
-        event = _event().model_copy(update={"progress_index": 1})
+        event = _event().model_copy(update={"progress_index": 2})
         store.save(event)
 
         _run_review(
@@ -665,7 +712,7 @@ class TestDirectorEventWorkflow:
 
         resolved = store.get_by_id(event.event_id)
         assert resolved.status == "resolved"
-        assert resolved.progress_index == 2
+        assert resolved.progress_index == 3
         assert resolved.resolved_reason == "无人阻止，默认最终状态已经形成。"
 
     def test_review_hold_auto_advances_when_due(self):
@@ -676,13 +723,13 @@ class TestDirectorEventWorkflow:
         result = _run_review(store, _review_response(), turn_index=2)
 
         assert "auto_advanced_active_event" in result.notes
-        assert store.get_active("ambient").progress_index == 1
+        assert store.get_active("ambient").progress_index == 2
 
     def test_auto_advance_to_final_resolves_event(self):
         store = DirectorEventStore()
         event = _event().model_copy(
             update={
-                "progress_index": 1,
+                "progress_index": 2,
                 "next_progress_clock": _state().world_clock,
             }
         )

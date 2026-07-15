@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.domain.action_preview.agent import ActionPreviewAgent
-from app.domain.current_state import StateUpdater
+from app.domain.current_state import StateChangeSet, StateUpdater
 from app.domain.director_event.reviewer import DirectorEventReviewer
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.entity.extractor import EntityExtractor
@@ -69,6 +69,7 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
     trace_id = state["trace_id"]
     cache = state["cache"]
     updated_state = cache.get("updated_state")
+    state_change_set = cache.get("state_change_set")
     if updated_state is None:
         gateway = _gateway_for(state)
         updater = StateUpdater(gateway)
@@ -84,11 +85,18 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
             npc_aliases=npc_aliases,
             trace_id=trace_id,
         )
+        state_change_set = getattr(updater, "last_change_set", StateChangeSet())
+    elif state_change_set is None:
+        state_change_set = StateChangeSet()
     return {
         "updated_state": updated_state,
+        "state_change_set": state_change_set,
         "events": [{
             "step": "state_update_done",
-            "data": {"state_after": model_data(updated_state)},
+            "data": {
+                "state_after": model_data(updated_state),
+                "state_changes": model_data(state_change_set),
+            },
         }],
     }
 

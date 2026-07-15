@@ -689,7 +689,7 @@ function renderStatePanel() {
   const scene = current.scene || {};
   const player = current.player || {};
   const resources = current.resources || {};
-  const npcs = current.npcs || [];
+  const participants = scene.participants || [];
   const activeDirectorEvents = data.active_director_events || [];
   const activeArcEvent = activeDirectorEvents.find((event) => event.role === "arc");
   const activeAmbientEvent = activeDirectorEvents.find((event) => event.role === "ambient");
@@ -709,12 +709,11 @@ function renderStatePanel() {
       ["场景", esc(text(scene.scene_id))],
       ["地点", esc(text(scene.location))],
       ["时间", esc(`第${current.world_clock?.day || "?"}日 ${current.world_clock?.phase || "?"}`)],
-      ["气氛", esc(text(scene.atmosphere))],
-      ["在场", chips(scene.participants)],
+      ["场景状态", chips(timedConditionLabels(scene.scene_condition))],
+      ["在场", chips(participantNames(participants))],
     ]))}
     ${card("主角", kv([
       ["姓名", esc(text(player.name))],
-      ["位置", esc(text(player.position))],
       ["外观", esc(text(player.visible_status))],
       ["状态", chips(player.condition)],
     ]))}
@@ -725,7 +724,7 @@ function renderStatePanel() {
       ["临时", chips(resources.temporary_assets)],
     ]))}
     ${details(`Core Memory (${coreItems.length})`, coreItems.map(coreMemoryItemCard).join("") || `<div class="empty">暂无 Core Memory</div>`)}
-    ${details(`NPC (${npcs.length})`, npcs.length ? npcs.map(npcCard).join("") : `<div class="empty">暂无 NPC</div>`)}
+    ${details(`在场人物状态 (${participants.length})`, participants.length ? participants.map(participantCard).join("") : `<div class="empty">当前无人</div>`)}
     ${details(`NPC 档案 (${data.npc_active_profile_count ?? 0}/${data.npc_profile_count ?? 0})`, renderNpcStateGroup(data.npc_profiles || []))}
     ${details("导演", `
       ${metrics([
@@ -781,13 +780,25 @@ function coreMemoryItemCard(item) {
   </div>`;
 }
 
-function npcCard(npc) {
+function participantNames(participants) {
+  return (participants || []).map((participant) => typeof participant === "string" ? participant : participant?.name).filter(Boolean);
+}
+
+function timedConditionLabels(conditions) {
+  return (conditions || []).map((item) => {
+    if (typeof item === "string") return item;
+    const expiry = item?.expires_after_phases;
+    const suffix = expiry === -1 ? "无期限" : `剩余${text(expiry)}时段`;
+    return `${text(item?.condition)} · ${suffix}`;
+  });
+}
+
+function participantCard(participant) {
+  if (typeof participant === "string") participant = { name: participant };
   return `<div class="section-card">${kv([
-    ["姓名", esc(text(npc.name))],
-    ["角色", esc(text(npc.role))],
-    ["地点", esc(text(npc.location))],
-    ["态度", esc(text(npc.attitude_to_player))],
-    ["意图", esc(text(npc.current_intent))],
+    ["姓名", esc(text(participant.name))],
+    ["状态", chips(timedConditionLabels(participant.npc_conditions))],
+    ["对玩家态度", esc(text(participant.attitude_to_player))],
   ])}</div>`;
 }
 
@@ -1291,6 +1302,7 @@ function renderStateDiff() {
   const finish = step("confirmation", "finish");
   const before = finish?.state_before || step("generation", "state_loaded")?.state_before;
   const after = finish?.state_after || step("confirmation", "state_update_done")?.state_after;
+  const changes = step("confirmation", "state_update_done")?.state_changes;
   if (!before && !after) return `<div class="empty">暂无状态快照。</div>`;
   if (!after) return card("生成时状态", stateSummary(before));
   const rows = diffRows(before, after);
@@ -1300,6 +1312,7 @@ function renderStateDiff() {
       ${rows.map((r) => `<div>${esc(r.label)}</div><div class="${r.changed ? "changed" : ""}">${renderValue(r.before)}</div><div class="${r.changed ? "changed" : ""}">${renderValue(r.after)}</div>`).join("")}
     </div>`)}
     <div class="two-col">${card("更新前", stateSummary(before))}${card("更新后", stateSummary(after))}</div>
+    ${details("类型化状态操作", jsonBlock(changes || { operations: [] }), true)}
     ${details("完整 state_before", jsonBlock(before))}
     ${details("完整 state_after", jsonBlock(after))}
   `;
@@ -1309,18 +1322,16 @@ function diffRows(before, after) {
   const fields = [
     ["scene.scene_id", "场景ID"],
     ["scene.location", "地点"],
-    ["scene.atmosphere", "气氛"],
+    ["scene.scene_condition", "场景状态"],
     ["scene.participants", "在场"],
     ["world_clock.day", "日期"],
     ["world_clock.phase", "时段"],
-    ["player.position", "主角位置"],
     ["player.visible_status", "主角外观"],
     ["player.condition", "主角状态"],
     ["resources.money", "金钱"],
     ["resources.inventory", "物品"],
     ["resources.fixed_assets", "固定资产"],
     ["resources.temporary_assets", "临时资产"],
-    ["npcs", "NPC明细"],
   ];
   return fields.map(([path, label]) => {
     const oldValue = getPath(before, path);
@@ -1349,10 +1360,10 @@ function stateSummary(s) {
     ["场景", esc(text(s.scene?.scene_id))],
     ["地点", esc(text(s.scene?.location))],
     ["时间", esc(`第${s.world_clock?.day || "?"}日 ${s.world_clock?.phase || "?"}`)],
-    ["在场", chips(s.scene?.participants)],
-    ["主角", esc(`${text(s.player?.name)} · ${text(s.player?.position)}`)],
+    ["场景状态", chips(timedConditionLabels(s.scene?.scene_condition))],
+    ["在场", chips(participantNames(s.scene?.participants))],
+    ["主角", esc(text(s.player?.name))],
     ["状态", chips(s.player?.condition)],
-    ["NPC", chips((s.npcs || []).map((n) => n.name))],
     ["物品", inventory(s.resources?.inventory)],
   ]);
 }
@@ -1594,7 +1605,7 @@ function directorCard(event) {
       ["暴露状态", esc(text(event.exposure))],
       ["当前接触", esc(text(event.player_contact_state))],
       ["最近呈现", event.last_presented_turn === null || event.last_presented_turn === undefined ? `<span class="empty">无</span>` : esc(`T${event.last_presented_turn}`)],
-      ["进度", esc(`${text(event.progress_index)} / 2`)],
+      ["进度", esc(`${text(event.progress_index)} / 3`)],
       ["下次推进", event.next_progress_clock ? esc(`第${event.next_progress_clock.day}日 ${event.next_progress_clock.phase}`) : `<span class="empty">无</span>`],
       ["阶段间隔", chips(event.milestone_interval_steps)],
       ["目标", esc(text(event.objective))],

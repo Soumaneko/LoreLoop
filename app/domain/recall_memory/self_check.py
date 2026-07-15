@@ -38,7 +38,7 @@ class MemorySelfCheck:
         result = SelfCheckResult(original_count=len(memories))
         cleaned: list[Memory] = []
 
-        participants: list[str] = current_state.scene.participants
+        participants = current_state.scene.participant_names
         allowed_visibility = set(participants) | {PUBLIC_VISIBILITY}
         scene_text_normalized = scene_text.strip()
         state_values = _flatten_strings(current_state.model_dump())

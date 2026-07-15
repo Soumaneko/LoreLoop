@@ -55,17 +55,17 @@
 - reason：简短说明本次审查判断依据。
 - action：只能是 `hold`、`advance` 或 `resolve`。
   - hold：事件仍在当前阶段，没有明确进入下一 milestone。
-  - advance：下一世界状态的核心局势已经成立，事件仍有后续发展空间。若从阶段 1 advance，表示阶段 2 的默认最终结局已经实际形成，程序会自动收束。
+  - advance：下一世界状态的核心局势已经成立，事件仍有后续发展空间。若从阶段 2 advance，表示阶段 3 的默认最终结局已经实际形成，程序会自动收束。
   - resolve：事件已经完成、失败或终结，或后续 milestones 已不可能成为事实或已失去继续发展的意义。可在任意 progress_index 使用，且不会进入后续 milestone。
 - exposure：本轮确认剧情结束后，玩家对该事件的接触状态，只能是 `hidden`、`foreshadowed`、`engaged`。
-- player_contact_state：50 个汉字。本轮结束时主角与该事件的当前接触情况。它是当前状态摘要，不是发生过什么的流水账。只保留当前介入方式、关键已知、当前目标和仍影响判断的关键未知；必须完整替换旧值，不得追加历史。
+- player_contact_state：建议 50-120 个汉字，硬性上限 200 个字符。本轮结束时主角与该事件的当前接触情况。它是当前状态摘要，不是发生过什么的流水账。只保留当前介入方式、关键已知、当前目标和仍影响判断的关键未知；必须完整替换旧值，不得追加历史。
 - evidence：Scene Facts 中支持判断的具体 fact 或摘要列表。
 - resolved_reason：仅在 action=resolve 时填写收束理由；其他 action 填 null。
 
 # 核心规则
 
 1. 判断事件是否推进或收束时，优先看 Scene Facts。
-2. milestones 是世界状态检查点，不是必须按原文演出的剧情脚本。当前阶段是 milestones[progress_index]；判断推进时比较下一阶段的核心局势，而不是要求其中某个角色、手段或交涉过程逐项发生。
+2. milestones 是世界状态检查点，不是必须按原文演出的剧情脚本。progress_index 使用 1、2、3 的自然数编号，分别对应 milestones 的第 1、第 2、第 3 项，绝不使用 0 号阶段。程序已额外提供 current_milestone_number/current_milestone 和 next_milestone_number/next_milestone；必须直接比较这两组字段，不得自行换算数组下标。
 3. Scene Facts 确认下一阶段的核心局势已经成立时选择 advance。只要后续仍可能继续，就不得因为阶段由玩家推动而 resolve。单次 review 只推进一个阶段。
 4. 没有建立下一状态、也没有永久终止后续路线时选择 hold。暂时控制关键对象、打断交易、逼问当事人或等待玩家处置，都不自动表示事件已经结束。
 5. Scene Facts 明确显示事件目标已经完成、失败或终结，或后续 milestones 已不可能成为事实或已无继续意义时，直接 resolve。resolve 不受 progress_index 限制，也不得强迫事件先走完所有 milestones。

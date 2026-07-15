@@ -11,6 +11,7 @@ DirectorEventStatus = Literal["active", "resolved"]
 DirectorEventRole = Literal["arc", "ambient"]
 DirectorEventExposure = Literal["hidden", "foreshadowed", "engaged"]
 ReviewAction = Literal["hold", "advance", "resolve"]
+PLAYER_CONTACT_STATE_MAX_LENGTH = 200
 
 
 def _new_id() -> str:
@@ -55,12 +56,12 @@ class DirectorEvent(BaseModel):
         max_length=2,
     )
     next_progress_clock: WorldClock | None = None
-    progress_index: int = Field(default=0, ge=0, le=2)
+    progress_index: int = Field(default=1, ge=1, le=3)
     exposure: DirectorEventExposure = "hidden"
     player_contact_state: str = Field(
         default="玩家尚未接触该事件的任何前台征兆。",
         min_length=1,
-        max_length=50,
+        max_length=PLAYER_CONTACT_STATE_MAX_LENGTH,
     )
     entry_points: list[DirectorEventEntryPoint] = Field(default_factory=list)
     last_presented_turn: int | None = Field(default=None, ge=0)
@@ -174,7 +175,7 @@ class DirectorEventSelectionResult(BaseModel):
             milestones=self.milestones,
             milestone_interval_steps=interval_steps,
             next_progress_clock=current_clock.advance_phase(interval_steps[0]),
-            progress_index=0,
+            progress_index=1,
             exposure="hidden",
             entry_points=list(self.entry_points),
             created_turn=turn_index,
@@ -188,7 +189,10 @@ class DirectorEventReviewResult(BaseModel):
     reason: str = Field(min_length=1)
     action: ReviewAction
     exposure: DirectorEventExposure
-    player_contact_state: str = Field(min_length=1, max_length=50)
+    player_contact_state: str = Field(
+        min_length=1,
+        max_length=PLAYER_CONTACT_STATE_MAX_LENGTH,
+    )
     evidence: list[str] = Field(default_factory=list)
     resolved_reason: str | None = None
 
@@ -205,7 +209,10 @@ class DirectorEventConsumption(BaseModel):
     event_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     use_event: bool
-    player_contact_state: str = Field(default="", max_length=50)
+    player_contact_state: str = Field(
+        default="",
+        max_length=PLAYER_CONTACT_STATE_MAX_LENGTH,
+    )
     allowed_facts: list[str] = Field(default_factory=list)
     immutable_constraints: list[str] = Field(default_factory=list)
     forbidden_inferences: list[str] = Field(default_factory=list)

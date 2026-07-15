@@ -1,666 +1,356 @@
 import json
 from pathlib import Path
 
-from app.domain.current_state.updater import _WorldClockUpdate
+import pytest
+
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import (
     CurrentState,
     InventoryItem,
-    NPCState,
     PlayerState,
     ResourcesState,
     SceneState,
     StateUpdater,
+    TimedCondition,
     WorldClock,
 )
-from app.domain.current_state.schemas import PHASE_ORDER
-from app.domain.views import project_current_state
+from app.domain.current_state.changes import StateChangeError
+from app.domain.current_state.changes import StateChangeSet
 
 
-def _make_state() -> CurrentState:
+def _state() -> CurrentState:
     return CurrentState(
         scene=SceneState(
-            scene_id="scene_001",
-            location="北郡修道院",
-            time_label="第1日深夜",
-            participants=["主角", "米莉", "莎拉"],
-            atmosphere="宁静",
+            scene_id="scene_009",
+            location="酒馆",
+            participants=[
+                "主角",
+                {"name": "米莉", "condition": ["疲惫"], "attitude_to_player": "谨慎"},
+            ],
         ),
         world_clock=WorldClock(day=1, phase="深夜"),
         player=PlayerState(
             name="主角",
-            condition=[],
-            position="修道院大厅",
-            visible_status="正常",
+            condition=["轻伤"],
+            visible_status="衣袍沾灰",
         ),
-        npcs=[
-            NPCState(
-                name="米莉",
-                role="酒馆老板",
-                location="酒馆吧台",
-                condition=[],
-                attitude_to_player="友好",
-                current_intent="招待客人",
-            ),
-            NPCState(
-                name="莎拉",
-                role="冒险者",
-                location="酒馆角落",
-                condition=[],
-                attitude_to_player="好奇",
-                current_intent="观察主角",
-            ),
-        ],
         resources=ResourcesState(
-            inventory=[InventoryItem(name="旧地图"), InventoryItem(name="干粮")],
-            money=50,
-            fixed_assets=[],
-            temporary_assets=["租来的马"],
+            inventory=[InventoryItem(name="火把", quantity=2)],
+            money=20,
+            money_unit="金币",
+            fixed_assets=["葡萄园"],
+            temporary_assets=["临时通行证"],
         ),
     )
 
 
-def _build_updated_state_json(overrides: dict | None = None) -> str:
-    state = _make_state()
-    data = json.loads(state.model_dump_json())
-    data["world_clock"] = {
-        "reason": None,
-        "day": state.world_clock.day,
-        "phase_index": PHASE_ORDER.index(state.world_clock.phase),
-    }
-    data["mentioned_npcs"] = [npc["name"] for npc in data.get("npcs", [])]
-    if overrides:
-        _deep_update(data, overrides)
-    return json.dumps(data, ensure_ascii=False)
-
-
-def _build_updated_state_json_without_scene_id(overrides: dict | None = None) -> str:
-    state = _make_state()
-    data = json.loads(state.model_dump_json())
-    data["scene"].pop("scene_id", None)
-    data["world_clock"] = {
-        "reason": None,
-        "day": state.world_clock.day,
-        "phase_index": PHASE_ORDER.index(state.world_clock.phase),
-    }
-    data["mentioned_npcs"] = [npc["name"] for npc in data.get("npcs", [])]
-    if overrides:
-        _deep_update(data, overrides)
-    return json.dumps(data, ensure_ascii=False)
-
-
-def _deep_update(target: dict, source: dict) -> None:
-    for key, value in source.items():
-        if isinstance(value, dict) and isinstance(target.get(key), dict):
-            _deep_update(target[key], value)
-        else:
-            target[key] = value
-
-
-def test_world_clock_reason_precedes_time_fields_in_schema():
-    assert list(_WorldClockUpdate.model_json_schema()["properties"]) == [
-        "reason",
-        "day",
-        "phase_index",
-    ]
-    prompt = Path("app/prompts/confirmation/state_update_v1.md").read_text(encoding="utf-8")
-    example_clock = prompt.split('"world_clock"', 1)[1]
-    assert example_clock.index('"reason"') < example_clock.index('"day"')
-
-
-class TestStateUpdaterNoChange:
-    def test_unchanged_state_returns_same(self):
-        state = _make_state()
-        mock = MockLLM()
-        mock.set_responses([_build_updated_state_json()])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角环顾四周，一切如常。", core_memory=CoreMemory(items=[]))
-
-        assert result == state
-
-    def test_location_unchanged_scene_id_preserved(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "scene": {"atmosphere": "紧张", "scene_id": "scene_001"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "酒馆气氛突然变得紧张。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.atmosphere == "紧张"
-        assert result.scene.location == "北郡修道院"
-        assert result.scene.scene_id == "scene_001"
-        assert result.world_clock == state.world_clock
-
-    def test_world_clock_uses_final_llm_time(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json_without_scene_id({
-            "world_clock": {
-                "day": 2,
-                "phase_index": 0,
-                "reason": "剧情明确进入下一时间段",
-            }
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "谈话持续到天色更深。", core_memory=CoreMemory(items=[]))
-
-        assert result.world_clock.day == 2
-        assert result.world_clock.phase == "凌晨"
-
-    def test_world_clock_retries_backward_output_and_accepts_correction(self):
-        state = _make_state()
-        backward_json = _build_updated_state_json_without_scene_id({
-            "world_clock": {
-                "day": 1,
-                "phase_index": 1,
-                "reason": "LLM accidentally returned an earlier time",
-            }
-        })
-        corrected_json = _build_updated_state_json_without_scene_id({
-            "world_clock": {
-                "day": 2,
-                "phase_index": 1,
-                "reason": "早餐发生在第二天上午",
-            }
-        })
-        mock = MockLLM()
-        mock.set_responses([backward_json, corrected_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "第二天早上，主角吃完早餐。", core_memory=CoreMemory(items=[]))
-
-        assert result.world_clock == WorldClock(day=2, phase="上午")
-        assert mock.provider._index == 2
-
-    def test_world_clock_falls_back_to_next_day_after_three_total_attempts(self):
-        state = _make_state()
-        backward_json = _build_updated_state_json_without_scene_id({
-            "world_clock": {
-                "day": 1,
-                "phase_index": 1,
-                "reason": "错误地保持同一天",
-            }
-        })
-        mock = MockLLM()
-        mock.set_responses([backward_json])
-
-        result = StateUpdater(mock.build_gateway()).update(
-            state,
-            "第二天早上，主角吃完早餐。",
-            core_memory=CoreMemory(items=[]),
-        )
-
-        assert result.world_clock == WorldClock(day=2, phase="上午")
-        assert mock.provider._index == 3
-
-
-class TestStateUpdaterPlayerChange:
-    def test_player_position_changes(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "player": {"position": "修道院门口"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角推开大门，走出了修道院。", core_memory=CoreMemory(items=[]))
-
-        assert result.player.position == "修道院门口"
-        assert result.scene.location == state.scene.location
-
-    def test_player_condition_changes(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "player": {"condition": ["轻伤"]},
-            "resources": {
-                "inventory": [
-                    {"name": "旧地图", "quantity": 1},
-                    {"name": "干粮", "quantity": 1},
-                    {"name": "治疗药水", "quantity": 1},
-                ]
-            },
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角在一次冒险中受了些轻伤，但找到了治疗药水。", core_memory=CoreMemory(items=[]))
-
-        assert "轻伤" in result.player.condition
-        assert any(item.name == "治疗药水" for item in result.resources.inventory)
-
-
-class TestStateUpdaterNPCChange:
-    def test_npc_attitude_changes(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "npcs": [
-                {
-                    "name": "米莉",
-                    "role": "酒馆老板",
-                    "location": "酒馆吧台",
-                    "condition": [],
-                    "attitude_to_player": "感激",
-                    "current_intent": "准备报酬",
-                },
-                {
-                    "name": "莎拉",
-                    "role": "冒险者",
-                    "location": "酒馆角落",
-                    "condition": [],
-                    "attitude_to_player": "好奇",
-                    "current_intent": "观察主角",
-                },
-            ]
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角帮米莉赶走了闹事的醉汉，米莉感激地表示要准备报酬。", core_memory=CoreMemory(items=[]))
-
-        milly = next(n for n in result.npcs if n.name == "米莉")
-        assert milly.attitude_to_player == "感激"
-        assert milly.current_intent == "准备报酬"
-        assert len(result.npcs) == 2
-
-    def test_new_npc_added(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "npcs": [
-                {
-                    "name": "米莉",
-                    "role": "酒馆老板",
-                    "location": "酒馆吧台",
-                    "condition": [],
-                    "attitude_to_player": "友好",
-                    "current_intent": "招待客人",
-                },
-                {
-                    "name": "莎拉",
-                    "role": "冒险者",
-                    "location": "酒馆角落",
-                    "condition": [],
-                    "attitude_to_player": "好奇",
-                    "current_intent": "观察主角",
-                },
-                {
-                    "name": "醉汉",
-                    "role": "捣乱者",
-                    "location": "酒馆大厅",
-                    "condition": ["酒醉"],
-                    "attitude_to_player": "敌意",
-                    "current_intent": "挑衅主角",
-                },
-            ]
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "一个浑身酒气的壮汉摇摇晃晃地走向主角。", core_memory=CoreMemory(items=[]))
-
-        assert len(result.npcs) == 3
-        drunk = next(n for n in result.npcs if n.name == "醉汉")
-        assert drunk.role == "捣乱者"
-        assert "酒醉" in drunk.condition
-
-    def test_npc_leaves(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "npcs": [
-                {
-                    "name": "米莉",
-                    "role": "酒馆老板",
-                    "location": "酒馆吧台",
-                    "condition": [],
-                    "attitude_to_player": "友好",
-                    "current_intent": "招待客人",
-                },
-            ]
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "莎拉站起身来，默默离开了酒馆。", core_memory=CoreMemory(items=[]))
-
-        assert len(result.npcs) == 1
-        assert result.npcs[0].name == "米莉"
-
-
-class TestStateUpdaterSceneChange:
-    def test_scene_location_changes(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "scene": {"location": "北郡森林"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角离开了修道院，进入了北郡森林。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.location == "北郡森林"
-        assert result.scene.scene_id == "scene_002"
-
-    def test_scene_atmosphere_changes(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "scene": {"atmosphere": "紧张"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "突然传来一声尖叫，酒馆的客人们都紧张起来。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.atmosphere == "紧张"
-
-
-class TestStateUpdaterResourcesChange:
-    def test_item_added_to_inventory(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "resources": {"inventory": [
-                {"name": "旧地图", "quantity": 1},
-                {"name": "干粮", "quantity": 1},
-                {"name": "箭矢", "quantity": 3},
-            ]}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角拾起了三支箭。", core_memory=CoreMemory(items=[]))
-
-        arrows = next(item for item in result.resources.inventory if item.name == "箭矢")
-        assert arrows.quantity == 3
-
-    def test_item_quantity_decreases(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "resources": {"inventory": [
-                {"name": "旧地图", "quantity": 1},
-                {"name": "干粮", "quantity": 1},
-            ]}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角吃掉了一份干粮。", core_memory=CoreMemory(items=[]))
-
-        food = next(item for item in result.resources.inventory if item.name == "干粮")
-        assert food.quantity == 1
-
-    def test_money_changes(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "resources": {"money": 30}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角付了20枚金币买了些补给。", core_memory=CoreMemory(items=[]))
-
-        assert result.resources.money == 30
-
-    def test_money_unknown_cost_can_use_small_deduction(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "resources": {"money": 48, "money_unit": "金币"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角付了些金币买了一杯热茶。", core_memory=CoreMemory(items=[]))
-
-        assert result.resources.money == 48
-        assert result.resources.money_unit == "金币"
-
-
-class TestStateUpdaterConsistency:
-    def test_player_name_unchanged(self):
-        state = _make_state()
-        mock = MockLLM()
-        mock.set_responses([_build_updated_state_json()])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "一段无关的剧情。", core_memory=CoreMemory(items=[]))
-
-        assert result.player.name == "主角"
-
-    def test_scene_id_preserved_when_location_same(self):
-        state = _make_state()
-        mock = MockLLM()
-        mock.set_responses([_build_updated_state_json()])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "一段无关的剧情。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.scene_id == "scene_001"
-
-
-class TestStateUpdaterNPCAbsentTurns:
-    def test_unmentioned_npc_absent_turns_increment(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "mentioned_npcs": ["米莉"],
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        result = StateUpdater(mock.build_gateway()).update(
-            state,
-            "米莉向主角点头致意，莎拉仍在角落但没有参与对话。",
-            core_memory=CoreMemory(items=[]),
-        )
-
-        milly = next(n for n in result.npcs if n.name == "米莉")
-        sarah = next(n for n in result.npcs if n.name == "莎拉")
-        assert milly.absent_turns == 0
-        assert sarah.absent_turns == 1
-
-    def test_npc_removed_after_three_absent_turns(self):
-        state = _make_state()
-        state.npcs[1] = state.npcs[1].model_copy(update={"absent_turns": 2})
-        updated_json = _build_updated_state_json({
-            "mentioned_npcs": ["米莉"],
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        result = StateUpdater(mock.build_gateway()).update(
-            state,
-            "米莉继续和主角讨论修道院的线索。",
-            core_memory=CoreMemory(items=[]),
-        )
-
-        assert [npc.name for npc in result.npcs] == ["米莉"]
-
-    def test_mentioned_npc_absent_turns_reset(self):
-        state = _make_state()
-        state.npcs[1] = state.npcs[1].model_copy(update={"absent_turns": 2})
-        updated_json = _build_updated_state_json({
-            "mentioned_npcs": ["米莉", "莎拉"],
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        result = StateUpdater(mock.build_gateway()).update(
-            state,
-            "莎拉从角落抬头，接过米莉的话。",
-            core_memory=CoreMemory(items=[]),
-        )
-
-        sarah = next(n for n in result.npcs if n.name == "莎拉")
-        assert sarah.absent_turns == 0
-
-    def test_alias_mentioned_npc_absent_turns_reset(self):
-        state = _make_state()
-        state.npcs[0] = state.npcs[0].model_copy(update={"absent_turns": 2})
-        updated_json = _build_updated_state_json({
-            "mentioned_npcs": ["米莉·奥斯沃斯"],
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        result = StateUpdater(mock.build_gateway()).update(
-            state,
-            "米莉·奥斯沃斯向主角点头致意，莎拉并未出现。",
-            core_memory=CoreMemory(items=[]),
-            npc_aliases={"米莉": ["米莉·奥斯沃斯"]},
-        )
-
-        milly = next(n for n in result.npcs if n.name == "米莉")
-        sarah = next(n for n in result.npcs if n.name == "莎拉")
-        assert milly.absent_turns == 0
-        assert sarah.absent_turns == 1
-
-    def test_new_npc_absent_turns_starts_at_zero(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "npcs": [
-                {
-                    "name": "米莉",
-                    "role": "酒馆老板",
-                    "location": "酒馆吧台",
-                    "condition": [],
-                    "attitude_to_player": "友好",
-                    "current_intent": "招待客人",
-                },
-                {
-                    "name": "莎拉",
-                    "role": "冒险者",
-                    "location": "酒馆角落",
-                    "condition": [],
-                    "attitude_to_player": "好奇",
-                    "current_intent": "观察主角",
-                },
-                {
-                    "name": "艾伦",
-                    "role": "信使",
-                    "location": "酒馆门口",
-                    "condition": [],
-                    "attitude_to_player": None,
-                    "current_intent": "送信",
-                },
+def _facts() -> str:
+    return json.dumps(
+        {
+            "scene_focus": "测试变更",
+            "facts": [
+                {"fact_id": f"f{i}", "fact": f"测试事实{i}"}
+                for i in range(1, 13)
             ],
-            "mentioned_npcs": ["艾伦"],
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
+        },
+        ensure_ascii=False,
+    )
 
-        result = StateUpdater(mock.build_gateway()).update(
-            state,
-            "一个名叫艾伦的信使走进酒馆。",
+
+def _operation(operation_id: str, operation_type: str, **fields) -> dict:
+    return {
+        "operation_id": operation_id,
+        "type": operation_type,
+        "reason": "Scene Facts 明确支持该变化。",
+        "evidence_fact_ids": ["f1"],
+        **fields,
+    }
+
+
+def _update(response: dict, *, state: CurrentState | None = None):
+    mock = MockLLM()
+    mock.set_responses([json.dumps(response, ensure_ascii=False)])
+    updater = StateUpdater(mock.build_gateway())
+    result = updater.update(
+        state or _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+    return result, updater.last_change_set
+
+
+def test_no_operations_preserve_the_complete_state():
+    state = _state()
+
+    result, changes = _update({"operations": []}, state=state)
+
+    assert result == state
+    assert changes.operations == []
+
+
+def test_location_and_time_are_applied_by_program():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation("op1", "location_change", location="城门"),
+                _operation("op2", "world_clock_advance", phases=2),
+            ]
+        }
+    )
+
+    assert result.scene.location == "城门"
+    assert result.scene.scene_id == "scene_010"
+    assert result.world_clock == WorldClock(day=2, phase="上午")
+    assert not hasattr(result.player, "position")
+
+
+def test_participant_state_is_added_changed_and_removed_in_order():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation("op1", "participant_add", name="莎拉"),
+                _operation(
+                    "op2",
+                    "npc_condition_add",
+                    name="莎拉",
+                    condition="手臂受伤",
+                    expires_after_phases=-1,
+                ),
+                _operation(
+                    "op3",
+                    "participant_attitude_change",
+                    name="莎拉",
+                    attitude_to_player="信任",
+                ),
+                _operation("op4", "participant_remove", name="米莉"),
+            ]
+        }
+    )
+
+    assert result.scene.participant_names == ["主角", "莎拉"]
+    sarah = result.scene.participants[1]
+    assert [item.condition for item in sarah.npc_conditions] == ["手臂受伤"]
+    assert sarah.npc_conditions[0].expires_after_phases == -1
+    assert sarah.attitude_to_player == "信任"
+
+
+def test_player_changes_use_add_remove_and_visible_status_change():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation(
+                    "op1",
+                    "player_condition_remove",
+                    condition="轻伤",
+                ),
+                _operation(
+                    "op2",
+                    "player_condition_add",
+                    condition="疲惫",
+                ),
+                _operation(
+                    "op3",
+                    "player_visible_status_change",
+                    visible_status=None,
+                ),
+            ]
+        }
+    )
+
+    assert result.player.condition == ["疲惫"]
+    assert result.player.visible_status is None
+
+
+def test_resource_deltas_and_asset_operations_are_deterministic():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation("op1", "inventory_delta", item="火把", delta=-1),
+                _operation("op2", "inventory_delta", item="银钥匙", delta=1),
+                _operation("op3", "money_delta", delta=-5),
+                _operation("op4", "fixed_asset_remove", asset="葡萄园"),
+                _operation("op5", "fixed_asset_add", asset="旧宅"),
+                _operation(
+                    "op6",
+                    "temporary_asset_remove",
+                    asset="临时通行证",
+                ),
+                _operation(
+                    "op7",
+                    "temporary_asset_add",
+                    asset="仓库钥匙使用权",
+                ),
+            ]
+        }
+    )
+
+    assert [(item.name, item.quantity) for item in result.resources.inventory] == [
+        ("火把", 1),
+        ("银钥匙", 1),
+    ]
+    assert result.resources.money == 15
+    assert result.resources.fixed_assets == ["旧宅"]
+    assert result.resources.temporary_assets == ["仓库钥匙使用权"]
+
+
+def test_world_clock_advance_expires_scene_and_npc_conditions():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation(
+                    "op1",
+                    "scene_condition_add",
+                    condition="房间正在燃烧",
+                    expires_after_phases=2,
+                ),
+                _operation(
+                    "op2",
+                    "scene_condition_add",
+                    condition="出口被落石封堵",
+                    expires_after_phases=-1,
+                ),
+                _operation(
+                    "op3",
+                    "npc_condition_add",
+                    name="米莉",
+                    condition="短暂眩晕",
+                    expires_after_phases=1,
+                ),
+                _operation("op4", "world_clock_advance", phases=1),
+            ]
+        }
+    )
+
+    assert [
+        (item.condition, item.expires_after_phases)
+        for item in result.scene.scene_condition
+    ] == [
+        ("房间正在燃烧", 1),
+        ("出口被落石封堵", -1),
+    ]
+    milly = result.scene.participants[1]
+    assert [
+        (item.condition, item.expires_after_phases)
+        for item in milly.npc_conditions
+    ] == [("疲惫", -1)]
+
+
+def test_timed_condition_add_requires_expiry():
+    with pytest.raises(ValueError, match="expires_after_phases"):
+        StateChangeSet.model_validate({
+            "operations": [
+                _operation(
+                    "op1",
+                    "scene_condition_add",
+                    condition="一片漆黑",
+                )
+            ]
+        })
+
+
+def test_llm_can_remove_conditions_before_their_expiry():
+    state = _state().model_copy(deep=True)
+    state.scene.scene_condition = [
+        TimedCondition(condition="毒物弥漫", expires_after_phases=3)
+    ]
+    state.scene.participants[1].npc_conditions = [
+        TimedCondition(condition="中毒", expires_after_phases=2)
+    ]
+    state = CurrentState.model_validate(state.model_dump(mode="python"))
+
+    result, _ = _update(
+        {
+            "operations": [
+                _operation(
+                    "op1",
+                    "scene_condition_remove",
+                    condition="毒物弥漫",
+                ),
+                _operation(
+                    "op2",
+                    "npc_condition_remove",
+                    name="米莉",
+                    condition="中毒",
+                ),
+            ]
+        },
+        state=state,
+    )
+
+    assert result.scene.scene_condition == []
+    assert result.scene.participants[1].npc_conditions == []
+
+
+def test_unknown_evidence_retries_with_validation_feedback():
+    mock = MockLLM()
+    mock.set_responses(
+        [
+            json.dumps(
+                {
+                    "operations": [
+                        {
+                            **_operation("op1", "money_delta", delta=1),
+                            "evidence_fact_ids": ["missing"],
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            json.dumps({"operations": []}, ensure_ascii=False),
+        ]
+    )
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+
+
+def test_illegal_delta_fails_after_semantic_retries():
+    response = json.dumps(
+        {
+            "operations": [
+                _operation("op1", "inventory_delta", item="不存在", delta=-1)
+            ]
+        },
+        ensure_ascii=False,
+    )
+    mock = MockLLM()
+    mock.set_responses([response, response, response])
+
+    with pytest.raises(StateChangeError, match="missing inventory item"):
+        StateUpdater(mock.build_gateway()).update(
+            _state(),
+            _facts(),
             core_memory=CoreMemory(items=[]),
         )
 
-        allen = next(n for n in result.npcs if n.name == "艾伦")
-        assert allen.absent_turns == 0
 
-    def test_project_current_state_hides_absent_turns(self):
-        state = _make_state()
-        state.npcs[0] = state.npcs[0].model_copy(update={"absent_turns": 2})
+def test_prompt_defines_incremental_state_contract():
+    prompt = Path("app/prompts/confirmation/state_update_v1.md").read_text(
+        encoding="utf-8"
+    )
 
-        projected = project_current_state(state)
-
-        assert "absent_turns" not in projected
-
-    def test_state_updater_prompt_hides_absent_turns(self):
-        state = _make_state()
-        state.npcs[0] = state.npcs[0].model_copy(update={"absent_turns": 2})
-        mock = MockLLM()
-        captured = {}
-
-        def generate(prompt: str, *, model: str = "", temperature: float = 0.2) -> "ProviderResult":
-            from app.core.llm.providers import ProviderResult
-            captured["prompt"] = prompt
-            return ProviderResult(content=_build_updated_state_json({"mentioned_npcs": ["米莉", "莎拉"]}))
-
-        mock.provider.generate = generate
-
-        StateUpdater(mock.build_gateway()).update(state, "米莉和莎拉都留在酒馆。", core_memory=CoreMemory(items=[]))
-
-        assert "absent_turns" not in captured["prompt"]
-
-
-class TestSceneIdAutoIncrement:
-    def test_accepts_llm_output_without_scene_id(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json_without_scene_id({
-            "scene": {"atmosphere": "疏离"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "酒馆里的交谈变得冷淡，气氛疏离。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.scene_id == "scene_001"
-        assert result.scene.atmosphere == "疏离"
-
-    def test_increments_on_location_change(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "scene": {"location": "北郡森林"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角走进了北郡森林。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.scene_id == "scene_002"
-
-    def test_preserved_when_location_same(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "player": {"position": "酒馆门口"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角走到酒馆门口。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.scene_id == "scene_001"
-
-    def test_ignores_llm_scene_id_output(self):
-        state = _make_state()
-        updated_json = _build_updated_state_json({
-            "scene": {"scene_id": "scene_999"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "酒馆里一切如常。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.scene_id == "scene_001"
-
-    def test_increment_preserves_padding(self):
-        state = _make_state()
-        state.scene.scene_id = "scene_009"
-        updated_json = _build_updated_state_json({
-            "scene": {"location": "北郡森林"}
-        })
-        mock = MockLLM()
-        mock.set_responses([updated_json])
-
-        updater = StateUpdater(mock.build_gateway())
-        result = updater.update(state, "主角离开修道院。", core_memory=CoreMemory(items=[]))
-
-        assert result.scene.scene_id == "scene_010"
+    template_sections = [
+        "# 上下文",
+        "# 输入",
+        "# 输出规范",
+        "# 核心规则",
+        "# 禁止事项",
+        "# 例子",
+    ]
+    section_positions = [prompt.index(section) for section in template_sections]
+    assert section_positions == sorted(section_positions)
+    assert "不输出完整状态" in prompt
+    assert "location_change" in prompt
+    assert "world_clock_advance" in prompt
+    assert "participant_attitude_change" in prompt
+    assert "scene_condition_add" in prompt
+    assert "npc_condition_add" in prompt
+    assert "expires_after_phases" in prompt
+    assert "inventory_delta" in prompt
