@@ -69,6 +69,10 @@ def _operation(operation_id: str, operation_type: str, **fields) -> dict:
 
 
 def _update(response: dict, *, state: CurrentState | None = None):
+    response = {
+        "decision": "Scene Facts 支持以下状态变化。",
+        **response,
+    }
     mock = MockLLM()
     mock.set_responses([json.dumps(response, ensure_ascii=False)])
     updater = StateUpdater(mock.build_gateway())
@@ -86,6 +90,7 @@ def test_no_operations_preserve_the_complete_state():
     result, changes = _update({"operations": []}, state=state)
 
     assert result == state
+    assert changes.decision == "Scene Facts 支持以下状态变化。"
     assert changes.operations == []
 
 
@@ -239,6 +244,7 @@ def test_world_clock_advance_expires_scene_and_npc_conditions():
 def test_timed_condition_add_requires_expiry():
     with pytest.raises(ValueError, match="expires_after_phases"):
         StateChangeSet.model_validate({
+            "decision": "场景获得需要期限的客观状态。",
             "operations": [
                 _operation(
                     "op1",
@@ -288,6 +294,7 @@ def test_unknown_evidence_retries_with_validation_feedback():
         [
             json.dumps(
                 {
+                    "decision": "事实引用无效，不应通过校验。",
                     "operations": [
                         {
                             **_operation("op1", "money_delta", delta=1),
@@ -297,7 +304,10 @@ def test_unknown_evidence_retries_with_validation_feedback():
                 },
                 ensure_ascii=False,
             ),
-            json.dumps({"operations": []}, ensure_ascii=False),
+            json.dumps(
+                {"decision": "无合法变化。", "operations": []},
+                ensure_ascii=False,
+            ),
         ]
     )
     updater = StateUpdater(mock.build_gateway())
@@ -314,6 +324,7 @@ def test_unknown_evidence_retries_with_validation_feedback():
 def test_illegal_delta_fails_after_semantic_retries():
     response = json.dumps(
         {
+            "decision": "尝试移除不存在的物品。",
             "operations": [
                 _operation("op1", "inventory_delta", item="不存在", delta=-1)
             ]
@@ -354,3 +365,17 @@ def test_prompt_defines_incremental_state_contract():
     assert "npc_condition_add" in prompt
     assert "expires_after_phases" in prompt
     assert "inventory_delta" in prompt
+    assert prompt.index("`decision`") < prompt.index("每项操作都必须填写")
+    assert "资源数额与单位是否一致" in prompt
+    assert prompt.index("- reason：") < prompt.index("- type：")
+    assert "判断 Scene Facts 是否真正支持一项合法、可执行的状态变化" in prompt
+
+
+def test_operation_schema_places_reason_before_type():
+    schema = StateChangeSet.model_json_schema()
+
+    assert list(schema["properties"])[:2] == ["decision", "operations"]
+    assert "decision" in schema["required"]
+    for operation_name in ("MoneyDelta", "InventoryDelta", "LocationChange"):
+        properties = list(schema["$defs"][operation_name]["properties"])
+        assert properties.index("reason") < properties.index("type")

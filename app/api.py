@@ -41,11 +41,16 @@ def redo_last_turn() -> dict:
     return get_campaign_runtime().redo()
 
 
+def discard_pending_turn(turn_id: str) -> dict:
+    return get_campaign_runtime().discard_pending_turn(turn_id)
+
+
 __all__ = [
     "apply_core_memory_init",
     "batch_classify_stream",
     "confirm_stream",
     "create_save",
+    "discard_pending_turn",
     "generate_turn_stream",
     "get_maintenance_job",
     "load_debug_state",

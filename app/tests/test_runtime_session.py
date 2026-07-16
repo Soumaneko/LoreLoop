@@ -31,6 +31,49 @@ def test_pending_turn_repository_orders_and_discards_variants():
     assert repository.get("other") is not None
 
 
+def test_runtime_discards_pending_group_and_returns_original_input(tmp_path):
+    runtime = CampaignRuntime(
+        "discard-pending",
+        paths=CampaignPaths.from_data_dir(tmp_path / "discard-pending"),
+        max_workers=1,
+    )
+    try:
+        runtime.pending_turns.add(SimpleNamespace(
+            turn_id="v1",
+            group_id="g",
+            version_index=1,
+            user_input="调查钟楼。",
+            difficulty="困难",
+            max_chars=1500,
+        ))
+        runtime.pending_turns.add(SimpleNamespace(
+            turn_id="v2",
+            group_id="g",
+            version_index=2,
+            user_input="调查钟楼。",
+            difficulty="困难",
+            max_chars=1500,
+        ))
+        runtime.pending_turns.add(SimpleNamespace(
+            turn_id="other",
+            group_id="other",
+            version_index=1,
+            user_input="等待。",
+            difficulty="普通",
+            max_chars=1000,
+        ))
+
+        result = runtime.discard_pending_turn("v2")
+
+        assert result["user_input"] == "调查钟楼。"
+        assert result["discarded_turn_ids"] == ["v1", "v2"]
+        assert runtime.pending_turns.get("v1") is None
+        assert runtime.pending_turns.get("v2") is None
+        assert runtime.pending_turns.get("other") is not None
+    finally:
+        runtime.close()
+
+
 def test_campaign_runtimes_isolate_paths_stores_pending_and_locks(tmp_path):
     first = CampaignRuntime(
         "first",

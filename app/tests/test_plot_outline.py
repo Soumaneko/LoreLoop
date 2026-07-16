@@ -228,8 +228,8 @@ class TestPlotOutlineAgent:
         assert "DirectorEvent Consumptions 是可选的导演事件材料" in prompt
         assert "arc 负责" not in prompt
         assert "ambient 负责" not in prompt
-        assert "若要求角色披露信息，必须写出本回合允许披露的具体事实" in prompt
-        assert "不得使用未携带事实内容的占位描述" in prompt
+        assert "禁止任何形式的“空泛任务”" in prompt
+        assert "必须写出具体的名词和结论" in prompt
         assert "依据不足时必须保持未知" in prompt
         assert "canonical_premise" not in prompt
         assert "allowed_effect" not in prompt

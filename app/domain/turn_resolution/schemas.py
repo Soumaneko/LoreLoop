@@ -21,7 +21,6 @@ class ActionJudgment(BaseModel):
     actor: list[str]
     action_type: str
     action_text: str
-    intended_goal: str | None = None
     resolution_source: ResolutionSource
     dice: str | None = None
     roll_value: int | None = None

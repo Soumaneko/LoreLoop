@@ -42,7 +42,6 @@ class AtomicAction(BaseModel):
     verb: str
     target: str | None = None
     method: str | None = None
-    goal: str | None = None
     condition: str | None = None
 
     likely_needs_roll: bool
@@ -59,7 +58,6 @@ class Anchor(BaseModel):
 
 class ActionExtractionResult(BaseModel):
     analysis: str = ""
-    turn_intent: str
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
 
 
@@ -70,7 +68,6 @@ class AnchorExtractionResult(BaseModel):
 
 class ActionParseResult(BaseModel):
     analysis: str = ""
-    turn_intent: str
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
     anchors: list[Anchor] = Field(default_factory=list)
     ambiguities: list[str] = Field(default_factory=list)

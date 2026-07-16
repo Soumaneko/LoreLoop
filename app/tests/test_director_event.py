@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,7 @@ from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
+from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.domain.director_event.workflows import update_director_event_workflow
 
 
@@ -237,10 +239,13 @@ class _SpyGateway:
     def __init__(self, response):
         self.response = response
         self.calls = []
+        self._lock = threading.Lock()
 
     def run(self, **kwargs):
-        self.calls.append(kwargs)
-        return kwargs["output_schema"].model_validate(self.response)
+        with self._lock:
+            self.calls.append(kwargs)
+        response = self.response(kwargs) if callable(self.response) else self.response
+        return kwargs["output_schema"].model_validate(response)
 
 
 class TestDirectorEventSchema:
@@ -737,9 +742,11 @@ class TestDirectorEventConsumer:
         assert "currently_happening" in prompt
         assert "player_contact_state：原样复制" not in prompt
         assert "不能再次成为 allowed_facts" in prompt
-        assert "allowed_facts 必须完成前台投影" in prompt
+        assert "allowed_facts 不允许摘抄 currently_happening" in prompt
         assert "通过什么地点、人物、公开行为、环境变化或可观察征兆具体表现" in prompt
         assert "这是照抄 already_happened" in prompt
+        assert "Player Input 只表示玩家尝试做什么" in prompt
+        assert "TR 的结果具有最高优先级" in prompt
 
     def test_consumption_schema_keeps_use_decision_consistent(self):
         with pytest.raises(ValidationError):
@@ -756,12 +763,12 @@ class TestDirectorEventConsumer:
                 allowed_facts=["不应存在的前台事实"],
             )
 
-    def test_consumer_receives_tr_context_and_returns_one_result_per_event(self):
+    def test_consumer_reviews_every_event_but_returns_only_adopted_events(self):
         arc = _event("主线事件", role="arc")
         ambient = _event("环境事件", role="ambient")
-        spy = _SpyGateway({
-            "consumptions": [
-                {
+        responses = {
+            arc.event_id: {
+                "consumption": {
                     "event_id": arc.event_id,
                     "reason": "仅提到目标地点，没有真实接触。",
                     "use_event": False,
@@ -769,7 +776,9 @@ class TestDirectorEventConsumer:
                     "immutable_constraints": [],
                     "forbidden_inferences": ["不得表现远方现场征兆。"],
                 },
-                {
+            },
+            ambient.event_id: {
+                "consumption": {
                     "event_id": ambient.event_id,
                     "reason": "当前场景存在自然接触。",
                     "use_event": True,
@@ -777,8 +786,14 @@ class TestDirectorEventConsumer:
                     "immutable_constraints": ["征兆发生在北郡驿站。"],
                     "forbidden_inferences": ["不得确认幕后势力。"],
                 },
-            ]
-        })
+            },
+        }
+
+        def respond(call):
+            event_data = json.loads(call["input_data"]["director_event_json"])
+            return responses[event_data["event_id"]]
+
+        spy = _SpyGateway(respond)
 
         result = DirectorEventConsumer(spy).consume(
             events=[arc, ambient],
@@ -786,41 +801,108 @@ class TestDirectorEventConsumer:
             current_state=_state(),
             core_memory=_core(),
             context_facts=ContextFactSet(turn_focus="询问消息", facts=[]),
+            turn_resolution=TurnResolutionResult(),
             entity_profiles=[],
             npc_profiles=[],
         )
 
-        assert [item.event_id for item in result] == [arc.event_id, ambient.event_id]
+        assert [item.event_id for item in result] == [ambient.event_id]
         assert [item.player_contact_state for item in result] == [
-            arc.player_contact_state,
             ambient.player_contact_state,
         ]
+        assert arc.event_id not in json.dumps(
+            [item.model_dump(mode="json") for item in result],
+            ensure_ascii=False,
+        )
+        assert len(spy.calls) == 2
+        projected_events = [
+            json.loads(call["input_data"]["director_event_json"])
+            for call in spy.calls
+        ]
+        assert {event["event_id"] for event in projected_events} == {
+            arc.event_id,
+            ambient.event_id,
+        }
+        assert all(
+            sum(
+                other.event_id in call["input_data"]["director_event_json"]
+                for other in (arc, ambient)
+            ) == 1
+            for call in spy.calls
+        )
+
         input_data = spy.calls[0]["input_data"]
         output_schema = json.loads(input_data["output_schema_json"])
         consumption_schema = output_schema["$defs"]["_DirectorEventConsumptionDraft"]
         assert "player_contact_state" not in consumption_schema["properties"]
+        assert set(output_schema["properties"]) == {"consumption"}
         assert set(input_data) == {
             "core_memory_json",
             "current_state_json",
             "user_input",
             "context_facts_json",
+            "turn_resolution_json",
             "entity_profiles_json",
             "npc_profiles_json",
-            "director_events_json",
+            "director_event_json",
             "output_schema_json",
         }
 
-    def test_consumer_rejects_missing_event_result(self):
-        event = _event()
-        spy = _SpyGateway({"consumptions": []})
+    def test_consumer_processes_multiple_events_in_parallel_and_preserves_order(self):
+        first = _event("第一事件", role="arc")
+        second = _event("第二事件", role="ambient")
+        barrier = threading.Barrier(2)
 
-        with pytest.raises(ValueError, match="exactly one result"):
+        def respond(call):
+            event_data = json.loads(call["input_data"]["director_event_json"])
+            barrier.wait(timeout=2)
+            return {
+                "consumption": {
+                    "event_id": event_data["event_id"],
+                    "reason": "当前场景存在自然接触。",
+                    "use_event": True,
+                    "allowed_facts": [f"{event_data['title']}形成了可见征兆。"],
+                    "immutable_constraints": [],
+                    "forbidden_inferences": [],
+                }
+            }
+
+        result = DirectorEventConsumer(_SpyGateway(respond)).consume(
+            events=[first, second],
+            user_input="继续。",
+            current_state=_state(),
+            core_memory=_core(),
+            context_facts=ContextFactSet(turn_focus="继续", facts=[]),
+            turn_resolution=TurnResolutionResult(),
+        )
+
+        assert [item.event_id for item in result] == [first.event_id, second.event_id]
+        assert [item.allowed_facts for item in result] == [
+            ["第一事件形成了可见征兆。"],
+            ["第二事件形成了可见征兆。"],
+        ]
+
+    def test_consumer_rejects_result_for_another_event(self):
+        event = _event()
+        spy = _SpyGateway({
+            "consumption": {
+                "event_id": "another_event",
+                "reason": "错误事件。",
+                "use_event": False,
+                "allowed_facts": [],
+                "immutable_constraints": [],
+                "forbidden_inferences": [],
+            }
+        })
+
+        with pytest.raises(ValueError, match="wrong active event"):
             DirectorEventConsumer(spy).consume(
                 events=[event],
                 user_input="继续。",
                 current_state=_state(),
                 core_memory=_core(),
                 context_facts=ContextFactSet(turn_focus="继续", facts=[]),
+                turn_resolution=TurnResolutionResult(),
             )
 
 
@@ -896,9 +978,9 @@ class TestDirectorEventWorkflow:
         prompt = Path("app/prompts/confirmation/director_event_review_v1.md").read_text(
             encoding="utf-8"
         )
-        assert "硬性上限 200 个字符" in prompt
-        assert "不是发生过什么的流水账" in prompt
-        assert "当前接触情况" in prompt
+        assert "硬性上限 200 字符" in prompt
+        assert "绝对禁止写成按时间顺序排布的历史流水账" in prompt
+        assert "当前接触快照" in prompt
 
     def test_review_resolves_active_event(self):
         store = DirectorEventStore()
@@ -1421,7 +1503,7 @@ class TestDirectorEventSelector:
         assert "不得限定唯一执行者、唯一方法" in selector_prompt
         assert "玩家推动默认下一状态成立应 advance" in reviewer_prompt
         assert "预定路线失效但冲突仍在应 redirect" in reviewer_prompt
-        assert "不受 progress_index 限制" in reviewer_prompt
+        assert "可在任意 progress_index 使用" in reviewer_prompt
         assert "不得把“玩家介入”本身作为 resolve 依据" in reviewer_prompt
 
     def test_selector_receives_event_list_and_standby_without_scene_text(self):

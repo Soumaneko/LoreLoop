@@ -216,6 +216,22 @@ class CampaignRuntime:
     def has_pending_content(self) -> bool:
         return bool(len(self.pending_turns) or len(self.pending_openings))
 
+    def discard_pending_turn(self, turn_id: str) -> dict[str, Any]:
+        with self._confirmation_lock:
+            pending = self.pending_turns.get(turn_id)
+            if pending is None:
+                raise ValueError("Pending turn not found")
+            variants = self.pending_turns.variants(pending.group_id)
+            discarded_turn_ids = [variant.turn_id for variant in variants]
+            self.pending_turns.discard_group(pending.group_id)
+            return {
+                "group_id": pending.group_id,
+                "user_input": pending.user_input,
+                "difficulty": pending.difficulty,
+                "max_chars": pending.max_chars,
+                "discarded_turn_ids": discarded_turn_ids,
+            }
+
     def _configure_pending_persistence(self) -> None:
         self.pending_turns.configure_callbacks(
             on_add=self._persist_pending_turn,
@@ -295,6 +311,8 @@ class CampaignRuntime:
             import json
 
             data = json.loads(payload)
+            if record.get("scene_text"):
+                data["scene_result"]["scene_text"] = record["scene_text"]
             if record["kind"] == "turn":
                 self.pending_turns.restore(PendingTurn(
                     turn_id=data["turn_id"],
@@ -358,15 +376,23 @@ class CampaignRuntime:
                 raise RuntimeError("Confirm or discard pending content before undo")
             self.jobs.wait_for_idle()
             result = self.history.undo()
+            self._restore_pending_transactions()
             self._restart_jobs()
             return result
 
     def redo(self) -> dict[str, Any]:
         with self._confirmation_lock:
-            if self.has_pending_content():
+            restored_ids = set(self.history.redo_pending_turn_ids())
+            pending_ids = {
+                *(pending.turn_id for pending in self.pending_turns.values()),
+                *(pending.turn_id for pending in self.pending_openings.values()),
+            }
+            if pending_ids and pending_ids != restored_ids:
                 raise RuntimeError("Confirm or discard pending content before redo")
             self.jobs.wait_for_idle()
             result = self.history.redo()
+            self.pending_turns.clear(discard=False)
+            self.pending_openings.clear(discard=False)
             self._restart_jobs()
             return result
 

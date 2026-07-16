@@ -51,7 +51,6 @@ class ActionSelfCheck:
         self.last_result = sc_result
 
         return ActionParseResult(
-            turn_intent=result.turn_intent,
             atomic_actions=actions,
             anchors=anchors,
             ambiguities=result.ambiguities,

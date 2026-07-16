@@ -54,7 +54,6 @@ class ActionParser:
 
         return ActionParseResult(
             analysis=action_result.analysis,
-            turn_intent=action_result.turn_intent,
             atomic_actions=action_result.atomic_actions,
             anchors=anchor_result.anchors,
             ambiguities=[

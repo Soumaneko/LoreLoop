@@ -179,7 +179,6 @@ def test_context_fact_memory_retrieval_uses_context_anchors():
         )
 
         result = retrieve_context_fact_memories(
-            user_input="询问顾晚棠如何解决盐帮追捕。",
             anchors=anchors,
             memory_store=store,
         )

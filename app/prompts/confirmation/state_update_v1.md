@@ -42,15 +42,20 @@
 没有状态变化时输出：
 
 ```json
-{{"operations": []}}
+{{
+  "decision": "Scene Facts 未形成任何需要写入 CurrentState 的状态变化。",
+  "operations": []
+}}
 ```
+
+首先填写 operations 列表外部的 `decision`：用简短的全局审计说明本轮哪些事实需要转化为状态操作、哪些事实不应修改状态及原因。必须先核对 CurrentState、事实是否真的造成变化、资源数额与单位是否一致，再决定是否创建任何 operation。`decision` 只总结判断，不写剧情正文。
 
 每项操作都必须填写：
 
 - operation_id：本次输出内唯一，按 `op1`、`op2` 顺序编号。
-- type：只能使用 schema 中声明的操作类型。
-- reason：说明 Scene Facts 中什么已发生事实支持这项变化。
+- reason：判断 Scene Facts 是否真正支持一项合法、可执行的状态变化，并说明依据。
 - evidence_fact_ids：至少一个真实存在的 Scene Fact ID；禁止虚构 ID。
+- type：选择 schema 中声明的操作类型。
 
 
 # 核心规则
@@ -60,7 +65,7 @@
 - `location_change`：角色在**场景结束**时实际到达了不同地点。填写 `location`。程序会增加 scene_id；`scene.location` 是当前位置的唯一权威字段。
 - `participant_add`：角色实际进入、加入或随玩家到达当前场景。填写 `name`。
 - `participant_remove`：角色明确离开，或地点改变且明确没有跟随玩家。填写 `name`。禁止移除玩家。
-- `scene_condition_add`：新增客观、会影响行动可能性的场景状态，填写 `condition` 和 `expires_after_phases`。
+- `scene_condition_add`：新增客观的、会影响行动可能性的场景状态，填写 `condition` 和 `expires_after_phases`。主观的氛围和发生的事情不应该被记录。
 - `scene_condition_remove`：Scene Facts 明确显示某个场景状态结束时，填写 `condition`。
 
 CurrentState 中 participants 是当前**在场人物**的唯一权威列表。仅被提及、回忆或远程谈论的角色不得加入。
@@ -69,17 +74,15 @@ scene_condition 只记录客观状态，例如“房间正在燃烧”“一片�
 
 ## 在场人物状态
 
-- `npc_condition_add`：在场非玩家人物获得明确身体或精神状态，填写 `name`、`condition` 和 `expires_after_phases`。
+- `npc_condition_add`：在场非玩家人物获得明确身体或精神状态，填写 `name`、`condition` 和 `expires_after_phases`。身份/职业/动机不应该被记录。
 - `npc_condition_remove`：明确显示在场非玩家人物的某项状态提前解除，填写 `name` 和 `condition`。
 - `participant_attitude_change`：在场非玩家人物对玩家的公开态度发生明确、持续到场景结束的变化。填写 `name` 和 `attitude_to_player`；设为 null 表示明确清除旧态度。
 
 若人物本回合刚加入，应先输出 `participant_add`，再输出该人物的 npc condition/attitude 操作。不要记录人物的即时动作意图、下一步打算或隐藏心理。
 
 所有 `scene_condition_add` 和 `npc_condition_add` 都必须填写期限：
-
-- `expires_after_phases=-1`：没有可确定的自动结束时间，只能由后续 remove 操作解除。
 - 正整数：还可持续几个 world phase。
-- 禁止填写 0。没有明确持续时间且无法可靠判断时使用 -1，不要猜测。
+- 禁止填写 0。没有明确持续时间且无法可靠判断时使用 1，不要猜测。
 
 ## 时间
 
@@ -89,17 +92,18 @@ scene_condition 只记录客观状态，例如“房间正在燃烧”“一片�
 
 ## 玩家
 
-- `player_condition_add` / `player_condition_remove`：玩家明确获得或解除身体、精神状态。填写 `condition`。
+- `player_condition_add` / `player_condition_remove`：玩家明确获得或解除身体、精神状态。填写 `condition`。身份/职业/动机不应该被记录。
 - `player_visible_status_change`：玩家对外可见的总体状态明确变化。填写 `visible_status`；明确恢复到无特殊可见状态时填 null。
 
 不要通过 npc condition 操作修改玩家。玩家 condition 不使用自动期限。
 
 ## 资源
 
-- `inventory_delta`：物品明确获得、失去或消耗。填写 `item` 和非零 `delta`。增加为正，减少为负。
-- `money_delta`：明确知道数额，单位正确的收入或支出。填写非零 `delta`。收入为正，支出为负。
+注意：不属于主角的取得/失去不应该被记录。
+- `inventory_delta`：物品明确获得、失去或消耗。填写 `item` 和 `delta`。增加为正，减少为负。
+- `money_delta`：明确知道数额的收入或支出。填写 `delta`。收入为正，支出为负。如果 Scene Facts 中的货币单位与基础 money 单位不同，**绝对禁止使用此操作**。
 - `fixed_asset_add` / `fixed_asset_remove`：永久或长期资产的明确取得/失去。填写 `asset`。
-- `temporary_asset_add` / `temporary_asset_remove`：临时权限、借用品或短期资源的明确取得/失去。填写 `asset`。
+- `temporary_asset_add` / `temporary_asset_remove`：临时物品、借用品的明确取得/失去。填写 `asset`。承诺/情报等非实体不应该处理。
 
 物品仅被展示、佩戴或非消耗性使用时不改变库存。没有明确金额时不得猜测 money delta。删除操作必须针对 CurrentState 中真实存在的内容。
 
@@ -111,6 +115,12 @@ scene_condition 只记录客观状态，例如“房间正在燃烧”“一片�
 3. 操作按故事发生顺序排列；后续操作可以依赖前面的操作。
 4. location 采用稳定、可复用的地点粒度。
 5. condition 使用简短的当前状态；状态解除使用 remove 操作。
+6. money 如果单位不一致，严禁进行 money_delta 操作。
+7. Condition 是系统的长期状态追踪器，提取门槛极高，在进行任何 `scene_condition_add`、`npc_condition_add` 或 `player_condition_add` 前，必须通过以下“持久性测试”：
+  - 是否跨越回合？如果该表现会在短时间内自然消失，绝对不提取。
+  - 是否有机制级影响？该状态必须能实质性限制或增强后续互动的可能性（如：[重伤流血]会扣血，[大门焊死]导致无法离开，[致盲]导致无法观察，[极度醉酒]导致无法正常对话）。
+  - 动作不是状态！瞬时动作或演出细节绝对禁止作为 condition 提取！
+  - 已经发生了什么不是状态！叙事流水账绝对禁止作为 condition 提取！
 
 
 # 禁止事项
@@ -120,6 +130,8 @@ scene_condition 只记录客观状态，例如“房间正在燃烧”“一片�
 3. 禁止根据计划、暗示、常识或未确认的结果修改状态。
 4. 禁止把人物站姿、房间内几步距离或其他过细位置作为新 location。
 5. 禁止在 condition 中记录事件经过或“不再受伤”之类否定状态。
+6. 禁止在 condition 中记录不值得跨回合保持的即时行为。
+7. 禁止在遇到货币单位不匹配时，依然强行输出 money_delta 操作。
 
 
 # 例子
@@ -135,42 +147,43 @@ scene_condition 只记录客观状态，例如“房间正在燃烧”“一片�
 
 ```json
 {{
+  "decision": "莱尔以金币支付并取得药剂，资源单位一致；随后实际抵达北门并跨越一个时段，米莉明确留在原地，因此需要更新金钱、库存、地点、参与者与时间。",
   "operations": [
     {{
       "operation_id": "op1",
-      "type": "money_delta",
-      "delta": -5,
       "reason": "莱尔明确支付5金币",
-      "evidence_fact_ids": ["f1"]
+      "evidence_fact_ids": ["f1"],
+      "type": "money_delta",
+      "delta": -5
     }},
     {{
       "operation_id": "op2",
+      "reason": "莱尔完成购买并获得药剂",
+      "evidence_fact_ids": ["f2"],
       "type": "inventory_delta",
       "item": "治疗药剂",
-      "delta": 1,
-      "reason": "莱尔完成购买并获得药剂",
-      "evidence_fact_ids": ["f2"]
+      "delta": 1
     }},
     {{
       "operation_id": "op3",
-      "type": "location_change",
-      "location": "北门",
       "reason": "莱尔已实际抵达北门",
-      "evidence_fact_ids": ["f3"]
+      "evidence_fact_ids": ["f3"],
+      "type": "location_change",
+      "location": "北门"
     }},
     {{
       "operation_id": "op4",
-      "type": "participant_remove",
-      "name": "米莉",
       "reason": "地点改变且米莉明确留在酒馆",
-      "evidence_fact_ids": ["f4"]
+      "evidence_fact_ids": ["f4"],
+      "type": "participant_remove",
+      "name": "米莉"
     }},
     {{
       "operation_id": "op5",
-      "type": "world_clock_advance",
-      "phases": 1,
       "reason": "Scene Facts 明确从下午推进至黄昏",
-      "evidence_fact_ids": ["f3"]
+      "evidence_fact_ids": ["f3"],
+      "type": "world_clock_advance",
+      "phases": 1
     }}
   ]
 }}

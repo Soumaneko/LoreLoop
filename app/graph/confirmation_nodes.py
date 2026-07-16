@@ -139,9 +139,15 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
             npc_aliases=npc_aliases,
             trace_id=trace_id,
         )
-        state_change_set = getattr(updater, "last_change_set", StateChangeSet())
+        state_change_set = getattr(
+            updater,
+            "last_change_set",
+            StateChangeSet(decision="State update produced no change set."),
+        )
     elif state_change_set is None:
-        state_change_set = StateChangeSet()
+        state_change_set = StateChangeSet(
+            decision="State update failed; no operations were applied."
+        )
     return {
         "updated_state": updated_state,
         "state_change_set": state_change_set,

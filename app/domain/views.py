@@ -87,7 +87,6 @@ def project_action_parse(result: ActionParseResult) -> str:
             d.pop("condition", None)
         actions.append(d)
     data = {
-        "turn_intent": result.turn_intent,
         "atomic_actions": actions,
         "ambiguities": result.ambiguities,
     }

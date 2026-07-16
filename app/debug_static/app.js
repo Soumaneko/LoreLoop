@@ -234,13 +234,17 @@ function setStatus(label, busy = false) {
   els.createSaveBtn.disabled = busy;
   const history = state.serverState?.turn_history || {};
   els.undoBtn.disabled = busy || Boolean(state.pendingTurnId) || !history.can_undo;
-  els.redoBtn.disabled = busy || Boolean(state.pendingTurnId) || !history.can_redo;
+  const redoPendingIds = history.redo_pending_turn_ids || [];
+  const pendingBelongsToRedo = state.pendingTurnId && redoPendingIds.includes(state.pendingTurnId);
+  els.redoBtn.disabled = busy || (!pendingBelongsToRedo && Boolean(state.pendingTurnId)) || !history.can_redo;
   const previous = document.querySelector(".scene-version-prev");
   const next = document.querySelector(".scene-version-next");
   const retry = document.querySelector(".scene-retry");
+  const discard = document.querySelector(".scene-discard");
   if (previous) previous.disabled = busy || state.pendingVariantIndex <= 0;
   if (next) next.disabled = busy || state.pendingVariantIndex >= state.pendingVariants.length - 1;
   if (retry) retry.disabled = busy;
+  if (discard) discard.disabled = busy;
   const edit = document.querySelector(".scene-edit");
   if (edit) edit.disabled = busy;
 }
@@ -348,7 +352,10 @@ async function createSave() {
 }
 
 async function changeHistory(action) {
-  if (state.pendingTurnId) return;
+  const history = state.serverState?.turn_history || {};
+  const redoPendingIds = history.redo_pending_turn_ids || [];
+  const canRedoRestoredPending = action === "redo" && redoPendingIds.includes(state.pendingTurnId);
+  if (state.pendingTurnId && !canRedoRestoredPending) return;
   setStatus(action === "undo" ? "正在撤销回合..." : "正在重做回合...", true);
   try {
     await api(`/api/history/${action}`, { method: "POST", body: "{}" });
@@ -417,9 +424,11 @@ function addEditableScene(textValue, meta, closingPrompt = "") {
   const previous = wrap.querySelector(".scene-version-prev");
   const next = wrap.querySelector(".scene-version-next");
   const retry = wrap.querySelector(".scene-retry");
+  const discard = wrap.querySelector(".scene-discard");
   if (previous) previous.onclick = () => selectPendingVariant(state.pendingVariantIndex - 1);
   if (next) next.onclick = () => selectPendingVariant(state.pendingVariantIndex + 1);
   if (retry) retry.onclick = retryTurn;
+  if (discard) discard.onclick = discardPendingTurn;
   wrap.querySelector(".scene-edit").onclick = () => {
     editor.value = state.pendingSceneText || "";
     display.style.display = "none";
@@ -518,6 +527,7 @@ function pendingVersionControls() {
     <span>${position} / ${state.pendingVariants.length}</span>
     <button class="icon-button scene-version-next" title="下一个版本" ${position >= state.pendingVariants.length ? "disabled" : ""}>›</button>
     <button class="scene-retry" title="重新运行完整生成管线">Retry</button>
+    <button class="scene-discard" title="删除全部未确认版本并返回生成前">删除</button>
   </span>`;
 }
 
@@ -1213,7 +1223,6 @@ function renderAction(result, raw, selfCheck) {
       metric("Anchors", result.anchors?.length || 0),
     ])}
     ${selfCheck ? details("Self Check", jsonBlock(selfCheck)) : ""}
-    ${card("Turn Intent", esc(text(result.turn_intent)))}
     ${(result.atomic_actions || []).map((a) => `<div class="section-card">
       <div class="card-title"><span>${esc(a.action_id)} · #${esc(a.sequence)}</span>${metric(a.action_type, a.risk_level || "risk?")}</div>
       ${kv([
@@ -1222,7 +1231,6 @@ function renderAction(result, raw, selfCheck) {
         ["动词", esc(text(a.verb))],
         ["目标", esc(text(a.target))],
         ["方式", esc(text(a.method))],
-        ["目的", esc(text(a.goal))],
         ["骰点", esc(a.likely_needs_roll ? `是 · ${a.roll_hint || ""}` : "否")],
       ])}
     </div>`).join("")}
@@ -1904,6 +1912,40 @@ async function retryTurn() {
     state.run.errors.push(err);
     setStatus("重新生成失败，原版本仍可确认");
     setDebugStatus("Retry 失败");
+    renderError(err);
+  }
+}
+
+async function discardPendingTurn() {
+  if (!state.pendingTurnId || !state.pendingGroupId) return;
+  if (!window.confirm("删除本次输入生成的全部未确认版本，并返回生成前状态？")) return;
+  const turnId = state.pendingTurnId;
+  setStatus("正在删除未确认正文...", true);
+  setDebugStatus("删除 Pending");
+  try {
+    const data = await api("/api/pending/discard", {
+      method: "POST",
+      body: JSON.stringify({ turn_id: turnId }),
+    });
+    removeStreamingScene();
+    removePendingScene();
+    state.pendingTurnId = null;
+    state.pendingGroupId = null;
+    state.pendingVariants = [];
+    state.pendingVariantIndex = -1;
+    state.pendingSceneText = null;
+    els.input.value = data.user_input || "";
+    resetRun("all");
+    await refreshState({ preserveStatus: true });
+    restoreChat(state.serverState?.chat_history || []);
+    els.input.focus();
+    els.turnInfo.textContent = "等待玩家行动";
+    setStatus("未确认正文已删除，可修改输入");
+    setDebugStatus("Ready");
+    renderDebug();
+  } catch (err) {
+    setStatus("删除未确认正文失败");
+    setDebugStatus("删除失败");
     renderError(err);
   }
 }

@@ -163,8 +163,28 @@ class CampaignHistory:
             ).fetchone()
             if row is None:
                 raise RuntimeError(f"Turn transaction is not journaled: {turn_id}")
+            abandoned_redo_path: Path | None = None
             if row["pre_snapshot_id"]:
                 snapshot_id = row["pre_snapshot_id"]
+                snapshot = conn.execute(
+                    "SELECT status, redo_path FROM turn_snapshots WHERE snapshot_id=?",
+                    (snapshot_id,),
+                ).fetchone()
+                if snapshot is None:
+                    raise RuntimeError(
+                        f"Turn snapshot is missing: {row['pre_snapshot_id']}"
+                    )
+                if snapshot["status"] == "undone":
+                    if snapshot["redo_path"]:
+                        abandoned_redo_path = Path(snapshot["redo_path"])
+                    conn.execute(
+                        """
+                        UPDATE turn_snapshots
+                        SET status='provisional', redo_path=NULL
+                        WHERE snapshot_id=?
+                        """,
+                        (snapshot_id,),
+                    )
             else:
                 self._discard_redo_locked(conn)
                 snapshot_id = uuid.uuid4().hex
@@ -193,6 +213,8 @@ class CampaignHistory:
                 (scene_text, snapshot_id, _now(), turn_id),
             )
             conn.commit()
+            if abandoned_redo_path is not None:
+                shutil.rmtree(abandoned_redo_path, ignore_errors=True)
             return snapshot_id
 
     def fail_confirmation(self, turn_id: str, error: BaseException) -> None:
@@ -335,8 +357,38 @@ class CampaignHistory:
                 "UPDATE turn_snapshots SET status='undone', redo_path=? WHERE sequence=?",
                 (str(redo_path), row["sequence"]),
             )
+            transaction = conn.execute(
+                "SELECT group_id FROM turn_transactions WHERE turn_id=?",
+                (row["turn_id"],),
+            ).fetchone()
+            if transaction is None:
+                raise RuntimeError(
+                    f"Confirmed turn transaction is missing: {row['turn_id']}"
+                )
+            if transaction["group_id"]:
+                conn.execute(
+                    """
+                    UPDATE turn_transactions
+                    SET status='awaiting_confirm', error=NULL, updated_at=?
+                    WHERE group_id=? AND status IN ('completed', 'discarded')
+                    """,
+                    (_now(), transaction["group_id"]),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE turn_transactions
+                    SET status='awaiting_confirm', error=NULL, updated_at=?
+                    WHERE turn_id=?
+                    """,
+                    (_now(), row["turn_id"]),
+                )
             conn.commit()
-            return self._snapshot_data(row, "undone")
+            result = self._snapshot_data(row, "undone")
+            result["restored_pending_turn_ids"] = self._redo_pending_turn_ids_locked(
+                conn, row["turn_id"]
+            )
+            return result
 
     def redo(self) -> dict[str, Any]:
         with self._lock, self._connect() as conn:
@@ -355,8 +407,47 @@ class CampaignHistory:
                 "UPDATE turn_snapshots SET status='applied', redo_path=NULL WHERE sequence=?",
                 (row["sequence"],),
             )
+            transaction = conn.execute(
+                "SELECT group_id FROM turn_transactions WHERE turn_id=?",
+                (row["turn_id"],),
+            ).fetchone()
+            if transaction is None:
+                raise RuntimeError(
+                    f"Undone turn transaction is missing: {row['turn_id']}"
+                )
+            conn.execute(
+                """
+                UPDATE turn_transactions
+                SET status='completed', error=NULL, updated_at=?
+                WHERE turn_id=?
+                """,
+                (_now(), row["turn_id"]),
+            )
+            if transaction["group_id"]:
+                conn.execute(
+                    """
+                    UPDATE turn_transactions
+                    SET status='discarded', updated_at=?
+                    WHERE group_id=? AND turn_id<>?
+                      AND status='awaiting_confirm'
+                    """,
+                    (_now(), transaction["group_id"], row["turn_id"]),
+                )
             conn.commit()
             return self._snapshot_data(row, "redone")
+
+    def redo_pending_turn_ids(self) -> list[str]:
+        """Pending drafts restored by the next available redo operation."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT turn_id FROM turn_snapshots WHERE status='undone'
+                ORDER BY sequence ASC LIMIT 1
+                """
+            ).fetchone()
+            if row is None:
+                return []
+            return self._redo_pending_turn_ids_locked(conn, row["turn_id"])
 
     def status(self) -> dict[str, Any]:
         with self._connect() as conn:
@@ -373,13 +464,42 @@ class CampaignHistory:
                 ORDER BY sequence DESC LIMIT 10
                 """
             ).fetchall()
+        redo_pending_turn_ids = self.redo_pending_turn_ids() if undone else []
         return {
             "can_undo": applied > 0,
             "can_redo": undone > 0,
             "undo_count": applied,
             "redo_count": undone,
+            "redo_pending_turn_ids": redo_pending_turn_ids,
             "snapshots": [dict(row) for row in rows],
         }
+
+    @staticmethod
+    def _redo_pending_turn_ids_locked(conn, turn_id: str) -> list[str]:
+        transaction = conn.execute(
+            "SELECT group_id FROM turn_transactions WHERE turn_id=?",
+            (turn_id,),
+        ).fetchone()
+        if transaction is None:
+            return []
+        if transaction["group_id"]:
+            rows = conn.execute(
+                """
+                SELECT turn_id FROM turn_transactions
+                WHERE group_id=? AND status='awaiting_confirm'
+                ORDER BY created_at
+                """,
+                (transaction["group_id"],),
+            ).fetchall()
+            return [item["turn_id"] for item in rows]
+        row = conn.execute(
+            """
+            SELECT turn_id FROM turn_transactions
+            WHERE turn_id=? AND status='awaiting_confirm'
+            """,
+            (turn_id,),
+        ).fetchone()
+        return [row["turn_id"]] if row is not None else []
 
     def _capture_snapshot(self, destination: Path) -> None:
         if destination.exists():

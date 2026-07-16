@@ -5,7 +5,7 @@ import pytest
 
 from app.core.llm import MockLLM
 from app.domain.action.parser import ActionParser
-from app.domain.action.schemas import ActionParseResult
+from app.domain.action.schemas import ActionExtractionResult, ActionParseResult, AtomicAction
 from app.domain.action.self_check import ActionSelfCheck
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
@@ -25,6 +25,16 @@ def test_prompt_requires_complete_explicit_action_coverage():
     assert "行动者姓名列表" in prompt
     assert "多人共同执行同一个原子行动" in prompt
     assert "仅仅在场、同行、旁观、受益、被保护或作为 target" in prompt
+
+
+def test_action_parse_contract_omits_inferred_intent_fields():
+    extraction_fields = ActionExtractionResult.model_json_schema()["properties"]
+    parse_fields = ActionParseResult.model_json_schema()["properties"]
+    action_fields = AtomicAction.model_json_schema()["properties"]
+
+    assert "turn_intent" not in extraction_fields
+    assert "turn_intent" not in parse_fields
+    assert "goal" not in action_fields
 
 
 def _make_current_state() -> CurrentState:

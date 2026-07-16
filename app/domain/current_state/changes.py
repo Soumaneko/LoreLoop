@@ -168,6 +168,7 @@ StateOperation = Annotated[
 class StateChangeSet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    decision: str = Field(min_length=1)
     operations: list[StateOperation] = Field(default_factory=list, max_length=30)
 
     @model_validator(mode="after")

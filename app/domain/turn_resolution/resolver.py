@@ -104,7 +104,6 @@ def build_action_judgments(
                 actor=action.actor,
                 action_type=action.action_type,
                 action_text=action.raw_text,
-                intended_goal=action.goal,
                 resolution_source="roll" if roll is not None else "automatic",
                 dice=roll.dice if roll is not None else None,
                 roll_value=roll.value if roll is not None else None,

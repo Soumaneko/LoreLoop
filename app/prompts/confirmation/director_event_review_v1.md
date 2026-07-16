@@ -55,34 +55,33 @@
 - reason：简短说明本次审查判断依据。
 - action：只能是 `hold`、`advance`、`redirect` 或 `resolve`。
   - hold：事件仍在当前阶段，没有明确进入下一 milestone。
-  - advance：下一世界状态的核心局势已经成立，事件仍有后续发展空间。若从阶段 2 advance，表示阶段 3 的默认最终结局已经实际形成，程序会自动收束。
+  - advance：下一世界状态的核心局势已经成立，事件仍有后续发展空间。
   - redirect：玩家已经实质改变事件因果，使原默认后续不再可能，但事件核心冲突仍未形成稳定结果。程序会另行生成有限期的新介入目标。
   - resolve：事件已经完成、失败、终结，或已经形成不再需要继续追踪的稳定结果。可在任意 progress_index 使用。
 - exposure：本轮确认剧情结束后，玩家对该事件的接触状态，只能是 `hidden`、`foreshadowed`、`engaged`。
-- player_contact_state：建议 50-120 个汉字，硬性上限 200 个字符。本轮结束时主角与该事件的当前接触情况。它是当前状态摘要，不是发生过什么的流水账。只保留当前介入方式、关键已知、当前目标和仍影响判断的关键未知；必须完整替换旧值，不得追加历史。
-- evidence：Scene Facts 中支持判断的具体 fact 或摘要列表。
-- resolved_reason：仅在 action=resolve 时填写收束理由；其他 action 填 null。
+- player_contact_state：当前接触快照。字数限制 50-120 汉字（硬性上限 200 字符）。必须直接覆盖旧值，用上帝视角提炼当前主角的“介入方式”、“关键已知”、“当前目标”与“关键未知”。绝对禁止写成按时间顺序排布的历史流水账！
+- evidence：从 Scene Facts 中摘录支持 action 判定的具体事实。如果 action 为 hold 且无新事实，可为空。
+- resolved_reason：仅在 action=resolve 时填写收束的具体理由；其他情况一律填 null。
 
 # 核心规则
 
-1. 判断事件是否推进或收束时，优先看 Scene Facts。
-2. milestones 是世界状态检查点，不是必须按原文演出的剧情脚本。progress_index 使用 1、2、3 的自然数编号，分别对应 milestones 的第 1、第 2、第 3 项，绝不使用 0 号阶段。程序已额外提供 current_milestone_number/current_milestone 和 next_milestone_number/next_milestone；必须直接比较这两组字段，不得自行换算数组下标。
-3. route_mode=default 时：Scene Facts 确认下一阶段的核心局势已经成立时选择 advance；下一阶段未成立但默认路线仍可发生时选择 hold。
-4. route_mode=default 时：玩家有意或无意的强介入已使默认后续不可能，但事件核心冲突仍在继续，必须 redirect，不得仅因默认 milestone 失效就 resolve。
-5. resolve 的标准是核心冲突已经形成稳定结果，而不是某条预定路线失效。resolve 不受 progress_index 限制，也不得强迫事件先走完所有 milestones。
-6. hidden：玩家没有接触到该事件的可见征兆。
-7. foreshadowed：玩家只是听到传闻、路过异常、看到可疑物、感受到价格/秩序/交通/环境变化，或被动收到无名线索。
-8. engaged：玩家已经直接调查、利用、对抗、交易、保护、追踪或明确处理该事件。redirect 时 exposure 必须是 engaged。
-9. exposure 不得回退。如果 active_event_json.exposure 已经是 foreshadowed，输出不能回到 hidden；如果已经是 engaged，必须继续输出 engaged。
-10. player_contact_state 描述“主角现在如何接触该事件”，不是“主角依次经历过什么”。新结论覆盖旧过程，当前目标覆盖抵达路径，当前关系覆盖对话经过。
-11. 即使本轮没有新增接触，也必须重新输出完整但精炼的当前状态，不能追加旧文本。
-12. 如果事件没有推进、改道或收束，action=hold。
+1. 审查 Action (按顺序进行以下 IF-THEN 检查，命中即停止)
+    - 检查 Resolve：Scene Facts 是否表明该事件的“核心冲突”已形成绝对稳定的最终结果？是，则输出 resolve
+    - 检查 Redirect：玩家的介入是否导致既定的默认下一阶段（default next milestone）已绝对不可能发生，但事件核心冲突仍在继续？是，则输出 redirect
+    - 检查 Advance ：next milestone 中的核心客观结果是否已经真实发生？是，则输出 advance
+    - 缺省 Hold ：以上皆非。输出 hold
+2. 审查 Exposure (Exposure 是一个单向棘轮，只能保持或向右推进：hidden -> foreshadowed -> engaged。绝对禁止回退！)
+    - hidden: 玩家目前没有任何与此事件相关的可见征兆。
+    - foreshadowed: 玩家被动接收到间接信息。
+    - engaged: 玩家主动进行了直接交互。
+3. milestones 是世界状态检查点，不是必须按原文演出的剧情脚本。
+4. player_contact_state 描述“主角现在如何接触该事件”，不是“主角依次经历过什么”。新结论覆盖旧过程，当前目标覆盖抵达路径，当前关系覆盖对话经过。即使本轮没有新增接触，也必须重新输出完整但精炼的当前状态，不能追加旧文本。
 
 # 禁止事项
 
 1. 不要写剧情正文，不要创建新事件，不要更新 CurrentState。
 2. 不要扩写后台因果，不要从局部征兆补全原因、规模和后果。
 3. 不要因为玩家忽略事件就 resolve 或 advance；忽略只影响 exposure，不代表世界事件结束或推进。
-4. 不要要求或假设完整剧情原文；Scene Facts 已经是本模块唯一的本回合剧情输入。
-5. 不得把 milestone 中的具体角色、方法和行动顺序当作 advance 的硬性前置条件。
+4. Scene Facts 已经是本模块唯一的本回合剧情输入，不要自行脑补。
+5. 玩家调查进度的推进（更新 player_contact_state 和 exposure）**绝不等于**世界状态的推进（advance）。
 6. 不得把“玩家介入”本身作为 resolve 依据。玩家推动默认下一状态成立应 advance；玩家使预定路线失效但冲突仍在应 redirect；只有已形成稳定结果时才 resolve。

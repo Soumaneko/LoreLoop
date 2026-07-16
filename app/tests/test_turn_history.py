@@ -115,13 +115,89 @@ def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
     history.complete_confirmation("turn-1", "group-1")
 
     assert history.status()["can_undo"] is True
-    assert history.undo()["turn_id"] == "turn-1"
+    undo_result = history.undo()
+    assert undo_result["turn_id"] == "turn-1"
+    assert undo_result["restored_pending_turn_ids"] == ["turn-1"]
     assert _read_value(game_db) == "before"
     assert history.status()["can_redo"] is True
+    assert [row["turn_id"] for row in history.pending_records()] == ["turn-1"]
 
     assert history.redo()["turn_id"] == "turn-1"
     assert _read_value(game_db) == "after"
     assert history.status()["can_redo"] is False
+    assert history.pending_records() == []
+
+
+def test_undo_restores_all_retry_variants_to_awaiting_confirmation(tmp_path):
+    data_dir = tmp_path / "save"
+    data_dir.mkdir()
+    game_db = data_dir / "game.db"
+    _write_value(game_db, "before")
+    history = CampaignHistory(data_dir)
+    for turn_id, version in (("turn-v1", 1), ("turn-v2", 2)):
+        history.save_pending(
+            turn_id=turn_id,
+            kind="turn",
+            group_id="group-1",
+            turn_index=1,
+            payload={"turn_id": turn_id, "version_index": version},
+        )
+
+    history.begin_confirmation(
+        "turn-v2",
+        write_db=True,
+        scene_text="确认前编辑后的正文。",
+    )
+    _write_value(game_db, "after")
+    history.complete_confirmation("turn-v2", "group-1")
+
+    result = history.undo()
+
+    assert result["restored_pending_turn_ids"] == ["turn-v1", "turn-v2"]
+    records = history.pending_records()
+    assert [record["turn_id"] for record in records] == ["turn-v1", "turn-v2"]
+    assert next(
+        record for record in records if record["turn_id"] == "turn-v2"
+    )["scene_text"] == "确认前编辑后的正文。"
+    assert _read_value(game_db) == "before"
+
+
+def test_runtime_undo_restores_edited_opening_as_pending_and_redo_clears_it(tmp_path):
+    paths = CampaignPaths.from_data_dir(tmp_path / "save")
+    config = InitConfig(
+        world_name="泰瑞大陆",
+        world_style="奇幻",
+        ability_system="魔法",
+        protagonist_name="莱尔",
+    )
+    pending = PendingOpening(
+        turn_id="opening-1",
+        config=config,
+        current_state=build_initial_current_state(config),
+        scene_result=SceneWriterResult(scene_text="最初生成的开场。"),
+    )
+    runtime = CampaignRuntime("undo-opening", paths=paths, max_workers=1)
+    try:
+        runtime.pending_openings.add(pending)
+        runtime.begin_confirmation(
+            pending,
+            write_db=True,
+            scene_text="确认前编辑后的开场。",
+        )
+        runtime.pending_openings.remove(pending.turn_id)
+        runtime.complete_confirmation(pending)
+
+        result = runtime.undo()
+
+        assert result["restored_pending_turn_ids"] == ["opening-1"]
+        restored = runtime.pending_openings.get("opening-1")
+        assert restored is not None
+        assert restored.scene_result.scene_text == "确认前编辑后的开场。"
+
+        runtime.redo()
+        assert runtime.pending_openings.get("opening-1") is None
+    finally:
+        runtime.close()
 
 
 def test_only_ten_latest_confirmed_turn_snapshots_are_retained(tmp_path):

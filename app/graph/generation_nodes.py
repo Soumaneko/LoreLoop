@@ -36,7 +36,6 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
     try:
         with _store_factory(state, "memory")() as mem_store:
             context_fact_memories = retrieve_context_fact_memories(
-                user_input=state["user_input"],
                 memory_store=mem_store,
                 anchors=state.get("matched_anchors", []),
             )
@@ -96,7 +95,6 @@ def parse_action_node(state: GenerationState) -> GenerationState:
     )
     raw_action_parse_result = ActionParseResult(
         analysis=action_result.analysis,
-        turn_intent=action_result.turn_intent,
         atomic_actions=action_result.atomic_actions,
         anchors=state.get("matched_anchors", []),
         ambiguities=[],
@@ -146,6 +144,7 @@ def consume_director_events_node(state: GenerationState) -> GenerationState:
         current_state=state["current_state"],
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
+        turn_resolution=state["turn_resolution"],
         entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
         trace_id=state["trace_id"],

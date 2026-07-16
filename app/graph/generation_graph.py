@@ -57,9 +57,9 @@ def _compile_generation_graph():
 
     graph.add_edge(START, "extract_context_facts")
     graph.add_edge(START, "parse_action")
-    graph.add_edge("extract_context_facts", "consume_director_events")
     graph.add_edge("parse_action", "evaluate_roll_modifiers")
     graph.add_edge(["extract_context_facts", "evaluate_roll_modifiers"], "resolve_turn")
+    graph.add_edge("resolve_turn", "consume_director_events")
     graph.add_edge("resolve_turn", "maybe_director_npc")
     graph.add_edge(
         ["maybe_director_npc", "consume_director_events"],

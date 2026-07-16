@@ -34,6 +34,8 @@ def test_debug_frontend_exposes_runtime_content():
         'data.pending_openings?.[0]',
         '/api/saves/switch',
         '/api/saves/create',
+        '/api/pending/discard',
+        'class="scene-discard"',
     ):
         assert marker in source
 

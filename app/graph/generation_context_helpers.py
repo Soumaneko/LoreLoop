@@ -6,7 +6,6 @@ from app.domain.retrieval.schemas import CandidateRetrievalResult
 
 def retrieve_context_fact_memories(
     *,
-    user_input: str,
     anchors: list[Anchor],
     memory_store: MemoryStore,
     top_k: int = 12,
@@ -16,7 +15,6 @@ def retrieve_context_fact_memories(
 
     return retrieve_candidates(
         ActionParseResult(
-            turn_intent=user_input,
             atomic_actions=[],
             anchors=anchors,
             ambiguities=[],

@@ -14,6 +14,7 @@ from app.api import (
     batch_classify_stream,
     confirm_stream,
     create_save,
+    discard_pending_turn,
     generate_turn_stream,
     get_maintenance_job,
     list_maintenance_jobs,
@@ -85,6 +86,9 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/retry":
             self._handle_json_stream(self._retry_stream)
+            return
+        if path == "/api/pending/discard":
+            self._handle_json(lambda: self._discard_pending_turn())
             return
         if path == "/api/batch-classify":
             self._handle_json_stream(self._batch_classify_stream)
@@ -251,6 +255,13 @@ class DebugHandler(BaseHTTPRequestHandler):
         if not turn_id:
             raise ValueError("turn_id is required")
         yield from retry_turn_stream(turn_id)
+
+    def _discard_pending_turn(self):
+        payload = _read_json(self)
+        turn_id = str(payload.get("turn_id", "")).strip()
+        if not turn_id:
+            raise ValueError("turn_id is required")
+        return discard_pending_turn(turn_id)
 
     def _batch_classify_stream(self):
         yield from batch_classify_stream()

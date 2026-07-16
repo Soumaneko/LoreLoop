@@ -20,7 +20,9 @@ class StateUpdater:
 
     def __init__(self, llm: LLMGateway):
         self.llm = llm
-        self.last_change_set = StateChangeSet()
+        self.last_change_set = StateChangeSet(
+            decision="State update has not run yet."
+        )
 
     def update(
         self,

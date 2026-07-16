@@ -4,7 +4,6 @@ from app.domain.action.schemas import Anchor, AtomicAction
 
 
 class CandidateRetrievalInput(BaseModel):
-    turn_intent: str
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
     anchors: list[Anchor] = Field(default_factory=list)
     top_k: int = 8

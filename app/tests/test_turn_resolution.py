@@ -170,23 +170,13 @@ class TestTurnResolutionAgent:
         assert "resolution_reasoning" in prompt
         assert "回合判定前的逻辑审计" in prompt
         assert "事实边界是什么" in prompt
-        assert "不要预写具体演出" in prompt
-        assert "确定信息边界" in prompt
+        assert "不负责“剧情演出”" in prompt
         assert "客观可能性" in prompt
-        assert "selected_type" not in prompt
-        assert "可选叙事类型" not in prompt
         assert "本行动的结果依据" in prompt
         assert "resolved_fact" in prompt
         assert "本行动判定后的权威事实结论" in prompt
-        assert "不能写成具体的细节描写" in prompt
-        assert "让其后果失控" in prompt
-        assert "保留 Player Input 明确指定的方式、路径和控制条件" in prompt
-        assert "行动失败、问题转移或局势恶化" in prompt
-        assert "resolution_source=automatic" in prompt
-        assert "不得重新制造立场冲突" in prompt
         assert "不得改成主角陪同" in prompt
-        assert "roll_judgments" not in prompt
-        assert "resolved_effect" not in prompt
+        assert "具体内容授权下游 Plot 模块" in prompt
 
     def test_prompt_input_omits_action_parse_result(self):
         gateway = _SpyGateway(json.loads(_response("critical_success")))
@@ -209,6 +199,7 @@ class TestTurnResolutionAgent:
         assert "available_types_json" not in input_data
         assert "resolution_reasoning" in input_data["output_schema_json"]
         assert "selected_type" not in input_data["output_schema_json"]
+        assert "intended_goal" not in input_data["action_judgments_json"]
         schema = json.loads(input_data["output_schema_json"])
         action_resolution_ref = schema["properties"]["action_resolutions"]["items"]["$ref"]
         action_resolution_def = schema["$defs"][action_resolution_ref.removeprefix("#/$defs/")]
