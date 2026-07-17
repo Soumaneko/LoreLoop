@@ -48,10 +48,15 @@ def configure_runtime_services(monkeypatch):
 def isolate_default_campaign_runtime(tmp_path):
     """Never allow a test to read or write the user's active save."""
     runtime = get_campaign_runtime()
+    # The default runtime is constructed during module import and may have
+    # restored the user's pending turns. Detach them in memory without firing
+    # persistence callbacks before switching to the isolated test campaign.
+    runtime.pending_turns.clear(discard=False)
+    runtime.pending_openings.clear(discard=False)
     runtime.reconfigure(
         "pytest",
         CampaignPaths.from_data_dir(tmp_path / "campaign-runtime"),
-        discard_pending=True,
+        discard_pending=False,
     )
     try:
         yield

@@ -11,18 +11,23 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
-from app.domain.plot_outline.schemas import PlotOutlineContext, PlannedEvent, PlotOutlineResult
-from app.domain.plot_outline.agent import PlotOutlineAgent
+from app.domain.narrative_composer import (
+    NarrativeComposerAgent,
+    NarrativeComposerContext,
+    NarrativeComposerResult,
+)
+from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
 from app.domain.plot_outline.views import project_retrieved_memories
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
 from app.domain.director_event.schemas import DirectorEventConsumption
 from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
-from app.graph.generation_helpers import assemble_context
+from app.domain.short_term_memory import ShortTermScene
+from app.graph.generation_helpers import assemble_narrative_context
 
 
-def _make_context() -> PlotOutlineContext:
-    return assemble_context(
+def _make_context() -> NarrativeComposerContext:
+    return assemble_narrative_context(
         user_input="我仔细观察酒馆里的客人，看看有没有可疑的人。",
         current_state=CurrentState(
             scene=SceneState(
@@ -81,7 +86,13 @@ def _build_outline_response(
 ) -> str:
     import json
     return json.dumps({
+        "director_event_reason": "本回合没有自然交点，未使用。",
+        "director_npc_reason": "本回合没有自然交点，未使用。",
         "planning_reasoning": planning_reasoning,
+        "must_establish_facts": must_establish_facts or ["主角发现酒馆客人中的可疑行为。"],
+        "must_not_establish_facts": must_not_establish_facts or ["不得透露可疑行为背后的完整真相。"],
+        "information_boundaries": ["主角只能确认可见行为异常，不能确认幕后原因。"],
+        "scene_stopping_point": "主角发现可疑行为后仍留在酒馆大厅，可以继续互动。",
         "planned_events": planned_events or [
             {
                 "event_fact": "主角仔细观察酒馆里的客人，并清楚发现其中存在可疑行为。",
@@ -89,13 +100,10 @@ def _build_outline_response(
                 "involved_entities": ["酒馆客人"],
             },
         ],
-        "must_establish_facts": must_establish_facts or ["主角发现酒馆客人中的可疑行为。"],
-        "must_not_establish_facts": must_not_establish_facts or ["不得透露可疑行为背后的完整真相。"],
-        "information_boundaries": ["主角只能确认可见行为异常，不能确认幕后原因。"],
-        "required_entities": ["酒馆客人"],
-        "scene_stopping_point": "主角发现可疑行为后仍留在酒馆大厅，可以继续互动。",
-        "director_event_reason": "本回合没有自然交点，未使用。",
-        "director_npc_reason": "本回合没有自然交点，未使用。",
+        "scene_reasoning": "规划与正文由同一次调用完成，并保持玩家行动、结果与停点一致。",
+        "scene_text": "你仔细观察酒馆里的客人，很快发现角落里有人反复避开众人的视线。",
+        "closing_prompt": "那名可疑客人仍在角落观察四周，你会怎么做？",
+        "next_action_directions": [],
     }, ensure_ascii=False)
 
 
@@ -109,11 +117,11 @@ class _SpyGateway:
         return kwargs["output_schema"].model_validate(self.response)
 
 
-class TestPlotOutlineAgent:
-    def test_runtime_schema_puts_director_decisions_before_planning(self):
+class TestNarrativeComposerAgent:
+    def test_runtime_schema_locks_semantics_before_creative_planning(self):
         gateway = _SpyGateway(json.loads(_build_outline_response()))
 
-        PlotOutlineAgent(gateway).generate(_make_context())
+        NarrativeComposerAgent(gateway).compose(_make_context())
 
         properties = json.loads(gateway.calls[0]["input_data"]["output_schema_json"])["properties"]
         assert list(properties)[:3] == [
@@ -121,12 +129,69 @@ class TestPlotOutlineAgent:
             "director_npc_reason",
             "planning_reasoning",
         ]
+        ordered_fields = list(properties)
+        assert ordered_fields.index("planning_reasoning") < ordered_fields.index(
+            "must_establish_facts"
+        )
+        assert ordered_fields.index("must_establish_facts") < ordered_fields.index(
+            "must_not_establish_facts"
+        )
+        assert ordered_fields.index("must_not_establish_facts") < ordered_fields.index(
+            "information_boundaries"
+        )
+        assert ordered_fields.index("information_boundaries") < ordered_fields.index(
+            "scene_stopping_point"
+        )
+        assert ordered_fields.index("scene_stopping_point") < ordered_fields.index(
+            "planned_events"
+        )
+        assert ordered_fields.index("planned_events") < ordered_fields.index(
+            "scene_reasoning"
+        )
+        assert list(properties).index("scene_reasoning") < list(properties).index(
+            "scene_text"
+        )
+
+    def test_one_call_receives_player_input_recent_scene_and_uses_creative_temperature(self):
+        gateway = _SpyGateway(json.loads(_build_outline_response()))
+
+        result = NarrativeComposerAgent(gateway).compose(
+            _make_context(),
+            recent_scene=ShortTermScene(
+                scene_id="scene_001",
+                turn_index=4,
+                user_input="旧输入不应进入 recent scene 投影",
+                scene_text="主角仍站在酒馆大厅。",
+            ),
+            turn_index=5,
+            max_chars=1800,
+        )
+
+        call = gateway.calls[0]
+        assert call["task"] == "narrative_compose"
+        assert call["temperature"] == 0.8
+        assert call["input_data"]["user_input"] == _make_context().user_input
+        assert "max_chars" not in call["input_data"]
+        assert json.loads(call["input_data"]["recent_scene_json"]) == {
+            "scene_id": "scene_001",
+            "turn_index": 4,
+            "scene_text": "主角仍站在酒馆大厅。",
+        }
+        assert result.to_outline().planned_events[0].event_id == "e1"
+        assert result.to_scene_result().scene_text == result.scene_text
+
+    def test_reserved_max_chars_argument_does_not_control_composition(self):
+        gateway = _SpyGateway(json.loads(_build_outline_response()))
+
+        NarrativeComposerAgent(gateway).compose(_make_context(), max_chars=-1)
+
+        assert "max_chars" not in gateway.calls[0]["input_data"]
 
     def test_prompt_input_omits_action_parse_result(self):
         context = _make_context()
         gateway = _SpyGateway(json.loads(_build_outline_response()))
 
-        PlotOutlineAgent(gateway).generate(context)
+        NarrativeComposerAgent(gateway).compose(context)
 
         input_data = gateway.calls[0]["input_data"]
         assert "user_input" in input_data
@@ -161,7 +226,7 @@ class TestPlotOutlineAgent:
         ]
         gateway = _SpyGateway(json.loads(_build_outline_response()))
 
-        PlotOutlineAgent(gateway).generate(context)
+        NarrativeComposerAgent(gateway).compose(context)
 
         payload = json.loads(
             gateway.calls[0]["input_data"]["director_event_consumptions_json"]
@@ -185,7 +250,7 @@ class TestPlotOutlineAgent:
         )
         gateway = _SpyGateway(json.loads(_build_outline_response()))
 
-        PlotOutlineAgent(gateway).generate(context)
+        NarrativeComposerAgent(gateway).compose(context)
 
         injection_json = gateway.calls[0]["input_data"]["director_npc_injection_json"]
         assert "艾琳娜" in injection_json
@@ -198,45 +263,34 @@ class TestPlotOutlineAgent:
         mock = MockLLM()
         mock.set_responses([_build_outline_response()])
 
-        agent = PlotOutlineAgent(mock.build_gateway())
-        result = agent.generate(context)
+        agent = NarrativeComposerAgent(mock.build_gateway())
+        result = agent.compose(context)
 
-        assert isinstance(result, PlotOutlineResult)
+        assert isinstance(result, NarrativeComposerResult)
         assert result.planned_events[0].event_id == "e1"
         assert result.planned_events[0].event_fact == "主角仔细观察酒馆里的客人，并清楚发现其中存在可疑行为。"
 
     def test_prompt_contains_outcome_following_requirements(self):
-        prompt = Path("app/prompts/generation/plot_outline_v1.md").read_text(encoding="utf-8")
+        prompt = Path("app/prompts/generation/narrative_compose_v1.md").read_text(encoding="utf-8")
 
         assert "TurnResolutionResult" in prompt
         assert "ActionParseResult" not in prompt
-        assert "规划本回合确定事件。TurnResolutionResult 是行动结果边界" in prompt
-        assert "不得把 Player Input 简化成只移动、只观察或只等待下一回合" in prompt
-        assert "不得追加负面后果把 success 实质写成 failure" in prompt
-        assert "不得追加有利结果把 failure 实质写成 success" in prompt
-        assert "这属于落实判定，不属于擅自扩展结果" in prompt
-        assert "系统确认客观事实" in prompt
-        assert "不是玩家选择" in prompt
-        assert "不得确认是不是目标" in prompt
-        assert "避免替玩家判断" in prompt
+        assert "同一次推理中完成本回合的事实规划与最终正文" in prompt
+        assert "Player Input 定义了玩家的绝对意图" in prompt
+        assert "Player Input 管行动语义，TR 管结果方向" in prompt
+        assert "规划字段是你对正文的绝对事实承诺" in prompt
         assert "must_establish_facts" in prompt
-        assert "DirectorEvent Consumptions 是可选的导演事件材料" in prompt
+        assert "DirectorEvent Consumptions" in prompt
         assert "arc 负责" not in prompt
         assert "ambient 负责" not in prompt
-        assert "禁止任何形式的“空泛任务”" in prompt
-        assert "必须写出具体的名词和结论" in prompt
-        assert "依据不足时必须保持未知" in prompt
+        assert "不得以“TR 没写”为由输出空泛内容" in prompt
         assert "canonical_premise" not in prompt
         assert "allowed_effect" not in prompt
-        assert "上述两个字段以外的导演事件内容一律视为不存在" in prompt
-        example = prompt.split("# 例子", 1)[1]
-        assert example.index('"director_event_reason"') < example.index('"director_npc_reason"')
-        assert example.index('"director_npc_reason"') < example.index('"planning_reasoning"')
+        assert "只包含 `allowed_facts` 与 `immutable_constraints`" in prompt
         assert "mode=foreshadow" not in prompt
         assert "mode=intersect" not in prompt
         assert "narrative_goal" not in prompt
         assert "ActionResolutionFrame" in prompt
-        assert "已经确定发生的事实" in prompt
         assert "resolved_effect" not in prompt
         assert "information_policy" not in prompt
         assert "ambiguous_hint_only" not in prompt
@@ -251,22 +305,23 @@ class TestPlotOutlineAgent:
         assert "SceneSummaries" not in prompt
         assert "scene_summaries_json" not in prompt
         assert "planning_reasoning" in prompt
-        assert "规划前的逻辑审计" in prompt
-        assert "NPC/世界反应的因果是否成立" in prompt
-        assert "哪些后台信息不能在本回合被角色知晓" in prompt
+        assert "自然语言逻辑审计" in prompt
+        assert "本回合的语义骨架" in prompt
+        assert "第一个允许进行创造性实例化的字段" in prompt
+        assert "严格分成“语义锁定”和“创造性实例化”两层" in prompt
         assert "hidden_secret" in prompt
-        assert "只写抽象边界" in prompt
-        assert "不得在原因字段里藏具体剧情影响" in prompt
-        assert "二次裁量权" in prompt
-        assert "不能为了省事每次都拒绝" in prompt
+        assert "不自动成为任何角色已经知道的前台信息" in prompt
+        assert "所有字段必须描述完全相同的人物、动作、结果和状态" in prompt
+        assert "scene_text" in prompt
+        assert "closing_prompt" in prompt
 
     def test_planned_events_have_required_fields(self):
         context = _make_context()
         mock = MockLLM()
         mock.set_responses([_build_outline_response()])
 
-        agent = PlotOutlineAgent(mock.build_gateway())
-        result = agent.generate(context)
+        agent = NarrativeComposerAgent(mock.build_gateway())
+        result = agent.compose(context)
 
         assert len(result.planned_events) >= 1
         event = result.planned_events[0]
@@ -318,8 +373,8 @@ class TestPlotOutlineAgent:
             must_not_establish_facts=["禁止1"],
         )])
 
-        agent = PlotOutlineAgent(mock.build_gateway())
-        result = agent.generate(context)
+        agent = NarrativeComposerAgent(mock.build_gateway())
+        result = agent.compose(context)
 
         assert len(result.must_establish_facts) >= 1
         assert len(result.must_not_establish_facts) >= 1
@@ -339,8 +394,8 @@ class TestPlotOutlineAgent:
             ],
         )])
 
-        agent = PlotOutlineAgent(mock.build_gateway())
-        result = agent.generate(context)
+        agent = NarrativeComposerAgent(mock.build_gateway())
+        result = agent.compose(context)
 
         assert len(result.planned_events) == 2
         assert result.planned_events[0].event_id == "e1"
@@ -359,7 +414,7 @@ class TestPlotOutlineAgent:
         mock = MockLLM()
         mock.set_responses([invalid, _build_outline_response()])
 
-        result = PlotOutlineAgent(mock.build_gateway()).generate(context)
+        result = NarrativeComposerAgent(mock.build_gateway()).compose(context)
 
         assert result.planned_events[0].linked_outcome_ids == ["a1"]
         assert "仔细观察" in result.planned_events[0].event_fact
@@ -407,7 +462,7 @@ class TestPlotOutlineAgent:
         mock = MockLLM()
         mock.set_responses([invalid, valid])
 
-        result = PlotOutlineAgent(mock.build_gateway()).generate(context)
+        result = NarrativeComposerAgent(mock.build_gateway()).compose(context)
 
         assert result.planned_events[0].linked_outcome_ids == ["A2", "A3"]
         assert "挖出浅沟" in result.planned_events[0].event_fact

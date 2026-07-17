@@ -5,12 +5,6 @@ from app.domain.plot_outline.schemas import PlotOutlineResult
 def build_entity_retrieval_anchors(outline: PlotOutlineResult) -> list[Anchor]:
     entity_names: list[str] = []
     seen: set[str] = set()
-    for name in outline.required_entities:
-        stripped = name.strip()
-        key = stripped.casefold()
-        if stripped and key not in seen:
-            entity_names.append(stripped)
-            seen.add(key)
     for event in outline.planned_events:
         for name in event.involved_entities:
             stripped = name.strip()

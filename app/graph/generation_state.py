@@ -12,7 +12,11 @@ from app.domain.director_event.schemas import DirectorEvent, DirectorEventConsum
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView, NPCProfilePublicView
-from app.domain.plot_outline.schemas import PlotOutlineContext, PlotOutlineResult
+from app.domain.narrative_composer.schemas import (
+    NarrativeComposerContext,
+    NarrativeComposerResult,
+)
+from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import Difficulty, RollConfig, RollResultBatch
 from app.domain.roll_modifier.schemas import RollModifierBatch
@@ -74,12 +78,13 @@ class GenerationState(TypedDict, total=False):
     turn_resolution: TurnResolutionResult
 
     director_npc_result: DirectorNPCWorkflowResult | None
-    context: PlotOutlineContext
+    context: NarrativeComposerContext
+    narrative_composition: NarrativeComposerResult
     outline: PlotOutlineResult
 
     beat_entity_anchors: list[Anchor]
-    writer_entity_profile_views: list[EntityProfileUpdateInput]
-    writer_npc_public_views: list[NPCProfilePublicView]
+    composer_entity_profile_views: list[EntityProfileUpdateInput]
+    composer_npc_public_views: list[NPCProfilePublicView]
     recent_scene: ShortTermScene | None
 
     scene_result: SceneWriterResult

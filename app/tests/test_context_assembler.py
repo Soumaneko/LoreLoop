@@ -10,8 +10,8 @@ from app.domain.current_state import (
     SceneState,
 )
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
-from app.domain.plot_outline.schemas import PlotOutlineContext
-from app.graph.generation_helpers import assemble_context
+from app.domain.narrative_composer import NarrativeComposerContext
+from app.graph.generation_helpers import assemble_narrative_context
 
 
 def _make_current_state() -> CurrentState:
@@ -64,7 +64,7 @@ def _make_core_memory() -> CoreMemory:
 
 class TestAssembleContext:
     def test_full_assembly(self):
-        ctx = assemble_context(
+        ctx = assemble_narrative_context(
             user_input="环顾四周观察环境。",
             current_state=_make_current_state(),
             turn_resolution=_make_turn_resolution(),
@@ -78,7 +78,7 @@ class TestAssembleContext:
         assert ctx.context_facts.facts == []
 
     def test_empty_core_memory(self):
-        ctx = assemble_context(
+        ctx = assemble_narrative_context(
             user_input="测试",
             current_state=_make_current_state(),
             turn_resolution=_make_turn_resolution(),
@@ -87,7 +87,7 @@ class TestAssembleContext:
         assert ctx.core_memory.items == []
 
     def test_serialization_roundtrip(self):
-        ctx = assemble_context(
+        ctx = assemble_narrative_context(
             user_input="测试",
             current_state=_make_current_state(),
             turn_resolution=_make_turn_resolution(),
@@ -95,7 +95,7 @@ class TestAssembleContext:
         )
 
         json_str = ctx.model_dump_json()
-        restored = PlotOutlineContext.model_validate_json(json_str)
+        restored = NarrativeComposerContext.model_validate_json(json_str)
 
         assert restored.user_input == ctx.user_input
         assert restored.current_state.scene.scene_id == ctx.current_state.scene.scene_id
@@ -104,7 +104,7 @@ class TestAssembleContext:
 
     def test_subtype_validation_rejects_wrong_subtype(self):
         with pytest.raises(ValidationError):
-            PlotOutlineContext(
+            NarrativeComposerContext(
                 user_input="测试",
                 current_state="not_a_state",  # type: ignore[arg-type]
                 turn_resolution=_make_turn_resolution(),

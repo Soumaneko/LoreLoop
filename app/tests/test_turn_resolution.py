@@ -176,7 +176,7 @@ class TestTurnResolutionAgent:
         assert "resolved_fact" in prompt
         assert "本行动判定后的权威事实结论" in prompt
         assert "不得改成主角陪同" in prompt
-        assert "具体内容授权下游 Plot 模块" in prompt
+        assert "具体的台词内容让下游去写" in prompt
 
     def test_prompt_input_omits_action_parse_result(self):
         gateway = _SpyGateway(json.loads(_response("critical_success")))

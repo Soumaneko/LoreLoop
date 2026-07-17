@@ -9,13 +9,14 @@ from app.domain.context_facts.extractor import ContextExtractor
 from app.domain.context_facts.schemas import ContextExtractInput
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.director_event.consumer import DirectorEventConsumer
-from app.domain.plot_outline.agent import PlotOutlineAgent
+from app.domain.narrative_composer import (
+    NarrativeComposerAgent,
+    build_entity_retrieval_anchors,
+)
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
 from app.domain.roll_modifier.schemas import RollModifierBatch
-from app.domain.scene_writer.agent import SceneWriterAgent
-from app.domain.scene_writer.helpers import build_entity_retrieval_anchors
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.runtime.serialization import model_data
 from app.domain.director_npc.workflows import maybe_director_npc_workflow
@@ -24,7 +25,7 @@ from app.domain.entity.workflows import gather_entity_profiles_from_state_and_an
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
 from .generation_context_helpers import retrieve_context_fact_memories
-from .generation_helpers import assemble_context, gateway_for
+from .generation_helpers import assemble_narrative_context, gateway_for
 from .generation_state import GenerationState
 
 
@@ -285,9 +286,10 @@ def maybe_director_npc_node(state: GenerationState) -> GenerationState:
     }
 
 
-def generate_plot_outline_node(state: GenerationState) -> GenerationState:
+def compose_narrative_node(state: GenerationState) -> GenerationState:
+    stream_writer = get_stream_writer()
     director_npc_result = state.get("director_npc_result")
-    context = assemble_context(
+    context = assemble_narrative_context(
         user_input=state["user_input"],
         current_state=state["current_state"],
         turn_resolution=state["turn_resolution"],
@@ -302,76 +304,16 @@ def generate_plot_outline_node(state: GenerationState) -> GenerationState:
             else None
         ),
     )
-    outline = PlotOutlineAgent(gateway_for(state)).generate(
-        context,
-        trace_id=state["trace_id"],
-    )
-    return {
-        "context": context,
-        "outline": outline,
-        "events": [
-            {
-                "step": "context_assembled",
-                "data": {
-                    "context": model_data(context),
-                },
-            },
-            {
-                "step": "outline_done",
-                "data": {
-                    "plot_outline": model_data(outline),
-                },
-            },
-        ],
-    }
-
-
-def generate_scene_node(state: GenerationState) -> GenerationState:
-    stream_writer = get_stream_writer()
-    beat_entity_anchors = build_entity_retrieval_anchors(state["outline"])
-    anchors = [
-        *state["action_parse_result"].anchors,
-        *beat_entity_anchors,
-    ]
-    with (
-        _store_factory(state, "entity")() as ent_store,
-        _store_factory(state, "npc_profile")() as npc_store,
-    ):
-        writer_entity_profiles = gather_entity_profiles_from_state_and_anchors(
-            current_state=state["current_state"],
-            anchors=anchors,
-            entity_store=ent_store,
-        )
-        writer_npc_profiles = gather_npc_profiles_from_state_and_anchors(
-            current_state=state["current_state"],
-            anchors=anchors,
-            npc_store=npc_store,
-        )
-
-    writer_entity_profile_views = [
-        profile.semantic_view()
-        for profile in writer_entity_profiles
-    ]
-    writer_npc_public_views = [
-        profile.public_view()
-        for profile in writer_npc_profiles
-    ]
     recent_scene = (
         state["short_term_memory"].recent_scenes[-1]
         if state["short_term_memory"].recent_scenes
         else None
     )
     next_turn_index = recent_scene.turn_index + 1 if recent_scene else 1
-
-    scene_result = SceneWriterAgent(gateway_for(state)).write(
-        outline=state["outline"],
-        current_state=state["current_state"],
-        core_memory=state["core_memory"],
+    composition = NarrativeComposerAgent(gateway_for(state)).compose(
+        context,
         recent_scene=recent_scene,
         turn_index=next_turn_index,
-        entity_profiles=writer_entity_profile_views,
-        npc_profiles=writer_npc_public_views,
-        max_chars=state.get("max_chars", 1500),
         trace_id=state["trace_id"],
         on_stream_start=lambda attempt: stream_writer({
             "step": "scene_stream_started",
@@ -382,11 +324,57 @@ def generate_scene_node(state: GenerationState) -> GenerationState:
             "data": {"delta": delta, "trace_id": state["trace_id"]},
         }),
     )
+    outline = composition.to_outline()
+    scene_result = composition.to_scene_result()
+    beat_entity_anchors = build_entity_retrieval_anchors(outline)
+    anchors = [
+        *state["action_parse_result"].anchors,
+        *beat_entity_anchors,
+    ]
+    with (
+        _store_factory(state, "entity")() as ent_store,
+        _store_factory(state, "npc_profile")() as npc_store,
+    ):
+        composer_entity_profiles = gather_entity_profiles_from_state_and_anchors(
+            current_state=state["current_state"],
+            anchors=anchors,
+            entity_store=ent_store,
+        )
+        composer_npc_profiles = gather_npc_profiles_from_state_and_anchors(
+            current_state=state["current_state"],
+            anchors=anchors,
+            npc_store=npc_store,
+        )
+
+    composer_entity_profile_views = [
+        profile.semantic_view()
+        for profile in composer_entity_profiles
+    ]
+    composer_npc_public_views = [
+        profile.public_view()
+        for profile in composer_npc_profiles
+    ]
     return {
+        "context": context,
+        "narrative_composition": composition,
+        "outline": outline,
         "beat_entity_anchors": beat_entity_anchors,
-        "writer_entity_profile_views": writer_entity_profile_views,
-        "writer_npc_public_views": writer_npc_public_views,
+        "composer_entity_profile_views": composer_entity_profile_views,
+        "composer_npc_public_views": composer_npc_public_views,
         "recent_scene": recent_scene,
         "next_turn_index": next_turn_index,
         "scene_result": scene_result,
+        "events": [
+            {
+                "step": "context_assembled",
+                "data": {"context": model_data(context)},
+            },
+            {
+                "step": "outline_done",
+                "data": {
+                    "plot_outline": model_data(outline),
+                    "scene_reasoning": composition.scene_reasoning,
+                },
+            },
+        ],
     }

@@ -971,8 +971,8 @@ function stepTasks(scope, stepName) {
     modifiers_done: ["roll_modifier"],
     turn_resolution_done: ["turn_resolution"],
     director_npc_done: ["director_npc_create", "director_npc_dispatch"],
-    outline_done: ["plot_outline"],
-    scene_written: ["scene_write"],
+    outline_done: ["narrative_compose"],
+    scene_written: ["narrative_compose"],
   };
   const confirmation = {
     scene_facts_done: ["scene_fact_extract"],
@@ -1049,17 +1049,17 @@ function renderGeneration() {
     `)}
     ${card("Turn Resolution", renderResolution(g.turn_resolution))}
     ${card("Director NPC", renderDirectorNpcResult(g.director_npc_result))}
-    ${card("Outline", renderOutline(g.plot_outline))}
-    ${card("Writer", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>${g.scene_result.closing_prompt ? `<div class="section-card muted">${esc(g.scene_result.closing_prompt)}</div>` : ""}` : `<div class="empty">未生成正文</div>`)}
+    ${card("Narrative Composer · Plan", renderOutline(g.plot_outline))}
+    ${card("Narrative Composer · Scene", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>${g.scene_result.closing_prompt ? `<div class="section-card muted">${esc(g.scene_result.closing_prompt)}</div>` : ""}` : `<div class="empty">未生成正文</div>`)}
     ${card("上下文档案", `
       ${metrics([
         metric("行动实体", g.entity_profiles?.length || 0),
         metric("行动NPC", g.npc_profiles?.length || 0),
-        metric("Writer实体", g.writer_entity_profiles?.length || 0, "info"),
-        metric("Writer NPC", g.writer_npc_profiles?.length || 0, "info"),
+        metric("Composer实体", g.composer_entity_profiles?.length || 0, "info"),
+        metric("Composer NPC", g.composer_npc_profiles?.length || 0, "info"),
       ])}
-      ${details("Writer 实体", (g.writer_entity_profiles || []).map(entityCard).join("") || `<div class="empty">无</div>`)}
-      ${details("Writer NPC", (g.writer_npc_profiles || []).map(npcProfileCard).join("") || `<div class="empty">无</div>`)}
+      ${details("Composer 实体", (g.composer_entity_profiles || []).map(entityCard).join("") || `<div class="empty">无</div>`)}
+      ${details("Composer NPC", (g.composer_npc_profiles || []).map(npcProfileCard).join("") || `<div class="empty">无</div>`)}
       ${g.recent_scene ? details("最近场景", jsonBlock(g.recent_scene)) : ""}
     `)}
     ${details("Context", jsonBlock(g.context))}
@@ -1301,7 +1301,6 @@ function renderOutline(outline) {
     ${details("必须成立", list(outline.must_establish_facts))}
     ${details("不得成立", list(outline.must_not_establish_facts))}
     ${details("信息边界", list(outline.information_boundaries))}
-    ${details("必要实体", chips(outline.required_entities))}
     ${card("停点", esc(text(outline.scene_stopping_point)))}
   `;
 }

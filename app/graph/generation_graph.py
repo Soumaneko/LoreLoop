@@ -14,11 +14,10 @@ from .generation_helpers import (
 )
 from .generation_events import GenerationEventPresenter
 from .generation_nodes import (
+    compose_narrative_node,
     consume_director_events_node,
     evaluate_roll_modifiers_node,
     extract_context_facts_node,
-    generate_plot_outline_node,
-    generate_scene_node,
     maybe_director_npc_node,
     parse_action_node,
     resolve_turn_node,
@@ -34,8 +33,7 @@ def build_generation_graph():
         evaluate_roll_modifiers_node,
         resolve_turn_node,
         maybe_director_npc_node,
-        generate_plot_outline_node,
-        generate_scene_node,
+        compose_narrative_node,
     )
     return get_cached_graph(
         "generation",
@@ -52,8 +50,7 @@ def _compile_generation_graph():
     graph.add_node("evaluate_roll_modifiers", evaluate_roll_modifiers_node)
     graph.add_node("resolve_turn", resolve_turn_node)
     graph.add_node("maybe_director_npc", maybe_director_npc_node)
-    graph.add_node("generate_plot_outline", generate_plot_outline_node)
-    graph.add_node("generate_scene", generate_scene_node)
+    graph.add_node("compose_narrative", compose_narrative_node)
 
     graph.add_edge(START, "extract_context_facts")
     graph.add_edge(START, "parse_action")
@@ -63,10 +60,9 @@ def _compile_generation_graph():
     graph.add_edge("resolve_turn", "maybe_director_npc")
     graph.add_edge(
         ["maybe_director_npc", "consume_director_events"],
-        "generate_plot_outline",
+        "compose_narrative",
     )
-    graph.add_edge("generate_plot_outline", "generate_scene")
-    graph.add_edge("generate_scene", END)
+    graph.add_edge("compose_narrative", END)
 
     return graph.compile()
 

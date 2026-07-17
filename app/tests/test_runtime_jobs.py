@@ -95,11 +95,11 @@ def test_compiled_generation_graph_is_cached_and_dependency_aware(monkeypatch):
     second = generation_graph.build_generation_graph()
     assert first is second
 
-    original = generation_graph.generate_scene_node
+    original = generation_graph.compose_narrative_node
 
     def replacement(state):
         return original(state)
 
-    monkeypatch.setattr(generation_graph, "generate_scene_node", replacement)
+    monkeypatch.setattr(generation_graph, "compose_narrative_node", replacement)
     rebuilt = generation_graph.build_generation_graph()
     assert rebuilt is not first

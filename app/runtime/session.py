@@ -5,11 +5,11 @@ from typing import Any, Callable
 from app.domain.core_memory import InitConfig
 from app.domain.current_state import CurrentState
 from app.domain.roll.schemas import Difficulty
+from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.short_term_memory import ShortTermMemory
-from app.domain.plot_outline.schemas import PlotOutlineContext
 from app.core.llm.config import SharedGatewayFactory
 from app.runtime.paths import (
     CampaignPaths,
@@ -32,7 +32,7 @@ class PendingTurn:
     difficulty: Difficulty
     max_chars: int
     state_before: CurrentState
-    context: PlotOutlineContext
+    context: NarrativeComposerContext
     outline: PlotOutlineResult
     scene_result: SceneWriterResult
     director_npc_result: DirectorNPCWorkflowResult | None = None
@@ -249,7 +249,7 @@ class CampaignRuntime:
         if not (
             isinstance(pending, PendingTurn)
             and isinstance(pending.state_before, CurrentState)
-            and isinstance(pending.context, PlotOutlineContext)
+            and isinstance(pending.context, NarrativeComposerContext)
             and isinstance(pending.outline, PlotOutlineResult)
             and isinstance(pending.scene_result, SceneWriterResult)
         ):
@@ -322,7 +322,7 @@ class CampaignRuntime:
                     difficulty=data["difficulty"],
                     max_chars=data["max_chars"],
                     state_before=CurrentState.model_validate(data["state_before"]),
-                    context=PlotOutlineContext.model_validate(data["context"]),
+                    context=NarrativeComposerContext.model_validate(data["context"]),
                     outline=PlotOutlineResult.model_validate(data["outline"]),
                     scene_result=SceneWriterResult.model_validate(data["scene_result"]),
                     director_npc_result=(

@@ -10,7 +10,7 @@ from app.domain.director_event.schemas import DirectorEventConsumption
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
-from app.domain.plot_outline.schemas import PlotOutlineContext
+from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.roll.schemas import Difficulty
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.serialization import model_data
@@ -21,7 +21,7 @@ from .generation_state import GenerationEvent, GenerationState
 from .generation_profile_helpers import select_context_profiles
 
 
-def assemble_context(
+def assemble_narrative_context(
     *,
     user_input: str,
     current_state: CurrentState,
@@ -32,8 +32,8 @@ def assemble_context(
     npc_profiles: list[NPCProfileDirectorView] | None = None,
     director_event_consumptions: list[DirectorEventConsumption] | None = None,
     director_npc_injection: DirectorNPCPlotInjection | None = None,
-) -> PlotOutlineContext:
-    return PlotOutlineContext(
+) -> NarrativeComposerContext:
+    return NarrativeComposerContext(
         user_input=user_input,
         current_state=current_state,
         turn_resolution=turn_resolution,
@@ -210,11 +210,11 @@ def scene_written_event(state: dict[str, Any]) -> GenerationEvent:
             "version_index": state["version_index"],
             "trace_id": state["trace_id"],
             "turn_index": state["turn_index"],
-            "writer_entity_profiles": model_data(
-                state.get("writer_entity_profile_views", [])
+            "composer_entity_profiles": model_data(
+                state.get("composer_entity_profile_views", [])
             ),
-            "writer_npc_profiles": model_data(
-                state.get("writer_npc_public_views", [])
+            "composer_npc_profiles": model_data(
+                state.get("composer_npc_public_views", [])
             ),
             "recent_scene": model_data(state.get("recent_scene")),
             "scene_result": model_data(state["scene_result"]),

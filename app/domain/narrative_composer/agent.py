@@ -1,18 +1,23 @@
 import json
+import re
+from collections.abc import Callable
 from typing import cast
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
-from app.domain.director_event.views import project_director_event_consumptions
 from app.domain.context_facts.views import project_context_facts
-from app.domain.plot_outline.schemas import PlotOutlineContext, PlotOutlineResult
+from app.domain.director_event.views import project_director_event_consumptions
 from app.domain.plot_outline.views import project_turn_resolution
+from app.domain.scene_writer.schemas import NextActionDirection
+from app.domain.short_term_memory.schemas import ShortTermScene
 from app.domain.views import (
     project_current_state,
     project_entity_profiles,
     project_npc_profiles,
 )
+
+from .schemas import NarrativeComposerContext, NarrativeComposerResult
 
 
 class _RuntimePlannedEvent(BaseModel):
@@ -21,31 +26,42 @@ class _RuntimePlannedEvent(BaseModel):
     involved_entities: list[str] = Field(default_factory=list)
 
 
-class PlotOutlineAgent:
+class NarrativeComposerAgent:
     def __init__(self, llm: LLMGateway):
         self.llm = llm
 
-    def generate(
+    def compose(
         self,
-        context: PlotOutlineContext,
+        context: NarrativeComposerContext,
         *,
+        recent_scene: ShortTermScene | None = None,
+        turn_index: int = 1,
+        max_chars: int = 1500,
         trace_id: str | None = None,
-    ) -> PlotOutlineResult:
+        on_scene_text_delta: Callable[[str], None] | None = None,
+        on_stream_start: Callable[[int], None] | None = None,
+    ) -> NarrativeComposerResult:
         expected_outcome_ids = [
             frame.action_id
             for frame in context.turn_resolution.action_resolutions
         ]
 
-        class RuntimePlotOutlineResult(BaseModel):
+        class RuntimeNarrativeComposerResult(BaseModel):
             director_event_reason: str | None = None
             director_npc_reason: str | None = None
             planning_reasoning: str = Field(min_length=1)
-            planned_events: list[_RuntimePlannedEvent] = Field(default_factory=list)
             must_establish_facts: list[str] = Field(default_factory=list)
             must_not_establish_facts: list[str] = Field(default_factory=list)
             information_boundaries: list[str] = Field(default_factory=list)
-            required_entities: list[str] = Field(default_factory=list)
             scene_stopping_point: str = Field(min_length=1)
+            planned_events: list[_RuntimePlannedEvent] = Field(default_factory=list)
+            scene_reasoning: str = Field(min_length=1)
+            scene_text: str = Field(min_length=1)
+            closing_prompt: str = Field(min_length=1)
+            next_action_directions: list[NextActionDirection] = Field(
+                default_factory=list,
+                max_length=5,
+            )
 
             @model_validator(mode="after")
             def _require_all_turn_resolution_outcomes(self):
@@ -55,7 +71,6 @@ class PlotOutlineAgent:
                         if outcome_id not in linked_in_order:
                             linked_in_order.append(outcome_id)
 
-                linked_ids = set(linked_in_order)
                 expected_ids = set(expected_outcome_ids)
                 unknown = [
                     outcome_id
@@ -70,7 +85,7 @@ class PlotOutlineAgent:
                 missing = [
                     outcome_id
                     for outcome_id in expected_outcome_ids
-                    if outcome_id not in linked_ids
+                    if outcome_id not in set(linked_in_order)
                 ]
                 if missing:
                     raise ValueError(
@@ -85,13 +100,25 @@ class PlotOutlineAgent:
                     )
                 return self
 
-        schema = RuntimePlotOutlineResult.model_json_schema()
+        schema = RuntimeNarrativeComposerResult.model_json_schema()
+        scene_stream = _JSONStringFieldStream("scene_text")
+
+        def start_attempt(attempt: int) -> None:
+            scene_stream.reset()
+            if on_stream_start is not None:
+                on_stream_start(attempt)
+
+        def consume_chunk(chunk: str) -> None:
+            delta = scene_stream.feed(chunk)
+            if delta and on_scene_text_delta is not None:
+                on_scene_text_delta(delta)
 
         result = cast(
-            RuntimePlotOutlineResult,
+            RuntimeNarrativeComposerResult,
             self.llm.run(
-                task="plot_outline",
+                task="narrative_compose",
                 input_data={
+                    "turn_index": turn_index,
                     "core_memory_json": context.core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(context.current_state),
                     "user_input": context.user_input,
@@ -111,11 +138,14 @@ class PlotOutlineAgent:
                         ensure_ascii=False,
                         indent=2,
                     ),
+                    "recent_scene_json": _project_recent_scene(recent_scene),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
-                output_schema=RuntimePlotOutlineResult,
+                output_schema=RuntimeNarrativeComposerResult,
                 temperature=0.8,
                 trace_id=trace_id,
+                on_chunk=consume_chunk if on_scene_text_delta is not None else None,
+                on_attempt_start=start_attempt if on_scene_text_delta is not None else None,
             ),
         )
         data = result.model_dump()
@@ -123,4 +153,73 @@ class PlotOutlineAgent:
             {"event_id": f"e{index}", **event}
             for index, event in enumerate(data["planned_events"], start=1)
         ]
-        return PlotOutlineResult.model_validate(data)
+        data["scene_text"] = data["scene_text"].strip()
+        data["closing_prompt"] = data["closing_prompt"].strip()
+        if data["closing_prompt"] and data["scene_text"].endswith(data["closing_prompt"]):
+            data["scene_text"] = data["scene_text"][:-len(data["closing_prompt"])].rstrip()
+        return NarrativeComposerResult.model_validate(data)
+
+
+def _project_recent_scene(scene: ShortTermScene | None) -> str:
+    if scene is None:
+        return "null"
+    return json.dumps(
+        {
+            "scene_id": scene.scene_id,
+            "turn_index": scene.turn_index,
+            "scene_text": scene.scene_text,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+class _JSONStringFieldStream:
+    def __init__(self, field: str):
+        self._marker = re.compile(rf'"{re.escape(field)}"\s*:\s*"')
+        self.reset()
+
+    def reset(self) -> None:
+        self._prefix = ""
+        self._started = False
+        self._finished = False
+        self._escape = ""
+
+    def feed(self, chunk: str) -> str:
+        if self._finished or not chunk:
+            return ""
+        if not self._started:
+            self._prefix += chunk
+            match = self._marker.search(self._prefix)
+            if match is None:
+                return ""
+            chunk = self._prefix[match.end():]
+            self._prefix = ""
+            self._started = True
+
+        output: list[str] = []
+        for char in chunk:
+            if self._escape:
+                self._escape += char
+                if self._escape == "\\u" or (
+                    self._escape.startswith("\\u") and len(self._escape) < 6
+                ):
+                    continue
+                output.append(self._decode_escape(self._escape))
+                self._escape = ""
+                continue
+            if char == "\\":
+                self._escape = "\\"
+            elif char == '"':
+                self._finished = True
+                break
+            else:
+                output.append(char)
+        return "".join(output)
+
+    @staticmethod
+    def _decode_escape(value: str) -> str:
+        try:
+            return json.loads(f'"{value}"')
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return value
