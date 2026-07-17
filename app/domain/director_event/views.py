@@ -19,7 +19,7 @@ def project_director_event(
         "milestone_interval_steps",
         "next_progress_clock",
         "progress_index",
-        "player_contact_state",
+        "player_contacts",
         "last_presented_turn",
         "route_mode",
         "intervention_route",
@@ -27,7 +27,13 @@ def project_director_event(
         data.pop(key, None)
     data["already_happened"] = [
         *past_milestones,
-        f"主角当前接触情况：{event.player_contact_state}",
+        *(
+            [
+                f"主角接触记录（第{record.turn_index}回合）：{record.contact}"
+                for record in event.player_contacts
+            ]
+            or ["主角尚未接触该事件的任何前台征兆。"]
+        ),
     ]
     data["currently_happening"] = current_milestone
     if event.exposure != "hidden":
@@ -49,10 +55,8 @@ def project_director_event_consumptions(
     return json.dumps(
         [
             {
-                "player_contact_state": consumption.player_contact_state,
                 "allowed_facts": consumption.allowed_facts,
                 "immutable_constraints": consumption.immutable_constraints,
-                "forbidden_inferences": consumption.forbidden_inferences,
             }
             for consumption in consumptions
             if consumption.use_event

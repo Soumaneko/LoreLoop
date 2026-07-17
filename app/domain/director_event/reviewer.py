@@ -28,6 +28,7 @@ class DirectorEventReviewer:
         if active_event.route_mode != "default":
             raise ValueError("DirectorEventReviewer requires the default route")
         event_view = active_event.semantic_view()
+        event_view.pop("player_contacts", None)
         current_offset = active_event.progress_index - 1
         next_offset = current_offset + 1
         event_view.update(

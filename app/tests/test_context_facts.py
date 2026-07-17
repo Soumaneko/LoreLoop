@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -56,12 +57,24 @@ def test_context_fact_set_assigns_fact_ids_from_drafts():
     result = ContextFactSet.from_drafts(
         turn_focus="萧云痕询问顾晚棠如何应对盐帮。",
         facts=[
-            {"fact": "顾晚棠因账册摹本被盐帮追杀。"},
-            {"fact": "萧云痕已承诺庇护顾晚棠三日。"},
+            {
+                "holder": "萧云痕",
+                "source": "顾晚棠告知",
+                "fact": "顾晚棠因账册摹本被盐帮追杀。",
+            },
+            {
+                "holder": "萧云痕、顾晚棠",
+                "source": "共同经历",
+                "fact": "萧云痕已承诺庇护顾晚棠三日。",
+            },
         ],
     )
 
     assert [fact.fact_id for fact in result.facts] == ["f1", "f2"]
+    assert [fact.fact for fact in result.facts] == [
+        "萧云痕已知(顾晚棠告知): 顾晚棠因账册摹本被盐帮追杀。",
+        "萧云痕、顾晚棠已知(共同经历): 萧云痕已承诺庇护顾晚棠三日。",
+    ]
 
 
 def test_context_fact_set_rejects_duplicate_fact_ids():
@@ -86,6 +99,8 @@ def test_context_extractor_projects_required_inputs_and_hides_fact_id_schema():
                 "turn_focus": "萧云痕询问顾晚棠如何应对盐帮。",
                 "facts": [
                     {
+                        "holder": "萧云痕",
+                        "source": "顾晚棠告知",
                         "fact": "顾晚棠曾透露账册摹本不在身上，只有她知道存放处。",
                     }
                 ],
@@ -139,6 +154,10 @@ def test_context_extractor_projects_required_inputs_and_hides_fact_id_schema():
     )
 
     assert result.facts[0].fact_id == "f1"
+    assert result.facts[0].fact == (
+        "萧云痕已知(顾晚棠告知): "
+        "顾晚棠曾透露账册摹本不在身上，只有她知道存放处。"
+    )
     assert "core_world" in gateway.input_data["core_memory_json"]
     assert "scene_001" in gateway.input_data["current_state_json"]
     assert "账册摹本" in gateway.input_data["retrieved_memories_json"]
@@ -153,6 +172,15 @@ def test_context_extractor_projects_required_inputs_and_hides_fact_id_schema():
         if name.endswith("ContextFactDraft")
     )
     assert "fact_id" not in schema["$defs"][draft_def_name]["properties"]
+    assert set(schema["$defs"][draft_def_name]["properties"]) == {
+        "holder",
+        "source",
+        "fact",
+    }
+    rendered_prompt = Path(
+        "app/prompts/generation/context_extract_v1.md"
+    ).read_text(encoding="utf-8").format(**gateway.input_data)
+    assert "{holder}已知({source}): {fact}" in rendered_prompt
 
 
 def test_context_fact_memory_retrieval_uses_context_anchors():

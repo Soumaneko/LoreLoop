@@ -22,6 +22,7 @@ from app.domain.director_event import (
     DirectorEventReviewer,
     DirectorEventSelector,
     DirectorEventStore,
+    PlayerContactRecord,
 )
 from app.domain.director_event.consumer import DirectorEventConsumer
 from app.domain.director_event.views import (
@@ -135,7 +136,7 @@ def _review_response(**updates):
         "action": "hold",
         "reason": "事件仍在世界中发展。",
         "exposure": "hidden",
-        "player_contact_state": "玩家尚未接触该事件的任何前台征兆。",
+        "new_player_contact": None,
         "evidence": ["本轮没有显示事件完成。"],
         "resolved_reason": None,
     }
@@ -165,7 +166,7 @@ def _intervention_review_response(**updates):
     response = {
         "status": "ongoing",
         "reason": "介入目标的成败条件均未成立。",
-        "player_contact_state": "玩家正在介入该事件。",
+        "new_player_contact": None,
         "evidence": ["本轮尚不足以确认介入结果。"],
     }
     response.update(updates)
@@ -268,7 +269,7 @@ class TestDirectorEventSchema:
             "next_progress_clock",
             "progress_index",
             "exposure",
-            "player_contact_state",
+            "player_contacts",
             "entry_points",
             "last_presented_turn",
             "route_mode",
@@ -332,7 +333,7 @@ class TestDirectorEventSchema:
 
 
 class TestDirectorEventStore:
-    @pytest.mark.parametrize("schema_version", [1, 2, 3])
+    @pytest.mark.parametrize("schema_version", [1, 2, 3, 4])
     def test_rejects_unsupported_database_schema(self, tmp_path, schema_version):
         db_path = tmp_path / "director_events.db"
         connection = sqlite3.connect(db_path)
@@ -354,7 +355,7 @@ class TestDirectorEventStore:
 
         with pytest.raises(
             RuntimeError,
-            match=f"expected 4, got {schema_version}",
+            match=f"expected 5, got {schema_version}",
         ):
             DirectorEventStore(str(db_path))
 
@@ -391,14 +392,16 @@ class TestDirectorEventStore:
 
         assert store.touch(event.event_id, turn_index=2) is True
         assert store.get_active("ambient").updated_turn == 2
-        assert store.replace_player_contact(
+        assert store.append_player_contact(
             event.event_id,
             exposure="foreshadowed",
-            player_contact_state="玩家已经看见驿站拒收无印信件。",
+            new_player_contact="玩家已经看见驿站拒收无印信件。",
             turn_index=3,
         ) is True
         assert store.get_active("ambient").exposure == "foreshadowed"
-        assert store.get_active("ambient").player_contact_state == "玩家已经看见驿站拒收无印信件。"
+        assert store.get_active("ambient").player_contacts == [
+            PlayerContactRecord(turn_index=3, contact="玩家已经看见驿站拒收无印信件。")
+        ]
         assert store.get_active("ambient").last_presented_turn == 3
         assert store.resolve_active(event.event_id, turn_index=5, resolved_reason="事件已结束")
 
@@ -407,27 +410,32 @@ class TestDirectorEventStore:
         assert resolved.resolved_turn == 5
         assert resolved.resolved_reason == "事件已结束"
 
-    def test_exposure_and_contact_state_never_regress(self):
+    def test_exposure_never_regresses_but_new_contact_is_still_recorded(self):
         store = DirectorEventStore()
         event = _event().model_copy(
             update={
                 "exposure": "engaged",
-                "player_contact_state": "玩家正在追查事件核心线索。",
+                "player_contacts": [
+                    PlayerContactRecord(turn_index=4, contact="玩家正在追查事件核心线索。")
+                ],
                 "last_presented_turn": 4,
             }
         )
         store.save(event)
 
-        assert store.replace_player_contact(
+        assert store.append_player_contact(
             event.event_id,
             exposure="hidden",
-            player_contact_state="玩家尚未接触事件。",
+            new_player_contact="玩家确认了信使曾在驿站出现。",
             turn_index=5,
         ) is True
 
         persisted = store.get_active("ambient")
         assert persisted.exposure == "engaged"
-        assert persisted.player_contact_state == "玩家正在追查事件核心线索。"
+        assert [record.contact for record in persisted.player_contacts] == [
+            "玩家正在追查事件核心线索。",
+            "玩家确认了信使曾在驿站出现。",
+        ]
         assert persisted.last_presented_turn == 4
         assert persisted.updated_turn == 5
 
@@ -497,7 +505,7 @@ class TestDirectorEventInterventionPlanner:
         redirect_review = json.loads(call["input_data"]["redirect_review_json"])
         assert redirect_review["reason"] == "玩家使默认路线失效。"
         assert redirect_review["evidence"] == ["f1"]
-        assert redirect_review["player_contact_state"]
+        assert "new_player_contact" in redirect_review
         assert "recent_summaries_json" in call["input_data"]
         assert "entity_profiles_json" in call["input_data"]
         assert "milestones" in call["input_data"]["active_event_json"]
@@ -583,7 +591,6 @@ class TestDirectorEventReviewerInput:
             "next_progress_clock",
             "progress_index",
             "exposure",
-            "player_contact_state",
             "entry_points",
             "last_presented_turn",
             "route_mode",
@@ -600,6 +607,7 @@ class TestDirectorEventReviewerInput:
         assert event_json["current_milestone"] == _milestones()[0]
         assert event_json["next_milestone_number"] == 2
         assert event_json["next_milestone"] == _milestones()[1]
+        assert "player_contacts" not in event_json
 
     def test_default_reviewer_rejects_intervention_route(self):
         with pytest.raises(ValueError, match="requires the default route"):
@@ -654,13 +662,11 @@ class TestDirectorEventViews:
 
         assert data["entry_points"]
         assert data["exposure"] == "hidden"
-        assert data["already_happened"] == [
-            f"主角当前接触情况：{event.player_contact_state}"
-        ]
+        assert data["already_happened"] == ["主角尚未接触该事件的任何前台征兆。"]
         assert data["currently_happening"] == event.milestones[0]
         assert "milestones" not in data
         assert "progress_index" not in data
-        assert "player_contact_state" not in data
+        assert "player_contacts" not in data
         assert "milestone_interval_steps" not in data
         assert "next_progress_clock" not in data
 
@@ -669,7 +675,9 @@ class TestDirectorEventViews:
         event = _event().model_copy(update={
             "exposure": exposure,
             "progress_index": 2,
-            "player_contact_state": "玩家已经看过驿站公告。",
+            "player_contacts": [
+                PlayerContactRecord(turn_index=2, contact="玩家已经看过驿站公告。")
+            ],
         })
         data = json.loads(project_director_event(event))
 
@@ -677,7 +685,7 @@ class TestDirectorEventViews:
         assert "entry_points" not in data
         assert data["already_happened"] == [
             event.milestones[0],
-            "主角当前接触情况：玩家已经看过驿站公告。",
+            "主角接触记录（第2回合）：玩家已经看过驿站公告。",
         ]
         assert data["currently_happening"] == event.milestones[1]
 
@@ -702,16 +710,13 @@ class TestDirectorEventViews:
                 reason="当前位置没有真实接触，仅保留相关事实边界。",
                 use_event=False,
                 immutable_constraints=["公告仍位于冒险者工会告示板。"],
-                forbidden_inferences=["不得改成希尔达随身持有公告。"],
             ),
             DirectorEventConsumption(
                 event_id="event_ambient",
                 reason="当前位于旅店，可以自然看见留言板。",
                 use_event=True,
-                player_contact_state="玩家已经看过旅店留言板上的木偶师便条。",
                 allowed_facts=["旅店留言板上有一张木偶师便条。"],
                 immutable_constraints=["便条固定在旅店留言板上。"],
-                forbidden_inferences=["不得推断张贴者身份。"],
             ),
         ]
 
@@ -719,34 +724,29 @@ class TestDirectorEventViews:
 
         assert len(data) == 1
         assert all(set(item) == {
-            "player_contact_state",
             "allowed_facts",
             "immutable_constraints",
-            "forbidden_inferences",
         } for item in data)
-        assert data[0]["player_contact_state"] == "玩家已经看过旅店留言板上的木偶师便条。"
         assert data[0]["allowed_facts"] == ["旅店留言板上有一张木偶师便条。"]
         assert "event_arc" not in json.dumps(data, ensure_ascii=False)
         assert "reason" not in json.dumps(data, ensure_ascii=False)
 
 
 class TestDirectorEventConsumer:
-    def test_prompt_distinguishes_private_facts_from_forbidden_conclusions(self):
+    def test_prompt_limits_output_to_event_sourced_facts(self):
         prompt = Path(
             "app/prompts/generation/director_event_consume_v1.md"
         ).read_text(encoding="utf-8")
 
-        assert "已经成立、真实存在，但本回合不应向角色或玩家公开" in prompt
-        assert "防止下游 Plot 发生知识泄露" in prompt
+        assert "这是你唯一的素材库" in prompt
+        assert "必须全部来源于 DirectorEvent 提供的信息" in prompt
         assert "already_happened" in prompt
         assert "currently_happening" in prompt
-        assert "player_contact_state：原样复制" not in prompt
         assert "不能再次成为 allowed_facts" in prompt
-        assert "allowed_facts 不允许摘抄 currently_happening" in prompt
-        assert "通过什么地点、人物、公开行为、环境变化或可观察征兆具体表现" in prompt
-        assert "这是照抄 already_happened" in prompt
-        assert "Player Input 只表示玩家尝试做什么" in prompt
+        assert "不允许摘抄 currently_happening" in prompt
+        assert "不得把上下文中的信息当作 DirectorEvent 的内容" in prompt
         assert "TR 的结果具有最高优先级" in prompt
+        assert "forbidden_inferences" not in prompt
 
     def test_consumption_schema_keeps_use_decision_consistent(self):
         with pytest.raises(ValidationError):
@@ -774,7 +774,6 @@ class TestDirectorEventConsumer:
                     "use_event": False,
                     "allowed_facts": [],
                     "immutable_constraints": [],
-                    "forbidden_inferences": ["不得表现远方现场征兆。"],
                 },
             },
             ambient.event_id: {
@@ -784,7 +783,6 @@ class TestDirectorEventConsumer:
                     "use_event": True,
                     "allowed_facts": ["驿站开始拒收部分无印信件。"],
                     "immutable_constraints": ["征兆发生在北郡驿站。"],
-                    "forbidden_inferences": ["不得确认幕后势力。"],
                 },
             },
         }
@@ -807,9 +805,7 @@ class TestDirectorEventConsumer:
         )
 
         assert [item.event_id for item in result] == [ambient.event_id]
-        assert [item.player_contact_state for item in result] == [
-            ambient.player_contact_state,
-        ]
+        assert result[0].allowed_facts == ["驿站开始拒收部分无印信件。"]
         assert arc.event_id not in json.dumps(
             [item.model_dump(mode="json") for item in result],
             ensure_ascii=False,
@@ -834,7 +830,13 @@ class TestDirectorEventConsumer:
         input_data = spy.calls[0]["input_data"]
         output_schema = json.loads(input_data["output_schema_json"])
         consumption_schema = output_schema["$defs"]["_DirectorEventConsumptionDraft"]
-        assert "player_contact_state" not in consumption_schema["properties"]
+        assert set(consumption_schema["properties"]) == {
+            "event_id",
+            "reason",
+            "use_event",
+            "allowed_facts",
+            "immutable_constraints",
+        }
         assert set(output_schema["properties"]) == {"consumption"}
         assert set(input_data) == {
             "core_memory_json",
@@ -863,7 +865,6 @@ class TestDirectorEventConsumer:
                     "use_event": True,
                     "allowed_facts": [f"{event_data['title']}形成了可见征兆。"],
                     "immutable_constraints": [],
-                    "forbidden_inferences": [],
                 }
             }
 
@@ -891,7 +892,6 @@ class TestDirectorEventConsumer:
                 "use_event": False,
                 "allowed_facts": [],
                 "immutable_constraints": [],
-                "forbidden_inferences": [],
             }
         })
 
@@ -927,7 +927,7 @@ class TestDirectorEventWorkflow:
             store,
             _review_response(
                 exposure="engaged",
-                player_contact_state="玩家已直接询问暗拍请柬的来源。",
+                new_player_contact="玩家已直接询问暗拍请柬的来源。",
                 reason="玩家已经直接调查该事件。",
                 evidence=["玩家询问暗拍请柬来源。"],
             ),
@@ -936,51 +936,91 @@ class TestDirectorEventWorkflow:
 
         assert result.review_result.exposure == "engaged"
         assert store.get_active("ambient").exposure == "engaged"
+        assert store.get_active("ambient").player_contacts[-1].contact == (
+            "玩家已直接询问暗拍请柬的来源。"
+        )
 
-    def test_review_replaces_complete_player_contact_state(self):
+    def test_review_appends_only_current_turn_contact(self):
         store = DirectorEventStore()
         event = _event().model_copy(update={
             "exposure": "foreshadowed",
-            "player_contact_state": "玩家看见驿站拒收无印信件。",
+            "player_contacts": [
+                PlayerContactRecord(turn_index=1, contact="玩家看见驿站拒收无印信件。")
+            ],
         })
         store.save(event)
 
-        complete_state = "玩家看见驿站拒收无印信件，并已向驿站职员询问原因。"
+        new_contact = "玩家向驿站职员询问了拒收原因。"
         _run_review(
             store,
             _review_response(
                 exposure="engaged",
-                player_contact_state=complete_state,
+                new_player_contact=new_contact,
                 reason="玩家开始直接调查。",
             ),
             turn_index=2,
         )
 
-        assert store.get_active("ambient").player_contact_state == complete_state
+        assert [record.contact for record in store.get_active("ambient").player_contacts] == [
+            "玩家看见驿站拒收无印信件。",
+            new_contact,
+        ]
 
-    def test_player_contact_state_is_bounded_to_current_snapshot(self):
+    def test_player_contact_delta_is_bounded(self):
         accepted = DirectorEventReviewResult(
             reason="测试放宽后的长度限制。",
             action="hold",
             exposure="engaged",
-            player_contact_state="过" * 120,
+            new_player_contact="过" * 120,
         )
-        assert len(accepted.player_contact_state) == 120
+        assert len(accepted.new_player_contact) == 120
 
         with pytest.raises(ValidationError):
             DirectorEventReviewResult(
                 reason="测试长度限制。",
                 action="hold",
                 exposure="engaged",
-                player_contact_state="过" * 201,
+                new_player_contact="过" * 201,
             )
 
         prompt = Path("app/prompts/confirmation/director_event_review_v1.md").read_text(
             encoding="utf-8"
         )
         assert "硬性上限 200 字符" in prompt
-        assert "绝对禁止写成按时间顺序排布的历史流水账" in prompt
-        assert "当前接触快照" in prompt
+        assert "本轮增量" in prompt
+        assert "最多五条" in prompt
+
+    def test_contact_log_keeps_latest_five_records_fifo(self):
+        store = DirectorEventStore()
+        event = _event()
+        store.save(event)
+
+        for turn_index in range(2, 8):
+            assert store.append_player_contact(
+                event.event_id,
+                exposure="engaged",
+                new_player_contact=f"第{turn_index}回合的新接触。",
+                turn_index=turn_index,
+            )
+
+        persisted = store.get_active("ambient")
+        assert [record.turn_index for record in persisted.player_contacts] == [3, 4, 5, 6, 7]
+        assert [record.contact for record in persisted.player_contacts] == [
+            f"第{turn_index}回合的新接触。" for turn_index in range(3, 8)
+        ]
+
+    def test_empty_contact_delta_does_not_create_record(self):
+        store = DirectorEventStore()
+        event = _event()
+        store.save(event)
+
+        assert store.append_player_contact(
+            event.event_id,
+            exposure="hidden",
+            new_player_contact=None,
+            turn_index=2,
+        )
+        assert store.get_active("ambient").player_contacts == []
 
     def test_review_resolves_active_event(self):
         store = DirectorEventStore()

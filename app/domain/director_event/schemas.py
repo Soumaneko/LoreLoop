@@ -21,7 +21,8 @@ DirectorEventResolutionKind = Literal[
 InterventionOutcome = Literal["success", "failure"]
 ReviewAction = Literal["hold", "advance", "redirect", "resolve"]
 InterventionReviewStatus = Literal["ongoing", "success", "failure"]
-PLAYER_CONTACT_STATE_MAX_LENGTH = 200
+PLAYER_CONTACT_MAX_LENGTH = 200
+PLAYER_CONTACT_MAX_RECORDS = 5
 
 
 def _new_id() -> str:
@@ -42,6 +43,13 @@ class DirectorEventEntryPoint(BaseModel):
     immediate_effect: str = Field(
         min_length=1,
     )
+
+
+class PlayerContactRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turn_index: int = Field(ge=0)
+    contact: str = Field(min_length=1, max_length=PLAYER_CONTACT_MAX_LENGTH)
 
 
 class DirectorEventInterventionRoute(BaseModel):
@@ -117,10 +125,9 @@ class DirectorEvent(BaseModel):
     next_progress_clock: WorldClock | None = None
     progress_index: int = Field(default=1, ge=1, le=3)
     exposure: DirectorEventExposure = "hidden"
-    player_contact_state: str = Field(
-        default="玩家尚未接触该事件的任何前台征兆。",
-        min_length=1,
-        max_length=PLAYER_CONTACT_STATE_MAX_LENGTH,
+    player_contacts: list[PlayerContactRecord] = Field(
+        default_factory=list,
+        max_length=PLAYER_CONTACT_MAX_RECORDS,
     )
     entry_points: list[DirectorEventEntryPoint] = Field(default_factory=list)
     last_presented_turn: int | None = Field(default=None, ge=0)
@@ -175,7 +182,9 @@ class DirectorEvent(BaseModel):
             ),
             "progress_index": self.progress_index,
             "exposure": self.exposure,
-            "player_contact_state": self.player_contact_state,
+            "player_contacts": [
+                contact.model_dump(mode="json") for contact in self.player_contacts
+            ],
             "entry_points": [entry.model_dump(mode="json") for entry in self.entry_points],
             "last_presented_turn": self.last_presented_turn,
             "route_mode": self.route_mode,
@@ -272,9 +281,9 @@ class DirectorEventReviewResult(BaseModel):
     reason: str = Field(min_length=1)
     action: ReviewAction
     exposure: DirectorEventExposure
-    player_contact_state: str = Field(
+    new_player_contact: str | None = Field(
         min_length=1,
-        max_length=PLAYER_CONTACT_STATE_MAX_LENGTH,
+        max_length=PLAYER_CONTACT_MAX_LENGTH,
     )
     evidence: list[str] = Field(default_factory=list)
     resolved_reason: str | None = None
@@ -295,9 +304,9 @@ class DirectorEventInterventionReviewResult(BaseModel):
 
     reason: str = Field(min_length=1)
     status: InterventionReviewStatus
-    player_contact_state: str = Field(
+    new_player_contact: str | None = Field(
         min_length=1,
-        max_length=PLAYER_CONTACT_STATE_MAX_LENGTH,
+        max_length=PLAYER_CONTACT_MAX_LENGTH,
     )
     evidence: list[str] = Field(default_factory=list)
 
@@ -314,13 +323,8 @@ class DirectorEventConsumption(BaseModel):
     event_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     use_event: bool
-    player_contact_state: str = Field(
-        default="",
-        max_length=PLAYER_CONTACT_STATE_MAX_LENGTH,
-    )
     allowed_facts: list[str] = Field(default_factory=list)
     immutable_constraints: list[str] = Field(default_factory=list)
-    forbidden_inferences: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_use_decision(self):

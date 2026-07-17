@@ -18,7 +18,12 @@ class ContextFact(BaseModel):
 class ContextFactDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    holder: str = Field(min_length=1)
+    source: str = Field(min_length=1)
     fact: str = Field(min_length=1)
+
+    def render_fact(self) -> str:
+        return f"{self.holder.strip()}已知({self.source.strip()}): {self.fact.strip()}"
 
 
 class ContextFactSet(BaseModel):
@@ -46,7 +51,7 @@ class ContextFactSet(BaseModel):
             facts=[
                 ContextFact(
                     fact_id=f"f{index}",
-                    fact=ContextFactDraft.model_validate(fact).fact,
+                    fact=ContextFactDraft.model_validate(fact).render_fact(),
                 )
                 for index, fact in enumerate(facts, start=1)
             ],

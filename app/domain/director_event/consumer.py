@@ -35,7 +35,6 @@ class _DirectorEventConsumptionDraft(BaseModel):
     use_event: bool
     allowed_facts: list[str] = Field(default_factory=list)
     immutable_constraints: list[str] = Field(default_factory=list)
-    forbidden_inferences: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_use_decision(self):
@@ -90,7 +89,6 @@ class DirectorEventConsumer:
         return [
             DirectorEventConsumption(
                 **result.model_dump(),
-                player_contact_state=event.player_contact_state,
             )
             for event, result in zip(events, results, strict=True)
             if result.use_event

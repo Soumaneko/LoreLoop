@@ -62,7 +62,7 @@
 
 ## DirectorEventReviewResult
 
-其中 reason 是触发 Redirect 的原因，evidence 是支持 Redirect 的本轮事实，player_contact_state 是 Redirect 后主角与事件的最新接触状态。
+其中 reason 是触发 Redirect 的原因，evidence 是支持 Redirect 的本轮事实，new_player_contact 是本轮 Redirect 产生的新接触记录。
 
 ```json
 {redirect_review_json}

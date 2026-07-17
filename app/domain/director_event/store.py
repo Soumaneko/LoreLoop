@@ -10,6 +10,8 @@ from .schemas import (
     DirectorEventInterventionPlan,
     DirectorEventResolutionKind,
     InterventionOutcome,
+    PLAYER_CONTACT_MAX_RECORDS,
+    PlayerContactRecord,
     utc_now,
 )
 
@@ -49,12 +51,12 @@ class DirectorEventStore:
                 "SELECT version FROM schema_versions WHERE component = ?",
                 ("director_event",),
             ).fetchone()
-            if version_row is not None and int(version_row["version"]) != 4:
+            if version_row is not None and int(version_row["version"]) != 5:
                 raise RuntimeError(
                     "Unsupported DirectorEvent database schema: "
-                    f"expected 4, got {version_row['version']}"
+                    f"expected 5, got {version_row['version']}"
                 )
-        ensure_schema_version(self._conn, "director_event", 4)
+        ensure_schema_version(self._conn, "director_event", 5)
         self._conn.commit()
 
     def save(self, event: DirectorEvent) -> str:
@@ -247,12 +249,12 @@ class DirectorEventStore:
         self.save(updated)
         return True
 
-    def replace_player_contact(
+    def append_player_contact(
         self,
         event_id: str,
         *,
         exposure: DirectorEventExposure,
-        player_contact_state: str,
+        new_player_contact: str | None,
         turn_index: int,
     ) -> bool:
         event = self.get_by_id(event_id)
@@ -260,16 +262,23 @@ class DirectorEventStore:
             return False
         exposure_regressed = _EXPOSURE_RANK[exposure] < _EXPOSURE_RANK[event.exposure]
         effective_exposure = event.exposure if exposure_regressed else exposure
-        effective_contact_state = (
-            event.player_contact_state
-            if exposure_regressed
-            else player_contact_state
-        )
+        contacts = list(event.player_contacts)
+        clean_contact = (new_player_contact or "").strip()
+        if clean_contact and (
+            not contacts or contacts[-1].contact != clean_contact
+        ):
+            contacts.append(
+                PlayerContactRecord(
+                    turn_index=turn_index,
+                    contact=clean_contact,
+                )
+            )
+            contacts = contacts[-PLAYER_CONTACT_MAX_RECORDS:]
         updated = DirectorEvent.model_validate(
             {
                 **event.model_dump(mode="python"),
                 "exposure": effective_exposure,
-                "player_contact_state": effective_contact_state,
+                "player_contacts": contacts,
                 "last_presented_turn": (
                     turn_index
                     if effective_exposure != "hidden" and not exposure_regressed

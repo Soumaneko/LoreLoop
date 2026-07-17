@@ -1614,7 +1614,9 @@ function directorCard(event) {
       ["结算类型", esc(text(event.resolution_kind))],
       ["结算状态", esc(text(event.resolved_state))],
       ["暴露状态", esc(text(event.exposure))],
-      ["当前接触", esc(text(event.player_contact_state))],
+      ["接触记录", list((event.player_contacts || []).map((item) =>
+        `T${text(item.turn_index)} · ${text(item.contact)}`
+      ))],
       ["最近呈现", event.last_presented_turn === null || event.last_presented_turn === undefined ? `<span class="empty">无</span>` : esc(`T${event.last_presented_turn}`)],
       ["进度", esc(`${text(event.progress_index)} / 3`)],
       ["路线模式", esc(text(event.route_mode || "default"))],

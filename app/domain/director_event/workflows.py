@@ -95,11 +95,11 @@ def update_director_event_workflow(
                 trace_id=trace_id,
             )
             exposure = active.exposure
-            player_contact_state = intervention_review.player_contact_state
+            new_player_contact = intervention_review.new_player_contact
         else:
             review = reviewer.review(**review_kwargs)
             exposure = review.exposure
-            player_contact_state = review.player_contact_state
+            new_player_contact = review.new_player_contact
         changed_event_id = active.event_id
         intervention_plan_result = None
         auto_progress_result = None
@@ -123,10 +123,10 @@ def update_director_event_workflow(
                 trace_id=trace_id,
             )
 
-        store.replace_player_contact(
+        store.append_player_contact(
             active.event_id,
             exposure=exposure,
-            player_contact_state=player_contact_state,
+            new_player_contact=new_player_contact,
             turn_index=turn_index,
         )
 

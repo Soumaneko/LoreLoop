@@ -28,13 +28,15 @@ class DirectorEventInterventionReviewer:
             or active_event.intervention_route is None
         ):
             raise ValueError("InterventionReviewer requires an intervention route")
+        event_view = active_event.semantic_view()
+        event_view.pop("player_contacts", None)
         return cast(
             DirectorEventInterventionReviewResult,
             self.llm.run(
                 task="director_event_intervention_review",
                 input_data={
                     "active_event_json": json.dumps(
-                        active_event.semantic_view(),
+                        event_view,
                         ensure_ascii=False,
                         indent=2,
                     ),
