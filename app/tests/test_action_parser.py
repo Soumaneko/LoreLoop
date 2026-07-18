@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from app.core.llm import MockLLM
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionExtractionResult, ActionParseResult, AtomicAction
@@ -27,14 +25,18 @@ def test_prompt_requires_complete_explicit_action_coverage():
     assert "仅仅在场、同行、旁观、受益、被保护或作为 target" in prompt
 
 
-def test_action_parse_contract_omits_inferred_intent_fields():
+def test_action_parse_contract_omits_removed_metadata_fields():
     extraction_fields = ActionExtractionResult.model_json_schema()["properties"]
     parse_fields = ActionParseResult.model_json_schema()["properties"]
     action_fields = AtomicAction.model_json_schema()["properties"]
+    anchor_fields = ActionParseResult.model_json_schema()["$defs"]["Anchor"]["properties"]
 
     assert "turn_intent" not in extraction_fields
     assert "turn_intent" not in parse_fields
     assert "goal" not in action_fields
+    assert "roll_hint" not in action_fields
+    assert "confidence" not in action_fields
+    assert "action_ids" not in anchor_fields
 
 
 def _make_current_state() -> CurrentState:
@@ -64,17 +66,19 @@ def _make_parser(responses: list[str]) -> ActionParser:
         }, ensure_ascii=False))
         split_responses.append(json.dumps({
             "analysis": data.get("analysis", ""),
-            "turn_intent": data.get("turn_intent", ""),
             "atomic_actions": data.get("atomic_actions", []),
-            "ambiguities": data.get("ambiguities", []),
         }, ensure_ascii=False))
     mock.set_responses(split_responses)
     return ActionParser(mock.build_gateway())
 
 
-def _build_response(actions: list[dict], anchors: list[dict], *, turn_intent: str = "测试意图", ambiguities: list[str] | None = None) -> str:
+def _build_response(
+    actions: list[dict],
+    anchors: list[dict],
+    *,
+    ambiguities: list[str] | None = None,
+) -> str:
     return json.dumps({
-        "turn_intent": turn_intent,
         "atomic_actions": actions,
         "anchors": anchors,
         "ambiguities": ambiguities or [],
@@ -99,17 +103,14 @@ class TestSimpleSingleAction:
                         "verb": "观察",
                         "target": "仓库门口",
                         "method": None,
-                        "goal": "确认是否有守卫",
                         "condition": None,
                         "likely_needs_roll": True,
-                        "roll_hint": "perception",
                         "risk_level": "medium",
-                        "confidence": 0.95,
                     }
                 ],
                 anchors=[
-                    {"text": "仓库门口", "normalized": "仓库门口", "kind": "location", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
+                    {"text": "仓库门口", "normalized": "仓库门口", "kind": "location", "source": "explicit", "confidence": 1.0},
+                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
                 ],
             )
         ])
@@ -146,11 +147,8 @@ class TestMultiAction:
                         "verb": "绕",
                         "target": "仓库侧面",
                         "method": None,
-                        "goal": None,
                         "condition": None,
                         "likely_needs_roll": False,
-                        "roll_hint": None,
-                        "confidence": 0.95,
                     },
                     {
                         "action_id": "A2",
@@ -161,16 +159,13 @@ class TestMultiAction:
                         "verb": "检查",
                         "target": "窗户",
                         "method": None,
-                        "goal": "确认是否有锁",
                         "condition": None,
                         "likely_needs_roll": True,
-                        "roll_hint": "investigation",
-                        "confidence": 0.9,
                     },
                 ],
                 anchors=[
-                    {"text": "仓库侧面", "normalized": "仓库侧面", "kind": "location", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "窗户", "normalized": "窗户", "kind": "item", "source": "explicit", "action_ids": ["A2"], "confidence": 1.0},
+                    {"text": "仓库侧面", "normalized": "仓库侧面", "kind": "location", "source": "explicit", "confidence": 1.0},
+                    {"text": "窗户", "normalized": "窗户", "kind": "item", "source": "explicit", "confidence": 1.0},
                 ],
             )
         ])
@@ -201,18 +196,15 @@ class TestPastReference:
                         "verb": "提醒",
                         "target": "伊莱娜",
                         "method": "使用之前约好的暗号",
-                        "goal": "让她别说话",
                         "condition": None,
                         "likely_needs_roll": False,
-                        "roll_hint": None,
-                        "confidence": 0.95,
                     }
                 ],
                 anchors=[
-                    {"text": "之前", "normalized": "past_reference", "kind": "concept", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "伊莱娜", "normalized": "伊莱娜", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "暗号", "normalized": "暗号", "kind": "concept", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "别说话", "normalized": "保持沉默", "kind": "action_keyword", "source": "explicit", "action_ids": ["A1"], "confidence": 0.95},
+                    {"text": "之前", "normalized": "past_reference", "kind": "concept", "source": "explicit", "confidence": 1.0},
+                    {"text": "伊莱娜", "normalized": "伊莱娜", "kind": "character", "source": "explicit", "confidence": 1.0},
+                    {"text": "暗号", "normalized": "暗号", "kind": "concept", "source": "explicit", "confidence": 1.0},
+                    {"text": "别说话", "normalized": "保持沉默", "kind": "action_keyword", "source": "explicit", "confidence": 0.95},
                 ],
             )
         ])
@@ -243,15 +235,12 @@ class TestPastReference:
                         "verb": "提醒",
                         "target": "伊莱娜",
                         "method": "使用之前约好的暗号",
-                        "goal": "让她别说话",
                         "condition": None,
                         "likely_needs_roll": False,
-                        "roll_hint": None,
-                        "confidence": 0.95,
                     }
                 ],
                 anchors=[
-                    {"text": "之前", "normalized": "past_reference", "kind": "concept", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
+                    {"text": "之前", "normalized": "past_reference", "kind": "concept", "source": "explicit", "confidence": 1.0},
                 ],
             )
         ])
@@ -279,11 +268,8 @@ class TestConditionalAction:
                         "verb": "假装",
                         "target": "守卫",
                         "method": "假装喝醉",
-                        "goal": "不被发现",
                         "condition": "守卫靠近",
                         "likely_needs_roll": True,
-                        "roll_hint": "deception",
-                        "confidence": 0.9,
                     },
                     {
                         "action_id": "A2",
@@ -294,16 +280,13 @@ class TestConditionalAction:
                         "verb": "走",
                         "target": "仓库门口",
                         "method": "趁没人注意",
-                        "goal": None,
                         "condition": "没人注意",
                         "likely_needs_roll": True,
-                        "roll_hint": "stealth",
-                        "confidence": 0.9,
                     },
                 ],
                 anchors=[
-                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "仓库门口", "normalized": "仓库门口", "kind": "location", "source": "explicit", "action_ids": ["A2"], "confidence": 1.0},
+                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
+                    {"text": "仓库门口", "normalized": "仓库门口", "kind": "location", "source": "explicit", "confidence": 1.0},
                 ],
             )
         ])
@@ -336,18 +319,15 @@ class TestInstructAlly:
                         "verb": "让",
                         "target": "马洛",
                         "method": "守在巷口，看到黑帆帮的人就吹哨",
-                        "goal": "警戒黑帆帮",
                         "condition": None,
                         "likely_needs_roll": False,
-                        "roll_hint": None,
-                        "confidence": 0.95,
                     }
                 ],
                 anchors=[
-                    {"text": "马洛", "normalized": "马洛", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "巷口", "normalized": "巷口", "kind": "location", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "黑帆帮", "normalized": "黑帆帮", "kind": "organization", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "吹哨", "normalized": "吹哨", "kind": "action_keyword", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
+                    {"text": "马洛", "normalized": "马洛", "kind": "character", "source": "explicit", "confidence": 1.0},
+                    {"text": "巷口", "normalized": "巷口", "kind": "location", "source": "explicit", "confidence": 1.0},
+                    {"text": "黑帆帮", "normalized": "黑帆帮", "kind": "organization", "source": "explicit", "confidence": 1.0},
+                    {"text": "吹哨", "normalized": "吹哨", "kind": "action_keyword", "source": "explicit", "confidence": 1.0},
                 ],
             )
         ])
@@ -383,11 +363,8 @@ class TestComplexAction:
                         "verb": "绕",
                         "target": "码头",
                         "method": "假装没看见守卫，低头整理斗篷",
-                        "goal": "不被发现",
                         "condition": None,
                         "likely_needs_roll": True,
-                        "roll_hint": "stealth",
-                        "confidence": 0.9,
                     },
                     {
                         "action_id": "A2",
@@ -398,11 +375,8 @@ class TestComplexAction:
                         "verb": "观察",
                         "target": "门口",
                         "method": None,
-                        "goal": "确认是否有黑帆帮的人",
                         "condition": None,
                         "likely_needs_roll": True,
-                        "roll_hint": "perception",
-                        "confidence": 0.9,
                     },
                     {
                         "action_id": "A3",
@@ -413,22 +387,19 @@ class TestComplexAction:
                         "verb": "看看",
                         "target": "门锁",
                         "method": "与旧城区见过的锁进行比较",
-                        "goal": "判断门锁是否相似",
                         "condition": None,
                         "likely_needs_roll": True,
-                        "roll_hint": "investigation",
-                        "confidence": 0.85,
                     },
                 ],
                 anchors=[
-                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "斗篷", "normalized": "斗篷", "kind": "item", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "码头", "normalized": "码头", "kind": "location", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                    {"text": "仓库", "normalized": "仓库", "kind": "location", "source": "explicit", "action_ids": ["A2", "A3"], "confidence": 1.0},
-                    {"text": "黑帆帮", "normalized": "黑帆帮", "kind": "organization", "source": "explicit", "action_ids": ["A2"], "confidence": 1.0},
-                    {"text": "门锁", "normalized": "门锁", "kind": "item", "source": "explicit", "action_ids": ["A3"], "confidence": 1.0},
-                    {"text": "旧城区", "normalized": "旧城区", "kind": "location", "source": "explicit", "action_ids": ["A3"], "confidence": 1.0},
-                    {"text": "见过的那种", "normalized": "past_seen_similar_object", "kind": "concept", "source": "explicit", "action_ids": ["A3"], "confidence": 0.95},
+                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
+                    {"text": "斗篷", "normalized": "斗篷", "kind": "item", "source": "explicit", "confidence": 1.0},
+                    {"text": "码头", "normalized": "码头", "kind": "location", "source": "explicit", "confidence": 1.0},
+                    {"text": "仓库", "normalized": "仓库", "kind": "location", "source": "explicit", "confidence": 1.0},
+                    {"text": "黑帆帮", "normalized": "黑帆帮", "kind": "organization", "source": "explicit", "confidence": 1.0},
+                    {"text": "门锁", "normalized": "门锁", "kind": "item", "source": "explicit", "confidence": 1.0},
+                    {"text": "旧城区", "normalized": "旧城区", "kind": "location", "source": "explicit", "confidence": 1.0},
+                    {"text": "见过的那种", "normalized": "past_seen_similar_object", "kind": "concept", "source": "explicit", "confidence": 0.95},
                 ],
             )
         ])
@@ -459,7 +430,6 @@ class TestActionSelfCheck:
     def test_joint_actor_list_is_deduplicated_without_losing_ownership(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
-            turn_intent="共同推门",
             atomic_actions=[
                 AtomicAction_model(
                     action_id="A1",
@@ -481,12 +451,11 @@ class TestActionSelfCheck:
     def test_auto_fill_actor_from_viewpoint(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
-            turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
                     action_id="A1", sequence=1, actor=[""], action_type="observe",
                     raw_text="观察四周", verb="观察", target="四周",
-                    likely_needs_roll=True, confidence=0.9,
+                    likely_needs_roll=True,
                 )
             ],
             anchors=[],
@@ -497,17 +466,16 @@ class TestActionSelfCheck:
     def test_fix_sequence(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
-            turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
                     action_id="A1", sequence=5, actor=["主角"], action_type="move",
                     raw_text="绕到侧面", verb="绕", target="侧面",
-                    likely_needs_roll=False, confidence=0.9,
+                    likely_needs_roll=False,
                 ),
                 AtomicAction_model(
                     action_id="A2", sequence=3, actor=["主角"], action_type="observe",
                     raw_text="观察四周", verb="观察", target="四周",
-                    likely_needs_roll=True, confidence=0.9,
+                    likely_needs_roll=True,
                 ),
             ],
             anchors=[],
@@ -519,17 +487,16 @@ class TestActionSelfCheck:
     def test_dedup_anchors(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
-            turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
                     action_id="A1", sequence=1, actor=["主角"], action_type="observe",
                     raw_text="观察守卫", verb="观察", target="守卫",
-                    likely_needs_roll=True, confidence=0.9,
+                    likely_needs_roll=True,
                 ),
             ],
             anchors=[
-                {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
+                {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
+                {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
             ],
         )
         cleaned = sc.check(result, "观察守卫", _make_current_state())
@@ -538,39 +505,19 @@ class TestActionSelfCheck:
         assert "守卫" in texts
         assert "主角" in texts
 
-    def test_remove_invalid_action_id(self):
-        sc = ActionSelfCheck()
-        result = ActionParseResult(
-            turn_intent="测试",
-            atomic_actions=[
-                AtomicAction_model(
-                    action_id="A1", sequence=1, actor=["主角"], action_type="observe",
-                    raw_text="观察守卫", verb="观察", target="守卫",
-                    likely_needs_roll=True, confidence=0.9,
-                ),
-            ],
-            anchors=[
-                {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "action_ids": ["A1", "A99"], "confidence": 1.0},
-            ],
-        )
-        cleaned = sc.check(result, "观察守卫", _make_current_state())
-        assert len(cleaned.anchors) == 2
-        assert cleaned.anchors[0].text == "守卫"
-
     def test_remove_empty_anchor(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
-            turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
                     action_id="A1", sequence=1, actor=["主角"], action_type="observe",
                     raw_text="观察守卫", verb="观察", target="守卫",
-                    likely_needs_roll=True, confidence=0.9,
+                    likely_needs_roll=True,
                 ),
             ],
             anchors=[
-                {"text": "", "normalized": "", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
-                {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "action_ids": ["A1"], "confidence": 1.0},
+                {"text": "", "normalized": "", "kind": "character", "source": "explicit", "confidence": 1.0},
+                {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
             ],
         )
         cleaned = sc.check(result, "观察守卫", _make_current_state())
@@ -582,17 +529,16 @@ class TestActionSelfCheck:
     def test_duplicate_action_id_fixed(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
-            turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
                     action_id="A1", sequence=1, actor=["主角"], action_type="move",
                     raw_text="绕到侧面", verb="绕", target="侧面",
-                    likely_needs_roll=False, confidence=0.9,
+                    likely_needs_roll=False,
                 ),
                 AtomicAction_model(
                     action_id="A1", sequence=2, actor=["主角"], action_type="observe",
                     raw_text="观察四周", verb="观察", target="四周",
-                    likely_needs_roll=True, confidence=0.9,
+                    likely_needs_roll=True,
                 ),
             ],
             anchors=[],
@@ -602,20 +548,19 @@ class TestActionSelfCheck:
         ids = {a.action_id for a in cleaned.atomic_actions}
         assert len(ids) == 2  # first keeps "A1", second renamed to "A1_1"
 
-    def test_duplicate_action_id_keeps_turn_level_anchors(self):
+    def test_duplicate_action_id_keeps_anchors(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
-            turn_intent="测试",
             atomic_actions=[
                 AtomicAction_model(
                     action_id="A1", sequence=1, actor=["主角"], action_type="move",
                     raw_text="绕到侧面", verb="绕", target="侧面",
-                    likely_needs_roll=False, confidence=0.9,
+                    likely_needs_roll=False,
                 ),
                 AtomicAction_model(
                     action_id="A1", sequence=2, actor=["主角"], action_type="observe",
                     raw_text="观察四周", verb="观察", target="四周",
-                    likely_needs_roll=True, confidence=0.9,
+                    likely_needs_roll=True,
                 ),
             ],
             anchors=[
@@ -624,7 +569,6 @@ class TestActionSelfCheck:
                     "normalized": "四周",
                     "kind": "location",
                     "source": "explicit",
-                    "action_ids": ["A1"],
                     "confidence": 1.0,
                 },
             ],
@@ -638,7 +582,6 @@ class TestActionSelfCheck:
     def test_empty_actions_warns(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(
-            turn_intent="测试",
             atomic_actions=[],
             anchors=[],
         )

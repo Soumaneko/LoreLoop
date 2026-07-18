@@ -1,5 +1,3 @@
-import pytest
-
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
 from app.domain.recall_memory.schemas import Memory
 from app.domain.recall_memory.store import MemoryStore
@@ -11,7 +9,7 @@ def _make_action(action_id="A1", action_type="observe", raw_text="测试", **ove
     defaults = {
         "action_id": action_id, "sequence": 1, "actor": ["主角"],
         "action_type": action_type, "raw_text": raw_text, "verb": raw_text[:4],
-        "likely_needs_roll": False, "confidence": 0.9,
+        "likely_needs_roll": False,
     }
     defaults.update(overrides)
     return AtomicAction(**defaults)
@@ -113,7 +111,7 @@ class TestAliasRetrieval:
         anchors = [_make_anchor("莎拉", kind="character")]
 
         parse_result = ActionParseResult(
-            turn_intent="测试", atomic_actions=[action], anchors=anchors
+            atomic_actions=[action], anchors=anchors
         )
 
         retriever = CandidateRetriever(store, alias_store=alias_store)
@@ -143,7 +141,7 @@ class TestAliasRetrieval:
         anchors = [_make_anchor("莎拉·月刃", kind="character")]
 
         parse_result = ActionParseResult(
-            turn_intent="测试", atomic_actions=[action], anchors=anchors
+            atomic_actions=[action], anchors=anchors
         )
 
         retriever = CandidateRetriever(store, alias_store=alias_store)
@@ -169,7 +167,7 @@ class TestAliasRetrieval:
         anchors = [_make_anchor("狗头人", kind="character")]
 
         parse_result = ActionParseResult(
-            turn_intent="测试", atomic_actions=[action], anchors=anchors
+            atomic_actions=[action], anchors=anchors
         )
 
         retriever = CandidateRetriever(store, alias_store=alias_store)

@@ -1,5 +1,3 @@
-import pytest
-
 from app.domain.recall_memory.schemas import Memory
 from app.domain.recall_memory.self_check import MemorySelfCheck, MAX_TAGS
 from app.domain.current_state import CurrentState, SceneState, PlayerState, ResourcesState, WorldClock

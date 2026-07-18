@@ -38,7 +38,6 @@ def test_batch_classification_reason_precedes_decision_in_schema():
 
 def _action_parse() -> ActionParseResult:
     return ActionParseResult(
-        turn_intent="询问老板钥匙的传闻",
         atomic_actions=[
             AtomicAction(
                 action_id="act_1",
@@ -48,9 +47,7 @@ def _action_parse() -> ActionParseResult:
                 raw_text="询问老板钥匙的传闻",
                 verb="询问",
                 target="老板",
-                goal="了解钥匙",
                 likely_needs_roll=False,
-                confidence=0.9,
             )
         ],
         anchors=[

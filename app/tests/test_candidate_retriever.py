@@ -5,7 +5,7 @@ from app.domain.action.schemas import (
     Anchor,
     AtomicAction,
 )
-from app.domain.recall_memory.schemas import Memory, MemoryRecord
+from app.domain.recall_memory.schemas import Memory
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.retrieval.candidate_retriever import (
     CandidateRetriever,
@@ -47,11 +47,8 @@ def _make_action(
         "verb": raw_text[:4],
         "target": None,
         "method": None,
-        "goal": None,
         "condition": None,
         "likely_needs_roll": False,
-        "roll_hint": None,
-        "confidence": 0.9,
     }
     defaults.update(overrides)
     return AtomicAction(**defaults)
@@ -75,12 +72,10 @@ def _make_anchor(
 
 
 def _make_parse_result(
-    turn_intent: str = "测试意图",
     actions: list[AtomicAction] | None = None,
     anchors: list[Anchor] | None = None,
 ) -> ActionParseResult:
     return ActionParseResult(
-        turn_intent=turn_intent,
         atomic_actions=actions or [],
         anchors=anchors or [],
     )
@@ -246,7 +241,6 @@ class TestSecretSignalRecall:
             verb="发信号",
             target="伊莱娜",
             method="暗号",
-            goal="提醒她别说话",
         )
 
         anchors = [
@@ -257,7 +251,6 @@ class TestSecretSignalRecall:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="用暗号提醒伊莱娜",
             actions=[action],
             anchors=anchors,
         )
@@ -317,7 +310,6 @@ class TestSecretSignalRecall:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="用暗号提醒伊莱娜",
             actions=[action],
             anchors=anchors,
         )
@@ -375,7 +367,6 @@ class TestDoorLockRecall:
             verb="检查",
             target="门锁",
             method="观察",
-            goal="确认门锁类型",
         )
 
         anchors = [
@@ -385,7 +376,6 @@ class TestDoorLockRecall:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="检查门锁",
             actions=[action],
             anchors=anchors,
         )
@@ -456,7 +446,6 @@ class TestAvoidEntityPollution:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="用暗号提醒伊莱娜",
             actions=[action],
             anchors=anchors,
         )
@@ -541,7 +530,6 @@ class TestPastReferenceAlone:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="照老办法行动",
             actions=[action],
             anchors=anchors,
         )
@@ -598,7 +586,6 @@ class TestItemAction:
             verb="检查",
             target="鹰徽章",
             method="仔细观察",
-            goal="确认徽章来源",
         )
 
         anchors = [
@@ -607,7 +594,6 @@ class TestItemAction:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="检查鹰徽章",
             actions=[action],
             anchors=anchors,
         )
@@ -677,7 +663,6 @@ class TestConditionNotRecalling:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="继续前进",
             actions=[action],
             anchors=anchors,
         )
@@ -721,7 +706,6 @@ class TestScoreBreakdown:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="提醒伊莱娜",
             actions=[action],
             anchors=anchors,
         )
@@ -772,7 +756,6 @@ class TestScoreBreakdown:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="提醒伊莱娜",
             actions=[action],
             anchors=anchors,
         )
@@ -826,7 +809,6 @@ class TestEmptyAndNoMatch:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="移动",
             actions=[action],
             anchors=anchors,
         )
@@ -878,7 +860,6 @@ class TestActionProximityBoost:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="提醒伊莱娜",
             actions=[action],
             anchors=anchors,
         )
@@ -929,7 +910,6 @@ class TestTopK:
         ]
 
         parse_result = _make_parse_result(
-            turn_intent="观察伊莱娜",
             actions=[action],
             anchors=anchors,
         )
@@ -964,7 +944,6 @@ class TestTopK:
             target="伊莱娜",
         )
         parse_result = _make_parse_result(
-            turn_intent="观察伊莱娜",
             actions=[action],
             anchors=[_make_anchor("伊莱娜", "伊莱娜", kind="character")],
         )

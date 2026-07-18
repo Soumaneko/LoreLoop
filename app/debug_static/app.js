@@ -1369,6 +1369,10 @@ function renderOutline(outline) {
     ${details("导演事件原因", esc(text(outline.director_event_reason)), true)}
     ${details("导演 NPC 原因", esc(text(outline.director_npc_reason)), true)}
     ${card("规划审计", esc(text(outline.planning_reasoning)))}
+    ${details("必须成立", list(outline.must_establish_facts))}
+    ${details("不得成立", list(outline.must_not_establish_facts))}
+    ${details("信息边界", list(outline.information_boundaries))}
+    ${card("停点", esc(text(outline.scene_stopping_point)))}
     ${(outline.planned_events || []).map((e) => `<div class="section-card">
       <div class="card-title"><span>${esc(e.event_id)}</span></div>
       <div style="margin-bottom:8px">${esc(text(e.event_fact))}</div>
@@ -1377,10 +1381,6 @@ function renderOutline(outline) {
         ["实体", chips(e.involved_entities)],
       ])}
     </div>`).join("")}
-    ${details("必须成立", list(outline.must_establish_facts))}
-    ${details("不得成立", list(outline.must_not_establish_facts))}
-    ${details("信息边界", list(outline.information_boundaries))}
-    ${card("停点", esc(text(outline.scene_stopping_point)))}
   `;
 }
 

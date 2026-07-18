@@ -23,13 +23,11 @@ def _make_action(action_id: str, likely_needs_roll: bool) -> AtomicAction:
         verb="观察",
         target="庭院",
         likely_needs_roll=likely_needs_roll,
-        confidence=0.9,
     )
 
 
 def _make_parse_result() -> ActionParseResult:
     return ActionParseResult(
-        turn_intent="观察庭院",
         atomic_actions=[
             _make_action("a1", True),
             _make_action("a2", False),
@@ -98,7 +96,6 @@ class TestRollModifierEvaluator:
 
     def test_generation_skips_modifier_llm_when_no_action_requires_roll(self, monkeypatch):
         parse_result = ActionParseResult(
-            turn_intent="观察庭院",
             atomic_actions=[_make_action("a1", False)],
             anchors=[],
             ambiguities=[],
@@ -150,7 +147,6 @@ class TestRollModifierEvaluator:
         monkeypatch.setattr(generation_nodes, "TurnResolutionAgent", _ResolutionAgent)
         monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
         parse_result = ActionParseResult(
-            turn_intent="观察庭院",
             atomic_actions=[_make_action("a1", False)],
         )
 

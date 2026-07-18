@@ -9,7 +9,6 @@ from app.domain.entity.extractor import EntityExtractor, _profile_for_extraction
 from app.domain.entity.schemas import (
     EntityExtractionResult,
     EntityProfile,
-    EntityProfileUpdateInput,
     RetrievedEntity,
 )
 from app.domain.entity.store import EntityStore

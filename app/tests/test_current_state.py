@@ -49,7 +49,9 @@ class TestParticipantState:
     def test_current_participant_state(self):
         state = ParticipantState(
             name="米莉",
-            condition=["疲惫"],
+            npc_conditions=[
+                TimedCondition(condition="疲惫", expires_after_phases=-1)
+            ],
             attitude_to_player="感激主角",
         )
 

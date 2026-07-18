@@ -49,6 +49,11 @@ def test_debug_frontend_exposes_runtime_content():
     assert 'id="saveSelect"' in html
     assert 'id="createSaveBtn"' in html
 
+    render_outline = source[source.index("function renderOutline"):]
+    assert render_outline.index('card("停点"') < render_outline.index(
+        "outline.planned_events"
+    )
+
 
 def test_maintenance_jobs_debug_endpoint_parses_filters(monkeypatch):
     captured = {}

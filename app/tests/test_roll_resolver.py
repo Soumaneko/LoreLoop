@@ -10,7 +10,6 @@ def _make_action(
     action_id: str,
     sequence: int,
     likely_needs_roll: bool,
-    roll_hint: str | None = None,
 ) -> AtomicAction:
     return AtomicAction(
         action_id=action_id,
@@ -21,20 +20,16 @@ def _make_action(
         verb="观察",
         target="四周",
         method=None,
-        goal=None,
         condition=None,
         likely_needs_roll=likely_needs_roll,
-        roll_hint=roll_hint,
-        confidence=0.9,
     )
 
 
 class TestDefaultRoll:
     def test_default_roll_is_d20(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
-                _make_action("a1", 1, True, "perception"),
+                _make_action("a1", 1, True),
             ],
             anchors=[],
             ambiguities=[],
@@ -51,7 +46,6 @@ class TestDefaultRoll:
 
     def test_custom_dice_sides(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, True),
                 _make_action("a2", 2, True),
@@ -73,10 +67,9 @@ class TestDefaultRoll:
 
     def test_roll_only_when_needed(self):
         parse_result = ActionParseResult(
-            turn_intent="潜入并等待",
             atomic_actions=[
-                _make_action("a1", 1, True, "stealth"),
-                _make_action("a2", 2, False, None),
+                _make_action("a1", 1, True),
+                _make_action("a2", 2, False),
             ],
             anchors=[],
             ambiguities=[],
@@ -91,7 +84,6 @@ class TestDefaultRoll:
 
     def test_roll_all_actions_when_disabled(self):
         parse_result = ActionParseResult(
-            turn_intent="潜入并等待",
             atomic_actions=[
                 _make_action("a1", 1, True),
                 _make_action("a2", 2, False),
@@ -109,7 +101,6 @@ class TestDefaultRoll:
 
     def test_seeded_rolls_are_reproducible(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, True),
                 _make_action("a2", 2, True),
@@ -130,7 +121,6 @@ class TestDefaultRoll:
 
     def test_empty_actions_return_zero_rolls(self):
         parse_result = ActionParseResult(
-            turn_intent="无行动",
             atomic_actions=[],
             anchors=[],
             ambiguities=[],
@@ -151,7 +141,6 @@ class TestDefaultRoll:
 class TestResultFields:
     def test_preserves_action_mapping(self):
         parse_result = ActionParseResult(
-            turn_intent="潜入并观察",
             atomic_actions=[
                 AtomicAction(
                     action_id="a1",
@@ -162,11 +151,8 @@ class TestResultFields:
                     verb="躲藏",
                     target="阴影",
                     method=None,
-                    goal="避免被发现",
                     condition=None,
                     likely_needs_roll=True,
-                    roll_hint="stealth",
-                    confidence=0.92,
                 ),
                 AtomicAction(
                     action_id="a2",
@@ -177,11 +163,8 @@ class TestResultFields:
                     verb="观察",
                     target="守卫",
                     method=None,
-                    goal="确认巡逻路线",
                     condition=None,
                     likely_needs_roll=True,
-                    roll_hint="perception",
-                    confidence=0.88,
                 ),
                 AtomicAction(
                     action_id="a3",
@@ -192,11 +175,8 @@ class TestResultFields:
                     verb="等待",
                     target="守卫",
                     method=None,
-                    goal="寻找安全时机",
                     condition=None,
                     likely_needs_roll=False,
-                    roll_hint=None,
-                    confidence=0.84,
                 ),
             ],
             anchors=[],
@@ -224,7 +204,6 @@ class TestResultFields:
 
     def test_dice_formula_matches_total_rolls(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, True),
                 _make_action("a2", 2, True),
@@ -243,7 +222,6 @@ class TestResultFields:
 
     def test_no_roll_actions_with_custom_dice_sides(self):
         parse_result = ActionParseResult(
-            turn_intent="无行动",
             atomic_actions=[
                 _make_action("a1", 1, False),
                 _make_action("a2", 2, False),
@@ -262,7 +240,6 @@ class TestResultFields:
 class TestRollModifiers:
     def test_modifier_adjusts_value_and_records_raw_value(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
             ambiguities=[],
@@ -287,7 +264,6 @@ class TestRollModifiers:
 
     def test_modifier_clamps_upper_bound(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
             ambiguities=[],
@@ -318,7 +294,6 @@ class TestRollModifiers:
 
     def test_modifier_clamps_lower_bound(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
             ambiguities=[],
@@ -342,7 +317,6 @@ class TestRollModifiers:
 
     def test_no_modifier_keeps_existing_value_behavior(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
             ambiguities=[],
@@ -357,7 +331,6 @@ class TestRollModifiers:
 
     def test_select_roll_actions_can_be_reused_for_modifier_evaluation(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, True),
                 _make_action("a2", 2, False),
@@ -393,7 +366,6 @@ class TestConfigValidation:
 class TestRollSelection:
     def test_rolls_only_actions_marked_as_needing_roll(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, True),
                 _make_action("a2", 2, False),
@@ -410,7 +382,6 @@ class TestRollSelection:
 
     def test_all_actions_without_roll_requirement_return_zero_rolls(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, False),
                 _make_action("a2", 2, False),
@@ -428,7 +399,6 @@ class TestRollSelection:
 
     def test_results_sorted_by_sequence(self):
         parse_result = ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, True),
                 _make_action("a2", 2, False),
@@ -449,7 +419,6 @@ class TestRollSelection:
 class TestDifficulty:
     def _single_parse(self):
         return ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
             ambiguities=[],
@@ -457,7 +426,6 @@ class TestDifficulty:
 
     def _multi_parse(self):
         return ActionParseResult(
-            turn_intent="观察",
             atomic_actions=[
                 _make_action("a1", 1, True),
                 _make_action("a2", 2, True),
@@ -560,7 +528,6 @@ class TestDifficulty:
 
     def test_empty_actions_normal(self):
         parse = ActionParseResult(
-            turn_intent="无行动",
             atomic_actions=[],
             anchors=[],
             ambiguities=[],
@@ -604,12 +571,10 @@ class TestNeverRolls:
             verb="行动",
             likely_needs_roll=likely_needs_roll,
             risk_level=risk_level,
-            confidence=0.9,
         )
 
     def test_wait_is_never_rolled_even_if_marked(self):
         parse_result = ActionParseResult(
-            turn_intent="等待",
             atomic_actions=[
                 self._action("w1", 1, "wait", likely_needs_roll=True),
             ],
@@ -624,7 +589,6 @@ class TestNeverRolls:
 
     def test_wait_excluded_from_forced_sampling(self):
         parse_result = ActionParseResult(
-            turn_intent="观察并等待",
             atomic_actions=[
                 self._action("a1", 1, "observe", likely_needs_roll=True),
                 self._action("w1", 2, "wait", likely_needs_roll=False),
@@ -641,7 +605,6 @@ class TestNeverRolls:
 
     def test_low_risk_move_is_never_rolled(self):
         parse_result = ActionParseResult(
-            turn_intent="走过去",
             atomic_actions=[
                 self._action("m1", 1, "move", likely_needs_roll=True, risk_level="low"),
             ],
@@ -656,7 +619,6 @@ class TestNeverRolls:
 
     def test_high_risk_move_can_be_rolled(self):
         parse_result = ActionParseResult(
-            turn_intent="冲过去",
             atomic_actions=[
                 self._action("m1", 1, "move", likely_needs_roll=True, risk_level="high"),
             ],

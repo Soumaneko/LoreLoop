@@ -31,15 +31,12 @@ def _action(
         verb="观察",
         target="四周",
         likely_needs_roll=True,
-        roll_hint="perception",
         risk_level=risk_level,
-        confidence=0.9,
     )
 
 
 def _parse(action: AtomicAction | None = None) -> ActionParseResult:
     return ActionParseResult(
-        turn_intent="观察",
         atomic_actions=[action or _action()],
     )
 

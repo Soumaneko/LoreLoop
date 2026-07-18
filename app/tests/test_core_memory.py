@@ -14,7 +14,6 @@ from app.domain.core_memory import (
     build_core_memory,
     build_initial_current_state,
 )
-from app.domain.current_state import CurrentStateStore
 from app.graph.initialization_helpers import preview_core_memory
 from app.runtime.session import get_campaign_runtime
 

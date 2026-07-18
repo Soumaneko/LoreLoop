@@ -1,6 +1,4 @@
-import pytest
-
-from app.domain.recall_memory.schemas import Memory, MemoryRecord
+from app.domain.recall_memory.schemas import Memory
 from app.domain.recall_memory.store import MemoryStore
 
 

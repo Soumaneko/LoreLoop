@@ -1,4 +1,3 @@
-import pytest
 from pathlib import Path
 import json
 
@@ -16,7 +15,7 @@ from app.domain.narrative_composer import (
     NarrativeComposerContext,
     NarrativeComposerResult,
 )
-from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
+from app.domain.plot_outline.schemas import PlannedEvent
 from app.domain.plot_outline.views import project_retrieved_memories
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
 from app.domain.director_event.schemas import DirectorEventConsumption
@@ -214,7 +213,7 @@ class TestNarrativeComposerAgent:
                 event_id="unused_event_id",
                 reason="本回合没有自然接触面。",
                 use_event=False,
-                immutable_constraints=["不会传给 Plot 的内部约束。"],
+                immutable_constraints=["不会传给 Composer 的内部约束。"],
             ),
             DirectorEventConsumption(
                 event_id="private_event_id",
