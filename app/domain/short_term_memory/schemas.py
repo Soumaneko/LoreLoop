@@ -110,6 +110,37 @@ class ShortTermMemoryStore:
         ).fetchall()
         return [self._row_to_scene(row) for row in rows]
 
+    def list_page(
+        self,
+        *,
+        before_turn_index: int | None = None,
+        limit: int = 5,
+    ) -> tuple[list[ShortTermScene], bool]:
+        """Return a cursor page ordered oldest to newest."""
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if before_turn_index is None:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM short_term_scenes
+                ORDER BY turn_index DESC, id DESC LIMIT ?
+                """,
+                (limit + 1,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM short_term_scenes
+                WHERE turn_index < ?
+                ORDER BY turn_index DESC, id DESC LIMIT ?
+                """,
+                (before_turn_index, limit + 1),
+            ).fetchall()
+        has_more = len(rows) > limit
+        page = rows[:limit]
+        page.reverse()
+        return [self._row_to_scene(row) for row in page], has_more
+
     @staticmethod
     def _row_to_scene(row: sqlite3.Row) -> ShortTermScene:
         return ShortTermScene(

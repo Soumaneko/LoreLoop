@@ -6,6 +6,7 @@ from app.graph.initialization_graph import apply_core_memory_init
 from app.graph.initialization_helpers import preview_core_memory
 from app.graph.maintenance_graph import batch_classify_stream, memory_maintain_stream
 from app.runtime.debug_state import load_debug_state
+from app.runtime.player_state import load_player_history, load_player_state
 from app.runtime.settings import save_difficulty, save_max_chars
 from app.runtime.saves import create_save, list_saves, switch_save
 from app.runtime.session import get_campaign_runtime
@@ -54,6 +55,8 @@ __all__ = [
     "generate_turn_stream",
     "get_maintenance_job",
     "load_debug_state",
+    "load_player_history",
+    "load_player_state",
     "list_maintenance_jobs",
     "list_saves",
     "memory_maintain_stream",

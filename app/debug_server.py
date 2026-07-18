@@ -20,6 +20,8 @@ from app.api import (
     list_maintenance_jobs,
     list_saves,
     load_debug_state,
+    load_player_history,
+    load_player_state,
     memory_maintain_stream,
     preview_core_memory,
     redo_last_turn,
@@ -30,10 +32,12 @@ from app.api import (
     undo_last_turn,
 )
 from app.runtime.session import get_campaign_runtime
+from app.runtime.player_state import player_saves_payload
 
 # python -m app.debug_server
 
-STATIC_DIR = Path(__file__).with_name("debug_static")
+DEBUG_STATIC_DIR = Path(__file__).with_name("debug_static")
+PLAYER_STATIC_DIR = Path(__file__).with_name("player_static")
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, data: dict[str, Any]) -> None:
@@ -55,12 +59,42 @@ def _read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
 
 class DebugHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
         if path == "/":
-            self._static_file(STATIC_DIR / "index.html")
+            self._static_file(PLAYER_STATIC_DIR / "index.html", PLAYER_STATIC_DIR)
             return
         if path.startswith("/assets/"):
-            self._static_file(STATIC_DIR / path.removeprefix("/assets/"))
+            self._static_file(
+                PLAYER_STATIC_DIR / path.removeprefix("/assets/"),
+                PLAYER_STATIC_DIR,
+            )
+            return
+        if path in {"/debug", "/debug/"}:
+            self._static_file(DEBUG_STATIC_DIR / "index.html", DEBUG_STATIC_DIR)
+            return
+        if path.startswith("/debug-assets/"):
+            self._static_file(
+                DEBUG_STATIC_DIR / path.removeprefix("/debug-assets/"),
+                DEBUG_STATIC_DIR,
+            )
+            return
+        if path == "/api/player/state":
+            self._handle_player_json(load_player_state)
+            return
+        if path == "/api/player/history":
+            query = parse_qs(parsed_url.query)
+            before = query.get("before_turn", [None])[0]
+            limit = query.get("limit", ["5"])[0]
+            self._handle_player_json(
+                lambda: load_player_history(
+                    before_turn_index=int(before) if before is not None else None,
+                    limit=int(limit),
+                )
+            )
+            return
+        if path == "/api/player/saves":
+            self._handle_player_json(lambda: player_saves_payload(list_saves()))
             return
         if path == "/api/state":
             self._handle_json(load_debug_state)
@@ -78,6 +112,40 @@ class DebugHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path == "/api/player/generate":
+            self._handle_player_json_stream(self._generate_stream)
+            return
+        if path == "/api/player/confirm":
+            self._handle_player_json_stream(self._player_confirm_stream)
+            return
+        if path == "/api/player/retry":
+            self._handle_player_json_stream(self._retry_stream)
+            return
+        if path == "/api/player/pending/discard":
+            self._handle_player_json(lambda: self._discard_pending_turn())
+            return
+        if path == "/api/player/init":
+            self._handle_player_json(self._player_init)
+            return
+        if path == "/api/player/difficulty":
+            self._handle_player_json(lambda: save_difficulty(_read_json(self)))
+            return
+        if path == "/api/player/saves/create":
+            self._handle_player_json(
+                lambda: player_saves_payload(create_save(_read_json(self)))
+            )
+            return
+        if path == "/api/player/saves/switch":
+            self._handle_player_json(
+                lambda: player_saves_payload(switch_save(_read_json(self)))
+            )
+            return
+        if path == "/api/player/history/undo":
+            self._handle_player_json(undo_last_turn)
+            return
+        if path == "/api/player/history/redo":
+            self._handle_player_json(redo_last_turn)
+            return
         if path == "/api/generate":
             self._handle_json_stream(self._generate_stream)
             return
@@ -125,10 +193,10 @@ class DebugHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         print(f"[debug-server] {self.address_string()} - {format % args}")
 
-    def _static_file(self, path: Path) -> None:
+    def _static_file(self, path: Path, static_root: Path) -> None:
         try:
             resolved = path.resolve()
-            root = STATIC_DIR.resolve()
+            root = static_root.resolve()
             if root not in resolved.parents and resolved != root:
                 self.send_error(403)
                 return
@@ -150,6 +218,23 @@ class DebugHandler(BaseHTTPRequestHandler):
         except Exception:
             self.send_error(500)
 
+    def _handle_player_json(self, fn) -> None:
+        try:
+            _json_response(self, 200, {"ok": True, "data": fn()})
+        except Exception as exc:
+            _json_response(
+                self,
+                500,
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "request_failed",
+                        "message": str(exc) or "请求没有完成，请稍后重试。",
+                        "recoverable": True,
+                    },
+                },
+            )
+
     def _handle_json(self, fn) -> None:
         try:
             _json_response(self, 200, {"ok": True, "data": fn()})
@@ -170,7 +255,7 @@ class DebugHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
-            self.send_header("Connection", "keep-alive")
+            self.send_header("Connection", "close")
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
             for event in generator:
@@ -180,6 +265,7 @@ class DebugHandler(BaseHTTPRequestHandler):
             done_payload = json.dumps({"ok": True, "step": "done"}, ensure_ascii=False)
             self.wfile.write(f"data: {done_payload}\n\n".encode("utf-8"))
             self.wfile.flush()
+            self.close_connection = True
         except Exception as exc:
             err_payload = json.dumps(
                 {"ok": False, "error": str(exc), "traceback": traceback.format_exc()},
@@ -190,6 +276,82 @@ class DebugHandler(BaseHTTPRequestHandler):
                 self.wfile.flush()
             except Exception:
                 pass
+            self.close_connection = True
+
+    @staticmethod
+    def _player_event(event: dict[str, Any]) -> dict[str, Any]:
+        step = str(event.get("step", "progress"))
+        data = event.get("data") or {}
+        if step == "scene_text_delta":
+            public_data = {"delta": data.get("delta", "")}
+        elif step == "scene_stream_started":
+            public_data = {
+                "attempt": data.get("attempt", 1),
+                "version_index": data.get("version_index"),
+            }
+        elif step == "retry_started":
+            public_data = {"version_index": data.get("version_index")}
+        elif step == "scene_written":
+            scene_result = data.get("scene_result") or {}
+            public_data = {
+                "turn_id": data.get("turn_id"),
+                "group_id": data.get("group_id"),
+                "version_index": data.get("version_index"),
+                "turn_index": data.get("turn_index"),
+                "scene_text": scene_result.get("scene_text", ""),
+                "closing_prompt": scene_result.get("closing_prompt", ""),
+            }
+        elif step == "finish":
+            public_data = {
+                "turn_id": data.get("turn_id"),
+                "status": data.get("status"),
+                "action_preview": data.get("action_preview"),
+            }
+        else:
+            public_data = {}
+        return {"step": step, "data": public_data}
+
+    def _handle_player_json_stream(self, generator_factory) -> None:
+        try:
+            generator = generator_factory()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            for event in generator:
+                payload = json.dumps(
+                    {"ok": True, **self._player_event(event)},
+                    ensure_ascii=False,
+                )
+                self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+                self.wfile.flush()
+            done_payload = json.dumps(
+                {"ok": True, "step": "done"}, ensure_ascii=False
+            )
+            self.wfile.write(f"data: {done_payload}\n\n".encode("utf-8"))
+            self.wfile.flush()
+            self.close_connection = True
+        except Exception as exc:
+            error = {
+                "ok": False,
+                "error": {
+                    "code": "stream_failed",
+                    "message": str(exc) or "本次操作没有完成，请重新尝试。",
+                    "recoverable": True,
+                },
+            }
+            try:
+                self.wfile.write(
+                    f"data: {json.dumps(error, ensure_ascii=False)}\n\n".encode(
+                        "utf-8"
+                    )
+                )
+                self.wfile.flush()
+            except Exception:
+                pass
+            self.close_connection = True
 
     def _load_traces(self) -> dict[str, Any]:
         params = parse_qs(urlparse(self.path).query)
@@ -249,6 +411,24 @@ class DebugHandler(BaseHTTPRequestHandler):
             scene_text=scene_text,
         )
 
+    def _player_confirm_stream(self):
+        payload = _read_json(self)
+        turn_id = str(payload.get("turn_id", "")).strip()
+        if not turn_id:
+            raise ValueError("turn_id is required")
+        scene_text = payload.get("scene_text")
+        if scene_text is not None:
+            scene_text = str(scene_text).strip()
+        yield from confirm_stream(turn_id, write_db=True, scene_text=scene_text)
+
+    def _player_init(self):
+        result = apply_core_memory_init(_read_json(self))
+        return {
+            "turn_id": result["turn_id"],
+            "opening_scene": result["opening_scene"],
+            "status": result["status"],
+        }
+
     def _retry_stream(self):
         payload = _read_json(self)
         turn_id = str(payload.get("turn_id", "")).strip()
@@ -273,13 +453,14 @@ class DebugHandler(BaseHTTPRequestHandler):
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the TVG Memory turn debugger.")
+    parser = argparse.ArgumentParser(description="Run TVG Memory.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
 
     server = ThreadingHTTPServer((args.host, args.port), DebugHandler)
-    print(f"TVG Memory Turn Debugger: http://{args.host}:{args.port}")
+    print(f"TVG Memory: http://{args.host}:{args.port}")
+    print(f"Debug Console: http://{args.host}:{args.port}/debug")
     server.serve_forever()
 
 

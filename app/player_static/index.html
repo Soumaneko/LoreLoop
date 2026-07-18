@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#141410" />
+  <title>TVG · 你的故事</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="TVG 首页">
+        <span class="brand-mark">T</span>
+        <span><strong>TVG</strong><small>YOUR LIVING STORY</small></span>
+      </a>
+      <div class="world-meta" aria-live="polite">
+        <span id="worldTime">尚未启程</span>
+        <i></i>
+        <span id="worldLocation">等待世界载入</span>
+      </div>
+      <div class="top-actions">
+        <span id="statusPill" class="status-pill" data-mode="booting"><b></b><span>载入中</span></span>
+        <button id="openDrawerBtn" class="icon-button" type="button" aria-label="打开旅程菜单" title="旅程菜单">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </header>
+
+    <main class="story-layout">
+      <section id="story" class="story" aria-live="polite">
+        <div id="welcome" class="welcome-card">
+          <div class="sigil">✦</div>
+          <p class="eyebrow">AN UNTOLD PATH</p>
+          <h1>故事等待你的选择</h1>
+          <p>这里没有预设答案。描述你想做的事，世界会记住已经发生的一切。</p>
+        </div>
+        <div id="history" class="history"></div>
+        <article id="streamingCard" class="narrative-card streaming-card" hidden>
+          <div class="narrative-kicker"><span class="quill">✦</span><span id="streamingLabel">世界正在回应</span></div>
+          <div id="streamingText" class="scene-text streaming-text"></div>
+          <div class="writing-indicator"><span></span><span></span><span></span></div>
+        </article>
+        <article id="pendingCard" class="narrative-card pending-card" hidden></article>
+        <section id="suggestions" class="suggestions" hidden>
+          <div class="section-heading"><span>一些可能的方向</span><i></i></div>
+          <div id="suggestionList" class="suggestion-list"></div>
+        </section>
+        <div id="errorCard" class="error-card" hidden>
+          <strong>这次回应没有完成</strong>
+          <p id="errorMessage">之前的故事没有受到影响，你可以重新尝试。</p>
+          <button id="dismissErrorBtn" type="button">知道了</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="composer-shell">
+      <div class="composer">
+        <textarea id="playerInput" rows="1" maxlength="4000" placeholder="你打算怎么做？"></textarea>
+        <div class="composer-footer">
+          <span id="inputHint">Ctrl / ⌘ + Enter 执行行动</span>
+          <button id="generateBtn" class="primary-action" type="button">
+            <span>执行行动</span><b>→</b>
+          </button>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
+  <aside id="drawer" class="drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div><p class="eyebrow">JOURNEY</p><h2>旅程</h2></div>
+      <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
+    </div>
+    <section class="drawer-section">
+      <label for="saveSelect">当前存档</label>
+      <div class="inline-control">
+        <select id="saveSelect"></select>
+        <button id="newSaveBtn" type="button" title="新建存档">＋</button>
+      </div>
+    </section>
+    <section class="drawer-section">
+      <div class="section-title">角色</div>
+      <div id="playerSummary" class="summary-card"></div>
+    </section>
+    <section class="drawer-section">
+      <div class="section-title">携带</div>
+      <div id="resourceSummary" class="resource-list"></div>
+    </section>
+    <section class="drawer-section">
+      <label for="difficultySelect">判定难度</label>
+      <select id="difficultySelect">
+        <option value="简单">简单 · 三骰取高</option>
+        <option value="普通">普通 · 双骰取高</option>
+        <option value="困难">困难 · 单骰判定</option>
+      </select>
+    </section>
+    <section class="drawer-section history-actions">
+      <button id="undoBtn" type="button"><span>↶</span>撤销上一回合</button>
+      <button id="redoBtn" type="button"><span>↷</span>重做回合</button>
+    </section>
+  </aside>
+
+  <dialog id="saveDialog" class="modal">
+    <form method="dialog" id="saveForm">
+      <p class="eyebrow">NEW JOURNEY</p>
+      <h2>新建存档</h2>
+      <p>存档名称同时也是本地文件夹名称。</p>
+      <input id="saveNameInput" maxlength="64" autocomplete="off" placeholder="例如：莱尔的旅程" />
+      <div class="modal-actions"><button id="saveCancelBtn" type="button">取消</button><button id="createSaveConfirmBtn" class="primary-action" value="default">创建</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="initDialog" class="modal init-modal">
+    <form method="dialog" id="initForm">
+      <p class="eyebrow">BEGIN A NEW STORY</p>
+      <h2>塑造你的起点</h2>
+      <p>只需要一个清晰的起点，余下的世界会在旅途中展开。</p>
+      <div class="form-grid">
+        <label><span>主角姓名</span><input name="protagonist_name" required placeholder="莱尔" /></label>
+        <label><span>性别</span><select name="protagonist_gender"><option>男</option><option>女</option><option>其他</option></select></label>
+        <label class="wide"><span>世界名称</span><input name="world_name" required placeholder="泰瑞大陆" /></label>
+        <label class="wide"><span>世界风格</span><textarea name="world_style" required placeholder="古典奇幻，衰落的王国与仍在苏醒的旧魔法"></textarea></label>
+        <label><span>能力体系</span><select name="ability_system"><option>魔法</option><option>低超自然</option><option>无超自然</option><option>灵能</option><option>科技奇迹</option></select></label>
+        <label><span>叙事基调</span><input name="narrative_tone" placeholder="冒险、神秘、有人情味" /></label>
+        <label class="wide"><span>人物背景</span><textarea name="protagonist_background" placeholder="一名带着未解谜团踏上旅途的年轻法师"></textarea></label>
+        <label class="wide"><span>希望体验的故事</span><textarea name="story_expectation" placeholder="探索未知，认识可信赖的同伴，并逐渐揭开世界的秘密"></textarea></label>
+      </div>
+      <div id="initError" class="form-error" hidden></div>
+      <div class="modal-actions"><button id="initSubmitBtn" class="primary-action" value="default">生成开场</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>

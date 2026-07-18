@@ -215,6 +215,10 @@ async function readEventStream(response, scope, onEvent) {
       if (!part.startsWith("data: ")) continue;
       const event = JSON.parse(part.slice(6));
       if (!event.ok) throw event;
+      if (event.step === "done") {
+        await reader.cancel();
+        return;
+      }
       const transient = event.step === "scene_stream_started" || event.step === "scene_text_delta";
       if (!transient) recordStep(scope, event);
       onEvent(event);

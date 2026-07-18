@@ -51,6 +51,23 @@ class TestShortTermMemoryStore:
         all_scenes = store.list_all()
         assert len(all_scenes) == 3
 
+    def test_list_page_uses_exclusive_turn_cursor(self):
+        store = ShortTermMemoryStore(max_items=2)
+        for i in range(1, 13):
+            store.add_turn(f"s{i}", i, "action", f"剧情{i}")
+
+        latest, has_more = store.list_page(limit=5)
+        assert [scene.turn_index for scene in latest] == [8, 9, 10, 11, 12]
+        assert has_more is True
+
+        previous, has_more = store.list_page(before_turn_index=8, limit=5)
+        assert [scene.turn_index for scene in previous] == [3, 4, 5, 6, 7]
+        assert has_more is True
+
+        oldest, has_more = store.list_page(before_turn_index=3, limit=5)
+        assert [scene.turn_index for scene in oldest] == [1, 2]
+        assert has_more is False
+
     def test_empty_store_returns_empty(self):
         store = ShortTermMemoryStore()
         memory = store.get_recent()

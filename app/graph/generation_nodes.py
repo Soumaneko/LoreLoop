@@ -377,6 +377,10 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
                     "scene_reasoning": composition.scene_reasoning,
                 },
             },
+            {
+                "step": "narrative_check_started",
+                "data": {"trace_id": state["trace_id"]},
+            },
         ],
     }
 

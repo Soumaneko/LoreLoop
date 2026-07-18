@@ -26,6 +26,7 @@ def test_debug_frontend_javascript_is_syntactically_valid():
 
 def test_debug_frontend_exposes_runtime_content():
     source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert 'event.step === "done"' in source
     for marker in (
         '["jobs", "后台任务"]',
         'Core Memory (${coreItems.length})',
@@ -46,6 +47,8 @@ def test_debug_frontend_exposes_runtime_content():
         assert marker in source
 
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'href="/debug-assets/styles.css"' in html
+    assert 'src="/debug-assets/app.js"' in html
     assert 'id="saveSelect"' in html
     assert 'id="createSaveBtn"' in html
 
