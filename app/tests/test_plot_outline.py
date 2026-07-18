@@ -419,7 +419,7 @@ class TestNarrativeComposerAgent:
         assert result.planned_events[0].linked_outcome_ids == ["a1"]
         assert "仔细观察" in result.planned_events[0].event_fact
 
-    def test_retries_when_turn_resolution_outcomes_are_out_of_order(self):
+    def test_accepts_turn_resolution_outcomes_in_any_link_order(self):
         context = _make_context()
         context.turn_resolution = TurnResolutionResult(
             action_resolutions=[
@@ -443,26 +443,18 @@ class TestNarrativeComposerAgent:
                 ),
             ],
         )
-        invalid = _build_outline_response(
+        response = _build_outline_response(
             planned_events=[
                 {
-                    "event_fact": "主角先撤离再挖沟，顺序错误。",
+                    "event_fact": "主角挖沟后撤离，事件同时关联两个判定结果。",
                     "linked_outcome_ids": ["A3", "A2"],
                 }
             ]
         )
-        valid = _build_outline_response(
-            planned_events=[
-                {
-                    "event_fact": "主角根据用户原文先亲手快速挖出浅沟，完成后立即沿绕行路线返回镇子。",
-                    "linked_outcome_ids": ["A2", "A3"],
-                }
-            ]
-        )
         mock = MockLLM()
-        mock.set_responses([invalid, valid])
+        mock.set_responses([response])
 
         result = NarrativeComposerAgent(mock.build_gateway()).compose(context)
 
-        assert result.planned_events[0].linked_outcome_ids == ["A2", "A3"]
-        assert "挖出浅沟" in result.planned_events[0].event_fact
+        assert result.planned_events[0].linked_outcome_ids == ["A3", "A2"]
+        assert "挖沟后撤离" in result.planned_events[0].event_fact

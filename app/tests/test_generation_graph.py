@@ -16,14 +16,16 @@ def test_generation_graph_compiles():
     assert graph is not None
 
 
-def test_director_event_consumer_runs_after_resolution_and_before_composer():
+def test_consumer_composer_and_consistency_checker_run_in_order():
     graph = generation_graph.build_generation_graph().get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
     assert ("resolve_turn", "consume_director_events") in edges
     assert ("consume_director_events", "compose_narrative") in edges
     assert ("maybe_director_npc", "compose_narrative") in edges
-    assert ("compose_narrative", "__end__") in edges
+    assert ("compose_narrative", "check_narrative_consistency") in edges
+    assert ("check_narrative_consistency", "__end__") in edges
+    assert ("compose_narrative", "__end__") not in edges
     assert ("extract_context_facts", "consume_director_events") not in edges
 
 

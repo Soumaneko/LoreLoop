@@ -16,6 +16,7 @@ from app.domain.narrative_composer.schemas import (
     NarrativeComposerContext,
     NarrativeComposerResult,
 )
+from app.domain.narrative_consistency.schemas import NarrativeConsistencyReview
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import Difficulty, RollConfig, RollResultBatch
@@ -80,6 +81,8 @@ class GenerationState(TypedDict, total=False):
     director_npc_result: DirectorNPCWorkflowResult | None
     context: NarrativeComposerContext
     narrative_composition: NarrativeComposerResult
+    narrative_consistency_review: NarrativeConsistencyReview
+    narrative_consistency_changed_paragraph_ids: list[str]
     outline: PlotOutlineResult
 
     beat_entity_anchors: list[Anchor]

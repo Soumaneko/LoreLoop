@@ -2,7 +2,12 @@ import sqlite3
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
-from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
+from app.runtime.sqlite import (
+    connect_sqlite,
+    ensure_column,
+    ensure_schema_version,
+    transaction,
+)
 
 
 class ShortTermScene(BaseModel):
@@ -10,6 +15,7 @@ class ShortTermScene(BaseModel):
     turn_index: int
     user_input: str = ""
     scene_text: str
+    closing_prompt: str = ""
     created_at: str | None = None
 
 
@@ -36,11 +42,18 @@ class ShortTermMemoryStore:
                 turn_index INTEGER NOT NULL,
                 user_input TEXT NOT NULL DEFAULT '',
                 scene_text TEXT NOT NULL,
+                closing_prompt TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL
             )
             """
         )
-        ensure_schema_version(self._conn, "short_term_memory", 1)
+        ensure_column(
+            self._conn,
+            "short_term_scenes",
+            "closing_prompt",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        ensure_schema_version(self._conn, "short_term_memory", 2)
         self._conn.commit()
 
     def add_turn(
@@ -49,6 +62,7 @@ class ShortTermMemoryStore:
         turn_index: int,
         user_input: str,
         scene_text: str,
+        closing_prompt: str = "",
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with transaction(self._conn):
@@ -59,11 +73,19 @@ class ShortTermMemoryStore:
             self._conn.execute(
                 """
                 INSERT INTO short_term_scenes (
-                    scene_id, turn_index, user_input, scene_text, created_at
+                    scene_id, turn_index, user_input, scene_text,
+                    closing_prompt, created_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (scene_id, turn_index, user_input, scene_text, now),
+                (
+                    scene_id,
+                    turn_index,
+                    user_input,
+                    scene_text,
+                    closing_prompt,
+                    now,
+                ),
             )
 
     def get_recent(self) -> ShortTermMemory:
@@ -95,6 +117,7 @@ class ShortTermMemoryStore:
             turn_index=row["turn_index"],
             user_input=row["user_input"],
             scene_text=row["scene_text"],
+            closing_prompt=row["closing_prompt"],
             created_at=row["created_at"],
         )
 

@@ -372,19 +372,26 @@ function setDebugStatus(label) {
   els.debugStatus.textContent = label;
 }
 
-function addMessage(role, body, meta = "") {
+function addMessage(role, body, meta = "", closingPrompt = "") {
   const wrap = document.createElement("div");
   wrap.className = `message ${role}`;
-  wrap.innerHTML = `<div class="bubble">${meta ? `<div class="bubble-meta">${esc(meta)}</div>` : ""}${esc(body)}</div>`;
+  wrap.innerHTML = `<div class="bubble">${meta ? `<div class="bubble-meta">${esc(meta)}</div>` : ""}${esc(body)}${closingPrompt ? `<div class="scene-closing-prompt">${esc(closingPrompt)}</div>` : ""}</div>`;
   els.messages.appendChild(wrap);
   els.messages.scrollTop = els.messages.scrollHeight;
 }
 
 function restoreChat(history) {
   els.messages.innerHTML = "";
-  for (const turn of history || []) {
+  const turns = history || [];
+  for (const [index, turn] of turns.entries()) {
     if (turn.user_input) addMessage("user", turn.user_input, "玩家行动");
-    addMessage("assistant", turn.scene_text, `Turn ${turn.turn_index} · ${turn.scene_id}`);
+    const latestClosingPrompt = index === turns.length - 1 ? turn.closing_prompt || "" : "";
+    addMessage(
+      "assistant",
+      turn.scene_text,
+      `Turn ${turn.turn_index} · ${turn.scene_id}`,
+      latestClosingPrompt,
+    );
   }
 }
 
@@ -972,6 +979,7 @@ function stepTasks(scope, stepName) {
     turn_resolution_done: ["turn_resolution"],
     director_npc_done: ["director_npc_create", "director_npc_dispatch"],
     outline_done: ["narrative_compose"],
+    narrative_checked: ["narrative_consistency_check"],
     scene_written: ["narrative_compose"],
   };
   const confirmation = {
@@ -1024,6 +1032,11 @@ function stepSummary(name, data) {
   if (name === "retrieval_done") return `${data.retrieved_memories?.total_returned || 0} memories`;
   if (name === "rolls_done") return `${data.roll_results?.total_rolls || 0} rolls`;
   if (name === "director_npc_done") return directorNpcStepSummary(data.director_npc_result);
+  if (name === "narrative_checked") {
+    const review = data.narrative_consistency_review || {};
+    const changed = data.changed_paragraph_ids?.length || 0;
+    return changed ? `${review.decision || "patch"} · ${changed} paragraphs` : (review.decision || "pass");
+  }
   if (name === "scene_written") return `turn ${data.turn_index || "?"}`;
   if (name === "state_update_done") return "state updated";
   if (name === "scene_facts_done") return `${data.scene_facts?.facts?.length || 0} facts`;
@@ -1050,6 +1063,10 @@ function renderGeneration() {
     ${card("Turn Resolution", renderResolution(g.turn_resolution))}
     ${card("Director NPC", renderDirectorNpcResult(g.director_npc_result))}
     ${card("Narrative Composer · Plan", renderOutline(g.plot_outline))}
+    ${card("Narrative Consistency Check", renderNarrativeConsistency(
+      g.narrative_consistency_review,
+      g.changed_paragraph_ids || g.narrative_consistency_changed_paragraph_ids || [],
+    ))}
     ${card("Narrative Composer · Scene", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>${g.scene_result.closing_prompt ? `<div class="section-card muted">${esc(g.scene_result.closing_prompt)}</div>` : ""}` : `<div class="empty">未生成正文</div>`)}
     ${card("上下文档案", `
       ${metrics([
@@ -1281,6 +1298,68 @@ function renderResolution(result) {
         ["事实结论", esc(text(o.resolved_fact))],
       ])}
     </div>`).join("")}
+  `;
+}
+
+function consistencyTone(value) {
+  if (value === "pass") return "ok";
+  if (value === "patch" || value === "issue") return "warn";
+  if (value === "reject") return "bad";
+  return "";
+}
+
+function renderConsistencyIssues(issues) {
+  if (!issues || !issues.length) return `<div class="empty">无问题</div>`;
+  return issues.map((issue) => `<div class="consistency-issue">
+    <div class="card-title">
+      <span>${esc(text(issue.issue_type, "issue"))}</span>
+      ${chips(issue.paragraph_ids || [], "无段落")}
+    </div>
+    <div>${esc(text(issue.explanation))}</div>
+  </div>`).join("");
+}
+
+function renderNarrativeConsistency(review, changedParagraphIds = []) {
+  if (!review) return `<div class="empty">尚未检查</div>`;
+  const segments = review.segment_reviews || [];
+  const cross = review.cross_segment_review || {};
+  const issueCount = segments.reduce((count, item) => count + (item.issues?.length || 0), 0)
+    + (cross.issues?.length || 0);
+  const changed = changedParagraphIds || [];
+
+  return `
+    ${metrics([
+      metric("判定", review.decision || "?", consistencyTone(review.decision)),
+      metric("分段", segments.length, "info"),
+      metric("问题", issueCount, issueCount ? "warn" : "ok"),
+      metric("修改段落", changed.length, changed.length ? "warn" : ""),
+    ])}
+    <div class="section-card">
+      <div class="card-title"><span>整体结论</span>${metric("decision", review.decision || "?", consistencyTone(review.decision))}</div>
+      <div class="consistency-copy">${esc(text(review.summary))}</div>
+      ${changed.length ? `<div class="consistency-refs">${chips(changed)}</div>` : ""}
+    </div>
+    ${segments.map((segment) => `<div class="section-card">
+      <div class="card-title">
+        <span>${esc(segment.segment_id || "S???")} · ${esc((segment.paragraph_ids || []).join(", ") || "无段落")}</span>
+        ${metric("verdict", segment.verdict || "?", consistencyTone(segment.verdict))}
+      </div>
+      <div class="consistency-copy">${esc(text(segment.audit_reasoning))}</div>
+      <div class="consistency-refs">${chips(segment.contract_refs || [], "无引用")}</div>
+      ${segment.issues?.length ? renderConsistencyIssues(segment.issues) : ""}
+    </div>`).join("")}
+    ${details("跨段审查", `
+      <div class="section-card">
+        <div class="card-title"><span>跨段结论</span>${metric("verdict", cross.verdict || "?", consistencyTone(cross.verdict))}</div>
+        <div class="consistency-copy">${esc(text(cross.summary))}</div>
+        ${cross.issues?.length ? renderConsistencyIssues(cross.issues) : ""}
+      </div>
+    `, true)}
+    ${(review.patches || []).length ? details("补丁", (review.patches || []).map((item) => `<div class="section-card">
+      <div class="card-title"><span>${esc(item.start_paragraph_id)} → ${esc(item.end_paragraph_id)}</span></div>
+      <div class="consistency-copy">${esc(text(item.replacement, "删除该段"))}</div>
+    </div>`).join(""), true) : ""}
+    ${details("完整 JSON", jsonBlock(review))}
   `;
 }
 
@@ -1812,6 +1891,9 @@ async function refreshState({ preserveStatus = false } = {}) {
 
 async function refreshMaintenanceJobs() {
   if (!state.serverState) return;
+  const jobs = state.serverState.maintenance_jobs || [];
+  const hasActiveJobs = jobs.some((job) => ["queued", "running"].includes(job.status));
+  if (!hasActiveJobs) return;
   try {
     const data = await api("/api/maintenance-jobs?limit=100");
     state.serverState.maintenance_jobs = data.jobs || [];
@@ -1860,6 +1942,7 @@ async function generateTurn() {
       if (event.step === "action_parsed") state.activeTab = "generation";
       if (event.step === "scene_stream_started") startStreamingScene(data.attempt || 1);
       if (event.step === "scene_text_delta") appendStreamingScene(data.delta || "");
+      if (event.step === "narrative_checked") setDebugStatus("一致性检查完成");
       if (event.step === "scene_written") {
         appendPendingVariant(data);
         setStatus("正文已生成 - 待确认");
@@ -1901,6 +1984,7 @@ async function retryTurn() {
       if (event.step === "action_parsed") state.activeTab = "generation";
       if (event.step === "scene_stream_started") startStreamingScene(data.attempt || 1);
       if (event.step === "scene_text_delta") appendStreamingScene(data.delta || "");
+      if (event.step === "narrative_checked") setDebugStatus("一致性检查完成");
       if (event.step === "scene_written") {
         appendPendingVariant(data);
         setStatus("新版本已生成 - 待确认");

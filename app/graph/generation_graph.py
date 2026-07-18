@@ -14,6 +14,7 @@ from .generation_helpers import (
 )
 from .generation_events import GenerationEventPresenter
 from .generation_nodes import (
+    check_narrative_consistency_node,
     compose_narrative_node,
     consume_director_events_node,
     evaluate_roll_modifiers_node,
@@ -34,6 +35,7 @@ def build_generation_graph():
         resolve_turn_node,
         maybe_director_npc_node,
         compose_narrative_node,
+        check_narrative_consistency_node,
     )
     return get_cached_graph(
         "generation",
@@ -51,6 +53,7 @@ def _compile_generation_graph():
     graph.add_node("resolve_turn", resolve_turn_node)
     graph.add_node("maybe_director_npc", maybe_director_npc_node)
     graph.add_node("compose_narrative", compose_narrative_node)
+    graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
 
     graph.add_edge(START, "extract_context_facts")
     graph.add_edge(START, "parse_action")
@@ -62,7 +65,8 @@ def _compile_generation_graph():
         ["maybe_director_npc", "consume_director_events"],
         "compose_narrative",
     )
-    graph.add_edge("compose_narrative", END)
+    graph.add_edge("compose_narrative", "check_narrative_consistency")
+    graph.add_edge("check_narrative_consistency", END)
 
     return graph.compile()
 

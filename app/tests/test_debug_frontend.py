@@ -31,11 +31,17 @@ def test_debug_frontend_exposes_runtime_content():
         'Core Memory (${coreItems.length})',
         '持久化记忆快照',
         '/api/maintenance-jobs?limit=100',
+        'const hasActiveJobs = jobs.some',
+        'turn.closing_prompt || ""',
         'data.pending_openings?.[0]',
         '/api/saves/switch',
         '/api/saves/create',
         '/api/pending/discard',
         'class="scene-discard"',
+        'function renderNarrativeConsistency',
+        'segment.audit_reasoning',
+        'details("跨段审查"',
+        'details("完整 JSON"',
     ):
         assert marker in source
 

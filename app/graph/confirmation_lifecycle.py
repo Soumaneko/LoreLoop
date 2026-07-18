@@ -210,6 +210,7 @@ class ConfirmationCommitter:
                     turn_index=pipeline_input.turn_index,
                     user_input=pipeline_input.user_input,
                     scene_text=state["effective_scene_text"],
+                    closing_prompt=pipeline_input.scene_result.closing_prompt,
                 )
                 cache["short_term_saved"] = True
             short_term_after = short_store.get_recent()

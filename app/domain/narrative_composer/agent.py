@@ -65,16 +65,16 @@ class NarrativeComposerAgent:
 
             @model_validator(mode="after")
             def _require_all_turn_resolution_outcomes(self):
-                linked_in_order: list[str] = []
+                linked_ids: list[str] = []
                 for event in self.planned_events:
                     for outcome_id in event.linked_outcome_ids:
-                        if outcome_id not in linked_in_order:
-                            linked_in_order.append(outcome_id)
+                        if outcome_id not in linked_ids:
+                            linked_ids.append(outcome_id)
 
                 expected_ids = set(expected_outcome_ids)
                 unknown = [
                     outcome_id
-                    for outcome_id in linked_in_order
+                    for outcome_id in linked_ids
                     if outcome_id not in expected_ids
                 ]
                 if unknown:
@@ -85,7 +85,7 @@ class NarrativeComposerAgent:
                 missing = [
                     outcome_id
                     for outcome_id in expected_outcome_ids
-                    if outcome_id not in set(linked_in_order)
+                    if outcome_id not in set(linked_ids)
                 ]
                 if missing:
                     raise ValueError(
@@ -93,11 +93,6 @@ class NarrativeComposerAgent:
                         f"missing linked_outcome_ids: {missing}"
                     )
 
-                if linked_in_order != expected_outcome_ids:
-                    raise ValueError(
-                        "turn resolution outcomes must be enacted in order; "
-                        f"expected {expected_outcome_ids}, got {linked_in_order}"
-                    )
                 return self
 
         schema = RuntimeNarrativeComposerResult.model_json_schema()

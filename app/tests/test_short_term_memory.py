@@ -9,7 +9,7 @@ from app.domain.short_term_memory import ShortTermMemory, ShortTermScene, ShortT
 class TestShortTermMemoryStore:
     def test_add_and_get_recent(self):
         store = ShortTermMemoryStore(max_items=5)
-        store.add_turn("s1", 1, "观察四周", "第一段剧情")
+        store.add_turn("s1", 1, "观察四周", "第一段剧情", "接下来做什么？")
         store.add_turn("s2", 2, "与米莉交谈", "第二段剧情")
 
         memory = store.get_recent()
@@ -17,9 +17,11 @@ class TestShortTermMemoryStore:
         assert memory.recent_scenes[0].scene_id == "s1"
         assert memory.recent_scenes[0].user_input == "观察四周"
         assert memory.recent_scenes[0].scene_text == "第一段剧情"
+        assert memory.recent_scenes[0].closing_prompt == "接下来做什么？"
         assert memory.recent_scenes[1].scene_id == "s2"
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "第二段剧情"
+        assert memory.recent_scenes[1].closing_prompt == ""
         assert memory.max_items == 5
 
     def test_evicts_oldest_when_exceeded(self):
@@ -98,6 +100,7 @@ class TestShortTermMemoryModel:
             scene_id="s1", turn_index=1, scene_text="剧情",
         )
         assert scene.user_input == ""
+        assert scene.closing_prompt == ""
 
 
 class TestShortTermMemoryPersistence:
@@ -107,7 +110,13 @@ class TestShortTermMemoryPersistence:
 
         store1 = ShortTermMemoryStore(db_path=db_path)
         store1.add_turn("s1", 1, "探索酒馆", "主角环顾四周。")
-        store1.add_turn("s2", 2, "与米莉交谈", "米莉告诉主角一条密道。")
+        store1.add_turn(
+            "s2",
+            2,
+            "与米莉交谈",
+            "米莉告诉主角一条密道。",
+            "要进入密道吗？",
+        )
         store1.close()
 
         store2 = ShortTermMemoryStore(db_path=db_path)
@@ -121,6 +130,7 @@ class TestShortTermMemoryPersistence:
         assert memory.recent_scenes[1].scene_id == "s2"
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "米莉告诉主角一条密道。"
+        assert memory.recent_scenes[1].closing_prompt == "要进入密道吗？"
 
         import os
         os.unlink(db_path)
@@ -161,6 +171,7 @@ class TestShortTermMemoryPersistence:
         store.close()
 
         assert memory.recent_scenes[0].scene_text == "旧剧情"
+        assert memory.recent_scenes[0].closing_prompt == ""
         assert updated.recent_scenes[1].scene_text == "新剧情"
 
         import os

@@ -13,6 +13,7 @@ from app.domain.narrative_composer import (
     NarrativeComposerAgent,
     build_entity_retrieval_anchors,
 )
+from app.domain.narrative_consistency import NarrativeConsistencyAgent
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
@@ -377,4 +378,38 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
                 },
             },
         ],
+    }
+
+
+def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
+    composition = state["narrative_composition"]
+    outcome = NarrativeConsistencyAgent(gateway_for(state)).check(
+        user_input=state["user_input"],
+        current_state=state["current_state"],
+        turn_resolution=state["turn_resolution"],
+        context_facts=state["context_facts"],
+        recent_scene=state.get("recent_scene"),
+        composition=composition,
+        trace_id=state["trace_id"],
+    )
+    checked_composition = (
+        composition.model_copy(update={"scene_text": outcome.scene_text})
+        if outcome.changed
+        else composition
+    )
+    scene_result = checked_composition.to_scene_result()
+    return {
+        "narrative_composition": checked_composition,
+        "narrative_consistency_review": outcome.review,
+        "narrative_consistency_changed_paragraph_ids": outcome.changed_paragraph_ids,
+        "scene_result": scene_result,
+        "events": [{
+            "step": "narrative_checked",
+            "data": {
+                "trace_id": state["trace_id"],
+                "narrative_consistency_review": model_data(outcome.review),
+                "changed_paragraph_ids": outcome.changed_paragraph_ids,
+                "scene_result": model_data(scene_result),
+            },
+        }],
     }
