@@ -11,14 +11,24 @@ from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.director_event.consumer import DirectorEventConsumer
 from app.domain.narrative_composer import (
     NarrativeComposerAgent,
+    NarrativeRevisionRequest,
     build_entity_retrieval_anchors,
 )
-from app.domain.narrative_consistency import NarrativeConsistencyAgent
+from app.domain.narrative_canon_query import (
+    NarrativeCanonQueryAgent,
+    build_entity_catalog,
+)
+from app.domain.canon_evidence import rebuild_and_retrieve_canon_evidence
+from app.domain.narrative_consistency import (
+    NarrativeConsistencyAgent,
+    render_revision_instruction,
+)
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
 from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
+from app.domain.turn_resolution.views import project_turn_resolution
 from app.runtime.serialization import model_data
 from app.domain.director_npc.workflows import maybe_director_npc_workflow
 from app.domain.retrieval.service import retrieve_candidates
@@ -32,6 +42,47 @@ from .generation_state import GenerationState
 
 def _store_factory(state: GenerationState, name: str):
     return getattr(state["runtime_services"].stores, name)
+
+
+def _composition_output_state(
+    state: GenerationState,
+    composition,
+) -> GenerationState:
+    outline = composition.to_outline()
+    scene_result = composition.to_scene_result()
+    beat_entity_anchors = build_entity_retrieval_anchors(outline)
+    anchors = [
+        *state["action_parse_result"].anchors,
+        *beat_entity_anchors,
+    ]
+    with (
+        _store_factory(state, "entity")() as ent_store,
+        _store_factory(state, "npc_profile")() as npc_store,
+    ):
+        composer_entity_profiles = gather_entity_profiles_from_state_and_anchors(
+            current_state=state["current_state"],
+            anchors=anchors,
+            entity_store=ent_store,
+        )
+        composer_npc_profiles = gather_npc_profiles_from_state_and_anchors(
+            current_state=state["current_state"],
+            anchors=anchors,
+            npc_store=npc_store,
+        )
+    return {
+        "narrative_composition": composition,
+        "outline": outline,
+        "beat_entity_anchors": beat_entity_anchors,
+        "composer_entity_profile_views": [
+            profile.semantic_view()
+            for profile in composer_entity_profiles
+        ],
+        "composer_npc_public_views": [
+            profile.public_view()
+            for profile in composer_npc_profiles
+        ],
+        "scene_result": scene_result,
+    }
 
 
 def extract_context_facts_node(state: GenerationState) -> GenerationState:
@@ -325,46 +376,12 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
             "data": {"delta": delta, "trace_id": state["trace_id"]},
         }),
     )
-    outline = composition.to_outline()
-    scene_result = composition.to_scene_result()
-    beat_entity_anchors = build_entity_retrieval_anchors(outline)
-    anchors = [
-        *state["action_parse_result"].anchors,
-        *beat_entity_anchors,
-    ]
-    with (
-        _store_factory(state, "entity")() as ent_store,
-        _store_factory(state, "npc_profile")() as npc_store,
-    ):
-        composer_entity_profiles = gather_entity_profiles_from_state_and_anchors(
-            current_state=state["current_state"],
-            anchors=anchors,
-            entity_store=ent_store,
-        )
-        composer_npc_profiles = gather_npc_profiles_from_state_and_anchors(
-            current_state=state["current_state"],
-            anchors=anchors,
-            npc_store=npc_store,
-        )
-
-    composer_entity_profile_views = [
-        profile.semantic_view()
-        for profile in composer_entity_profiles
-    ]
-    composer_npc_public_views = [
-        profile.public_view()
-        for profile in composer_npc_profiles
-    ]
+    output_state = _composition_output_state(state, composition)
     return {
         "context": context,
-        "narrative_composition": composition,
-        "outline": outline,
-        "beat_entity_anchors": beat_entity_anchors,
-        "composer_entity_profile_views": composer_entity_profile_views,
-        "composer_npc_public_views": composer_npc_public_views,
+        **output_state,
         "recent_scene": recent_scene,
         "next_turn_index": next_turn_index,
-        "scene_result": scene_result,
         "events": [
             {
                 "step": "context_assembled",
@@ -373,8 +390,79 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
             {
                 "step": "outline_done",
                 "data": {
-                    "plot_outline": model_data(outline),
+                    "plot_outline": model_data(output_state["outline"]),
                     "scene_reasoning": composition.scene_reasoning,
+                },
+            },
+        ],
+    }
+
+
+def generate_canon_queries_node(state: GenerationState) -> GenerationState:
+    get_stream_writer()({
+        "step": "canon_query_started",
+        "data": {"trace_id": state["trace_id"]},
+    })
+    with (
+        _store_factory(state, "entity")() as entity_store,
+        _store_factory(state, "npc_profile")() as npc_store,
+    ):
+        entity_profiles = [
+            profile.semantic_view()
+            for profile in entity_store.list_all()
+        ]
+        npc_profiles = [
+            profile.director_view()
+            for profile in npc_store.list_all()
+        ]
+        entity_catalog = build_entity_catalog(
+            player_name=state["current_state"].player.name,
+            entity_profiles=entity_profiles,
+            npc_profiles=npc_profiles,
+        )
+    query_set = NarrativeCanonQueryAgent(gateway_for(state)).generate(
+        scene_text=state["narrative_composition"].scene_text,
+        player_name=state["current_state"].player.name,
+        entity_profiles=entity_profiles,
+        npc_profiles=npc_profiles,
+        trace_id=state["trace_id"],
+    )
+    return {
+        "canon_entity_catalog": entity_catalog,
+        "canon_query_set": query_set,
+        "events": [{
+            "step": "canon_queries_generated",
+            "data": {
+                "trace_id": state["trace_id"],
+                "canon_query_set": model_data(query_set),
+            },
+        }],
+    }
+
+
+def retrieve_canon_evidence_node(state: GenerationState) -> GenerationState:
+    with (
+        _store_factory(state, "short_term")() as short_term_store,
+        _store_factory(state, "canon_evidence")() as evidence_store,
+    ):
+        evidence_set = rebuild_and_retrieve_canon_evidence(
+            query_set=state["canon_query_set"],
+            short_term_store=short_term_store,
+            evidence_store=evidence_store,
+            entity_catalog=state["canon_entity_catalog"],
+        )
+    evidence_query_count = sum(
+        1 for result in evidence_set.results if result.evidence
+    )
+    return {
+        "canon_evidence_set": evidence_set,
+        "events": [
+            {
+                "step": "canon_evidence_retrieved",
+                "data": {
+                    "trace_id": state["trace_id"],
+                    "canon_evidence_set": model_data(evidence_set),
+                    "queries_with_evidence": evidence_query_count,
                 },
             },
             {
@@ -387,33 +475,73 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
 
 def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
     composition = state["narrative_composition"]
-    outcome = NarrativeConsistencyAgent(gateway_for(state)).check(
+    review = NarrativeConsistencyAgent(gateway_for(state)).check(
         user_input=state["user_input"],
         current_state=state["current_state"],
-        turn_resolution=state["turn_resolution"],
-        context_facts=state["context_facts"],
-        recent_scene=state.get("recent_scene"),
+        turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
         composition=composition,
+        canon_query_set=state.get("canon_query_set"),
+        canon_evidence_set=state.get("canon_evidence_set"),
         trace_id=state["trace_id"],
     )
-    checked_composition = (
-        composition.model_copy(update={"scene_text": outcome.scene_text})
-        if outcome.changed
-        else composition
-    )
-    scene_result = checked_composition.to_scene_result()
     return {
-        "narrative_composition": checked_composition,
-        "narrative_consistency_review": outcome.review,
-        "narrative_consistency_changed_paragraph_ids": outcome.changed_paragraph_ids,
-        "scene_result": scene_result,
+        "narrative_consistency_review": review,
         "events": [{
             "step": "narrative_checked",
             "data": {
                 "trace_id": state["trace_id"],
-                "narrative_consistency_review": model_data(outcome.review),
-                "changed_paragraph_ids": outcome.changed_paragraph_ids,
-                "scene_result": model_data(scene_result),
+                "narrative_consistency_review": model_data(review),
+                "revision_required": review.decision == "revise",
+            },
+        }],
+    }
+
+
+def revise_narrative_node(state: GenerationState) -> GenerationState:
+    stream_writer = get_stream_writer()
+    review = state["narrative_consistency_review"]
+    instruction = render_revision_instruction(review)
+    stream_writer({
+        "step": "narrative_revision_started",
+        "data": {"trace_id": state["trace_id"]},
+    })
+    composition = NarrativeComposerAgent(gateway_for(state)).compose(
+        state["context"],
+        recent_scene=state.get("recent_scene"),
+        turn_index=state["next_turn_index"],
+        revision_request=NarrativeRevisionRequest(
+            previous_scene_text=state["narrative_composition"].scene_text,
+            instruction=instruction,
+        ),
+        trace_id=state["trace_id"],
+        on_stream_start=lambda attempt: stream_writer({
+            "step": "scene_stream_started",
+            "data": {
+                "attempt": attempt,
+                "revision": True,
+                "trace_id": state["trace_id"],
+            },
+        }),
+        on_scene_text_delta=lambda delta: stream_writer({
+            "step": "scene_text_delta",
+            "data": {
+                "delta": delta,
+                "revision": True,
+                "trace_id": state["trace_id"],
+            },
+        }),
+    )
+    output_state = _composition_output_state(state, composition)
+    return {
+        **output_state,
+        "narrative_revision_instruction": instruction,
+        "events": [{
+            "step": "narrative_revised",
+            "data": {
+                "trace_id": state["trace_id"],
+                "revision_instruction": instruction,
+                "plot_outline": model_data(output_state["outline"]),
+                "scene_result": model_data(output_state["scene_result"]),
             },
         }],
     }

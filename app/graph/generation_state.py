@@ -16,6 +16,11 @@ from app.domain.narrative_composer.schemas import (
     NarrativeComposerContext,
     NarrativeComposerResult,
 )
+from app.domain.narrative_canon_query.schemas import (
+    CanonEntityReference,
+    NarrativeCanonQuerySet,
+)
+from app.domain.canon_evidence.schemas import CanonEvidenceSet
 from app.domain.narrative_consistency.schemas import NarrativeConsistencyReview
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.retrieval.schemas import CandidateRetrievalResult
@@ -81,8 +86,11 @@ class GenerationState(TypedDict, total=False):
     director_npc_result: DirectorNPCWorkflowResult | None
     context: NarrativeComposerContext
     narrative_composition: NarrativeComposerResult
+    canon_entity_catalog: list[CanonEntityReference]
+    canon_query_set: NarrativeCanonQuerySet
+    canon_evidence_set: CanonEvidenceSet
     narrative_consistency_review: NarrativeConsistencyReview
-    narrative_consistency_changed_paragraph_ids: list[str]
+    narrative_revision_instruction: str
     outline: PlotOutlineResult
 
     beat_entity_anchors: list[Anchor]

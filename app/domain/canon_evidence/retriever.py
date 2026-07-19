@@ -19,6 +19,35 @@ from .store import CanonEvidenceStore
 
 SEMANTIC_ADMISSION_THRESHOLD = 0.12
 
+COMMON_HISTORY_RELATION_CUES = {
+    "告诉", "听说", "得知", "第一次", "首次", "陌生", "询问",
+    "发现", "意识到", "决定", "曾经", "此前", "过去", "以前",
+    "去过", "到访", "探索", "住过",
+}
+CLAIM_TYPE_RELATION_CUES = {
+    "past_event": {"发生", "做过", "见过", "遇到", "经历"},
+    "knowledge_provenance": {
+        "知道", "知悉", "获知", "说出", "解释", "记得", "相信",
+    },
+    "causal_motivation": {"因为", "因此", "为了", "原因", "动机", "目标"},
+    "identity_or_relationship": {
+        "身份", "关系", "认识", "朋友", "敌人", "亲人", "化名",
+    },
+    "ownership_or_resource": {
+        "拥有", "持有", "属于", "获得", "丢失", "购买", "支付", "交给",
+    },
+    "location_or_presence": {
+        "到过", "抵达", "离开", "前往", "来到", "居住", "位于", "在场",
+    },
+    "world_rule_or_history": {
+        "传说", "规则", "历史", "始终", "只能", "无法", "由来",
+    },
+    "persistent_state": {
+        "仍然", "依然", "已经", "保持", "失去", "受伤", "死亡", "存活",
+    },
+    "other": {"起初", "后来", "当时", "原本", "从前"},
+}
+
 
 class CanonEvidenceRetriever:
     def __init__(
@@ -76,7 +105,11 @@ class CanonEvidenceRetriever:
             _remove_entity_surfaces(text, requested_entities, self._surfaces)
             for text in search_texts
         ]
-        query_trigrams = set().union(*(_trigrams(text) for text in semantic_texts))
+        query_trigram_sets = [
+            trigrams
+            for text in semantic_texts
+            if (trigrams := _trigrams(text))
+        ]
 
         fts_hits: dict[str, float] = {}
         search_terms = _fts_terms(search_texts, requested_entities, self._surfaces)
@@ -84,50 +117,89 @@ class CanonEvidenceRetriever:
             for document_id, score in self.store.fts_search(term).items():
                 fts_hits[document_id] = max(fts_hits.get(document_id, 0.0), score)
 
-        scored = []
+        strong_scored = []
+        weak_scored = []
         for document in documents:
-            document_mentions = doc_mentions.get(document.document_id, set())
+            admission_documents = _three_paragraph_window(
+                document,
+                by_turn[document.turn_index],
+            )
+            admission_text = "\n\n".join(
+                item.text for item in admission_documents
+            )
+            document_mentions = set().union(*(
+                doc_mentions.get(item.document_id, set())
+                for item in admission_documents
+            ))
             matched_entities = sorted(
                 set(requested_entities) & document_mentions
             )
-            doc_trigrams = _trigrams(document.text)
-            matched_trigrams = query_trigrams & doc_trigrams
-            lexical_score = (
-                len(matched_trigrams) / max(1, min(len(query_trigrams), len(doc_trigrams)))
+            lexical_score, matched_trigrams = _best_trigram_match(
+                query_trigram_sets,
+                admission_text,
             )
-            entity_admitted = (
+            matched_relation_cues = _matched_relation_cues(
+                query.claim_type,
+                admission_text,
+            )
+            entity_cooccurs = (
                 len(requested_entities) >= 2
                 and len(matched_entities) == len(requested_entities)
             )
+            entity_admitted = entity_cooccurs and bool(matched_relation_cues)
             semantic_admitted = lexical_score >= SEMANTIC_ADMISSION_THRESHOLD
+            weak_entity_fallback = (
+                entity_cooccurs
+                and not entity_admitted
+                and not semantic_admitted
+            )
             has_fts = document.document_id in fts_hits
-            if not (entity_admitted or semantic_admitted):
+            if not (entity_admitted or semantic_admitted or weak_entity_fallback):
                 continue
 
             source_weight = 1.0 if document.source_type == "scene_paragraph" else 0.72
-            score = source_weight * (
-                (0.58 if entity_admitted else 0.0)
-                + 0.39 * lexical_score
-                + (0.03 if has_fts else 0.0)
-            )
+            if weak_entity_fallback:
+                score = source_weight * (
+                    0.12
+                    + 0.10 * lexical_score
+                    + (0.01 if has_fts else 0.0)
+                )
+            else:
+                score = source_weight * (
+                    (0.58 if entity_admitted else 0.0)
+                    + 0.39 * lexical_score
+                    + (0.03 if has_fts else 0.0)
+                )
             if score <= 0:
                 continue
             channels = []
             if entity_admitted:
-                channels.append("entity_all_in_document")
+                channels.append("entity_relation_window")
             if semantic_admitted:
                 channels.append("semantic_trigram_threshold")
+            if weak_entity_fallback:
+                channels.append("entity_window_fallback")
             if has_fts:
                 channels.append("fts5_trigram")
             if matched_trigrams:
                 channels.append("trigram_overlap")
-            scored.append((
+            candidate = (
                 score,
                 document,
                 matched_entities,
-                _matched_terms(search_terms, document.text),
+                _matched_terms(
+                    [*search_terms, *matched_relation_cues],
+                    admission_text,
+                ),
                 channels,
-            ))
+            )
+            if weak_entity_fallback:
+                weak_scored.append(candidate)
+            else:
+                strong_scored.append(candidate)
+
+        scored = strong_scored if strong_scored else weak_scored
+        effective_limit = limit if strong_scored else min(limit, 1)
 
         scored.sort(
             key=lambda item: (
@@ -168,7 +240,7 @@ class CanonEvidenceRetriever:
                 score=round(score, 6),
             ))
             used_paragraphs.append(document.paragraph_index)
-            if len(hits) >= limit:
+            if len(hits) >= effective_limit:
                 break
 
         return CanonQueryEvidence(
@@ -252,6 +324,51 @@ def _trigrams(text: str) -> set[str]:
     return {normalized[index:index + 3] for index in range(len(normalized) - 2)}
 
 
+def _best_trigram_match(
+    query_trigram_sets: list[set[str]],
+    document_text: str,
+) -> tuple[float, set[str]]:
+    document_trigrams = _trigrams(document_text)
+    best_score = 0.0
+    best_matches: set[str] = set()
+    for query_trigrams in query_trigram_sets:
+        matched = query_trigrams & document_trigrams
+        score = len(matched) / max(
+            1,
+            min(len(query_trigrams), len(document_trigrams)),
+        )
+        if score > best_score:
+            best_score = score
+            best_matches = matched
+    return best_score, best_matches
+
+
+def _three_paragraph_window(document, turn_documents) -> list:
+    if document.source_type != "scene_paragraph" or document.paragraph_index is None:
+        return [document]
+    paragraphs = {
+        item.paragraph_index: item
+        for item in turn_documents
+        if item.source_type == "scene_paragraph" and item.paragraph_index is not None
+    }
+    return [
+        paragraphs[index]
+        for index in range(document.paragraph_index - 1, document.paragraph_index + 2)
+        if index in paragraphs
+    ]
+
+
+def _matched_relation_cues(claim_type: str, text: str) -> list[str]:
+    cues = COMMON_HISTORY_RELATION_CUES | CLAIM_TYPE_RELATION_CUES.get(
+        claim_type,
+        set(),
+    )
+    return sorted(
+        (cue for cue in cues if cue in text),
+        key=lambda cue: (-len(cue), cue),
+    )
+
+
 def _matched_terms(terms: list[str], text: str) -> list[str]:
     folded = text.casefold()
     return [term for term in terms if term.casefold() in folded][:8]
@@ -276,4 +393,3 @@ def _adjacent_context(document, turn_documents) -> tuple[str | None, str | None]
         if index in paragraphs
     ]
     return "\n\n".join(before) or None, "\n\n".join(after) or None
-

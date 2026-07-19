@@ -17,7 +17,11 @@ from app.domain.views import (
     project_npc_profiles,
 )
 
-from .schemas import NarrativeComposerContext, NarrativeComposerResult
+from .schemas import (
+    NarrativeComposerContext,
+    NarrativeComposerResult,
+    NarrativeRevisionRequest,
+)
 
 
 class _RuntimePlannedEvent(BaseModel):
@@ -37,6 +41,7 @@ class NarrativeComposerAgent:
         recent_scene: ShortTermScene | None = None,
         turn_index: int = 1,
         max_chars: int = 1500,
+        revision_request: NarrativeRevisionRequest | None = None,
         trace_id: str | None = None,
         on_scene_text_delta: Callable[[str], None] | None = None,
         on_stream_start: Callable[[int], None] | None = None,
@@ -134,6 +139,15 @@ class NarrativeComposerAgent:
                         indent=2,
                     ),
                     "recent_scene_json": _project_recent_scene(recent_scene),
+                    "revision_request_json": json.dumps(
+                        (
+                            revision_request.model_dump(mode="json")
+                            if revision_request is not None
+                            else None
+                        ),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },
                 output_schema=RuntimeNarrativeComposerResult,

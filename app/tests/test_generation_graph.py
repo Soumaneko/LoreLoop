@@ -2,7 +2,8 @@ from types import SimpleNamespace
 
 from langgraph.graph import END, START, StateGraph
 
-from app.graph import generation_graph
+from app.graph import generation_graph, generation_nodes
+from app.domain.narrative_canon_query.schemas import NarrativeCanonQuerySet
 from app.graph.generation_events import GenerationEventPresenter
 from app.graph.generation_state import GenerationState
 from app.domain.scene_writer.schemas import SceneWriterResult
@@ -23,10 +24,89 @@ def test_consumer_composer_and_consistency_checker_run_in_order():
     assert ("resolve_turn", "consume_director_events") in edges
     assert ("consume_director_events", "compose_narrative") in edges
     assert ("maybe_director_npc", "compose_narrative") in edges
-    assert ("compose_narrative", "check_narrative_consistency") in edges
+    assert ("compose_narrative", "generate_canon_queries") in edges
+    assert ("generate_canon_queries", "retrieve_canon_evidence") in edges
+    assert ("retrieve_canon_evidence", "check_narrative_consistency") in edges
     assert ("check_narrative_consistency", "__end__") in edges
+    assert ("check_narrative_consistency", "revise_narrative") in edges
+    assert ("revise_narrative", "__end__") in edges
+    assert ("compose_narrative", "check_narrative_consistency") not in edges
     assert ("compose_narrative", "__end__") not in edges
     assert ("extract_context_facts", "consume_director_events") not in edges
+
+
+def test_consistency_route_revises_only_when_assertions_exist():
+    assert generation_graph._route_after_consistency_check({
+        "narrative_consistency_review": SimpleNamespace(decision="pass"),
+    }) == "pass"
+    assert generation_graph._route_after_consistency_check({
+        "narrative_consistency_review": SimpleNamespace(decision="revise"),
+    }) == "revise"
+
+
+def test_canon_query_node_uses_one_full_catalog_for_llm_and_retrieval(monkeypatch):
+    streamed = []
+    captured = {}
+
+    class _Store:
+        def __init__(self, profiles):
+            self.profiles = profiles
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def list_all(self):
+            return self.profiles
+
+    entity_profile = SimpleNamespace(semantic_view=lambda: "all-entity-view")
+    npc_profile = SimpleNamespace(director_view=lambda: "all-npc-view")
+    stores = {
+        "entity": _Store([entity_profile]),
+        "npc_profile": _Store([npc_profile]),
+    }
+
+    def _build_catalog(**kwargs):
+        captured["catalog_kwargs"] = kwargs
+        return []
+
+    class _FakeAgent:
+        def __init__(self, _gateway):
+            pass
+
+        def generate(self, **kwargs):
+            captured["agent_kwargs"] = kwargs
+            return NarrativeCanonQuerySet(
+                thought_process="本轮没有历史主张。",
+                queries=[],
+            )
+
+    monkeypatch.setattr(
+        generation_nodes,
+        "_store_factory",
+        lambda _state, name: lambda: stores[name],
+    )
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
+    monkeypatch.setattr(generation_nodes, "build_entity_catalog", _build_catalog)
+    monkeypatch.setattr(generation_nodes, "NarrativeCanonQueryAgent", _FakeAgent)
+    monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
+
+    result = generation_nodes.generate_canon_queries_node({
+        "current_state": SimpleNamespace(player=SimpleNamespace(name="莱尔")),
+        "narrative_composition": SimpleNamespace(scene_text="风吹过窗沿。"),
+        "trace_id": "trace-canon",
+        "composer_entity_profile_views": ["selected-only-entity"],
+        "action_npc_director_views": ["selected-only-npc"],
+    })
+
+    assert streamed[0]["step"] == "canon_query_started"
+    assert captured["catalog_kwargs"]["entity_profiles"] == ["all-entity-view"]
+    assert captured["catalog_kwargs"]["npc_profiles"] == ["all-npc-view"]
+    assert captured["agent_kwargs"]["entity_profiles"] == ["all-entity-view"]
+    assert captured["agent_kwargs"]["npc_profiles"] == ["all-npc-view"]
+    assert result["events"][0]["step"] == "canon_queries_generated"
 
 
 def test_generation_events_reducer_merges_parallel_branch_events():

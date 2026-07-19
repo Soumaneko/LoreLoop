@@ -76,6 +76,14 @@
 
 - turn_index: {turn_index}
 
+## Revision Request
+
+正常首次生成时为 `null`。不为 `null` 时，这是对你上一次生成的自动重试：`previous_scene_text` 是上一次正文，`instruction` 已按“正文错误、正确事实、修订要求”明确列出问题。必须根据 instruction 重新生成完整结果，消除所有列出的问题；保持与问题无关的正确内容、创造性细节和既定结果，不得创造新的圆场解释。
+
+```json
+{revision_request_json}
+```
+
 
 # 输出规范
 

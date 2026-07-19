@@ -288,6 +288,7 @@ class DebugHandler(BaseHTTPRequestHandler):
             public_data = {
                 "attempt": data.get("attempt", 1),
                 "version_index": data.get("version_index"),
+                "revision": bool(data.get("revision", False)),
             }
         elif step == "retry_started":
             public_data = {"version_index": data.get("version_index")}

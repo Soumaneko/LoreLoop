@@ -1,4 +1,11 @@
-from app.domain.canon_evidence import CanonEvidenceRetriever, CanonEvidenceStore
+import json
+
+from app.domain.canon_evidence import (
+    CanonEvidenceRetriever,
+    CanonEvidenceStore,
+    project_canon_evidence_for_check,
+)
+from app.domain.canon_evidence.retriever import _best_trigram_match, _trigrams
 from app.domain.narrative_canon_query.schemas import (
     CanonEntityReference,
     NarrativeCanonQuery,
@@ -112,7 +119,110 @@ def test_retriever_finds_prior_entity_cooccurrence_and_returns_raw_context():
     assert "埃利奥把灰烬图书馆这个名字低声念了一遍" in evidence_window
     assert "埃利奥·维瓦切" in evidence[0].matched_entities
     assert "灰烬图书馆废墟" in evidence[0].matched_entities
-    assert "entity_all_in_document" in evidence[0].retrieval_channels
+    assert "entity_relation_window" in evidence[0].retrieval_channels
+
+
+def test_each_lookup_query_is_scored_independently_and_best_match_wins():
+    unrelated = _trigrams("王都商人与旧马车的长篇无关交易记录")
+    direct_match = _trigrams("第一次得知灰烬图书馆")
+
+    score, matched = _best_trigram_match(
+        [unrelated, direct_match],
+        "希尔达让埃利奥第一次得知灰烬图书馆。",
+    )
+
+    assert score == 1.0
+    assert matched == direct_match
+
+
+def test_retriever_admits_entities_and_relation_cues_across_three_paragraphs():
+    store = CanonEvidenceStore()
+    try:
+        store.rebuild([
+            ShortTermScene(
+                scene_id="scene_003",
+                turn_index=3,
+                scene_text=(
+                    "埃利奥皱眉询问那座废墟究竟叫什么。\n\n"
+                    "希尔达第一次说出灰烬图书馆的名字。\n\n"
+                    "他把这个陌生地名低声重复了一遍。"
+                ),
+            )
+        ], _catalog())
+        result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
+    finally:
+        store.close()
+
+    evidence = result.results[0].evidence
+    assert evidence
+    evidence_window = "\n".join(filter(None, [
+        evidence[0].context_before,
+        evidence[0].text,
+        evidence[0].context_after,
+    ]))
+    assert "埃利奥皱眉询问" in evidence_window
+    assert "希尔达第一次说出灰烬图书馆" in evidence_window
+    assert "陌生地名" in evidence_window
+    assert set(evidence[0].matched_entities) == {
+        "埃利奥·维瓦切",
+        "灰烬图书馆废墟",
+    }
+    assert "entity_relation_window" in evidence[0].retrieval_channels
+
+
+def test_strong_candidate_suppresses_entity_only_fallback():
+    store = CanonEvidenceStore()
+    try:
+        store.rebuild([
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                scene_text="埃利奥与灰烬图书馆同时印在一张褪色海报的标题上。",
+            ),
+            ShortTermScene(
+                scene_id="scene_002",
+                turn_index=2,
+                scene_text="希尔达第一次告诉埃利奥灰烬图书馆的名字。",
+            ),
+        ], _catalog())
+        result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
+    finally:
+        store.close()
+
+    evidence = result.results[0].evidence
+    assert evidence
+    assert {item.turn_index for item in evidence} == {2}
+    assert all(
+        "entity_window_fallback" not in item.retrieval_channels
+        for item in evidence
+    )
+
+
+def test_entity_only_fallback_returns_at_most_one_when_no_strong_candidate():
+    store = CanonEvidenceStore()
+    try:
+        store.rebuild([
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                scene_text="埃利奥与灰烬图书馆同时印在一张褪色海报的标题上。",
+            ),
+            ShortTermScene(
+                scene_id="scene_002",
+                turn_index=2,
+                scene_text="埃利奥和灰烬图书馆被画在两枚并排的徽章上。",
+            ),
+        ], _catalog())
+        result = CanonEvidenceRetriever(store, _catalog()).retrieve(
+            _query_set(),
+            evidence_per_query=5,
+        )
+    finally:
+        store.close()
+
+    evidence = result.results[0].evidence
+    assert len(evidence) == 1
+    assert "entity_window_fallback" in evidence[0].retrieval_channels
 
 
 def test_retriever_keeps_player_input_as_lower_weight_intent_evidence():
@@ -233,3 +343,52 @@ def test_multiple_entities_must_share_one_evidence_window():
         store.close()
 
     assert result.results[0].evidence == []
+
+
+def test_check_projection_omits_queries_without_evidence():
+    query_set = NarrativeCanonQuerySet(
+        thought_process="调试信息。",
+        queries=[
+            NarrativeCanonQuery(
+                query_id="q1",
+                paragraph_ids=["P001"],
+                claim="没有召回结果。",
+                claim_type="other",
+                entities=[],
+                lookup_queries=["不会进入检查器"],
+                priority="low",
+            ),
+        ],
+    )
+    store = CanonEvidenceStore()
+    try:
+        evidence_set = CanonEvidenceRetriever(store, _catalog()).retrieve(query_set)
+    finally:
+        store.close()
+
+    assert project_canon_evidence_for_check(query_set, evidence_set) == "[]"
+
+
+def test_check_projection_orders_each_record_as_before_text_after():
+    query_set = _query_set()
+    store = CanonEvidenceStore()
+    try:
+        store.rebuild([
+            ShortTermScene(
+                scene_id="scene_003",
+                turn_index=3,
+                scene_text=(
+                    "埃利奥询问那座废墟叫什么。\n\n"
+                    "希尔达第一次说出灰烬图书馆。\n\n"
+                    "埃利奥重复这个陌生名字。"
+                ),
+            )
+        ], _catalog())
+        evidence_set = CanonEvidenceRetriever(store, _catalog()).retrieve(query_set)
+    finally:
+        store.close()
+
+    projected = project_canon_evidence_for_check(query_set, evidence_set)
+    assert json.loads(projected)[0]["audit_target"] == query_set.queries[0].claim
+    assert projected.index('"context_before"') < projected.index('"text"')
+    assert projected.index('"text"') < projected.index('"context_after"')

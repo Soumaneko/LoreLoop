@@ -28,14 +28,18 @@ const els = {
 
 const progressLabels = {
   state_loaded: "正在唤醒世界",
-  profiles_selected: "正在理解你的行动",
+  entity_profiles_loaded: "正在理解场景",
   action_parsed: "正在理解你的行动",
   rolls_done: "命运已经掷下",
-  resolution_done: "正在推演结果",
-  narrative_compose_started: "正在编写场景",
+  turn_resolution_done: "正在推演结果",
   scene_stream_started: "世界正在回应",
+  canon_query_started: "正在核对历史事实",
+  canon_queries_generated: "历史查询已规划",
+  canon_evidence_retrieved: "历史证据已检索",
   narrative_check_started: "正在检查前后逻辑",
   narrative_checked: "正在检查前后逻辑",
+  narrative_revision_started: "发现明确问题，正在重新编写",
+  narrative_revised: "修订完成",
 };
 let streamBuffer = "";
 let streamFrame = 0;
@@ -413,7 +417,9 @@ async function generateTurn() {
   try {
     await stream("/api/player/generate", { user_input: userInput, difficulty: els.difficultySelect.value }, (event) => {
       setProgress(event.step);
-      if (event.step === "scene_stream_started") startStreaming("世界正在回应");
+      if (event.step === "scene_stream_started") startStreaming(
+        event.data?.revision ? "正在根据问题断言重新编写" : "世界正在回应"
+      );
       if (event.step === "scene_text_delta") appendStreamingText(event.data?.delta || "");
     });
     els.playerInput.value = ""; autoSizeInput(); stopStreaming();
@@ -430,6 +436,9 @@ async function retryTurn() {
   try {
     await stream("/api/player/retry", { turn_id: variant.turn_id }, (event) => {
       setProgress(event.step);
+      if (event.step === "scene_stream_started") startStreaming(
+        event.data?.revision ? "正在根据问题断言重新编写" : "正在重新推演这一回合"
+      );
       if (event.step === "scene_text_delta") appendStreamingText(event.data?.delta || "");
     });
     stopStreaming(); await loadAll({ scroll: "smooth" }); showToast("新版本已生成，旧版本仍然保留");

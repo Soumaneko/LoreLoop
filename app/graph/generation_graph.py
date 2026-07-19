@@ -22,6 +22,9 @@ from .generation_nodes import (
     maybe_director_npc_node,
     parse_action_node,
     resolve_turn_node,
+    generate_canon_queries_node,
+    retrieve_canon_evidence_node,
+    revise_narrative_node,
 )
 from .generation_state import GenerationEvent, GenerationState
 
@@ -35,7 +38,11 @@ def build_generation_graph():
         resolve_turn_node,
         maybe_director_npc_node,
         compose_narrative_node,
+        generate_canon_queries_node,
+        retrieve_canon_evidence_node,
         check_narrative_consistency_node,
+        revise_narrative_node,
+        _route_after_consistency_check,
     )
     return get_cached_graph(
         "generation",
@@ -53,7 +60,10 @@ def _compile_generation_graph():
     graph.add_node("resolve_turn", resolve_turn_node)
     graph.add_node("maybe_director_npc", maybe_director_npc_node)
     graph.add_node("compose_narrative", compose_narrative_node)
+    graph.add_node("generate_canon_queries", generate_canon_queries_node)
+    graph.add_node("retrieve_canon_evidence", retrieve_canon_evidence_node)
     graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
+    graph.add_node("revise_narrative", revise_narrative_node)
 
     graph.add_edge(START, "extract_context_facts")
     graph.add_edge(START, "parse_action")
@@ -65,10 +75,25 @@ def _compile_generation_graph():
         ["maybe_director_npc", "consume_director_events"],
         "compose_narrative",
     )
-    graph.add_edge("compose_narrative", "check_narrative_consistency")
-    graph.add_edge("check_narrative_consistency", END)
+    graph.add_edge("compose_narrative", "generate_canon_queries")
+    graph.add_edge("generate_canon_queries", "retrieve_canon_evidence")
+    graph.add_edge("retrieve_canon_evidence", "check_narrative_consistency")
+    graph.add_conditional_edges(
+        "check_narrative_consistency",
+        _route_after_consistency_check,
+        {
+            "pass": END,
+            "revise": "revise_narrative",
+        },
+    )
+    graph.add_edge("revise_narrative", END)
 
     return graph.compile()
+
+
+def _route_after_consistency_check(state: GenerationState) -> str:
+    review = state["narrative_consistency_review"]
+    return "revise" if review.decision == "revise" else "pass"
 
 
 def generate_turn_stream(

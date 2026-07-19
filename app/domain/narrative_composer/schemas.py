@@ -12,6 +12,11 @@ from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResu
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 
 
+class NarrativeRevisionRequest(BaseModel):
+    previous_scene_text: str = Field(min_length=1)
+    instruction: str = Field(min_length=1)
+
+
 class NarrativeComposerContext(BaseModel):
     user_input: str
     current_state: CurrentState

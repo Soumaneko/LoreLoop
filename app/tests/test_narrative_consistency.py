@@ -1,22 +1,23 @@
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from app.domain.context_facts.schemas import ContextFactSet
+from app.domain.canon_evidence.schemas import CanonEvidenceHit, CanonEvidenceSet, CanonQueryEvidence
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
+from app.domain.narrative_canon_query.schemas import NarrativeCanonQuery, NarrativeCanonQuerySet
 from app.domain.narrative_composer.schemas import NarrativeComposerResult
 from app.domain.narrative_consistency import (
     NarrativeConsistencyAgent,
-    NarrativeConsistencyOutcome,
-    NarrativeConsistencyRejectedError,
+    NarrativeConsistencyAssertion,
     NarrativeConsistencyReview,
+    render_revision_instruction,
 )
 from app.domain.narrative_consistency.agent import _segment_paragraphs
 from app.domain.plot_outline.schemas import PlannedEvent
-from app.domain.turn_resolution.schemas import (
-    ActionResolutionFrame,
-    TurnResolutionResult,
-)
+from app.domain.turn_resolution.schemas import ActionResolutionFrame, TurnResolutionResult
+from app.domain.turn_resolution.views import project_turn_resolution
 from app.graph import generation_nodes
 
 
@@ -32,27 +33,21 @@ class _SpyGateway:
 
 def _current_state() -> CurrentState:
     return CurrentState(
-        scene=SceneState(
-            scene_id="scene_1",
-            location="广场",
-            participants=["莱尔", "埃利奥"],
-        ),
+        scene=SceneState(scene_id="scene_1", location="广场", participants=["莱尔", "埃利奥"]),
         player=PlayerState(name="莱尔"),
     )
 
 
 def _turn_resolution() -> TurnResolutionResult:
-    return TurnResolutionResult(action_resolutions=[
-        ActionResolutionFrame(
-            action_id="A1",
-            sequence=1,
-            actor=["莱尔"],
-            action_type="speak",
-            outcome_band="success",
-            effect_reasoning="埃利奥接受付款条件。",
-            resolved_fact="埃利奥向莱尔支付三枚金币。",
-        )
-    ])
+    return TurnResolutionResult(action_resolutions=[ActionResolutionFrame(
+        action_id="A1",
+        sequence=1,
+        actor=["莱尔"],
+        action_type="speak",
+        outcome_band="success",
+        effect_reasoning="埃利奥接受付款条件。",
+        resolved_fact="埃利奥向莱尔支付三枚金币。",
+    )])
 
 
 def _composition(scene_text: str) -> NarrativeComposerResult:
@@ -62,255 +57,436 @@ def _composition(scene_text: str) -> NarrativeComposerResult:
         must_not_establish_facts=["莱尔向埃利奥支付三枚金币。"],
         information_boundaries=[],
         scene_stopping_point="莱尔收到三枚金币后仍在广场。",
-        planned_events=[
-            PlannedEvent(
-                event_id="e1",
-                event_fact="埃利奥向莱尔支付三枚金币。",
-                linked_outcome_ids=["A1"],
-                involved_entities=["埃利奥"],
-            )
-        ],
+        planned_events=[PlannedEvent(
+            event_id="e1",
+            event_fact="埃利奥向莱尔支付三枚金币。",
+            linked_outcome_ids=["A1"],
+            involved_entities=["埃利奥"],
+        )],
         scene_reasoning="正文落实付款结果。",
         scene_text=scene_text,
         closing_prompt="交易已经完成，你会怎么做？",
     )
 
 
-def _check(gateway: _SpyGateway, scene_text: str):
+def _check(
+    gateway: _SpyGateway,
+    scene_text: str,
+    *,
+    query_set: NarrativeCanonQuerySet | None = None,
+    evidence_set: CanonEvidenceSet | None = None,
+    turn_resolution_json: str | None = None,
+):
     return NarrativeConsistencyAgent(gateway).check(
         user_input="我要求埃利奥支付三枚金币。",
         current_state=_current_state(),
-        turn_resolution=_turn_resolution(),
-        context_facts=ContextFactSet(turn_focus="交易", facts=[]),
-        recent_scene=None,
+        turn_resolution_json=(
+            turn_resolution_json or project_turn_resolution(_turn_resolution())
+        ),
         composition=_composition(scene_text),
+        canon_query_set=query_set,
+        canon_evidence_set=evidence_set,
         trace_id="trace-1",
     )
 
 
-def _segment_review(
-    paragraph_ids: list[str],
-    *,
-    verdict: str = "pass",
-    issues: list[dict] | None = None,
-) -> dict:
-    return {
-        "segment_id": "S001",
-        "paragraph_ids": paragraph_ids,
-        "audit_reasoning": (
-            "正文事实：正文中的交易继续进行；PLAYER_INPUT：行动语义一致；"
-            "TR：最终状态一致；玩家决定：无新增。"
-        ),
-        "verdict": verdict,
-        "contract_refs": ["TR:A1"],
-        "issues": issues or [],
+def _assertion_payload(**overrides):
+    payload = {
+        "issue_type": "contract_violation",
+        "paragraph_ids": ["P001"],
+        "incorrect_statement": "正文写成莱尔向埃利奥支付了两枚金币。",
+        "authoritative_fact": "Player Input 与 TR 均确定埃利奥向莱尔支付三枚金币，主体、方向和数量相反。",
+        "required_revision": "改正付款主体、方向和数量；保留交易场景中的其他对白与反应。",
+        "authority_refs": ["Player Input", "TurnResolutionResult"],
+        "canon_query_id": None,
+        "evidence_ids": [],
     }
+    payload.update(overrides)
+    return payload
 
 
-def _cross_review(*, verdict: str = "pass", issues: list[dict] | None = None) -> dict:
-    return {
-        "verdict": verdict,
-        "summary": "跨段状态与最终停点一致。",
-        "issues": issues or [],
-    }
-
-
-def test_pass_preserves_scene_byte_for_byte():
+def test_pass_returns_no_assertions_and_preserves_compact_input_contract():
     gateway = _SpyGateway({
-        "segment_reviews": [_segment_review(["P001", "P002", "P003"])],
-        "cross_segment_review": _cross_review(),
+        "audit_summary": "正文与本轮权威输入不存在明确冲突。",
+        "canon_findings": [],
         "decision": "pass",
-        "summary": "不存在明确的逻辑或一致性错误。",
-        "patches": [],
+        "assertions": [],
     })
-    scene_text = "第一段。\n\n第二段。\n\n第三段。"
 
-    outcome = _check(gateway, scene_text)
+    review = _check(gateway, "埃利奥向莱尔支付了三枚金币。")
 
-    assert outcome.scene_text == scene_text
-    assert outcome.changed is False
+    assert review.decision == "pass"
+    assert review.assertions == []
     call = gateway.calls[0]
     assert call["task"] == "narrative_consistency_check"
     assert call["temperature"] == 0.2
     assert "max_chars" not in call["input_data"]
-    segmented = call["input_data"]["segmented_scene_text"]
-    assert "## S001 | P001-P003" in segmented
-    assert "[P001]\n第一段。" in segmented
-    assert "plan_json" not in call["input_data"]
+    assert "context_facts_json" not in call["input_data"]
+    assert "recent_scene_json" not in call["input_data"]
+    assert call["input_data"]["historical_canon_evidence_json"] == "[]"
+    assert "[P001]" in call["input_data"]["segmented_scene_text"]
 
 
-def test_patch_replaces_only_the_named_paragraph():
+def test_check_accepts_projected_turn_resolution_without_effect_reasoning():
     gateway = _SpyGateway({
-        "segment_reviews": [_segment_review(
-            ["P001", "P002", "P003", "P004", "P005"],
-            verdict="issue",
-            issues=[{
-                "issue_type": "contract_violation",
-                "paragraph_ids": ["P003"],
-                "explanation": "TR要求埃利奥向莱尔付款，正文写反。",
-            }],
-        )],
-        "cross_segment_review": _cross_review(),
-        "decision": "patch",
-        "summary": "第三段颠倒付款方向。",
-        "patches": [{
-            "start_paragraph_id": "P003",
-            "end_paragraph_id": "P003",
-            "replacement": "埃利奥将三枚金币交给你。",
-        }],
+        "audit_summary": "正文与本轮权威输入不存在明确冲突。",
+        "canon_findings": [],
+        "decision": "pass",
+        "assertions": [],
     })
-    scene_text = "第一段保持原样。\n\n第二段保持原样。\n\n你把三枚金币交给埃利奥。\n\n第四段保持原样。\n\n第五段保持原样。"
+    projected = json.dumps({
+        "action_resolutions": [{
+            "action_id": "A1",
+            "sequence": 1,
+            "actor": ["莱尔"],
+            "action_type": "speak",
+            "outcome_band": "success",
+            "resolved_fact": "埃利奥向莱尔支付三枚金币。",
+        }],
+        "total_resolutions": 1,
+    }, ensure_ascii=False)
 
-    outcome = _check(gateway, scene_text)
-
-    assert outcome.changed_paragraph_ids == ["P003"]
-    assert outcome.scene_text == (
-        "第一段保持原样。\n\n第二段保持原样。\n\n埃利奥将三枚金币交给你。"
-        "\n\n第四段保持原样。\n\n第五段保持原样。"
+    _check(
+        gateway,
+        "埃利奥向莱尔支付了三枚金币。",
+        turn_resolution_json=projected,
     )
 
+    assert gateway.calls[0]["input_data"]["turn_resolution_json"] == projected
 
-def test_patch_guard_rejects_broad_rewriting():
+
+def test_revise_outputs_composer_ready_semantic_assertion():
     gateway = _SpyGateway({
-        "segment_reviews": [_segment_review(
-            ["P001", "P002", "P003", "P004", "P005"],
-            verdict="issue",
-            issues=[{
-                "issue_type": "other",
-                "paragraph_ids": ["P002", "P003"],
-                "explanation": "范围过大。",
-            }],
+        "audit_summary": "发现一项付款方向和数量错误。",
+        "canon_findings": [],
+        "decision": "revise",
+        "assertions": [_assertion_payload()],
+    })
+
+    review = _check(gateway, "莱尔向埃利奥支付了两枚金币。")
+    instruction = render_revision_instruction(review)
+
+    assert review.decision == "revise"
+    assert "正文错误：正文写成莱尔向埃利奥支付了两枚金币。" in instruction
+    assert "正确事实：Player Input 与 TR 均确定埃利奥向莱尔支付三枚金币" in instruction
+    assert "修订要求：改正付款主体、方向和数量" in instruction
+    assert "contract_violation" not in instruction
+
+
+def test_canon_assertion_requires_real_query_and_evidence():
+    query_set = NarrativeCanonQuerySet(
+        thought_process="核对知识来源。",
+        queries=[NarrativeCanonQuery(
+            query_id="q1",
+            paragraph_ids=["P002"],
+            claim="埃利奥此前熟知灰烬图书馆。",
+            claim_type="knowledge_provenance",
+            entities=["埃利奥", "灰烬图书馆"],
+            lookup_queries=["埃利奥何时得知灰烬图书馆"],
+            priority="high",
         )],
-        "cross_segment_review": _cross_review(),
-        "decision": "patch",
-        "summary": "尝试改写多个段落。",
-        "patches": [{
-            "start_paragraph_id": "P002",
-            "end_paragraph_id": "P003",
-            "replacement": "重新创作的内容。",
-        }],
-    })
-
-    with pytest.raises(ValueError, match="affects too much prose"):
-        _check(gateway, "第一段。\n\n第二段。\n\n第三段。\n\n第四段。\n\n第五段。")
-
-
-def test_reject_blocks_prose_only_repair():
+    )
+    evidence_set = CanonEvidenceSet(
+        results=[CanonQueryEvidence(
+            query_id="q1",
+            claim=query_set.queries[0].claim,
+            evidence=[CanonEvidenceHit(
+                evidence_id="turn_4_p002",
+                source_type="scene_paragraph",
+                turn_index=4,
+                scene_id="scene_4",
+                paragraph_index=2,
+                text="希尔达首次告诉埃利奥灰烬图书馆的线索。",
+                matched_entities=["埃利奥", "灰烬图书馆"],
+                retrieval_channels=["entity_all_in_document"],
+                score=0.91,
+            )],
+        )],
+        indexed_documents=20,
+        indexed_turns=4,
+    )
     gateway = _SpyGateway({
-        "segment_reviews": [_segment_review(["P001"])],
-        "cross_segment_review": _cross_review(
-            verdict="issue",
-            issues=[{
-                "issue_type": "contract_violation",
-                "paragraph_ids": [],
-                "explanation": "Plan与TR冲突。",
-            }],
-        ),
-        "decision": "reject",
-        "summary": "Plan本身颠倒了付款方向。",
-        "patches": [],
+        "audit_summary": "发现一项知识来源冲突。",
+        "canon_findings": [{
+            "query_id": "q1",
+            "verdict": "contradiction",
+            "reasoning": "历史明确写出希尔达首次告知，和正文的提前认知不能同时成立。",
+            "evidence_ids": ["turn_4_p002"],
+        }],
+        "decision": "revise",
+        "assertions": [_assertion_payload(
+            issue_type="canon_contradiction",
+            incorrect_statement="正文把埃利奥对灰烬图书馆的认知提前到希尔达告知之前。",
+            authoritative_fact="历史原文明确演出希尔达告知后埃利奥才形成前往灰烬图书馆的方向。",
+            required_revision="删除所有提前认知、提前探索及由此形成的招募动机；保留其他巡演经历。",
+            authority_refs=["Historical Canon Evidence"],
+            canon_query_id="q1",
+            evidence_ids=["turn_4_p002"],
+        )],
     })
 
-    with pytest.raises(NarrativeConsistencyRejectedError, match="Plan本身"):
-        _check(gateway, "埃利奥等待你的回应。")
+    review = _check(
+        gateway,
+        "埃利奥说自己早已探索过灰烬图书馆。",
+        query_set=query_set,
+        evidence_set=evidence_set,
+    )
+
+    assert review.assertions[0].canon_query_id == "q1"
+    projected = json.loads(
+        gateway.calls[0]["input_data"]["historical_canon_evidence_json"]
+    )
+    assert projected[0]["historical_records"][0]["evidence_id"] == "turn_4_p002"
+    assert projected[0]["audit_target"] == "埃利奥此前熟知灰烬图书馆。"
+    assert "claim" not in projected[0]
 
 
-def test_prompt_forbids_creative_and_editorial_rewriting():
+def test_each_projected_query_requires_exactly_one_canon_finding():
+    query_set = NarrativeCanonQuerySet(
+        thought_process="核对历史。",
+        queries=[NarrativeCanonQuery(
+            query_id="q1",
+            paragraph_ids=["P001"],
+            claim="埃利奥此前去过灰烬图书馆。",
+            claim_type="past_event",
+            entities=["埃利奥", "灰烬图书馆"],
+            lookup_queries=["埃利奥是否去过灰烬图书馆"],
+            priority="high",
+        )],
+    )
+    evidence_set = CanonEvidenceSet(results=[CanonQueryEvidence(
+        query_id="q1",
+        claim=query_set.queries[0].claim,
+        evidence=[CanonEvidenceHit(
+            evidence_id="turn_4_p002",
+            source_type="scene_paragraph",
+            turn_index=4,
+            scene_id="scene_4",
+            paragraph_index=2,
+            text="历史只提到埃利奥后来听说了图书馆。",
+            score=0.5,
+        )],
+    )])
+    gateway = _SpyGateway({
+        "audit_summary": "证据不足。",
+        "canon_findings": [],
+        "decision": "pass",
+        "assertions": [],
+    })
+
+    with pytest.raises(ValueError, match="cover every projected query"):
+        _check(
+            gateway,
+            "埃利奥说自己去过灰烬图书馆。",
+            query_set=query_set,
+            evidence_set=evidence_set,
+        )
+
+
+def test_insufficient_is_valid_without_canon_revision_assertion():
+    query_set = NarrativeCanonQuerySet(
+        thought_process="核对历史。",
+        queries=[NarrativeCanonQuery(
+            query_id="q1",
+            paragraph_ids=["P001"],
+            claim="埃利奥此前去过灰烬图书馆。",
+            claim_type="past_event",
+            entities=["埃利奥", "灰烬图书馆"],
+            lookup_queries=["埃利奥是否去过灰烬图书馆"],
+            priority="high",
+        )],
+    )
+    evidence_set = CanonEvidenceSet(results=[CanonQueryEvidence(
+        query_id="q1",
+        claim=query_set.queries[0].claim,
+        evidence=[CanonEvidenceHit(
+            evidence_id="turn_4_p002",
+            source_type="scene_paragraph",
+            turn_index=4,
+            scene_id="scene_4",
+            paragraph_index=2,
+            text="历史只提到埃利奥后来听说了图书馆。",
+            score=0.5,
+        )],
+    )])
+    gateway = _SpyGateway({
+        "audit_summary": "历史没有明确证明或反驳该声明。",
+        "canon_findings": [{
+            "query_id": "q1",
+            "verdict": "insufficient",
+            "reasoning": "原文相关，但没有明确证明埃利奥此前是否去过。",
+            "evidence_ids": ["turn_4_p002"],
+        }],
+        "decision": "pass",
+        "assertions": [],
+    })
+
+    review = _check(
+        gateway,
+        "埃利奥说自己去过灰烬图书馆。",
+        query_set=query_set,
+        evidence_set=evidence_set,
+    )
+
+    assert review.canon_findings[0].verdict == "insufficient"
+
+
+def test_canon_assertion_rejects_unavailable_evidence_reference():
+    gateway = _SpyGateway({
+        "audit_summary": "发现冲突。",
+        "canon_findings": [],
+        "decision": "revise",
+        "assertions": [_assertion_payload(
+            issue_type="canon_contradiction",
+            authority_refs=["Historical Canon Evidence"],
+            canon_query_id="q1",
+            evidence_ids=["missing"],
+        )],
+    })
+
+    with pytest.raises(ValueError, match="unavailable query"):
+        _check(gateway, "错误正文。")
+
+
+def test_canon_assertion_may_cite_evidence_retrieved_by_another_query():
+    query_set = NarrativeCanonQuerySet(
+        thought_process="两条查询召回了可交叉使用的历史原文。",
+        queries=[
+            NarrativeCanonQuery(
+                query_id="q1",
+                paragraph_ids=["P001"],
+                claim="埃利奥此前去过灰烬图书馆。",
+                claim_type="past_event",
+                entities=["埃利奥", "灰烬图书馆"],
+                lookup_queries=["埃利奥是否去过灰烬图书馆"],
+                priority="high",
+            ),
+            NarrativeCanonQuery(
+                query_id="q2",
+                paragraph_ids=["P001"],
+                claim="埃利奥后来才得知灰烬图书馆。",
+                claim_type="knowledge_provenance",
+                entities=["埃利奥", "灰烬图书馆"],
+                lookup_queries=["埃利奥何时得知灰烬图书馆"],
+                priority="high",
+            ),
+        ],
+    )
+    evidence_set = CanonEvidenceSet(
+        results=[
+            CanonQueryEvidence(
+                query_id="q1",
+                claim=query_set.queries[0].claim,
+                evidence=[CanonEvidenceHit(
+                    evidence_id="turn_3_p001",
+                    source_type="scene_paragraph",
+                    turn_index=3,
+                    scene_id="scene_3",
+                    paragraph_index=1,
+                    text="埃利奥谈到了这座图书馆。",
+                    score=0.5,
+                )],
+            ),
+            CanonQueryEvidence(
+                query_id="q2",
+                claim=query_set.queries[1].claim,
+                evidence=[CanonEvidenceHit(
+                    evidence_id="turn_4_p002",
+                    source_type="scene_paragraph",
+                    turn_index=4,
+                    scene_id="scene_4",
+                    paragraph_index=2,
+                    text="希尔达首次告诉埃利奥灰烬图书馆的名字。",
+                    score=0.9,
+                )],
+            ),
+        ],
+    )
+    gateway = _SpyGateway({
+        "audit_summary": "发现历史形成冲突。",
+        "canon_findings": [
+            {
+                "query_id": "q1",
+                "verdict": "contradiction",
+                "reasoning": "希尔达首次告知的历史与提前探索不能同时成立。",
+                "evidence_ids": ["turn_4_p002"],
+            },
+            {
+                "query_id": "q2",
+                "verdict": "explicitly_confirmed",
+                "reasoning": "历史原文明确写出希尔达首次告诉埃利奥图书馆的名字。",
+                "evidence_ids": ["turn_4_p002"],
+            },
+        ],
+        "decision": "revise",
+        "assertions": [_assertion_payload(
+            issue_type="canon_contradiction",
+            authority_refs=["Historical Canon Evidence"],
+            canon_query_id="q1",
+            evidence_ids=["turn_4_p002"],
+        )],
+    })
+
+    review = _check(
+        gateway,
+        "埃利奥说自己早已探索过灰烬图书馆。",
+        query_set=query_set,
+        evidence_set=evidence_set,
+    )
+
+    assert review.assertions[0].canon_query_id == "q1"
+    assert review.assertions[0].evidence_ids == ["turn_4_p002"]
+
+
+def test_schema_rejects_pass_with_assertions_and_revise_without_assertions():
+    with pytest.raises(ValueError, match="pass must not contain assertions"):
+        NarrativeConsistencyReview(
+            audit_summary="错误。",
+            canon_findings=[],
+            decision="pass",
+            assertions=[NarrativeConsistencyAssertion.model_validate(_assertion_payload())],
+        )
+    with pytest.raises(ValueError, match="revise requires"):
+        NarrativeConsistencyReview(
+            audit_summary="错误。",
+            canon_findings=[],
+            decision="revise",
+            assertions=[],
+        )
+
+
+def test_segmentation_preserves_every_natural_paragraph_once():
+    paragraphs = ["甲" * 260, "乙" * 260, "丙" * 260, "丁" * 260, "戊" * 120]
+    segments = _segment_paragraphs(paragraphs)
+
+    assert [paragraph for segment in segments for paragraph in segment.paragraphs] == paragraphs
+    assert [pid for segment in segments for pid in segment.paragraph_ids] == [
+        "P001", "P002", "P003", "P004", "P005",
+    ]
+
+
+def test_prompt_defines_assertions_and_forbids_patch_replacement():
     prompt = Path(
         "app/prompts/generation/narrative_consistency_check_v1.md"
     ).read_text(encoding="utf-8")
 
-    assert "你不是编辑、润色者、共同作者、剧情规划者或安全审查者" in prompt
-    assert "创造性内容是文字冒险的必要组成部分" in prompt
-    assert "把明确进展改回未知" in prompt
-    assert "重新规划后续剧情" in prompt
-    assert "执行简明的三方核对思维链" in prompt
-    assert "对照 Player Input" in prompt
-    assert "对照 TR" in prompt
-    assert "参数无损穿透" in prompt
-    assert "判定结果锚定" in prompt
-    assert "上下文不相容" in prompt
-    assert "基础物理与时空逻辑" in prompt
-    assert "知识隔离边界" in prompt
-    assert "行动所有权与蔓延" in prompt
-    assert "不得新增任何玩家动作、选择、同意、拒绝、承诺或参数" in prompt
+    assert "incorrect_statement" in prompt
+    assert "authoritative_fact" in prompt
+    assert "required_revision" in prompt
+    assert "正文错误：{{incorrect_statement}}" in prompt
+    assert "不得输出 replacement、patch 或修改后的正文" in prompt
+    assert "形成之前" in prompt
+    assert "默认判定始终是 `insufficient`" in prompt
+    assert "每个 query 恰好输出一项" in prompt
 
 
-def test_segment_review_schema_requires_audit_without_punctuation_pattern():
-    schema = NarrativeConsistencyReview.model_json_schema()
-    segment_schema = schema["$defs"]["SegmentReview"]
-
-    assert "audit_reasoning" in segment_schema["required"]
-    assert "factual_summary" not in segment_schema["properties"]
-    assert list(segment_schema["properties"])[:4] == [
-        "segment_id",
-        "paragraph_ids",
-        "audit_reasoning",
-        "verdict",
-    ]
-    assert "pattern" not in segment_schema["properties"]["audit_reasoning"]
-
-    review = _segment_review(["P001"])
-    review["audit_reasoning"] = (
-        "正文事实：正文没有变化。PLAYER_INPUT：不涉及。"
-        "TR：不涉及。玩家决定：无新增。"
-    )
-    NarrativeConsistencyReview.model_validate({
-        "segment_reviews": [review],
-        "cross_segment_review": _cross_review(),
-        "decision": "pass",
-        "summary": "通过。",
-        "patches": [],
-    })
-
-
-def test_segmentation_keeps_paragraphs_atomic_and_rebalances_short_tail():
-    paragraphs = [f"第{index}段" + "字" * 196 for index in range(1, 7)]
-
-    segments = _segment_paragraphs(paragraphs)
-
-    assert [segment.paragraph_ids for segment in segments] == [
-        ["P001", "P002", "P003", "P004"],
-        ["P005", "P006"],
-    ]
-    assert [paragraph for segment in segments for paragraph in segment.paragraphs] == paragraphs
-
-
-def test_runtime_schema_requires_every_segment_once_and_in_order():
-    paragraphs = [f"第{index}段" + "字" * 196 for index in range(1, 7)]
-    scene_text = "\n\n".join(paragraphs)
-    gateway = _SpyGateway({
-        "segment_reviews": [_segment_review(["P001", "P002", "P003", "P004"])],
-        "cross_segment_review": _cross_review(),
-        "decision": "pass",
-        "summary": "遗漏了第二个检查段。",
-        "patches": [],
-    })
-
-    with pytest.raises(ValueError, match="cover every segment exactly once"):
-        _check(gateway, scene_text)
-
-
-def test_generation_node_promotes_checked_text_to_scene_result(monkeypatch):
-    original = _composition("错误正文。")
+def test_check_node_stores_review_without_mutating_composition(monkeypatch):
+    composition = _composition("原始正文。")
     review = NarrativeConsistencyReview(
-        segment_reviews=[_segment_review(
-            ["P001"],
-            verdict="issue",
-            issues=[{
-                "issue_type": "logic_contradiction",
-                "paragraph_ids": ["P001"],
-                "explanation": "正文与语义合同冲突。",
-            }],
-        )],
-        cross_segment_review=_cross_review(),
-        decision="patch",
-        summary="修复明确错误。",
-        patches=[{
-            "start_paragraph_id": "P001",
-            "end_paragraph_id": "P001",
-            "replacement": "正确正文。",
-        }],
+        audit_summary="发现错误。",
+        canon_findings=[],
+        decision="revise",
+        assertions=[NarrativeConsistencyAssertion.model_validate(_assertion_payload())],
     )
 
     class _FakeAgent:
@@ -318,11 +494,7 @@ def test_generation_node_promotes_checked_text_to_scene_result(monkeypatch):
             pass
 
         def check(self, **_kwargs):
-            return NarrativeConsistencyOutcome(
-                review=review,
-                scene_text="正确正文。",
-                changed_paragraph_ids=["P001"],
-            )
+            return review
 
     monkeypatch.setattr(generation_nodes, "NarrativeConsistencyAgent", _FakeAgent)
     monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
@@ -331,13 +503,67 @@ def test_generation_node_promotes_checked_text_to_scene_result(monkeypatch):
         "user_input": "行动",
         "current_state": _current_state(),
         "turn_resolution": _turn_resolution(),
-        "context_facts": ContextFactSet(turn_focus="行动", facts=[]),
-        "recent_scene": None,
-        "narrative_composition": original,
+        "narrative_composition": composition,
         "trace_id": "trace-1",
     })
 
-    assert result["narrative_composition"].scene_text == "正确正文。"
+    assert result["narrative_consistency_review"] == review
+    assert "narrative_composition" not in result
+    assert result["events"][0]["data"]["revision_required"] is True
+
+
+def test_revision_node_reuses_composer_with_rendered_assertions(monkeypatch):
+    original = _composition("错误正文。")
+    revised = _composition("正确正文。")
+    review = NarrativeConsistencyReview(
+        audit_summary="发现错误。",
+        canon_findings=[],
+        decision="revise",
+        assertions=[NarrativeConsistencyAssertion.model_validate(_assertion_payload())],
+    )
+    captured = {}
+    streamed = []
+
+    class _FakeComposer:
+        def __init__(self, _gateway):
+            pass
+
+        def compose(self, context, **kwargs):
+            captured["context"] = context
+            captured.update(kwargs)
+            kwargs["on_stream_start"](1)
+            kwargs["on_scene_text_delta"]("正确正文。")
+            return revised
+
+    monkeypatch.setattr(generation_nodes, "NarrativeComposerAgent", _FakeComposer)
+    monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
+    monkeypatch.setattr(
+        generation_nodes,
+        "_composition_output_state",
+        lambda _state, composition: {
+            "narrative_composition": composition,
+            "outline": composition.to_outline(),
+            "scene_result": composition.to_scene_result(),
+        },
+    )
+
+    result = generation_nodes.revise_narrative_node({
+        "context": SimpleNamespace(),
+        "recent_scene": None,
+        "next_turn_index": 5,
+        "narrative_composition": original,
+        "narrative_consistency_review": review,
+        "trace_id": "trace-1",
+    })
+
+    request = captured["revision_request"]
+    assert request.previous_scene_text == "错误正文。"
+    assert "正文错误：正文写成莱尔向埃利奥支付了两枚金币。" in request.instruction
     assert result["scene_result"].scene_text == "正确正文。"
-    assert result["events"][0]["step"] == "narrative_checked"
-    assert result["events"][0]["data"]["changed_paragraph_ids"] == ["P001"]
+    assert result["events"][0]["step"] == "narrative_revised"
+    assert [event["step"] for event in streamed] == [
+        "narrative_revision_started",
+        "scene_stream_started",
+        "scene_text_delta",
+    ]

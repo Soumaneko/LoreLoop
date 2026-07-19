@@ -21,7 +21,8 @@ class _SpyGateway:
                     "claim_type": "location_or_presence",
                     "entities": ["埃利奥", "灰烬图书馆"],
                     "lookup_queries": [
-                        "埃利奥此前是否到访或探索过灰烬图书馆？"
+                        "埃利奥此前是否到访或探索过灰烬图书馆？",
+                        "埃利奥何时第一次得知灰烬图书馆？",
                     ],
                     "priority": "high",
                 }
@@ -53,6 +54,10 @@ def test_agent_projects_only_numbered_prose_and_compact_entity_catalog():
     )
 
     assert result.queries[0].query_id == "q1"
+    assert result.queries[0].lookup_queries == [
+        "埃利奥此前是否到访或探索过灰烬图书馆？",
+        "埃利奥何时第一次得知灰烬图书馆？",
+    ]
     assert "P002-P003" in result.thought_process
     assert gateway.call["task"] == "narrative_canon_query"
     assert gateway.call["temperature"] == 0.2
@@ -120,3 +125,11 @@ def test_prompt_keeps_query_generation_separate_from_retrieval_and_checking():
     assert "不提出修改建议" in prompt
     assert "纯粹发生在本轮正文当下" in prompt
     assert "空列表是正常结果" in prompt
+    assert "先规划、再输出查询" in prompt
+    assert "最小可独立判真的历史命题" in prompt
+    assert "只保留一个核心谓词" in prompt
+    assert "即使多个动作发生在同一时间、地点" in prompt
+    assert "必须拆分或只保留最关键的一个" in prompt
+    assert "亚瑟拔出了在黑水镇买的铁剑" in prompt
+    assert "亚瑟在黑水镇买过一把铁剑" in prompt
+    assert "重新淬火、磨剑次数和之后如何携带" in prompt

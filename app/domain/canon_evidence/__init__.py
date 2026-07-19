@@ -7,6 +7,7 @@ from .schemas import (
     CanonQueryEvidence,
 )
 from .store import CanonEvidenceStore
+from .views import project_canon_evidence_for_check
 
 __all__ = [
     "CanonEvidenceDocument",
@@ -16,4 +17,5 @@ __all__ = [
     "CanonEvidenceStore",
     "CanonQueryEvidence",
     "rebuild_and_retrieve_canon_evidence",
+    "project_canon_evidence_for_check",
 ]

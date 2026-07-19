@@ -1,20 +1,15 @@
-from .agent import NarrativeConsistencyAgent, NarrativeConsistencyRejectedError
+from .agent import NarrativeConsistencyAgent
 from .schemas import (
-    CrossSegmentReview,
-    NarrativeConsistencyIssue,
-    NarrativeConsistencyOutcome,
+    NarrativeCanonFinding,
+    NarrativeConsistencyAssertion,
     NarrativeConsistencyReview,
-    ParagraphPatch,
-    SegmentReview,
+    render_revision_instruction,
 )
 
 __all__ = [
     "NarrativeConsistencyAgent",
-    "CrossSegmentReview",
-    "NarrativeConsistencyIssue",
-    "NarrativeConsistencyOutcome",
-    "NarrativeConsistencyRejectedError",
+    "NarrativeCanonFinding",
+    "NarrativeConsistencyAssertion",
     "NarrativeConsistencyReview",
-    "ParagraphPatch",
-    "SegmentReview",
+    "render_revision_instruction",
 ]

@@ -66,6 +66,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
         STATIC_DIR / "api.js"
     ).read_text(encoding="utf-8")
     assert "narrative_check_started" in source
+    assert "canon_query_started" in source
+    assert "narrative_revision_started" in source
+    assert "event.data?.revision" in source
     assert 'loadAll({ scroll: "instant" })' in source
     assert ".composer-shell:focus-within" in styles
     assert ".story-highlight-npc" in styles
@@ -214,6 +217,26 @@ def test_player_event_projection_removes_internal_generation_data():
         },
     }
     assert "private" not in str(event)
+
+
+def test_player_event_projection_preserves_revision_stream_marker():
+    event = DebugHandler._player_event({
+        "step": "scene_stream_started",
+        "data": {
+            "attempt": 2,
+            "revision": True,
+            "trace_id": "private-trace",
+        },
+    })
+
+    assert event == {
+        "step": "scene_stream_started",
+        "data": {
+            "attempt": 2,
+            "version_index": None,
+            "revision": True,
+        },
+    }
 
 
 def test_player_save_payload_removes_server_root():
