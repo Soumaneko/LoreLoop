@@ -529,20 +529,37 @@ class CampaignHistory:
     def _restore_snapshot(self, source: Path) -> None:
         manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
         expected = set(manifest["files"])
-        for sidecar in [
-            *self.data_dir.glob("*.db-wal"),
-            *self.data_dir.glob("*.db-shm"),
-        ]:
-            sidecar.unlink(missing_ok=True)
         for current in self.data_dir.glob("*.db"):
             if current.name not in expected:
+                for suffix in ("-wal", "-shm"):
+                    Path(f"{current}{suffix}").unlink(missing_ok=True)
                 current.unlink()
         for name in ("core_memory.json", "settings.json"):
             current = self.data_dir / name
             if current.exists() and name not in expected:
                 current.unlink()
         for name in expected:
-            shutil.copy2(source / name, self.data_dir / name)
+            snapshot_file = source / name
+            destination = self.data_dir / name
+            if snapshot_file.suffix == ".db":
+                self._restore_database(snapshot_file, destination)
+            else:
+                shutil.copy2(snapshot_file, destination)
+
+    @staticmethod
+    def _restore_database(source: Path, destination: Path) -> None:
+        """Restore through SQLite so WAL readers cannot revive replaced pages."""
+        source_uri = f"file:{source.resolve()}?mode=ro"
+        source_conn = sqlite3.connect(source_uri, uri=True, timeout=30)
+        destination_conn = sqlite3.connect(str(destination), timeout=30)
+        try:
+            destination_conn.execute("PRAGMA busy_timeout = 30000")
+            source_conn.backup(destination_conn)
+            destination_conn.commit()
+            destination_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            destination_conn.close()
+            source_conn.close()
 
     def _discard_redo_locked(self, conn) -> None:
         rows = conn.execute(

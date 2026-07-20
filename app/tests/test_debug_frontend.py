@@ -55,6 +55,10 @@ def test_debug_frontend_exposes_runtime_content():
         'Composer Revision Instruction',
         'narrative_revised: ["narrative_compose"]',
         'details("完整 JSON"',
+        '/api/init/story-direction',
+        'init-ability-name',
+        'init-ability-description',
+        'initDirectionContent',
     ):
         assert marker in source
 
@@ -63,6 +67,8 @@ def test_debug_frontend_exposes_runtime_content():
     assert 'src="/debug-assets/app.js"' in html
     assert 'id="saveSelect"' in html
     assert 'id="createSaveBtn"' in html
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+    assert "select option, select optgroup" in styles
 
     render_outline = source[source.index("function renderOutline"):]
     assert render_outline.index('card("停点"') < render_outline.index(

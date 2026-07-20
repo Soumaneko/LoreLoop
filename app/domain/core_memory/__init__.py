@@ -1,5 +1,6 @@
 from .init import (
     InitConfig,
+    ProtagonistAbility,
     build_core_memory,
     build_core_memory_items,
     build_initial_current_state,
@@ -13,6 +14,7 @@ __all__ = [
     "CoreMemoryItem",
     "CoreMemoryStore",
     "InitConfig",
+    "ProtagonistAbility",
     "StoryDirectionAgent",
     "StoryDirectionResult",
     "build_core_memory",

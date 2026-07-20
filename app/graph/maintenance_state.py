@@ -11,6 +11,7 @@ from app.domain.recall_memory.maintenance import (
     MaintainMemoriesWorkflowResult,
 )
 from app.domain.recall_memory.schemas import PendingMemoryItem
+from app.domain.recall_memory.schemas import MemoryDraftExtractResult
 from app.domain.scene_summary.maintenance import SceneSummaryMaintenanceResult
 from app.runtime.services import RuntimeServices
 
@@ -25,9 +26,6 @@ class SceneSummaryMaintenanceState(TypedDict, total=False):
     events: Annotated[list[MaintenanceEvent], add]
     trace_id: str
     turn_index: int
-    scene_id: str
-    scene_text: str
-    current_state: CurrentState
     core_memory: CoreMemory
     threshold: int
     result: SceneSummaryMaintenanceResult
@@ -39,11 +37,15 @@ class MemoryMaintenanceState(TypedDict, total=False):
     trace_id: str
     turn_index: int
     current_state: CurrentState
+    state_before_update: CurrentState
+    scene_facts_json: str
     core_memory: CoreMemory
     turn_threshold: int
     force: bool
     through_turn: int | None
     pending_items: list[PendingMemoryItem]
+    pending_memory_result: MemoryDraftExtractResult
+    saved_pending_ids: list[str]
     pending_total: int
     unclassified_turn_count: int
     batch_result: BatchClassifyPendingMemoryWorkflowResult

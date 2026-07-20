@@ -34,7 +34,7 @@ _ALWAYS_CACHED_NODE_RESULTS = {
     "scene_facts",
     "updated_state",
     "state_change_set",
-    "pending_memory_result",
+    "turn_summary",
     "action_preview",
 }
 _WRITE_CACHED_NODE_RESULTS = {
@@ -43,6 +43,14 @@ _WRITE_CACHED_NODE_RESULTS = {
     "director_event_result",
     "updated_entity_ids",
     "updated_npc_profile_ids",
+}
+_ROLLBACK_SAFE_CACHE_KEYS = {
+    "key",
+    "scene_facts",
+    "updated_state",
+    "state_change_set",
+    "turn_summary",
+    "action_preview",
 }
 
 @dataclass
@@ -218,6 +226,7 @@ def prepare_confirmation_state(
     *,
     write_db: bool = True,
     scene_text: str | None = None,
+    journaled: bool = False,
 ) -> ConfirmationState:
     runtime = get_campaign_runtime()
     runtime_services = runtime.services
@@ -243,6 +252,7 @@ def prepare_confirmation_state(
         pipeline_input,
         write_db=write_db,
         scene_text=scene_text,
+        journaled=journaled,
     )
 
 
@@ -269,40 +279,27 @@ def merge_confirmation_node_update(
     return events
 
 
+def reset_confirmation_cache_after_rollback(pending) -> None:
+    """Keep pure LLM results but discard every cache entry tied to DB writes."""
+    cache = pending.confirmation_cache
+    retained = {
+        key: cache[key]
+        for key in _ROLLBACK_SAFE_CACHE_KEYS
+        if key in cache
+    }
+    cache.clear()
+    cache.update(retained)
+
+
 def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationState:
-    from app.domain.recall_memory.maintenance import fill_pending_memory_scene_metadata
-
-    cache = state["cache"]
-    updated_state = state["updated_state"]
-    pending_memory_result = state["pending_memory_result"]
-
-    if not cache.get("pending_memory_metadata_filled"):
-        pending_memory_items = fill_pending_memory_scene_metadata(
-            pending_memory_result.items,
-            updated_state,
-        )
-        pending_memory_result = pending_memory_result.model_copy(
-            update={"items": pending_memory_items}
-        )
-        cache["pending_memory_result"] = pending_memory_result
-        cache["pending_memory_metadata_filled"] = True
-        state["pending_memory_result"] = pending_memory_result
-
     with state["runtime_services"].stores.scene_summary() as summary_store:
+        turn_summary = state["turn_summary"]
         state["scene_summaries"] = summary_store.list_active()
         state["recent_summaries"] = summary_store.get_recent(5)
-
-    state["events"] = [
-        *state.get("events", []),
-        {
-            "step": "memory_draft_metadata_filled",
-            "data": {
-                "location": updated_state.scene.location,
-                "time_label": updated_state.world_clock.label,
-                "pending_items": model_data(pending_memory_result.items),
-            },
-        },
-    ]
+        state["selection_summaries"] = [
+            *state["recent_summaries"],
+            turn_summary,
+        ]
     return state
 
 
@@ -315,6 +312,7 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
             short_term_memory_store=stores.short_term,
             pending_memory_store=stores.pending_memory,
             memory_store=stores.memory,
+            scene_summary_store=stores.scene_summary,
         )
     )
     scheduler = ConfirmationMaintenanceScheduler(
@@ -324,7 +322,6 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
             run_director_npc_restock=run_director_npc_restock,
             run_scene_summary_maintenance=run_scene_summary_maintenance,
             run_memory_batch_maintenance=run_memory_batch_maintenance,
-            submit_memory_batch_once=runtime.jobs.submit_memory_batch_once,
         ),
     )
     return ConfirmationFinalizer(

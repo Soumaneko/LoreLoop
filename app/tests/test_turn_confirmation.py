@@ -9,7 +9,6 @@ from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.entity.schemas import EntityExtractionResult
 from app.domain.director_event.workflows import DirectorEventWorkflowResult
 from app.domain.npc_profile.schemas import NPCExtractionResult
-from app.domain.recall_memory.schemas import MemoryDraftExtractResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory import ShortTermMemory
 from app.runtime.session import (
@@ -77,7 +76,7 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
     )
     pending_turns = get_campaign_runtime().pending_turns
     pending_turns.add(pending)
-    calls = {"state": 0, "memory": 0, "preview": 0}
+    calls = {"state": 0, "preview": 0}
 
     class _StateUpdater:
         def __init__(self, _gateway):
@@ -86,14 +85,6 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
         def update(self, current_state, *_args, **_kwargs):
             calls["state"] += 1
             return current_state
-
-    class _MemoryExtractor:
-        def __init__(self, _gateway):
-            pass
-
-        def extract(self, *_args, **_kwargs):
-            calls["memory"] += 1
-            return MemoryDraftExtractResult(items=[])
 
     def _preview(**_kwargs):
         calls["preview"] += 1
@@ -117,6 +108,8 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
                 return kwargs["output_schema"].model_validate(
                     {"scene_focus": "测试场景事实", "facts": []}
                 )
+            if kwargs.get("task") == "scene_summarize":
+                return kwargs["output_schema"].model_validate({"content": "本轮摘要"})
             return kwargs["output_schema"].model_validate({})
 
     configure_runtime_services(
@@ -132,11 +125,6 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
         memory=lambda: _ContextStore(count=lambda: 0),
     )
     monkeypatch.setattr(confirmation_nodes, "StateUpdater", _StateUpdater)
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "MemoryDraftExtractor",
-        _MemoryExtractor,
-    )
     monkeypatch.setattr(
         confirmation_nodes,
         "ActionPreviewAgent",
@@ -159,14 +147,14 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
             )
         )
 
-        assert calls == {"state": 1, "memory": 1, "preview": 2}
+        assert calls == {"state": 1, "preview": 2}
         assert events[-1]["data"]["status"] == "dry_run"
         assert turn_id in pending_turns
     finally:
         pending_turns.remove(turn_id)
 
 
-def test_reentered_confirmation_passes_cached_summary_future_to_batch(
+def test_confirmation_queues_memory_draft_before_batch_without_summary_wait(
     monkeypatch,
     configure_runtime_services,
 ):
@@ -213,6 +201,8 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(
                 return kwargs["output_schema"].model_validate(
                     {"scene_focus": "测试场景事实", "facts": []}
                 )
+            if kwargs.get("task") == "scene_summarize":
+                return kwargs["output_schema"].model_validate({"content": "本轮摘要"})
             return kwargs["output_schema"].model_validate({})
 
     class _StateUpdater:
@@ -221,13 +211,6 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(
 
         def update(self, current_state, *_args, **_kwargs):
             return current_state
-
-    class _MemoryExtractor:
-        def __init__(self, _gateway):
-            pass
-
-        def extract(self, *_args, **_kwargs):
-            return MemoryDraftExtractResult(items=[])
 
     class _EntityExtractor:
         def __init__(self, _gateway):
@@ -256,6 +239,7 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(
         scene_summary=lambda: _ContextStore(
             list_active=lambda: [],
             get_recent=lambda _limit=5: [],
+            save_one=lambda summary: summary.id,
         ),
         short_term=lambda: _ContextStore(
             add_turn=lambda **_kwargs: None,
@@ -276,7 +260,6 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(
         ),
     )
     monkeypatch.setattr(confirmation_nodes, "StateUpdater", _StateUpdater)
-    monkeypatch.setattr(confirmation_nodes, "MemoryDraftExtractor", _MemoryExtractor)
     monkeypatch.setattr(confirmation_nodes, "EntityExtractor", _EntityExtractor)
     monkeypatch.setattr(confirmation_nodes, "NPCProfileExtractor", _NPCExtractor)
     monkeypatch.setattr(
@@ -308,11 +291,15 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(
         lambda **_kwargs: [],
     )
 
-    def _submit_once(_fn, /, *_args, **kwargs):
-        captured["wait_for_summary"] = kwargs.get("wait_for_summary")
-        return True
+    def _memory_maintenance(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
 
-    monkeypatch.setattr(runtime.jobs, "submit_memory_batch_once", _submit_once)
+    monkeypatch.setattr(
+        confirmation_helpers,
+        "run_memory_batch_maintenance",
+        _memory_maintenance,
+    )
 
     try:
         events = list(
@@ -321,6 +308,7 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(
                 write_db=True,
             )
         )
+        runtime.jobs.wait_for_idle()
         group_removed = (
             turn_id not in pending_turns
             and sibling_turn_id not in pending_turns
@@ -330,7 +318,10 @@ def test_reentered_confirmation_passes_cached_summary_future_to_batch(
         pending_turns.remove(sibling_turn_id)
 
     assert events[-1]["data"]["status"] == "committed"
-    assert captured["wait_for_summary"] is summary_future
+    assert captured["args"][0] == state
+    assert captured["args"][1] == state
+    assert isinstance(captured["args"][2], str)
+    assert "wait_for_summary" not in captured["kwargs"]
     assert group_removed is True
 
 
@@ -359,6 +350,8 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
                 return kwargs["output_schema"].model_validate(
                     {"scene_focus": "测试场景事实", "facts": []}
                 )
+            if kwargs.get("task") == "scene_summarize":
+                return kwargs["output_schema"].model_validate({"content": "本轮摘要"})
             return kwargs["output_schema"].model_validate({})
 
     class _StateUpdater:
@@ -367,13 +360,6 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
 
         def update(self, current_state, *_args, **_kwargs):
             return current_state
-
-    class _MemoryExtractor:
-        def __init__(self, _gateway):
-            pass
-
-        def extract(self, *_args, **_kwargs):
-            return MemoryDraftExtractResult(items=[])
 
     class _EntityExtractor:
         def __init__(self, _gateway):
@@ -401,6 +387,7 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
         scene_summary=lambda: _ContextStore(
             list_active=lambda: [],
             get_recent=lambda _limit=5: [],
+            save_one=lambda summary: summary.id,
         ),
         short_term=lambda: _ContextStore(
             clear=lambda: None,
@@ -418,7 +405,6 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
         director_npc=lambda: _ContextStore(list_standby=lambda: []),
     )
     monkeypatch.setattr(confirmation_nodes, "StateUpdater", _StateUpdater)
-    monkeypatch.setattr(confirmation_nodes, "MemoryDraftExtractor", _MemoryExtractor)
     monkeypatch.setattr(confirmation_nodes, "EntityExtractor", _EntityExtractor)
     monkeypatch.setattr(confirmation_nodes, "NPCProfileExtractor", _NPCExtractor)
     monkeypatch.setattr(
@@ -444,6 +430,11 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
     monkeypatch.setattr(
         confirmation_helpers,
         "run_scene_summary_maintenance",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        confirmation_helpers,
+        "run_memory_batch_maintenance",
         lambda *_args, **_kwargs: None,
     )
 

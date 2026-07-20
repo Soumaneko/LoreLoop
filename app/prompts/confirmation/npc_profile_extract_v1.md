@@ -62,7 +62,7 @@ NPCProfile 用于保存人物长期公开信息与导演幕后信息；本任务
 1. exact_match：Scene Facts 精确命中了已有 NPC 的 name 或任一 alias。
 2. alias_match：Scene Facts 的称呼可明确归入某个已有 NPC，但该称呼尚未被收录。
 3. new：Scene Facts 中的具体 NPC 无法合理匹配给任何已有 NPC。
-4. 应提取：有专有名字、明确个人身份、或已经被塑造成会长期复用的具体个体。
+4. 应提取：必须有专有名字、必须有明确个人身份、必须有会长期复用的具体个体。
 5. 严禁提取：物种/族群/怪物类型、临时敌人、职业泛称、未命名路人、未塑造的登记员/镇长/守卫/民兵/猎人/铁匠/文书。
 6. 严禁通过上帝视角匹配：Scene Facts 仅写“那女子”“女侠”时，除非当前 facts 或 Existing NPC Profiles 的别名能 100% 对应，否则不要强行匹配。
 7. DirectorEvent 明确说明某个描述性身份对应 Existing NPC 时，应映射到该已有 NPC，不得为同一人物创建占位档案。

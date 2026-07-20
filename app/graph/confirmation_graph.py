@@ -15,16 +15,17 @@ from .confirmation_helpers import (
     merge_confirmation_node_update,
     prepare_confirmation_second_wave,
     prepare_confirmation_state,
+    reset_confirmation_cache_after_rollback,
 )
 from .confirmation_nodes import (
     action_preview_node,
     director_event_update_node,
     entity_extract_node,
     entity_profile_update_node,
-    memory_draft_extract_node,
     npc_profile_extract_node,
     npc_profile_update_node,
     scene_fact_extract_node,
+    scene_summarize_node,
     state_update_node,
 )
 from .confirmation_state import ConfirmationPipelineInput, ConfirmationState
@@ -53,7 +54,7 @@ def build_confirmation_first_wave_graph():
     dependencies = (
         scene_fact_extract_node,
         state_update_node,
-        memory_draft_extract_node,
+        scene_summarize_node,
         entity_extract_node,
         npc_profile_extract_node,
     )
@@ -75,8 +76,8 @@ def _compile_confirmation_first_wave_graph():
         capture_confirmation_node_errors("state_update", state_update_node),
     )
     graph.add_node(
-        "memory_draft_extract",
-        capture_confirmation_node_errors("memory_draft_extract", memory_draft_extract_node),
+        "scene_summarize",
+        capture_confirmation_node_errors("scene_summarize", scene_summarize_node),
     )
     graph.add_node(
         "entity_extract",
@@ -89,11 +90,10 @@ def _compile_confirmation_first_wave_graph():
 
     graph.add_edge(START, "scene_fact_extract")
     graph.add_edge("scene_fact_extract", "state_update")
-    graph.add_edge("scene_fact_extract", "memory_draft_extract")
     graph.add_edge("scene_fact_extract", "entity_extract")
     graph.add_edge("scene_fact_extract", "npc_profile_extract")
-    graph.add_edge("state_update", END)
-    graph.add_edge("memory_draft_extract", END)
+    graph.add_edge("state_update", "scene_summarize")
+    graph.add_edge("scene_summarize", END)
     graph.add_edge("entity_extract", END)
     graph.add_edge("npc_profile_extract", END)
 
@@ -167,11 +167,13 @@ def stream_confirmation_pipeline(
     *,
     write_db: bool = True,
     scene_text: str | None = None,
+    journaled: bool = False,
 ):
     state: ConfirmationState = prepare_confirmation_state(
         pipeline_input,
         write_db=write_db,
         scene_text=scene_text,
+        journaled=journaled,
     )
     event_count = 0
     for event in state.get("events", []):
@@ -280,15 +282,16 @@ def _confirm_pipeline_locked(
             pipeline_input,
             write_db=write_db,
             scene_text=scene_text,
+            journaled=journaled,
         )
     except BaseException as exc:
         if journaled:
             runtime.jobs.wait_for_idle()
-            runtime.history.fail_confirmation(pipeline_input.turn_id, exc)
+            try:
+                runtime.history.fail_confirmation(pipeline_input.turn_id, exc)
+            finally:
+                reset_confirmation_cache_after_rollback(pipeline_input.pending)
         raise
-    else:
-        if journaled:
-            runtime.complete_confirmation(pipeline_input.pending)
 
 
 def confirm_opening_stream(

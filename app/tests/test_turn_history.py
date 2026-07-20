@@ -5,6 +5,7 @@ from app.domain.core_memory import InitConfig, build_initial_current_state
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import CampaignRuntime, PendingOpening
+from app.runtime.sqlite import connect_sqlite
 from app.runtime.turn_history import CampaignHistory
 
 
@@ -71,6 +72,39 @@ def test_interrupted_confirmation_restores_pre_turn_database(tmp_path):
     assert restarted.recover_interrupted() is True
     assert _read_value(game_db) == "before"
     assert restarted.pending_records()[0]["status"] == "awaiting_confirm"
+
+
+def test_failed_confirmation_restores_wal_database_with_live_connection(tmp_path):
+    data_dir = tmp_path / "save"
+    data_dir.mkdir()
+    game_db = data_dir / "game.db"
+    connection = connect_sqlite(game_db)
+    try:
+        connection.execute("CREATE TABLE game_state (value TEXT NOT NULL)")
+        connection.execute("INSERT INTO game_state VALUES ('before')")
+        connection.commit()
+
+        history = CampaignHistory(data_dir)
+        history.save_pending(
+            turn_id="turn-wal",
+            kind="turn",
+            group_id="group-wal",
+            turn_index=1,
+            payload={"turn_id": "turn-wal"},
+        )
+        history.begin_confirmation("turn-wal", write_db=True, scene_text=None)
+        connection.execute("UPDATE game_state SET value='partially-written'")
+        connection.commit()
+
+        history.fail_confirmation("turn-wal", RuntimeError("failed"))
+
+        assert connection.execute(
+            "SELECT value FROM game_state"
+        ).fetchone()[0] == "before"
+    finally:
+        connection.close()
+
+    assert _read_value(game_db) == "before"
 
 
 def test_turn_journal_persists_incremental_state_audit(tmp_path):

@@ -31,13 +31,14 @@
 
     <main class="story-layout">
       <section id="story" class="story" aria-live="polite">
-        <div id="welcome" class="welcome-card">
+        <div id="welcome" class="welcome-card" hidden>
           <div class="sigil">✦</div>
           <p class="eyebrow">AN UNTOLD PATH</p>
           <h1>故事等待你的选择</h1>
           <p>这里没有预设答案。描述你想做的事，世界会记住已经发生的一切。</p>
         </div>
         <div id="history" class="history"></div>
+        <div id="activePlayerAction" class="player-action active-player-action" hidden></div>
         <article id="streamingCard" class="narrative-card streaming-card" hidden>
           <div class="narrative-kicker"><span class="quill">✦</span><span id="streamingLabel">世界正在回应</span></div>
           <div id="streamingText" class="scene-text streaming-text"></div>
@@ -118,19 +119,60 @@
     <form method="dialog" id="initForm">
       <p class="eyebrow">BEGIN A NEW STORY</p>
       <h2>塑造你的起点</h2>
-      <p>只需要一个清晰的起点，余下的世界会在旅途中展开。</p>
-      <div class="form-grid">
-        <label><span>主角姓名</span><input name="protagonist_name" required placeholder="莱尔" /></label>
-        <label><span>性别</span><select name="protagonist_gender"><option>男</option><option>女</option><option>其他</option></select></label>
-        <label class="wide"><span>世界名称</span><input name="world_name" required placeholder="泰瑞大陆" /></label>
-        <label class="wide"><span>世界风格</span><textarea name="world_style" required placeholder="古典奇幻，衰落的王国与仍在苏醒的旧魔法"></textarea></label>
-        <label><span>能力体系</span><select name="ability_system"><option>魔法</option><option>低超自然</option><option>无超自然</option><option>灵能</option><option>科技奇迹</option></select></label>
-        <label><span>叙事基调</span><input name="narrative_tone" placeholder="冒险、神秘、有人情味" /></label>
-        <label class="wide"><span>人物背景</span><textarea name="protagonist_background" placeholder="一名带着未解谜团踏上旅途的年轻法师"></textarea></label>
-        <label class="wide"><span>希望体验的故事</span><textarea name="story_expectation" placeholder="探索未知，认识可信赖的同伴，并逐渐揭开世界的秘密"></textarea></label>
-      </div>
+      <p id="initStageHint">填写世界与主角设定，然后先生成一份可修改的长期故事方向。</p>
+      <fieldset id="initConfigFields" class="init-fieldset">
+        <div class="form-grid">
+          <label class="wide toggle-label"><input id="initFanfic" name="fanfic" type="checkbox" /><span>同人世界</span></label>
+
+          <div id="initOriginalFields" class="form-subgrid wide">
+            <label><span>世界名称</span><input name="world_name" required placeholder="泰瑞大陆" /></label>
+            <label><span>能力体系</span><select id="initAbilitySystem" name="ability_system"><option value="">未指定</option><option>无超自然</option><option>低超自然</option><option selected>魔法</option><option>灵能</option><option>科技奇迹</option><option>自定义</option></select></label>
+            <label class="wide"><span>世界风格</span><textarea name="world_style" required placeholder="古典奇幻，衰落的王国与仍在苏醒的旧魔法"></textarea></label>
+            <label id="initCustomAbilityWrap" class="wide" hidden><span>自定义能力体系</span><textarea name="custom_ability_system" placeholder="说明这个世界的能力来源、边界与常见形式"></textarea></label>
+          </div>
+
+          <div id="initFanficFields" class="form-subgrid wide" hidden>
+            <label><span>原作名称</span><input name="work_name" placeholder="原作或作品系列名称" /></label>
+            <label><span>故事时代</span><input name="story_era" placeholder="例如：原作第三卷结束后" /></label>
+            <label class="wide"><span>出生地点</span><input name="birth_location" placeholder="主角开始故事的地点" /></label>
+          </div>
+
+          <label><span>主角姓名</span><input name="protagonist_name" required placeholder="莱尔" /></label>
+          <label><span>性别</span><select name="protagonist_gender"><option>男</option><option>女</option><option>其他</option></select></label>
+          <label><span>年龄</span><input name="protagonist_age" type="number" min="0" placeholder="可选" /></label>
+          <label><span>叙事基调</span><input name="narrative_tone" placeholder="冒险、神秘、有人情味" /></label>
+          <label class="wide"><span>人物背景</span><textarea name="protagonist_background" placeholder="一名带着未解谜团踏上旅途的年轻法师"></textarea></label>
+
+          <section class="wide init-collection">
+            <div class="collection-heading"><span>主角能力（最多 3 项）</span><small>每项能力都需要名称和解释</small></div>
+            <div class="ability-grid">
+              <input class="ability-name" placeholder="能力 1 名称" />
+              <input class="ability-description" placeholder="能力 1 的效果、边界或代价" />
+              <input class="ability-name" placeholder="能力 2 名称" />
+              <input class="ability-description" placeholder="能力 2 的效果、边界或代价" />
+              <input class="ability-name" placeholder="能力 3 名称" />
+              <input class="ability-description" placeholder="能力 3 的效果、边界或代价" />
+            </div>
+          </section>
+
+          <label class="wide"><span>希望体验的故事</span><textarea name="story_expectation" required placeholder="探索未知，认识可信赖的同伴，并逐渐揭开世界的秘密"></textarea></label>
+
+          <section class="wide init-collection">
+            <div class="collection-heading"><span>额外核心设定</span><button id="addCoreMemoryBtn" class="text-button" type="button">＋ 添加</button></div>
+            <div id="extraCoreMemoryList" class="extra-memory-list"></div>
+          </section>
+        </div>
+      </fieldset>
+
+      <section id="storyDirectionStage" class="story-direction-stage" hidden>
+        <div class="section-heading"><span>长期故事方向</span><i></i></div>
+        <p>这是开场与后续导演系统使用的长期方向。你可以直接修改后再生成开场。</p>
+        <label><span>故事方向</span><textarea id="storyDirectionContent" maxlength="800"></textarea></label>
+        <label><span>默认货币单位</span><input id="storyDirectionCurrency" maxlength="40" placeholder="可留空，例如：金币" /></label>
+      </section>
       <div id="initError" class="form-error" hidden></div>
-      <div class="modal-actions"><button id="initSubmitBtn" class="primary-action" value="default">生成开场</button></div>
+      <div id="initConfigActions" class="modal-actions"><button id="storyDirectionBtn" class="primary-action" type="button">生成故事方向</button></div>
+      <div id="storyDirectionActions" class="modal-actions" hidden><button id="editInitConfigBtn" type="button">返回修改设定</button><button id="regenerateStoryDirectionBtn" type="button">重新生成方向</button><button id="initSubmitBtn" class="primary-action" value="default">生成开场</button></div>
     </form>
   </dialog>
 

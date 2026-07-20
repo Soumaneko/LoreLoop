@@ -55,6 +55,7 @@ def update_director_event_workflow(
     core_memory: CoreMemory,
     scene_summaries: list[SceneSummary],
     recent_summaries: list[SceneSummary] | None = None,
+    selection_summaries: list[SceneSummary] | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
     entity_mentions: list[str] | None = None,
@@ -257,7 +258,11 @@ def update_director_event_workflow(
         standby_director_npcs=standby_director_npcs,
         current_state=current_state,
         core_memory=core_memory,
-        recent_summaries=recent_summaries or scene_summaries[-5:],
+        recent_summaries=(
+            selection_summaries
+            if selection_summaries is not None
+            else recent_summaries or scene_summaries[-5:]
+        ),
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
         trace_id=trace_id,
@@ -276,7 +281,9 @@ def update_director_event_workflow(
         )
         if selected_director_npc is None:
             raise ValueError("DirectorEventSelector selected an unknown DirectorNPC")
-        if selected_director_npc.name not in selection.actors:
+        if not any(
+            selected_director_npc.name in actor for actor in selection.actors
+        ):
             raise ValueError(
                 "DirectorEventSelector must include the selected DirectorNPC in actors"
             )

@@ -3,13 +3,26 @@ import tempfile
 import pytest
 from pydantic import ValidationError
 
+from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene, ShortTermMemoryStore
+
+
+def _action_preview() -> ActionPreviewResult:
+    return ActionPreviewResult(previews=[
+        {"level": "冒险举动", "label": "追上去", "good_result": "追上目标。", "risk": "可能暴露。"},
+        {"level": "保守举动", "label": "留在原地", "good_result": "保持安全。", "risk": "可能错失机会。"},
+        {"level": "信息获取", "label": "检查痕迹", "good_result": "发现线索。", "risk": "会消耗时间。"},
+        {"level": "奇招", "label": "制造声响", "good_result": "引开注意。", "risk": "可能惊动更多人。"},
+    ])
 
 
 class TestShortTermMemoryStore:
     def test_add_and_get_recent(self):
         store = ShortTermMemoryStore(max_items=5)
-        store.add_turn("s1", 1, "观察四周", "第一段剧情", "接下来做什么？")
+        store.add_turn(
+            "s1", 1, "观察四周", "第一段剧情", "接下来做什么？",
+            action_preview=_action_preview(),
+        )
         store.add_turn("s2", 2, "与米莉交谈", "第二段剧情")
 
         memory = store.get_recent()
@@ -18,6 +31,7 @@ class TestShortTermMemoryStore:
         assert memory.recent_scenes[0].user_input == "观察四周"
         assert memory.recent_scenes[0].scene_text == "第一段剧情"
         assert memory.recent_scenes[0].closing_prompt == "接下来做什么？"
+        assert memory.recent_scenes[0].action_preview == _action_preview()
         assert memory.recent_scenes[1].scene_id == "s2"
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "第二段剧情"
@@ -118,6 +132,7 @@ class TestShortTermMemoryModel:
         )
         assert scene.user_input == ""
         assert scene.closing_prompt == ""
+        assert scene.action_preview is None
 
 
 class TestShortTermMemoryPersistence:
@@ -133,6 +148,7 @@ class TestShortTermMemoryPersistence:
             "与米莉交谈",
             "米莉告诉主角一条密道。",
             "要进入密道吗？",
+            action_preview=_action_preview(),
         )
         store1.close()
 
@@ -148,6 +164,7 @@ class TestShortTermMemoryPersistence:
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "米莉告诉主角一条密道。"
         assert memory.recent_scenes[1].closing_prompt == "要进入密道吗？"
+        assert memory.recent_scenes[1].action_preview == _action_preview()
 
         import os
         os.unlink(db_path)
@@ -189,6 +206,7 @@ class TestShortTermMemoryPersistence:
 
         assert memory.recent_scenes[0].scene_text == "旧剧情"
         assert memory.recent_scenes[0].closing_prompt == ""
+        assert memory.recent_scenes[0].action_preview is None
         assert updated.recent_scenes[1].scene_text == "新剧情"
 
         import os

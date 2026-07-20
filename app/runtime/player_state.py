@@ -17,6 +17,7 @@ def _project_history(turns) -> list[dict[str, Any]]:
             "user_input": turn.user_input,
             "scene_text": turn.scene_text,
             "closing_prompt": turn.closing_prompt,
+            "action_preview": model_data(turn.action_preview),
         }
         for turn in turns
     ]
@@ -195,6 +196,9 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
             "resources": model_data(resources),
         },
         "history": history,
+        "action_preview": (
+            history[-1]["action_preview"] if history else None
+        ),
         "history_pagination": history_page["pagination"],
         "highlights": _project_text_highlights(
             runtime,

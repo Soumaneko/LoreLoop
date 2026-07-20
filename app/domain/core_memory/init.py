@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.core_memory.schemas import CoreMemory, CoreMemoryItem
 from app.domain.current_state.schemas import (
@@ -13,6 +13,19 @@ from app.domain.current_state.schemas import (
 
 
 AbilitySystemPreset = Literal["无超自然", "低超自然", "魔法", "灵能", "科技奇迹", "自定义"]
+
+
+class ProtagonistAbility(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(min_length=1, max_length=300)
+
+    @field_validator("name", "description")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("must not be blank")
+        return clean
 
 
 class InitConfig(BaseModel):
@@ -33,7 +46,10 @@ class InitConfig(BaseModel):
     protagonist_age: int | None = Field(default=None, ge=0)
     protagonist_background: str | None = None
 
-    protagonist_abilities: list[str] = Field(default_factory=list, max_length=3)
+    protagonist_abilities: list[ProtagonistAbility] = Field(
+        default_factory=list,
+        max_length=3,
+    )
     narrative_tone: str | None = None
     story_expectation: str | None = None
 
@@ -110,12 +126,14 @@ def build_core_memory_items(config: InitConfig) -> list[CoreMemoryItem]:
         _build_player_identity(config),
     ]
 
-    abilities = [ability.strip() for ability in config.protagonist_abilities if ability.strip()]
-    if abilities:
+    if config.protagonist_abilities:
         items.append(CoreMemoryItem(
             id="core_player_abilities",
             category="player",
-            content="主角的特殊能力：\n" + "\n".join(f"- {ability}" for ability in abilities),
+            content="主角的特殊能力：\n" + "\n".join(
+                f"- {ability.name}：{ability.description}"
+                for ability in config.protagonist_abilities
+            ),
             priority=100,
         ))
 

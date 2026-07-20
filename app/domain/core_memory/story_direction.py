@@ -1,7 +1,7 @@
 import json
 from typing import cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.llm import LLMGateway
 
@@ -12,6 +12,20 @@ from .schemas import CoreMemory, CoreMemoryItem
 class StoryDirectionResult(BaseModel):
     content: str = Field(min_length=1, max_length=800)
     currency_unit: str | None = Field(default=None, max_length=40)
+
+    @field_validator("content")
+    @classmethod
+    def strip_content(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("content must not be blank")
+        return clean
+
+    @field_validator("currency_unit")
+    @classmethod
+    def strip_currency_unit(cls, value: str | None) -> str | None:
+        clean = (value or "").strip()
+        return clean or None
 
     def to_core_memory_item(self) -> CoreMemoryItem:
         return CoreMemoryItem(

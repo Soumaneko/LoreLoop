@@ -18,8 +18,8 @@ from app.domain.npc_profile.workflows import (
     sync_npc_profile_absence_from_current_state,
     update_npc_profiles_from_extraction,
 )
-from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
+from app.domain.scene_summary.summarizer import SceneSummarizer
 from app.domain.views import project_scene_facts
 from app.runtime.serialization import model_data
 from app.domain.director_event.workflows import (
@@ -161,30 +161,24 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
     }
 
 
-def memory_draft_extract_node(state: ConfirmationState) -> ConfirmationState:
+def scene_summarize_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
-    trace_id = state["trace_id"]
     cache = state["cache"]
-    pending_memory_result = cache.get("pending_memory_result")
-    if pending_memory_result is None:
-        gateway = _gateway_for(state)
-        extractor = MemoryDraftExtractor(gateway)
-        pending_memory_result = extractor.extract(
-            state["scene_facts_json"],
-            state["state_before_update"],
+    turn_summary = cache.get("turn_summary")
+    if turn_summary is None:
+        turn_summary = SceneSummarizer(_gateway_for(state)).summarize_turn(
+            scene_text=state["confirmation_scene_text"],
+            current_state=state["updated_state"],
             core_memory=state["core_memory"],
+            scene_id=state["updated_state"].scene.scene_id,
             turn_index=pipeline_input.turn_index,
-            scene_id=state["state_before_update"].scene.scene_id,
-            trace_id=trace_id,
+            trace_id=state["trace_id"],
         )
     return {
-        "pending_memory_result": pending_memory_result,
+        "turn_summary": turn_summary,
         "events": [{
-            "step": "memory_draft_extract_done",
-            "data": {
-                "pending_items_count": len(pending_memory_result.items),
-                "pending_items": model_data(pending_memory_result.items),
-            },
+            "step": "scene_summarized",
+            "data": {"turn_summary": model_data(turn_summary)},
         }],
     }
 
@@ -327,6 +321,7 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                     core_memory=state["core_memory"],
                     scene_summaries=state.get("scene_summaries", []),
                     recent_summaries=state.get("recent_summaries", []),
+                    selection_summaries=state.get("selection_summaries", []),
                     entity_profiles=director_entity_profiles,
                     npc_profiles=director_npc_profiles,
                     entity_mentions=entity_mentions,
@@ -344,6 +339,9 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                     standby_director_npcs=standby_director_npcs,
                     trace_id=trace_id,
                 )
+                # Scene Facts above are confined to reviewing/intervening on an
+                # existing event. DirectorEventSelector's contract receives the
+                # recent summaries, never this turn's Scene Facts.
                 active_after = results[role].active_after
                 if active_after is not None and active_after.director_npc_id:
                     promoted = ensure_director_npc_profile(

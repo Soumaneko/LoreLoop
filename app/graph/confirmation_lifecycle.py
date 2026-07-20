@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import traceback
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -37,6 +38,7 @@ class ConfirmationPreparer:
         *,
         write_db: bool = True,
         scene_text: str | None = None,
+        journaled: bool = False,
     ) -> ConfirmationState:
         services = self.services
         pending = pipeline_input.pending
@@ -132,6 +134,7 @@ class ConfirmationPreparer:
             "node_errors": [],
             "pipeline_input": pipeline_input,
             "write_db": write_db,
+            "journaled": journaled,
             "scene_text": scene_text,
             "pending": pending,
             "turn_id": turn_id,
@@ -155,6 +158,7 @@ class ConfirmationCommitServices:
     short_term_memory_store: Callable
     pending_memory_store: Callable
     memory_store: Callable
+    scene_summary_store: Callable
 
 
 @dataclass
@@ -162,7 +166,6 @@ class ConfirmationCommitResult:
     short_term_after: Any
     saved_pending_ids: list[str]
     pending_count_after: int
-    should_batch: bool
     store_count_before: int
     store_count_after: int
     store_total: int
@@ -190,7 +193,6 @@ class ConfirmationCommitter:
                 short_term_after=short_term_after,
                 saved_pending_ids=[],
                 pending_count_after=0,
-                should_batch=False,
                 store_count_before=0,
                 store_count_after=0,
                 store_total=store_total,
@@ -200,6 +202,13 @@ class ConfirmationCommitter:
             with services.current_state_store() as state_store:
                 state_store.save(updated_state)
             cache["state_saved"] = True
+
+        if not cache.get("turn_summary_saved"):
+            with services.scene_summary_store() as summary_store:
+                cache["turn_summary_id"] = summary_store.save_one(
+                    state["turn_summary"]
+                )
+            cache["turn_summary_saved"] = True
 
         with services.short_term_memory_store() as short_store:
             if not cache.get("short_term_saved"):
@@ -211,21 +220,14 @@ class ConfirmationCommitter:
                     user_input=pipeline_input.user_input,
                     scene_text=state["effective_scene_text"],
                     closing_prompt=pipeline_input.scene_result.closing_prompt,
+                    action_preview=state.get("action_preview"),
                 )
                 cache["short_term_saved"] = True
             short_term_after = short_store.get_recent()
 
         with services.pending_memory_store() as pending_store:
-            if not cache.get("pending_memories_saved"):
-                saved_pending_ids = pending_store.save_many(
-                    state["pending_memory_result"].items
-                )
-                cache["saved_pending_ids"] = saved_pending_ids
-                cache["pending_memories_saved"] = True
-            else:
-                saved_pending_ids = cache.get("saved_pending_ids", [])
+            saved_pending_ids = []
             pending_count_after = pending_store.count()
-            should_batch = pending_store.should_trigger_batch(turn_threshold=5)
 
         with services.memory_store() as mem_store:
             store_count_before = mem_store.count()
@@ -236,7 +238,6 @@ class ConfirmationCommitter:
             short_term_after=short_term_after,
             saved_pending_ids=saved_pending_ids,
             pending_count_after=pending_count_after,
-            should_batch=should_batch,
             store_count_before=store_count_before,
             store_count_after=store_count_after,
             store_total=store_total,
@@ -249,7 +250,6 @@ class ConfirmationMaintenanceServices:
     run_director_npc_restock: Callable
     run_scene_summary_maintenance: Callable
     run_memory_batch_maintenance: Callable
-    submit_memory_batch_once: Callable
 
 
 @dataclass
@@ -339,11 +339,8 @@ class ConfirmationMaintenanceScheduler:
             summary_future = self.runtime.jobs.submit_job(
                 "scene_summary",
                 self.services.run_scene_summary_maintenance,
-                state["confirmation_scene_text"],
-                updated_state,
-                updated_state.scene.scene_id,
-                pipeline_input.turn_index,
                 state["trace_id"],
+                pipeline_input.turn_index,
                 trace_id=state["trace_id"],
                 turn_index=pipeline_input.turn_index,
                 metadata={
@@ -361,16 +358,30 @@ class ConfirmationMaintenanceScheduler:
             cache["scene_summary_scheduled"] = True
 
         batch_queued = bool(cache.get("memory_batch_scheduled"))
-        if commit_result.should_batch and not batch_queued:
-            batch_queued = self.services.submit_memory_batch_once(
+        if not batch_queued:
+            memory_future = self.runtime.jobs.submit_job(
+                "memory_batch",
                 self.services.run_memory_batch_maintenance,
                 updated_state,
+                state["state_before_update"],
+                state["scene_facts_json"],
                 state["trace_id"],
                 pipeline_input.turn_index,
+                trace_id=state["trace_id"],
+                turn_index=pipeline_input.turn_index,
+                metadata={
+                    "campaign_id": self.runtime.campaign_id,
+                    "scene_id": updated_state.scene.scene_id,
+                },
                 core_memory=state["core_memory"],
-                wait_for_summary=summary_future,
             )
-            cache["memory_batch_scheduled"] = batch_queued
+            cache["memory_batch_job_id"] = getattr(
+                memory_future,
+                "job_id",
+                None,
+            )
+            batch_queued = True
+            cache["memory_batch_scheduled"] = True
 
         return ConfirmationScheduleResult(
             director_npc_restock_scheduled=director_npc_restock_scheduled,
@@ -414,7 +425,7 @@ class ConfirmationEventBuilder:
             })
 
         memory_data: dict = {
-            "pending_items": model_data(state["pending_memory_result"].items),
+            "pending_items": [],
             "saved_pending_ids": commit_result.saved_pending_ids,
             "pending_count_after": commit_result.pending_count_after,
             "batch_queued": schedule_result.batch_queued,
@@ -487,13 +498,7 @@ class ConfirmationFinalizer:
         self.event_builder = event_builder
 
     def finalize(self, state: ConfirmationState) -> ConfirmationState:
-        restock_scheduled = self.scheduler.schedule_restock(state)
         commit_result = self.committer.commit(state)
-        schedule_result = self.scheduler.schedule_followups(
-            state,
-            commit_result,
-            director_npc_restock_scheduled=restock_scheduled,
-        )
 
         if state.get("write_db", True):
             pipeline_input = state["pipeline_input"]
@@ -504,10 +509,35 @@ class ConfirmationFinalizer:
                 state_after=model_data(state["updated_state"]),
             )
             pending = state["pending"]
+            if state.get("journaled"):
+                self.runtime.complete_confirmation(pending)
+                state["journal_completed"] = True
             if isinstance(pending, PendingTurn):
                 self.runtime.pending_turns.discard_group(pending.group_id)
             else:
                 self.runtime.pending_openings.remove(state["turn_id"])
+
+        try:
+            restock_scheduled = self.scheduler.schedule_restock(state)
+        except Exception:
+            print("[debug-server] failed to schedule director npc restock")
+            traceback.print_exc()
+            restock_scheduled = bool(
+                state.get("director_npc_restock_scheduled")
+            )
+        try:
+            schedule_result = self.scheduler.schedule_followups(
+                state,
+                commit_result,
+                director_npc_restock_scheduled=restock_scheduled,
+            )
+        except Exception:
+            print("[debug-server] failed to schedule confirmation maintenance")
+            traceback.print_exc()
+            schedule_result = ConfirmationScheduleResult(
+                director_npc_restock_scheduled=restock_scheduled,
+                batch_queued=bool(state["cache"].get("memory_batch_scheduled")),
+            )
 
         state["events"] = [
             *state.get("events", []),

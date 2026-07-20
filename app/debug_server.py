@@ -16,6 +16,7 @@ from app.api import (
     create_save,
     discard_pending_turn,
     generate_turn_stream,
+    generate_story_direction,
     get_maintenance_job,
     list_maintenance_jobs,
     list_saves,
@@ -116,7 +117,10 @@ class DebugHandler(BaseHTTPRequestHandler):
             self._handle_player_json_stream(self._generate_stream)
             return
         if path == "/api/player/confirm":
-            self._handle_player_json_stream(self._player_confirm_stream)
+            self._handle_player_json_stream(
+                self._player_confirm_stream,
+                continue_on_disconnect=True,
+            )
             return
         if path == "/api/player/retry":
             self._handle_player_json_stream(self._retry_stream)
@@ -126,6 +130,9 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/init":
             self._handle_player_json(self._player_init)
+            return
+        if path == "/api/player/init/story-direction":
+            self._handle_player_json(self._player_story_direction)
             return
         if path == "/api/player/difficulty":
             self._handle_player_json(lambda: save_difficulty(_read_json(self)))
@@ -150,7 +157,10 @@ class DebugHandler(BaseHTTPRequestHandler):
             self._handle_json_stream(self._generate_stream)
             return
         if path == "/api/confirm":
-            self._handle_json_stream(self._confirm_stream)
+            self._handle_json_stream(
+                self._confirm_stream,
+                continue_on_disconnect=True,
+            )
             return
         if path == "/api/retry":
             self._handle_json_stream(self._retry_stream)
@@ -166,6 +176,9 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/init/preview":
             self._handle_json(lambda: preview_core_memory(_read_json(self)))
+            return
+        if path == "/api/init/story-direction":
+            self._handle_json(lambda: generate_story_direction(_read_json(self)))
             return
         if path == "/api/init/apply":
             self._handle_json(lambda: apply_core_memory_init(_read_json(self)))
@@ -249,7 +262,12 @@ class DebugHandler(BaseHTTPRequestHandler):
                 },
             )
 
-    def _handle_json_stream(self, generator_factory) -> None:
+    def _handle_json_stream(
+        self,
+        generator_factory,
+        *,
+        continue_on_disconnect: bool = False,
+    ) -> None:
         try:
             generator = generator_factory()
             self.send_response(200)
@@ -258,13 +276,22 @@ class DebugHandler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
+            client_connected = True
             for event in generator:
+                if not client_connected:
+                    continue
                 payload = json.dumps({"ok": True, **event}, ensure_ascii=False)
-                self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+                try:
+                    self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    if not continue_on_disconnect:
+                        raise
+                    client_connected = False
+            if client_connected:
+                done_payload = json.dumps({"ok": True, "step": "done"}, ensure_ascii=False)
+                self.wfile.write(f"data: {done_payload}\n\n".encode("utf-8"))
                 self.wfile.flush()
-            done_payload = json.dumps({"ok": True, "step": "done"}, ensure_ascii=False)
-            self.wfile.write(f"data: {done_payload}\n\n".encode("utf-8"))
-            self.wfile.flush()
             self.close_connection = True
         except Exception as exc:
             err_payload = json.dumps(
@@ -312,7 +339,12 @@ class DebugHandler(BaseHTTPRequestHandler):
             public_data = {}
         return {"step": step, "data": public_data}
 
-    def _handle_player_json_stream(self, generator_factory) -> None:
+    def _handle_player_json_stream(
+        self,
+        generator_factory,
+        *,
+        continue_on_disconnect: bool = False,
+    ) -> None:
         try:
             generator = generator_factory()
             self.send_response(200)
@@ -321,18 +353,27 @@ class DebugHandler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
+            client_connected = True
             for event in generator:
+                if not client_connected:
+                    continue
                 payload = json.dumps(
                     {"ok": True, **self._player_event(event)},
                     ensure_ascii=False,
                 )
-                self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+                try:
+                    self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    if not continue_on_disconnect:
+                        raise
+                    client_connected = False
+            if client_connected:
+                done_payload = json.dumps(
+                    {"ok": True, "step": "done"}, ensure_ascii=False
+                )
+                self.wfile.write(f"data: {done_payload}\n\n".encode("utf-8"))
                 self.wfile.flush()
-            done_payload = json.dumps(
-                {"ok": True, "step": "done"}, ensure_ascii=False
-            )
-            self.wfile.write(f"data: {done_payload}\n\n".encode("utf-8"))
-            self.wfile.flush()
             self.close_connection = True
         except Exception as exc:
             error = {
@@ -428,6 +469,13 @@ class DebugHandler(BaseHTTPRequestHandler):
             "turn_id": result["turn_id"],
             "opening_scene": result["opening_scene"],
             "status": result["status"],
+        }
+
+    def _player_story_direction(self):
+        result = generate_story_direction(_read_json(self))
+        return {
+            "config": result["config"],
+            "story_direction": result["story_direction"],
         }
 
     def _retry_stream(self):

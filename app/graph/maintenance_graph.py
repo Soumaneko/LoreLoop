@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import traceback
-from concurrent.futures import Future
 
 from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
@@ -14,14 +13,14 @@ from .maintenance_helpers import (
     prepare_manual_batch_state,
     prepare_manual_memory_maintenance_state,
     prepare_memory_batch_state,
+    prepare_turn_memory_maintenance_state,
     prepare_scene_summary_state,
-    scene_summary_route,
 )
 from .maintenance_nodes import (
     director_npc_restock_node,
     memory_batch_classify_node,
+    memory_draft_extract_node,
     memory_maintain_node,
-    scene_summarize_node,
     scene_summary_condense_node,
 )
 from .maintenance_state import (
@@ -33,9 +32,7 @@ from .maintenance_state import (
 
 def build_scene_summary_maintenance_graph():
     dependencies = (
-        scene_summarize_node,
         scene_summary_condense_node,
-        scene_summary_route,
     )
     return get_cached_graph(
         "maintenance_scene_summary",
@@ -46,18 +43,9 @@ def build_scene_summary_maintenance_graph():
 
 def _compile_scene_summary_maintenance_graph():
     graph = StateGraph(SceneSummaryMaintenanceState)
-    graph.add_node("scene_summarize", scene_summarize_node)
     graph.add_node("scene_summary_condense", scene_summary_condense_node)
 
-    graph.add_edge(START, "scene_summarize")
-    graph.add_conditional_edges(
-        "scene_summarize",
-        scene_summary_route,
-        {
-            "scene_summary_condense": "scene_summary_condense",
-            "done": END,
-        },
-    )
+    graph.add_edge(START, "scene_summary_condense")
     graph.add_edge("scene_summary_condense", END)
     return graph.compile()
 
@@ -81,6 +69,39 @@ def _compile_memory_batch_maintenance_graph():
     graph.add_node("memory_maintain", memory_maintain_node)
 
     graph.add_edge(START, "memory_batch_classify")
+    graph.add_conditional_edges(
+        "memory_batch_classify",
+        memory_batch_route,
+        {
+            "memory_maintain": "memory_maintain",
+            "done": END,
+        },
+    )
+    graph.add_edge("memory_maintain", END)
+    return graph.compile()
+
+
+def build_turn_memory_maintenance_graph():
+    dependencies = (
+        memory_draft_extract_node,
+        memory_batch_classify_node,
+        memory_maintain_node,
+        memory_batch_route,
+    )
+    return get_cached_graph(
+        "maintenance_turn_memory",
+        dependencies,
+        _compile_turn_memory_maintenance_graph,
+    )
+
+
+def _compile_turn_memory_maintenance_graph():
+    graph = StateGraph(MemoryMaintenanceState)
+    graph.add_node("memory_draft_extract", memory_draft_extract_node)
+    graph.add_node("memory_batch_classify", memory_batch_classify_node)
+    graph.add_node("memory_maintain", memory_maintain_node)
+    graph.add_edge(START, "memory_draft_extract")
+    graph.add_edge("memory_draft_extract", "memory_batch_classify")
     graph.add_conditional_edges(
         "memory_batch_classify",
         memory_batch_route,
@@ -155,21 +176,15 @@ def run_director_npc_restock(
 
 
 def run_scene_summary_maintenance(
-    scene_text,
-    current_state,
-    scene_id,
-    turn_index,
     trace_id,
+    turn_index,
     *,
     core_memory,
 ) -> None:
     try:
         state = prepare_scene_summary_state(
-            scene_text,
-            current_state,
-            scene_id,
-            turn_index,
             trace_id,
+            turn_index,
             core_memory=core_memory,
             threshold=10,
         )
@@ -177,7 +192,7 @@ def run_scene_summary_maintenance(
         result = graph_state["result"]
         print(
             "[debug-server] scene summary maintenance "
-            f"l1={result.saved_l1_id} condensed={len(result.condensed_ids)}"
+            f"condensed={len(result.condensed_ids)}"
         )
     except Exception:
         print("[debug-server] scene summary maintenance failed")
@@ -187,23 +202,24 @@ def run_scene_summary_maintenance(
 
 def run_memory_batch_maintenance(
     current_state,
+    state_before_update,
+    scene_facts_json,
     trace_id,
     turn_index,
     *,
     core_memory,
-    wait_for_summary: Future | None = None,
 ) -> None:
     try:
-        if wait_for_summary is not None:
-            wait_for_summary.result()
-        state = prepare_memory_batch_state(
+        state = prepare_turn_memory_maintenance_state(
             current_state,
+            state_before_update,
+            scene_facts_json,
             trace_id,
             turn_index,
             core_memory=core_memory,
             turn_threshold=5,
         )
-        graph_state = build_memory_batch_maintenance_graph().invoke(state)
+        graph_state = build_turn_memory_maintenance_graph().invoke(state)
         result = graph_state["batch_result"]
         maintenance_result = graph_state.get("maintenance_result")
         print(

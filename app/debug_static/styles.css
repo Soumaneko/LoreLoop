@@ -37,6 +37,9 @@ input {
   font: inherit;
 }
 
+select { color-scheme: light; color: var(--text); background-color: #fff; }
+select option, select optgroup { color: var(--text); background-color: #fff; }
+
 button {
   min-height: 34px;
   border: 1px solid var(--line-strong);

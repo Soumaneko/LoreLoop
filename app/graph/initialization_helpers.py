@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import ValidationError
 
 from app.domain.core_memory import (
     CoreMemory,
     InitConfig,
+    StoryDirectionAgent,
     StoryDirectionResult,
     build_core_memory,
     build_initial_current_state,
@@ -47,25 +48,51 @@ def preview_core_memory(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def generate_story_direction(payload: dict[str, Any]) -> dict[str, Any]:
+    runtime = get_campaign_runtime()
+    with runtime.confirmation_lock:
+        config, core_memory = build_core_memory_from_payload(payload)
+        trace_id = str(uuid.uuid4())
+        story_direction = StoryDirectionAgent(
+            runtime.services.gateway(session_type="init")
+        ).generate(
+            config=config,
+            base_core_memory=core_memory,
+            trace_id=trace_id,
+        )
+    return {
+        "config": model_data(config),
+        "core_memory": model_data(core_memory),
+        "story_direction": model_data(story_direction),
+        "trace_id": trace_id,
+    }
+
+
 def prepare_initialization_state(payload: dict[str, Any]) -> InitializationState:
     runtime = get_campaign_runtime()
     services = runtime.services
-    config, core_memory = build_core_memory_from_payload(payload)
-    return {
+    config_payload = payload.get("config")
+    if not isinstance(config_payload, dict):
+        raise ValueError("config is required")
+    story_direction_payload = payload.get("story_direction")
+    if not isinstance(story_direction_payload, dict):
+        raise ValueError("story_direction is required")
+
+    config, core_memory = build_core_memory_from_payload(config_payload)
+    story_direction = StoryDirectionResult.model_validate(story_direction_payload)
+    state: InitializationState = {
         "events": [],
         "runtime_services": services,
         "trace_id": str(uuid.uuid4()),
         "config": config,
         "core_memory": core_memory,
         "current_state": build_initial_current_state(config),
+        "story_direction": story_direction,
     }
-
-
-def initialization_route(
-    state: InitializationState,
-) -> Literal["story_direction", "opening_scene"]:
-    expectation = state["config"].story_expectation or ""
-    return "story_direction" if expectation.strip() else "opening_scene"
+    core_memory, current_state = apply_story_direction(state, story_direction)
+    state["core_memory"] = core_memory
+    state["current_state"] = current_state
+    return state
 
 
 def apply_story_direction(

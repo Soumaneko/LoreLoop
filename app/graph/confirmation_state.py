@@ -14,7 +14,6 @@ from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.entity.schemas import EntityExtractionResult, EntityProfile
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
-from app.domain.recall_memory.schemas import MemoryDraftExtractResult
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
@@ -57,7 +56,7 @@ class ConfirmationCache(TypedDict, total=False):
     scene_facts: SceneFactSet
     updated_state: CurrentState
     state_change_set: StateChangeSet
-    pending_memory_result: MemoryDraftExtractResult
+    turn_summary: SceneSummary
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
     npc_director_events: list[DirectorEvent]
@@ -72,15 +71,15 @@ class ConfirmationCache(TypedDict, total=False):
     director_npc_restock_scheduled: bool
     director_npc_restock_job_id: str | None
     director_npc_last_dispatch_turn_set: bool
-    pending_memory_metadata_filled: bool
+    turn_summary_saved: bool
+    turn_summary_id: str
     state_saved: bool
     short_term_saved: bool
-    pending_memories_saved: bool
-    saved_pending_ids: list[str]
     scene_summary_future: Future[Any]
     scene_summary_job_id: str | None
     scene_summary_scheduled: bool
     memory_batch_scheduled: bool
+    memory_batch_job_id: str | None
 
 
 class ConfirmationState(TypedDict, total=False):
@@ -89,6 +88,8 @@ class ConfirmationState(TypedDict, total=False):
     node_errors: Annotated[list[ConfirmationNodeError], add]
     pipeline_input: ConfirmationPipelineInput
     write_db: bool
+    journaled: bool
+    journal_completed: bool
     scene_text: str | None
     pending: PendingTurn | PendingOpening
     turn_id: str
@@ -105,11 +106,12 @@ class ConfirmationState(TypedDict, total=False):
     core_memory: CoreMemory
     scene_summaries: list[SceneSummary]
     recent_summaries: list[SceneSummary]
+    selection_summaries: list[SceneSummary]
+    turn_summary: SceneSummary
     scene_facts: SceneFactSet
     scene_facts_json: str
     updated_state: CurrentState
     state_change_set: StateChangeSet
-    pending_memory_result: MemoryDraftExtractResult
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
     npc_director_events: list[DirectorEvent]

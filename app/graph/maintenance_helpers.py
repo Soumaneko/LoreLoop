@@ -27,11 +27,8 @@ def maintenance_gateway(
 
 
 def prepare_scene_summary_state(
-    scene_text: str,
-    current_state: CurrentState,
-    scene_id: str,
-    turn_index: int,
     trace_id: str,
+    turn_index: int,
     *,
     core_memory: CoreMemory,
     threshold: int = 10,
@@ -42,23 +39,10 @@ def prepare_scene_summary_state(
         "runtime_services": services,
         "trace_id": trace_id,
         "turn_index": turn_index,
-        "scene_id": scene_id,
-        "scene_text": scene_text,
-        "current_state": current_state,
         "core_memory": core_memory,
         "threshold": threshold,
         "result": SceneSummaryMaintenanceResult(),
     }
-
-
-def scene_summary_route(
-    state: SceneSummaryMaintenanceState,
-) -> Literal["scene_summary_condense", "done"]:
-    with state["runtime_services"].stores.scene_summary() as store:
-        if store.should_condense(1, threshold=state.get("threshold", 10)):
-            return "scene_summary_condense"
-    return "done"
-
 
 def prepare_memory_batch_state(
     current_state: CurrentState,
@@ -82,6 +66,30 @@ def prepare_memory_batch_state(
         "force": force,
         "through_turn": turn_index if through_turn is None else through_turn,
     }
+
+
+def prepare_turn_memory_maintenance_state(
+    current_state: CurrentState,
+    state_before_update: CurrentState,
+    scene_facts_json: str,
+    trace_id: str,
+    turn_index: int,
+    *,
+    core_memory: CoreMemory,
+    turn_threshold: int = 5,
+) -> MemoryMaintenanceState:
+    state = prepare_memory_batch_state(
+        current_state,
+        trace_id,
+        turn_index,
+        core_memory=core_memory,
+        turn_threshold=turn_threshold,
+    )
+    state.update({
+        "state_before_update": state_before_update,
+        "scene_facts_json": scene_facts_json,
+    })
+    return state
 
 
 def prepare_manual_batch_state() -> MemoryMaintenanceState:

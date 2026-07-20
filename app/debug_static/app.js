@@ -62,6 +62,8 @@ const state = {
   pendingSceneText: null,
   chatRestored: false,
   coreMemoryInitialized: true,
+  initConfigSnapshot: null,
+  initStoryDirection: null,
   operationStatus: "Ready",
   saves: [],
   activeSave: null,
@@ -591,7 +593,14 @@ function appendPendingVariant(data) {
 
 function readInitConfig() {
   const fanfic = $("initFanfic")?.checked || false;
-  const abilities = [...document.querySelectorAll(".init-ability")].map((el) => el.value.trim()).filter(Boolean).slice(0, 3);
+  const abilityNames = [...document.querySelectorAll(".init-ability-name")];
+  const abilityDescriptions = [...document.querySelectorAll(".init-ability-description")];
+  const abilities = abilityNames.map((el, index) => {
+    const name = el.value.trim();
+    const description = abilityDescriptions[index].value.trim();
+    if (Boolean(name) !== Boolean(description)) throw new Error(`能力 ${index + 1} 的名称和解释需要同时填写`);
+    return name ? { name, description } : null;
+  }).filter(Boolean).slice(0, 3);
   let extraItems = [];
   const extraRaw = $("initExtraItems")?.value.trim();
   if (extraRaw) extraItems = JSON.parse(extraRaw);
@@ -631,10 +640,12 @@ function readInitConfig() {
 
 function renderInitPanel() {
   state.coreMemoryInitialized = false;
+  state.initConfigSnapshot = null;
+  state.initStoryDirection = null;
   setStatus("需要初始化 Core Memory");
   els.turnInfo.textContent = "未初始化";
   els.statePanel.innerHTML = `
-    ${card("初始化", `<div class="empty">创建核心记忆后会生成开场情景，并进入待确认状态。</div>`)}
+    ${card("初始化", `<div class="empty">先生成并编辑 Story Direction，再用确认后的方向生成开场。</div>`)}
     <section class="card init-grid">
       <label><input id="initFanfic" type="checkbox" /> 同人世界</label>
       <input id="initName" placeholder="主角姓名" />
@@ -656,18 +667,25 @@ function renderInitPanel() {
         <option value="自定义">自定义</option>
       </select>
       <input id="initCustomAbilitySystem" placeholder="自定义能力体系，仅选择自定义时填写" />
-      <input class="init-ability" placeholder="能力 1" />
-      <input class="init-ability" placeholder="能力 2" />
-      <input class="init-ability" placeholder="能力 3" />
+      <input class="init-ability-name" placeholder="能力 1 名称" />
+      <input class="init-ability-description" placeholder="能力 1 解释" />
+      <input class="init-ability-name" placeholder="能力 2 名称" />
+      <input class="init-ability-description" placeholder="能力 2 解释" />
+      <input class="init-ability-name" placeholder="能力 3 名称" />
+      <input class="init-ability-description" placeholder="能力 3 解释" />
       <input id="initTone" placeholder="叙事基调，可选" />
       <textarea id="initStoryExpectation" placeholder="剧情主旨与游玩期待"></textarea>
       <textarea id="initExtraItems" placeholder='额外核心记忆 JSON，可选'></textarea>
       <button id="initPreviewBtn">预览</button>
-      <button id="initSaveBtn" class="primary-button">保存初始化</button>
+      <button id="initDirectionBtn" class="primary-button">生成 Story Direction</button>
+      <textarea id="initDirectionContent" placeholder="生成后可在这里修改 Story Direction" disabled></textarea>
+      <input id="initCurrencyUnit" placeholder="默认货币单位，可选" disabled />
+      <button id="initSaveBtn" class="primary-button" disabled>使用当前方向生成开场</button>
       <pre id="initPreview" class="json-block">等待预览...</pre>
     </section>
   `;
   $("initPreviewBtn").onclick = previewInit;
+  $("initDirectionBtn").onclick = generateInitDirection;
   $("initSaveBtn").onclick = applyInit;
 }
 
@@ -685,7 +703,18 @@ async function applyInit() {
   const btn = $("initSaveBtn");
   btn.disabled = true;
   try {
-    const data = await api("/api/init/apply", { method: "POST", body: JSON.stringify(readInitConfig()) });
+    const content = $("initDirectionContent").value.trim();
+    if (!state.initConfigSnapshot || !content) throw new Error("请先生成并确认 Story Direction");
+    const data = await api("/api/init/apply", {
+      method: "POST",
+      body: JSON.stringify({
+        config: state.initConfigSnapshot,
+        story_direction: {
+          content,
+          currency_unit: $("initCurrencyUnit").value.trim() || null,
+        },
+      }),
+    });
     state.coreMemoryInitialized = true;
     state.pendingTurnId = data.turn_id || null;
     state.pendingGroupId = null;
@@ -698,6 +727,29 @@ async function applyInit() {
   } catch (err) {
     btn.disabled = false;
     $("initPreview").textContent = err.message || "保存失败";
+  }
+}
+
+async function generateInitDirection() {
+  const btn = $("initDirectionBtn");
+  btn.disabled = true;
+  try {
+    const data = await api("/api/init/story-direction", {
+      method: "POST",
+      body: JSON.stringify(readInitConfig()),
+    });
+    state.initConfigSnapshot = data.config;
+    state.initStoryDirection = data.story_direction;
+    $("initDirectionContent").disabled = false;
+    $("initCurrencyUnit").disabled = false;
+    $("initDirectionContent").value = data.story_direction.content || "";
+    $("initCurrencyUnit").value = data.story_direction.currency_unit || "";
+    $("initSaveBtn").disabled = false;
+    $("initPreview").textContent = JSON.stringify(data.story_direction, null, 2);
+  } catch (err) {
+    $("initPreview").textContent = err.message || "Story Direction 生成失败";
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -1015,7 +1067,6 @@ function stepTasks(scope, stepName) {
   const confirmation = {
     scene_facts_done: ["scene_fact_extract"],
     state_update_done: ["state_update"],
-    memory_draft_extract_done: ["memory_draft_extract"],
     entity_extract_done: ["entity_extract"],
     npc_extract_done: ["npc_profile_extract"],
     action_preview_done: ["action_preview"],
@@ -1023,6 +1074,7 @@ function stepTasks(scope, stepName) {
     finish: ["*"],
   };
   const maintenance = {
+    memory_draft_extract_done: ["memory_draft_extract"],
     batch_classified: ["memory_batch_classify", "memory_maintain"],
     memory_maintain_done: ["memory_maintain"],
   };
@@ -2150,7 +2202,6 @@ async function confirmTurn() {
     await readEventStream(response, "confirmation", (event) => {
       if (event.step === "state_update_done") state.activeTab = "diff";
       if (event.step === "scene_facts_done") state.activeTab = "confirmation";
-      if (event.step === "memory_draft_extract_done") state.activeTab = "confirmation";
       if (event.step === "entity_extract_done") state.activeTab = "entity";
       if (event.step === "npc_extract_done") state.activeTab = "npc";
       if (event.step === "action_preview_done") state.activeTab = "preview";

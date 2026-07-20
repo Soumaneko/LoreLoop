@@ -2,6 +2,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
+from app.domain.action_preview.schemas import ActionPreviewResult
 from app.runtime.sqlite import (
     connect_sqlite,
     ensure_column,
@@ -16,6 +17,7 @@ class ShortTermScene(BaseModel):
     user_input: str = ""
     scene_text: str
     closing_prompt: str = ""
+    action_preview: ActionPreviewResult | None = None
     created_at: str | None = None
 
 
@@ -43,6 +45,7 @@ class ShortTermMemoryStore:
                 user_input TEXT NOT NULL DEFAULT '',
                 scene_text TEXT NOT NULL,
                 closing_prompt TEXT NOT NULL DEFAULT '',
+                action_preview_json TEXT,
                 created_at TEXT NOT NULL
             )
             """
@@ -53,7 +56,13 @@ class ShortTermMemoryStore:
             "closing_prompt",
             "TEXT NOT NULL DEFAULT ''",
         )
-        ensure_schema_version(self._conn, "short_term_memory", 2)
+        ensure_column(
+            self._conn,
+            "short_term_scenes",
+            "action_preview_json",
+            "TEXT",
+        )
+        ensure_schema_version(self._conn, "short_term_memory", 3)
         self._conn.commit()
 
     def add_turn(
@@ -63,6 +72,7 @@ class ShortTermMemoryStore:
         user_input: str,
         scene_text: str,
         closing_prompt: str = "",
+        action_preview: ActionPreviewResult | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with transaction(self._conn):
@@ -74,9 +84,9 @@ class ShortTermMemoryStore:
                 """
                 INSERT INTO short_term_scenes (
                     scene_id, turn_index, user_input, scene_text,
-                    closing_prompt, created_at
+                    closing_prompt, action_preview_json, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     scene_id,
@@ -84,6 +94,7 @@ class ShortTermMemoryStore:
                     user_input,
                     scene_text,
                     closing_prompt,
+                    action_preview.model_dump_json() if action_preview else None,
                     now,
                 ),
             )
@@ -149,6 +160,11 @@ class ShortTermMemoryStore:
             user_input=row["user_input"],
             scene_text=row["scene_text"],
             closing_prompt=row["closing_prompt"],
+            action_preview=(
+                ActionPreviewResult.model_validate_json(row["action_preview_json"])
+                if row["action_preview_json"]
+                else None
+            ),
             created_at=row["created_at"],
         )
 

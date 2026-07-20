@@ -106,13 +106,13 @@ def generate_turn_stream(
 
 
 def retry_turn_stream(turn_id: str):
-    lock = get_campaign_runtime().confirmation_lock
-    with lock:
-        pending = get_campaign_runtime().pending_turns.get(turn_id)
+    runtime = get_campaign_runtime()
+    with runtime.confirmation_lock:
+        pending = runtime.pending_turns.get(turn_id)
         if pending is None:
             raise ValueError("Pending turn not found. Generate a scene before retrying.")
 
-        with get_campaign_runtime().services.stores.current_state() as state_store:
+        with runtime.services.stores.current_state() as state_store:
             current_state = state_store.load_or_default()
         if current_state != pending.state_before:
             raise ValueError(
@@ -122,7 +122,7 @@ def retry_turn_stream(turn_id: str):
 
         version_index = max(
             variant.version_index
-            for variant in get_campaign_runtime().pending_turns.variants(pending.group_id)
+            for variant in runtime.pending_turns.variants(pending.group_id)
         ) + 1
         yield {
             "step": "retry_started",

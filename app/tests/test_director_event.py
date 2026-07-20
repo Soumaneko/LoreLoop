@@ -33,6 +33,7 @@ from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
+from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.domain.director_event.workflows import update_director_event_workflow
 
@@ -1343,6 +1344,46 @@ class TestDirectorEventWorkflow:
         assert ambient_events[0].role == "arc"
         assert ambient_events[0].status == "active"
 
+    def test_select_uses_dedicated_recent_plus_current_summaries(self):
+        store = DirectorEventStore()
+        historical = SceneSummary(
+            id="historical",
+            level=1,
+            content="历史摘要",
+            turn_start=1,
+            turn_end=1,
+        )
+        current = SceneSummary(
+            id="current",
+            level=1,
+            content="本轮摘要",
+            turn_start=2,
+            turn_end=2,
+        )
+        captured = {}
+
+        class _Selector:
+            def select_or_create(self, **kwargs):
+                captured.update(kwargs)
+                return _selection_result()
+
+        update_director_event_workflow(
+            role="arc",
+            user_input="继续。",
+            scene_facts="本轮事实。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[historical],
+            recent_summaries=[historical],
+            selection_summaries=[historical, current],
+            turn_index=2,
+            store=store,
+            reviewer=DirectorEventReviewer(MockLLM().build_gateway()),
+            selector=_Selector(),
+        )
+
+        assert captured["recent_summaries"] == [historical, current]
+
     def test_select_creates_event_without_required_standby_npc_binding(self):
         store = DirectorEventStore()
         draft = _selection_result().model_copy(
@@ -1410,6 +1451,35 @@ class TestDirectorEventWorkflow:
         assert result.active_after is not None
         assert result.active_after.director_npc_id == standby.draft_id
 
+    def test_ambient_event_accepts_selected_director_npc_name_inside_actor(self):
+        store = DirectorEventStore()
+        standby = _standby_npc(name="陆归雪")
+        selection = _selection_result().model_copy(
+            update={
+                "director_npc_id": standby.draft_id,
+                "actors": ["云来赌坊掌骰师陆归雪", "云来赌坊账房管事"],
+            }
+        )
+
+        result = update_director_event_workflow(
+            role="ambient",
+            user_input="继续。",
+            scene_facts="没有新事件。",
+            current_state=_state(),
+            core_memory=_core(),
+            scene_summaries=[],
+            standby_director_npcs=[standby],
+            turn_index=2,
+            store=store,
+            reviewer=DirectorEventReviewer(MockLLM().build_gateway()),
+            selector=DirectorEventSelector(
+                _SpyGateway(selection.model_dump(mode="json"))
+            ),
+        )
+
+        assert result.active_after is not None
+        assert result.active_after.actors[0] == "云来赌坊掌骰师陆归雪"
+
     def test_event_rejects_unknown_or_arc_director_npc_binding(self):
         standby = _standby_npc()
         selection = _selection_result().model_copy(
@@ -1461,6 +1531,35 @@ class TestDirectorEventWorkflow:
 
 
 class TestDirectorEventSelector:
+    def test_selector_retries_invalid_director_npc_actor_binding(self):
+        standby = _standby_npc(name="陆归雪")
+        invalid = _selection_response(
+            director_npc_id=standby.draft_id,
+            actors=["云来赌坊账房管事"],
+        )
+        corrected = _selection_response(
+            director_npc_id=standby.draft_id,
+            actors=["云来赌坊掌骰师陆归雪", "云来赌坊账房管事"],
+        )
+        mock = MockLLM()
+        mock.set_responses(
+            [
+                json.dumps(invalid, ensure_ascii=False),
+                json.dumps(corrected, ensure_ascii=False),
+            ]
+        )
+
+        selection = DirectorEventSelector(mock.build_gateway()).select_or_create(
+            role="ambient",
+            events=[],
+            standby_director_npcs=[standby],
+            current_state=_state(),
+            core_memory=_core(),
+        )
+
+        assert selection.actors[0] == "云来赌坊掌骰师陆归雪"
+        assert mock.provider._index == 2
+
     def test_arc_and_ambient_prompts_share_structure_but_split_direction_rules(self):
         arc = Path(
             "app/prompts/confirmation/director_event_select_arc_v1.md"
@@ -1571,6 +1670,8 @@ class TestDirectorEventSelector:
         assert "entity_profiles_json" in input_data
         assert "npc_profiles_json" in input_data
         assert "scene_text" not in input_data
+        assert "scene_facts" not in input_data
+        assert "scene_facts_json" not in input_data
         assert "scene_summaries_json" not in input_data
 
     def test_arc_selector_does_not_receive_standby_director_npcs(self):

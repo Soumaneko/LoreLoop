@@ -14,6 +14,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   worldTime: $("worldTime"), worldLocation: $("worldLocation"), statusPill: $("statusPill"),
   story: $("story"), welcome: $("welcome"), history: $("history"),
+  activePlayerAction: $("activePlayerAction"),
   streamingCard: $("streamingCard"), streamingText: $("streamingText"), streamingLabel: $("streamingLabel"),
   pendingCard: $("pendingCard"), suggestions: $("suggestions"), suggestionList: $("suggestionList"),
   errorCard: $("errorCard"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
@@ -23,6 +24,12 @@ const els = {
   difficultySelect: $("difficultySelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
   initDialog: $("initDialog"), initForm: $("initForm"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
+  initConfigFields: $("initConfigFields"), initOriginalFields: $("initOriginalFields"), initFanficFields: $("initFanficFields"),
+  initFanfic: $("initFanfic"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
+  initConfigActions: $("initConfigActions"), storyDirectionActions: $("storyDirectionActions"), storyDirectionStage: $("storyDirectionStage"),
+  storyDirectionBtn: $("storyDirectionBtn"), regenerateStoryDirectionBtn: $("regenerateStoryDirectionBtn"), editInitConfigBtn: $("editInitConfigBtn"),
+  storyDirectionContent: $("storyDirectionContent"), storyDirectionCurrency: $("storyDirectionCurrency"),
+  addCoreMemoryBtn: $("addCoreMemoryBtn"), extraCoreMemoryList: $("extraCoreMemoryList"), initStageHint: $("initStageHint"),
   toast: $("toast"),
 };
 
@@ -40,11 +47,23 @@ const progressLabels = {
   narrative_checked: "正在检查前后逻辑",
   narrative_revision_started: "发现明确问题，正在重新编写",
   narrative_revised: "修订完成",
+  confirm_started: "正在读取最终正文",
+  scene_facts_done: "正在提取场景事实",
+  state_update_done: "正在更新世界状态",
+  memory_draft_extract_done: "正在整理本轮记忆",
+  entity_extract_done: "正在识别重要实体",
+  npc_extract_done: "正在整理人物信息",
+  memory_draft_metadata_filled: "正在准备确认结果",
+  action_preview_done: "下一步方向已经生成",
+  entity_profiles_updated: "正在写入旅程",
 };
 let streamBuffer = "";
 let streamFrame = 0;
 let followStream = true;
+let initConfigSnapshot = null;
 const HISTORY_PAGE_SIZE = 5;
+const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
+const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -158,6 +177,11 @@ function renderHistory() {
   els.history.appendChild(fragment);
 }
 
+function showActivePlayerAction(text) {
+  els.activePlayerAction.textContent = text || "";
+  els.activePlayerAction.hidden = !text;
+}
+
 async function loadEarlierHistory() {
   const pagination = state.playerState?.history_pagination || {};
   const history = state.playerState?.history || [];
@@ -202,6 +226,7 @@ async function loadEarlierHistory() {
 function renderPending() {
   const pending = activePending();
   if (!pending) {
+    if (state.mode !== "generating") showActivePlayerAction("");
     els.pendingCard.hidden = true;
     els.pendingCard.replaceChildren();
     return;
@@ -213,7 +238,7 @@ function renderPending() {
   els.pendingCard.replaceChildren();
   els.pendingCard.hidden = false;
 
-  if (pending.user_input) els.pendingCard.appendChild(node("div", "player-action", pending.user_input));
+  showActivePlayerAction(pending.user_input || "");
   const toolbar = node("div", "pending-toolbar");
   const kicker = node("div", "narrative-kicker");
   kicker.append(node("span", "quill", "✦"), node("span", "", pending.kind === "opening" ? "开场 · 待确认" : "新场景 · 待确认"));
@@ -231,20 +256,33 @@ function renderPending() {
   const display = appendHighlightedText(node("div", "scene-text"), readDraft(variant));
   const closing = variant.closing_prompt ? node("div", "closing-prompt", variant.closing_prompt) : null;
   const actions = node("div", "pending-actions");
+  const confirming = state.mode === "confirming";
   const edit = node("button", "soft-button", "编辑正文");
   const retry = node("button", "soft-button", "重新生成");
   const discard = node("button", "soft-button danger-button", "删除");
   const confirm = node("button", "primary-action", "确认采用");
   edit.onclick = () => beginEdit(display, closing, actions, variant);
+  edit.disabled = confirming;
   retry.disabled = pending.kind === "opening" || ["generating", "confirming"].includes(state.mode);
   retry.onclick = retryTurn;
+  discard.disabled = confirming;
   discard.onclick = discardPending;
+  confirm.disabled = confirming;
+  confirm.textContent = confirming ? "正在确认……" : "确认采用";
   confirm.onclick = confirmTurn;
   actions.append(edit, retry);
   if (pending.kind !== "opening") actions.appendChild(discard);
   actions.appendChild(confirm);
   els.pendingCard.append(toolbar, display);
   if (closing) els.pendingCard.appendChild(closing);
+  if (confirming) {
+    const progress = node("div", "confirmation-status");
+    progress.id = "confirmationProgress";
+    const kicker = node("div", "narrative-kicker confirmation-status-kicker");
+    kicker.append(node("span", "quill", "✦"), node("span", "confirmation-progress-label", "正在读取最终正文"));
+    progress.appendChild(kicker);
+    els.pendingCard.appendChild(progress);
+  }
   els.pendingCard.appendChild(actions);
 }
 
@@ -353,17 +391,62 @@ function renderAll() {
   renderHeader(); renderHistory(); renderPending(); renderDrawer(); renderSaves(); renderSuggestions(); renderControls();
 }
 
+function cachePlayerShell() {
+  if (!state.playerState) return;
+  try {
+    sessionStorage.setItem(PLAYER_SHELL_CACHE_KEY, JSON.stringify({
+      activeSave: state.activeSave,
+      saves: state.saves,
+      playerState: state.playerState,
+    }));
+  } catch (_error) {
+    // The cache is only a refresh-time display fallback.
+  }
+}
+
+function restorePlayerShell() {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(PLAYER_SHELL_CACHE_KEY) || "null");
+    if (!cached?.playerState) return false;
+    state.activeSave = cached.activeSave || null;
+    state.saves = cached.saves || [];
+    state.playerState = cached.playerState;
+    state.suggestions = cached.playerState.action_preview?.previews || [];
+    state.selectedPendingIndex = Math.max(0, (activePending()?.variants?.length || 1) - 1);
+    const confirmationInFlight = sessionStorage.getItem(CONFIRMATION_IN_FLIGHT_KEY) === "1";
+    setMode(
+      confirmationInFlight
+        ? "confirming"
+        : cached.playerState.needs_init
+          ? "needs_init"
+          : activePending()
+            ? "pending"
+            : "idle",
+    );
+    renderAll();
+    return true;
+  } catch (_error) {
+    sessionStorage.removeItem(PLAYER_SHELL_CACHE_KEY);
+    return false;
+  }
+}
+
 async function loadAll({ scroll = false } = {}) {
   state.historyPagingEnabled = false;
-  const [saves, playerState] = await Promise.all([
-    request("/api/player/saves"), request("/api/player/state"),
-  ]);
+  const saves = await request("/api/player/saves");
   state.saves = saves.saves || [];
   state.activeSave = saves.active;
+  renderSaves();
+  renderControls();
+
+  const playerState = await request("/api/player/state");
+  sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
   state.playerState = playerState;
+  state.suggestions = playerState.action_preview?.previews || [];
   state.selectedPendingIndex = Math.max(0, (activePending()?.variants?.length || 1) - 1);
   setMode(playerState.needs_init ? "needs_init" : activePending() ? "pending" : "idle");
   renderAll();
+  cachePlayerShell();
   if (playerState.needs_init && !els.initDialog.open) els.initDialog.showModal();
   if (scroll) scrollToBottom(scroll, () => { state.historyPagingEnabled = true; });
   else window.requestAnimationFrame(() => { state.historyPagingEnabled = true; });
@@ -372,6 +455,8 @@ async function loadAll({ scroll = false } = {}) {
 function setProgress(step) {
   const label = progressLabels[step];
   if (label) els.streamingLabel.textContent = label;
+  const confirmationLabel = document.querySelector("#confirmationProgress .confirmation-progress-label");
+  if (label && confirmationLabel) confirmationLabel.textContent = label;
 }
 
 function startStreaming(label = "世界正在回应") {
@@ -413,6 +498,8 @@ async function generateTurn() {
   const userInput = els.playerInput.value.trim();
   if (!userInput || state.mode !== "idle") return;
   clearError(); setMode("generating"); state.suggestions = []; renderSuggestions(); renderControls();
+  showActivePlayerAction(userInput);
+  els.playerInput.value = ""; autoSizeInput(); renderControls();
   startStreaming("正在理解你的行动");
   try {
     await stream("/api/player/generate", { user_input: userInput, difficulty: els.difficultySelect.value }, (event) => {
@@ -422,10 +509,12 @@ async function generateTurn() {
       );
       if (event.step === "scene_text_delta") appendStreamingText(event.data?.delta || "");
     });
-    els.playerInput.value = ""; autoSizeInput(); stopStreaming();
+    stopStreaming();
     await loadAll({ scroll: "smooth" });
   } catch (error) {
-    stopStreaming(); showError(error);
+    stopStreaming(); showActivePlayerAction("");
+    els.playerInput.value = userInput; autoSizeInput();
+    showError(error);
   }
 }
 
@@ -448,7 +537,8 @@ async function retryTurn() {
 async function confirmTurn() {
   const pending = activePending(); const variant = selectedVariant();
   if (!pending || !variant) return;
-  setMode("confirming"); renderControls();
+  sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
+  setMode("confirming"); renderPending(); renderControls();
   try {
     await stream("/api/player/confirm", { turn_id: variant.turn_id, scene_text: readDraft(variant) }, (event) => {
       setProgress(event.step);
@@ -459,6 +549,7 @@ async function confirmTurn() {
     });
     clearDrafts(pending); await loadAll({ scroll: "smooth" }); showToast("这一回合已经写入旅程");
   } catch (error) { setMode("pending"); renderAll(); showError(error); }
+  finally { sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY); }
 }
 
 async function discardPending() {
@@ -499,9 +590,156 @@ async function createSave(name) {
   state.suggestions = []; await loadAll({ scroll: "instant" });
 }
 
-async function initialize(form) {
-  const data = Object.fromEntries(new FormData(form));
-  const payload = { ...data, fanfic: false, version: 1, protagonist_abilities: [], extra_core_memory_items: [] };
+function formValue(form, name) {
+  return String(new FormData(form).get(name) || "").trim();
+}
+
+function readInitConfig(form) {
+  const fanfic = els.initFanfic.checked;
+  const abilityNames = [...form.querySelectorAll(".ability-name")];
+  const abilityDescriptions = [...form.querySelectorAll(".ability-description")];
+  const protagonistAbilities = abilityNames.map((input, index) => {
+    const name = input.value.trim();
+    const description = abilityDescriptions[index].value.trim();
+    if (Boolean(name) !== Boolean(description)) {
+      throw new Error(`能力 ${index + 1} 的名称和解释需要同时填写`);
+    }
+    return name ? { name, description } : null;
+  }).filter(Boolean);
+  const extraCoreMemoryItems = [...els.extraCoreMemoryList.querySelectorAll(".extra-memory-row")].map((row, index) => {
+    const id = row.querySelector(".extra-memory-id").value.trim();
+    const category = row.querySelector(".extra-memory-category").value.trim();
+    const content = row.querySelector(".extra-memory-content").value.trim();
+    const priorityRaw = row.querySelector(".extra-memory-priority").value.trim();
+    if (!id || !category || !content) throw new Error(`额外核心设定 ${index + 1} 尚未填写完整`);
+    return { id, category, content, priority: priorityRaw ? Number(priorityRaw) : 100 };
+  });
+  const age = formValue(form, "protagonist_age");
+  const abilitySystem = fanfic ? null : formValue(form, "ability_system") || null;
+  return {
+    version: 1,
+    fanfic,
+    work_name: fanfic ? formValue(form, "work_name") || null : null,
+    birth_location: fanfic ? formValue(form, "birth_location") || null : null,
+    story_era: fanfic ? formValue(form, "story_era") || null : null,
+    world_name: fanfic ? null : formValue(form, "world_name") || null,
+    world_style: fanfic ? null : formValue(form, "world_style") || null,
+    ability_system: abilitySystem,
+    custom_ability_system: abilitySystem === "自定义" ? formValue(form, "custom_ability_system") || null : null,
+    protagonist_gender: formValue(form, "protagonist_gender") || "男",
+    protagonist_name: formValue(form, "protagonist_name"),
+    protagonist_age: age ? Number(age) : null,
+    protagonist_background: formValue(form, "protagonist_background") || null,
+    protagonist_abilities: protagonistAbilities,
+    narrative_tone: formValue(form, "narrative_tone") || null,
+    story_expectation: formValue(form, "story_expectation") || null,
+    extra_core_memory_items: extraCoreMemoryItems,
+  };
+}
+
+function addExtraCoreMemoryRow(values = {}) {
+  const row = node("div", "extra-memory-row");
+  const id = node("input", "extra-memory-id");
+  id.placeholder = "唯一 ID"; id.value = values.id || "";
+  const category = node("input", "extra-memory-category");
+  category.placeholder = "分类"; category.value = values.category || "";
+  const priority = node("input", "extra-memory-priority");
+  priority.type = "number"; priority.min = "0"; priority.placeholder = "优先级 100"; priority.value = values.priority ?? "";
+  const content = node("textarea", "extra-memory-content");
+  content.placeholder = "额外长期设定内容"; content.value = values.content || "";
+  const remove = node("button", "text-button danger-button", "删除");
+  remove.type = "button"; remove.onclick = () => row.remove();
+  row.append(id, category, priority, content, remove);
+  els.extraCoreMemoryList.appendChild(row);
+}
+
+function toggleInitWorldFields() {
+  const fanfic = els.initFanfic.checked;
+  els.initOriginalFields.hidden = fanfic;
+  els.initFanficFields.hidden = !fanfic;
+  for (const control of els.initOriginalFields.querySelectorAll("input, textarea, select")) control.disabled = fanfic;
+  for (const control of els.initFanficFields.querySelectorAll("input, textarea, select")) control.disabled = !fanfic;
+  for (const name of ["world_name", "world_style"]) els.initForm.elements[name].required = !fanfic;
+  for (const name of ["work_name", "birth_location", "story_era"]) els.initForm.elements[name].required = fanfic;
+  toggleCustomAbilityField();
+}
+
+function toggleCustomAbilityField() {
+  const visible = !els.initFanfic.checked && els.initAbilitySystem.value === "自定义";
+  els.initCustomAbilityWrap.hidden = !visible;
+  els.initForm.elements.custom_ability_system.disabled = !visible;
+  els.initForm.elements.custom_ability_system.required = visible;
+}
+
+function showStoryDirectionStage(result) {
+  initConfigSnapshot = result.config;
+  els.storyDirectionContent.value = result.story_direction?.content || "";
+  els.storyDirectionCurrency.value = result.story_direction?.currency_unit || "";
+  els.initConfigFields.disabled = true;
+  els.initConfigActions.hidden = true;
+  els.storyDirectionStage.hidden = false;
+  els.storyDirectionActions.hidden = false;
+  els.initStageHint.textContent = "检查并修改故事方向；确认后才会生成开场并写入存档。";
+  els.storyDirectionContent.focus();
+}
+
+function editInitConfig() {
+  initConfigSnapshot = null;
+  els.initConfigFields.disabled = false;
+  els.initConfigActions.hidden = false;
+  els.storyDirectionStage.hidden = true;
+  els.storyDirectionActions.hidden = true;
+  els.initStageHint.textContent = "填写世界与主角设定，然后先生成一份可修改的长期故事方向。";
+  els.initError.hidden = true;
+}
+
+async function requestStoryDirection({ regenerate = false } = {}) {
+  els.initError.hidden = true;
+  let config;
+  try {
+    if (regenerate && initConfigSnapshot) config = initConfigSnapshot;
+    else {
+      if (!els.initForm.reportValidity()) return;
+      config = readInitConfig(els.initForm);
+    }
+  } catch (error) {
+    els.initError.textContent = error.message;
+    els.initError.hidden = false;
+    return;
+  }
+  const button = regenerate ? els.regenerateStoryDirectionBtn : els.storyDirectionBtn;
+  button.disabled = true;
+  const oldText = button.textContent;
+  button.textContent = "正在生成……";
+  try {
+    const result = await request("/api/player/init/story-direction", {
+      method: "POST",
+      body: JSON.stringify(config),
+    });
+    showStoryDirectionStage(result);
+  } catch (error) {
+    els.initError.textContent = error.message;
+    els.initError.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = oldText;
+  }
+}
+
+async function initialize() {
+  const content = els.storyDirectionContent.value.trim();
+  if (!initConfigSnapshot || !content) {
+    els.initError.textContent = "请先生成并确认故事方向";
+    els.initError.hidden = false;
+    return;
+  }
+  const payload = {
+    config: initConfigSnapshot,
+    story_direction: {
+      content,
+      currency_unit: els.storyDirectionCurrency.value.trim() || null,
+    },
+  };
   setMode("generating"); els.initSubmitBtn.disabled = true; els.initSubmitBtn.textContent = "正在生成开场……"; els.initError.hidden = true;
   try { await request("/api/player/init", { method: "POST", body: JSON.stringify(payload) }); els.initDialog.close(); await loadAll({ scroll: "instant" }); }
   catch (error) { setMode("needs_init"); els.initError.textContent = error.message; els.initError.hidden = false; }
@@ -544,10 +782,18 @@ els.saveCancelBtn.onclick = () => els.saveDialog.close();
 els.saveForm.addEventListener("submit", async (event) => { event.preventDefault(); const name = els.saveNameInput.value.trim(); if (!name) return; els.saveDialog.close(); try { await createSave(name); } catch (error) { showError(error); } });
 els.difficultySelect.onchange = async () => { try { await request("/api/player/difficulty", { method: "POST", body: JSON.stringify({ difficulty: els.difficultySelect.value }) }); state.playerState.difficulty = els.difficultySelect.value; showToast("难度已更新"); } catch (error) { showError(error); } };
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
-els.initForm.addEventListener("submit", (event) => { event.preventDefault(); initialize(els.initForm); });
+els.initFanfic.onchange = toggleInitWorldFields;
+els.initAbilitySystem.onchange = toggleCustomAbilityField;
+els.addCoreMemoryBtn.onclick = () => addExtraCoreMemoryRow();
+els.storyDirectionBtn.onclick = () => requestStoryDirection();
+els.regenerateStoryDirectionBtn.onclick = () => requestStoryDirection({ regenerate: true });
+els.editInitConfigBtn.onclick = editInitConfig;
+els.initForm.addEventListener("submit", (event) => { event.preventDefault(); initialize(); });
 els.initDialog.addEventListener("cancel", (event) => event.preventDefault());
 window.addEventListener("scroll", () => {
   if (window.scrollY <= 220) loadEarlierHistory();
 }, { passive: true });
 
+toggleInitWorldFields();
+restorePlayerShell();
 loadAll({ scroll: "instant" }).catch(showError);

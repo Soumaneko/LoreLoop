@@ -14,7 +14,7 @@ from app.domain.core_memory import (
     build_core_memory,
     build_initial_current_state,
 )
-from app.graph.initialization_helpers import preview_core_memory
+from app.graph.initialization_helpers import generate_story_direction, preview_core_memory
 from app.runtime.session import get_campaign_runtime
 
 
@@ -65,7 +65,20 @@ class TestInitConfig:
                 world_name="艾兰",
                 world_style="西幻",
                 protagonist_name="卢西安",
-                protagonist_abilities=["a", "b", "c", "d"],
+                protagonist_abilities=[
+                    {"name": value, "description": f"{value} 的解释"}
+                    for value in ("a", "b", "c", "d")
+                ],
+            )
+
+    def test_ability_requires_name_and_description(self):
+        with pytest.raises(ValidationError):
+            InitConfig(
+                fanfic=False,
+                world_name="艾兰",
+                world_style="西幻",
+                protagonist_name="卢西安",
+                protagonist_abilities=[{"name": "闪现", "description": ""}],
             )
 
 
@@ -142,11 +155,18 @@ class TestBuildCoreMemory:
             world_name="艾兰",
             world_style="西幻",
             protagonist_name="卢西安",
-            protagonist_abilities=["旁观者之瞳：顺应历史时获得运势加成", "闪现"],
+            protagonist_abilities=[
+                {"name": "旁观者之瞳", "description": "顺应历史时获得运势加成"},
+                {"name": "闪现", "description": "短距离穿越空间，但会迅速疲惫"},
+            ],
         ))
 
         abilities = next(item for item in cm.items if item.id == "core_player_abilities")
-        assert abilities.content == "主角的特殊能力：\n- 旁观者之瞳：顺应历史时获得运势加成\n- 闪现"
+        assert abilities.content == (
+            "主角的特殊能力：\n"
+            "- 旁观者之瞳：顺应历史时获得运势加成\n"
+            "- 闪现：短距离穿越空间，但会迅速疲惫"
+        )
 
     def test_no_abilities_item_when_empty(self):
         cm = build_core_memory(InitConfig(
@@ -321,7 +341,7 @@ class TestDebugCoreMemoryPreview:
         assert result["core_memory"] is None
         assert result["validation_errors"]
 
-    def test_apply_generates_story_direction_before_opening(
+    def test_direction_preview_can_be_edited_before_opening(
         self,
         tmp_path,
         monkeypatch,
@@ -350,7 +370,7 @@ class TestDebugCoreMemoryPreview:
         runtime = get_campaign_runtime()
         configure_runtime_services(gateway_factory=RecordingGateway)
 
-        result = core_memory_engine.apply_core_memory_init({
+        config = {
             "version": 1,
             "fanfic": False,
             "world_name": "好莱坞",
@@ -358,20 +378,29 @@ class TestDebugCoreMemoryPreview:
             "protagonist_name": "莱尔",
             "story_expectation": "经营经纪公司，发掘演员并发展事业与浪漫关系。",
             "extra_core_memory_items": [],
+        }
+        preview = generate_story_direction(config)
+        result = core_memory_engine.apply_core_memory_init({
+            "config": preview["config"],
+            "story_direction": {
+                "content": "用户修改后：聚焦经纪公司经营，但不发展浪漫关系。",
+                "currency_unit": "港币",
+            },
         })
 
         try:
             assert [task for task, _ in calls] == ["story_direction", "opening_scene"]
             opening_core = json.loads(calls[1][1]["core_memory_json"])
-            assert any(
-                item["id"] == "core_story_direction"
-                for item in opening_core["items"]
+            direction_item = next(
+                item for item in opening_core["items"]
+                if item["id"] == "core_story_direction"
             )
+            assert direction_item["content"].startswith("用户修改后")
             assert any(
                 item["id"] == "core_currency_system"
                 for item in opening_core["items"]
             )
-            assert result["current_state"]["resources"]["money_unit"] == "美元"
+            assert result["current_state"]["resources"]["money_unit"] == "港币"
             assert runtime.stores.core_memory().load() == CoreMemory.model_validate(
                 result["core_memory"]
             )

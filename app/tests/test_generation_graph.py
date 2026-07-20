@@ -178,6 +178,42 @@ def test_generate_turn_stream_forwards_state_events(monkeypatch):
     ]
 
 
+def test_generation_pipeline_reloads_store_context_on_every_invocation(monkeypatch):
+    latest = {"memory_version": "before-maintenance"}
+    loaded = []
+
+    class _EmptyGraph:
+        def stream(self, _state, stream_mode):
+            assert stream_mode == ["updates", "custom"]
+            return iter(())
+
+    def _prepare(*_args, **_kwargs):
+        value = latest["memory_version"]
+        loaded.append(value)
+        return {
+            "events": [{
+                "step": "context_loaded",
+                "data": {"memory_version": value},
+            }],
+        }
+
+    monkeypatch.setattr(generation_graph, "prepare_generation_state", _prepare)
+    monkeypatch.setattr(generation_graph, "build_generation_graph", _EmptyGraph)
+    monkeypatch.setattr(
+        generation_graph,
+        "finalize_pending_turn",
+        lambda state, **_kwargs: state,
+    )
+
+    first = list(generation_graph._generate_turn_stream("观察", "普通", 900))
+    latest["memory_version"] = "after-maintenance"
+    retried = list(generation_graph._generate_turn_stream("观察", "普通", 900))
+
+    assert loaded == ["before-maintenance", "after-maintenance"]
+    assert first[0]["data"]["memory_version"] == "before-maintenance"
+    assert retried[0]["data"]["memory_version"] == "after-maintenance"
+
+
 def test_generation_buffers_context_events_until_action_parsed(monkeypatch):
     class _FakeGraph:
         def stream(self, _state, stream_mode):
@@ -269,6 +305,7 @@ def test_retry_creates_next_version_in_same_group(
         short_term_memory=ShortTermMemory(),
     ))
     captured = {}
+    order = []
 
     class _StateStore:
         def __enter__(self):
@@ -278,9 +315,11 @@ def test_retry_creates_next_version_in_same_group(
             return None
 
         def load_or_default(self):
+            order.append("state_loaded")
             return state_before
 
     def _retry_stream(user_input, difficulty, max_chars, **kwargs):
+        order.append("retry_generation_started")
         captured.update({
             "user_input": user_input,
             "difficulty": difficulty,
@@ -299,6 +338,10 @@ def test_retry_creates_next_version_in_same_group(
         runtime.pending_turns.remove(turn_id)
 
     assert events[0]["step"] == "retry_started"
+    assert order == [
+        "state_loaded",
+        "retry_generation_started",
+    ]
     assert captured == {
         "user_input": "观察门外",
         "difficulty": "普通",

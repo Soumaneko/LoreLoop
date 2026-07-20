@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from app.domain.recall_memory.batch_classifier import MemoryBatchClassifier
+from app.domain.recall_memory.draft_extractor import MemoryDraftExtractor
 from app.domain.recall_memory.maintainer import MemoryMaintainer
 from app.domain.recall_memory.maintenance import (
     batch_classify_pending_memories_workflow,
+    fill_pending_memory_scene_metadata,
     maintain_memories_workflow,
 )
 from app.domain.scene_summary.maintenance import _CONDENSE_LOCK
@@ -25,39 +27,6 @@ def _services(state):
 
 def _store_factory(state, name: str):
     return getattr(_services(state).stores, name)
-
-
-def scene_summarize_node(
-    state: SceneSummaryMaintenanceState,
-) -> SceneSummaryMaintenanceState:
-    summarizer = SceneSummarizer(
-        maintenance_gateway(
-            turn_index=state["turn_index"], services=_services(state)
-        )
-    )
-    summary = summarizer.summarize_turn(
-        scene_text=state["scene_text"],
-        current_state=state["current_state"],
-        core_memory=state["core_memory"],
-        scene_id=state["scene_id"],
-        turn_index=state["turn_index"],
-        trace_id=state["trace_id"],
-    )
-    with _store_factory(state, "scene_summary")() as store:
-        saved_id = store.save_one(summary)
-
-    result = state["result"]
-    result.saved_l1_id = saved_id
-    result.created_summaries.append(summary)
-    return {
-        "result": result,
-        "events": [
-            {
-                "step": "scene_summarized",
-                "data": {"saved_l1_id": saved_id},
-            }
-        ],
-    }
 
 
 def scene_summary_condense_node(
@@ -103,6 +72,49 @@ def scene_summary_condense_node(
                 "data": {"condensed_ids": result.condensed_ids},
             }
         ],
+    }
+
+
+def memory_draft_extract_node(
+    state: MemoryMaintenanceState,
+) -> MemoryMaintenanceState:
+    extractor = MemoryDraftExtractor(
+        maintenance_gateway(
+            turn_index=state["turn_index"], services=_services(state)
+        )
+    )
+    result = extractor.extract(
+        state["scene_facts_json"],
+        state["state_before_update"],
+        core_memory=state["core_memory"],
+        turn_index=state["turn_index"],
+        scene_id=state["state_before_update"].scene.scene_id,
+        trace_id=state["trace_id"],
+    )
+    items = fill_pending_memory_scene_metadata(
+        result.items,
+        state["current_state"],
+    )
+    result = result.model_copy(update={"items": items})
+    with _store_factory(state, "pending_memory")() as pending_store:
+        saved_ids = pending_store.save_many(items)
+        pending_count = pending_store.count()
+        unclassified_turn_count = pending_store.unclassified_turn_count()
+    return {
+        "pending_memory_result": result,
+        "saved_pending_ids": saved_ids,
+        "pending_total": pending_count,
+        "unclassified_turn_count": unclassified_turn_count,
+        "events": [{
+            "step": "memory_draft_extract_done",
+            "data": {
+                "pending_items_count": len(items),
+                "pending_items": model_data(items),
+                "saved_pending_ids": saved_ids,
+                "pending_count": pending_count,
+                "unclassified_turn_count": unclassified_turn_count,
+            },
+        }],
     }
 
 

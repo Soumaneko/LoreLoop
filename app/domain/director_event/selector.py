@@ -1,6 +1,8 @@
 import json
 from typing import cast
 
+from pydantic import model_validator
+
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -51,6 +53,38 @@ def _standby_director_npc_view(npc: DirectorNPCDraft) -> dict:
     }
 
 
+def _selection_output_schema(
+    *,
+    role: DirectorEventRole,
+    standby_director_npcs: list[DirectorNPCDraft],
+) -> type[DirectorEventSelectionResult]:
+    standby_by_id = {npc.draft_id: npc for npc in standby_director_npcs}
+
+    class ValidatedDirectorEventSelectionResult(DirectorEventSelectionResult):
+        @model_validator(mode="after")
+        def validate_director_npc_binding(self) -> DirectorEventSelectionResult:
+            if self.director_npc_id is None:
+                return self
+            if role != "ambient":
+                raise ValueError("Arc DirectorEvent cannot use a standby DirectorNPC")
+
+            selected_director_npc = standby_by_id.get(self.director_npc_id)
+            if selected_director_npc is None:
+                raise ValueError(
+                    "DirectorEventSelector selected an unknown DirectorNPC"
+                )
+            if not any(
+                selected_director_npc.name in actor for actor in self.actors
+            ):
+                raise ValueError(
+                    "DirectorEventSelector must include the selected DirectorNPC "
+                    "name in actors"
+                )
+            return self
+
+    return ValidatedDirectorEventSelectionResult
+
+
 class DirectorEventSelector:
     def __init__(self, llm: LLMGateway):
         self.llm = llm
@@ -68,6 +102,10 @@ class DirectorEventSelector:
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
     ) -> DirectorEventSelectionResult:
+        output_schema = _selection_output_schema(
+            role=role,
+            standby_director_npcs=standby_director_npcs,
+        )
         input_data = {
             "events_json": json.dumps(
                 [_event_list_view(event) for event in events],
@@ -80,7 +118,7 @@ class DirectorEventSelector:
             "entity_profiles_json": project_entity_profiles(entity_profiles or []),
             "npc_profiles_json": project_npc_profiles(npc_profiles or []),
             "output_schema_json": json.dumps(
-                DirectorEventSelectionResult.model_json_schema(),
+                output_schema.model_json_schema(),
                 ensure_ascii=False,
                 indent=2,
             ),
@@ -97,7 +135,7 @@ class DirectorEventSelector:
             self.llm.run(
                 task=f"director_event_select_{role}",
                 input_data=input_data,
-                output_schema=DirectorEventSelectionResult,
+                output_schema=output_schema,
                 temperature=0.3,
                 trace_id=trace_id,
             ),

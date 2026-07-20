@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.debug_server import DebugHandler
+from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
@@ -28,6 +29,23 @@ from app.runtime.session import get_campaign_runtime
 STATIC_DIR = Path(__file__).parents[1] / "player_static"
 
 
+class _DisconnectedWriter:
+    def write(self, _payload):
+        raise BrokenPipeError
+
+    def flush(self):
+        pass
+
+
+def _action_preview() -> ActionPreviewResult:
+    return ActionPreviewResult(previews=[
+        {"level": "冒险举动", "label": "追上去", "good_result": "追上目标。", "risk": "可能暴露。"},
+        {"level": "保守举动", "label": "留在原地", "good_result": "保持安全。", "risk": "可能错失机会。"},
+        {"level": "信息获取", "label": "检查痕迹", "good_result": "发现线索。", "risk": "会消耗时间。"},
+        {"level": "奇招", "label": "制造声响", "good_result": "引开注意。", "risk": "可能惊动更多人。"},
+    ])
+
+
 def test_player_frontend_javascript_is_syntactically_valid():
     node = shutil.which("node")
     if node is None:
@@ -48,13 +66,18 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "/api/player/state" in source
+    assert 'const saves = await request("/api/player/saves")' in source
+    assert 'const playerState = await request("/api/player/state")' in source
+    assert "Promise.all([" not in source
     assert "/api/player/history?before_turn=" in source
     assert "/api/player/generate" in source
     assert "/api/player/confirm" in source
+    assert "/api/player/init/story-direction" in source
     assert "/api/state" not in source
     assert "/api/traces" not in source
     assert "/api/maintenance-jobs" not in source
     assert 'href="/debug"' not in html
+    assert 'id="welcome" class="welcome-card" hidden' in html
     assert "maxCharsInput" not in html
     assert "writeDbToggle" not in html
     assert "loadEarlierHistory" in source
@@ -75,6 +98,68 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "inventory-quantity" in source
     assert ".resource-group-inventory .resource-items" in styles
     assert "width: min(1040px" in styles
+    assert "backdrop-filter" not in styles
+    assert ".init-modal [hidden]" in styles
+    assert "select option, select optgroup" in styles
+    assert "confirmation-status" in source
+    assert "activePlayerAction" in source
+    assert "showActivePlayerAction(userInput)" in source
+    assert 'const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell"' in source
+    assert "function restorePlayerShell()" in source
+    assert 'sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1")' in source
+    assert "restorePlayerShell();" in source
+    assert 'confirm.textContent = confirming ? "正在确认……"' in source
+    assert "playerState.action_preview?.previews" in source
+    assert 'els.initOriginalFields.querySelectorAll("input, textarea, select")' in source
+    assert 'els.initFanficFields.querySelectorAll("input, textarea, select")' in source
+    for field in (
+        "initFanfic",
+        'name="work_name"',
+        'name="birth_location"',
+        'name="story_era"',
+        'name="world_name"',
+        'name="world_style"',
+        'name="ability_system"',
+        'name="custom_ability_system"',
+        'name="protagonist_age"',
+        'name="protagonist_background"',
+        'name="narrative_tone"',
+        'name="story_expectation"',
+        "ability-name",
+        "ability-description",
+        "extraCoreMemoryList",
+        "storyDirectionContent",
+        "storyDirectionCurrency",
+    ):
+        assert field in html
+    assert "story_direction" in source
+    assert "initConfigSnapshot" in source
+
+
+@pytest.mark.parametrize(
+    "handler_name",
+    ["_handle_json_stream", "_handle_player_json_stream"],
+)
+def test_confirmation_stream_keeps_running_after_client_disconnect(handler_name):
+    handler = object.__new__(DebugHandler)
+    handler.send_response = lambda _status: None
+    handler.send_header = lambda _name, _value: None
+    handler.end_headers = lambda: None
+    handler.wfile = _DisconnectedWriter()
+    completed = []
+
+    def confirmation_events():
+        yield {"step": "state_update_done", "data": {}}
+        completed.append("continued")
+        yield {"step": "scene_summarize_done", "data": {}}
+        completed.append("finished")
+
+    getattr(handler, handler_name)(
+        confirmation_events,
+        continue_on_disconnect=True,
+    )
+
+    assert completed == ["continued", "finished"]
 
 
 def test_player_state_is_allow_listed_and_restores_pending_content():
@@ -114,6 +199,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             "询问木偶的事。",
             "莱尔在图书馆找到了木偶师埃利奥。",
             "继续追问吗？",
+            action_preview=_action_preview(),
         )
     with runtime.stores.entity() as store:
         store.upsert(EntityProfile(
@@ -146,6 +232,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     assert set(payload) == {
         "save", "needs_init", "difficulty", "campaign", "history",
         "history_pagination", "highlights", "pending", "history_controls",
+        "action_preview",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
     assert payload["campaign"]["scene_conditions"] == ["房间正在燃烧"]
@@ -161,6 +248,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "player", "npc", "entity",
     }
     assert payload["pending"][0]["variants"][0]["closing_prompt"] == "你准备如何回应？"
+    assert payload["action_preview"] == _action_preview().model_dump(mode="json")
 
 
 def test_player_history_loads_five_turn_pages_oldest_to_newest():

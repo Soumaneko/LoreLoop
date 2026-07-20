@@ -1,4 +1,3 @@
-from concurrent.futures import Future
 import json
 from types import SimpleNamespace
 
@@ -9,6 +8,7 @@ from app.domain.recall_memory.maintenance import (
     BatchClassifyPendingMemoryWorkflowResult,
     MaintainMemoriesWorkflowResult,
 )
+from app.domain.recall_memory.schemas import MemoryDraftExtractResult
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.store import SceneSummaryStore
 from app.graph import maintenance_graph
@@ -32,7 +32,6 @@ def test_scene_summary_graph_has_only_llm_workflow_nodes():
 
     assert set(graph.get_graph().nodes) == {
         "__start__",
-        "scene_summarize",
         "scene_summary_condense",
         "__end__",
     }
@@ -45,12 +44,21 @@ def test_scene_summary_graph_preserves_recursive_condensation(
     mock = MockLLM()
     mock.set_responses(
         [
-            json.dumps({"content": "第2回合摘要。"}, ensure_ascii=False),
             json.dumps({"content": "L2 汇总。"}, ensure_ascii=False),
             json.dumps({"content": "L3 汇总。"}, ensure_ascii=False),
         ]
     )
     store = SceneSummaryStore(":memory:")
+    store.save_one(
+        SceneSummary(
+            id="l1-current",
+            level=1,
+            content="第2回合摘要。",
+            scene_ids=["scene_002"],
+            turn_start=2,
+            turn_end=2,
+        )
+    )
     store.save_one(
         SceneSummary(
             id="l1-existing",
@@ -89,17 +97,14 @@ def test_scene_summary_graph_preserves_recursive_condensation(
 
     try:
         state = maintenance_helpers.prepare_scene_summary_state(
-            "第2回合正文。",
-            _state(),
-            "scene_002",
-            2,
             "trace-2",
+            2,
             core_memory=CoreMemory(items=[]),
             threshold=2,
         )
         result = maintenance_graph.build_scene_summary_maintenance_graph().invoke(state)
 
-        assert len(result["result"].created_summaries) == 3
+        assert len(result["result"].created_summaries) == 2
         assert len(result["result"].condensed_ids) == 2
         assert store.count_uncondensed(1) == 0
         assert store.count_uncondensed(2) == 0
@@ -178,17 +183,50 @@ def test_memory_batch_graph_skips_maintain_when_classification_does_not_trigger(
     assert result["batch_result"].triggered is False
 
 
-def test_background_memory_batch_waits_for_summary_before_invoking_graph(monkeypatch):
+def test_turn_memory_maintenance_extracts_before_threshold_classification(monkeypatch):
     order = []
 
-    class _SummaryFuture(Future):
-        def result(self, timeout=None):
-            order.append("summary")
-            return None
+    def _extract(_state):
+        order.append("memory_draft_extract")
+        return {"events": []}
+
+    def _classify(_state):
+        order.append("memory_batch_classify")
+        return {
+            "batch_result": BatchClassifyPendingMemoryWorkflowResult(
+                triggered=False
+            ),
+            "events": [],
+        }
+
+    monkeypatch.setattr(maintenance_graph, "memory_draft_extract_node", _extract)
+    monkeypatch.setattr(maintenance_graph, "memory_batch_classify_node", _classify)
+    monkeypatch.setattr(
+        maintenance_graph,
+        "memory_maintain_node",
+        lambda _state: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+
+    graph = maintenance_graph.build_turn_memory_maintenance_graph()
+    graph.invoke({
+        "events": [],
+        "trace_id": "trace-9",
+        "turn_index": 9,
+        "current_state": _state(),
+        "state_before_update": _state(),
+        "scene_facts_json": "facts",
+        "core_memory": CoreMemory(items=[]),
+    })
+
+    assert order == ["memory_draft_extract", "memory_batch_classify"]
+
+
+def test_background_memory_batch_does_not_wait_for_summary(monkeypatch):
+    captured = {}
 
     class _Graph:
-        def invoke(self, _state):
-            order.append("memory")
+        def invoke(self, state):
+            captured.update(state)
             return {
                 "batch_result": SimpleNamespace(
                     triggered=False,
@@ -200,19 +238,20 @@ def test_background_memory_batch_waits_for_summary_before_invoking_graph(monkeyp
 
     monkeypatch.setattr(
         maintenance_graph,
-        "build_memory_batch_maintenance_graph",
+        "build_turn_memory_maintenance_graph",
         lambda: _Graph(),
     )
 
     maintenance_graph.run_memory_batch_maintenance(
         _state(),
+        _state(),
+        "facts",
         "trace-9",
         9,
         core_memory=CoreMemory(items=[]),
-        wait_for_summary=_SummaryFuture(),
     )
 
-    assert order == ["summary", "memory"]
+    assert captured["scene_facts_json"] == "facts"
 
 
 class _TraceGateway:
@@ -229,6 +268,17 @@ class _TraceStore:
 
     def __exit__(self, *_args):
         return None
+
+
+class _TracePendingStore(_TraceStore):
+    def save_many(self, _items):
+        return []
+
+    def count(self):
+        return 0
+
+    def unclassified_turn_count(self):
+        return 0
 
 
 class _TraceSceneSummaryStore(_TraceStore):
@@ -270,11 +320,8 @@ def test_scene_summary_maintenance_sets_turn_trace_context(
     )
 
     maintenance_graph.run_scene_summary_maintenance(
-        "正文",
-        _state(),
-        "scene_007",
-        7,
         "trace-7",
+        7,
         core_memory=CoreMemory(items=[]),
     )
 
@@ -291,10 +338,17 @@ def test_memory_batch_maintenance_sets_turn_trace_context(
     gateway = _TraceGateway()
     configure_runtime_services(
         gateway_factory=lambda: gateway,
-        pending_memory=_TraceStore,
+        pending_memory=_TracePendingStore,
         memory=_TraceStore,
         entity=_TraceStore,
         scene_summary=_TraceStore,
+    )
+    monkeypatch.setattr(
+        maintenance_nodes,
+        "MemoryDraftExtractor",
+        lambda _gateway: SimpleNamespace(
+            extract=lambda *_args, **_kwargs: MemoryDraftExtractResult(items=[])
+        ),
     )
     monkeypatch.setattr(
         maintenance_nodes,
@@ -310,6 +364,8 @@ def test_memory_batch_maintenance_sets_turn_trace_context(
 
     maintenance_graph.run_memory_batch_maintenance(
         _state(),
+        _state(),
+        "facts",
         "trace-8",
         8,
         core_memory=CoreMemory(items=[]),
