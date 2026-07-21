@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
+from app.runtime.operations import OperationManager
+
 
 JobStatus = Literal[
     "queued",
@@ -77,10 +79,21 @@ class _MaintenanceJobRecord:
 class MaintenanceJobCoordinator:
     """Run maintenance work and retain bounded, queryable job state."""
 
-    def __init__(self, *, max_workers: int = 2, max_history: int = 200) -> None:
+    def __init__(
+        self,
+        *,
+        max_workers: int = 2,
+        max_history: int = 200,
+        operation_manager: OperationManager | None = None,
+    ) -> None:
         if max_history < 1:
             raise ValueError("max_history must be >= 1")
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+        self.operation_manager = operation_manager
+        self.executor = (
+            None
+            if operation_manager is not None
+            else concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+        )
         self._max_history = max_history
         self._guard = threading.RLock()
         self._records: OrderedDict[str, _MaintenanceJobRecord] = OrderedDict()
@@ -174,7 +187,10 @@ class MaintenanceJobCoordinator:
             return dict(Counter(record.status for record in self._records.values()))
 
     def shutdown(self, *, wait: bool = True) -> None:
-        self.executor.shutdown(wait=wait)
+        if self.executor is not None:
+            self.executor.shutdown(wait=wait)
+        elif wait:
+            self.wait_for_idle()
 
     def wait_for_idle(self) -> None:
         """Wait until current work and any queued single-flight rerun finish."""
@@ -210,7 +226,35 @@ class MaintenanceJobCoordinator:
         return job_id
 
     def _submit_record(self, job_id, fn, args, kwargs):
-        future = self.executor.submit(self._run_record, job_id, fn, args, kwargs)
+        if self.operation_manager is None:
+            future = self.executor.submit(
+                self._run_record,
+                job_id,
+                fn,
+                args,
+                kwargs,
+            )
+        else:
+            with self._guard:
+                record = self._records[job_id]
+                operation_type = f"maintenance_{record.job_type}"
+                metadata = {
+                    **record.metadata,
+                    "maintenance_job_id": job_id,
+                    "trace_id": record.trace_id,
+                    "turn_index": record.turn_index,
+                }
+            operation_id = self.operation_manager.submit_callable(
+                operation_type,
+                self._run_record,
+                job_id,
+                fn,
+                args,
+                kwargs,
+                metadata=metadata,
+            )
+            future = self.operation_manager.future(operation_id)
+            setattr(future, "operation_id", operation_id)
         with self._guard:
             self._active_futures.add(future)
         setattr(future, "job_id", job_id)

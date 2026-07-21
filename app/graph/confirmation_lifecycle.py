@@ -314,6 +314,11 @@ class ConfirmationMaintenanceScheduler:
                 "job_id",
                 None,
             )
+            cache["director_npc_restock_operation_id"] = getattr(
+                future,
+                "operation_id",
+                None,
+            )
         cache["director_npc_restock_scheduled"] = True
         state["director_npc_restock_scheduled"] = True
         return True
@@ -355,6 +360,11 @@ class ConfirmationMaintenanceScheduler:
                 "job_id",
                 None,
             )
+            cache["scene_summary_operation_id"] = getattr(
+                summary_future,
+                "operation_id",
+                None,
+            )
             cache["scene_summary_scheduled"] = True
 
         batch_queued = bool(cache.get("memory_batch_scheduled"))
@@ -378,6 +388,11 @@ class ConfirmationMaintenanceScheduler:
             cache["memory_batch_job_id"] = getattr(
                 memory_future,
                 "job_id",
+                None,
+            )
+            cache["memory_batch_operation_id"] = getattr(
+                memory_future,
+                "operation_id",
                 None,
             )
             batch_queued = True

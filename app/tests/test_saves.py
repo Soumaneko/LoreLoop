@@ -1,3 +1,4 @@
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -83,6 +84,35 @@ def test_switch_requires_explicitly_discarding_pending_content(tmp_path):
         assert runtime.campaign_id == "other"
         assert runtime.pending_turns.get("pending") is None
     finally:
+        runtime.close()
+
+
+def test_create_does_not_leave_directory_when_operation_is_active(tmp_path):
+    root = tmp_path / "saves"
+    runtime = CampaignRuntime(
+        "default",
+        paths=CampaignPaths.from_data_dir(root / "default"),
+        max_workers=1,
+    )
+    manager = SaveManager(root, runtime=runtime)
+    started = threading.Event()
+    release = threading.Event()
+
+    def stream():
+        started.set()
+        assert release.wait(timeout=2)
+        yield {"step": "finished", "data": {}}
+
+    try:
+        operation_id = runtime.operations.submit_stream("generation", stream)
+        assert started.wait(timeout=2)
+        with pytest.raises(RuntimeError, match="active operation"):
+            manager.create("should-not-exist")
+        assert not (root / "should-not-exist").exists()
+        release.set()
+        runtime.operations.wait(operation_id, timeout=2)
+    finally:
+        release.set()
         runtime.close()
 
 

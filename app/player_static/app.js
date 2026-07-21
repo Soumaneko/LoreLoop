@@ -1,4 +1,4 @@
-import { request, stream } from "./api.js";
+import { request, stream, subscribe } from "./api.js";
 import {
   activePending,
   clearDrafts,
@@ -56,6 +56,10 @@ const progressLabels = {
   memory_draft_metadata_filled: "正在准备确认结果",
   action_preview_done: "下一步方向已经生成",
   entity_profiles_updated: "正在写入旅程",
+  story_direction_started: "正在规划长期故事方向",
+  initialization_started: "正在准备开场",
+  opening_scene_done: "开场已经生成",
+  initialization_pending: "正在保存待确认开场",
 };
 let streamBuffer = "";
 let streamFrame = 0;
@@ -431,7 +435,7 @@ function restorePlayerShell() {
   }
 }
 
-async function loadAll({ scroll = false } = {}) {
+async function loadAll({ scroll = false, resumeOperation = true } = {}) {
   state.historyPagingEnabled = false;
   const saves = await request("/api/player/saves");
   state.saves = saves.saves || [];
@@ -439,17 +443,85 @@ async function loadAll({ scroll = false } = {}) {
   renderSaves();
   renderControls();
 
-  const playerState = await request("/api/player/state");
-  sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
+  const activeOperation = resumeOperation
+    ? (await request("/api/player/operations/active")).operation
+    : null;
+  const confirmationActive = activeOperation?.operation_type === "confirmation";
+  const initializationActive = activeOperation?.operation_type?.startsWith(
+    "initialization_",
+  );
+  const playerState = (confirmationActive || initializationActive) && state.playerState
+    ? state.playerState
+    : await request("/api/player/state");
+  if (!confirmationActive) {
+    sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
+  }
   state.playerState = playerState;
   state.suggestions = playerState.action_preview?.previews || [];
   state.selectedPendingIndex = Math.max(0, (activePending()?.variants?.length || 1) - 1);
-  setMode(playerState.needs_init ? "needs_init" : activePending() ? "pending" : "idle");
+  setMode(
+    activeOperation
+      ? confirmationActive ? "confirming" : "generating"
+      : playerState.needs_init
+        ? "needs_init"
+        : activePending()
+          ? "pending"
+          : "idle",
+  );
   renderAll();
   cachePlayerShell();
+  if (activeOperation) {
+    if (initializationActive) {
+      await resumeInitializationOperation(activeOperation, { scroll });
+    } else if (confirmationActive) {
+      await resumeConfirmationOperation(activeOperation, { scroll });
+    } else {
+      await resumeGenerationOperation(activeOperation, { scroll });
+    }
+    return;
+  }
   if (playerState.needs_init && !els.initDialog.open) els.initDialog.showModal();
   if (scroll) scrollToBottom(scroll, () => { state.historyPagingEnabled = true; });
   else window.requestAnimationFrame(() => { state.historyPagingEnabled = true; });
+}
+
+function handleInitializationEvent(event) {
+  setProgress(event.step);
+  if (event.step === "story_direction_done") {
+    showStoryDirectionStage(event.data || {});
+  }
+}
+
+async function resumeInitializationOperation(operation, { scroll = false } = {}) {
+  const storyDirection = operation.operation_type === "initialization_story_direction";
+  setMode("generating");
+  renderControls();
+  if (!els.initDialog.open) els.initDialog.showModal();
+  const button = storyDirection ? els.storyDirectionBtn : els.initSubmitBtn;
+  const oldText = button.textContent;
+  button.disabled = true;
+  button.textContent = storyDirection ? "正在生成……" : "正在生成开场……";
+  try {
+    await subscribe(
+      `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
+      handleInitializationEvent,
+    );
+    if (storyDirection) {
+      setMode("needs_init");
+      renderControls();
+    } else {
+      els.initDialog.close();
+      await loadAll({ scroll: scroll || "instant", resumeOperation: false });
+    }
+  } catch (error) {
+    setMode("needs_init");
+    els.initError.textContent = error.message;
+    els.initError.hidden = false;
+    renderControls();
+  } finally {
+    button.disabled = false;
+    button.textContent = oldText;
+  }
 }
 
 function setProgress(step) {
@@ -494,6 +566,90 @@ function flushStreamingText() {
 
 function stopStreaming() { flushStreamingText(); els.streamingCard.hidden = true; }
 
+function newRequestId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function handleGenerationEvent(event, { retry = false } = {}) {
+  if (event.step === "operation_events_truncated") {
+    els.streamingLabel.textContent = "正在恢复最新生成进度";
+  }
+  setProgress(event.step);
+  if (event.step === "scene_stream_started") startStreaming(
+    event.data?.revision
+      ? "正在根据问题断言重新编写"
+      : retry
+        ? "正在重新推演这一回合"
+        : "世界正在回应",
+  );
+  if (event.step === "scene_text_delta") {
+    appendStreamingText(event.data?.delta || "");
+  }
+}
+
+async function resumeGenerationOperation(operation, { scroll = false } = {}) {
+  const retry = operation.operation_type === "retry";
+  const userInput = operation.metadata?.user_input || "";
+  setMode("generating");
+  renderControls();
+  showActivePlayerAction(userInput);
+  startStreaming(retry ? "正在重新推演这一回合" : "正在恢复生成进度");
+  try {
+    await subscribe(
+      `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
+      (event) => handleGenerationEvent(event, { retry }),
+    );
+    stopStreaming();
+    await loadAll({ scroll: scroll || "smooth", resumeOperation: false });
+    if (retry) showToast("新版本已生成，旧版本仍然保留");
+  } catch (error) {
+    stopStreaming();
+    if (retry) {
+      setMode("pending");
+      renderAll();
+    } else {
+      showActivePlayerAction("");
+      if (userInput) {
+        els.playerInput.value = userInput;
+        autoSizeInput();
+      }
+    }
+    showError(error);
+  }
+}
+
+function handleConfirmationEvent(event) {
+  setProgress(event.step);
+  if (event.step === "action_preview_done" || event.step === "finish") {
+    const previews = event.data?.action_preview?.previews;
+    if (previews) state.suggestions = previews;
+  }
+}
+
+async function resumeConfirmationOperation(operation, { scroll = false } = {}) {
+  const pending = activePending();
+  sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
+  setMode("confirming");
+  renderPending();
+  renderControls();
+  try {
+    await subscribe(
+      `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
+      handleConfirmationEvent,
+    );
+    if (pending) clearDrafts(pending);
+    sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
+    await loadAll({ scroll: scroll || "smooth", resumeOperation: false });
+    showToast("这一回合已经写入旅程");
+  } catch (error) {
+    sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
+    setMode("pending");
+    renderAll();
+    showError(error);
+  }
+}
+
 async function generateTurn() {
   const userInput = els.playerInput.value.trim();
   if (!userInput || state.mode !== "idle") return;
@@ -502,13 +658,11 @@ async function generateTurn() {
   els.playerInput.value = ""; autoSizeInput(); renderControls();
   startStreaming("正在理解你的行动");
   try {
-    await stream("/api/player/generate", { user_input: userInput, difficulty: els.difficultySelect.value }, (event) => {
-      setProgress(event.step);
-      if (event.step === "scene_stream_started") startStreaming(
-        event.data?.revision ? "正在根据问题断言重新编写" : "世界正在回应"
-      );
-      if (event.step === "scene_text_delta") appendStreamingText(event.data?.delta || "");
-    });
+    await stream("/api/player/generate", {
+      user_input: userInput,
+      difficulty: els.difficultySelect.value,
+      request_id: newRequestId(),
+    }, (event) => handleGenerationEvent(event));
     stopStreaming();
     await loadAll({ scroll: "smooth" });
   } catch (error) {
@@ -523,13 +677,10 @@ async function retryTurn() {
   if (!pending || !variant || pending.kind === "opening") return;
   setMode("generating"); renderControls(); startStreaming("正在重新推演这一回合");
   try {
-    await stream("/api/player/retry", { turn_id: variant.turn_id }, (event) => {
-      setProgress(event.step);
-      if (event.step === "scene_stream_started") startStreaming(
-        event.data?.revision ? "正在根据问题断言重新编写" : "正在重新推演这一回合"
-      );
-      if (event.step === "scene_text_delta") appendStreamingText(event.data?.delta || "");
-    });
+    await stream("/api/player/retry", {
+      turn_id: variant.turn_id,
+      request_id: newRequestId(),
+    }, (event) => handleGenerationEvent(event, { retry: true }));
     stopStreaming(); await loadAll({ scroll: "smooth" }); showToast("新版本已生成，旧版本仍然保留");
   } catch (error) { stopStreaming(); setMode("pending"); renderAll(); showError(error); }
 }
@@ -540,16 +691,16 @@ async function confirmTurn() {
   sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
   setMode("confirming"); renderPending(); renderControls();
   try {
-    await stream("/api/player/confirm", { turn_id: variant.turn_id, scene_text: readDraft(variant) }, (event) => {
-      setProgress(event.step);
-      if (event.step === "action_preview_done" || event.step === "finish") {
-        const previews = event.data?.action_preview?.previews;
-        if (previews) state.suggestions = previews;
-      }
-    });
+    await stream("/api/player/confirm", {
+      turn_id: variant.turn_id,
+      scene_text: readDraft(variant),
+      request_id: newRequestId(),
+    }, handleConfirmationEvent);
     clearDrafts(pending); await loadAll({ scroll: "smooth" }); showToast("这一回合已经写入旅程");
   } catch (error) { setMode("pending"); renderAll(); showError(error); }
-  finally { sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY); }
+  finally {
+    sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
+  }
 }
 
 async function discardPending() {
@@ -712,11 +863,10 @@ async function requestStoryDirection({ regenerate = false } = {}) {
   const oldText = button.textContent;
   button.textContent = "正在生成……";
   try {
-    const result = await request("/api/player/init/story-direction", {
-      method: "POST",
-      body: JSON.stringify(config),
-    });
-    showStoryDirectionStage(result);
+    await stream("/api/player/init/story-direction", {
+      ...config,
+      request_id: newRequestId(),
+    }, handleInitializationEvent);
   } catch (error) {
     els.initError.textContent = error.message;
     els.initError.hidden = false;
@@ -741,7 +891,14 @@ async function initialize() {
     },
   };
   setMode("generating"); els.initSubmitBtn.disabled = true; els.initSubmitBtn.textContent = "正在生成开场……"; els.initError.hidden = true;
-  try { await request("/api/player/init", { method: "POST", body: JSON.stringify(payload) }); els.initDialog.close(); await loadAll({ scroll: "instant" }); }
+  try {
+    await stream("/api/player/init", {
+      ...payload,
+      request_id: newRequestId(),
+    }, handleInitializationEvent);
+    els.initDialog.close();
+    await loadAll({ scroll: "instant" });
+  }
   catch (error) { setMode("needs_init"); els.initError.textContent = error.message; els.initError.hidden = false; }
   finally { els.initSubmitBtn.disabled = false; els.initSubmitBtn.textContent = "生成开场"; renderControls(); }
 }

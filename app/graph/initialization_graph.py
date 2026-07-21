@@ -34,9 +34,32 @@ def _compile_initialization_graph():
     return graph.compile()
 
 
-def apply_core_memory_init(payload: dict[str, Any]) -> dict[str, Any]:
+def initialization_stream(payload: dict[str, Any]):
     with get_campaign_runtime().confirmation_lock:
         state = prepare_initialization_state(payload)
-        graph_state = build_initialization_graph().invoke(state)
-        finalized = finalize_initialization_state(graph_state)
-        return initialization_result(finalized)
+        yield {
+            "step": "initialization_started",
+            "data": {"trace_id": state["trace_id"]},
+        }
+        event_count = len(state.get("events", []))
+        for update in build_initialization_graph().stream(
+            state,
+            stream_mode="updates",
+        ):
+            for node_update in update.values():
+                state.update({
+                    key: value
+                    for key, value in node_update.items()
+                    if key != "events"
+                })
+                events = node_update.get("events", [])
+                state["events"] = [*state.get("events", []), *events]
+                for event in events:
+                    event_count += 1
+                    yield event
+
+        state = finalize_initialization_state(state)
+        for event in state.get("events", [])[event_count:]:
+            yield event
+        result = initialization_result(state)
+        return result

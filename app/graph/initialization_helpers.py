@@ -48,11 +48,15 @@ def preview_core_memory(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def generate_story_direction(payload: dict[str, Any]) -> dict[str, Any]:
+def generate_story_direction_stream(payload: dict[str, Any]):
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
         config, core_memory = build_core_memory_from_payload(payload)
         trace_id = str(uuid.uuid4())
+        yield {
+            "step": "story_direction_started",
+            "data": {"trace_id": trace_id},
+        }
         story_direction = StoryDirectionAgent(
             runtime.services.gateway(session_type="init")
         ).generate(
@@ -60,12 +64,14 @@ def generate_story_direction(payload: dict[str, Any]) -> dict[str, Any]:
             base_core_memory=core_memory,
             trace_id=trace_id,
         )
-    return {
-        "config": model_data(config),
-        "core_memory": model_data(core_memory),
-        "story_direction": model_data(story_direction),
-        "trace_id": trace_id,
-    }
+        result = {
+            "config": model_data(config),
+            "core_memory": model_data(core_memory),
+            "story_direction": model_data(story_direction),
+            "trace_id": trace_id,
+        }
+        yield {"step": "story_direction_done", "data": result}
+        return result
 
 
 def prepare_initialization_state(payload: dict[str, Any]) -> InitializationState:

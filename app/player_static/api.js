@@ -15,12 +15,7 @@ export async function request(path, options = {}) {
   return payload.data;
 }
 
-export async function stream(path, body, onEvent) {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body || {}),
-  });
+async function readStream(response, onEvent) {
   if (!response.ok || !response.body) {
     throw new Error(`请求失败（${response.status}）`);
   }
@@ -45,4 +40,20 @@ export async function stream(path, body, onEvent) {
       onEvent(event);
     }
   }
+}
+
+export async function stream(path, body, onEvent) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  return readStream(response, onEvent);
+}
+
+export async function subscribe(path, onEvent) {
+  const response = await fetch(path, {
+    headers: { Accept: "text/event-stream" },
+  });
+  return readStream(response, onEvent);
 }

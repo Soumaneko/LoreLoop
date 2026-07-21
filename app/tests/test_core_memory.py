@@ -14,7 +14,10 @@ from app.domain.core_memory import (
     build_core_memory,
     build_initial_current_state,
 )
-from app.graph.initialization_helpers import generate_story_direction, preview_core_memory
+from app.graph.initialization_helpers import (
+    generate_story_direction_stream,
+    preview_core_memory,
+)
 from app.runtime.session import get_campaign_runtime
 
 
@@ -379,14 +382,16 @@ class TestDebugCoreMemoryPreview:
             "story_expectation": "经营经纪公司，发掘演员并发展事业与浪漫关系。",
             "extra_core_memory_items": [],
         }
-        preview = generate_story_direction(config)
-        result = core_memory_engine.apply_core_memory_init({
+        direction_events = list(generate_story_direction_stream(config))
+        preview = direction_events[-1]["data"]
+        initialization_events = list(core_memory_engine.initialization_stream({
             "config": preview["config"],
             "story_direction": {
                 "content": "用户修改后：聚焦经纪公司经营，但不发展浪漫关系。",
                 "currency_unit": "港币",
             },
-        })
+        }))
+        result = initialization_events[-1]["data"]
 
         try:
             assert [task for task, _ in calls] == ["story_direction", "opening_scene"]
@@ -400,9 +405,12 @@ class TestDebugCoreMemoryPreview:
                 item["id"] == "core_currency_system"
                 for item in opening_core["items"]
             )
-            assert result["current_state"]["resources"]["money_unit"] == "港币"
-            assert runtime.stores.core_memory().load() == CoreMemory.model_validate(
-                result["core_memory"]
+            assert runtime.stores.current_state().load_or_default().resources.money_unit == "港币"
+            saved_core_memory = runtime.stores.core_memory().load()
+            assert any(
+                item.id == "core_story_direction"
+                and item.content.startswith("用户修改后")
+                for item in saved_core_memory.items
             )
         finally:
             get_campaign_runtime().pending_openings.remove(result["turn_id"])

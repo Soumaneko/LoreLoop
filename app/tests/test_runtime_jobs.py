@@ -5,6 +5,7 @@ import pytest
 from app.graph import generation_graph
 from app.runtime.graph_cache import clear_compiled_graph_cache
 from app.runtime.jobs import MaintenanceJobCoordinator
+from app.runtime.operations import OperationManager
 
 
 def test_job_coordinator_records_success_and_failure():
@@ -51,6 +52,38 @@ def test_submit_forwards_all_keyword_arguments():
         assert coordinator.get(future.job_id).status == "succeeded"
     finally:
         coordinator.shutdown()
+
+
+def test_job_coordinator_delegates_execution_to_operation_manager():
+    operations = OperationManager("campaign-1", max_workers=1)
+    coordinator = MaintenanceJobCoordinator(
+        max_workers=1,
+        operation_manager=operations,
+    )
+    try:
+        future = coordinator.submit_job(
+            "scene_summary",
+            lambda: "ok",
+            trace_id="trace-1",
+            turn_index=4,
+            metadata={"scene_id": "scene-4"},
+        )
+
+        assert future.result(timeout=2) == "ok"
+        job = coordinator.get(future.job_id)
+        operation = operations.get(future.operation_id)
+        assert job.status == "succeeded"
+        assert operation.status == "succeeded"
+        assert operation.operation_type == "maintenance_scene_summary"
+        assert operation.metadata == {
+            "scene_id": "scene-4",
+            "maintenance_job_id": future.job_id,
+            "trace_id": "trace-1",
+            "turn_index": 4,
+        }
+    finally:
+        coordinator.shutdown()
+        operations.shutdown()
 
 
 def test_memory_batch_single_flight_tracks_superseded_rerun():

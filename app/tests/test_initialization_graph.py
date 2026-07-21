@@ -82,3 +82,22 @@ def test_initialization_state_applies_edited_story_direction_before_opening(monk
     assert [event["step"] for event in result["events"]] == [
         "opening_scene_done",
     ]
+
+
+def test_initialization_stream_emits_progress_and_pending_boundary(monkeypatch):
+    def _opening_scene(_state):
+        return {
+            "opening_scene": SceneWriterResult(scene_text="开场"),
+            "events": [{"step": "opening_scene_done", "data": {}}],
+        }
+
+    monkeypatch.setattr(initialization_graph, "opening_scene_node", _opening_scene)
+
+    events = list(initialization_graph.initialization_stream(_payload()))
+
+    assert [event["step"] for event in events] == [
+        "initialization_started",
+        "opening_scene_done",
+        "initialization_pending",
+    ]
+    assert events[-1]["data"]["status"] == "awaiting_confirm"

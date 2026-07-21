@@ -199,7 +199,8 @@ def run_manual_turn(
     confirm: bool = False,
     write_db: bool = False,
 ) -> dict[str, Any]:
-    from app.api import confirm_stream, generate_turn_stream
+    from app.graph.confirmation_graph import confirm_stream
+    from app.graph.generation_graph import generate_turn_stream
 
     install_manual_gateway(exchange)
 

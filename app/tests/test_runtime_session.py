@@ -1,4 +1,7 @@
+import threading
 from types import SimpleNamespace
+
+import pytest
 
 from app.domain.current_state import PlayerState, make_default_state
 from app.runtime.paths import CampaignPaths
@@ -92,6 +95,9 @@ def test_campaign_runtimes_isolate_paths_stores_pending_and_locks(tmp_path):
         assert first.pending_turns.get("turn") is not None
         assert second.pending_turns.get("turn") is None
         assert first.confirmation_lock is not second.confirmation_lock
+        assert first.operations is not second.operations
+        assert first.operations.campaign_id == "first"
+        assert second.operations.campaign_id == "second"
 
         first_state = make_default_state().model_copy(
             update={"player": PlayerState(name="甲")}
@@ -111,3 +117,39 @@ def test_campaign_runtimes_isolate_paths_stores_pending_and_locks(tmp_path):
     finally:
         first.close()
         second.close()
+
+
+def test_runtime_rejects_save_switch_while_operation_is_active(tmp_path):
+    runtime = CampaignRuntime(
+        "first",
+        paths=CampaignPaths.from_data_dir(tmp_path / "first"),
+        max_workers=1,
+    )
+    started = threading.Event()
+    release = threading.Event()
+
+    def stream():
+        started.set()
+        assert release.wait(timeout=2)
+        yield {"step": "finished", "data": {}}
+
+    try:
+        operation_id = runtime.operations.submit_stream("generation", stream)
+        assert started.wait(timeout=2)
+
+        with pytest.raises(RuntimeError, match="active operation"):
+            runtime.reconfigure(
+                "second",
+                CampaignPaths.from_data_dir(tmp_path / "second"),
+            )
+
+        release.set()
+        assert runtime.operations.wait(operation_id, timeout=2).status == "succeeded"
+        runtime.reconfigure(
+            "second",
+            CampaignPaths.from_data_dir(tmp_path / "second"),
+        )
+        assert runtime.operations.campaign_id == "second"
+    finally:
+        release.set()
+        runtime.close()

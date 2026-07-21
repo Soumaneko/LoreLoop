@@ -70,6 +70,11 @@ class SaveManager:
     ) -> SaveInfo:
         clean = validate_save_name(name)
         with self._lock:
+            if activate and self.runtime.has_active_operations():
+                raise RuntimeError(
+                    "Current save has an active operation. Wait for it to finish "
+                    "before creating and switching saves."
+                )
             if activate and self.runtime.has_pending_content() and not discard_pending:
                 raise RuntimeError(
                     "Current save has pending content. Confirm it or explicitly "

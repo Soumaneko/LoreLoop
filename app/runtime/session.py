@@ -19,6 +19,7 @@ from app.runtime.paths import (
 from app.runtime.services import RuntimeServices
 from app.runtime.stores import StoreBundle
 from app.runtime.jobs import MaintenanceJobCoordinator
+from app.runtime.operations import OperationManager
 from app.runtime.serialization import model_data
 from app.runtime.turn_history import CampaignHistory
 
@@ -196,7 +197,11 @@ class CampaignRuntime:
         self._max_workers = max_workers
         self.pending_turns = PendingTurnRepository()
         self.pending_openings = PendingOpeningRepository()
-        self.jobs = MaintenanceJobCoordinator(max_workers=max_workers)
+        self.operations = OperationManager(campaign_id, max_workers=max_workers)
+        self.jobs = MaintenanceJobCoordinator(
+            max_workers=max_workers,
+            operation_manager=self.operations,
+        )
         self.services = RuntimeServices(
             stores=self.stores,
             gateway_factory=self.gateway_factory,
@@ -215,6 +220,9 @@ class CampaignRuntime:
 
     def has_pending_content(self) -> bool:
         return bool(len(self.pending_turns) or len(self.pending_openings))
+
+    def has_active_operations(self) -> bool:
+        return bool(self.operations.list(active_only=True, limit=1))
 
     def discard_pending_turn(self, turn_id: str) -> dict[str, Any]:
         with self._confirmation_lock:
@@ -398,7 +406,10 @@ class CampaignRuntime:
 
     def _restart_jobs(self) -> None:
         self.jobs.shutdown(wait=True)
-        self.jobs = MaintenanceJobCoordinator(max_workers=self._max_workers)
+        self.jobs = MaintenanceJobCoordinator(
+            max_workers=self._max_workers,
+            operation_manager=self.operations,
+        )
         self.services = RuntimeServices(
             stores=self.stores,
             gateway_factory=self.gateway_factory,
@@ -414,18 +425,31 @@ class CampaignRuntime:
     ) -> None:
         """Switch this runtime to another persisted campaign directory."""
         with self._confirmation_lock:
+            if self.has_active_operations():
+                raise RuntimeError(
+                    "Current save has an active operation. Wait for it to finish "
+                    "before switching saves."
+                )
             if self.has_pending_content() and not discard_pending:
                 raise RuntimeError(
                     "Current save has pending content. Confirm it or explicitly "
                     "discard pending content before switching saves."
                 )
+            self.operations.shutdown(wait=True)
             self.jobs.shutdown(wait=True)
             self.pending_turns.clear(discard=discard_pending)
             self.pending_openings.clear(discard=discard_pending)
             self.campaign_id = campaign_id
             self.paths = paths
             self.stores = StoreBundle(paths)
-            self.jobs = MaintenanceJobCoordinator(max_workers=self._max_workers)
+            self.operations = OperationManager(
+                campaign_id,
+                max_workers=self._max_workers,
+            )
+            self.jobs = MaintenanceJobCoordinator(
+                max_workers=self._max_workers,
+                operation_manager=self.operations,
+            )
             self.services = RuntimeServices(
                 stores=self.stores,
                 gateway_factory=self.gateway_factory,
@@ -437,6 +461,7 @@ class CampaignRuntime:
             self._restore_pending_transactions()
 
     def close(self, *, wait_for_jobs: bool = True) -> None:
+        self.operations.shutdown(wait=wait_for_jobs)
         self.jobs.shutdown(wait=wait_for_jobs)
 
 

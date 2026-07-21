@@ -70,6 +70,7 @@ class ConfirmationCache(TypedDict, total=False):
     confirmed_director_npc_draft: DirectorNPCDraft | None
     director_npc_restock_scheduled: bool
     director_npc_restock_job_id: str | None
+    director_npc_restock_operation_id: str | None
     director_npc_last_dispatch_turn_set: bool
     turn_summary_saved: bool
     turn_summary_id: str
@@ -77,9 +78,11 @@ class ConfirmationCache(TypedDict, total=False):
     short_term_saved: bool
     scene_summary_future: Future[Any]
     scene_summary_job_id: str | None
+    scene_summary_operation_id: str | None
     scene_summary_scheduled: bool
     memory_batch_scheduled: bool
     memory_batch_job_id: str | None
+    memory_batch_operation_id: str | None
 
 
 class ConfirmationState(TypedDict, total=False):

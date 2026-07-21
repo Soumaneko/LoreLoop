@@ -1,10 +1,13 @@
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 import pytest
 
+from app import debug_server
 from app.debug_server import DebugHandler
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
@@ -23,6 +26,7 @@ from app.runtime.player_state import (
     load_player_state,
     player_saves_payload,
 )
+from app.runtime.operations import OperationManager
 from app.runtime.session import get_campaign_runtime
 
 
@@ -67,12 +71,21 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
 
     assert "/api/player/state" in source
     assert 'const saves = await request("/api/player/saves")' in source
-    assert 'const playerState = await request("/api/player/state")' in source
+    assert 'await request("/api/player/state")' in source
     assert "Promise.all([" not in source
     assert "/api/player/history?before_turn=" in source
     assert "/api/player/generate" in source
+    assert "/api/player/retry" in source
     assert "/api/player/confirm" in source
+    assert "/api/player/operations/active" in source
+    assert "/api/player/operations/${encodeURIComponent(operation.operation_id)}/events" in source
+    assert "request_id: newRequestId()" in source
+    assert "function resumeConfirmationOperation(" in source
+    assert 'import { request, stream, subscribe } from "./api.js"' in source
     assert "/api/player/init/story-direction" in source
+    assert 'activeOperation?.operation_type?.startsWith(' in source
+    assert "function resumeInitializationOperation(" in source
+    assert "story_direction_done" in source
     assert "/api/state" not in source
     assert "/api/traces" not in source
     assert "/api/maintenance-jobs" not in source
@@ -109,6 +122,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1")' in source
     assert "restorePlayerShell();" in source
     assert 'confirm.textContent = confirming ? "正在确认……"' in source
+    assert "_handle_player_json_stream" not in (
+        Path(__file__).parents[1] / "debug_server.py"
+    ).read_text(encoding="utf-8")
     assert "playerState.action_preview?.previews" in source
     assert 'els.initOriginalFields.querySelectorAll("input, textarea, select")' in source
     assert 'els.initFanficFields.querySelectorAll("input, textarea, select")' in source
@@ -137,29 +153,55 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
 
 
 @pytest.mark.parametrize(
-    "handler_name",
-    ["_handle_json_stream", "_handle_player_json_stream"],
+    "operation_type",
+    [
+        "generation",
+        "confirmation",
+        "initialization_story_direction",
+        "initialization_opening",
+    ],
 )
-def test_confirmation_stream_keeps_running_after_client_disconnect(handler_name):
+def test_pipeline_operation_continues_after_subscriber_disconnect(
+    monkeypatch,
+    operation_type,
+):
+    manager = OperationManager("disconnect-test", max_workers=1)
     handler = object.__new__(DebugHandler)
     handler.send_response = lambda _status: None
     handler.send_header = lambda _name, _value: None
     handler.end_headers = lambda: None
     handler.wfile = _DisconnectedWriter()
+    handler.path = "/api/player/generate"
+    release = threading.Event()
     completed = []
 
-    def confirmation_events():
-        yield {"step": "state_update_done", "data": {}}
+    def generation_events():
+        yield {"step": "state_loaded", "data": {}}
+        assert release.wait(timeout=2)
         completed.append("continued")
-        yield {"step": "scene_summarize_done", "data": {}}
+        yield {"step": "scene_written", "data": {}}
         completed.append("finished")
 
-    getattr(handler, handler_name)(
-        confirmation_events,
-        continue_on_disconnect=True,
+    monkeypatch.setattr(
+        debug_server,
+        "get_campaign_runtime",
+        lambda: SimpleNamespace(operations=manager),
     )
+    try:
+        operation_id = manager.submit_stream(operation_type, generation_events)
+        handler._handle_operation_event_stream(
+            operation_id,
+            urlparse(handler.path),
+            player=True,
+            resumed=False,
+        )
+        release.set()
 
-    assert completed == ["continued", "finished"]
+        assert manager.wait(operation_id, timeout=2).status == "succeeded"
+        assert completed == ["continued", "finished"]
+    finally:
+        release.set()
+        manager.shutdown()
 
 
 def test_player_state_is_allow_listed_and_restores_pending_content():
@@ -325,6 +367,58 @@ def test_player_event_projection_preserves_revision_stream_marker():
             "revision": True,
         },
     }
+
+
+def test_player_story_direction_event_exposes_only_editable_result():
+    event = DebugHandler._player_event({
+        "step": "story_direction_done",
+        "data": {
+            "config": {"protagonist_name": "莱尔"},
+            "story_direction": {"content": "向北探索", "currency_unit": "金币"},
+            "core_memory": {"items": [{"content": "internal"}]},
+            "trace_id": "private-trace",
+        },
+    })
+
+    assert event == {
+        "step": "story_direction_done",
+        "data": {
+            "config": {"protagonist_name": "莱尔"},
+            "story_direction": {"content": "向北探索", "currency_unit": "金币"},
+        },
+    }
+
+
+def test_player_operation_projection_is_allow_listed():
+    operation = DebugHandler._player_operation({
+        "operation_id": "operation-1",
+        "operation_type": "generation",
+        "status": "running",
+        "current_step": "action_parsed",
+        "submitted_at": "now",
+        "started_at": "now",
+        "result": {"private": "result"},
+        "error_message": "private error",
+        "metadata": {
+            "user_input": "调查钟楼",
+            "turn_id": "turn-1",
+            "trace_id": "private-trace",
+        },
+    })
+
+    assert operation == {
+        "operation_id": "operation-1",
+        "operation_type": "generation",
+        "status": "running",
+        "current_step": "action_parsed",
+        "submitted_at": "now",
+        "started_at": "now",
+        "metadata": {
+            "user_input": "调查钟楼",
+            "turn_id": "turn-1",
+        },
+    }
+    assert "private" not in str(operation)
 
 
 def test_player_save_payload_removes_server_root():

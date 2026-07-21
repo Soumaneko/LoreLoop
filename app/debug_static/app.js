@@ -65,18 +65,35 @@ const state = {
   initConfigSnapshot: null,
   initStoryDirection: null,
   operationStatus: "Ready",
+  activeOperationId: null,
   saves: [],
   activeSave: null,
   run: emptyRun(),
 };
+
+const RESUMABLE_OPERATION_TYPES = new Set([
+  "generation",
+  "retry",
+  "confirmation",
+  "initialization_story_direction",
+  "initialization_opening",
+  "maintenance_batch_classify_manual",
+  "maintenance_memory_maintain_manual",
+]);
 
 function emptyRun() {
   return {
     generation: { order: [], steps: {}, merged: {} },
     confirmation: { order: [], steps: {}, merged: {} },
     maintenance: { order: [], steps: {}, merged: {} },
+    initialization: { order: [], steps: {}, merged: {} },
     errors: [],
   };
+}
+
+function newRequestId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function resetRun(scope = "all") {
@@ -218,8 +235,12 @@ async function readEventStream(response, scope, onEvent) {
       const event = JSON.parse(part.slice(6));
       if (!event.ok) throw event;
       if (event.step === "done") {
+        state.activeOperationId = null;
         await reader.cancel();
         return;
+      }
+      if (event.step === "operation_started") {
+        state.activeOperationId = event.data?.operation_id || null;
       }
       const transient = event.step === "scene_stream_started" || event.step === "scene_text_delta";
       if (!transient) recordStep(scope, event);
@@ -705,23 +726,25 @@ async function applyInit() {
   try {
     const content = $("initDirectionContent").value.trim();
     if (!state.initConfigSnapshot || !content) throw new Error("请先生成并确认 Story Direction");
-    const data = await api("/api/init/apply", {
+    const response = await fetch("/api/init/apply", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         config: state.initConfigSnapshot,
         story_direction: {
           content,
           currency_unit: $("initCurrencyUnit").value.trim() || null,
         },
+        request_id: newRequestId(),
       }),
     });
-    state.coreMemoryInitialized = true;
-    state.pendingTurnId = data.turn_id || null;
-    state.pendingGroupId = null;
-    state.pendingVariants = [];
-    state.pendingVariantIndex = -1;
+    resetRun("initialization");
+    await readEventStream(
+      response,
+      "initialization",
+      handleInitializationPipelineEvent,
+    );
     await refreshState({ preserveStatus: true });
-    if (data.opening_scene?.scene_text) addEditableScene(data.opening_scene.scene_text, "开场 · 待确认", data.opening_scene.closing_prompt || "");
     setStatus(state.pendingTurnId ? "开场已生成 - 待确认" : "Core Memory 已初始化");
     els.turnInfo.textContent = state.pendingTurnId ? `Pending ${state.pendingTurnId}` : "等待玩家行动";
   } catch (err) {
@@ -734,22 +757,45 @@ async function generateInitDirection() {
   const btn = $("initDirectionBtn");
   btn.disabled = true;
   try {
-    const data = await api("/api/init/story-direction", {
+    const response = await fetch("/api/init/story-direction", {
       method: "POST",
-      body: JSON.stringify(readInitConfig()),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...readInitConfig(),
+        request_id: newRequestId(),
+      }),
     });
-    state.initConfigSnapshot = data.config;
-    state.initStoryDirection = data.story_direction;
-    $("initDirectionContent").disabled = false;
-    $("initCurrencyUnit").disabled = false;
-    $("initDirectionContent").value = data.story_direction.content || "";
-    $("initCurrencyUnit").value = data.story_direction.currency_unit || "";
-    $("initSaveBtn").disabled = false;
-    $("initPreview").textContent = JSON.stringify(data.story_direction, null, 2);
+    resetRun("initialization");
+    await readEventStream(
+      response,
+      "initialization",
+      handleInitializationPipelineEvent,
+    );
   } catch (err) {
     $("initPreview").textContent = err.message || "Story Direction 生成失败";
   } finally {
     btn.disabled = false;
+  }
+}
+
+function handleInitializationPipelineEvent(event) {
+  const data = event.data || {};
+  if (event.step === "story_direction_done") {
+    state.initConfigSnapshot = data.config;
+    state.initStoryDirection = data.story_direction;
+    $("initDirectionContent").disabled = false;
+    $("initCurrencyUnit").disabled = false;
+    $("initDirectionContent").value = data.story_direction?.content || "";
+    $("initCurrencyUnit").value = data.story_direction?.currency_unit || "";
+    $("initSaveBtn").disabled = false;
+    $("initPreview").textContent = JSON.stringify(data.story_direction, null, 2);
+  }
+  if (event.step === "initialization_pending") {
+    state.coreMemoryInitialized = true;
+    state.pendingTurnId = data.turn_id || null;
+    state.pendingGroupId = null;
+    state.pendingVariants = [];
+    state.pendingVariantIndex = -1;
   }
 }
 
@@ -2045,6 +2091,181 @@ async function refreshMaintenanceJobs() {
   }
 }
 
+function handleGenerationPipelineEvent(event, { retry = false } = {}) {
+  const data = event.data || {};
+  if (event.step === "state_loaded") setDebugStatus("状态加载完成");
+  if (event.step === "retry_started") {
+    startStreamingScene(1, data.version_index || state.pendingVariants.length + 1);
+  }
+  if (event.step === "action_parsed") state.activeTab = "generation";
+  if (event.step === "scene_stream_started") {
+    startStreamingScene(data.attempt || 1, null, Boolean(data.revision));
+  }
+  if (event.step === "scene_text_delta") appendStreamingScene(data.delta || "");
+  if (event.step === "narrative_checked") setDebugStatus("一致性检查完成");
+  if (event.step === "narrative_revision_started") {
+    setDebugStatus("正在根据问题断言重写正文");
+  }
+  if (event.step === "narrative_revised") setDebugStatus("正文修订完成");
+  if (event.step === "scene_written") {
+    appendPendingVariant(data);
+    setStatus(retry ? "新版本已生成 - 待确认" : "正文已生成 - 待确认");
+    setDebugStatus("等待确认");
+  }
+}
+
+function handleConfirmationPipelineEvent(event) {
+  if (event.step === "state_update_done") state.activeTab = "diff";
+  if (event.step === "scene_facts_done") state.activeTab = "confirmation";
+  if (event.step === "entity_extract_done") state.activeTab = "entity";
+  if (event.step === "npc_extract_done") state.activeTab = "npc";
+  if (event.step === "action_preview_done") state.activeTab = "preview";
+  if (event.step === "finish") {
+    const data = event.data || {};
+    if (data.write_db) {
+      markPendingSceneConfirmed();
+      state.pendingTurnId = null;
+      state.pendingGroupId = null;
+      state.pendingVariants = [];
+      state.pendingVariantIndex = -1;
+      state.pendingSceneText = null;
+      els.input.value = "";
+      addMessage("assistant", "已确认采用，并写入状态、短期记忆和记忆流程。", "系统");
+      setStatus(data.memory_extraction?.batch_queued ? "确认完成 · 后台维护中" : "确认完成");
+      els.turnInfo.textContent = data.memory_extraction?.batch_queued ? "后台维护中" : "等待玩家行动";
+    } else {
+      addMessage("assistant", "Dry Run 完成，候选版本仍可切换和确认。", "系统");
+      setStatus("Dry Run 完成 - 仍待确认");
+      els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
+    }
+    setDebugStatus(data.status || "committed");
+    state.activeTab = "diff";
+  }
+}
+
+function handleManualMaintenanceEvent(event) {
+  if (event.step === "batch_classified") setDebugStatus("批分类完成");
+  if (event.step === "batch_classify_done") setStatus("批分类完成");
+  if (event.step === "memory_maintain_done") setStatus("记忆维护完成");
+}
+
+async function replayOperation(operation, scope, onEvent) {
+  const response = await fetch(
+    `/api/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
+  );
+  await readEventStream(response, scope, onEvent);
+}
+
+function failResumedOperation(err, label) {
+  state.activeOperationId = null;
+  state.run.errors.push(err);
+  setStatus(label);
+  setDebugStatus(label);
+  renderError(err);
+}
+
+async function resumeInitializationOperation(operation) {
+  const storyDirection = (
+    operation.operation_type === "initialization_story_direction"
+  );
+  state.activeOperationId = operation.operation_id;
+  resetRun("initialization");
+  setStatus(
+    storyDirection ? "正在恢复 Story Direction..." : "正在恢复开场生成...",
+    true,
+  );
+  setDebugStatus(storyDirection ? "Story Direction" : "开场生成中");
+  renderStatePanel();
+  renderDebug();
+  try {
+    await replayOperation(
+      operation,
+      "initialization",
+      handleInitializationPipelineEvent,
+    );
+    if (storyDirection) {
+      setStatus("Story Direction 已生成");
+    } else {
+      await refreshState({ preserveStatus: true });
+      setStatus("开场已生成 - 待确认");
+    }
+  } catch (err) {
+    failResumedOperation(err, "初始化失败");
+  }
+}
+
+async function resumeConfirmationOperation(operation) {
+  state.activeOperationId = operation.operation_id;
+  resetRun("confirmation");
+  setStatus("正在恢复确认...", true);
+  setDebugStatus("确认中");
+  state.activeTab = "overview";
+  renderDebug();
+  try {
+    await replayOperation(
+      operation,
+      "confirmation",
+      handleConfirmationPipelineEvent,
+    );
+    if (operation.metadata?.write_db !== false) {
+      await refreshState({ preserveStatus: true });
+    }
+  } catch (err) {
+    failResumedOperation(err, "确认失败");
+  }
+}
+
+async function resumeMaintenanceOperation(operation) {
+  state.activeOperationId = operation.operation_id;
+  resetRun("maintenance");
+  setStatus("正在恢复维护...", true);
+  setDebugStatus("维护中");
+  state.activeTab = "memory";
+  renderDebug();
+  try {
+    await replayOperation(operation, "maintenance", handleManualMaintenanceEvent);
+    await refreshState({ preserveStatus: true });
+  } catch (err) {
+    failResumedOperation(err, "维护失败");
+  }
+}
+
+async function resumeGenerationOperation(operation) {
+  const retry = operation.operation_type === "retry";
+  state.activeOperationId = operation.operation_id;
+  resetRun("generation");
+  setStatus(retry ? "正在恢复Retry..." : "正在恢复生成...", true);
+  setDebugStatus(retry ? "Retry 生成中" : "生成中");
+  state.activeTab = "overview";
+  renderDebug();
+  try {
+    await replayOperation(operation, "generation", (event) => {
+      handleGenerationPipelineEvent(event, { retry });
+    });
+    await refreshState({ preserveStatus: true });
+  } catch (err) {
+    failResumedOperation(err, retry ? "Retry 失败" : "生成失败");
+  }
+}
+
+async function resumeActivePipelineOperation() {
+  if (state.activeOperationId) return;
+  const data = await api("/api/operations/active");
+  const operation = (data.operations || []).find(
+    (item) => RESUMABLE_OPERATION_TYPES.has(item.operation_type),
+  );
+  if (!operation) return;
+  if (operation.operation_type.startsWith("initialization_")) {
+    await resumeInitializationOperation(operation);
+  } else if (operation.operation_type === "confirmation") {
+    await resumeConfirmationOperation(operation);
+  } else if (operation.operation_type.startsWith("maintenance_")) {
+    await resumeMaintenanceOperation(operation);
+  } else {
+    await resumeGenerationOperation(operation);
+  }
+}
+
 async function generateTurn() {
   const userInput = els.input.value.trim();
   if (!state.coreMemoryInitialized) {
@@ -2076,19 +2297,7 @@ async function generateTurn() {
       }),
     });
     await readEventStream(response, "generation", (event) => {
-      const data = event.data || {};
-      if (event.step === "state_loaded") setDebugStatus("状态加载完成");
-      if (event.step === "action_parsed") state.activeTab = "generation";
-      if (event.step === "scene_stream_started") startStreamingScene(data.attempt || 1, null, Boolean(data.revision));
-      if (event.step === "scene_text_delta") appendStreamingScene(data.delta || "");
-      if (event.step === "narrative_checked") setDebugStatus("一致性检查完成");
-      if (event.step === "narrative_revision_started") setDebugStatus("正在根据问题断言重写正文");
-      if (event.step === "narrative_revised") setDebugStatus("正文修订完成");
-      if (event.step === "scene_written") {
-        appendPendingVariant(data);
-        setStatus("正文已生成 - 待确认");
-        setDebugStatus("等待确认");
-      }
+      handleGenerationPipelineEvent(event);
     });
   } catch (err) {
     removeStreamingScene();
@@ -2122,19 +2331,7 @@ async function retryTurn() {
       body: JSON.stringify({ turn_id: retryFromTurnId }),
     });
     await readEventStream(response, "generation", (event) => {
-      const data = event.data || {};
-      if (event.step === "retry_started") startStreamingScene(1, data.version_index || state.pendingVariants.length + 1);
-      if (event.step === "action_parsed") state.activeTab = "generation";
-      if (event.step === "scene_stream_started") startStreamingScene(data.attempt || 1, null, Boolean(data.revision));
-      if (event.step === "scene_text_delta") appendStreamingScene(data.delta || "");
-      if (event.step === "narrative_checked") setDebugStatus("一致性检查完成");
-      if (event.step === "narrative_revision_started") setDebugStatus("正在根据问题断言重写正文");
-      if (event.step === "narrative_revised") setDebugStatus("正文修订完成");
-      if (event.step === "scene_written") {
-        appendPendingVariant(data);
-        setStatus("新版本已生成 - 待确认");
-        setDebugStatus("等待确认");
-      }
+      handleGenerationPipelineEvent(event, { retry: true });
     });
   } catch (err) {
     removeStreamingScene();
@@ -2199,34 +2396,7 @@ async function confirmTurn() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    await readEventStream(response, "confirmation", (event) => {
-      if (event.step === "state_update_done") state.activeTab = "diff";
-      if (event.step === "scene_facts_done") state.activeTab = "confirmation";
-      if (event.step === "entity_extract_done") state.activeTab = "entity";
-      if (event.step === "npc_extract_done") state.activeTab = "npc";
-      if (event.step === "action_preview_done") state.activeTab = "preview";
-      if (event.step === "finish") {
-        const data = event.data || {};
-        if (data.write_db) {
-          markPendingSceneConfirmed();
-          state.pendingTurnId = null;
-          state.pendingGroupId = null;
-          state.pendingVariants = [];
-          state.pendingVariantIndex = -1;
-          state.pendingSceneText = null;
-          els.input.value = "";
-          addMessage("assistant", "已确认采用，并写入状态、短期记忆和记忆流程。", "系统");
-          setStatus(data.memory_extraction?.batch_queued ? "确认完成 · 后台维护中" : "确认完成");
-          els.turnInfo.textContent = data.memory_extraction?.batch_queued ? "后台维护中" : "等待玩家行动";
-        } else {
-          addMessage("assistant", "Dry Run 完成，候选版本仍可切换和确认。", "系统");
-          setStatus("Dry Run 完成 - 仍待确认");
-          els.turnInfo.textContent = `Pending ${state.pendingTurnId}`;
-        }
-        setDebugStatus(data.status || "committed");
-        state.activeTab = "diff";
-      }
-    });
+    await readEventStream(response, "confirmation", handleConfirmationPipelineEvent);
     if (writeDb) await refreshState({ preserveStatus: true });
   } catch (err) {
     state.run.errors.push(err);
@@ -2244,10 +2414,7 @@ async function triggerBatchClassify() {
   renderDebug();
   try {
     const response = await fetch("/api/batch-classify", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    await readEventStream(response, "maintenance", (event) => {
-      if (event.step === "batch_classified") setDebugStatus("批分类完成");
-      if (event.step === "batch_classify_done") setStatus("批分类完成");
-    });
+    await readEventStream(response, "maintenance", handleManualMaintenanceEvent);
     await refreshState({ preserveStatus: true });
   } catch (err) {
     state.run.errors.push(err);
@@ -2264,9 +2431,7 @@ async function triggerMemoryMaintain() {
   renderDebug();
   try {
     const response = await fetch("/api/memory-maintain", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    await readEventStream(response, "maintenance", (event) => {
-      if (event.step === "memory_maintain_done") setStatus("记忆维护完成");
-    });
+    await readEventStream(response, "maintenance", handleManualMaintenanceEvent);
     await refreshState({ preserveStatus: true });
   } catch (err) {
     state.run.errors.push(err);
@@ -2282,7 +2447,10 @@ function renderError(err) {
 
 els.generateBtn.onclick = generateTurn;
 els.confirmBtn.onclick = confirmTurn;
-els.refreshBtn.onclick = () => refreshState();
+els.refreshBtn.onclick = async () => {
+  await refreshState();
+  await resumeActivePipelineOperation();
+};
 els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
 els.createSaveBtn.onclick = createSave;
 els.undoBtn.onclick = () => changeHistory("undo");
@@ -2292,7 +2460,9 @@ els.maxCharsInput.onchange = () => api("/api/max-chars", { method: "POST", body:
 
 renderTabs();
 renderDebug();
-Promise.all([loadSaves(), refreshState()]).catch((err) => {
-  els.statePanel.innerHTML = card("状态加载失败", esc(err.message || "Unknown"));
-});
+Promise.all([loadSaves(), refreshState()])
+  .then(() => resumeActivePipelineOperation())
+  .catch((err) => {
+    els.statePanel.innerHTML = card("状态加载失败", esc(err.message || "Unknown"));
+  });
 window.setInterval(refreshMaintenanceJobs, 2000);
