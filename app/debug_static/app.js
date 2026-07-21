@@ -224,6 +224,7 @@ async function readEventStream(response, scope, onEvent) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let operationId = null;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -233,20 +234,38 @@ async function readEventStream(response, scope, onEvent) {
     for (const part of parts) {
       if (!part.startsWith("data: ")) continue;
       const event = JSON.parse(part.slice(6));
-      if (!event.ok) throw event;
+      if (!event.ok) {
+        event.operationId = operationId;
+        throw event;
+      }
       if (event.step === "done") {
         state.activeOperationId = null;
         await reader.cancel();
-        return;
+        return operationId;
       }
       if (event.step === "operation_started") {
-        state.activeOperationId = event.data?.operation_id || null;
+        operationId = event.data?.operation_id || operationId;
+        state.activeOperationId = operationId;
       }
       const transient = event.step === "scene_stream_started" || event.step === "scene_text_delta";
       if (!transient) recordStep(scope, event);
       onEvent(event);
       if (!transient) renderDebug();
     }
+  }
+  const error = new Error("Operation event stream ended before completion");
+  error.operationId = operationId;
+  throw error;
+}
+
+async function acknowledgeOperation(operationId) {
+  if (!operationId) return;
+  try {
+    await api(`/api/operations/${encodeURIComponent(operationId)}/ack`, {
+      method: "POST",
+    });
+  } catch (_error) {
+    // Leave it recoverable so a later refresh can replay it again.
   }
 }
 
@@ -739,17 +758,19 @@ async function applyInit() {
       }),
     });
     resetRun("initialization");
-    await readEventStream(
+    const operationId = await readEventStream(
       response,
       "initialization",
       handleInitializationPipelineEvent,
     );
     await refreshState({ preserveStatus: true });
+    await acknowledgeOperation(operationId);
     setStatus(state.pendingTurnId ? "开场已生成 - 待确认" : "Core Memory 已初始化");
     els.turnInfo.textContent = state.pendingTurnId ? `Pending ${state.pendingTurnId}` : "等待玩家行动";
   } catch (err) {
     btn.disabled = false;
     $("initPreview").textContent = err.message || "保存失败";
+    await acknowledgeOperation(err?.operationId);
   }
 }
 
@@ -766,13 +787,15 @@ async function generateInitDirection() {
       }),
     });
     resetRun("initialization");
-    await readEventStream(
+    const operationId = await readEventStream(
       response,
       "initialization",
       handleInitializationPipelineEvent,
     );
+    await acknowledgeOperation(operationId);
   } catch (err) {
     $("initPreview").textContent = err.message || "Story Direction 生成失败";
+    await acknowledgeOperation(err?.operationId);
   } finally {
     btn.disabled = false;
   }
@@ -2156,12 +2179,13 @@ async function replayOperation(operation, scope, onEvent) {
   await readEventStream(response, scope, onEvent);
 }
 
-function failResumedOperation(err, label) {
+async function failResumedOperation(err, label, operationId) {
   state.activeOperationId = null;
   state.run.errors.push(err);
   setStatus(label);
   setDebugStatus(label);
   renderError(err);
+  await acknowledgeOperation(operationId || err?.operationId);
 }
 
 async function resumeInitializationOperation(operation) {
@@ -2189,8 +2213,9 @@ async function resumeInitializationOperation(operation) {
       await refreshState({ preserveStatus: true });
       setStatus("开场已生成 - 待确认");
     }
+    await acknowledgeOperation(operation.operation_id);
   } catch (err) {
-    failResumedOperation(err, "初始化失败");
+    await failResumedOperation(err, "初始化失败", operation.operation_id);
   }
 }
 
@@ -2210,8 +2235,9 @@ async function resumeConfirmationOperation(operation) {
     if (operation.metadata?.write_db !== false) {
       await refreshState({ preserveStatus: true });
     }
+    await acknowledgeOperation(operation.operation_id);
   } catch (err) {
-    failResumedOperation(err, "确认失败");
+    await failResumedOperation(err, "确认失败", operation.operation_id);
   }
 }
 
@@ -2225,8 +2251,9 @@ async function resumeMaintenanceOperation(operation) {
   try {
     await replayOperation(operation, "maintenance", handleManualMaintenanceEvent);
     await refreshState({ preserveStatus: true });
+    await acknowledgeOperation(operation.operation_id);
   } catch (err) {
-    failResumedOperation(err, "维护失败");
+    await failResumedOperation(err, "维护失败", operation.operation_id);
   }
 }
 
@@ -2243,14 +2270,19 @@ async function resumeGenerationOperation(operation) {
       handleGenerationPipelineEvent(event, { retry });
     });
     await refreshState({ preserveStatus: true });
+    await acknowledgeOperation(operation.operation_id);
   } catch (err) {
-    failResumedOperation(err, retry ? "Retry 失败" : "生成失败");
+    await failResumedOperation(
+      err,
+      retry ? "Retry 失败" : "生成失败",
+      operation.operation_id,
+    );
   }
 }
 
 async function resumeActivePipelineOperation() {
   if (state.activeOperationId) return;
-  const data = await api("/api/operations/active");
+  const data = await api("/api/operations/recoverable");
   const operation = (data.operations || []).find(
     (item) => RESUMABLE_OPERATION_TYPES.has(item.operation_type),
   );
@@ -2294,11 +2326,13 @@ async function generateTurn() {
         user_input: userInput,
         difficulty: els.difficultySelect.value,
         max_chars: parseInt(els.maxCharsInput.value, 10) || 1500,
+        request_id: newRequestId(),
       }),
     });
-    await readEventStream(response, "generation", (event) => {
+    const operationId = await readEventStream(response, "generation", (event) => {
       handleGenerationPipelineEvent(event);
     });
+    await acknowledgeOperation(operationId);
   } catch (err) {
     removeStreamingScene();
     state.run.errors.push(err);
@@ -2311,6 +2345,7 @@ async function generateTurn() {
     const failedTraceId = merged("generation").trace_id;
     if (failedTraceId) await loadTrace(failedTraceId);
     renderError(err);
+    await acknowledgeOperation(err?.operationId);
   }
 }
 
@@ -2328,11 +2363,15 @@ async function retryTurn() {
     const response = await fetch("/api/retry", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ turn_id: retryFromTurnId }),
+      body: JSON.stringify({
+        turn_id: retryFromTurnId,
+        request_id: newRequestId(),
+      }),
     });
-    await readEventStream(response, "generation", (event) => {
+    const operationId = await readEventStream(response, "generation", (event) => {
       handleGenerationPipelineEvent(event, { retry: true });
     });
+    await acknowledgeOperation(operationId);
   } catch (err) {
     removeStreamingScene();
     selectPendingVariant(retryFromVariantIndex);
@@ -2342,6 +2381,7 @@ async function retryTurn() {
     const failedTraceId = merged("generation").trace_id;
     if (failedTraceId) await loadTrace(failedTraceId);
     renderError(err);
+    await acknowledgeOperation(err?.operationId);
   }
 }
 
@@ -2389,6 +2429,7 @@ async function confirmTurn() {
   try {
     const writeDb = els.writeDbToggle.checked;
     const body = { turn_id: state.pendingTurnId, write_db: writeDb };
+    body.request_id = newRequestId();
     const sceneText = getSceneText();
     if (sceneText != null) body.scene_text = sceneText;
     const response = await fetch("/api/confirm", {
@@ -2396,13 +2437,19 @@ async function confirmTurn() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    await readEventStream(response, "confirmation", handleConfirmationPipelineEvent);
+    const operationId = await readEventStream(
+      response,
+      "confirmation",
+      handleConfirmationPipelineEvent,
+    );
     if (writeDb) await refreshState({ preserveStatus: true });
+    await acknowledgeOperation(operationId);
   } catch (err) {
     state.run.errors.push(err);
     setStatus("确认失败");
     setDebugStatus("确认失败");
     renderError(err);
+    await acknowledgeOperation(err?.operationId);
   }
 }
 
@@ -2413,13 +2460,15 @@ async function triggerBatchClassify() {
   state.activeTab = "memory";
   renderDebug();
   try {
-    const response = await fetch("/api/batch-classify", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    await readEventStream(response, "maintenance", handleManualMaintenanceEvent);
+    const response = await fetch("/api/batch-classify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: newRequestId() }) });
+    const operationId = await readEventStream(response, "maintenance", handleManualMaintenanceEvent);
     await refreshState({ preserveStatus: true });
+    await acknowledgeOperation(operationId);
   } catch (err) {
     state.run.errors.push(err);
     setStatus("批分类失败");
     renderError(err);
+    await acknowledgeOperation(err?.operationId);
   }
 }
 
@@ -2430,13 +2479,15 @@ async function triggerMemoryMaintain() {
   state.activeTab = "memory";
   renderDebug();
   try {
-    const response = await fetch("/api/memory-maintain", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    await readEventStream(response, "maintenance", handleManualMaintenanceEvent);
+    const response = await fetch("/api/memory-maintain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: newRequestId() }) });
+    const operationId = await readEventStream(response, "maintenance", handleManualMaintenanceEvent);
     await refreshState({ preserveStatus: true });
+    await acknowledgeOperation(operationId);
   } catch (err) {
     state.run.errors.push(err);
     setStatus("记忆维护失败");
     renderError(err);
+    await acknowledgeOperation(err?.operationId);
   }
 }
 

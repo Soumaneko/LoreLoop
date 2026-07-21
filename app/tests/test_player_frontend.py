@@ -77,13 +77,20 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "/api/player/generate" in source
     assert "/api/player/retry" in source
     assert "/api/player/confirm" in source
-    assert "/api/player/operations/active" in source
+    assert "/api/player/operations/recoverable" in source
+    assert "/api/player/operations/${encodeURIComponent(operationId)}/ack" in (
+        STATIC_DIR / "api.js"
+    ).read_text(encoding="utf-8")
     assert "/api/player/operations/${encodeURIComponent(operation.operation_id)}/events" in source
     assert "request_id: newRequestId()" in source
     assert "function resumeConfirmationOperation(" in source
-    assert 'import { request, stream, subscribe } from "./api.js"' in source
+    assert (
+        'import { acknowledgeOperation, request, stream, subscribe } from "./api.js"'
+        in source
+    )
     assert "/api/player/init/story-direction" in source
-    assert 'activeOperation?.operation_type?.startsWith(' in source
+    assert 'operation.recovery_kind === "initialization"' in source
+    assert "for (const operation of recoverableOperations)" in source
     assert "function resumeInitializationOperation(" in source
     assert "story_direction_done" in source
     assert "/api/state" not in source
@@ -413,12 +420,89 @@ def test_player_operation_projection_is_allow_listed():
         "current_step": "action_parsed",
         "submitted_at": "now",
         "started_at": "now",
+        "recovery_kind": "generation",
         "metadata": {
             "user_input": "调查钟楼",
             "turn_id": "turn-1",
         },
     }
     assert "private" not in str(operation)
+
+
+def test_completed_player_operation_is_returned_until_acknowledged(monkeypatch):
+    captured = {}
+
+    def list_recoverable(**kwargs):
+        captured.update(kwargs)
+        return [
+            {
+                "operation_id": "operation-newer",
+                "operation_type": "initialization_opening",
+                "status": "running",
+                "current_step": "initialization_started",
+                "submitted_at": "later",
+                "started_at": "later",
+                "metadata": {"stage": "opening"},
+            },
+            {
+                "operation_id": "operation-finished",
+                "operation_type": "initialization_story_direction",
+                "status": "succeeded",
+                "current_step": "story_direction_done",
+                "submitted_at": "earlier",
+                "started_at": "earlier",
+                "metadata": {"stage": "story_direction"},
+            },
+        ]
+
+    monkeypatch.setattr(debug_server, "list_operations", list_recoverable)
+    handler = object.__new__(DebugHandler)
+
+    result = handler._load_recoverable_player_operations()
+
+    assert captured == {"recoverable_only": True, "limit": None}
+    assert [operation["operation_id"] for operation in result["operations"]] == [
+        "operation-finished",
+        "operation-newer",
+    ]
+    assert result["operations"][0]["recovery_kind"] == "initialization"
+
+
+def test_operation_ack_path_parser_rejects_ambiguous_paths():
+    assert DebugHandler._operation_id_from_ack_path(
+        "/api/player/operations/operation-1/ack",
+        player=True,
+    ) == "operation-1"
+    with pytest.raises(ValueError, match="Invalid"):
+        DebugHandler._operation_id_from_ack_path(
+            "/api/player/operations/operation-1/extra/ack",
+            player=True,
+        )
+
+
+def test_player_ack_removes_completed_operation_from_recovery():
+    runtime = get_campaign_runtime()
+
+    def stream():
+        yield {"step": "story_direction_done", "data": {}}
+
+    operation_id = runtime.operations.submit_stream(
+        "initialization_story_direction",
+        stream,
+        requires_ack=True,
+    )
+    runtime.operations.wait(operation_id, timeout=2)
+    handler = object.__new__(DebugHandler)
+
+    result = handler._acknowledge_player_operation(
+        f"/api/player/operations/{operation_id}/ack"
+    )
+
+    assert result == {"operation_id": operation_id, "acknowledged": True}
+    assert operation_id not in {
+        operation.operation_id
+        for operation in runtime.operations.list(recoverable_only=True)
+    }
 
 
 def test_player_save_payload_removes_server_root():

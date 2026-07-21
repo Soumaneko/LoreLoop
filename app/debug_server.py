@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from app.core.llm import TraceLogger
 from app.api import (
+    acknowledge_operation,
     create_save,
     discard_pending_turn,
     get_operation,
@@ -36,18 +37,15 @@ from app.api import (
 )
 from app.runtime.session import get_campaign_runtime
 from app.runtime.player_state import player_saves_payload
+from app.runtime.operation_types import (
+    PLAYER_OPERATION_TYPES,
+    operation_policy,
+)
 
 # python -m app.debug_server
 
 DEBUG_STATIC_DIR = Path(__file__).with_name("debug_static")
 PLAYER_STATIC_DIR = Path(__file__).with_name("player_static")
-PLAYER_OPERATION_TYPES = frozenset({
-    "generation",
-    "retry",
-    "confirmation",
-    "initialization_story_direction",
-    "initialization_opening",
-})
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, data: dict[str, Any]) -> None:
@@ -106,8 +104,8 @@ class DebugHandler(BaseHTTPRequestHandler):
         if path == "/api/player/saves":
             self._handle_player_json(lambda: player_saves_payload(list_saves()))
             return
-        if path == "/api/player/operations/active":
-            self._handle_player_json(self._load_active_player_operation)
+        if path == "/api/player/operations/recoverable":
+            self._handle_player_json(self._load_recoverable_player_operations)
             return
         if path.startswith("/api/player/operations/"):
             self._handle_player_operation_get(path, parsed_url)
@@ -124,9 +122,11 @@ class DebugHandler(BaseHTTPRequestHandler):
         if path == "/api/maintenance-jobs":
             self._handle_json(self._load_maintenance_jobs)
             return
-        if path == "/api/operations/active":
+        if path == "/api/operations/recoverable":
             self._handle_json(
-                lambda: {"operations": list_operations(active_only=True)}
+                lambda: {
+                    "operations": list_operations(recoverable_only=True)
+                }
             )
             return
         if path.startswith("/api/operations/"):
@@ -136,6 +136,14 @@ class DebugHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path.startswith("/api/player/operations/") and path.endswith("/ack"):
+            self._handle_player_json(
+                lambda: self._acknowledge_player_operation(path)
+            )
+            return
+        if path.startswith("/api/operations/") and path.endswith("/ack"):
+            self._handle_json(lambda: self._acknowledge_operation(path))
+            return
         if path == "/api/player/generate":
             self._handle_operation_start_stream(
                 self._start_generate_operation,
@@ -361,6 +369,7 @@ class DebugHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _player_operation(operation: dict[str, Any]) -> dict[str, Any]:
         metadata = operation.get("metadata") or {}
+        policy = operation_policy(str(operation.get("operation_type", "")))
         return {
             "operation_id": operation.get("operation_id"),
             "operation_type": operation.get("operation_type"),
@@ -368,24 +377,47 @@ class DebugHandler(BaseHTTPRequestHandler):
             "current_step": operation.get("current_step"),
             "submitted_at": operation.get("submitted_at"),
             "started_at": operation.get("started_at"),
+            "recovery_kind": policy.recovery_kind,
             "metadata": {
                 key: metadata.get(key)
-                for key in ("user_input", "turn_id", "group_id")
+                for key in ("user_input", "turn_id", "group_id", "stage")
                 if metadata.get(key) is not None
             },
         }
 
-    def _load_active_player_operation(self) -> dict[str, Any]:
-        operations = [
+    def _load_recoverable_player_operations(self) -> dict[str, Any]:
+        newest_first = [
             operation
-            for operation in list_operations(active_only=True)
+            for operation in list_operations(recoverable_only=True, limit=None)
             if operation.get("operation_type") in PLAYER_OPERATION_TYPES
         ]
         return {
-            "operation": (
-                self._player_operation(operations[0]) if operations else None
-            )
+            "operations": [
+                self._player_operation(operation)
+                for operation in reversed(newest_first)
+            ]
         }
+
+    @staticmethod
+    def _operation_id_from_ack_path(path: str, *, player: bool) -> str:
+        parts = path.strip("/").split("/")
+        expected_length = 5 if player else 4
+        if len(parts) != expected_length or parts[-1] != "ack":
+            raise ValueError("Invalid Operation ACK path")
+        operation_id = parts[-2].strip()
+        if not operation_id:
+            raise ValueError("operation_id is required")
+        return operation_id
+
+    def _acknowledge_player_operation(self, path: str) -> dict[str, Any]:
+        operation_id = self._operation_id_from_ack_path(path, player=True)
+        self._load_player_operation(operation_id)
+        acknowledge_operation(operation_id)
+        return {"operation_id": operation_id, "acknowledged": True}
+
+    def _acknowledge_operation(self, path: str) -> dict[str, Any]:
+        operation_id = self._operation_id_from_ack_path(path, player=False)
+        return {"operation": acknowledge_operation(operation_id)}
 
     def _handle_player_operation_get(self, path: str, parsed_url) -> None:
         parts = path.strip("/").split("/")

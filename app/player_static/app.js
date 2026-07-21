@@ -1,4 +1,4 @@
-import { request, stream, subscribe } from "./api.js";
+import { acknowledgeOperation, request, stream, subscribe } from "./api.js";
 import {
   activePending,
   clearDrafts,
@@ -443,25 +443,27 @@ async function loadAll({ scroll = false, resumeOperation = true } = {}) {
   renderSaves();
   renderControls();
 
-  const activeOperation = resumeOperation
-    ? (await request("/api/player/operations/active")).operation
-    : null;
-  const confirmationActive = activeOperation?.operation_type === "confirmation";
-  const initializationActive = activeOperation?.operation_type?.startsWith(
-    "initialization_",
+  const recoverableOperations = resumeOperation
+    ? (await request("/api/player/operations/recoverable")).operations || []
+    : [];
+  const firstOperation = recoverableOperations[0] || null;
+  const preserveCachedState = recoverableOperations.some(
+    (operation) => ["confirmation", "initialization"].includes(
+      operation.recovery_kind,
+    ),
   );
-  const playerState = (confirmationActive || initializationActive) && state.playerState
+  const playerState = preserveCachedState && state.playerState
     ? state.playerState
     : await request("/api/player/state");
-  if (!confirmationActive) {
+  if (firstOperation?.recovery_kind !== "confirmation") {
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
   }
   state.playerState = playerState;
   state.suggestions = playerState.action_preview?.previews || [];
   state.selectedPendingIndex = Math.max(0, (activePending()?.variants?.length || 1) - 1);
   setMode(
-    activeOperation
-      ? confirmationActive ? "confirming" : "generating"
+    firstOperation
+      ? firstOperation.recovery_kind === "confirmation" ? "confirming" : "generating"
       : playerState.needs_init
         ? "needs_init"
         : activePending()
@@ -470,13 +472,25 @@ async function loadAll({ scroll = false, resumeOperation = true } = {}) {
   );
   renderAll();
   cachePlayerShell();
-  if (activeOperation) {
-    if (initializationActive) {
-      await resumeInitializationOperation(activeOperation, { scroll });
-    } else if (confirmationActive) {
-      await resumeConfirmationOperation(activeOperation, { scroll });
-    } else {
-      await resumeGenerationOperation(activeOperation, { scroll });
+  if (recoverableOperations.length) {
+    let reloadAfterRecovery = false;
+    for (const operation of recoverableOperations) {
+      if (operation.recovery_kind === "initialization") {
+        reloadAfterRecovery = (
+          await resumeInitializationOperation(operation)
+        ) || reloadAfterRecovery;
+      } else if (operation.recovery_kind === "confirmation") {
+        reloadAfterRecovery = (
+          await resumeConfirmationOperation(operation)
+        ) || reloadAfterRecovery;
+      } else if (operation.recovery_kind === "generation") {
+        reloadAfterRecovery = (
+          await resumeGenerationOperation(operation)
+        ) || reloadAfterRecovery;
+      }
+    }
+    if (reloadAfterRecovery) {
+      await loadAll({ scroll: scroll || "smooth", resumeOperation: false });
     }
     return;
   }
@@ -492,8 +506,8 @@ function handleInitializationEvent(event) {
   }
 }
 
-async function resumeInitializationOperation(operation, { scroll = false } = {}) {
-  const storyDirection = operation.operation_type === "initialization_story_direction";
+async function resumeInitializationOperation(operation) {
+  const storyDirection = operation.metadata?.stage === "story_direction";
   setMode("generating");
   renderControls();
   if (!els.initDialog.open) els.initDialog.showModal();
@@ -506,18 +520,22 @@ async function resumeInitializationOperation(operation, { scroll = false } = {})
       `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
       handleInitializationEvent,
     );
+    await acknowledgeHandledOperation(operation.operation_id);
     if (storyDirection) {
       setMode("needs_init");
       renderControls();
+      return false;
     } else {
       els.initDialog.close();
-      await loadAll({ scroll: scroll || "instant", resumeOperation: false });
+      return true;
     }
   } catch (error) {
     setMode("needs_init");
     els.initError.textContent = error.message;
     els.initError.hidden = false;
     renderControls();
+    await acknowledgeFailedOperation(error, operation.operation_id);
+    return false;
   } finally {
     button.disabled = false;
     button.textContent = oldText;
@@ -571,6 +589,19 @@ function newRequestId() {
   return `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+async function acknowledgeHandledOperation(operationId) {
+  if (!operationId) return;
+  try {
+    await acknowledgeOperation(operationId);
+  } catch (_ackError) {
+    // Keep the terminal Operation recoverable for the next refresh.
+  }
+}
+
+async function acknowledgeFailedOperation(error, operationId = null) {
+  await acknowledgeHandledOperation(operationId || error?.operationId);
+}
+
 function handleGenerationEvent(event, { retry = false } = {}) {
   if (event.step === "operation_events_truncated") {
     els.streamingLabel.textContent = "正在恢复最新生成进度";
@@ -588,7 +619,7 @@ function handleGenerationEvent(event, { retry = false } = {}) {
   }
 }
 
-async function resumeGenerationOperation(operation, { scroll = false } = {}) {
+async function resumeGenerationOperation(operation) {
   const retry = operation.operation_type === "retry";
   const userInput = operation.metadata?.user_input || "";
   setMode("generating");
@@ -600,9 +631,10 @@ async function resumeGenerationOperation(operation, { scroll = false } = {}) {
       `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
       (event) => handleGenerationEvent(event, { retry }),
     );
+    await acknowledgeHandledOperation(operation.operation_id);
     stopStreaming();
-    await loadAll({ scroll: scroll || "smooth", resumeOperation: false });
     if (retry) showToast("新版本已生成，旧版本仍然保留");
+    return true;
   } catch (error) {
     stopStreaming();
     if (retry) {
@@ -616,6 +648,8 @@ async function resumeGenerationOperation(operation, { scroll = false } = {}) {
       }
     }
     showError(error);
+    await acknowledgeFailedOperation(error, operation.operation_id);
+    return false;
   }
 }
 
@@ -627,7 +661,7 @@ function handleConfirmationEvent(event) {
   }
 }
 
-async function resumeConfirmationOperation(operation, { scroll = false } = {}) {
+async function resumeConfirmationOperation(operation) {
   const pending = activePending();
   sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
   setMode("confirming");
@@ -638,15 +672,18 @@ async function resumeConfirmationOperation(operation, { scroll = false } = {}) {
       `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
       handleConfirmationEvent,
     );
+    await acknowledgeHandledOperation(operation.operation_id);
     if (pending) clearDrafts(pending);
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
-    await loadAll({ scroll: scroll || "smooth", resumeOperation: false });
     showToast("这一回合已经写入旅程");
+    return true;
   } catch (error) {
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
     setMode("pending");
     renderAll();
     showError(error);
+    await acknowledgeFailedOperation(error, operation.operation_id);
+    return false;
   }
 }
 
@@ -658,17 +695,19 @@ async function generateTurn() {
   els.playerInput.value = ""; autoSizeInput(); renderControls();
   startStreaming("正在理解你的行动");
   try {
-    await stream("/api/player/generate", {
+    const operationId = await stream("/api/player/generate", {
       user_input: userInput,
       difficulty: els.difficultySelect.value,
       request_id: newRequestId(),
     }, (event) => handleGenerationEvent(event));
+    await acknowledgeHandledOperation(operationId);
     stopStreaming();
     await loadAll({ scroll: "smooth" });
   } catch (error) {
     stopStreaming(); showActivePlayerAction("");
     els.playerInput.value = userInput; autoSizeInput();
     showError(error);
+    await acknowledgeFailedOperation(error);
   }
 }
 
@@ -677,12 +716,16 @@ async function retryTurn() {
   if (!pending || !variant || pending.kind === "opening") return;
   setMode("generating"); renderControls(); startStreaming("正在重新推演这一回合");
   try {
-    await stream("/api/player/retry", {
+    const operationId = await stream("/api/player/retry", {
       turn_id: variant.turn_id,
       request_id: newRequestId(),
     }, (event) => handleGenerationEvent(event, { retry: true }));
+    await acknowledgeHandledOperation(operationId);
     stopStreaming(); await loadAll({ scroll: "smooth" }); showToast("新版本已生成，旧版本仍然保留");
-  } catch (error) { stopStreaming(); setMode("pending"); renderAll(); showError(error); }
+  } catch (error) {
+    stopStreaming(); setMode("pending"); renderAll(); showError(error);
+    await acknowledgeFailedOperation(error);
+  }
 }
 
 async function confirmTurn() {
@@ -691,13 +734,17 @@ async function confirmTurn() {
   sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
   setMode("confirming"); renderPending(); renderControls();
   try {
-    await stream("/api/player/confirm", {
+    const operationId = await stream("/api/player/confirm", {
       turn_id: variant.turn_id,
       scene_text: readDraft(variant),
       request_id: newRequestId(),
     }, handleConfirmationEvent);
+    await acknowledgeHandledOperation(operationId);
     clearDrafts(pending); await loadAll({ scroll: "smooth" }); showToast("这一回合已经写入旅程");
-  } catch (error) { setMode("pending"); renderAll(); showError(error); }
+  } catch (error) {
+    setMode("pending"); renderAll(); showError(error);
+    await acknowledgeFailedOperation(error);
+  }
   finally {
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
   }
@@ -863,13 +910,15 @@ async function requestStoryDirection({ regenerate = false } = {}) {
   const oldText = button.textContent;
   button.textContent = "正在生成……";
   try {
-    await stream("/api/player/init/story-direction", {
+    const operationId = await stream("/api/player/init/story-direction", {
       ...config,
       request_id: newRequestId(),
     }, handleInitializationEvent);
+    await acknowledgeHandledOperation(operationId);
   } catch (error) {
     els.initError.textContent = error.message;
     els.initError.hidden = false;
+    await acknowledgeFailedOperation(error);
   } finally {
     button.disabled = false;
     button.textContent = oldText;
@@ -892,14 +941,18 @@ async function initialize() {
   };
   setMode("generating"); els.initSubmitBtn.disabled = true; els.initSubmitBtn.textContent = "正在生成开场……"; els.initError.hidden = true;
   try {
-    await stream("/api/player/init", {
+    const operationId = await stream("/api/player/init", {
       ...payload,
       request_id: newRequestId(),
     }, handleInitializationEvent);
+    await acknowledgeHandledOperation(operationId);
     els.initDialog.close();
     await loadAll({ scroll: "instant" });
   }
-  catch (error) { setMode("needs_init"); els.initError.textContent = error.message; els.initError.hidden = false; }
+  catch (error) {
+    setMode("needs_init"); els.initError.textContent = error.message; els.initError.hidden = false;
+    await acknowledgeFailedOperation(error);
+  }
   finally { els.initSubmitBtn.disabled = false; els.initSubmitBtn.textContent = "生成开场"; renderControls(); }
 }
 

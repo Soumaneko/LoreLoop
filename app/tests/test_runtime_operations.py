@@ -4,7 +4,8 @@ from types import SimpleNamespace
 import pytest
 
 from app import api
-from app.runtime.operations import OperationEventBuffer, OperationManager
+from app.runtime.operation_models import OperationEventBuffer
+from app.runtime.operations import OperationManager
 from app.runtime.session import get_campaign_runtime
 
 
@@ -69,7 +70,11 @@ def test_operation_manager_records_stream_failure_without_losing_prior_events():
         raise ValueError("broken pipeline")
 
     try:
-        operation_id = manager.submit_stream("confirmation", stream)
+        operation_id = manager.submit_stream(
+            "confirmation",
+            stream,
+            requires_ack=True,
+        )
         snapshot = manager.wait(operation_id, timeout=2)
         batch = manager.read_events(operation_id)
 
@@ -78,6 +83,161 @@ def test_operation_manager_records_stream_failure_without_losing_prior_events():
         assert snapshot.error_message == "broken pipeline"
         assert [event.step for event in batch.events] == ["started"]
         assert batch.status == "failed"
+        assert [
+            operation.operation_id
+            for operation in manager.list(recoverable_only=True)
+        ] == [operation_id]
+    finally:
+        manager.shutdown()
+
+
+def test_terminal_operation_remains_recoverable_until_acknowledged():
+    manager = OperationManager("campaign-1", max_workers=1)
+
+    def stream():
+        yield {"step": "finished", "data": {"value": 1}}
+
+    try:
+        operation_id = manager.submit_stream(
+            "initialization_story_direction",
+            stream,
+            requires_ack=True,
+        )
+        assert manager.wait(operation_id, timeout=2).status == "succeeded"
+        background_id = manager.submit_stream("maintenance_scene_summary", stream)
+        assert manager.wait(background_id, timeout=2).status == "succeeded"
+
+        recoverable = manager.list(recoverable_only=True)
+        assert [operation.operation_id for operation in recoverable] == [operation_id]
+        assert recoverable[0].acknowledged_at is None
+
+        acknowledged = manager.acknowledge(operation_id)
+
+        assert acknowledged.acknowledged_at is not None
+        assert manager.list(recoverable_only=True) == []
+        assert manager.acknowledge(operation_id).acknowledged_at == (
+            acknowledged.acknowledged_at
+        )
+    finally:
+        manager.shutdown()
+
+
+def test_active_operation_cannot_be_acknowledged():
+    manager = OperationManager("campaign-1", max_workers=1)
+    started = threading.Event()
+    release = threading.Event()
+
+    def stream():
+        started.set()
+        assert release.wait(timeout=2)
+        yield {"step": "finished", "data": {}}
+
+    try:
+        operation_id = manager.submit_stream("generation", stream)
+        assert started.wait(timeout=2)
+
+        with pytest.raises(RuntimeError, match="active operation"):
+            manager.acknowledge(operation_id)
+    finally:
+        release.set()
+        manager.shutdown()
+
+
+def test_history_trimming_never_discards_unacknowledged_operations():
+    manager = OperationManager("campaign-1", max_workers=1, max_history=2)
+
+    def stream():
+        yield {"step": "finished", "data": {}}
+
+    try:
+        operation_ids = []
+        for index in range(3):
+            operation_id = manager.submit_stream(
+                f"foreground-{index}",
+                stream,
+                requires_ack=True,
+            )
+            manager.wait(operation_id, timeout=2)
+            operation_ids.append(operation_id)
+
+        assert {
+            operation.operation_id
+            for operation in manager.list(recoverable_only=True, limit=None)
+        } == set(operation_ids)
+
+        manager.acknowledge(operation_ids[0])
+
+        assert manager.get(operation_ids[0]) is None
+        assert {
+            operation.operation_id
+            for operation in manager.list(recoverable_only=True, limit=None)
+        } == set(operation_ids[1:])
+    finally:
+        manager.shutdown()
+
+
+def test_successful_operation_supersedes_older_recoverable_types():
+    manager = OperationManager("campaign-1", max_workers=1)
+
+    def stream():
+        yield {"step": "finished", "data": {}}
+
+    try:
+        direction_id = manager.submit_stream(
+            "initialization_story_direction",
+            stream,
+            requires_ack=True,
+        )
+        manager.wait(direction_id, timeout=2)
+        opening_id = manager.submit_stream(
+            "initialization_opening",
+            stream,
+            requires_ack=True,
+            supersedes_recoverable_types=("initialization_story_direction",),
+        )
+        manager.wait(opening_id, timeout=2)
+
+        direction = manager.get(direction_id)
+        assert direction.acknowledged_at is not None
+        assert direction.superseded_by_operation_id == opening_id
+        assert [
+            operation.operation_id
+            for operation in manager.list(recoverable_only=True)
+        ] == [opening_id]
+    finally:
+        manager.shutdown()
+
+
+def test_failed_operation_does_not_supersede_recoverable_result():
+    manager = OperationManager("campaign-1", max_workers=1)
+
+    def success_stream():
+        yield {"step": "finished", "data": {}}
+
+    def failed_stream():
+        raise RuntimeError("opening failed")
+        yield
+
+    try:
+        direction_id = manager.submit_stream(
+            "initialization_story_direction",
+            success_stream,
+            requires_ack=True,
+        )
+        manager.wait(direction_id, timeout=2)
+        opening_id = manager.submit_stream(
+            "initialization_opening",
+            failed_stream,
+            requires_ack=True,
+            supersedes_recoverable_types=("initialization_story_direction",),
+        )
+        assert manager.wait(opening_id, timeout=2).status == "failed"
+
+        assert manager.get(direction_id).acknowledged_at is None
+        assert {
+            operation.operation_id
+            for operation in manager.list(recoverable_only=True)
+        } == {direction_id, opening_id}
     finally:
         manager.shutdown()
 
@@ -214,6 +374,8 @@ def test_public_api_starts_generation_as_background_operation(monkeypatch):
     assert snapshot.status == "succeeded"
     assert snapshot.operation_type == "generation"
     assert snapshot.metadata == {"user_input": "调查钟楼"}
+    assert snapshot.requires_ack is True
+    assert snapshot.supersedes_recoverable_types == ()
     assert captured == {
         "user_input": "调查钟楼",
         "difficulty": "普通",
@@ -248,6 +410,7 @@ def test_public_api_starts_retry_with_pending_turn_metadata(monkeypatch):
         "group_id": "group-1",
         "user_input": "调查钟楼",
     }
+    assert snapshot.supersedes_recoverable_types == ("generation", "retry")
 
 
 def test_public_api_starts_confirmation_with_pending_turn_metadata(monkeypatch):
@@ -286,6 +449,11 @@ def test_public_api_starts_confirmation_with_pending_turn_metadata(monkeypatch):
         "user_input": "推开石门",
         "write_db": True,
     }
+    assert snapshot.supersedes_recoverable_types == (
+        "generation",
+        "retry",
+        "initialization_opening",
+    )
     assert captured == {
         "turn_id": "turn-confirm",
         "write_db": True,
@@ -347,9 +515,14 @@ def test_public_api_starts_both_initialization_stages_as_operations(monkeypatch)
     assert direction.status == "succeeded"
     assert direction.operation_type == "initialization_story_direction"
     assert direction.metadata == {"stage": "story_direction"}
+    assert direction.requires_ack is True
     assert opening.status == "succeeded"
     assert opening.operation_type == "initialization_opening"
     assert opening.metadata == {"stage": "opening"}
+    assert opening.requires_ack is True
+    assert opening.supersedes_recoverable_types == (
+        "initialization_story_direction",
+    )
 
 
 def test_submit_callable_runs_inside_operation_executor():

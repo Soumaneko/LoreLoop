@@ -5,133 +5,19 @@ import copy
 import threading
 import time
 import uuid
-from collections import Counter, OrderedDict, deque
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Literal
+from collections import Counter, OrderedDict
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
-
-OperationStatus = Literal[
-    "queued",
-    "running",
-    "succeeded",
-    "failed",
-    "cancelled",
-]
-
-TERMINAL_OPERATION_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-@dataclass(frozen=True)
-class OperationEvent:
-    operation_id: str
-    sequence: int
-    step: str
-    data: dict[str, Any]
-    created_at: str
-
-    def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(frozen=True)
-class OperationEventWindow:
-    events: tuple[OperationEvent, ...]
-    first_available_sequence: int
-    last_sequence: int
-    truncated: bool
-
-
-class OperationEventBuffer:
-    """Thread-safe, operation-scoped, bounded event history."""
-
-    def __init__(self, operation_id: str, *, max_events: int = 500) -> None:
-        if max_events < 1:
-            raise ValueError("max_events must be >= 1")
-        self.operation_id = operation_id
-        self._events: deque[OperationEvent] = deque(maxlen=max_events)
-        self._next_sequence = 1
-        self._guard = threading.RLock()
-
-    def append(self, step: str, data: dict[str, Any] | None = None) -> OperationEvent:
-        if not isinstance(step, str):
-            raise TypeError("operation event step must be a string")
-        clean_step = step.strip()
-        if not clean_step:
-            raise ValueError("operation event step cannot be empty")
-        if data is not None and not isinstance(data, dict):
-            raise TypeError("operation event data must be a dict")
-        with self._guard:
-            event = OperationEvent(
-                operation_id=self.operation_id,
-                sequence=self._next_sequence,
-                step=clean_step,
-                data=copy.deepcopy(data or {}),
-                created_at=_utc_now(),
-            )
-            self._next_sequence += 1
-            self._events.append(event)
-            return event
-
-    def read(self, *, after_sequence: int = 0) -> OperationEventWindow:
-        if after_sequence < 0:
-            raise ValueError("after_sequence must be >= 0")
-        with self._guard:
-            first_available = (
-                self._events[0].sequence
-                if self._events
-                else self._next_sequence
-            )
-            last_sequence = self._next_sequence - 1
-            events = tuple(
-                copy.deepcopy(event)
-                for event in self._events
-                if event.sequence > after_sequence
-            )
-            return OperationEventWindow(
-                events=events,
-                first_available_sequence=first_available,
-                last_sequence=last_sequence,
-                truncated=(after_sequence < first_available - 1),
-            )
-
-
-@dataclass(frozen=True)
-class OperationSnapshot:
-    operation_id: str
-    campaign_id: str
-    operation_type: str
-    status: OperationStatus
-    submitted_at: str
-    started_at: str | None = None
-    finished_at: str | None = None
-    current_step: str | None = None
-    request_id: str | None = None
-    result: Any = None
-    error_type: str | None = None
-    error_message: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(frozen=True)
-class OperationEventBatch:
-    operation_id: str
-    status: OperationStatus
-    current_step: str | None
-    events: tuple[OperationEvent, ...]
-    first_available_sequence: int
-    last_sequence: int
-    truncated: bool
-
-    def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+from app.runtime.operation_models import (
+    TERMINAL_OPERATION_STATUSES,
+    OperationEvent,
+    OperationEventBatch,
+    OperationEventBuffer,
+    OperationSnapshot,
+    OperationStatus,
+    operation_timestamp,
+)
 
 
 @dataclass
@@ -144,8 +30,12 @@ class _OperationRecord:
     event_buffer: OperationEventBuffer
     started_at: str | None = None
     finished_at: str | None = None
+    acknowledged_at: str | None = None
+    superseded_by_operation_id: str | None = None
     current_step: str | None = None
     request_id: str | None = None
+    requires_ack: bool = False
+    supersedes_recoverable_types: tuple[str, ...] = ()
     exclusive_key: str | None = None
     result: Any = None
     error_type: str | None = None
@@ -161,8 +51,12 @@ class _OperationRecord:
             submitted_at=self.submitted_at,
             started_at=self.started_at,
             finished_at=self.finished_at,
+            acknowledged_at=self.acknowledged_at,
+            superseded_by_operation_id=self.superseded_by_operation_id,
             current_step=self.current_step,
             request_id=self.request_id,
+            requires_ack=self.requires_ack,
+            supersedes_recoverable_types=self.supersedes_recoverable_types,
             result=copy.deepcopy(self.result),
             error_type=self.error_type,
             error_message=self.error_message,
@@ -207,6 +101,8 @@ class OperationManager:
         *args,
         request_id: str | None = None,
         exclusive_key: str | None = None,
+        requires_ack: bool = False,
+        supersedes_recoverable_types: tuple[str, ...] = (),
         metadata: dict[str, Any] | None = None,
         **kwargs,
     ) -> str:
@@ -221,6 +117,11 @@ class OperationManager:
         )
         if exclusive_key is not None and not clean_exclusive_key:
             raise ValueError("exclusive_key cannot be empty")
+        clean_supersedes = tuple(
+            str(candidate).strip()
+            for candidate in supersedes_recoverable_types
+            if str(candidate).strip()
+        )
 
         with self._condition:
             if self._shutdown:
@@ -247,9 +148,11 @@ class OperationManager:
                 campaign_id=self.campaign_id,
                 operation_type=clean_type,
                 status="queued",
-                submitted_at=_utc_now(),
+                submitted_at=operation_timestamp(),
                 request_id=clean_request_id,
                 exclusive_key=clean_exclusive_key,
+                requires_ack=bool(requires_ack),
+                supersedes_recoverable_types=clean_supersedes,
                 metadata=copy.deepcopy(metadata or {}),
                 event_buffer=OperationEventBuffer(
                     operation_id,
@@ -284,6 +187,8 @@ class OperationManager:
         *args,
         request_id: str | None = None,
         exclusive_key: str | None = None,
+        requires_ack: bool = False,
+        supersedes_recoverable_types: tuple[str, ...] = (),
         metadata: dict[str, Any] | None = None,
         **kwargs,
     ) -> str:
@@ -298,6 +203,8 @@ class OperationManager:
             callable_stream,
             request_id=request_id,
             exclusive_key=exclusive_key,
+            requires_ack=requires_ack,
+            supersedes_recoverable_types=supersedes_recoverable_types,
             metadata=metadata,
         )
 
@@ -335,9 +242,10 @@ class OperationManager:
         status: OperationStatus | None = None,
         operation_type: str | None = None,
         active_only: bool = False,
-        limit: int = 100,
+        recoverable_only: bool = False,
+        limit: int | None = 100,
     ) -> list[OperationSnapshot]:
-        if limit < 1:
+        if limit is not None and limit < 1:
             return []
         with self._guard:
             snapshots = [
@@ -349,8 +257,27 @@ class OperationManager:
                     not active_only
                     or record.status not in TERMINAL_OPERATION_STATUSES
                 )
+                and (
+                    not recoverable_only
+                    or record.status not in TERMINAL_OPERATION_STATUSES
+                    or (
+                        record.requires_ack
+                        and record.acknowledged_at is None
+                    )
+                )
             ]
-        return snapshots[:limit]
+        return snapshots if limit is None else snapshots[:limit]
+
+    def acknowledge(self, operation_id: str) -> OperationSnapshot:
+        with self._condition:
+            record = self._require_record_locked(operation_id)
+            if record.status not in TERMINAL_OPERATION_STATUSES:
+                raise RuntimeError("cannot acknowledge an active operation")
+            if record.acknowledged_at is None:
+                record.acknowledged_at = operation_timestamp()
+                self._trim_history_locked()
+                self._condition.notify_all()
+            return record.snapshot()
 
     def status_counts(self) -> dict[str, int]:
         with self._guard:
@@ -427,7 +354,7 @@ class OperationManager:
         with self._condition:
             record = self._require_record_locked(operation_id)
             record.status = "running"
-            record.started_at = _utc_now()
+            record.started_at = operation_timestamp()
             self._condition.notify_all()
         try:
             stream = iter(stream_factory(*args, **kwargs))
@@ -467,10 +394,12 @@ class OperationManager:
             if record is None:
                 return
             record.status = status
-            record.finished_at = _utc_now()
+            record.finished_at = operation_timestamp()
             record.result = copy.deepcopy(result)
             record.error_type = error_type
             record.error_message = error_message
+            if status == "succeeded":
+                self._supersede_recoverable_locked(record)
             if record.exclusive_key is not None:
                 active_id = self._exclusive_index.get(record.exclusive_key)
                 if active_id == operation_id:
@@ -485,12 +414,32 @@ class OperationManager:
                     operation_id
                     for operation_id, record in self._records.items()
                     if record.status in TERMINAL_OPERATION_STATUSES
+                    and (
+                        not record.requires_ack
+                        or record.acknowledged_at is not None
+                    )
                 ),
                 None,
             )
             if removable_id is None:
                 return
             self._remove_record_locked(removable_id)
+
+    def _supersede_recoverable_locked(self, completed: _OperationRecord) -> None:
+        if not completed.supersedes_recoverable_types:
+            return
+        acknowledged_at = operation_timestamp()
+        for record in self._records.values():
+            if record.operation_id == completed.operation_id:
+                continue
+            if record.operation_type not in completed.supersedes_recoverable_types:
+                continue
+            if record.status not in TERMINAL_OPERATION_STATUSES:
+                continue
+            if not record.requires_ack or record.acknowledged_at is not None:
+                continue
+            record.acknowledged_at = acknowledged_at
+            record.superseded_by_operation_id = completed.operation_id
 
     def _remove_record_locked(self, operation_id: str) -> None:
         record = self._records.pop(operation_id, None)

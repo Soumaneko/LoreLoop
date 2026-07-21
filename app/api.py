@@ -14,7 +14,36 @@ from app.runtime.settings import save_difficulty, save_max_chars
 from app.runtime.saves import create_save, list_saves, switch_save
 from app.runtime.session import get_campaign_runtime
 from app.runtime.jobs import JobStatus
-from app.runtime.operations import OperationStatus
+from app.runtime.operation_models import OperationStatus
+from app.runtime.operation_types import operation_policy
+
+
+def _submit_managed_operation(
+    operation_type: str,
+    stream_factory,
+    /,
+    *args,
+    request_id: str | None = None,
+    metadata: dict | None = None,
+    supersedes_recoverable_types: tuple[str, ...] | None = None,
+    **kwargs,
+) -> str:
+    policy = operation_policy(operation_type)
+    return get_campaign_runtime().operations.submit_stream(
+        policy.operation_type,
+        stream_factory,
+        *args,
+        request_id=request_id,
+        exclusive_key=policy.exclusive_key,
+        requires_ack=policy.requires_ack,
+        supersedes_recoverable_types=(
+            policy.supersedes
+            if supersedes_recoverable_types is None
+            else supersedes_recoverable_types
+        ),
+        metadata=metadata,
+        **kwargs,
+    )
 
 
 def start_generation_operation(
@@ -24,15 +53,13 @@ def start_generation_operation(
     max_chars: int,
     request_id: str | None = None,
 ) -> str:
-    runtime = get_campaign_runtime()
-    return runtime.operations.submit_stream(
+    return _submit_managed_operation(
         "generation",
         generate_turn_stream,
         user_input,
         difficulty=difficulty,
         max_chars=max_chars,
         request_id=request_id,
-        exclusive_key="generation",
         metadata={"user_input": user_input},
     )
 
@@ -46,12 +73,11 @@ def start_retry_operation(
     pending = runtime.pending_turns.get(turn_id)
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before retrying.")
-    return runtime.operations.submit_stream(
+    return _submit_managed_operation(
         "retry",
         retry_turn_stream,
         turn_id,
         request_id=request_id,
-        exclusive_key="generation",
         metadata={
             "turn_id": turn_id,
             "group_id": pending.group_id,
@@ -73,14 +99,14 @@ def start_confirmation_operation(
     selected = pending or opening
     if selected is None:
         raise ValueError("Pending turn not found. Generate a scene before confirming.")
-    return runtime.operations.submit_stream(
+    return _submit_managed_operation(
         "confirmation",
         confirm_stream,
         turn_id,
         write_db=write_db,
         scene_text=scene_text,
         request_id=request_id,
-        exclusive_key="confirmation",
+        supersedes_recoverable_types=(None if write_db else ()),
         metadata={
             "turn_id": turn_id,
             "kind": "turn" if pending is not None else "opening",
@@ -91,21 +117,19 @@ def start_confirmation_operation(
 
 
 def start_batch_classify_operation(*, request_id: str | None = None) -> str:
-    return get_campaign_runtime().operations.submit_stream(
+    return _submit_managed_operation(
         "maintenance_batch_classify_manual",
         batch_classify_stream,
         request_id=request_id,
-        exclusive_key="manual_maintenance",
         metadata={"manual": True},
     )
 
 
 def start_memory_maintain_operation(*, request_id: str | None = None) -> str:
-    return get_campaign_runtime().operations.submit_stream(
+    return _submit_managed_operation(
         "maintenance_memory_maintain_manual",
         memory_maintain_stream,
         request_id=request_id,
-        exclusive_key="manual_maintenance",
         metadata={"manual": True},
     )
 
@@ -115,12 +139,11 @@ def start_story_direction_operation(
     *,
     request_id: str | None = None,
 ) -> str:
-    return get_campaign_runtime().operations.submit_stream(
+    return _submit_managed_operation(
         "initialization_story_direction",
         generate_story_direction_stream,
         payload,
         request_id=request_id,
-        exclusive_key="initialization",
         metadata={"stage": "story_direction"},
     )
 
@@ -130,12 +153,11 @@ def start_initialization_operation(
     *,
     request_id: str | None = None,
 ) -> str:
-    return get_campaign_runtime().operations.submit_stream(
+    return _submit_managed_operation(
         "initialization_opening",
         initialization_stream,
         payload,
         request_id=request_id,
-        exclusive_key="initialization",
         metadata={"stage": "opening"},
     )
 
@@ -145,12 +167,17 @@ def get_operation(operation_id: str) -> dict | None:
     return operation.as_dict() if operation is not None else None
 
 
+def acknowledge_operation(operation_id: str) -> dict:
+    return get_campaign_runtime().operations.acknowledge(operation_id).as_dict()
+
+
 def list_operations(
     *,
     status: OperationStatus | None = None,
     operation_type: str | None = None,
     active_only: bool = False,
-    limit: int = 100,
+    recoverable_only: bool = False,
+    limit: int | None = 100,
 ) -> list[dict]:
     return [
         operation.as_dict()
@@ -158,6 +185,7 @@ def list_operations(
             status=status,
             operation_type=operation_type,
             active_only=active_only,
+            recoverable_only=recoverable_only,
             limit=limit,
         )
     ]
@@ -197,6 +225,7 @@ def discard_pending_turn(turn_id: str) -> dict:
 
 
 __all__ = [
+    "acknowledge_operation",
     "create_save",
     "discard_pending_turn",
     "get_operation",

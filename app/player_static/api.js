@@ -22,6 +22,7 @@ async function readStream(response, onEvent) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let operationId = null;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -32,14 +33,32 @@ async function readStream(response, onEvent) {
       const line = chunk.split("\n").find((item) => item.startsWith("data: "));
       if (!line) continue;
       const event = JSON.parse(line.slice(6));
-      if (!event.ok) throw new Error(errorMessage(event));
+      if (!event.ok) {
+        const error = new Error(errorMessage(event));
+        error.operationId = operationId;
+        throw error;
+      }
+      if (event.step === "operation_started") {
+        operationId = event.data?.operation_id || operationId;
+      }
       if (event.step === "done") {
         await reader.cancel();
-        return;
+        return operationId;
       }
       onEvent(event);
     }
   }
+  const error = new Error("任务连接已中断，刷新后将继续恢复。");
+  error.operationId = operationId;
+  throw error;
+}
+
+export async function acknowledgeOperation(operationId) {
+  if (!operationId) return;
+  await request(
+    `/api/player/operations/${encodeURIComponent(operationId)}/ack`,
+    { method: "POST" },
+  );
 }
 
 export async function stream(path, body, onEvent) {
