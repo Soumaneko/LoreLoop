@@ -19,7 +19,7 @@ const els = {
   pendingCard: $("pendingCard"), suggestions: $("suggestions"), suggestionList: $("suggestionList"),
   errorCard: $("errorCard"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
-  drawer: $("drawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"),
+  drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"), openLeftDrawerBtn: $("openLeftDrawerBtn"), closeLeftDrawerBtn: $("closeLeftDrawerBtn"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
   closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelApiKey: $("modelApiKey"),
@@ -568,13 +568,28 @@ function renderSaveManager() {
   });
 }
 
+function setTextareaValueWithUndo(textarea, text) {
+  textarea.focus();
+  textarea.select();
+  let inserted = false;
+  try {
+    inserted = document.execCommand("insertText", false, text);
+  } catch (_e) {
+    inserted = false;
+  }
+  if (!inserted) {
+    textarea.value = text;
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
 function renderSuggestions() {
   els.suggestionList.replaceChildren();
   els.suggestions.hidden = state.suggestions.length === 0 || Boolean(activePending());
   state.suggestions.forEach((preview) => {
     const button = node("button", "suggestion");
     button.append(node("strong", "", preview.label), node("small", "", `${preview.level} · ${preview.risk}`));
-    button.onclick = () => { els.playerInput.value = preview.label; autoSizeInput(); renderControls(); els.playerInput.focus(); };
+    button.onclick = () => { setTextareaValueWithUndo(els.playerInput, preview.label); autoSizeInput(); renderControls(); };
     els.suggestionList.appendChild(button);
   });
 }
@@ -1286,8 +1301,30 @@ async function initialize() {
   finally { els.initSubmitBtn.disabled = false; els.initSubmitBtn.textContent = "生成开场"; renderControls(); }
 }
 
+function openLeftDrawer() {
+  if (els.leftDrawer) {
+    els.leftDrawer.classList.add("open");
+    els.leftDrawer.setAttribute("aria-hidden", "false");
+    els.drawerBackdrop.hidden = false;
+  }
+}
+function closeLeftDrawer() {
+  if (els.leftDrawer) {
+    els.leftDrawer.classList.remove("open");
+    els.leftDrawer.setAttribute("aria-hidden", "true");
+    if (!els.drawer?.classList.contains("open")) {
+      els.drawerBackdrop.hidden = true;
+    }
+  }
+}
 function openDrawer() { els.drawer.classList.add("open"); els.drawer.setAttribute("aria-hidden", "false"); els.drawerBackdrop.hidden = false; }
-function closeDrawer() { els.drawer.classList.remove("open"); els.drawer.setAttribute("aria-hidden", "true"); els.drawerBackdrop.hidden = true; }
+function closeDrawer() {
+  els.drawer.classList.remove("open");
+  els.drawer.setAttribute("aria-hidden", "true");
+  if (!els.leftDrawer?.classList.contains("open")) {
+    els.drawerBackdrop.hidden = true;
+  }
+}
 function isNearBottom() {
   return document.documentElement.scrollHeight - window.innerHeight - window.scrollY < 180;
 }
@@ -1315,7 +1352,10 @@ els.playerInput.addEventListener("blur", () => { els.playerInput.style.height = 
 els.playerInput.addEventListener("keydown", (event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); generateTurn(); } });
 els.generateBtn.onclick = generateTurn;
 els.dismissErrorBtn.onclick = clearError;
-els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer; els.drawerBackdrop.onclick = closeDrawer;
+els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer;
+if (els.openLeftDrawerBtn) els.openLeftDrawerBtn.onclick = openLeftDrawer;
+if (els.closeLeftDrawerBtn) els.closeLeftDrawerBtn.onclick = closeLeftDrawer;
+els.drawerBackdrop.onclick = () => { closeDrawer(); closeLeftDrawer(); };
 els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
 els.newSaveBtn.onclick = () => { els.saveNameInput.value = ""; els.saveDialog.showModal(); window.setTimeout(() => els.saveNameInput.focus(), 0); };
 els.saveCancelBtn.onclick = () => els.saveDialog.close();

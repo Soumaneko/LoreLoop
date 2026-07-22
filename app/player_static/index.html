@@ -23,7 +23,10 @@
       </div>
       <div class="top-actions">
         <span id="statusPill" class="status-pill" data-mode="booting"><b></b><span>载入中</span></span>
-        <button id="openDrawerBtn" class="icon-button" type="button" aria-label="打开旅程菜单" title="旅程菜单">
+        <button id="openLeftDrawerBtn" class="icon-button codex-button" type="button" aria-label="打开角色典籍" title="角色与局内资产">
+          <span class="codex-icon">📜</span>
+        </button>
+        <button id="openDrawerBtn" class="icon-button" type="button" aria-label="打开旅程控制" title="系统旅程控制">
           <span></span><span></span><span></span>
         </button>
       </div>
@@ -61,9 +64,9 @@
       <div class="composer">
         <textarea id="playerInput" rows="1" maxlength="4000" placeholder="你打算怎么做？"></textarea>
         <div class="composer-footer">
-          <span id="inputHint">Ctrl / ⌘ + Enter 执行行动</span>
+          <span id="inputHint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> 执行行动</span>
           <button id="generateBtn" class="primary-action" type="button">
-            <span>执行行动</span><b>→</b>
+            <span>执行行动</span>
           </button>
         </div>
       </div>
@@ -71,11 +74,41 @@
   </div>
 
   <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
+
+  <!-- Left Drawer: Character & In-Game Codex -->
+  <aside id="leftDrawer" class="drawer left-drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div><p class="eyebrow">CHARACTER & CODEX</p><h2>局内典籍</h2></div>
+      <button id="closeLeftDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
+    </div>
+    <section class="drawer-section">
+      <div class="section-title">角色</div>
+      <div id="playerSummary" class="summary-card"></div>
+    </section>
+    <section class="drawer-section">
+      <div class="section-title">携带</div>
+      <div id="resourceSummary" class="resource-list"></div>
+    </section>
+  </aside>
+
+  <!-- Right Drawer: System Control & Saves -->
   <aside id="drawer" class="drawer" aria-hidden="true">
     <div class="drawer-header">
-      <div><p class="eyebrow">JOURNEY</p><h2>旅程</h2></div>
+      <div><p class="eyebrow">SYSTEM & CONTROL</p><h2>系统控制</h2></div>
       <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
     </div>
+    <section class="drawer-section history-actions">
+      <button id="undoBtn" type="button"><span>↶</span>撤销上一回合</button>
+      <button id="redoBtn" type="button"><span>↷</span>重做回合</button>
+    </section>
+    <section class="drawer-section">
+      <label for="difficultySelect">判定难度</label>
+      <select id="difficultySelect">
+        <option value="简单">简单 · 三骰取高</option>
+        <option value="普通">普通 · 双骰取高</option>
+        <option value="困难">困难 · 单骰判定</option>
+      </select>
+    </section>
     <section class="drawer-section">
       <label for="saveSelect">当前存档</label>
       <div class="inline-control">
@@ -87,26 +120,6 @@
     <section class="drawer-section">
       <div class="section-title">模型服务</div>
       <button id="modelSettingsBtn" class="manage-saves-button" type="button">模型设置与连接检查</button>
-    </section>
-    <section class="drawer-section">
-      <div class="section-title">角色</div>
-      <div id="playerSummary" class="summary-card"></div>
-    </section>
-    <section class="drawer-section">
-      <div class="section-title">携带</div>
-      <div id="resourceSummary" class="resource-list"></div>
-    </section>
-    <section class="drawer-section">
-      <label for="difficultySelect">判定难度</label>
-      <select id="difficultySelect">
-        <option value="简单">简单 · 三骰取高</option>
-        <option value="普通">普通 · 双骰取高</option>
-        <option value="困难">困难 · 单骰判定</option>
-      </select>
-    </section>
-    <section class="drawer-section history-actions">
-      <button id="undoBtn" type="button"><span>↶</span>撤销上一回合</button>
-      <button id="redoBtn" type="button"><span>↷</span>重做回合</button>
     </section>
   </aside>
 
