@@ -1,7 +1,11 @@
 """Public application API used by the debug server and local tools."""
 
 from app.graph.confirmation_graph import confirm_stream
-from app.graph.generation_graph import generate_turn_stream, retry_turn_stream
+from app.graph.generation_graph import (
+    generate_turn_stream,
+    rephrase_turn_stream,
+    reroll_turn_stream,
+)
 from app.graph.initialization_graph import initialization_stream
 from app.graph.initialization_helpers import (
     generate_story_direction_stream,
@@ -82,7 +86,9 @@ def start_generation_operation(
     )
 
 
-def start_retry_operation(
+def _start_pending_variant_operation(
+    operation_type: str,
+    stream_factory,
     turn_id: str,
     *,
     request_id: str | None = None,
@@ -92,15 +98,42 @@ def start_retry_operation(
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before retrying.")
     return _submit_managed_operation(
-        "retry",
-        retry_turn_stream,
+        operation_type,
+        stream_factory,
         turn_id,
         request_id=request_id,
         metadata={
             "turn_id": turn_id,
             "group_id": pending.group_id,
             "user_input": pending.user_input,
+            "retry_mode": operation_type,
         },
+    )
+
+
+def start_rephrase_operation(
+    turn_id: str,
+    *,
+    request_id: str | None = None,
+) -> str:
+    return _start_pending_variant_operation(
+        "rephrase",
+        rephrase_turn_stream,
+        turn_id,
+        request_id=request_id,
+    )
+
+
+def start_reroll_operation(
+    turn_id: str,
+    *,
+    request_id: str | None = None,
+) -> str:
+    return _start_pending_variant_operation(
+        "reroll",
+        reroll_turn_stream,
+        turn_id,
+        request_id=request_id,
     )
 
 
@@ -270,7 +303,8 @@ __all__ = [
     "start_generation_operation",
     "start_initialization_operation",
     "start_memory_maintain_operation",
-    "start_retry_operation",
+    "start_rephrase_operation",
+    "start_reroll_operation",
     "start_story_direction_operation",
     "switch_save",
     "test_model_connection",

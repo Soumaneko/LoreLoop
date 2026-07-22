@@ -51,8 +51,9 @@ def _composition_output_state(
     outline = composition.to_outline()
     scene_result = composition.to_scene_result()
     beat_entity_anchors = build_entity_retrieval_anchors(outline)
+    action_parse_result = state.get("action_parse_result")
     anchors = [
-        *state["action_parse_result"].anchors,
+        *(action_parse_result.anchors if action_parse_result is not None else []),
         *beat_entity_anchors,
     ]
     with (
@@ -338,30 +339,21 @@ def maybe_director_npc_node(state: GenerationState) -> GenerationState:
     }
 
 
-def compose_narrative_node(state: GenerationState) -> GenerationState:
+def _compose_with_context(
+    state: GenerationState,
+    context,
+    *,
+    context_event: str,
+) -> GenerationState:
     stream_writer = get_stream_writer()
-    director_npc_result = state.get("director_npc_result")
-    context = assemble_narrative_context(
-        user_input=state["user_input"],
-        current_state=state["current_state"],
-        turn_resolution=state["turn_resolution"],
-        core_memory=state["core_memory"],
-        context_facts=state["context_facts"],
-        entity_profiles=state.get("action_entity_profile_views", []),
-        npc_profiles=state.get("action_npc_director_views", []),
-        director_event_consumptions=state.get("director_event_consumptions", []),
-        director_npc_injection=(
-            director_npc_result.plot_injection
-            if director_npc_result is not None
-            else None
-        ),
-    )
     recent_scene = (
         state["short_term_memory"].recent_scenes[-1]
         if state["short_term_memory"].recent_scenes
         else None
     )
-    next_turn_index = recent_scene.turn_index + 1 if recent_scene else 1
+    next_turn_index = state.get("next_turn_index") or (
+        recent_scene.turn_index + 1 if recent_scene else 1
+    )
     composition = NarrativeComposerAgent(gateway_for(state)).compose(
         context,
         recent_scene=recent_scene,
@@ -384,7 +376,7 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
         "next_turn_index": next_turn_index,
         "events": [
             {
-                "step": "context_assembled",
+                "step": context_event,
                 "data": {"context": model_data(context)},
             },
             {
@@ -396,6 +388,38 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
             },
         ],
     }
+
+
+def compose_narrative_node(state: GenerationState) -> GenerationState:
+    director_npc_result = state.get("director_npc_result")
+    context = assemble_narrative_context(
+        user_input=state["user_input"],
+        current_state=state["current_state"],
+        turn_resolution=state["turn_resolution"],
+        core_memory=state["core_memory"],
+        context_facts=state["context_facts"],
+        entity_profiles=state.get("action_entity_profile_views", []),
+        npc_profiles=state.get("action_npc_director_views", []),
+        director_event_consumptions=state.get("director_event_consumptions", []),
+        director_npc_injection=(
+            director_npc_result.plot_injection
+            if director_npc_result is not None
+            else None
+        ),
+    )
+    return _compose_with_context(
+        state,
+        context,
+        context_event="context_assembled",
+    )
+
+
+def rephrase_narrative_node(state: GenerationState) -> GenerationState:
+    return _compose_with_context(
+        state,
+        state["context"],
+        context_event="context_reused",
+    )
 
 
 def generate_canon_queries_node(state: GenerationState) -> GenerationState:

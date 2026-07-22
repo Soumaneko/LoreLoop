@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from typing import Any
+import uuid
 
 from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
 
 from app.domain.roll.schemas import Difficulty
+from app.domain.short_term_memory import ShortTermMemory
 from app.runtime.session import get_campaign_runtime
 
 from .generation_helpers import (
@@ -21,6 +23,7 @@ from .generation_nodes import (
     extract_context_facts_node,
     maybe_director_npc_node,
     parse_action_node,
+    rephrase_narrative_node,
     resolve_turn_node,
     generate_canon_queries_node,
     retrieve_canon_evidence_node,
@@ -91,6 +94,46 @@ def _compile_generation_graph():
     return graph.compile()
 
 
+def build_rephrase_graph():
+    dependencies = (
+        rephrase_narrative_node,
+        generate_canon_queries_node,
+        retrieve_canon_evidence_node,
+        check_narrative_consistency_node,
+        revise_narrative_node,
+        _route_after_consistency_check,
+    )
+    return get_cached_graph(
+        "generation_rephrase",
+        dependencies,
+        _compile_rephrase_graph,
+    )
+
+
+def _compile_rephrase_graph():
+    graph = StateGraph(GenerationState)
+    graph.add_node("rephrase_narrative", rephrase_narrative_node)
+    graph.add_node("generate_canon_queries", generate_canon_queries_node)
+    graph.add_node("retrieve_canon_evidence", retrieve_canon_evidence_node)
+    graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
+    graph.add_node("revise_narrative", revise_narrative_node)
+
+    graph.add_edge(START, "rephrase_narrative")
+    graph.add_edge("rephrase_narrative", "generate_canon_queries")
+    graph.add_edge("generate_canon_queries", "retrieve_canon_evidence")
+    graph.add_edge("retrieve_canon_evidence", "check_narrative_consistency")
+    graph.add_conditional_edges(
+        "check_narrative_consistency",
+        _route_after_consistency_check,
+        {
+            "pass": END,
+            "revise": "revise_narrative",
+        },
+    )
+    graph.add_edge("revise_narrative", END)
+    return graph.compile()
+
+
 def _route_after_consistency_check(state: GenerationState) -> str:
     review = state["narrative_consistency_review"]
     return "revise" if review.decision == "revise" else "pass"
@@ -105,27 +148,12 @@ def generate_turn_stream(
         yield from _generate_turn_stream(user_input, difficulty, max_chars)
 
 
-def retry_turn_stream(turn_id: str):
+def reroll_turn_stream(turn_id: str):
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
-        pending = runtime.pending_turns.get(turn_id)
-        if pending is None:
-            raise ValueError("Pending turn not found. Generate a scene before retrying.")
-
-        with runtime.services.stores.current_state() as state_store:
-            current_state = state_store.load_or_default()
-        if current_state != pending.state_before:
-            raise ValueError(
-                "Pending turn is stale because CurrentState changed after generation. "
-                "Generate a new turn from the current state."
-            )
-
-        version_index = max(
-            variant.version_index
-            for variant in runtime.pending_turns.variants(pending.group_id)
-        ) + 1
+        pending, version_index = _retry_source(runtime, turn_id)
         yield {
-            "step": "retry_started",
+            "step": "reroll_started",
             "data": {
                 "turn_id": turn_id,
                 "group_id": pending.group_id,
@@ -141,6 +169,63 @@ def retry_turn_stream(turn_id: str):
         )
 
 
+def rephrase_turn_stream(turn_id: str):
+    runtime = get_campaign_runtime()
+    with runtime.confirmation_lock:
+        pending, version_index = _retry_source(runtime, turn_id)
+        trace_id = str(uuid.uuid4())
+        state: GenerationState = {
+            "events": [{
+                "step": "rephrase_started",
+                "data": {
+                    "turn_id": turn_id,
+                    "group_id": pending.group_id,
+                    "version_index": version_index,
+                    "trace_id": trace_id,
+                },
+            }],
+            "runtime_services": runtime.services,
+            "runtime": runtime,
+            "user_input": pending.user_input,
+            "difficulty": pending.difficulty,
+            "max_chars": pending.max_chars,
+            "trace_id": trace_id,
+            "current_state": pending.state_before,
+            "short_term_memory": pending.short_term_memory or ShortTermMemory(),
+            "turn_index": pending.turn_index,
+            "next_turn_index": pending.turn_index,
+            "context": pending.context,
+            "turn_resolution": pending.context.turn_resolution,
+            "director_npc_result": pending.director_npc_result,
+        }
+        yield from _stream_generation_graph(
+            state,
+            build_rephrase_graph(),
+            group_id=pending.group_id,
+            version_index=version_index,
+        )
+
+
+def _retry_source(runtime, turn_id: str):
+    pending = runtime.pending_turns.get(turn_id)
+    if pending is None:
+        raise ValueError("Pending turn not found. Generate a scene before retrying.")
+
+    with runtime.services.stores.current_state() as state_store:
+        current_state = state_store.load_or_default()
+    if current_state != pending.state_before:
+        raise ValueError(
+            "Pending turn is stale because CurrentState changed after generation. "
+            "Generate a new turn from the current state."
+        )
+
+    version_index = max(
+        variant.version_index
+        for variant in runtime.pending_turns.variants(pending.group_id)
+    ) + 1
+    return pending, version_index
+
+
 def _generate_turn_stream(
     user_input: str,
     difficulty: Difficulty,
@@ -150,12 +235,26 @@ def _generate_turn_stream(
     version_index: int = 1,
 ):
     state: dict[str, Any] = prepare_generation_state(user_input, difficulty, max_chars)
+    yield from _stream_generation_graph(
+        state,
+        build_generation_graph(),
+        group_id=group_id,
+        version_index=version_index,
+    )
+
+
+def _stream_generation_graph(
+    state: GenerationState,
+    graph,
+    *,
+    group_id: str | None,
+    version_index: int,
+):
     event_count = 0
     for event in state.get("events", []):
         event_count += 1
         yield event
 
-    graph = build_generation_graph()
     event_presenter = GenerationEventPresenter()
 
     def append_and_yield(event: GenerationEvent):

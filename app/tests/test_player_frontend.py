@@ -78,7 +78,11 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "Promise.all([" not in source
     assert "/api/player/history?before_turn=" in source
     assert "/api/player/generate" in source
-    assert "/api/player/retry" in source
+    assert "/api/player/${endpoint}" in source
+    assert 'retryTurn("rephrase")' in source
+    assert 'retryTurn("reroll")' in source
+    assert '"重新措辞"' in source
+    assert '"重新判定"' in source
     assert "/api/player/confirm" in source
     assert "/api/player/operations/recoverable" in source
     assert "/api/player/operations/${encodeURIComponent(operationId)}/ack" in (

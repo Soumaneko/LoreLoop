@@ -331,7 +331,7 @@ def test_exclusive_key_rejects_parallel_operation_and_releases_on_finish():
         assert started.wait(timeout=2)
         with pytest.raises(RuntimeError, match="already active"):
             manager.submit_stream(
-                "retry",
+                "reroll",
                 quick_stream,
                 exclusive_key="generation",
             )
@@ -339,7 +339,7 @@ def test_exclusive_key_rejects_parallel_operation_and_releases_on_finish():
         release.set()
         assert manager.wait(first_id, timeout=2).status == "succeeded"
         second_id = manager.submit_stream(
-            "retry",
+            "reroll",
             quick_stream,
             exclusive_key="generation",
         )
@@ -397,7 +397,19 @@ def test_public_api_rejects_model_operations_before_configuration(monkeypatch):
     assert runtime.operations.list(active_only=True) == []
 
 
-def test_public_api_starts_retry_with_pending_turn_metadata(monkeypatch):
+@pytest.mark.parametrize(
+    ("operation_type", "stream_attribute", "starter"),
+    [
+        ("rephrase", "rephrase_turn_stream", api.start_rephrase_operation),
+        ("reroll", "reroll_turn_stream", api.start_reroll_operation),
+    ],
+)
+def test_public_api_starts_retry_modes_with_pending_turn_metadata(
+    monkeypatch,
+    operation_type,
+    stream_attribute,
+    starter,
+):
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(SimpleNamespace(
         turn_id="turn-v1",
@@ -407,24 +419,29 @@ def test_public_api_starts_retry_with_pending_turn_metadata(monkeypatch):
     ))
 
     def retry_stream(turn_id):
-        yield {"step": "retry_started", "data": {"turn_id": turn_id}}
+        yield {"step": f"{operation_type}_started", "data": {"turn_id": turn_id}}
 
-    monkeypatch.setattr(api, "retry_turn_stream", retry_stream)
+    monkeypatch.setattr(api, stream_attribute, retry_stream)
 
-    operation_id = api.start_retry_operation(
+    operation_id = starter(
         "turn-v1",
-        request_id="request-retry-api",
+        request_id=f"request-{operation_type}-api",
     )
     snapshot = runtime.operations.wait(operation_id, timeout=2)
 
     assert snapshot.status == "succeeded"
-    assert snapshot.operation_type == "retry"
+    assert snapshot.operation_type == operation_type
     assert snapshot.metadata == {
         "turn_id": "turn-v1",
         "group_id": "group-1",
         "user_input": "调查钟楼",
+        "retry_mode": operation_type,
     }
-    assert snapshot.supersedes_recoverable_types == ("generation", "retry")
+    assert snapshot.supersedes_recoverable_types == (
+        "generation",
+        "rephrase",
+        "reroll",
+    )
 
 
 def test_public_api_starts_confirmation_with_pending_turn_metadata(monkeypatch):
@@ -465,7 +482,8 @@ def test_public_api_starts_confirmation_with_pending_turn_metadata(monkeypatch):
     }
     assert snapshot.supersedes_recoverable_types == (
         "generation",
-        "retry",
+        "rephrase",
+        "reroll",
         "initialization_opening",
     )
     assert captured == {

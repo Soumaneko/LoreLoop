@@ -28,12 +28,20 @@ OPERATION_POLICIES = {
             recovery_kind="generation",
         ),
         OperationPolicy(
-            "retry",
+            "rephrase",
             "generation",
             True,
             player_visible=True,
             recovery_kind="generation",
-            supersedes=("generation", "retry"),
+            supersedes=("generation", "rephrase", "reroll"),
+        ),
+        OperationPolicy(
+            "reroll",
+            "generation",
+            True,
+            player_visible=True,
+            recovery_kind="generation",
+            supersedes=("generation", "rephrase", "reroll"),
         ),
         OperationPolicy(
             "confirmation",
@@ -41,7 +49,12 @@ OPERATION_POLICIES = {
             True,
             player_visible=True,
             recovery_kind="confirmation",
-            supersedes=("generation", "retry", "initialization_opening"),
+            supersedes=(
+                "generation",
+                "rephrase",
+                "reroll",
+                "initialization_opening",
+            ),
         ),
         OperationPolicy(
             "initialization_story_direction",

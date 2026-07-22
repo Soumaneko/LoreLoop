@@ -276,19 +276,24 @@ function renderPending() {
   const actions = node("div", "pending-actions");
   const confirming = state.mode === "confirming";
   const edit = node("button", "soft-button", "编辑正文");
-  const retry = node("button", "soft-button", "重新生成");
+  const rephrase = node("button", "soft-button", "重新措辞");
+  const reroll = node("button", "soft-button", "重新判定");
   const discard = node("button", "soft-button danger-button", "删除");
   const confirm = node("button", "primary-action", "确认采用");
   edit.onclick = () => beginEdit(display, closing, actions, variant);
   edit.disabled = confirming;
-  retry.disabled = pending.kind === "opening" || ["generating", "confirming"].includes(state.mode);
-  retry.onclick = retryTurn;
+  rephrase.disabled = pending.kind === "opening" || ["generating", "confirming"].includes(state.mode);
+  rephrase.title = "保留本次判定与导演输入，只重新生成正文";
+  rephrase.onclick = () => retryTurn("rephrase");
+  reroll.disabled = rephrase.disabled;
+  reroll.title = "重新运行完整生成管线并重新投骰";
+  reroll.onclick = () => retryTurn("reroll");
   discard.disabled = confirming;
   discard.onclick = discardPending;
   confirm.disabled = confirming;
   confirm.textContent = confirming ? "正在确认……" : "确认采用";
   confirm.onclick = confirmTurn;
-  actions.append(edit, retry);
+  actions.append(edit, rephrase, reroll);
   if (pending.kind !== "opening") actions.appendChild(discard);
   actions.appendChild(confirm);
   els.pendingCard.append(toolbar, display);
@@ -947,7 +952,7 @@ async function acknowledgeFailedOperation(error, operationId = null) {
   await acknowledgeHandledOperation(operationId || error?.operationId);
 }
 
-function handleGenerationEvent(event, { retry = false } = {}) {
+function handleGenerationEvent(event, { retryMode = null } = {}) {
   if (event.step === "operation_events_truncated") {
     els.streamingLabel.textContent = "正在恢复最新生成进度";
   }
@@ -955,8 +960,10 @@ function handleGenerationEvent(event, { retry = false } = {}) {
   if (event.step === "scene_stream_started") startStreaming(
     event.data?.revision
       ? "正在根据问题断言重新编写"
-      : retry
-        ? "正在重新推演这一回合"
+      : retryMode === "rephrase"
+        ? "正在重新措辞"
+        : retryMode === "reroll"
+          ? "正在重新判定"
         : "世界正在回应",
   );
   if (event.step === "scene_text_delta") {
@@ -965,24 +972,32 @@ function handleGenerationEvent(event, { retry = false } = {}) {
 }
 
 async function resumeGenerationOperation(operation) {
-  const retry = operation.operation_type === "retry";
+  const retryMode = ["rephrase", "reroll"].includes(operation.operation_type)
+    ? operation.operation_type
+    : null;
   const userInput = operation.metadata?.user_input || "";
   setMode("generating");
   renderControls();
   showActivePlayerAction(userInput);
-  startStreaming(retry ? "正在重新推演这一回合" : "正在恢复生成进度");
+  startStreaming(
+    retryMode === "rephrase"
+      ? "正在恢复重新措辞"
+      : retryMode === "reroll"
+        ? "正在恢复重新判定"
+        : "正在恢复生成进度",
+  );
   try {
     await subscribe(
       `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
-      (event) => handleGenerationEvent(event, { retry }),
+      (event) => handleGenerationEvent(event, { retryMode }),
     );
     await acknowledgeHandledOperation(operation.operation_id);
     stopStreaming();
-    if (retry) showToast("新版本已生成，旧版本仍然保留");
+    if (retryMode) showToast("新版本已生成，旧版本仍然保留");
     return true;
   } catch (error) {
     stopStreaming();
-    if (retry) {
+    if (retryMode) {
       setMode("pending");
       renderAll();
     } else {
@@ -1056,15 +1071,18 @@ async function generateTurn() {
   }
 }
 
-async function retryTurn() {
+async function retryTurn(retryMode) {
   const pending = activePending(); const variant = selectedVariant();
   if (!pending || !variant || pending.kind === "opening") return;
-  setMode("generating"); renderControls(); startStreaming("正在重新推演这一回合");
+  const rephrase = retryMode === "rephrase";
+  const endpoint = rephrase ? "rephrase" : "reroll";
+  setMode("generating"); renderControls();
+  startStreaming(rephrase ? "正在重新措辞" : "正在重新判定");
   try {
-    const operationId = await stream("/api/player/retry", {
+    const operationId = await stream(`/api/player/${endpoint}`, {
       turn_id: variant.turn_id,
       request_id: newRequestId(),
-    }, (event) => handleGenerationEvent(event, { retry: true }));
+    }, (event) => handleGenerationEvent(event, { retryMode }));
     await acknowledgeHandledOperation(operationId);
     stopStreaming(); await loadAll({ scroll: "smooth" }); showToast("新版本已生成，旧版本仍然保留");
   } catch (error) {

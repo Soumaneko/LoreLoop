@@ -39,7 +39,8 @@ from app.api import (
     start_generation_operation,
     start_initialization_operation,
     start_memory_maintain_operation,
-    start_retry_operation,
+    start_rephrase_operation,
+    start_reroll_operation,
     start_story_direction_operation,
     switch_save,
     test_model_connection,
@@ -174,9 +175,15 @@ class DebugHandler(BaseHTTPRequestHandler):
                 player=True,
             )
             return
-        if path == "/api/player/retry":
+        if path == "/api/player/rephrase":
             self._handle_operation_start_stream(
-                self._start_retry_operation,
+                self._start_rephrase_operation,
+                player=True,
+            )
+            return
+        if path == "/api/player/reroll":
+            self._handle_operation_start_stream(
+                self._start_reroll_operation,
                 player=True,
             )
             return
@@ -249,8 +256,11 @@ class DebugHandler(BaseHTTPRequestHandler):
                 self._start_confirmation_operation,
             )
             return
-        if path == "/api/retry":
-            self._handle_operation_start_stream(self._start_retry_operation)
+        if path == "/api/rephrase":
+            self._handle_operation_start_stream(self._start_rephrase_operation)
+            return
+        if path == "/api/reroll":
+            self._handle_operation_start_stream(self._start_reroll_operation)
             return
         if path == "/api/pending/discard":
             self._handle_json(lambda: self._discard_pending_turn())
@@ -449,7 +459,7 @@ class DebugHandler(BaseHTTPRequestHandler):
                 "version_index": data.get("version_index"),
                 "revision": bool(data.get("revision", False)),
             }
-        elif step == "retry_started":
+        elif step in {"rephrase_started", "reroll_started"}:
             public_data = {"version_index": data.get("version_index")}
         elif step == "story_direction_done":
             public_data = {
@@ -841,13 +851,21 @@ class DebugHandler(BaseHTTPRequestHandler):
         request_id = str(payload.pop("request_id", "")).strip() or None
         return start_initialization_operation(payload, request_id=request_id)
 
-    def _start_retry_operation(self) -> str:
+    def _retry_request(self) -> tuple[str, str | None]:
         payload = _read_json(self)
         turn_id = str(payload.get("turn_id", "")).strip()
         if not turn_id:
             raise ValueError("turn_id is required")
         request_id = str(payload.get("request_id", "")).strip() or None
-        return start_retry_operation(turn_id, request_id=request_id)
+        return turn_id, request_id
+
+    def _start_rephrase_operation(self) -> str:
+        turn_id, request_id = self._retry_request()
+        return start_rephrase_operation(turn_id, request_id=request_id)
+
+    def _start_reroll_operation(self) -> str:
+        turn_id, request_id = self._retry_request()
+        return start_reroll_operation(turn_id, request_id=request_id)
 
     def _discard_pending_turn(self):
         payload = _read_json(self)

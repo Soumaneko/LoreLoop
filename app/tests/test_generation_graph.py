@@ -17,6 +17,24 @@ def test_generation_graph_compiles():
     assert graph is not None
 
 
+def test_rephrase_graph_runs_only_composer_and_consistency_tail():
+    graph = generation_graph.build_rephrase_graph().get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+
+    assert ("__start__", "rephrase_narrative") in edges
+    assert ("rephrase_narrative", "generate_canon_queries") in edges
+    assert ("generate_canon_queries", "retrieve_canon_evidence") in edges
+    assert ("retrieve_canon_evidence", "check_narrative_consistency") in edges
+    assert ("check_narrative_consistency", "revise_narrative") in edges
+    assert not any(target in {
+        "parse_action",
+        "evaluate_roll_modifiers",
+        "resolve_turn",
+        "consume_director_events",
+        "maybe_director_npc",
+    } for _source, target in edges)
+
+
 def test_consumer_composer_and_consistency_checker_run_in_order():
     graph = generation_graph.build_generation_graph().get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
@@ -282,7 +300,7 @@ def test_generation_event_presenter_flushes_context_before_later_nodes():
     assert presenter.finish() == []
 
 
-def test_retry_creates_next_version_in_same_group(
+def test_reroll_creates_next_version_in_same_group(
     monkeypatch,
     configure_runtime_services,
 ):
@@ -332,12 +350,12 @@ def test_retry_creates_next_version_in_same_group(
     monkeypatch.setattr(generation_graph, "_generate_turn_stream", _retry_stream)
 
     try:
-        events = list(generation_graph.retry_turn_stream(turn_id))
+        events = list(generation_graph.reroll_turn_stream(turn_id))
         old_version_retained = turn_id in runtime.pending_turns
     finally:
         runtime.pending_turns.remove(turn_id)
 
-    assert events[0]["step"] == "retry_started"
+    assert events[0]["step"] == "reroll_started"
     assert order == [
         "state_loaded",
         "retry_generation_started",
@@ -350,4 +368,75 @@ def test_retry_creates_next_version_in_same_group(
         "version_index": 2,
     }
     assert old_version_retained is True
+    assert events[-1]["data"]["turn_id"] == "turn_v2"
+
+
+def test_rephrase_reuses_selected_composer_context_without_full_generation(
+    monkeypatch,
+    configure_runtime_services,
+):
+    turn_id = "turn_v1"
+    group_id = "group_1"
+    state_before = object()
+    context = SimpleNamespace(turn_resolution=object())
+    director_npc_result = object()
+    short_term = ShortTermMemory()
+    runtime = get_campaign_runtime()
+    runtime.pending_turns.add(PendingTurn(
+        turn_id=turn_id,
+        group_id=group_id,
+        version_index=1,
+        user_input="观察门外",
+        difficulty="普通",
+        max_chars=900,
+        state_before=state_before,
+        context=context,
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="版本一"),
+        director_npc_result=director_npc_result,
+        turn_index=3,
+        short_term_memory=short_term,
+    ))
+    captured = {}
+    graph = object()
+
+    class _StateStore:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def load_or_default(self):
+            return state_before
+
+    def _stream(state, selected_graph, **kwargs):
+        captured.update({"state": state, "graph": selected_graph, **kwargs})
+        yield {"step": "scene_written", "data": {"turn_id": "turn_v2"}}
+
+    configure_runtime_services(current_state=_StateStore)
+    monkeypatch.setattr(generation_graph, "build_rephrase_graph", lambda: graph)
+    monkeypatch.setattr(generation_graph, "_stream_generation_graph", _stream)
+    monkeypatch.setattr(
+        generation_graph,
+        "_generate_turn_stream",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("full generation must not run")
+        ),
+    )
+
+    try:
+        events = list(generation_graph.rephrase_turn_stream(turn_id))
+    finally:
+        runtime.pending_turns.remove(turn_id)
+
+    state = captured["state"]
+    assert captured["graph"] is graph
+    assert captured["group_id"] == group_id
+    assert captured["version_index"] == 2
+    assert state["context"] is context
+    assert state["turn_resolution"] is context.turn_resolution
+    assert state["current_state"] is state_before
+    assert state["short_term_memory"] is short_term
+    assert state["director_npc_result"] is director_npc_result
     assert events[-1]["data"]["turn_id"] == "turn_v2"
