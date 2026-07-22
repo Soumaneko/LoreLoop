@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import re
 from typing import Annotated, Literal, Union
 
@@ -10,6 +11,21 @@ from .schemas import CurrentState, InventoryItem, ParticipantState, TimedConditi
 
 class StateChangeError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class StateChangeWarning:
+    operation_id: str
+    operation_type: str
+    target: str
+    code: str
+    message: str
+
+
+@dataclass(frozen=True)
+class StateApplyResult:
+    state: CurrentState
+    warnings: list[StateChangeWarning] = field(default_factory=list)
 
 
 class _Operation(BaseModel):
@@ -184,9 +200,10 @@ def apply_state_changes(
     change_set: StateChangeSet,
     *,
     npc_aliases: dict[str, list[str]] | None = None,
-) -> CurrentState:
+) -> StateApplyResult:
     state = current_state.model_copy(deep=True)
     aliases = _alias_map(npc_aliases or {})
+    warnings: list[StateChangeWarning] = []
 
     for operation in change_set.operations:
         if isinstance(operation, LocationChange):
@@ -217,27 +234,42 @@ def apply_state_changes(
                 "scene condition",
             )
         elif isinstance(operation, NPCConditionAdd):
-            participant = _require_non_player_participant(
-                state, operation.name, aliases
+            participant = _resolve_npc_attachment_target(
+                state,
+                operation,
+                aliases,
+                warnings,
             )
+            if participant is None:
+                continue
             _add_timed_condition(
                 participant.npc_conditions,
                 operation.condition,
                 operation.expires_after_phases,
             )
         elif isinstance(operation, NPCConditionRemove):
-            participant = _require_non_player_participant(
-                state, operation.name, aliases
+            participant = _resolve_npc_attachment_target(
+                state,
+                operation,
+                aliases,
+                warnings,
             )
+            if participant is None:
+                continue
             _remove_timed_condition(
                 participant.npc_conditions,
                 operation.condition,
                 "NPC condition",
             )
         elif isinstance(operation, ParticipantAttitudeChange):
-            participant = _require_non_player_participant(
-                state, operation.name, aliases
+            participant = _resolve_npc_attachment_target(
+                state,
+                operation,
+                aliases,
+                warnings,
             )
+            if participant is None:
+                continue
             updated_attitude = _clean_optional(operation.attitude_to_player)
             if updated_attitude == participant.attitude_to_player:
                 raise StateChangeError(
@@ -273,7 +305,10 @@ def apply_state_changes(
                 "temporary asset",
             )
 
-    return CurrentState.model_validate(state.model_dump(mode="python"))
+    return StateApplyResult(
+        state=CurrentState.model_validate(state.model_dump(mode="python")),
+        warnings=warnings,
+    )
 
 
 def _apply_inventory_delta(state: CurrentState, item_name: str, delta: int) -> None:
@@ -394,12 +429,25 @@ def _require_participant(
     return participant
 
 
-def _require_non_player_participant(
+def _resolve_npc_attachment_target(
     state: CurrentState,
-    name: str,
+    operation: NPCConditionAdd | NPCConditionRemove | ParticipantAttitudeChange,
     aliases: dict[str, str],
-) -> ParticipantState:
-    participant = _require_participant(state, name, aliases)
+    warnings: list[StateChangeWarning],
+) -> ParticipantState | None:
+    participant = _find_participant(state, operation.name, aliases)
+    if participant is None:
+        target = operation.name.strip()
+        warnings.append(StateChangeWarning(
+            operation_id=operation.operation_id,
+            operation_type=operation.type,
+            target=target,
+            code="npc_target_not_present",
+            message=(
+                f"NPC attachment skipped because the target is not present: {target}"
+            ),
+        ))
+        return None
     if _norm(participant.name) == _norm(state.player.name):
         raise StateChangeError(
             "player condition/status must use player-specific operations"

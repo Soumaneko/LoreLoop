@@ -34,6 +34,7 @@ _ALWAYS_CACHED_NODE_RESULTS = {
     "scene_facts",
     "updated_state",
     "state_change_set",
+    "state_update_warnings",
     "turn_summary",
     "action_preview",
 }
@@ -49,6 +50,7 @@ _ROLLBACK_SAFE_CACHE_KEYS = {
     "scene_facts",
     "updated_state",
     "state_change_set",
+    "state_update_warnings",
     "turn_summary",
     "action_preview",
 }

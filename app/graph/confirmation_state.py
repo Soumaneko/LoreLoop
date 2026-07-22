@@ -8,7 +8,7 @@ from typing import Annotated, Any, TypedDict
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.current_state.changes import StateChangeSet
+from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
 from app.domain.director_event.workflows import DirectorEventWorkflowBatchResult
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.schemas import DirectorNPCDraft
@@ -56,6 +56,7 @@ class ConfirmationCache(TypedDict, total=False):
     scene_facts: SceneFactSet
     updated_state: CurrentState
     state_change_set: StateChangeSet
+    state_update_warnings: list[StateChangeWarning]
     turn_summary: SceneSummary
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
@@ -115,6 +116,7 @@ class ConfirmationState(TypedDict, total=False):
     scene_facts_json: str
     updated_state: CurrentState
     state_change_set: StateChangeSet
+    state_update_warnings: list[StateChangeWarning]
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
     npc_director_events: list[DirectorEvent]

@@ -120,6 +120,10 @@ def test_turn_journal_persists_incremental_state_audit(tmp_path):
     history.record_state_audit(
         "turn-audit",
         state_changes={"operations": [{"type": "money_delta", "delta": -2}]},
+        state_warnings=[{
+            "operation_id": "op2",
+            "code": "npc_target_not_present",
+        }],
         state_before={"resources": {"money": 10}},
         state_after={"resources": {"money": 8}},
     )
@@ -127,6 +131,7 @@ def test_turn_journal_persists_incremental_state_audit(tmp_path):
     row = history.get_transaction("turn-audit")
     assert row is not None
     assert json.loads(row["state_changes_json"])["operations"][0]["delta"] == -2
+    assert json.loads(row["state_warnings_json"])[0]["operation_id"] == "op2"
     assert json.loads(row["state_before_json"])["resources"]["money"] == 10
     assert json.loads(row["state_after_json"])["resources"]["money"] == 8
 

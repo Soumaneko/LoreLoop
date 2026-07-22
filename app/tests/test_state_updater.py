@@ -140,6 +140,102 @@ def test_participant_state_is_added_changed_and_removed_in_order():
     assert sarah.attitude_to_player == "信任"
 
 
+def test_npc_attachment_after_participant_remove_is_skipped_with_warning():
+    response = {
+        "decision": "米莉离开当前场景，后续状态不再挂靠场景参与者。",
+        "operations": [
+            _operation("op1", "participant_remove", name="米莉"),
+            _operation(
+                "op2",
+                "npc_condition_add",
+                name="米莉",
+                condition="手臂受伤",
+                expires_after_phases=-1,
+            ),
+        ],
+    }
+    mock = MockLLM()
+    mock.set_responses([json.dumps(response, ensure_ascii=False)])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.scene.participant_names == ["主角"]
+    assert len(updater.last_warnings) == 1
+    warning = updater.last_warnings[0]
+    assert warning.operation_id == "op2"
+    assert warning.operation_type == "npc_condition_add"
+    assert warning.target == "米莉"
+    assert warning.code == "npc_target_not_present"
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        _operation(
+            "op1",
+            "npc_condition_remove",
+            name="不在场者",
+            condition="疲惫",
+        ),
+        _operation(
+            "op1",
+            "participant_attitude_change",
+            name="不在场者",
+            attitude_to_player="警惕",
+        ),
+    ],
+)
+def test_other_missing_npc_attachments_are_skipped(operation):
+    response = {
+        "decision": "目标不属于当前场景参与者。",
+        "operations": [operation],
+    }
+    mock = MockLLM()
+    mock.set_responses([json.dumps(response, ensure_ascii=False)])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert updater.last_warnings[0].operation_type == operation["type"]
+
+
+def test_npc_attachment_targeting_player_remains_an_error():
+    response = json.dumps(
+        {
+            "decision": "错误地使用 NPC 操作修改玩家。",
+            "operations": [
+                _operation(
+                    "op1",
+                    "npc_condition_add",
+                    name="主角",
+                    condition="疲惫",
+                    expires_after_phases=-1,
+                )
+            ],
+        },
+        ensure_ascii=False,
+    )
+    mock = MockLLM()
+    mock.set_responses([response, response, response])
+
+    with pytest.raises(StateChangeError, match="player-specific operations"):
+        StateUpdater(mock.build_gateway()).update(
+            _state(),
+            _facts(),
+            core_memory=CoreMemory(items=[]),
+        )
+
+
 def test_player_changes_use_add_remove_and_visible_status_change():
     result, _ = _update(
         {

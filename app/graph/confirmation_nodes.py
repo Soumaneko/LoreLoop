@@ -124,6 +124,7 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
     cache = state["cache"]
     updated_state = cache.get("updated_state")
     state_change_set = cache.get("state_change_set")
+    state_update_warnings = cache.get("state_update_warnings")
     if updated_state is None:
         gateway = _gateway_for(state)
         updater = StateUpdater(gateway)
@@ -144,18 +145,23 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
             "last_change_set",
             StateChangeSet(decision="State update produced no change set."),
         )
+        state_update_warnings = list(getattr(updater, "last_warnings", []))
     elif state_change_set is None:
         state_change_set = StateChangeSet(
             decision="State update failed; no operations were applied."
         )
+    if state_update_warnings is None:
+        state_update_warnings = []
     return {
         "updated_state": updated_state,
         "state_change_set": state_change_set,
+        "state_update_warnings": state_update_warnings,
         "events": [{
             "step": "state_update_done",
             "data": {
                 "state_after": model_data(updated_state),
                 "state_changes": model_data(state_change_set),
+                "warnings": model_data(state_update_warnings),
             },
         }],
     }

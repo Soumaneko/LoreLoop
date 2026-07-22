@@ -466,6 +466,9 @@ class ConfirmationEventBuilder:
             "state_before": model_data(pipeline_input.state_before),
             "state_after": model_data(state["updated_state"]),
             "state_changes": model_data(state["state_change_set"]),
+            "state_update_warnings": model_data(
+                state.get("state_update_warnings", [])
+            ),
             "scene_result": scene_result_data,
             "action_preview": model_data(action_preview),
             "short_term_memory_after": model_data(commit_result.short_term_after),
@@ -520,6 +523,7 @@ class ConfirmationFinalizer:
             self.runtime.history.record_state_audit(
                 state["turn_id"],
                 state_changes=model_data(state["state_change_set"]),
+                state_warnings=model_data(state.get("state_update_warnings", [])),
                 state_before=model_data(pipeline_input.state_before),
                 state_after=model_data(state["updated_state"]),
             )

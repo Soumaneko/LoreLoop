@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
+from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
@@ -31,6 +32,51 @@ def test_confirmation_first_wave_preserves_parallel_extract_dependencies():
     assert ("scene_fact_extract", "npc_profile_extract") in edges
     assert ("state_update", "scene_summarize") in edges
     assert ("scene_summarize", "__end__") in edges
+
+
+def test_state_update_warning_is_emitted_and_cached(monkeypatch):
+    current_state = CurrentState(
+        scene=SceneState(scene_id="scene-1", location="门外"),
+        player=PlayerState(name="主角"),
+    )
+    warning = StateChangeWarning(
+        operation_id="op2",
+        operation_type="npc_condition_add",
+        target="米莉",
+        code="npc_target_not_present",
+        message="target missing",
+    )
+    change_set = StateChangeSet(decision="NPC 已离开。")
+
+    class _Updater:
+        def __init__(self, _gateway):
+            self.last_change_set = change_set
+            self.last_warnings = [warning]
+
+        def update(self, state, *_args, **_kwargs):
+            return state
+
+    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _Updater)
+    monkeypatch.setattr(confirmation_nodes, "_gateway_for", lambda _state: object())
+    state = {
+        "pipeline_input": object(),
+        "trace_id": "trace-1",
+        "cache": {},
+        "state_before_update": current_state,
+        "scene_facts_json": "{}",
+        "core_memory": CoreMemory(items=[]),
+        "existing_npc_profiles": [],
+        "events": [],
+        "node_errors": [],
+        "write_db": True,
+    }
+
+    update = confirmation_nodes.state_update_node(state)
+    events = merge_confirmation_node_update(state, update)
+
+    assert update["state_update_warnings"] == [warning]
+    assert events[0]["data"]["warnings"][0]["code"] == "npc_target_not_present"
+    assert state["cache"]["state_update_warnings"] == [warning]
 
 
 def test_only_selection_summaries_append_current_turn_summary():

@@ -79,6 +79,7 @@ class CampaignHistory:
             ensure_column(conn, "turn_transactions", "state_changes_json", "TEXT")
             ensure_column(conn, "turn_transactions", "state_before_json", "TEXT")
             ensure_column(conn, "turn_transactions", "state_after_json", "TEXT")
+            ensure_column(conn, "turn_transactions", "state_warnings_json", "TEXT")
             conn.commit()
 
     def save_pending(
@@ -130,6 +131,7 @@ class CampaignHistory:
         turn_id: str,
         *,
         state_changes: dict[str, Any],
+        state_warnings: list[dict[str, Any]],
         state_before: dict[str, Any],
         state_after: dict[str, Any],
     ) -> None:
@@ -138,12 +140,13 @@ class CampaignHistory:
             conn.execute(
                 """
                 UPDATE turn_transactions
-                SET state_changes_json=?, state_before_json=?, state_after_json=?,
-                    updated_at=?
+                SET state_changes_json=?, state_warnings_json=?, state_before_json=?,
+                    state_after_json=?, updated_at=?
                 WHERE turn_id=?
                 """,
                 (
                     json.dumps(state_changes, ensure_ascii=False),
+                    json.dumps(state_warnings, ensure_ascii=False),
                     json.dumps(state_before, ensure_ascii=False),
                     json.dumps(state_after, ensure_ascii=False),
                     _now(),

@@ -23,6 +23,7 @@ class StateUpdater:
         self.last_change_set = StateChangeSet(
             decision="State update has not run yet."
         )
+        self.last_warnings = []
 
     def update(
         self,
@@ -33,6 +34,7 @@ class StateUpdater:
         npc_aliases: dict[str, list[str]] | None = None,
         trace_id: str | None = None,
     ) -> CurrentState:
+        self.last_warnings = []
         schema = StateChangeSet.model_json_schema()
         valid_fact_ids = _scene_fact_ids(scene_facts)
         validation_feedback = "无；这是首次输出。"
@@ -59,7 +61,7 @@ class StateUpdater:
             )
             try:
                 _validate_evidence(change_set, valid_fact_ids)
-                updated_state = apply_state_changes(
+                application = apply_state_changes(
                     current_state,
                     change_set,
                     npc_aliases=npc_aliases,
@@ -74,7 +76,8 @@ class StateUpdater:
                 continue
 
             self.last_change_set = change_set
-            return updated_state
+            self.last_warnings = application.warnings
+            return application.state
 
         raise RuntimeError("unreachable state update retry state")
 

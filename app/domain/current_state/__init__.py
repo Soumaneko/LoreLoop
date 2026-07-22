@@ -11,7 +11,13 @@ from .schemas import (
     WorldPhase,
 )
 from .updater import StateUpdater
-from .changes import StateChangeSet, StateOperation, apply_state_changes
+from .changes import (
+    StateApplyResult,
+    StateChangeSet,
+    StateChangeWarning,
+    StateOperation,
+    apply_state_changes,
+)
 from .store import CurrentStateStore, make_default_state
 
 __all__ = [
@@ -24,7 +30,9 @@ __all__ = [
     "ResourcesState",
     "SceneState",
     "StateUpdater",
+    "StateApplyResult",
     "StateChangeSet",
+    "StateChangeWarning",
     "StateOperation",
     "apply_state_changes",
     "WorldClock",
