@@ -21,6 +21,10 @@ const els = {
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
   drawer: $("drawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), resourceSummary: $("resourceSummary"),
+  modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
+  closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelApiKey: $("modelApiKey"),
+  modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"),
+  modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
   difficultySelect: $("difficultySelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
   saveManagerDialog: $("saveManagerDialog"), closeSaveManagerBtn: $("closeSaveManagerBtn"), saveCardList: $("saveCardList"),
@@ -71,6 +75,8 @@ let followStream = true;
 let initConfigSnapshot = null;
 let saveManagerBusy = false;
 let selectedImportFile = null;
+let modelConfigBusy = false;
+let modelConnectionVerified = false;
 const HISTORY_PAGE_SIZE = 5;
 const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
 const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
@@ -102,12 +108,12 @@ function clearError() {
   state.lastError = null;
   els.errorCard.hidden = true;
   const pending = activePending();
-  setMode(state.playerState?.needs_init ? "needs_init" : pending ? "pending" : "idle");
+  setMode(!state.modelConfig?.configured ? "needs_model" : state.playerState?.needs_init ? "needs_init" : pending ? "pending" : "idle");
   renderControls();
 }
 
 function renderControls() {
-  const busy = saveManagerBusy || ["booting", "generating", "confirming", "switching"].includes(state.mode);
+  const busy = saveManagerBusy || modelConfigBusy || ["booting", "needs_model", "generating", "confirming", "switching"].includes(state.mode);
   const pending = Boolean(activePending());
   els.statusPill.dataset.mode = state.mode;
   els.statusPill.querySelector("span").textContent = modeLabels[state.mode] || "等待行动";
@@ -116,6 +122,7 @@ function renderControls() {
   els.saveSelect.disabled = busy;
   els.newSaveBtn.disabled = busy;
   els.manageSavesBtn.disabled = busy;
+  els.modelSettingsBtn.disabled = modelConfigBusy || ["generating", "confirming", "switching"].includes(state.mode);
   const controls = state.playerState?.history_controls || {};
   const pendingIds = (activePending()?.variants || []).map((variant) => variant.turn_id);
   const canRedoPending = pendingIds.some((turnId) => (controls.redo_pending_turn_ids || []).includes(turnId));
@@ -616,8 +623,139 @@ function restorePlayerShell() {
   }
 }
 
-async function loadAll({ scroll = false, resumeOperation = true } = {}) {
+function showModelTestResult(status, message) {
+  els.modelTestResult.dataset.status = status;
+  els.modelTestResult.textContent = message;
+  els.modelTestResult.hidden = false;
+}
+
+function invalidateModelConnectionTest() {
+  modelConnectionVerified = false;
+  els.modelTestResult.hidden = true;
+}
+
+function modelConfigPayload() {
+  return {
+    api_key: els.modelApiKey.value.trim(),
+    base_url: els.modelBaseUrl.value.trim(),
+    model: els.modelName.value.trim(),
+    thinking: els.modelThinking.checked,
+  };
+}
+
+function renderModelConfigForm(config, { required = false } = {}) {
+  state.modelConfig = config;
+  els.modelConfigDialog.dataset.required = required ? "true" : "false";
+  els.closeModelConfigBtn.hidden = required;
+  els.modelConfigIntro.textContent = required
+    ? "开始故事前，请先配置并测试本机使用的模型服务。配置不会写入或导出到故事存档。"
+    : "模型配置只保存在本机，不会写入或导出到任何故事存档。";
+  els.modelApiKey.value = "";
+  els.modelApiKey.placeholder = config.configured
+    ? "••••••••••••（已配置）"
+    : "填写 API Key";
+  els.modelKeyHint.textContent = config.configured
+    ? "已保存密钥。留空会继续使用现有密钥；密钥不会传回浏览器。"
+    : "保存后不会再次显示或传回浏览器。";
+  els.modelBaseUrl.value = config.base_url || "https://api.openai.com/v1";
+  els.modelName.value = config.model || "gpt-4o";
+  els.modelThinking.checked = Boolean(config.thinking);
+  invalidateModelConnectionTest();
+}
+
+function openModelConfig(config = state.modelConfig, { required = false } = {}) {
+  renderModelConfigForm(config || {
+    configured: false,
+    base_url: "https://api.openai.com/v1",
+    model: "gpt-4o",
+    thinking: false,
+  }, { required });
+  if (!els.modelConfigDialog.open) els.modelConfigDialog.showModal();
+  window.setTimeout(() => (
+    config?.configured ? els.modelBaseUrl : els.modelApiKey
+  ).focus(), 0);
+}
+
+function enterModelSetup(config) {
+  state.modelConfig = config;
+  setMode("needs_model");
+  if (els.initDialog.open) els.initDialog.close();
+  renderControls();
+  openModelConfig(config, { required: true });
+}
+
+function setModelConfigBusy(busy) {
+  modelConfigBusy = busy;
+  for (const input of els.modelConfigForm.querySelectorAll("input, button")) {
+    input.disabled = busy;
+  }
+  if (els.modelConfigDialog.dataset.required === "true") {
+    els.closeModelConfigBtn.hidden = true;
+  }
+  renderControls();
+}
+
+async function testModelConnection() {
+  if (!els.modelConfigForm.reportValidity()) return;
+  setModelConfigBusy(true);
+  showModelTestResult("pending", "正在连接模型服务……");
+  try {
+    const result = await request("/api/player/model-config/test", {
+      method: "POST",
+      body: JSON.stringify(modelConfigPayload()),
+    });
+    modelConnectionVerified = Boolean(result.success);
+    if (result.success) {
+      showModelTestResult(
+        "success",
+        `连接成功 · ${result.model} · ${Number(result.latency_ms).toFixed(0)} ms`,
+      );
+    } else {
+      showModelTestResult(
+        "error",
+        `${result.error?.message || "连接失败"}（${result.error?.code || "unknown"}，${Number(result.latency_ms).toFixed(0)} ms）`,
+      );
+    }
+  } catch (error) {
+    modelConnectionVerified = false;
+    showModelTestResult("error", error.message || "连接检查没有完成");
+  } finally {
+    setModelConfigBusy(false);
+  }
+}
+
+async function saveModelSettings() {
+  if (!els.modelConfigForm.reportValidity()) return;
+  if (!modelConnectionVerified) {
+    showModelTestResult("error", "请先使用当前填写内容完成一次连接测试。修改任一字段后需要重新测试。");
+    return;
+  }
+  setModelConfigBusy(true);
+  try {
+    const config = await request("/api/player/model-config", {
+      method: "POST",
+      body: JSON.stringify(modelConfigPayload()),
+    });
+    state.modelConfig = config;
+    els.modelApiKey.value = "";
+    els.modelConfigDialog.close();
+    showToast("模型配置已保存并立即启用");
+    await loadAll({ scroll: "instant", knownModelConfig: config });
+  } catch (error) {
+    showModelTestResult("error", error.message || "模型配置未能保存");
+  } finally {
+    setModelConfigBusy(false);
+  }
+}
+
+async function loadAll({ scroll = false, resumeOperation = true, knownModelConfig = null } = {}) {
   state.historyPagingEnabled = false;
+  const modelConfig = knownModelConfig || await request("/api/player/model-config");
+  state.modelConfig = modelConfig;
+  if (!modelConfig.configured) {
+    enterModelSetup(modelConfig);
+    return;
+  }
   const saves = await request("/api/player/saves");
   state.saves = saves.saves || [];
   state.activeSave = saves.active;
@@ -678,6 +816,17 @@ async function loadAll({ scroll = false, resumeOperation = true } = {}) {
   if (playerState.needs_init && !els.initDialog.open) els.initDialog.showModal();
   if (scroll) scrollToBottom(scroll, () => { state.historyPagingEnabled = true; });
   else window.requestAnimationFrame(() => { state.historyPagingEnabled = true; });
+}
+
+async function bootstrap() {
+  const modelConfig = await request("/api/player/model-config");
+  state.modelConfig = modelConfig;
+  if (!modelConfig.configured) {
+    enterModelSetup(modelConfig);
+    return;
+  }
+  restorePlayerShell();
+  await loadAll({ scroll: "instant", knownModelConfig: modelConfig });
 }
 
 function handleInitializationEvent(event) {
@@ -1176,6 +1325,23 @@ els.manageSavesBtn.onclick = () => {
   renderSaveManager();
   els.saveManagerDialog.showModal();
 };
+els.modelSettingsBtn.onclick = () => {
+  closeDrawer();
+  openModelConfig(state.modelConfig, { required: false });
+};
+els.closeModelConfigBtn.onclick = () => els.modelConfigDialog.close();
+els.testModelBtn.onclick = testModelConnection;
+els.modelConfigForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveModelSettings();
+});
+for (const input of els.modelConfigForm.querySelectorAll("input")) {
+  input.addEventListener("input", invalidateModelConnectionTest);
+  input.addEventListener("change", invalidateModelConnectionTest);
+}
+els.modelConfigDialog.addEventListener("cancel", (event) => {
+  if (els.modelConfigDialog.dataset.required === "true") event.preventDefault();
+});
 els.closeSaveManagerBtn.onclick = () => els.saveManagerDialog.close();
 els.importSaveBtn.onclick = () => els.importSaveInput.click();
 els.importSaveInput.onchange = () => {
@@ -1219,5 +1385,4 @@ window.addEventListener("scroll", () => {
 }, { passive: true });
 
 toggleInitWorldFields();
-restorePlayerShell();
-loadAll({ scroll: "instant" }).catch(showError);
+bootstrap().catch(showError);

@@ -11,7 +11,7 @@ from .providers import LLMProvider, MockProvider, OpenAICompatibleProvider
 from .schemas import EchoResult
 from .tracing import NullTraceLogger, TraceLogger
 from .mock import MockLLM
-from .config import LLMConfig, create_gateway
+from .config import GatewayConfig, LLMConfig, SharedGatewayFactory, create_gateway
 
 __all__ = [
     "LLMGateway",
@@ -29,5 +29,7 @@ __all__ = [
     "NullTraceLogger",
     "MockLLM",
     "LLMConfig",
+    "GatewayConfig",
+    "SharedGatewayFactory",
     "create_gateway",
 ]

@@ -383,6 +383,20 @@ def test_public_api_starts_generation_as_background_operation(monkeypatch):
     }
 
 
+def test_public_api_rejects_model_operations_before_configuration(monkeypatch):
+    runtime = get_campaign_runtime()
+    monkeypatch.setattr(runtime, "is_model_configured", lambda: False)
+
+    with pytest.raises(RuntimeError, match="请先在模型设置中配置"):
+        api.start_generation_operation(
+            "调查钟楼",
+            difficulty="普通",
+            max_chars=1200,
+        )
+
+    assert runtime.operations.list(active_only=True) == []
+
+
 def test_public_api_starts_retry_with_pending_turn_metadata(monkeypatch):
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(SimpleNamespace(

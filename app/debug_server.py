@@ -27,11 +27,13 @@ from app.api import (
     load_debug_state,
     load_player_history,
     load_player_state,
+    model_config_status,
     preview_core_memory,
     rename_save,
     redo_last_turn,
     save_difficulty,
     save_max_chars,
+    save_model_config,
     start_batch_classify_operation,
     start_confirmation_operation,
     start_generation_operation,
@@ -40,6 +42,7 @@ from app.api import (
     start_retry_operation,
     start_story_direction_operation,
     switch_save,
+    test_model_connection,
     undo_last_turn,
 )
 from app.runtime.session import get_campaign_runtime
@@ -96,6 +99,9 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/state":
             self._handle_player_json(load_player_state)
+            return
+        if path == "/api/player/model-config":
+            self._handle_player_json(model_config_status)
             return
         if path == "/api/player/history":
             query = parse_qs(parsed_url.query)
@@ -191,6 +197,14 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/difficulty":
             self._handle_player_json(lambda: save_difficulty(_read_json(self)))
+            return
+        if path == "/api/player/model-config/test":
+            self._handle_player_json(
+                lambda: test_model_connection(_read_json(self))
+            )
+            return
+        if path == "/api/player/model-config":
+            self._handle_player_json(lambda: save_model_config(_read_json(self)))
             return
         if path == "/api/player/saves/create":
             self._handle_player_json(

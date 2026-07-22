@@ -79,11 +79,13 @@ class OpenAICompatibleProvider(LLMProvider):
         base_url: str,
         default_model: str = "gpt-4o",
         thinking: str | None = None,
+        timeout: float | None = None,
     ):
         self._api_key = api_key
         self._base_url = base_url
         self._default_model = default_model
         self._thinking = thinking
+        self._timeout = timeout
         self._client_instance: Any | None = None
         self._client_lock = threading.Lock()
 
@@ -101,9 +103,14 @@ class OpenAICompatibleProvider(LLMProvider):
 
         with self._client_lock:
             if self._client_instance is None:
+                kwargs = {
+                    "api_key": self._api_key,
+                    "base_url": self._base_url,
+                }
+                if self._timeout is not None:
+                    kwargs["timeout"] = self._timeout
                 self._client_instance = OpenAI(
-                    api_key=self._api_key,
-                    base_url=self._base_url,
+                    **kwargs,
                 )
         return self._client_instance
 

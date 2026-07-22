@@ -11,7 +11,6 @@ from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.short_term_memory import ShortTermMemory
-from app.core.llm.config import SharedGatewayFactory
 from app.runtime.paths import (
     CampaignPaths,
     DEFAULT_CAMPAIGN_PATHS,
@@ -21,6 +20,7 @@ from app.runtime.services import RuntimeServices
 from app.runtime.stores import StoreBundle
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
+from app.runtime.model_config import effective_gateway_factory
 from app.runtime.serialization import model_data
 from app.runtime.turn_history import CampaignHistory
 
@@ -194,7 +194,7 @@ class CampaignRuntime:
         self.campaign_id = campaign_id
         self.paths = paths or DEFAULT_CAMPAIGN_PATHS
         self.stores = stores or StoreBundle(self.paths)
-        self.gateway_factory = gateway_factory or SharedGatewayFactory()
+        self.gateway_factory = gateway_factory or effective_gateway_factory()
         self._max_workers = max_workers
         self.pending_turns = PendingTurnRepository()
         self.pending_openings = PendingOpeningRepository()
@@ -227,6 +227,30 @@ class CampaignRuntime:
 
     def has_active_operations(self) -> bool:
         return bool(self.operations.list(active_only=True, limit=1))
+
+    def is_model_configured(self) -> bool:
+        configured = getattr(self.gateway_factory, "is_configured", None)
+        return True if configured is None else bool(configured)
+
+    def replace_gateway_factory(self, factory, *, persist=None) -> None:
+        """Atomically install model settings for future pipeline work."""
+        with self._lifecycle_lock:
+            if self._save_task_active:
+                raise RuntimeError("A save management task is currently running")
+            if self.has_active_operations():
+                raise RuntimeError(
+                    "模型任务正在运行，请等待当前生成、确认或维护完成后再修改配置"
+                )
+            with self._confirmation_lock:
+                self.jobs.wait_for_idle()
+                if persist is not None:
+                    persist()
+                self.gateway_factory = factory
+                self.services = RuntimeServices(
+                    stores=self.stores,
+                    gateway_factory=factory,
+                    jobs=self.jobs,
+                )
 
     def configure_save_touch(self, callback) -> None:
         self._on_save_played = callback

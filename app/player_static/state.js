@@ -1,6 +1,7 @@
 export const state = {
   mode: "booting",
   playerState: null,
+  modelConfig: null,
   saves: [],
   activeSave: null,
   selectedPendingIndex: 0,
@@ -12,6 +13,7 @@ export const state = {
 
 export const modeLabels = {
   booting: "载入中",
+  needs_model: "等待模型配置",
   needs_init: "等待启程",
   idle: "等待行动",
   generating: "世界回应中",

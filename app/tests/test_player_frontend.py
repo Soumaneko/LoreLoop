@@ -70,6 +70,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "/api/player/state" in source
+    assert 'await request("/api/player/model-config")' in source
+    assert 'request("/api/player/model-config/test"' in source
+    assert 'request("/api/player/model-config"' in source
     assert 'const saves = await request("/api/player/saves")' in source
     assert 'await request("/api/player/state")' in source
     assert "Promise.all([" not in source
@@ -156,6 +159,13 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "story_direction" in source
     assert "initConfigSnapshot" in source
     assert 'id="manageSavesBtn"' in html
+    assert 'id="modelSettingsBtn"' in html
+    assert 'id="modelConfigDialog"' in html
+    assert 'id="modelApiKey" type="password"' in html
+    assert "modelApiKey.value = config" not in source
+    assert 'els.modelApiKey.value = ""' in source
+    assert 'setMode("needs_model")' in source
+    assert "enterModelSetup(modelConfig)" in source
     assert 'id="saveManagerDialog"' in html
     assert "save.last_played_at" in source
     assert "save.turn_count" in source

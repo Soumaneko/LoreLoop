@@ -85,6 +85,10 @@
       <button id="manageSavesBtn" class="manage-saves-button" type="button">管理本地存档</button>
     </section>
     <section class="drawer-section">
+      <div class="section-title">模型服务</div>
+      <button id="modelSettingsBtn" class="manage-saves-button" type="button">模型设置与连接检查</button>
+    </section>
+    <section class="drawer-section">
       <div class="section-title">角色</div>
       <div id="playerSummary" class="summary-card"></div>
     </section>
@@ -134,6 +138,40 @@
       <div id="saveManagerError" class="form-error" role="alert" hidden></div>
       <div id="saveCardList" class="save-card-list"></div>
     </section>
+  </dialog>
+
+  <dialog id="modelConfigDialog" class="modal model-config-modal">
+    <form id="modelConfigForm">
+      <header class="model-config-header">
+        <div><p class="eyebrow">MODEL CONNECTION</p><h2>配置模型服务</h2></div>
+        <button id="closeModelConfigBtn" class="close-button" type="button" aria-label="关闭">×</button>
+      </header>
+      <p id="modelConfigIntro">模型配置只保存在本机，不会写入或导出到任何故事存档。</p>
+      <div class="model-config-fields">
+        <label>
+          <span>API Key</span>
+          <input id="modelApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="填写 API Key" />
+          <small id="modelKeyHint">保存后不会再次显示或传回浏览器。</small>
+        </label>
+        <label>
+          <span>Base URL</span>
+          <input id="modelBaseUrl" type="url" autocomplete="off" spellcheck="false" required placeholder="https://api.openai.com/v1" />
+        </label>
+        <label>
+          <span>模型名称</span>
+          <input id="modelName" autocomplete="off" spellcheck="false" required placeholder="gpt-4o" />
+        </label>
+        <label class="model-thinking-toggle">
+          <input id="modelThinking" type="checkbox" />
+          <span><strong>Thinking</strong><small>向兼容服务发送 thinking.type 设置</small></span>
+        </label>
+      </div>
+      <div id="modelTestResult" class="model-test-result" role="status" hidden></div>
+      <div class="modal-actions">
+        <button id="testModelBtn" type="button">测试连接</button>
+        <button id="saveModelBtn" class="primary-action" type="submit">保存并启用</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="initDialog" class="modal init-modal">

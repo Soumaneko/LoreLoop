@@ -178,6 +178,20 @@ select option, select optgroup { background: #1d1d17; color: var(--ink); }
 .modal::backdrop { background: rgba(0,0,0,.82); }
 .modal form { padding: 30px; }.modal h2 { margin: 0 0 10px; font-family: var(--serif); font-size: 30px; font-weight: 500; }.modal form > p:not(.eyebrow) { color: var(--muted); line-height: 1.7; }
 .modal input { margin-top: 10px; }.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }.modal-actions button:not(.primary-action) { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 11px 16px; cursor: pointer; }
+.model-config-modal { width: min(610px, calc(100% - 28px)); }
+.model-config-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.model-config-header h2 { margin-bottom: 0; }
+.model-config-fields { display: grid; gap: 16px; margin-top: 22px; }
+.model-config-fields label > span { display: block; color: var(--muted); font-size: 12px; }
+.model-config-fields label > small, #modelKeyHint { display: block; margin-top: 7px; color: var(--faint); font-size: 11px; line-height: 1.5; }
+.model-thinking-toggle { display: flex; align-items: center; gap: 11px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.018); cursor: pointer; }
+.model-thinking-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--gold); }
+.model-thinking-toggle span { display: grid !important; gap: 3px; }
+.model-thinking-toggle strong { color: var(--ink); font-size: 13px; font-weight: 600; }
+.model-thinking-toggle small { color: var(--faint); font-size: 11px; }
+.model-test-result { margin-top: 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.model-test-result[data-status="success"] { border-color: rgba(112,171,126,.4); background: rgba(74,133,88,.1); color: #acd2b4; }
+.model-test-result[data-status="error"] { border-color: rgba(213,150,137,.35); background: rgba(126,62,51,.11); color: #dda69b; }
 .save-manager-modal { width: min(820px, calc(100% - 28px)); max-height: calc(100dvh - 28px); overflow: hidden; }
 .save-manager-shell { padding: 28px 30px 30px; }
 .save-manager-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }

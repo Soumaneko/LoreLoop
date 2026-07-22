@@ -11,6 +11,11 @@ from app.graph.maintenance_graph import batch_classify_stream, memory_maintain_s
 from app.runtime.debug_state import load_debug_state
 from app.runtime.player_state import load_player_history, load_player_state
 from app.runtime.settings import save_difficulty, save_max_chars
+from app.runtime.model_config import (
+    model_config_status,
+    save_model_config,
+    test_model_connection,
+)
 from app.runtime.saves import (
     copy_save,
     create_save,
@@ -40,6 +45,8 @@ def _submit_managed_operation(
     policy = operation_policy(operation_type)
     runtime = get_campaign_runtime()
     with runtime.operation_submission():
+        if not runtime.is_model_configured():
+            raise RuntimeError("请先在模型设置中配置并测试连接")
         return runtime.operations.submit_stream(
             policy.operation_type,
             stream_factory,
@@ -248,6 +255,7 @@ __all__ = [
     "load_debug_state",
     "load_player_history",
     "load_player_state",
+    "model_config_status",
     "list_maintenance_jobs",
     "list_operations",
     "list_saves",
@@ -256,6 +264,7 @@ __all__ = [
     "redo_last_turn",
     "save_difficulty",
     "save_max_chars",
+    "save_model_config",
     "start_batch_classify_operation",
     "start_confirmation_operation",
     "start_generation_operation",
@@ -264,5 +273,6 @@ __all__ = [
     "start_retry_operation",
     "start_story_direction_operation",
     "switch_save",
+    "test_model_connection",
     "undo_last_turn",
 ]
