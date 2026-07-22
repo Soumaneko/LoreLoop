@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from app.domain.core_memory.schemas import CoreMemory
@@ -25,7 +26,16 @@ class CoreMemoryStore:
 
     def save(self, core_memory: CoreMemory) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps(core_memory.model_dump(mode="json"), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        temporary = self.path.with_name(f".{self.path.name}.tmp")
+        try:
+            temporary.write_text(
+                json.dumps(
+                    core_memory.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            os.replace(temporary, self.path)
+        finally:
+            temporary.unlink(missing_ok=True)

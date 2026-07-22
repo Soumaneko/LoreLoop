@@ -1,35 +1,46 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 import threading
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4
 
-from .paths import (
-    ACTIVE_SAVE_FILE,
-    DEFAULT_SAVE_NAME,
-    SAVES_DIR,
-    CampaignPaths,
-    validate_save_name,
+from .paths import ACTIVE_SAVE_FILE, SAVES_DIR, CampaignPaths, validate_save_name
+from .save_archive import (
+    ArchiveInspection,
+    create_consistent_snapshot,
+    export_save as write_save_archive,
+    extract_archive,
+    inspect_archive,
+)
+from .save_manifest import (
+    SaveManifestRepository,
+    load_save_metadata,
 )
 from .session import CampaignRuntime, get_campaign_runtime
 
 
 @dataclass(frozen=True)
 class SaveInfo:
+    save_id: str
     name: str
     active: bool
     initialized: bool
-    modified_at: str | None
+    last_played_at: str
+    turn_count: int
+    protagonist_name: str | None
+    location: str | None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 class SaveManager:
-    """Own save directories and switch the process-wide campaign runtime safely."""
+    """Own local save identity, lifecycle operations, and active runtime binding."""
 
     def __init__(
         self,
@@ -43,23 +54,45 @@ class SaveManager:
         self.active_file = Path(active_file) if active_file else self.root / ACTIVE_SAVE_FILE.name
         self._lock = threading.RLock()
         self.root.mkdir(parents=True, exist_ok=True)
-        self._ensure_save_directory(
-            self.runtime.campaign_id or DEFAULT_SAVE_NAME
-        )
-        self._write_active_name(self.runtime.campaign_id)
+        self._cleanup_staging()
+        if not self._save_directories():
+            runtime_path = self.runtime.paths.data_dir
+            if (
+                runtime_path.parent.resolve() == self.root.resolve()
+                and self._is_save_id(runtime_path.name)
+                and runtime_path.is_dir()
+            ):
+                SaveManifestRepository(runtime_path).create(
+                    "默认存档",
+                    save_id=runtime_path.name,
+                )
+            else:
+                self._create_directory("默认存档")
+        active_id = self._configured_active_id()
+        if (
+            active_id != self.runtime.campaign_id
+            or self.runtime.paths.data_dir != self._save_path(active_id)
+        ):
+            self.runtime.pending_turns.clear(discard=False)
+            self.runtime.pending_openings.clear(discard=False)
+            self.runtime.reconfigure(
+                active_id,
+                CampaignPaths.from_data_dir(self._save_path(active_id)),
+            )
+        self.runtime.configure_save_touch(self.touch_active)
+        self._write_active_id(active_id)
 
     @property
-    def active_name(self) -> str:
+    def active_id(self) -> str:
         return self.runtime.campaign_id
 
     def list(self) -> list[SaveInfo]:
         with self._lock:
-            saves = [
-                self._describe(path)
-                for path in self.root.iterdir()
-                if path.is_dir() and not path.is_symlink() and not path.name.startswith(".")
-            ]
-        return sorted(saves, key=lambda item: (not item.active, item.name.casefold()))
+            saves = [self._describe(path) for path in self._save_directories()]
+        saves.sort(key=lambda item: item.name.casefold())
+        saves.sort(key=lambda item: item.last_played_at, reverse=True)
+        saves.sort(key=lambda item: item.active, reverse=True)
+        return saves
 
     def create(
         self,
@@ -68,86 +101,277 @@ class SaveManager:
         activate: bool = True,
         discard_pending: bool = False,
     ) -> SaveInfo:
-        clean = validate_save_name(name)
-        with self._lock:
-            if activate and self.runtime.has_active_operations():
-                raise RuntimeError(
-                    "Current save has an active operation. Wait for it to finish "
-                    "before creating and switching saves."
-                )
-            if activate and self.runtime.has_pending_content() and not discard_pending:
-                raise RuntimeError(
-                    "Current save has pending content. Confirm it or explicitly "
-                    "discard pending content before creating and switching saves."
-                )
-            path = self._save_path(clean)
+        with self.runtime.save_task(), self._lock:
+            clean_name = self._available_name(name)
+            path = self._create_directory(clean_name)
+            save_id = path.name
             try:
-                path.mkdir(parents=False, exist_ok=False)
-            except FileExistsError as exc:
-                raise ValueError(f"Save already exists: {clean}") from exc
-            if activate:
-                self._switch_locked(clean, discard_pending=discard_pending)
+                if activate:
+                    self._switch_locked(save_id, discard_pending=discard_pending)
+                return self._describe(path)
+            except BaseException:
+                if self.active_id != save_id:
+                    shutil.rmtree(path, ignore_errors=True)
+                raise
+
+    def switch(self, save_id: str, *, discard_pending: bool = False) -> SaveInfo:
+        with self.runtime.save_task(), self._lock:
+            return self._switch_locked(
+                self._validate_save_id(save_id),
+                discard_pending=discard_pending,
+            )
+
+    def rename(self, save_id: str, name: str) -> SaveInfo:
+        clean_id = self._validate_save_id(save_id)
+        with self._lock:
+            clean_name = self._available_name(name, excluding=clean_id)
+            path = self._require_save(clean_id)
+            SaveManifestRepository(path).rename(clean_name)
             return self._describe(path)
 
-    def switch(self, name: str, *, discard_pending: bool = False) -> SaveInfo:
-        clean = validate_save_name(name)
+    def copy(self, save_id: str, name: str = "") -> SaveInfo:
+        source_id = self._validate_save_id(save_id)
+        with self.runtime.save_task(), self._lock:
+            self._require_no_pending_source(source_id, "copy")
+            source = self._require_save(source_id)
+            if str(name).strip():
+                clean_name = self._available_name(name)
+            else:
+                original = SaveManifestRepository(source).load().display_name
+                candidate = f"{original} - 副本"
+                suffix = 2
+                while True:
+                    try:
+                        clean_name = self._available_name(candidate)
+                        break
+                    except ValueError:
+                        candidate = f"{original} - 副本 {suffix}"
+                        suffix += 1
+            destination_id = str(uuid4())
+            destination = self._save_path(destination_id)
+            staging = Path(tempfile.mkdtemp(prefix=".copy-", dir=self.root))
+            try:
+                create_consistent_snapshot(source, staging)
+                (staging / "save_manifest.json").unlink(missing_ok=True)
+                SaveManifestRepository(staging).create(
+                    clean_name,
+                    save_id=destination_id,
+                )
+                os.replace(staging, destination)
+            except BaseException:
+                shutil.rmtree(staging, ignore_errors=True)
+                raise
+            return self._describe(destination)
+
+    def delete(
+        self,
+        save_id: str,
+        *,
+        confirmation_name: str,
+        replacement_save_id: str | None = None,
+    ) -> dict[str, Any]:
+        clean_id = self._validate_save_id(save_id)
+        with self.runtime.save_task(), self._lock:
+            path = self._require_save(clean_id)
+            manifest = SaveManifestRepository(path).load()
+            if confirmation_name != manifest.display_name:
+                raise ValueError("The confirmation name does not match the save")
+            if len(self._save_directories()) <= 1:
+                raise RuntimeError("The last remaining save cannot be deleted")
+            if clean_id == self.active_id:
+                if self.runtime.has_pending_content():
+                    raise RuntimeError(
+                        "Confirm or discard pending content before deleting this save"
+                    )
+                replacement = (
+                    self._validate_save_id(replacement_save_id)
+                    if replacement_save_id
+                    else next(
+                        item.name for item in self._save_directories()
+                        if item.name != clean_id
+                    )
+                )
+                if replacement == clean_id:
+                    raise ValueError("Replacement save must be different")
+                self._switch_locked(replacement, discard_pending=False)
+            trash = self.root / f".trash-{uuid4()}"
+            os.replace(path, trash)
+            try:
+                shutil.rmtree(trash)
+            except OSError:
+                # Hidden trash is excluded from all save enumeration and can be
+                # cleaned on the next application start.
+                pass
+            return self.payload()
+
+    def export_to(self, save_id: str, destination: str | Path) -> ArchiveInspection:
+        clean_id = self._validate_save_id(save_id)
+        destination_path = Path(destination)
+        with self.runtime.save_task(), self._lock:
+            self._require_no_pending_source(clean_id, "export")
+            source = self._require_save(clean_id)
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination_path.with_name(
+                f".{destination_path.name}.{uuid4().hex}.tmp"
+            )
+            try:
+                inspection = write_save_archive(source, temporary)
+                os.replace(temporary, destination_path)
+                return inspection
+            finally:
+                temporary.unlink(missing_ok=True)
+
+    def inspect_import(self, archive: str | Path) -> ArchiveInspection:
+        return inspect_archive(Path(archive))
+
+    def import_from(self, archive: str | Path, name: str) -> SaveInfo:
+        with self.runtime.save_task(), self._lock:
+            clean_name = self._available_name(name)
+            save_id = str(uuid4())
+            destination = self._save_path(save_id)
+            staging = Path(tempfile.mkdtemp(prefix=".import-", dir=self.root))
+            try:
+                extract_archive(Path(archive), staging)
+                (staging / "save_manifest.json").unlink(missing_ok=True)
+                SaveManifestRepository(staging).create(clean_name, save_id=save_id)
+                os.replace(staging, destination)
+            except BaseException:
+                shutil.rmtree(staging, ignore_errors=True)
+                raise
+            return self._describe(destination)
+
+    def touch_active(self) -> None:
         with self._lock:
-            return self._switch_locked(clean, discard_pending=discard_pending)
+            SaveManifestRepository(self._require_save(self.active_id)).touch()
 
     def payload(self) -> dict[str, Any]:
         return {
-            "active": self.active_name,
-            "root": str(self.root.resolve()),
+            "active": self.active_id,
             "saves": [save.as_dict() for save in self.list()],
         }
 
-    def _switch_locked(self, name: str, *, discard_pending: bool) -> SaveInfo:
-        path = self._save_path(name)
-        if not path.is_dir() or path.is_symlink():
-            raise ValueError(f"Save not found: {name}")
-        if name != self.runtime.campaign_id:
+    def _switch_locked(self, save_id: str, *, discard_pending: bool) -> SaveInfo:
+        path = self._require_save(save_id)
+        if save_id != self.runtime.campaign_id:
             self.runtime.reconfigure(
-                name,
+                save_id,
                 CampaignPaths.from_data_dir(path),
                 discard_pending=discard_pending,
             )
-        self._write_active_name(name)
+        self._write_active_id(save_id)
         return self._describe(path)
 
-    def _save_path(self, name: str) -> Path:
+    def _create_directory(self, display_name: str) -> Path:
+        save_id = str(uuid4())
+        path = self._save_path(save_id)
+        path.mkdir(parents=False, exist_ok=False)
+        try:
+            SaveManifestRepository(path).create(display_name, save_id=save_id)
+        except BaseException:
+            shutil.rmtree(path, ignore_errors=True)
+            raise
+        return path
+
+    def _available_name(self, name: str, *, excluding: str | None = None) -> str:
         clean = validate_save_name(name)
+        folded = clean.casefold()
+        for path in self._save_directories():
+            if path.name == excluding:
+                continue
+            if SaveManifestRepository(path).load().display_name.casefold() == folded:
+                raise ValueError(f"Save name already exists: {clean}")
+        return clean
+
+    def _describe(self, path: Path) -> SaveInfo:
+        manifest = SaveManifestRepository(path).load()
+        metadata = load_save_metadata(path)
+        return SaveInfo(
+            save_id=manifest.save_id,
+            name=manifest.display_name,
+            active=manifest.save_id == self.runtime.campaign_id,
+            initialized=(path / "core_memory.json").is_file(),
+            last_played_at=manifest.last_played_at,
+            turn_count=metadata.turn_count,
+            protagonist_name=metadata.protagonist_name,
+            location=metadata.location,
+        )
+
+    def _save_directories(self) -> list[Path]:
+        return sorted(
+            (
+                path for path in self.root.iterdir()
+                if path.is_dir()
+                and not path.is_symlink()
+                and not path.name.startswith(".")
+                and self._is_save_id(path.name)
+                and (path / "save_manifest.json").is_file()
+            ),
+            key=lambda path: path.name,
+        )
+
+    def _require_save(self, save_id: str) -> Path:
+        path = self._save_path(save_id)
+        if not path.is_dir() or path.is_symlink():
+            raise ValueError(f"Save not found: {save_id}")
+        manifest = SaveManifestRepository(path).load()
+        if manifest.save_id != save_id:
+            raise ValueError("Save identity does not match its directory")
+        return path
+
+    def _save_path(self, save_id: str) -> Path:
+        clean = self._validate_save_id(save_id)
         path = self.root / clean
         if path.parent.resolve() != self.root.resolve():
             raise ValueError("Save path must be inside the saves directory")
         return path
 
-    def _ensure_save_directory(self, name: str) -> Path:
-        path = self._save_path(validate_save_name(name))
-        if path.is_symlink():
-            raise ValueError(f"Save cannot be a symbolic link: {name}")
-        path.mkdir(parents=False, exist_ok=True)
-        return path
+    def _configured_active_id(self) -> str:
+        try:
+            save_id = self._validate_save_id(
+                self.active_file.read_text(encoding="utf-8").strip()
+            )
+            self._require_save(save_id)
+            return save_id
+        except (FileNotFoundError, OSError, ValueError):
+            saves = self._save_directories()
+            if not saves:
+                raise RuntimeError("No local save is available")
+            return max(
+                saves,
+                key=lambda path: SaveManifestRepository(path).load().last_played_at,
+            ).name
 
-    def _write_active_name(self, name: str) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
+    def _cleanup_staging(self) -> None:
+        for path in self.root.iterdir():
+            if path.is_dir() and any(
+                path.name.startswith(prefix)
+                for prefix in (".copy-", ".import-", ".trash-")
+            ):
+                shutil.rmtree(path, ignore_errors=True)
+
+    def _write_active_id(self, save_id: str) -> None:
         temporary = self.active_file.with_name(f"{self.active_file.name}.tmp")
-        temporary.write_text(name, encoding="utf-8")
+        temporary.write_text(save_id, encoding="utf-8")
         os.replace(temporary, self.active_file)
 
-    def _describe(self, path: Path) -> SaveInfo:
+    def _require_no_pending_source(self, save_id: str, action: str) -> None:
+        if save_id == self.active_id and self.runtime.has_pending_content():
+            raise RuntimeError(
+                f"Confirm or discard pending content before {action}ing this save"
+            )
+
+    @staticmethod
+    def _is_save_id(value: str) -> bool:
         try:
-            modified = datetime.fromtimestamp(
-                path.stat().st_mtime,
-                tz=timezone.utc,
-            ).isoformat()
-        except OSError:
-            modified = None
-        return SaveInfo(
-            name=path.name,
-            active=path.name == self.runtime.campaign_id,
-            initialized=(path / "core_memory.json").is_file(),
-            modified_at=modified,
-        )
+            return str(UUID(value)) == value
+        except (ValueError, AttributeError):
+            return False
+
+    def _validate_save_id(self, value: object) -> str:
+        clean = str(value).strip()
+        if not self._is_save_id(clean):
+            raise ValueError("save_id must be a canonical UUID")
+        return clean
 
 
 SAVE_MANAGER = SaveManager()
@@ -168,7 +392,48 @@ def create_save(payload: dict[str, Any]) -> dict[str, Any]:
 
 def switch_save(payload: dict[str, Any]) -> dict[str, Any]:
     save = SAVE_MANAGER.switch(
-        str(payload.get("name", "")),
+        str(payload.get("save_id", "")),
         discard_pending=bool(payload.get("discard_pending", False)),
     )
+    return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
+
+
+def rename_save(payload: dict[str, Any]) -> dict[str, Any]:
+    save = SAVE_MANAGER.rename(
+        str(payload.get("save_id", "")),
+        str(payload.get("name", "")),
+    )
+    return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
+
+
+def copy_save(payload: dict[str, Any]) -> dict[str, Any]:
+    save = SAVE_MANAGER.copy(
+        str(payload.get("save_id", "")),
+        str(payload.get("name", "")),
+    )
+    return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
+
+
+def delete_save(payload: dict[str, Any]) -> dict[str, Any]:
+    return SAVE_MANAGER.delete(
+        str(payload.get("save_id", "")),
+        confirmation_name=str(payload.get("confirmation_name", "")),
+        replacement_save_id=(
+            str(payload["replacement_save_id"])
+            if payload.get("replacement_save_id") else None
+        ),
+    )
+
+
+def export_save_archive(save_id: str, destination: str | Path) -> dict[str, Any]:
+    inspection = SAVE_MANAGER.export_to(save_id, destination)
+    return {
+        "format_version": inspection.format_version,
+        "file_count": len(inspection.files),
+        "total_size": inspection.total_size,
+    }
+
+
+def import_save_archive(archive: str | Path, name: str) -> dict[str, Any]:
+    save = SAVE_MANAGER.import_from(archive, name)
     return {"save": save.as_dict(), **SAVE_MANAGER.payload()}

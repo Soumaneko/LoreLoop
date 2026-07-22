@@ -33,6 +33,19 @@ class CampaignHistory:
     def _connect(self):
         return connect_sqlite(self.db_path)
 
+    def _stored_snapshot_path(self, path: Path) -> str:
+        return path.relative_to(self.data_dir).as_posix()
+
+    def _snapshot_path(self, stored: str) -> Path:
+        path = Path(stored)
+        if path.is_absolute():
+            raise RuntimeError("Turn history contains a non-portable snapshot path")
+        resolved = (self.data_dir / path).resolve()
+        root = self.data_dir.resolve()
+        if resolved != root and root not in resolved.parents:
+            raise RuntimeError("Turn history snapshot path escapes the campaign")
+        return resolved
+
     def _init_schema(self) -> None:
         with self._connect() as conn:
             conn.executescript(
@@ -176,7 +189,7 @@ class CampaignHistory:
                     )
                 if snapshot["status"] == "undone":
                     if snapshot["redo_path"]:
-                        abandoned_redo_path = Path(snapshot["redo_path"])
+                        abandoned_redo_path = self._snapshot_path(snapshot["redo_path"])
                     conn.execute(
                         """
                         UPDATE turn_snapshots
@@ -200,7 +213,7 @@ class CampaignHistory:
                         snapshot_id,
                         turn_id,
                         row["turn_index"],
-                        str(path),
+                        self._stored_snapshot_path(path),
                         _now(),
                     ),
                 )
@@ -228,7 +241,7 @@ class CampaignHistory:
                 (turn_id,),
             ).fetchone()
             if row is not None:
-                self._restore_snapshot(Path(row["path"]))
+                self._restore_snapshot(self._snapshot_path(row["path"]))
             conn.execute(
                 """
                 UPDATE turn_transactions SET status='failed', error=?, updated_at=?
@@ -277,7 +290,7 @@ class CampaignHistory:
                 )
             conn.commit()
             for snapshot in abandoned_snapshots:
-                shutil.rmtree(snapshot["path"], ignore_errors=True)
+                shutil.rmtree(self._snapshot_path(snapshot["path"]), ignore_errors=True)
             self._trim_locked(conn)
 
     def discard(self, turn_ids: list[str]) -> None:
@@ -310,7 +323,7 @@ class CampaignHistory:
                 )
             conn.commit()
             for snapshot in snapshots:
-                shutil.rmtree(snapshot["path"], ignore_errors=True)
+                shutil.rmtree(self._snapshot_path(snapshot["path"]), ignore_errors=True)
 
     def recover_interrupted(self) -> bool:
         with self._lock, self._connect() as conn:
@@ -324,7 +337,7 @@ class CampaignHistory:
             ).fetchone()
             if row is None:
                 return False
-            self._restore_snapshot(Path(row["path"]))
+            self._restore_snapshot(self._snapshot_path(row["path"]))
             conn.execute(
                 """
                 UPDATE turn_transactions SET status='awaiting_confirm',
@@ -352,10 +365,10 @@ class CampaignHistory:
                 raise ValueError("No confirmed turn is available to undo")
             redo_path = self.snapshots_dir / f"redo-{row['snapshot_id']}"
             self._capture_snapshot(redo_path)
-            self._restore_snapshot(Path(row["path"]))
+            self._restore_snapshot(self._snapshot_path(row["path"]))
             conn.execute(
                 "UPDATE turn_snapshots SET status='undone', redo_path=? WHERE sequence=?",
-                (str(redo_path), row["sequence"]),
+                (self._stored_snapshot_path(redo_path), row["sequence"]),
             )
             transaction = conn.execute(
                 "SELECT group_id FROM turn_transactions WHERE turn_id=?",
@@ -400,7 +413,7 @@ class CampaignHistory:
             ).fetchone()
             if row is None or not row["redo_path"]:
                 raise ValueError("No undone turn is available to redo")
-            redo_path = Path(row["redo_path"])
+            redo_path = self._snapshot_path(row["redo_path"])
             self._restore_snapshot(redo_path)
             shutil.rmtree(redo_path, ignore_errors=True)
             conn.execute(
@@ -566,9 +579,9 @@ class CampaignHistory:
             "SELECT path, redo_path FROM turn_snapshots WHERE status='undone'"
         ).fetchall()
         for row in rows:
-            shutil.rmtree(row["path"], ignore_errors=True)
+            shutil.rmtree(self._snapshot_path(row["path"]), ignore_errors=True)
             if row["redo_path"]:
-                shutil.rmtree(row["redo_path"], ignore_errors=True)
+                shutil.rmtree(self._snapshot_path(row["redo_path"]), ignore_errors=True)
         conn.execute("DELETE FROM turn_snapshots WHERE status='undone'")
 
     def _trim_locked(self, conn) -> None:
@@ -579,9 +592,9 @@ class CampaignHistory:
             """
         ).fetchall()
         for row in rows[self.max_undo :]:
-            shutil.rmtree(row["path"], ignore_errors=True)
+            shutil.rmtree(self._snapshot_path(row["path"]), ignore_errors=True)
             if row["redo_path"]:
-                shutil.rmtree(row["redo_path"], ignore_errors=True)
+                shutil.rmtree(self._snapshot_path(row["redo_path"]), ignore_errors=True)
             conn.execute("DELETE FROM turn_snapshots WHERE sequence=?", (row["sequence"],))
         conn.commit()
 

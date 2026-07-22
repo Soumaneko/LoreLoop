@@ -2,19 +2,25 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
+import tempfile
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from app.core.llm import TraceLogger
 from app.api import (
     acknowledge_operation,
+    copy_save,
     create_save,
+    delete_save,
     discard_pending_turn,
+    export_save_archive,
     get_operation,
     get_maintenance_job,
+    import_save_archive,
     list_maintenance_jobs,
     list_operations,
     list_saves,
@@ -22,6 +28,7 @@ from app.api import (
     load_player_history,
     load_player_state,
     preview_core_memory,
+    rename_save,
     redo_last_turn,
     save_difficulty,
     save_max_chars,
@@ -104,6 +111,10 @@ class DebugHandler(BaseHTTPRequestHandler):
         if path == "/api/player/saves":
             self._handle_player_json(lambda: player_saves_payload(list_saves()))
             return
+        if path == "/api/player/saves/export":
+            query = parse_qs(parsed_url.query)
+            self._handle_save_export(query.get("save_id", [""])[0])
+            return
         if path == "/api/player/operations/recoverable":
             self._handle_player_json(self._load_recoverable_player_operations)
             return
@@ -135,7 +146,8 @@ class DebugHandler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self) -> None:
-        path = urlparse(self.path).path
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
         if path.startswith("/api/player/operations/") and path.endswith("/ack"):
             self._handle_player_json(
                 lambda: self._acknowledge_player_operation(path)
@@ -189,6 +201,25 @@ class DebugHandler(BaseHTTPRequestHandler):
             self._handle_player_json(
                 lambda: player_saves_payload(switch_save(_read_json(self)))
             )
+            return
+        if path == "/api/player/saves/rename":
+            self._handle_player_json(
+                lambda: player_saves_payload(rename_save(_read_json(self)))
+            )
+            return
+        if path == "/api/player/saves/copy":
+            self._handle_player_json(
+                lambda: player_saves_payload(copy_save(_read_json(self)))
+            )
+            return
+        if path == "/api/player/saves/delete":
+            self._handle_player_json(
+                lambda: player_saves_payload(delete_save(_read_json(self)))
+            )
+            return
+        if path == "/api/player/saves/import":
+            query = parse_qs(parsed_url.query)
+            self._handle_save_import(query.get("name", [""])[0])
             return
         if path == "/api/player/history/undo":
             self._handle_player_json(undo_last_turn)
@@ -297,6 +328,76 @@ class DebugHandler(BaseHTTPRequestHandler):
                     },
                 },
             )
+
+    def _handle_save_export(self, save_id: str) -> None:
+        temporary_path: Path | None = None
+        response_started = False
+        try:
+            descriptor, raw_path = tempfile.mkstemp(prefix="tvg-save-", suffix=".zip")
+            os.close(descriptor)
+            temporary_path = Path(raw_path)
+            temporary_path.unlink()
+            export_save_archive(save_id, temporary_path)
+            saves = list_saves().get("saves", [])
+            save = next((item for item in saves if item.get("save_id") == save_id), None)
+            display_name = str(save.get("name", "TVG-save")) if save else "TVG-save"
+            payload_size = temporary_path.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(payload_size))
+            self.send_header(
+                "Content-Disposition",
+                f"attachment; filename=save.zip; filename*=UTF-8''{quote(display_name + '.zip')}",
+            )
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            response_started = True
+            with temporary_path.open("rb") as archive:
+                for block in iter(lambda: archive.read(1024 * 1024), b""):
+                    self.wfile.write(block)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as exc:
+            if not response_started and not self.wfile.closed:
+                _json_response(
+                    self,
+                    500,
+                    {"ok": False, "error": {"code": "export_failed", "message": str(exc)}},
+                )
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
+    def _handle_save_import(self, name: str) -> None:
+        temporary_path: Path | None = None
+        try:
+            content_type = self.headers.get("Content-Type", "").split(";", 1)[0]
+            if content_type not in {"application/zip", "application/octet-stream"}:
+                raise ValueError("Import body must be a ZIP archive")
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 1 or length > 512 * 1024 * 1024:
+                raise ValueError("ZIP archive size must be between 1 byte and 512 MB")
+            descriptor, raw_path = tempfile.mkstemp(prefix="tvg-import-", suffix=".zip")
+            temporary_path = Path(raw_path)
+            remaining = length
+            with os.fdopen(descriptor, "wb") as destination:
+                while remaining:
+                    block = self.rfile.read(min(1024 * 1024, remaining))
+                    if not block:
+                        raise ValueError("ZIP upload ended before Content-Length")
+                    destination.write(block)
+                    remaining -= len(block)
+            data = player_saves_payload(import_save_archive(temporary_path, name))
+            _json_response(self, 200, {"ok": True, "data": data})
+        except Exception as exc:
+            _json_response(
+                self,
+                500,
+                {"ok": False, "error": {"code": "import_failed", "message": str(exc)}},
+            )
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
     def _handle_json(self, fn) -> None:
         try:
@@ -768,3 +869,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    export_save_archive,
+    import_save_archive,
+    rename_save,

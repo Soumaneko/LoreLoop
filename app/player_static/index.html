@@ -82,6 +82,7 @@
         <select id="saveSelect"></select>
         <button id="newSaveBtn" type="button" title="新建存档">＋</button>
       </div>
+      <button id="manageSavesBtn" class="manage-saves-button" type="button">管理本地存档</button>
     </section>
     <section class="drawer-section">
       <div class="section-title">角色</div>
@@ -109,10 +110,30 @@
     <form method="dialog" id="saveForm">
       <p class="eyebrow">NEW JOURNEY</p>
       <h2>新建存档</h2>
-      <p>存档名称同时也是本地文件夹名称。</p>
+      <p>名称仅用于识别这段旅程，之后可以随时修改。</p>
       <input id="saveNameInput" maxlength="64" autocomplete="off" placeholder="例如：莱尔的旅程" />
       <div class="modal-actions"><button id="saveCancelBtn" type="button">取消</button><button id="createSaveConfirmBtn" class="primary-action" value="default">创建</button></div>
     </form>
+  </dialog>
+
+  <dialog id="saveManagerDialog" class="modal save-manager-modal">
+    <section class="save-manager-shell">
+      <header class="save-manager-header">
+        <div><p class="eyebrow">LOCAL JOURNEYS</p><h2>管理存档</h2></div>
+        <button id="closeSaveManagerBtn" class="close-button" type="button" aria-label="关闭">×</button>
+      </header>
+      <p class="save-manager-intro">存档保存在本机。复制与导入不会自动切换当前旅程。</p>
+      <div class="save-manager-toolbar">
+        <button id="importSaveBtn" class="soft-button" type="button">从 ZIP 导入</button>
+        <input id="importSaveInput" type="file" accept=".zip,application/zip" hidden />
+      </div>
+      <form id="importSaveForm" class="save-import-panel" hidden>
+        <label><span id="importSaveFileName">已选择 ZIP</span><input id="importSaveName" maxlength="80" autocomplete="off" placeholder="导入后的存档名称" required /></label>
+        <div class="save-card-confirm-actions"><button id="cancelImportSaveBtn" class="soft-button" type="button">取消</button><button class="primary-action" type="submit">开始导入</button></div>
+      </form>
+      <div id="saveManagerError" class="form-error" role="alert" hidden></div>
+      <div id="saveCardList" class="save-card-list"></div>
+    </section>
   </dialog>
 
   <dialog id="initDialog" class="modal init-modal">

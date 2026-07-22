@@ -577,7 +577,7 @@ class TestDirectorEventReviewerInput:
         )
 
         event_json = json.loads(spy.calls[0]["input_data"]["active_event_json"])
-        assert event_json["entry_points"]
+        assert "entry_points" not in event_json
         assert set(event_json) == {
             "event_id",
             "role",
@@ -592,7 +592,6 @@ class TestDirectorEventReviewerInput:
             "next_progress_clock",
             "progress_index",
             "exposure",
-            "entry_points",
             "last_presented_turn",
             "route_mode",
             "intervention_route",
@@ -637,7 +636,12 @@ class TestDirectorEventInterventionReviewerInput:
         assert result.status == "ongoing"
         assert spy.calls[0]["task"] == "director_event_intervention_review"
         assert "scene_summaries_json" not in spy.calls[0]["input_data"]
-        assert "success_state" in spy.calls[0]["input_data"]["active_event_json"]
+        active_event_json = json.loads(
+            spy.calls[0]["input_data"]["active_event_json"]
+        )
+        assert "success_state" in active_event_json["intervention_route"]
+        assert "entry_points" not in active_event_json
+        assert "player_contacts" not in active_event_json
         output_schema = json.loads(
             spy.calls[0]["input_data"]["output_schema_json"]
         )

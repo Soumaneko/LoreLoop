@@ -15,6 +15,46 @@ export async function request(path, options = {}) {
   return payload.data;
 }
 
+async function responseError(response) {
+  const payload = await response.json().catch(() => null);
+  return new Error(errorMessage(payload, `请求失败（${response.status}）`));
+}
+
+export async function downloadSave(saveId) {
+  const response = await fetch(
+    `/api/player/saves/export?save_id=${encodeURIComponent(saveId)}`,
+  );
+  if (!response.ok) throw await responseError(response);
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const utf8Name = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  let filename = plainName || "save.zip";
+  if (utf8Name) {
+    try { filename = decodeURIComponent(utf8Name); } catch (_error) { /* Use fallback. */ }
+  }
+  filename = filename.split(/[\\/]/).pop() || "save.zip";
+  return {
+    blob: await response.blob(),
+    filename,
+  };
+}
+
+export async function importSaveArchive(file, name) {
+  const response = await fetch(
+    `/api/player/saves/import?name=${encodeURIComponent(name)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/zip" },
+      body: file,
+    },
+  );
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new Error(errorMessage(payload, `导入失败（${response.status}）`));
+  }
+  return payload.data;
+}
+
 async function readStream(response, onEvent) {
   if (!response.ok || !response.body) {
     throw new Error(`请求失败（${response.status}）`);

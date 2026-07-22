@@ -175,7 +175,7 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
     resources = current_state.resources
     return {
         "save": {
-            "name": runtime.campaign_id,
+            "save_id": runtime.campaign_id,
             "initialized": core_memory is not None,
         },
         "needs_init": core_memory is None,
@@ -228,7 +228,16 @@ def player_saves_payload(payload: dict[str, Any]) -> dict[str, Any]:
             {
                 key: value
                 for key, value in save.items()
-                if key in {"name", "active", "initialized", "modified_at"}
+                if key in {
+                    "save_id",
+                    "name",
+                    "active",
+                    "initialized",
+                    "last_played_at",
+                    "turn_count",
+                    "protagonist_name",
+                    "location",
+                }
             }
             for save in payload.get("saves", [])
         ],

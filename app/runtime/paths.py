@@ -1,11 +1,12 @@
 from dataclasses import dataclass
+import os
 from pathlib import Path
+from uuid import UUID, uuid4
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SAVES_DIR = PROJECT_ROOT / "saves"
 ACTIVE_SAVE_FILE = SAVES_DIR / ".active_save"
-DEFAULT_SAVE_NAME = "default"
 
 
 def validate_save_name(name: str) -> str:
@@ -21,14 +22,21 @@ def validate_save_name(name: str) -> str:
     return clean
 
 
-def configured_save_name() -> str:
+def configured_save_id() -> str:
+    SAVES_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        name = validate_save_name(ACTIVE_SAVE_FILE.read_text(encoding="utf-8"))
-        if (SAVES_DIR / name).is_dir():
-            return name
+        raw = ACTIVE_SAVE_FILE.read_text(encoding="utf-8").strip()
+        save_id = str(UUID(raw))
+        if raw == save_id and (SAVES_DIR / save_id).is_dir():
+            return save_id
     except (FileNotFoundError, OSError, ValueError):
         pass
-    return DEFAULT_SAVE_NAME
+    save_id = str(uuid4())
+    (SAVES_DIR / save_id).mkdir(parents=False, exist_ok=False)
+    temporary = ACTIVE_SAVE_FILE.with_name(f"{ACTIVE_SAVE_FILE.name}.tmp")
+    temporary.write_text(save_id, encoding="utf-8")
+    os.replace(temporary, ACTIVE_SAVE_FILE)
+    return save_id
 
 
 @dataclass(frozen=True)
@@ -89,5 +97,5 @@ class CampaignPaths:
 
 
 DEFAULT_CAMPAIGN_PATHS = CampaignPaths.from_data_dir(
-    SAVES_DIR / configured_save_name()
+    SAVES_DIR / configured_save_id()
 )

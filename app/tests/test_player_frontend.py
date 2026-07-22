@@ -84,10 +84,8 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "/api/player/operations/${encodeURIComponent(operation.operation_id)}/events" in source
     assert "request_id: newRequestId()" in source
     assert "function resumeConfirmationOperation(" in source
-    assert (
-        'import { acknowledgeOperation, request, stream, subscribe } from "./api.js"'
-        in source
-    )
+    assert "acknowledgeOperation" in source
+    assert 'from "./api.js"' in source
     assert "/api/player/init/story-direction" in source
     assert 'operation.recovery_kind === "initialization"' in source
     assert "for (const operation of recoverableOperations)" in source
@@ -157,6 +155,20 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
         assert field in html
     assert "story_direction" in source
     assert "initConfigSnapshot" in source
+    assert 'id="manageSavesBtn"' in html
+    assert 'id="saveManagerDialog"' in html
+    assert "save.last_played_at" in source
+    assert "save.turn_count" in source
+    assert "save.protagonist_name" in source
+    assert "save.location" in source
+    assert 'option.value = save.save_id' in source
+    assert '/api/player/saves/rename' in source
+    assert '/api/player/saves/copy' in source
+    assert '/api/player/saves/delete' in source
+    api_source = (STATIC_DIR / "api.js").read_text(encoding="utf-8")
+    assert '/api/player/saves/export?save_id=' in api_source
+    assert '/api/player/saves/import?name=' in api_source
+    assert '"Content-Type": "application/zip"' in api_source
 
 
 @pytest.mark.parametrize(
@@ -507,13 +519,17 @@ def test_player_ack_removes_completed_operation_from_recovery():
 
 def test_player_save_payload_removes_server_root():
     payload = player_saves_payload({
-        "active": "莱尔",
+        "active": "8e4e1da7-00a0-4a63-83c7-d6726694077a",
         "root": "/private/server/path",
         "saves": [{
+            "save_id": "8e4e1da7-00a0-4a63-83c7-d6726694077a",
             "name": "莱尔",
             "active": True,
             "initialized": True,
-            "modified_at": "now",
+            "last_played_at": "now",
+            "turn_count": 3,
+            "protagonist_name": "莱尔",
+            "location": "北门",
             "path": "/private/server/path/莱尔",
         }],
     })

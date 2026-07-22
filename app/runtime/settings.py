@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Any
 
 
@@ -17,12 +18,21 @@ def load_settings() -> dict[str, Any]:
 
 
 def save_settings(settings: dict[str, Any]) -> None:
-    settings_path = _settings_path()
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(
-        json.dumps(settings, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    from .session import get_campaign_runtime
+
+    runtime = get_campaign_runtime()
+    with runtime.operation_submission():
+        settings_path = runtime.paths.settings_json
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = settings_path.with_name(f".{settings_path.name}.tmp")
+        try:
+            temporary.write_text(
+                json.dumps(settings, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(temporary, settings_path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def save_difficulty(payload: dict[str, Any]) -> dict[str, str]:

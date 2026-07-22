@@ -1,4 +1,5 @@
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -14,7 +15,7 @@ from app.core.llm.config import SharedGatewayFactory
 from app.runtime.paths import (
     CampaignPaths,
     DEFAULT_CAMPAIGN_PATHS,
-    configured_save_name,
+    configured_save_id,
 )
 from app.runtime.services import RuntimeServices
 from app.runtime.stores import StoreBundle
@@ -208,6 +209,9 @@ class CampaignRuntime:
             jobs=self.jobs,
         )
         self._confirmation_lock = threading.RLock()
+        self._lifecycle_lock = threading.RLock()
+        self._save_task_active = False
+        self._on_save_played = None
         self.history = CampaignHistory(self.paths.data_dir)
         self.history.recover_interrupted()
         self._configure_pending_persistence()
@@ -223,6 +227,45 @@ class CampaignRuntime:
 
     def has_active_operations(self) -> bool:
         return bool(self.operations.list(active_only=True, limit=1))
+
+    def configure_save_touch(self, callback) -> None:
+        self._on_save_played = callback
+
+    def _touch_save_played(self) -> None:
+        if self._on_save_played is not None:
+            try:
+                self._on_save_played()
+            except (OSError, ValueError):
+                # Narrative state is already committed at this point. A
+                # secondary display timestamp must never turn that success
+                # into a retryable confirmation failure.
+                pass
+
+    @contextmanager
+    def operation_submission(self):
+        """Serialize pipeline submission against save lifecycle mutations."""
+        with self._lifecycle_lock:
+            if self._save_task_active:
+                raise RuntimeError("A save management task is currently running")
+            yield
+
+    @contextmanager
+    def save_task(self):
+        """Reserve this runtime while a save is copied, moved, or archived."""
+        with self._lifecycle_lock:
+            if self._save_task_active:
+                raise RuntimeError("Another save management task is already running")
+            if self.has_active_operations():
+                raise RuntimeError(
+                    "Current save has an active operation. Wait for it to finish."
+                )
+            self._save_task_active = True
+        try:
+            with self._confirmation_lock:
+                yield
+        finally:
+            with self._lifecycle_lock:
+                self._save_task_active = False
 
     def discard_pending_turn(self, turn_id: str) -> dict[str, Any]:
         with self._confirmation_lock:
@@ -377,6 +420,7 @@ class CampaignRuntime:
     def complete_confirmation(self, pending: PendingTurn | PendingOpening) -> None:
         group_id = pending.group_id if isinstance(pending, PendingTurn) else None
         self.history.complete_confirmation(pending.turn_id, group_id)
+        self._touch_save_played()
 
     def undo(self) -> dict[str, Any]:
         with self._confirmation_lock:
@@ -386,6 +430,7 @@ class CampaignRuntime:
             result = self.history.undo()
             self._restore_pending_transactions()
             self._restart_jobs()
+            self._touch_save_played()
             return result
 
     def redo(self) -> dict[str, Any]:
@@ -402,6 +447,7 @@ class CampaignRuntime:
             self.pending_turns.clear(discard=False)
             self.pending_openings.clear(discard=False)
             self._restart_jobs()
+            self._touch_save_played()
             return result
 
     def _restart_jobs(self) -> None:
@@ -466,7 +512,7 @@ class CampaignRuntime:
 
 
 DEFAULT_CAMPAIGN_RUNTIME = CampaignRuntime(
-    configured_save_name(),
+    configured_save_id(),
     paths=DEFAULT_CAMPAIGN_PATHS,
 )
 

@@ -150,6 +150,8 @@ select option, select optgroup { background: #1d1d17; color: var(--ink); }
 .drawer select, .drawer input, .modal input, .modal textarea, .modal select { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--ink); padding: 11px 12px; outline: none; }
 .drawer select:focus, .modal input:focus, .modal textarea:focus { border-color: rgba(228,201,138,.48); }
 .inline-control { display: grid; grid-template-columns: 1fr 42px; gap: 8px; }.inline-control button { border: 1px solid var(--line); background: transparent; border-radius: 8px; cursor: pointer; }
+.manage-saves-button { width: 100%; margin-top: 9px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.02); color: var(--muted); padding: 10px 12px; cursor: pointer; }
+.manage-saves-button:hover { border-color: rgba(228,201,138,.38); color: var(--ink); }
 .summary-card { color: var(--muted); line-height: 1.8; }.summary-card strong { display: block; color: var(--ink); font-family: var(--serif); font-size: 20px; font-weight: 500; }
 .tags { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }.tag { padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 11px; }
 .resource-list { display: grid; gap: 12px; color: var(--muted); font-size: 13px; }
@@ -176,6 +178,32 @@ select option, select optgroup { background: #1d1d17; color: var(--ink); }
 .modal::backdrop { background: rgba(0,0,0,.82); }
 .modal form { padding: 30px; }.modal h2 { margin: 0 0 10px; font-family: var(--serif); font-size: 30px; font-weight: 500; }.modal form > p:not(.eyebrow) { color: var(--muted); line-height: 1.7; }
 .modal input { margin-top: 10px; }.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }.modal-actions button:not(.primary-action) { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 11px 16px; cursor: pointer; }
+.save-manager-modal { width: min(820px, calc(100% - 28px)); max-height: calc(100dvh - 28px); overflow: hidden; }
+.save-manager-shell { padding: 28px 30px 30px; }
+.save-manager-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.save-manager-header h2 { margin-bottom: 0; }
+.save-manager-intro { margin: 9px 0 0; color: var(--muted); line-height: 1.6; }
+.save-manager-toolbar { display: flex; justify-content: flex-end; margin: 18px 0 14px; }
+.modal .save-import-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; margin: 0 0 15px; padding: 14px; border: 1px solid rgba(201,169,103,.25); border-radius: 10px; background: rgba(201,169,103,.045); }
+.modal .save-import-panel[hidden] { display: none; }
+.save-import-panel label span { display: block; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.save-import-panel .save-card-confirm-actions { align-self: end; padding-bottom: 1px; }
+.save-card-list { display: grid; gap: 12px; max-height: min(62vh, 610px); overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.save-card { padding: 17px 18px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.018); }
+.save-card.active { border-color: rgba(201,169,103,.36); background: rgba(201,169,103,.045); }
+.save-card-heading { display: flex; align-items: center; gap: 10px; }
+.save-card-heading h3 { min-width: 0; margin: 0; color: var(--ink); font-family: var(--serif); font-size: 19px; font-weight: 500; overflow-wrap: anywhere; }
+.save-active-badge { padding: 3px 7px; border: 1px solid rgba(201,169,103,.36); border-radius: 999px; color: var(--gold-bright); font-size: 10px; }
+.save-card-meta, .save-card-played { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.save-card-played { margin-top: 3px; color: var(--faint); }
+.save-card-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+.save-card-actions button, .save-card-confirm-actions button { padding: 8px 11px; }
+.save-card-actions .danger-button, .danger-action { border: 1px solid rgba(213,150,137,.3); border-radius: 8px; background: transparent; color: #d59689; cursor: pointer; }
+.save-card-confirm { display: grid; gap: 11px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line); }
+.save-card-confirm label { color: var(--muted); font-size: 12px; }
+.save-card-confirm input, .save-card-confirm select { margin-top: 7px; }
+.save-card-confirm p { margin: 0; color: #d6a096; font-size: 12px; line-height: 1.6; }
+.save-card-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }.form-grid .wide { grid-column: 1 / -1; }.form-grid label span { display: block; margin-bottom: 7px; color: var(--muted); font-size: 12px; }.form-grid textarea { min-height: 78px; resize: vertical; }
 .form-error { margin-top: 16px; color: #dd988b; font-size: 13px; }
 .init-modal { width: min(780px, calc(100% - 28px)); max-height: calc(100dvh - 28px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; box-shadow: 0 14px 42px rgba(0,0,0,.42); }
@@ -228,6 +256,10 @@ select option, select optgroup { background: #1d1d17; color: var(--ink); }
   .form-grid, .form-subgrid, .ability-grid { grid-template-columns: 1fr; }.form-grid .wide, .form-subgrid .wide { grid-column: auto; }
   .extra-memory-row { grid-template-columns: 1fr; }
   .extra-memory-content { grid-column: auto; }
+  .save-manager-shell { padding: 22px 18px; }
+  .save-card-list { max-height: 66vh; }
+  .save-card-actions button { flex: 1 1 calc(50% - 7px); }
+  .modal .save-import-panel { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,4 +1,4 @@
-import { acknowledgeOperation, request, stream, subscribe } from "./api.js";
+import { acknowledgeOperation, downloadSave, importSaveArchive, request, stream, subscribe } from "./api.js";
 import {
   activePending,
   clearDrafts,
@@ -20,9 +20,13 @@ const els = {
   errorCard: $("errorCard"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
   drawer: $("drawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"),
-  saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), playerSummary: $("playerSummary"), resourceSummary: $("resourceSummary"),
+  saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), resourceSummary: $("resourceSummary"),
   difficultySelect: $("difficultySelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
+  saveManagerDialog: $("saveManagerDialog"), closeSaveManagerBtn: $("closeSaveManagerBtn"), saveCardList: $("saveCardList"),
+  importSaveBtn: $("importSaveBtn"), importSaveInput: $("importSaveInput"), importSaveForm: $("importSaveForm"),
+  importSaveName: $("importSaveName"), importSaveFileName: $("importSaveFileName"), cancelImportSaveBtn: $("cancelImportSaveBtn"),
+  saveManagerError: $("saveManagerError"),
   initDialog: $("initDialog"), initForm: $("initForm"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
   initConfigFields: $("initConfigFields"), initOriginalFields: $("initOriginalFields"), initFanficFields: $("initFanficFields"),
   initFanfic: $("initFanfic"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
@@ -65,6 +69,8 @@ let streamBuffer = "";
 let streamFrame = 0;
 let followStream = true;
 let initConfigSnapshot = null;
+let saveManagerBusy = false;
+let selectedImportFile = null;
 const HISTORY_PAGE_SIZE = 5;
 const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
 const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
@@ -101,7 +107,7 @@ function clearError() {
 }
 
 function renderControls() {
-  const busy = ["booting", "generating", "confirming", "switching"].includes(state.mode);
+  const busy = saveManagerBusy || ["booting", "generating", "confirming", "switching"].includes(state.mode);
   const pending = Boolean(activePending());
   els.statusPill.dataset.mode = state.mode;
   els.statusPill.querySelector("span").textContent = modeLabels[state.mode] || "等待行动";
@@ -109,6 +115,7 @@ function renderControls() {
   els.generateBtn.disabled = busy || pending || state.playerState?.needs_init || !els.playerInput.value.trim();
   els.saveSelect.disabled = busy;
   els.newSaveBtn.disabled = busy;
+  els.manageSavesBtn.disabled = busy;
   const controls = state.playerState?.history_controls || {};
   const pendingIds = (activePending()?.variants || []).map((variant) => variant.turn_id);
   const canRedoPending = pendingIds.some((turnId) => (controls.redo_pending_turn_ids || []).includes(turnId));
@@ -374,9 +381,183 @@ function renderSaves() {
   els.saveSelect.replaceChildren();
   state.saves.forEach((save) => {
     const option = node("option", "", `${save.name}${save.initialized ? "" : " · 未初始化"}`);
-    option.value = save.name;
-    option.selected = save.name === state.activeSave;
+    option.value = save.save_id;
+    option.selected = save.save_id === state.activeSave;
     els.saveSelect.appendChild(option);
+  });
+  if (!state.saves.length) {
+    const option = node("option", "", "暂无存档");
+    option.disabled = true;
+    option.selected = true;
+    els.saveSelect.appendChild(option);
+  }
+  if (els.saveManagerDialog.open) renderSaveManager();
+}
+
+function formatLastPlayed(value) {
+  if (!value) return "尚未开始";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  }).format(date);
+}
+
+function saveManagerMessage(message = "") {
+  els.saveManagerError.textContent = message;
+  els.saveManagerError.hidden = !message;
+}
+
+function saveMeta(save) {
+  const protagonist = save.protagonist_name || "主角未设定";
+  const location = save.location || "位置未知";
+  const turns = `${Number(save.turn_count) || 0} 个已确认回合`;
+  return `${protagonist} · ${turns} · ${location}`;
+}
+
+function saveActionButton(label, className, action) {
+  const button = node("button", className, label);
+  button.type = "button";
+  button.disabled = saveManagerBusy;
+  button.onclick = action;
+  return button;
+}
+
+async function runSaveManagerAction(action, successMessage) {
+  if (saveManagerBusy) return;
+  saveManagerBusy = true;
+  saveManagerMessage();
+  renderSaveManager();
+  renderControls();
+  try {
+    await action();
+    await loadAll({ resumeOperation: false });
+    showToast(successMessage);
+  } catch (error) {
+    saveManagerMessage(error?.message || "存档操作没有完成");
+  } finally {
+    saveManagerBusy = false;
+    renderSaveManager();
+    renderControls();
+  }
+}
+
+function showRenamePanel(card, save) {
+  card.querySelector(".save-card-confirm")?.remove();
+  const panel = node("form", "save-card-confirm");
+  const label = node("label", "", "新的存档名称");
+  const input = node("input");
+  input.maxLength = 80;
+  input.value = save.name;
+  label.appendChild(input);
+  const actions = node("div", "save-card-confirm-actions");
+  const cancel = saveActionButton("取消", "soft-button", () => panel.remove());
+  const confirm = saveActionButton("保存名称", "primary-action", () => {});
+  confirm.type = "submit";
+  confirm.onclick = null;
+  actions.append(cancel, confirm);
+  panel.append(label, actions);
+  panel.onsubmit = (event) => {
+    event.preventDefault();
+    const name = input.value.trim();
+    if (!name || name === save.name) return;
+    runSaveManagerAction(
+      () => request("/api/player/saves/rename", { method: "POST", body: JSON.stringify({ save_id: save.save_id, name }) }),
+      "存档已重命名",
+    );
+  };
+  card.appendChild(panel);
+  input.focus();
+}
+
+function showDeletePanel(card, save) {
+  card.querySelector(".save-card-confirm")?.remove();
+  const panel = node("form", "save-card-confirm save-card-delete-confirm");
+  const warning = node("p", "", `请输入“${save.name}”确认永久删除。`);
+  const input = node("input");
+  input.placeholder = save.name;
+  input.autocomplete = "off";
+  panel.append(warning, input);
+  const replacements = state.saves.filter((item) => item.save_id !== save.save_id);
+  let replacement = null;
+  if (save.active && replacements.length) {
+    const label = node("label", "", "删除后切换到");
+    replacement = node("select");
+    replacements.forEach((item) => {
+      const option = node("option", "", item.name);
+      option.value = item.save_id;
+      replacement.appendChild(option);
+    });
+    label.appendChild(replacement);
+    panel.appendChild(label);
+  }
+  const actions = node("div", "save-card-confirm-actions");
+  const cancel = saveActionButton("取消", "soft-button", () => panel.remove());
+  const confirm = saveActionButton("永久删除", "danger-action", () => {});
+  confirm.type = "submit";
+  confirm.onclick = null;
+  confirm.disabled = true;
+  input.oninput = () => { confirm.disabled = saveManagerBusy || input.value !== save.name; };
+  actions.append(cancel, confirm);
+  panel.appendChild(actions);
+  panel.onsubmit = (event) => {
+    event.preventDefault();
+    if (input.value !== save.name) return;
+    const body = { save_id: save.save_id, confirmation_name: input.value };
+    if (replacement?.value) body.replacement_save_id = replacement.value;
+    runSaveManagerAction(
+      () => request("/api/player/saves/delete", { method: "POST", body: JSON.stringify(body) }),
+      "存档已删除",
+    );
+  };
+  card.appendChild(panel);
+  input.focus();
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function renderSaveManager() {
+  els.saveCardList.replaceChildren();
+  els.importSaveBtn.disabled = saveManagerBusy;
+  els.importSaveName.disabled = saveManagerBusy;
+  for (const button of els.importSaveForm.querySelectorAll("button")) button.disabled = saveManagerBusy;
+  state.saves.forEach((save) => {
+    const card = node("article", `save-card${save.active ? " active" : ""}`);
+    const heading = node("div", "save-card-heading");
+    const title = node("h3", "", save.name);
+    heading.appendChild(title);
+    if (save.active) heading.appendChild(node("span", "save-active-badge", "当前"));
+    const metadata = node("p", "save-card-meta", saveMeta(save));
+    const played = node("p", "save-card-played", `最后游玩：${formatLastPlayed(save.last_played_at)}`);
+    const actions = node("div", "save-card-actions");
+    const deleteButton = saveActionButton("删除", "danger-button", () => showDeletePanel(card, save));
+    if (state.saves.length <= 1) {
+      deleteButton.disabled = true;
+      deleteButton.title = "至少需要保留一个存档";
+    }
+    actions.append(
+      saveActionButton("重命名", "soft-button", () => showRenamePanel(card, save)),
+      saveActionButton("复制", "soft-button", () => runSaveManagerAction(
+        () => request("/api/player/saves/copy", { method: "POST", body: JSON.stringify({ save_id: save.save_id }) }),
+        "存档副本已创建",
+      )),
+      saveActionButton("导出 ZIP", "soft-button", () => runSaveManagerAction(async () => {
+        const archive = await downloadSave(save.save_id);
+        triggerDownload(archive.blob, archive.filename);
+      }, "存档已导出")),
+      deleteButton,
+    );
+    card.append(heading, metadata, played, actions);
+    els.saveCardList.appendChild(card);
   });
 }
 
@@ -769,13 +950,13 @@ async function changeHistory(action) {
   catch (error) { showError(error); }
 }
 
-async function switchSave(name) {
-  if (!name || name === state.activeSave) return;
+async function switchSave(saveId) {
+  if (!saveId || saveId === state.activeSave) return;
   const hasPending = Boolean(activePending());
   if (hasPending && !window.confirm("当前存档有未确认内容。切换后这些内容会被删除，是否继续？")) { els.saveSelect.value = state.activeSave; return; }
   setMode("switching"); renderControls();
   try {
-    await request("/api/player/saves/switch", { method: "POST", body: JSON.stringify({ name, discard_pending: hasPending }) });
+    await request("/api/player/saves/switch", { method: "POST", body: JSON.stringify({ save_id: saveId, discard_pending: hasPending }) });
     state.suggestions = []; await loadAll({ scroll: "instant" }); closeDrawer();
   } catch (error) { els.saveSelect.value = state.activeSave; showError(error); }
 }
@@ -990,6 +1171,39 @@ els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
 els.newSaveBtn.onclick = () => { els.saveNameInput.value = ""; els.saveDialog.showModal(); window.setTimeout(() => els.saveNameInput.focus(), 0); };
 els.saveCancelBtn.onclick = () => els.saveDialog.close();
 els.saveForm.addEventListener("submit", async (event) => { event.preventDefault(); const name = els.saveNameInput.value.trim(); if (!name) return; els.saveDialog.close(); try { await createSave(name); } catch (error) { showError(error); } });
+els.manageSavesBtn.onclick = () => {
+  saveManagerMessage();
+  renderSaveManager();
+  els.saveManagerDialog.showModal();
+};
+els.closeSaveManagerBtn.onclick = () => els.saveManagerDialog.close();
+els.importSaveBtn.onclick = () => els.importSaveInput.click();
+els.importSaveInput.onchange = () => {
+  const file = els.importSaveInput.files?.[0];
+  els.importSaveInput.value = "";
+  if (!file) return;
+  selectedImportFile = file;
+  const suggestedName = file.name.replace(/\.zip$/i, "").trim() || "导入的旅程";
+  els.importSaveFileName.textContent = `已选择：${file.name}`;
+  els.importSaveName.value = suggestedName;
+  els.importSaveForm.hidden = false;
+  els.importSaveName.focus();
+};
+els.cancelImportSaveBtn.onclick = () => {
+  selectedImportFile = null;
+  els.importSaveForm.hidden = true;
+};
+els.importSaveForm.onsubmit = (event) => {
+  event.preventDefault();
+  const file = selectedImportFile;
+  const name = els.importSaveName.value.trim();
+  if (!file || !name) return;
+  runSaveManagerAction(async () => {
+    await importSaveArchive(file, name);
+    selectedImportFile = null;
+    els.importSaveForm.hidden = true;
+  }, "存档已导入");
+};
 els.difficultySelect.onchange = async () => { try { await request("/api/player/difficulty", { method: "POST", body: JSON.stringify({ difficulty: els.difficultySelect.value }) }); state.playerState.difficulty = els.difficultySelect.value; showToast("难度已更新"); } catch (error) { showError(error); } };
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.initFanfic.onchange = toggleInitWorldFields;

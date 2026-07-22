@@ -8,6 +8,19 @@ from typing import Iterator
 
 
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
+SUPPORTED_SCHEMA_VERSIONS = {
+    "canon_evidence": 1,
+    "current_state": 3,
+    "director_event": 5,
+    "director_npc": 1,
+    "entity_profile": 2,
+    "npc_profile": 2,
+    "pending_memory": 1,
+    "recall_memory": 1,
+    "retrieval_alias": 1,
+    "scene_summary": 1,
+    "short_term_memory": 3,
+}
 _savepoint_counter = 0
 _savepoint_lock = threading.Lock()
 
@@ -67,6 +80,12 @@ def ensure_schema_version(
     """Record the schema owned by a store in its database file."""
     if version < 1:
         raise ValueError("schema version must be >= 1")
+    supported = SUPPORTED_SCHEMA_VERSIONS.get(component)
+    if supported is not None and version != supported:
+        raise RuntimeError(
+            f"Code schema version for {component!r} is not registered "
+            f"({version} != {supported})"
+        )
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS schema_versions (

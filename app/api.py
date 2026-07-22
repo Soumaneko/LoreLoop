@@ -11,7 +11,16 @@ from app.graph.maintenance_graph import batch_classify_stream, memory_maintain_s
 from app.runtime.debug_state import load_debug_state
 from app.runtime.player_state import load_player_history, load_player_state
 from app.runtime.settings import save_difficulty, save_max_chars
-from app.runtime.saves import create_save, list_saves, switch_save
+from app.runtime.saves import (
+    copy_save,
+    create_save,
+    delete_save,
+    export_save_archive,
+    import_save_archive,
+    list_saves,
+    rename_save,
+    switch_save,
+)
 from app.runtime.session import get_campaign_runtime
 from app.runtime.jobs import JobStatus
 from app.runtime.operation_models import OperationStatus
@@ -29,21 +38,23 @@ def _submit_managed_operation(
     **kwargs,
 ) -> str:
     policy = operation_policy(operation_type)
-    return get_campaign_runtime().operations.submit_stream(
-        policy.operation_type,
-        stream_factory,
-        *args,
-        request_id=request_id,
-        exclusive_key=policy.exclusive_key,
-        requires_ack=policy.requires_ack,
-        supersedes_recoverable_types=(
-            policy.supersedes
-            if supersedes_recoverable_types is None
-            else supersedes_recoverable_types
-        ),
-        metadata=metadata,
-        **kwargs,
-    )
+    runtime = get_campaign_runtime()
+    with runtime.operation_submission():
+        return runtime.operations.submit_stream(
+            policy.operation_type,
+            stream_factory,
+            *args,
+            request_id=request_id,
+            exclusive_key=policy.exclusive_key,
+            requires_ack=policy.requires_ack,
+            supersedes_recoverable_types=(
+                policy.supersedes
+                if supersedes_recoverable_types is None
+                else supersedes_recoverable_types
+            ),
+            metadata=metadata,
+            **kwargs,
+        )
 
 
 def start_generation_operation(
@@ -227,15 +238,20 @@ def discard_pending_turn(turn_id: str) -> dict:
 __all__ = [
     "acknowledge_operation",
     "create_save",
+    "copy_save",
+    "delete_save",
+    "export_save_archive",
     "discard_pending_turn",
     "get_operation",
     "get_maintenance_job",
+    "import_save_archive",
     "load_debug_state",
     "load_player_history",
     "load_player_state",
     "list_maintenance_jobs",
     "list_operations",
     "list_saves",
+    "rename_save",
     "preview_core_memory",
     "redo_last_turn",
     "save_difficulty",

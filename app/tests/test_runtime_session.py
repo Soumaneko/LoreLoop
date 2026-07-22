@@ -153,3 +153,18 @@ def test_runtime_rejects_save_switch_while_operation_is_active(tmp_path):
     finally:
         release.set()
         runtime.close()
+
+
+def test_save_task_blocks_new_pipeline_submission(tmp_path):
+    runtime = CampaignRuntime(
+        "save-task",
+        paths=CampaignPaths.from_data_dir(tmp_path / "save-task"),
+        max_workers=1,
+    )
+    try:
+        with runtime.save_task():
+            with pytest.raises(RuntimeError, match="save management task"):
+                with runtime.operation_submission():
+                    pass
+    finally:
+        runtime.close()
