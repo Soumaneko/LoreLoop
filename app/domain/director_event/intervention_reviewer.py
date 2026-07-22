@@ -29,7 +29,8 @@ class DirectorEventInterventionReviewer:
         ):
             raise ValueError("InterventionReviewer requires an intervention route")
         event_view = active_event.semantic_view()
-        event_view.pop("player_contacts", None)
+        for excluded_field in ("player_contacts", "entry_points"):
+            event_view.pop(excluded_field, None)
         return cast(
             DirectorEventInterventionReviewResult,
             self.llm.run(
