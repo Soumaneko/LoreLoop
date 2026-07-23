@@ -204,6 +204,7 @@ def apply_state_changes(
     state = current_state.model_copy(deep=True)
     aliases = _alias_map(npc_aliases or {})
     warnings: list[StateChangeWarning] = []
+    clock_advance_phases = 0
 
     for operation in change_set.operations:
         if isinstance(operation, LocationChange):
@@ -277,8 +278,7 @@ def apply_state_changes(
                 )
             participant.attitude_to_player = updated_attitude
         elif isinstance(operation, WorldClockAdvance):
-            state.world_clock = state.world_clock.advance_phase(operation.phases)
-            _advance_condition_expiries(state, operation.phases)
+            clock_advance_phases += operation.phases
         elif isinstance(operation, PlayerConditionAdd):
             _add_unique(state.player.condition, operation.condition)
         elif isinstance(operation, PlayerConditionRemove):
@@ -304,6 +304,10 @@ def apply_state_changes(
                 operation.asset,
                 "temporary asset",
             )
+
+    if clock_advance_phases:
+        state.world_clock = state.world_clock.advance_phase(clock_advance_phases)
+        _advance_condition_expiries(state, clock_advance_phases)
 
     return StateApplyResult(
         state=CurrentState.model_validate(state.model_dump(mode="python")),

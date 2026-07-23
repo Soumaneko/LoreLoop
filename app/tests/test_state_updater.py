@@ -337,6 +337,41 @@ def test_world_clock_advance_expires_scene_and_npc_conditions():
     ] == [("疲惫", -1)]
 
 
+def test_explicit_condition_removal_runs_before_end_of_batch_expiry():
+    state = _state().model_copy(deep=True)
+    state.scene.scene_condition = [
+        TimedCondition(condition="烟雾弥漫", expires_after_phases=1)
+    ]
+    state.scene.participants[1].npc_conditions = [
+        TimedCondition(condition="短暂眩晕", expires_after_phases=1)
+    ]
+    state = CurrentState.model_validate(state.model_dump(mode="python"))
+
+    result, _ = _update(
+        {
+            "operations": [
+                _operation("op1", "world_clock_advance", phases=1),
+                _operation(
+                    "op2",
+                    "scene_condition_remove",
+                    condition="烟雾弥漫",
+                ),
+                _operation(
+                    "op3",
+                    "npc_condition_remove",
+                    name="米莉",
+                    condition="短暂眩晕",
+                ),
+            ]
+        },
+        state=state,
+    )
+
+    assert result.world_clock == WorldClock(day=2, phase="凌晨")
+    assert result.scene.scene_condition == []
+    assert result.scene.participants[1].npc_conditions == []
+
+
 def test_timed_condition_add_requires_expiry():
     with pytest.raises(ValueError, match="expires_after_phases"):
         StateChangeSet.model_validate({
