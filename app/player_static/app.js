@@ -19,6 +19,7 @@ const els = {
   pendingCard: $("pendingCard"), suggestions: $("suggestions"), suggestionList: $("suggestionList"),
   errorCard: $("errorCard"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
+  composerModeBadge: $("composerModeBadge"),
   drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"), openLeftDrawerBtn: $("openLeftDrawerBtn"), closeLeftDrawerBtn: $("closeLeftDrawerBtn"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
@@ -118,13 +119,42 @@ function clearError() {
   renderControls();
 }
 
+function setInputHintText(actionText) {
+  if (!els.inputHint) return;
+  els.inputHint.replaceChildren(
+    node("kbd", "", "Ctrl"),
+    document.createTextNode(" / "),
+    node("kbd", "", "⌘"),
+    document.createTextNode(" + "),
+    node("kbd", "", "Enter"),
+    document.createTextNode(` ${actionText}`),
+  );
+}
+
 function renderControls() {
   const busy = saveManagerBusy || modelConfigBusy || ["booting", "needs_model", "generating", "confirming", "switching"].includes(state.mode);
   const pending = Boolean(activePending());
   els.statusPill.dataset.mode = state.mode;
   els.statusPill.querySelector("span").textContent = modeLabels[state.mode] || "等待行动";
-  els.playerInput.disabled = busy || pending || state.playerState?.needs_init;
-  els.generateBtn.disabled = busy || pending || state.playerState?.needs_init || !els.playerInput.value.trim();
+
+  if (pending && !busy) {
+    if (els.composerModeBadge) els.composerModeBadge.hidden = false;
+    els.playerInput.disabled = false;
+    els.playerInput.placeholder = "对这段正文有意见？在此输入修改要求（如“写到门前即可停下”）...";
+    setInputHintText("提交修改意见");
+    els.generateBtn.disabled = !els.playerInput.value.trim();
+    const btnSpan = els.generateBtn.querySelector("span");
+    if (btnSpan) btnSpan.textContent = "意见重写";
+  } else {
+    if (els.composerModeBadge) els.composerModeBadge.hidden = true;
+    els.playerInput.disabled = busy || state.playerState?.needs_init;
+    els.playerInput.placeholder = "你打算怎么做？";
+    setInputHintText("执行行动");
+    els.generateBtn.disabled = busy || pending || state.playerState?.needs_init || !els.playerInput.value.trim();
+    const btnSpan = els.generateBtn.querySelector("span");
+    if (btnSpan) btnSpan.textContent = "执行行动";
+  }
+
   els.saveSelect.disabled = busy;
   els.newSaveBtn.disabled = busy;
   els.manageSavesBtn.disabled = busy;
@@ -178,7 +208,8 @@ function appendHighlightedText(element, text) {
 function renderTurn(turn, { showClosing = false } = {}) {
   const wrap = node("section", "turn");
   wrap.dataset.turnIndex = String(turn.turn_index);
-  wrap.appendChild(node("div", "player-action", turn.user_input || "继续故事"));
+  const defaultActionText = Number(turn.turn_index) === 0 ? "故事从这里开始" : "继续故事";
+  wrap.appendChild(node("div", "player-action", turn.user_input || defaultActionText));
   const card = node("article", "narrative-card");
   const kicker = node("div", "narrative-kicker");
   kicker.append(node("span", "quill", "✦"), node("span", "", `第 ${turn.turn_index} 回合`));
@@ -262,7 +293,8 @@ function renderPending() {
   els.pendingCard.replaceChildren();
   els.pendingCard.hidden = false;
 
-  showActivePlayerAction(pending.user_input || "");
+  const defaultPendingText = pending.kind === "opening" ? "故事从这里开始" : "";
+  showActivePlayerAction(pending.user_input || defaultPendingText);
   const toolbar = node("div", "pending-toolbar");
   const kicker = node("div", "narrative-kicker");
   kicker.append(node("span", "quill", "✦"), node("span", "", pending.kind === "opening" ? "开场 · 待确认" : "新场景 · 待确认"));
@@ -281,31 +313,48 @@ function renderPending() {
   const closing = variant.closing_prompt ? node("div", "closing-prompt", variant.closing_prompt) : null;
   const actions = node("div", "pending-actions");
   const confirming = state.mode === "confirming";
+  const confirm = node("button", "primary-action confirm-button", "确认采用");
   const edit = node("button", "soft-button", "编辑正文");
-  const rephrase = node("button", "soft-button", "重新措辞");
-  const feedbackRewrite = node("button", "soft-button", "根据意见修改");
-  const reroll = node("button", "soft-button", "重新判定");
-  const discard = node("button", "soft-button danger-button", "删除");
-  const confirm = node("button", "primary-action", "确认采用");
-  edit.onclick = () => beginEdit(display, closing, actions, variant);
-  edit.disabled = confirming;
-  rephrase.disabled = pending.kind === "opening" || ["generating", "confirming"].includes(state.mode);
-  rephrase.title = "保留本次判定与导演输入，只重新生成正文";
-  rephrase.onclick = () => retryTurn("rephrase");
-  feedbackRewrite.disabled = rephrase.disabled;
-  feedbackRewrite.title = "根据具体意见决定局部修订、重新构思或不重写";
-  feedbackRewrite.onclick = openFeedbackRewrite;
-  reroll.disabled = rephrase.disabled;
-  reroll.title = "重新运行完整生成管线并重新投骰";
-  reroll.onclick = () => retryTurn("reroll");
-  discard.disabled = confirming;
-  discard.onclick = discardPending;
+  const rephrase = node("button", "soft-button dropdown-item", "重新措辞");
+  const feedbackRewrite = node("button", "soft-button dropdown-item", "根据意见修改");
+  const reroll = node("button", "soft-button dropdown-item", "重新判定");
+  const discard = node("button", "soft-button danger-button compact-discard", "删除");
+
   confirm.disabled = confirming;
   confirm.textContent = confirming ? "正在确认……" : "确认采用";
   confirm.onclick = confirmTurn;
-  actions.append(edit, rephrase, feedbackRewrite, reroll);
-  if (pending.kind !== "opening") actions.appendChild(discard);
+
+  edit.onclick = () => beginEdit(display, closing, actions, variant);
+  edit.disabled = confirming;
+
+  rephrase.disabled = pending.kind === "opening" || ["generating", "confirming"].includes(state.mode);
+  rephrase.title = "保留本次判定与导演输入，只重新生成正文";
+  rephrase.onclick = () => retryTurn("rephrase");
+
+  feedbackRewrite.disabled = rephrase.disabled;
+  feedbackRewrite.title = "根据具体意见决定局部修订、重新构思或不重写";
+  feedbackRewrite.onclick = openFeedbackRewrite;
+
+  reroll.disabled = rephrase.disabled;
+  reroll.title = "重新运行完整生成管线并重新投骰";
+  reroll.onclick = () => retryTurn("reroll");
+
+  discard.disabled = confirming;
+  discard.onclick = discardPending;
+
   actions.appendChild(confirm);
+  actions.appendChild(edit);
+
+  if (pending.kind !== "opening") {
+    const dropdown = node("div", "rewrite-dropdown");
+    const dropdownTrigger = node("button", "soft-button rewrite-dropdown-trigger", "重写选项 ▾");
+    dropdownTrigger.disabled = rephrase.disabled;
+    const dropdownMenu = node("div", "rewrite-dropdown-menu");
+    dropdownMenu.append(rephrase, reroll);
+    dropdown.append(dropdownTrigger, dropdownMenu);
+    actions.appendChild(dropdown);
+    actions.appendChild(discard);
+  }
   els.pendingCard.append(toolbar, display);
   if (closing) els.pendingCard.appendChild(closing);
   if (confirming) {
@@ -1076,8 +1125,52 @@ async function resumeConfirmationOperation(operation) {
   }
 }
 
+async function rewriteFromFeedbackText(userFeedback) {
+  const pending = activePending(); const variant = selectedVariant();
+  if (!pending || !variant || pending.kind === "opening" || !userFeedback) return;
+  if (els.feedbackRewriteDialog?.open) els.feedbackRewriteDialog.close();
+  setMode("generating"); renderControls();
+  startStreaming("正在理解修改意见");
+  let decision = null;
+  try {
+    const operationId = await stream("/api/player/feedback-rewrite", {
+      turn_id: variant.turn_id,
+      source_scene_text: readDraft(variant),
+      user_feedback: userFeedback,
+      request_id: newRequestId(),
+    }, (event) => {
+      if (event.step === "feedback_rewrite_strategy_selected") decision = event.data;
+      handleGenerationEvent(event, { retryMode: "feedback_rewrite" });
+    });
+    await acknowledgeHandledOperation(operationId);
+    stopStreaming();
+    await loadAll({ scroll: decision?.strategy === "no_rewrite" ? "instant" : "smooth" });
+    els.feedbackRewriteInput.value = "";
+    if (decision?.strategy === "no_rewrite") {
+      showToast(feedbackNoRewriteMessage(decision.reason_code));
+    } else {
+      showToast("新版本已生成，旧版本仍然保留");
+    }
+  } catch (error) {
+    stopStreaming(); setMode("pending"); renderAll(); showError(error);
+    await acknowledgeFailedOperation(error);
+  }
+}
+
+async function rewriteFromFeedback() {
+  const userFeedback = els.feedbackRewriteInput.value.trim();
+  await rewriteFromFeedbackText(userFeedback);
+}
+
 async function generateTurn() {
   const userInput = els.playerInput.value.trim();
+  const pending = activePending();
+  if (pending && userInput) {
+    els.playerInput.value = "";
+    autoSizeInput();
+    await rewriteFromFeedbackText(userInput);
+    return;
+  }
   if (!userInput || state.mode !== "idle") return;
   clearError(); setMode("generating"); state.suggestions = []; renderSuggestions(); renderControls();
   showActivePlayerAction(userInput);
@@ -1138,39 +1231,6 @@ function feedbackNoRewriteMessage(reasonCode) {
     return "没有识别到明确可执行的修改要求";
   }
   return "这项意见不适用于正文重写，原版本保持不变";
-}
-
-async function rewriteFromFeedback() {
-  const pending = activePending(); const variant = selectedVariant();
-  const userFeedback = els.feedbackRewriteInput.value.trim();
-  if (!pending || !variant || pending.kind === "opening" || !userFeedback) return;
-  els.feedbackRewriteDialog.close();
-  setMode("generating"); renderControls();
-  startStreaming("正在理解修改意见");
-  let decision = null;
-  try {
-    const operationId = await stream("/api/player/feedback-rewrite", {
-      turn_id: variant.turn_id,
-      source_scene_text: readDraft(variant),
-      user_feedback: userFeedback,
-      request_id: newRequestId(),
-    }, (event) => {
-      if (event.step === "feedback_rewrite_strategy_selected") decision = event.data;
-      handleGenerationEvent(event, { retryMode: "feedback_rewrite" });
-    });
-    await acknowledgeHandledOperation(operationId);
-    stopStreaming();
-    await loadAll({ scroll: decision?.strategy === "no_rewrite" ? "instant" : "smooth" });
-    els.feedbackRewriteInput.value = "";
-    if (decision?.strategy === "no_rewrite") {
-      showToast(feedbackNoRewriteMessage(decision.reason_code));
-    } else {
-      showToast("新版本已生成，旧版本仍然保留");
-    }
-  } catch (error) {
-    stopStreaming(); setMode("pending"); renderAll(); showError(error);
-    await acknowledgeFailedOperation(error);
-  }
 }
 
 async function confirmTurn() {

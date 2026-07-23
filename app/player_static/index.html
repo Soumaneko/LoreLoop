@@ -23,6 +23,14 @@
       </div>
       <div class="top-actions">
         <span id="statusPill" class="status-pill" data-mode="booting"><b></b><span>载入中</span></span>
+        <div class="time-travel-group">
+          <button id="undoBtn" class="icon-button time-travel-button" type="button" aria-label="撤销上一回合" title="撤销上一回合 (↶)" disabled>
+            <span>↶</span>
+          </button>
+          <button id="redoBtn" class="icon-button time-travel-button" type="button" aria-label="重做回合" title="重做回合 (↷)" disabled>
+            <span>↷</span>
+          </button>
+        </div>
         <button id="openLeftDrawerBtn" class="icon-button codex-button" type="button" aria-label="打开角色典籍" title="角色与局内资产">
           <span class="codex-icon">📜</span>
         </button>
@@ -62,6 +70,10 @@
 
     <footer class="composer-shell">
       <div class="composer">
+        <div id="composerModeBadge" class="composer-mode-badge" hidden>
+          <span class="badge-dot">✦</span>
+          <span>正文修改意见模式</span>
+        </div>
         <textarea id="playerInput" rows="1" maxlength="4000" placeholder="你打算怎么做？"></textarea>
         <div class="composer-footer">
           <span id="inputHint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> 执行行动</span>
@@ -97,10 +109,6 @@
       <div><p class="eyebrow">SYSTEM & CONTROL</p><h2>系统控制</h2></div>
       <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
     </div>
-    <section class="drawer-section history-actions">
-      <button id="undoBtn" type="button"><span>↶</span>撤销上一回合</button>
-      <button id="redoBtn" type="button"><span>↷</span>重做回合</button>
-    </section>
     <section class="drawer-section">
       <label for="difficultySelect">判定难度</label>
       <select id="difficultySelect">
