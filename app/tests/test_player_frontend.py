@@ -21,6 +21,7 @@ from app.domain.current_state import (
 )
 from app.domain.entity.schemas import EntityProfile
 from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.turn_resolution import PlayerTurnResolution
 from app.runtime.player_state import (
     load_player_history,
     load_player_state,
@@ -28,6 +29,7 @@ from app.runtime.player_state import (
 )
 from app.runtime.operations import OperationManager
 from app.runtime.session import get_campaign_runtime
+from app.runtime.settings import load_settings, save_dice_display
 
 
 STATIC_DIR = Path(__file__).parents[1] / "player_static"
@@ -50,6 +52,24 @@ def _action_preview() -> ActionPreviewResult:
     ])
 
 
+def _player_resolution() -> PlayerTurnResolution:
+    return PlayerTurnResolution(actions=[{
+        "action_text": "追问木偶师",
+        "resolution_source": "roll",
+        "outcome_band": "partial_success",
+        "dice": "2d20kh",
+        "raw_values": [7, 11],
+        "modifiers": [{
+            "label": "对方戒备",
+            "reason": "木偶师对直接追问有所防备。",
+            "value": -1,
+        }],
+        "modifier_total": -1,
+        "final_value": 10,
+        "dice_sides": 20,
+    }])
+
+
 def test_player_frontend_javascript_is_syntactically_valid():
     node = shutil.which("node")
     if node is None:
@@ -62,6 +82,16 @@ def test_player_frontend_javascript_is_syntactically_valid():
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_dice_display_setting_is_per_save_and_normalized():
+    assert save_dice_display({"dice_display": "full"}) == {
+        "dice_display": "full"
+    }
+    assert load_settings()["dice_display"] == "full"
+    assert save_dice_display({"dice_display": "invalid"}) == {
+        "dice_display": "outcome"
+    }
 
 
 def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
@@ -111,6 +141,20 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "loadEarlierHistory" in source
     assert "addedHeight" in source
     assert "appendHighlightedText" in source
+    assert "openCodexProfile" in source
+    assert "preview.good_result" in source
+    assert "renderPlayerResolution" in source
+    assert 'if (mode === "outcome")' in source
+    assert '"resolution-outcome resolution-outcome-line"' in source
+    assert "`${item.label} ${valueText}`" in source
+    assert "`${item.label} ${valueText}：${item.reason}`" not in source
+    assert "`[${values.join(\", \")}] → ${keptValue}`" in source
+    assert "`最终值 ${finalValue}/${sides}　${outcome}`" in source
+    assert "修正明细未记录" in source
+    assert "/api/player/dice-display" in source
+    assert 'id="sceneSummary"' in html
+    assert 'id="codexDialog"' in html
+    assert 'id="diceDisplaySelect"' in html
     assert "innerHTML" not in source
     assert "appendStreamingText" in source
     assert 'event.step === "done"' in (
@@ -278,18 +322,21 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             "莱尔在图书馆找到了木偶师埃利奥。",
             "继续追问吗？",
             action_preview=_action_preview(),
+            player_resolution=_player_resolution(),
         )
     with runtime.stores.entity() as store:
         store.upsert(EntityProfile(
             entity_type="location",
             name="灰烬图书馆",
             aliases=["图书馆"],
-            summary="不应投影的实体摘要",
+            summary="藏有大量旧书的公开地点。",
         ))
     with runtime.stores.npc_profile() as store:
         store.upsert(NPCProfile(
             name="埃利奥",
             aliases=["木偶师"],
+            role="流浪木偶师",
+            public_summary="一名公开身份不明的木偶师。",
             hidden_secret="不应投影的 NPC 秘密",
         ))
     runtime.pending_turns.add(SimpleNamespace(
@@ -310,14 +357,15 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     assert set(payload) == {
         "save", "needs_init", "difficulty", "campaign", "history",
         "history_pagination", "highlights", "pending", "history_controls",
-        "action_preview",
+        "action_preview", "dice_display",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
     assert payload["campaign"]["scene_conditions"] == ["房间正在燃烧"]
     assert "attitude_to_player" not in str(payload)
     assert "暗中恐惧" not in str(payload)
     assert "不可泄露" not in str(payload)
-    assert "不应投影的实体摘要" not in str(payload)
+    assert "藏有大量旧书的公开地点。" in str(payload)
+    assert "流浪木偶师" in str(payload)
     assert "不应投影的 NPC 秘密" not in str(payload)
     assert {item["surface"] for item in payload["highlights"]} == {
         "莱尔", "图书馆", "木偶师", "埃利奥",
@@ -327,6 +375,8 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     }
     assert payload["pending"][0]["variants"][0]["closing_prompt"] == "你准备如何回应？"
     assert payload["action_preview"] == _action_preview().model_dump(mode="json")
+    assert payload["history"][0]["player_resolution"] == _player_resolution().model_dump(mode="json")
+    assert payload["dice_display"] == "outcome"
 
 
 def test_player_history_loads_five_turn_pages_oldest_to_newest():

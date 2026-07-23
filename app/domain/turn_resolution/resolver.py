@@ -23,6 +23,9 @@ from .schemas import (
     ActionJudgment,
     ActionResolutionFrame,
     OutcomeBand,
+    PlayerActionResolution,
+    PlayerRollModifier,
+    PlayerTurnResolution,
     RiskLevel,
     TurnResolutionResult,
 )
@@ -114,6 +117,51 @@ def build_action_judgments(
             )
         )
     return judgments
+
+
+def build_player_turn_resolution(
+    parse_result: ActionParseResult,
+    roll_results: RollResultBatch,
+    turn_resolution: TurnResolutionResult,
+) -> PlayerTurnResolution:
+    roll_by_id = {roll.action_id: roll for roll in roll_results.results}
+    resolution_by_id = {
+        resolution.action_id: resolution
+        for resolution in turn_resolution.action_resolutions
+    }
+    actions: list[PlayerActionResolution] = []
+    for action in sorted(parse_result.atomic_actions, key=lambda item: item.sequence):
+        resolution = resolution_by_id.get(action.action_id)
+        if resolution is None:
+            continue
+        roll = roll_by_id.get(action.action_id)
+        actions.append(PlayerActionResolution(
+            action_text=action.raw_text,
+            resolution_source="roll" if roll is not None else "automatic",
+            outcome_band=resolution.outcome_band,
+            dice=roll.dice if roll is not None else None,
+            raw_values=list(roll.all_raw_values) if roll is not None else [],
+            modifiers=(
+                [
+                    PlayerRollModifier(
+                        label=modifier.label,
+                        reason=modifier.reason,
+                        value=modifier.value,
+                    )
+                    for modifier in roll.modifiers
+                ]
+                if roll is not None
+                else []
+            ),
+            modifier_total=(
+                sum(modifier.value for modifier in roll.modifiers)
+                if roll is not None
+                else 0
+            ),
+            final_value=roll.value if roll is not None else None,
+            dice_sides=roll.dice_sides if roll is not None else None,
+        ))
+    return PlayerTurnResolution(actions=actions)
 
 
 class TurnResolutionAgent:

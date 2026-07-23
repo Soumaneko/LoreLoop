@@ -31,6 +31,7 @@ from app.api import (
     preview_core_memory,
     rename_save,
     redo_last_turn,
+    save_dice_display,
     save_difficulty,
     save_max_chars,
     save_model_config,
@@ -211,6 +212,9 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/difficulty":
             self._handle_player_json(lambda: save_difficulty(_read_json(self)))
+            return
+        if path == "/api/player/dice-display":
+            self._handle_player_json(lambda: save_dice_display(_read_json(self)))
             return
         if path == "/api/player/model-config/test":
             self._handle_player_json(

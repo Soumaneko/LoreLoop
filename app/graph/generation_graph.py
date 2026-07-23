@@ -344,6 +344,7 @@ def _pending_context_state(
         "next_turn_index": pending.turn_index,
         "context": pending.context,
         "turn_resolution": pending.context.turn_resolution,
+        "player_resolution": pending.player_resolution,
         "director_npc_result": pending.director_npc_result,
         "recent_scene": recent_scene,
     }

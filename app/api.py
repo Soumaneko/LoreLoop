@@ -15,7 +15,11 @@ from app.graph.initialization_helpers import (
 from app.graph.maintenance_graph import batch_classify_stream, memory_maintain_stream
 from app.runtime.debug_state import load_debug_state
 from app.runtime.player_state import load_player_history, load_player_state
-from app.runtime.settings import save_difficulty, save_max_chars
+from app.runtime.settings import (
+    save_dice_display,
+    save_difficulty,
+    save_max_chars,
+)
 from app.runtime.model_config import (
     model_config_status,
     save_model_config,
@@ -322,6 +326,7 @@ __all__ = [
     "rename_save",
     "preview_core_memory",
     "redo_last_turn",
+    "save_dice_display",
     "save_difficulty",
     "save_max_chars",
     "save_model_config",

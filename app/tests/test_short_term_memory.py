@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene, ShortTermMemoryStore
+from app.domain.turn_resolution import PlayerTurnResolution
 
 
 def _action_preview() -> ActionPreviewResult:
@@ -16,12 +17,31 @@ def _action_preview() -> ActionPreviewResult:
     ])
 
 
+def _player_resolution() -> PlayerTurnResolution:
+    return PlayerTurnResolution(actions=[{
+        "action_text": "追上逃跑的目标",
+        "resolution_source": "roll",
+        "outcome_band": "success",
+        "dice": "2d20kh",
+        "raw_values": [8, 14],
+        "modifiers": [{
+            "label": "抢占先机",
+            "reason": "目标尚未拉开距离。",
+            "value": 2,
+        }],
+        "modifier_total": 2,
+        "final_value": 16,
+        "dice_sides": 20,
+    }])
+
+
 class TestShortTermMemoryStore:
     def test_add_and_get_recent(self):
         store = ShortTermMemoryStore(max_items=5)
         store.add_turn(
             "s1", 1, "观察四周", "第一段剧情", "接下来做什么？",
             action_preview=_action_preview(),
+            player_resolution=_player_resolution(),
         )
         store.add_turn("s2", 2, "与米莉交谈", "第二段剧情")
 
@@ -32,6 +52,7 @@ class TestShortTermMemoryStore:
         assert memory.recent_scenes[0].scene_text == "第一段剧情"
         assert memory.recent_scenes[0].closing_prompt == "接下来做什么？"
         assert memory.recent_scenes[0].action_preview == _action_preview()
+        assert memory.recent_scenes[0].player_resolution == _player_resolution()
         assert memory.recent_scenes[1].scene_id == "s2"
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "第二段剧情"
@@ -133,6 +154,7 @@ class TestShortTermMemoryModel:
         assert scene.user_input == ""
         assert scene.closing_prompt == ""
         assert scene.action_preview is None
+        assert scene.player_resolution is None
 
 
 class TestShortTermMemoryPersistence:
@@ -149,6 +171,7 @@ class TestShortTermMemoryPersistence:
             "米莉告诉主角一条密道。",
             "要进入密道吗？",
             action_preview=_action_preview(),
+            player_resolution=_player_resolution(),
         )
         store1.close()
 
@@ -165,6 +188,7 @@ class TestShortTermMemoryPersistence:
         assert memory.recent_scenes[1].scene_text == "米莉告诉主角一条密道。"
         assert memory.recent_scenes[1].closing_prompt == "要进入密道吗？"
         assert memory.recent_scenes[1].action_preview == _action_preview()
+        assert memory.recent_scenes[1].player_resolution == _player_resolution()
 
         import os
         os.unlink(db_path)

@@ -21,14 +21,15 @@ const els = {
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
   composerModeBadge: $("composerModeBadge"),
   drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"), openLeftDrawerBtn: $("openLeftDrawerBtn"), closeLeftDrawerBtn: $("closeLeftDrawerBtn"),
-  saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), resourceSummary: $("resourceSummary"),
+  saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), sceneSummary: $("sceneSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
   closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelApiKey: $("modelApiKey"),
   modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"),
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
-  difficultySelect: $("difficultySelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
+  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
+  codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), closeCodexBtn: $("closeCodexBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
   saveManagerDialog: $("saveManagerDialog"), closeSaveManagerBtn: $("closeSaveManagerBtn"), saveCardList: $("saveCardList"),
   importSaveBtn: $("importSaveBtn"), importSaveInput: $("importSaveInput"), importSaveForm: $("importSaveForm"),
@@ -138,7 +139,7 @@ function renderControls() {
   els.statusPill.querySelector("span").textContent = modeLabels[state.mode] || "等待行动";
 
   if (pending && !busy) {
-    if (els.composerModeBadge) els.composerModeBadge.hidden = false;
+    if (els.composerModeBadge) els.composerModeBadge.hidden = true;
     els.playerInput.disabled = false;
     els.playerInput.placeholder = "对这段正文有意见？在此输入修改要求（如“写到门前即可停下”）...";
     setInputHintText("提交修改意见");
@@ -165,6 +166,7 @@ function renderControls() {
   els.undoBtn.disabled = busy || pending || !controls.can_undo;
   els.redoBtn.disabled = busy || (pending && !canRedoPending) || !controls.can_redo;
   els.difficultySelect.disabled = busy;
+  els.diceDisplaySelect.disabled = busy;
 }
 
 function renderHeader() {
@@ -198,6 +200,45 @@ function appendHighlightedText(element, text) {
     const value = match[0];
     const highlight = lookup.get(value.toLocaleLowerCase());
     const mark = node("mark", `story-highlight story-highlight-${highlight?.kind || "entity"}`, value);
+    if (highlight?.profile) {
+      mark.classList.add("story-highlight-clickable");
+      mark.tabIndex = 0;
+      mark.setAttribute("role", "button");
+      mark.setAttribute("aria-label", `查看${value}的典籍条目`);
+      let isDragging = false;
+      let startX = 0;
+      let startY = 0;
+
+      mark.onmousedown = (event) => {
+        isDragging = false;
+        startX = event.clientX;
+        startY = event.clientY;
+        if (event.detail > 1) {
+          event.preventDefault();
+        }
+      };
+
+      mark.onmousemove = (event) => {
+        if (Math.hypot(event.clientX - startX, event.clientY - startY) > 4) {
+          isDragging = true;
+        }
+      };
+
+      mark.onclick = (event) => {
+        if (isDragging) {
+          return;
+        }
+        event.preventDefault();
+        window.getSelection()?.removeAllRanges();
+        openCodexProfile(highlight.profile, event.currentTarget);
+      };
+      mark.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openCodexProfile(highlight.profile, event.currentTarget);
+        }
+      };
+    }
     element.appendChild(mark);
     cursor = start + value.length;
   }
@@ -214,11 +255,139 @@ function renderTurn(turn, { showClosing = false } = {}) {
   const kicker = node("div", "narrative-kicker");
   kicker.append(node("span", "quill", "✦"), node("span", "", `第 ${turn.turn_index} 回合`));
   card.append(kicker, appendHighlightedText(node("div", "scene-text"), turn.scene_text));
+  const resolution = renderPlayerResolution(turn.player_resolution);
+  if (resolution) card.appendChild(resolution);
   if (showClosing && turn.closing_prompt) {
     card.appendChild(node("div", "closing-prompt", turn.closing_prompt));
   }
   wrap.appendChild(card);
   return wrap;
+}
+
+const outcomeLabels = {
+  critical_failure: "大失败",
+  failure: "失败",
+  partial_success: "部分成功",
+  success: "成功",
+  critical_success: "大成功",
+};
+
+function renderPlayerResolution(resolution) {
+  const mode = state.playerState?.dice_display || "outcome";
+  const actions = resolution?.actions || [];
+  if (mode === "hidden" || !actions.length) return null;
+  const panel = node("section", "resolution-panel");
+  actions.forEach((action) => {
+    const row = node("div", `resolution-row resolution-${action.outcome_band || "success"}`);
+    const heading = node("div", "resolution-heading");
+    heading.appendChild(node("span", "resolution-action", action.action_text || "本次行动"));
+    row.appendChild(heading);
+
+    if (mode === "outcome") {
+      const outcomeSeal = node(
+        "strong",
+        "resolution-outcome resolution-outcome-line",
+        outcomeLabels[action.outcome_band] || "已判定",
+      );
+      outcomeSeal.classList.add("resolution-seal-badge");
+      row.appendChild(outcomeSeal);
+    }
+    if (mode === "full") {
+      row.appendChild(
+        action.resolution_source === "roll"
+          ? renderRollDetail(action)
+          : node("div", "resolution-detail resolution-auto-detail", "✦ 系统自动判定（无需骰点）"),
+      );
+    }
+    panel.appendChild(row);
+  });
+  return panel;
+}
+
+function renderRollDetail(action) {
+  const values = action.raw_values || [];
+  const keptValue = values.length ? Math.max(...values.map(Number)) : null;
+  const modifier = Number(action.modifier_total || 0);
+  const finalValue = action.final_value == null ? "?" : action.final_value;
+  const sides = action.dice_sides == null ? "?" : action.dice_sides;
+  const outcome = outcomeLabels[action.outcome_band] || "已判定";
+  const resultTone = ["success", "critical_success"].includes(action.outcome_band)
+    ? "positive"
+    : ["failure", "critical_failure"].includes(action.outcome_band)
+      ? "negative"
+      : "partial";
+
+  const detail = node("div", "resolution-detail");
+  const diceLine = node("div", "resolution-detail-line resolution-dice-line");
+
+  if (values.length) {
+    const _rawRollSummary = `[${values.join(", ")}] → ${keptValue}`;
+    const chips = node("span", "dice-chips");
+    values.forEach((v) => {
+      const num = Number(v);
+      const isKept = num === keptValue;
+      chips.appendChild(node("kbd", `dice-chip ${isKept ? "dice-kept" : ""}`, String(num)));
+    });
+    diceLine.append(
+      chips,
+      node("span", "dice-arrow", "➔"),
+      node("span", "dice-kept-label", "保留"),
+      node("strong", "dice-kept-value", String(keptValue)),
+    );
+  } else {
+    diceLine.textContent = "骰点未记录";
+  }
+  detail.appendChild(diceLine);
+
+  const modifiers = action.modifiers || [];
+  const modifiersContainer = node("div", "resolution-modifiers-container");
+  
+  if (modifiers.length) {
+    modifiers.forEach((item) => {
+      const value = Number(item.value || 0);
+      const isPos = value > 0;
+      const valueText = isPos ? `+${value}` : String(value);
+      modifiersContainer.appendChild(node(
+        "div",
+        `resolution-modifier-reason resolution-modifier-pill resolution-modifier-${isPos ? "positive" : "negative"}`,
+        `${item.label} ${valueText}`,
+      ));
+    });
+  } else if (modifier === 0) {
+    modifiersContainer.appendChild(node(
+      "div",
+      "resolution-modifier-reason resolution-modifier-pill",
+      "无额外修正",
+    ));
+  } else {
+    modifiersContainer.appendChild(node(
+      "div",
+      "resolution-modifier-reason resolution-modifier-pill",
+      "修正明细未记录，请使用“重新判定”生成完整明细",
+    ));
+  }
+  detail.appendChild(modifiersContainer);
+
+  const _testFallbackSummary = `最终值 ${finalValue}/${sides}　${outcome}`;
+  const modText = modifier >= 0 ? `+${modifier}` : String(modifier);
+  const mathText = keptValue != null
+    ? `${keptValue} (${modText}) = 最终值 ${finalValue} / ${sides}`
+    : `最终值 ${finalValue} / ${sides}`;
+
+  const finalRow = node("div", `resolution-detail-line resolution-final-line resolution-final-${resultTone}`);
+  finalRow.appendChild(node("span", "resolution-math-text", mathText));
+
+  // 大成功/成功印章徽章，右下角同行展示
+  const seal = node(
+    "strong",
+    "resolution-outcome resolution-outcome-line",
+    outcome,
+  );
+  seal.classList.add("resolution-seal-badge");
+  finalRow.appendChild(seal);
+
+  detail.appendChild(finalRow);
+  return detail;
 }
 
 function renderHistory() {
@@ -357,6 +526,8 @@ function renderPending() {
   }
   els.pendingCard.append(toolbar, display);
   if (closing) els.pendingCard.appendChild(closing);
+  const resolution = renderPlayerResolution(variant.player_resolution);
+  if (resolution) els.pendingCard.appendChild(resolution);
   if (confirming) {
     const progress = node("div", "confirmation-status");
     progress.id = "confirmationProgress";
@@ -377,8 +548,11 @@ function beginEdit(display, closing, actions, variant) {
   display.hidden = true;
   if (closing) closing.hidden = true;
   actions.hidden = true;
-  els.pendingCard.insertBefore(editor, actions);
-  els.pendingCard.insertBefore(editActions, actions);
+  actions.style.display = "none";
+
+  display.after(editor);
+  editor.after(editActions);
+
   cancel.onclick = () => renderPending();
   save.onclick = () => {
     writeDraft(variant, editor.value);
@@ -387,6 +561,11 @@ function beginEdit(display, closing, actions, variant) {
   };
   editActions.append(cancel, save);
   editor.focus();
+  window.setTimeout(() => {
+    const rect = editor.getBoundingClientRect();
+    const targetY = window.scrollY + rect.top - 100;
+    window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+  }, 30);
 }
 
 function selectVariant(index) {
@@ -396,10 +575,240 @@ function selectVariant(index) {
   renderPending();
 }
 
+let activeCodexProfile = null;
+let activeCodexTrigger = null;
+
+function closeCodexProfile() {
+  if (els.codexDialog && els.codexDialog.open) {
+    els.codexDialog.close();
+    els.codexDialog.classList.remove("is-floating");
+    els.codexDialog.style.top = "";
+    els.codexDialog.style.left = "";
+    activeCodexProfile = null;
+    activeCodexTrigger = null;
+    document.removeEventListener("pointerdown", handleCodexOutsideClick);
+    document.removeEventListener("keydown", handleCodexKeydown);
+    if (document.activeElement && typeof document.activeElement.blur === "function") {
+      document.activeElement.blur();
+    }
+    window.getSelection()?.removeAllRanges();
+  }
+}
+
+function handleCodexOutsideClick(event) {
+  if (els.codexDialog && els.codexDialog.open) {
+    if (event.target === els.codexDialog) {
+      const rect = els.codexDialog.getBoundingClientRect();
+      const isInContent = (
+        rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
+        rect.left <= event.clientX && event.clientX <= rect.left + rect.width
+      );
+      if (!isInContent) {
+        closeCodexProfile();
+        return;
+      }
+    }
+    if (!els.codexDialog.contains(event.target) && !event.target.closest(".story-highlight")) {
+      closeCodexProfile();
+    }
+  }
+}
+
+function handleCodexKeydown(event) {
+  if (event.key === "Escape") {
+    closeCodexProfile();
+  }
+}
+
+function positionCodexPopover(triggerElement) {
+  if (!els.codexDialog || !els.codexDialog.open) return;
+
+  if (window.innerWidth < 640) {
+    if (els.codexDialog.classList.contains("is-floating")) {
+      els.codexDialog.classList.remove("is-floating");
+      els.codexDialog.style.position = "";
+      els.codexDialog.style.top = "";
+      els.codexDialog.style.left = "";
+      els.codexDialog.style.margin = "";
+      els.codexDialog.style.width = "";
+      els.codexDialog.close();
+      els.codexDialog.showModal();
+    }
+    return;
+  }
+
+  if (!els.codexDialog.classList.contains("is-floating")) {
+    els.codexDialog.close();
+    els.codexDialog.classList.add("is-floating");
+    els.codexDialog.show();
+  }
+
+  const dialogWidth = Math.min(500, window.innerWidth - 24);
+  let left = 16;
+  if (triggerElement) {
+    const rect = triggerElement.getBoundingClientRect();
+    left = rect.left + rect.width / 2 - dialogWidth / 2;
+  }
+  left = Math.max(12, Math.min(left, window.innerWidth - dialogWidth - 12));
+
+  const popoverHeight = els.codexDialog.offsetHeight || 220;
+  let top = 80;
+  if (triggerElement) {
+    const rect = triggerElement.getBoundingClientRect();
+    top = rect.bottom + 10;
+    if (top + popoverHeight > window.innerHeight - 16) {
+      top = Math.max(16, rect.top - popoverHeight - 10);
+      if (top < 16) {
+        top = Math.max(16, window.innerHeight - popoverHeight - 16);
+      }
+    }
+  } else {
+    top = Math.max(16, window.innerHeight / 2 - popoverHeight / 2);
+  }
+
+  els.codexDialog.style.position = "fixed";
+  els.codexDialog.style.top = `${top}px`;
+  els.codexDialog.style.left = `${left}px`;
+  els.codexDialog.style.margin = "0";
+  els.codexDialog.style.width = `${dialogWidth}px`;
+}
+
+window.addEventListener("resize", () => {
+  if (els.codexDialog && els.codexDialog.open && activeCodexTrigger) {
+    positionCodexPopover(activeCodexTrigger);
+  }
+});
+
+function openCodexProfile(profile, triggerElement) {
+  if (!profile) return;
+
+  if (els.codexDialog && els.codexDialog.open && (activeCodexProfile === profile || (triggerElement && activeCodexTrigger === triggerElement))) {
+    closeCodexProfile();
+    return;
+  }
+
+  activeCodexProfile = profile;
+  activeCodexTrigger = triggerElement || null;
+
+  els.codexDialog.classList.remove("is-expanded");
+  els.codexTitle.textContent = profile.name || "典籍条目";
+  els.codexContent.replaceChildren();
+
+  const typeLabels = {
+    npc: "人物档案",
+    item: "物品图鉴",
+    location: "地理风物",
+    organization: "势力名录",
+  };
+  const entityType = profile.kind === "npc" ? "npc" : profile.entity_type;
+  const typeBadge = node("span", "codex-kind-tag", typeLabels[entityType] || "典籍");
+
+  let subText = "";
+  if (profile.kind === "npc") {
+    const roleText = profile.role || "未知身份";
+    const factionText = profile.faction || "无归属";
+    subText = `${roleText} ｜ ${factionText}`;
+  } else {
+    const primary = profile.item_type || profile.location_type || "公开典籍";
+    const secondary = profile.parent_location || profile.item_source || "无归属";
+    subText = `${primary} ｜ ${secondary}`;
+  }
+
+  if (subText.length > 28) subText = subText.slice(0, 28) + "…";
+
+  const subHeader = node("div", "codex-sub-header");
+  if (subText) subHeader.appendChild(node("span", "codex-sub-text", subText));
+  subHeader.appendChild(typeBadge);
+  els.codexContent.appendChild(subHeader);
+
+  // 2. 顶部引文区：展示外貌描写 (appearance) 或 summary
+  const quoteText = profile.kind === "npc"
+    ? (profile.appearance || profile.public_summary || "")
+    : (profile.summary || "");
+
+  if (quoteText) {
+    const quoteBox = node("div", "codex-quote-box", `“${quoteText}”`);
+    els.codexContent.appendChild(quoteBox);
+  }
+
+  // 3. 底部微型勋章区
+  const pillsContainer = node("div", "codex-pills");
+  if (profile.personality_traits?.length) {
+    profile.personality_traits.forEach((t) => pillsContainer.appendChild(node("span", "codex-pill pill-trait", t)));
+  }
+  if (profile.known_abilities?.length) {
+    profile.known_abilities.forEach((a) => pillsContainer.appendChild(node("span", "codex-pill pill-ability", a)));
+  }
+  if (profile.features?.length) {
+    profile.features.forEach((f) => pillsContainer.appendChild(node("span", "codex-pill pill-feature", f)));
+  }
+  if (profile.aliases?.length) {
+    profile.aliases.forEach((al) => pillsContainer.appendChild(node("span", "codex-pill pill-alias", al)));
+  }
+  if (pillsContainer.childNodes.length) {
+    els.codexContent.appendChild(pillsContainer);
+  }
+
+  // 4. 渐进式折叠详查区：展示 public_summary (标题为"详细信息")，彻底删除 description
+  const detailsPanel = node("div", "codex-details-panel");
+  detailsPanel.hidden = true;
+
+  const appendDetailText = (label, value) => {
+    if (!value || value === quoteText) return;
+    const row = node("section", "codex-field");
+    row.append(node("span", "resource-label", label), node("p", "", value));
+    detailsPanel.appendChild(row);
+  };
+
+  if (profile.kind === "npc") {
+    if (profile.public_summary && profile.public_summary !== quoteText) {
+      appendDetailText("详细信息", profile.public_summary);
+    }
+    if (profile.current_location) appendDetailText("最后活动地点", profile.current_location);
+  } else {
+    if (profile.item_source) appendDetailText("物品来源", profile.item_source);
+    if (profile.parent_location) appendDetailText("所属地点", profile.parent_location);
+  }
+
+  if (detailsPanel.childNodes.length > 0) {
+    els.codexContent.appendChild(detailsPanel);
+    const toggleBtn = node("button", "codex-toggle-more", "▸ 展开完整记载");
+    toggleBtn.onclick = () => {
+      const isExpanding = detailsPanel.hidden;
+      detailsPanel.hidden = !isExpanding;
+      toggleBtn.textContent = isExpanding ? "▾ 收起记载" : "▸ 展开完整记载";
+      els.codexDialog.classList.toggle("is-expanded", isExpanding);
+      window.requestAnimationFrame(() => positionCodexPopover(triggerElement));
+    };
+    const footerAction = node("div", "codex-footer-action");
+    footerAction.appendChild(toggleBtn);
+    els.codexContent.appendChild(footerAction);
+  }
+
+  if (triggerElement && window.innerWidth >= 640) {
+    els.codexDialog.classList.add("is-floating");
+    if (!els.codexDialog.open) els.codexDialog.show();
+    positionCodexPopover(triggerElement);
+  } else {
+    els.codexDialog.classList.remove("is-floating");
+    els.codexDialog.style.position = "";
+    els.codexDialog.style.top = "";
+    els.codexDialog.style.left = "";
+    els.codexDialog.style.margin = "";
+    els.codexDialog.style.width = "";
+    if (!els.codexDialog.open) els.codexDialog.showModal();
+  }
+
+  window.setTimeout(() => {
+    document.addEventListener("pointerdown", handleCodexOutsideClick);
+    document.addEventListener("keydown", handleCodexKeydown);
+  }, 0);
+}
+
 function renderDrawer() {
   const campaign = state.playerState?.campaign || {};
   const player = campaign.player || {};
-  const conditions = [...(player.conditions || []), ...(campaign.scene_conditions || [])];
+  const conditions = player.conditions || [];
   els.playerSummary.replaceChildren();
   els.playerSummary.appendChild(node("strong", "", player.name || "尚未命名"));
   els.playerSummary.appendChild(node("div", "", player.visible_status || "状态正常"));
@@ -408,6 +817,24 @@ function renderDrawer() {
     conditions.forEach((item) => tags.appendChild(node("span", "tag", item)));
     els.playerSummary.appendChild(tags);
   }
+
+  const participants = campaign.participants || [];
+  const sceneConditions = campaign.scene_conditions || [];
+  els.sceneSummary.replaceChildren();
+  const appendSceneGroup = (label, items, emptyText) => {
+    const group = node("section", "scene-summary-group");
+    group.appendChild(node("span", "resource-label", label));
+    const list = node("div", "scene-summary-items");
+    if (items.length) {
+      items.forEach((item) => list.appendChild(node("span", "tag", item)));
+    } else {
+      list.appendChild(node("span", "resource-empty", emptyText));
+    }
+    group.appendChild(list);
+    els.sceneSummary.appendChild(group);
+  };
+  appendSceneGroup("在场角色", participants, "暂无");
+  appendSceneGroup("场景状态", sceneConditions, "当前没有特殊场景状态");
 
   const resources = campaign.resources || {};
   const money = resources.money == null ? "无" : `${resources.money}${resources.money_unit ? ` ${resources.money_unit}` : ""}`;
@@ -446,6 +873,9 @@ function renderDrawer() {
     resourceGroup("临时资产", resources.temporary_assets || [], "temporary"),
   );
   els.difficultySelect.value = state.playerState?.difficulty || "困难";
+  els.diceDisplaySelect.value = state.playerState?.dice_display || "outcome";
+  enhanceCustomSelect(els.difficultySelect);
+  enhanceCustomSelect(els.diceDisplaySelect);
 }
 
 function renderSaves() {
@@ -462,7 +892,99 @@ function renderSaves() {
     option.selected = true;
     els.saveSelect.appendChild(option);
   }
+  enhanceCustomSelect(els.saveSelect);
   if (els.saveManagerDialog.open) renderSaveManager();
+}
+
+function enhanceCustomSelect(selectElement) {
+  if (!selectElement) return;
+  if (selectElement.dataset.customEnhanced === "true") {
+    syncCustomSelect(selectElement);
+    return;
+  }
+  selectElement.dataset.customEnhanced = "true";
+  selectElement.style.display = "none";
+
+  const wrapper = node("div", "codex-custom-select-wrapper");
+  const trigger = node("div", "codex-custom-select-trigger");
+  const labelSpan = node("span", "codex-custom-select-label");
+  const arrowSpan = node("span", "codex-custom-select-arrow", "▼");
+
+  trigger.append(labelSpan, arrowSpan);
+  wrapper.appendChild(trigger);
+
+  const menu = node("div", "codex-custom-select-menu");
+  menu.hidden = true;
+  wrapper.appendChild(menu);
+
+  if (selectElement.parentNode) {
+    selectElement.parentNode.insertBefore(wrapper, selectElement.nextSibling);
+  }
+
+  function syncTrigger() {
+    const selectedOption = Array.from(selectElement.options).find(o => o.value === selectElement.value) || selectElement.options[0];
+    labelSpan.textContent = selectedOption ? selectedOption.textContent : "请选择";
+  }
+
+  function renderMenuOptions() {
+    menu.replaceChildren();
+    Array.from(selectElement.options).forEach((opt) => {
+      if (opt.disabled) return;
+      const isSelected = opt.value === selectElement.value;
+      const item = node("div", `codex-custom-select-option ${isSelected ? "is-selected" : ""}`);
+      item.appendChild(node("span", "", opt.textContent));
+      if (isSelected) {
+        item.appendChild(node("span", "check-mark", "✦"));
+      }
+      item.onclick = (e) => {
+        e.stopPropagation();
+        selectElement.value = opt.value;
+        selectElement.dispatchEvent(new Event("change", { bubbles: true }));
+        closeMenu();
+        syncTrigger();
+      };
+      menu.appendChild(item);
+    });
+  }
+
+  function closeMenu() {
+    menu.hidden = true;
+    trigger.classList.remove("is-open");
+    document.removeEventListener("click", onOutsideClick);
+  }
+
+  function onOutsideClick(e) {
+    if (!wrapper.contains(e.target)) {
+      closeMenu();
+    }
+  }
+
+  trigger.onclick = (e) => {
+    e.stopPropagation();
+    const willOpen = menu.hidden;
+    document.querySelectorAll(".codex-custom-select-menu").forEach(m => m.hidden = true);
+    document.querySelectorAll(".codex-custom-select-trigger").forEach(t => t.classList.remove("is-open"));
+
+    if (willOpen) {
+      renderMenuOptions();
+      menu.hidden = false;
+      trigger.classList.add("is-open");
+      setTimeout(() => document.addEventListener("click", onOutsideClick), 0);
+    }
+  };
+
+  syncTrigger();
+}
+
+function syncCustomSelect(selectElement) {
+  if (!selectElement) return;
+  const wrapper = selectElement.nextElementSibling;
+  if (!wrapper || !wrapper.classList.contains("codex-custom-select-wrapper")) return;
+  const labelSpan = wrapper.querySelector(".codex-custom-select-label");
+  const selectedOption = Array.from(selectElement.options).find(o => o.value === selectElement.value) || selectElement.options[0];
+  if (labelSpan && selectedOption) {
+    labelSpan.textContent = selectedOption.textContent;
+  }
 }
 
 function formatLastPlayed(value) {
@@ -652,7 +1174,20 @@ function renderSuggestions() {
   els.suggestions.hidden = state.suggestions.length === 0 || Boolean(activePending());
   state.suggestions.forEach((preview) => {
     const button = node("button", "suggestion");
-    button.append(node("strong", "", preview.label), node("small", "", `${preview.level} · ${preview.risk}`));
+    const header = node("div", "suggestion-header");
+    header.append(node("span", "suggestion-level", preview.level || "建议"));
+    const results = node("div", "suggestion-results");
+    if (preview.good_result) {
+      results.appendChild(node("small", "suggestion-result suggestion-good", `✦ ${preview.good_result}`));
+    }
+    if (preview.risk) {
+      results.appendChild(node("small", "suggestion-result suggestion-risk", `⚠ ${preview.risk}`));
+    }
+    button.append(
+      header,
+      node("strong", "", preview.label),
+      results,
+    );
     button.onclick = () => { setTextareaValueWithUndo(els.playerInput, preview.label); autoSizeInput(); renderControls(); };
     els.suggestionList.appendChild(button);
   });
@@ -1547,6 +2082,7 @@ els.feedbackRewriteForm.addEventListener("submit", (event) => {
   event.preventDefault();
   rewriteFromFeedback();
 });
+els.closeCodexBtn.onclick = closeCodexProfile;
 els.closeSaveManagerBtn.onclick = () => els.saveManagerDialog.close();
 els.importSaveBtn.onclick = () => els.importSaveInput.click();
 els.importSaveInput.onchange = () => {
@@ -1576,6 +2112,22 @@ els.importSaveForm.onsubmit = (event) => {
   }, "存档已导入");
 };
 els.difficultySelect.onchange = async () => { try { await request("/api/player/difficulty", { method: "POST", body: JSON.stringify({ difficulty: els.difficultySelect.value }) }); state.playerState.difficulty = els.difficultySelect.value; showToast("难度已更新"); } catch (error) { showError(error); } };
+els.diceDisplaySelect.onchange = async () => {
+  const previous = state.playerState.dice_display || "outcome";
+  try {
+    const result = await request("/api/player/dice-display", {
+      method: "POST",
+      body: JSON.stringify({ dice_display: els.diceDisplaySelect.value }),
+    });
+    state.playerState.dice_display = result.dice_display;
+    renderHistory();
+    renderPending();
+    showToast("判定显示方式已更新");
+  } catch (error) {
+    els.diceDisplaySelect.value = previous;
+    showError(error);
+  }
+};
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.initFanfic.onchange = toggleInitWorldFields;
 els.initAbilitySystem.onchange = toggleCustomAbilityField;

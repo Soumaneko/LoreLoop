@@ -4,7 +4,7 @@ from typing import Any
 
 from .serialization import model_data
 from .session import CampaignRuntime, get_campaign_runtime
-from .settings import load_settings
+from .settings import load_settings, normalize_dice_display
 
 
 PLAYER_HISTORY_PAGE_SIZE = 5
@@ -18,6 +18,7 @@ def _project_history(turns) -> list[dict[str, Any]]:
             "scene_text": turn.scene_text,
             "closing_prompt": turn.closing_prompt,
             "action_preview": model_data(turn.action_preview),
+            "player_resolution": model_data(turn.player_resolution),
         }
         for turn in turns
     ]
@@ -28,40 +29,60 @@ def _project_text_highlights(
     *,
     texts: list[str],
     player_name: str,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     folded_text = "\n".join(texts).casefold()
     if not folded_text:
         return []
 
-    candidates: list[tuple[str, str]] = []
+    candidates: list[tuple[str, str, dict[str, Any] | None]] = []
     clean_player_name = player_name.strip()
     if clean_player_name:
-        candidates.append((clean_player_name, "player"))
+        candidates.append((clean_player_name, "player", None))
     with runtime.stores.npc_profile() as store:
         for profile in store.list_all():
+            public_profile = {
+                "kind": "npc",
+                "name": profile.name,
+                "aliases": list(profile.aliases),
+                "public_summary": profile.public_summary,
+                "role": profile.role,
+                "appearance": profile.appearance,
+                "personality_traits": list(profile.personality_traits),
+                "known_abilities": list(profile.known_abilities),
+                "faction": profile.faction,
+                "description": profile.description,
+                "current_location": profile.current_location,
+            }
             candidates.extend(
-                (surface, "npc")
+                (surface, "npc", public_profile)
                 for surface in [profile.name, *profile.aliases]
             )
     with runtime.stores.entity() as store:
         for profile in store.list_all():
+            public_profile = {
+                "kind": "entity",
+                **model_data(profile.semantic_view()),
+            }
             candidates.extend(
-                (surface, "entity")
+                (surface, "entity", public_profile)
                 for surface in [profile.name, *profile.aliases]
             )
 
-    projected: list[dict[str, str]] = []
+    projected: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for raw_surface, kind in candidates:
+    for raw_surface, kind, profile in candidates:
         surface = str(raw_surface).strip()
         key = surface.casefold()
         if not surface or key in seen or key not in folded_text:
             continue
         seen.add(key)
-        projected.append({
+        item = {
             "surface": surface,
             "kind": kind,
-        })
+        }
+        if profile is not None:
+            item["profile"] = profile
+        projected.append(item)
     projected.sort(key=lambda item: len(item["surface"]), reverse=True)
     return projected
 
@@ -142,6 +163,9 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
                     "turn_index": variant.turn_index,
                     "scene_text": variant.scene_result.scene_text,
                     "closing_prompt": variant.scene_result.closing_prompt,
+                    "player_resolution": model_data(
+                        getattr(variant, "player_resolution", None)
+                    ),
                 }
                 for variant in variants
             ],
@@ -180,6 +204,7 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
         },
         "needs_init": core_memory is None,
         "difficulty": settings.get("difficulty", "困难"),
+        "dice_display": normalize_dice_display(settings.get("dice_display")),
         "campaign": {
             "turn_index": history[-1]["turn_index"] if history else 0,
             "world_time": current_state.world_clock.label,

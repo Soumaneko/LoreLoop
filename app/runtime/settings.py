@@ -3,6 +3,14 @@ import os
 from typing import Any
 
 
+DICE_DISPLAY_MODES = {"hidden", "outcome", "full"}
+DEFAULT_DICE_DISPLAY = "outcome"
+
+
+def normalize_dice_display(value: Any) -> str:
+    mode = str(value or "").strip()
+    return mode if mode in DICE_DISPLAY_MODES else DEFAULT_DICE_DISPLAY
+
 
 def _settings_path():
     from .session import get_campaign_runtime
@@ -43,6 +51,14 @@ def save_difficulty(payload: dict[str, Any]) -> dict[str, str]:
     settings["difficulty"] = difficulty
     save_settings(settings)
     return {"difficulty": difficulty}
+
+
+def save_dice_display(payload: dict[str, Any]) -> dict[str, str]:
+    dice_display = normalize_dice_display(payload.get("dice_display"))
+    settings = load_settings()
+    settings["dice_display"] = dice_display
+    save_settings(settings)
+    return {"dice_display": dice_display}
 
 
 def save_max_chars(payload: dict[str, Any]) -> dict[str, int]:

@@ -230,6 +230,11 @@ class ConfirmationCommitter:
                     scene_text=state["effective_scene_text"],
                     closing_prompt=pipeline_input.scene_result.closing_prompt,
                     action_preview=state.get("action_preview"),
+                    player_resolution=getattr(
+                        pipeline_input.pending,
+                        "player_resolution",
+                        None,
+                    ),
                 )
                 cache["short_term_saved"] = True
             short_term_after = short_store.get_recent()

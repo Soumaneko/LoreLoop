@@ -12,7 +12,9 @@ from app.domain.roll_modifier.schemas import RollModifier
 from app.domain.turn_resolution import (
     ActionResolutionFrame,
     TurnResolutionAgent,
+    TurnResolutionResult,
     build_action_judgments,
+    build_player_turn_resolution,
     map_roll_to_band,
 )
 
@@ -158,6 +160,50 @@ class TestActionJudgment:
                 effect_reasoning="支点：当前场景可观察；边界：只给克制发现。",
                 resolved_fact="超长事实边界" * 25,
             )
+
+    def test_builds_persistable_player_roll_summary(self):
+        roll = RollResult(
+            action_id="a1",
+            sequence=1,
+            actor=["主角"],
+            action_type="observe",
+            dice="2d20kh",
+            value=16,
+            raw_value=14,
+            all_raw_values=[8, 14],
+            dice_sides=20,
+            modifiers=[RollModifier(
+                action_id="a1",
+                label="清晰视野",
+                reason="视线良好。",
+                value=2,
+            )],
+        )
+        resolution = ActionResolutionFrame(
+            action_id="a1",
+            sequence=1,
+            actor=["主角"],
+            action_type="observe",
+            outcome_band="success",
+            effect_reasoning="观察成功。",
+            resolved_fact="发现异常。",
+        )
+
+        summary = build_player_turn_resolution(
+            _parse(),
+            _roll_batch(roll),
+            TurnResolutionResult(action_resolutions=[resolution]),
+        )
+
+        action = summary.actions[0]
+        assert action.action_text == "观察四周"
+        assert action.raw_values == [8, 14]
+        assert action.modifiers[0].label == "清晰视野"
+        assert action.modifiers[0].reason == "视线良好。"
+        assert action.modifiers[0].value == 2
+        assert action.modifier_total == 2
+        assert action.final_value == 16
+        assert action.outcome_band == "success"
 
 
 class TestTurnResolutionAgent:

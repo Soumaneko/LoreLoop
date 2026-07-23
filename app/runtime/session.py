@@ -11,6 +11,7 @@ from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
 from app.domain.short_term_memory import ShortTermMemory
+from app.domain.turn_resolution.schemas import PlayerTurnResolution
 from app.runtime.paths import (
     CampaignPaths,
     DEFAULT_CAMPAIGN_PATHS,
@@ -39,6 +40,9 @@ class PendingTurn:
     outline: PlotOutlineResult
     scene_result: SceneWriterResult
     director_npc_result: DirectorNPCWorkflowResult | None = None
+    player_resolution: PlayerTurnResolution = field(
+        default_factory=PlayerTurnResolution
+    )
     turn_index: int = 1
     short_term_memory: ShortTermMemory | None = None
     confirmation_cache: dict[str, Any] = field(default_factory=dict)
@@ -359,6 +363,7 @@ class CampaignRuntime:
             "outline": model_data(pending.outline),
             "scene_result": model_data(pending.scene_result),
             "director_npc_result": model_data(pending.director_npc_result),
+            "player_resolution": model_data(pending.player_resolution),
             "turn_index": pending.turn_index,
             "short_term_memory": model_data(pending.short_term_memory),
             # Futures and locks in the in-process cache are deliberately not
@@ -421,6 +426,9 @@ class CampaignRuntime:
                     director_npc_result=(
                         DirectorNPCWorkflowResult.model_validate(data["director_npc_result"])
                         if data.get("director_npc_result") else None
+                    ),
+                    player_resolution=PlayerTurnResolution.model_validate(
+                        data.get("player_resolution") or {}
                     ),
                     turn_index=data["turn_index"],
                     short_term_memory=(

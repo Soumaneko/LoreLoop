@@ -12,6 +12,7 @@ from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.roll.schemas import Difficulty
+from app.domain.turn_resolution import build_player_turn_resolution
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.serialization import model_data
 from app.runtime.services import RuntimeServices
@@ -140,6 +141,13 @@ def finalize_pending_turn(
     turn_id = str(uuid.uuid4())
     group_id = group_id or turn_id
     runtime = state.get("runtime") or get_campaign_runtime()
+    player_resolution = state.get("player_resolution")
+    if player_resolution is None:
+        player_resolution = build_player_turn_resolution(
+            state["action_parse_result"],
+            state["roll_results"],
+            state["turn_resolution"],
+        )
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
         group_id=group_id,
@@ -152,6 +160,7 @@ def finalize_pending_turn(
         outline=state["outline"],
         scene_result=state["scene_result"],
         director_npc_result=state.get("director_npc_result"),
+        player_resolution=player_resolution,
         turn_index=state["next_turn_index"],
         short_term_memory=state["short_term_memory"],
     ))
@@ -163,6 +172,7 @@ def finalize_pending_turn(
         "turn_index": state["next_turn_index"],
         "status": "awaiting_confirm",
         "pending_turn_status": "awaiting_confirm",
+        "player_resolution": player_resolution,
     }
     finalized["events"] = [
         *state.get("events", []),

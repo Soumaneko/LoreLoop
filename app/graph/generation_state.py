@@ -33,7 +33,7 @@ from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory.schemas import ShortTermMemory, ShortTermScene
-from app.domain.turn_resolution.schemas import TurnResolutionResult
+from app.domain.turn_resolution.schemas import PlayerTurnResolution, TurnResolutionResult
 from app.runtime.services import RuntimeServices
 from app.runtime.session import CampaignRuntime
 
@@ -86,6 +86,7 @@ class GenerationState(TypedDict, total=False):
     modifier_batch: RollModifierBatch
     roll_results: RollResultBatch
     turn_resolution: TurnResolutionResult
+    player_resolution: PlayerTurnResolution
 
     director_npc_result: DirectorNPCWorkflowResult | None
     context: NarrativeComposerContext

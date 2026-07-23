@@ -19,7 +19,7 @@ SUPPORTED_SCHEMA_VERSIONS = {
     "recall_memory": 1,
     "retrieval_alias": 1,
     "scene_summary": 1,
-    "short_term_memory": 3,
+    "short_term_memory": 4,
 }
 _savepoint_counter = 0
 _savepoint_lock = threading.Lock()

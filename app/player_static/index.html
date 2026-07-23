@@ -98,6 +98,10 @@
       <div id="playerSummary" class="summary-card"></div>
     </section>
     <section class="drawer-section">
+      <div class="section-title">当前场景</div>
+      <div id="sceneSummary" class="scene-summary"></div>
+    </section>
+    <section class="drawer-section">
       <div class="section-title">携带</div>
       <div id="resourceSummary" class="resource-list"></div>
     </section>
@@ -115,6 +119,14 @@
         <option value="简单">简单 · 三骰取高</option>
         <option value="普通">普通 · 双骰取高</option>
         <option value="困难">困难 · 单骰判定</option>
+      </select>
+    </section>
+    <section class="drawer-section">
+      <label for="diceDisplaySelect">判定显示</label>
+      <select id="diceDisplaySelect">
+        <option value="hidden">完全不显示</option>
+        <option value="outcome">只显示结果状态</option>
+        <option value="full">显示骰点、修正与结果</option>
       </select>
     </section>
     <section class="drawer-section">
@@ -209,6 +221,16 @@
         <button class="primary-action" type="submit">判断并修改</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="codexDialog" class="modal codex-modal">
+    <section class="codex-modal-shell">
+      <header class="codex-modal-header">
+        <div><p class="eyebrow">KNOWN RECORD</p><h2 id="codexTitle">典籍条目</h2></div>
+        <button id="closeCodexBtn" class="close-button" type="button" aria-label="关闭">×</button>
+      </header>
+      <div id="codexContent" class="codex-content"></div>
+    </section>
   </dialog>
 
   <dialog id="initDialog" class="modal init-modal">

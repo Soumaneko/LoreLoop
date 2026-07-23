@@ -472,6 +472,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
         turn_index=3,
         short_term_memory=short_term,
     ))
+    player_resolution = runtime.pending_turns.get(turn_id).player_resolution
     captured = {}
     graph = object()
 
@@ -511,6 +512,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     assert captured["version_index"] == 2
     assert state["context"] is context
     assert state["turn_resolution"] is context.turn_resolution
+    assert state["player_resolution"] is player_resolution
     assert state["current_state"] is state_before
     assert state["short_term_memory"] is short_term
     assert state["director_npc_result"] is director_npc_result

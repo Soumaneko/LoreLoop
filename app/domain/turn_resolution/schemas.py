@@ -49,3 +49,25 @@ class TurnResolutionResult(BaseModel):
     def _fill_total(self):
         self.total_resolutions = len(self.action_resolutions)
         return self
+
+
+class PlayerRollModifier(BaseModel):
+    label: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    value: int
+
+
+class PlayerActionResolution(BaseModel):
+    action_text: str = Field(min_length=1)
+    resolution_source: ResolutionSource
+    outcome_band: OutcomeBand
+    dice: str | None = None
+    raw_values: list[int] = Field(default_factory=list)
+    modifiers: list[PlayerRollModifier] = Field(default_factory=list)
+    modifier_total: int = 0
+    final_value: int | None = None
+    dice_sides: int | None = None
+
+
+class PlayerTurnResolution(BaseModel):
+    actions: list[PlayerActionResolution] = Field(default_factory=list)
