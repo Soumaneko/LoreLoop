@@ -1,0 +1,69 @@
+# 权威上下文
+
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
+## CurrentState
+
+```json
+{current_state_json}
+```
+
+## Context Facts
+
+```json
+{context_facts_json}
+```
+
+## Entity Profiles
+
+```json
+{entity_profiles_json}
+```
+
+## NPC Profiles
+
+```json
+{npc_profiles_json}
+```
+
+## DirectorEvent Consumptions
+
+每个数组元素都是一个彼此独立的导演事件授权，只包含 `allowed_facts` 与 `immutable_constraints`。没有输入时为 `[]`。
+
+```json
+{director_event_consumptions_json}
+```
+
+## Director NPC Candidate
+
+```json
+{director_npc_injection_json}
+```
+
+## Previous Confirmed Scene
+
+这是上一回合最终确认的正文，用于承接当前对话、站位、物品和未结束动作。没有时为 `null`。
+
+```json
+{recent_scene_json}
+```
+
+## Player Input
+
+```text
+{user_input}
+```
+
+## TurnResolutionResult
+
+```json
+{turn_resolution_json}
+```
+
+## Turn Index
+
+- turn_index: {turn_index}

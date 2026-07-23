@@ -1,7 +1,14 @@
 import os
+import re
 from pathlib import Path
 
 from .errors import PromptNotFoundError
+
+
+_INCLUDE_PATTERN = re.compile(
+    r"^\[\[include:\s*([^\]\r\n]+?)\s*\]\]$",
+    re.MULTILINE,
+)
 
 
 class PromptLoader:
@@ -28,8 +35,36 @@ class PromptLoader:
                 f"Prompt file not found: {self._prompts_dir / filename} (task={task}, version={version})"
             )
 
-        content = filepath.read_text(encoding="utf-8")
+        content = self._expand_includes(filepath, stack=())
         return content, version
+
+    def _expand_includes(
+        self,
+        filepath: Path,
+        *,
+        stack: tuple[Path, ...],
+    ) -> str:
+        root = self._prompts_dir.resolve()
+        resolved = filepath.resolve()
+        if not resolved.is_relative_to(root):
+            raise ValueError(f"Prompt include escapes prompts directory: {filepath}")
+        if resolved in stack:
+            chain = " -> ".join(path.name for path in (*stack, resolved))
+            raise ValueError(f"Circular prompt include: {chain}")
+        if not resolved.is_file():
+            raise PromptNotFoundError(f"Prompt include not found: {filepath}")
+
+        content = resolved.read_text(encoding="utf-8")
+        next_stack = (*stack, resolved)
+
+        def replace(match: re.Match[str]) -> str:
+            relative = Path(match.group(1).strip())
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValueError(f"Invalid prompt include path: {relative}")
+            included = root / relative
+            return self._expand_includes(included, stack=next_stack).rstrip()
+
+        return _INCLUDE_PATTERN.sub(replace, content)
 
     def list_tasks(self) -> list[str]:
         tasks = set()
