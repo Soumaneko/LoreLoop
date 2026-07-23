@@ -56,25 +56,25 @@ def _build_response() -> str:
     return json.dumps({
         "previews": [
             {
-                "level": "冒险举动",
+                "level": "正面威慑",
                 "label": "立刻追问米莉仓库区的异常。",
                 "good_result": "可能逼近仓库区线索的核心。",
                 "risk": "追问过急可能让米莉感到不安。",
             },
             {
-                "level": "保守举动",
+                "level": "情感动员",
                 "label": "先稳住语气确认米莉是否安全。",
                 "good_result": "可能获得更多信任并减少误会。",
                 "risk": "节奏放慢可能错过继续追问的窗口。",
             },
             {
-                "level": "信息获取",
+                "level": "线索核验",
                 "label": "对照旧地图询问仓库区位置。",
                 "good_result": "可能明确下一步可前往的方向。",
                 "risk": "暴露你对仓库区缺乏了解。",
             },
             {
-                "level": "奇招",
+                "level": "话术试探",
                 "label": "用闲聊试探米莉是否避开某些名字。",
                 "good_result": "可能发现她刻意回避的线索范围。",
                 "risk": "试探太明显可能让谈话变僵。",
@@ -96,7 +96,12 @@ class TestActionPreviewAgent:
 
         assert isinstance(result, ActionPreviewResult)
         assert len(result.previews) == 4
-        assert {preview.level for preview in result.previews} == {"冒险举动", "保守举动", "信息获取", "奇招"}
+        assert {preview.level for preview in result.previews} == {
+            "正面威慑",
+            "情感动员",
+            "线索核验",
+            "话术试探",
+        }
         assert all(preview.label for preview in result.previews)
 
     def test_passes_next_action_directions_without_closing_prompt(self):
@@ -145,8 +150,16 @@ class TestActionPreviewAgent:
         assert "Closing Prompt" not in prompt
         assert "Scene Text" not in prompt
         assert "Scene Facts" in prompt
-        assert "不能被当作下一回合的结构化输入" in prompt
+        assert "不是结构化行动输入" in prompt
         assert "禁止输出 schema 以外的任何字段" in prompt
+
+    @pytest.mark.parametrize("level", ["单", "超过四个汉字"])
+    def test_level_must_be_a_short_dynamic_strategy_label(self, level):
+        data = json.loads(_build_response())["previews"][0]
+        data["level"] = level
+
+        with pytest.raises(Exception):
+            ActionPreview.model_validate(data)
 
     def test_duplicate_labels_are_rejected_by_schema(self):
         data = json.loads(_build_response())

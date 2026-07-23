@@ -1,14 +1,10 @@
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-ActionPreviewLevel = Literal["冒险举动", "保守举动", "信息获取", "奇招"]
 
 
 class ActionPreview(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    level: ActionPreviewLevel
+    level: str = Field(min_length=2, max_length=4)
     label: str = Field(min_length=1)
     good_result: str = Field(min_length=1)
     risk: str = Field(min_length=1)
