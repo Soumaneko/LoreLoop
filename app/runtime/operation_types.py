@@ -33,7 +33,7 @@ OPERATION_POLICIES = {
             True,
             player_visible=True,
             recovery_kind="generation",
-            supersedes=("generation", "rephrase", "reroll"),
+            supersedes=("generation", "rephrase", "reroll", "feedback_rewrite"),
         ),
         OperationPolicy(
             "reroll",
@@ -41,7 +41,15 @@ OPERATION_POLICIES = {
             True,
             player_visible=True,
             recovery_kind="generation",
-            supersedes=("generation", "rephrase", "reroll"),
+            supersedes=("generation", "rephrase", "reroll", "feedback_rewrite"),
+        ),
+        OperationPolicy(
+            "feedback_rewrite",
+            "generation",
+            True,
+            player_visible=True,
+            recovery_kind="generation",
+            supersedes=("generation", "rephrase", "reroll", "feedback_rewrite"),
         ),
         OperationPolicy(
             "confirmation",
@@ -53,6 +61,7 @@ OPERATION_POLICIES = {
                 "generation",
                 "rephrase",
                 "reroll",
+                "feedback_rewrite",
                 "initialization_opening",
             ),
         ),

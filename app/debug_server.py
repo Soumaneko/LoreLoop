@@ -37,6 +37,7 @@ from app.api import (
     start_batch_classify_operation,
     start_confirmation_operation,
     start_generation_operation,
+    start_feedback_rewrite_operation,
     start_initialization_operation,
     start_memory_maintain_operation,
     start_rephrase_operation,
@@ -184,6 +185,12 @@ class DebugHandler(BaseHTTPRequestHandler):
         if path == "/api/player/reroll":
             self._handle_operation_start_stream(
                 self._start_reroll_operation,
+                player=True,
+            )
+            return
+        if path == "/api/player/feedback-rewrite":
+            self._handle_operation_start_stream(
+                self._start_feedback_rewrite_operation,
                 player=True,
             )
             return
@@ -459,8 +466,15 @@ class DebugHandler(BaseHTTPRequestHandler):
                 "version_index": data.get("version_index"),
                 "revision": bool(data.get("revision", False)),
             }
-        elif step in {"rephrase_started", "reroll_started"}:
+            if data.get("rewrite_mode") is not None:
+                public_data["rewrite_mode"] = data.get("rewrite_mode")
+        elif step in {"rephrase_started", "reroll_started", "feedback_rewrite_started"}:
             public_data = {"version_index": data.get("version_index")}
+        elif step == "feedback_rewrite_strategy_selected":
+            public_data = {
+                "strategy": data.get("strategy"),
+                "reason_code": data.get("reason_code"),
+            }
         elif step == "story_direction_done":
             public_data = {
                 "config": data.get("config"),
@@ -866,6 +880,25 @@ class DebugHandler(BaseHTTPRequestHandler):
     def _start_reroll_operation(self) -> str:
         turn_id, request_id = self._retry_request()
         return start_reroll_operation(turn_id, request_id=request_id)
+
+    def _start_feedback_rewrite_operation(self) -> str:
+        payload = _read_json(self)
+        turn_id = str(payload.get("turn_id", "")).strip()
+        source_scene_text = str(payload.get("source_scene_text", "")).strip()
+        user_feedback = str(payload.get("user_feedback", "")).strip()
+        if not turn_id:
+            raise ValueError("turn_id is required")
+        if not source_scene_text:
+            raise ValueError("source_scene_text is required")
+        if not user_feedback:
+            raise ValueError("user_feedback is required")
+        request_id = str(payload.get("request_id", "")).strip() or None
+        return start_feedback_rewrite_operation(
+            turn_id,
+            source_scene_text=source_scene_text,
+            user_feedback=user_feedback,
+            request_id=request_id,
+        )
 
     def _discard_pending_turn(self):
         payload = _read_json(self)

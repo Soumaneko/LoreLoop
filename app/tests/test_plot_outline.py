@@ -14,7 +14,13 @@ from app.domain.narrative_composer import (
     NarrativeComposerAgent,
     NarrativeComposerContext,
     NarrativeComposerResult,
-    NarrativeRevisionRequest,
+)
+from app.domain.narrative_rewrite import (
+    NarrativeRecomposer,
+    RecomposeRequest,
+    RewriteStrategySelector,
+    SourceNarrativeRewriter,
+    SourceRewriteRequest,
 )
 from app.domain.plot_outline.schemas import PlannedEvent
 from app.domain.plot_outline.views import project_retrieved_memories
@@ -177,7 +183,7 @@ class TestNarrativeComposerAgent:
             "turn_index": 4,
             "scene_text": "主角仍站在酒馆大厅。",
         }
-        assert json.loads(call["input_data"]["revision_request_json"]) is None
+        assert "revision_request_json" not in call["input_data"]
         assert result.to_outline().planned_events[0].event_id == "e1"
         assert result.to_scene_result().scene_text == result.scene_text
 
@@ -188,24 +194,64 @@ class TestNarrativeComposerAgent:
 
         assert "max_chars" not in gateway.calls[0]["input_data"]
 
-    def test_revision_request_passes_previous_scene_and_instruction(self):
+    def test_source_rewriter_has_its_own_task_and_source_only_input(self):
         gateway = _SpyGateway(json.loads(_build_outline_response()))
 
-        NarrativeComposerAgent(gateway).compose(
+        SourceNarrativeRewriter(gateway).rewrite(
             _make_context(),
-            revision_request=NarrativeRevisionRequest(
-                previous_scene_text="莱尔向埃利奥支付了两枚金币。",
-                instruction=(
-                    "问题 1\n正文错误：付款方向和数量错误。\n"
-                    "正确事实：埃利奥向莱尔支付三枚金币。\n"
-                    "修订要求：改正付款关系，保留其他内容。"
-                ),
+            SourceRewriteRequest(
+                source_scene_text="米莉说出了她不应知道的秘密。",
+                requirements=["重写米莉的反应，使她不知道这个秘密；保留其余内容。"],
             ),
         )
 
-        payload = json.loads(gateway.calls[0]["input_data"]["revision_request_json"])
-        assert payload["previous_scene_text"] == "莱尔向埃利奥支付了两枚金币。"
-        assert "正文错误" in payload["instruction"]
+        call = gateway.calls[0]
+        assert call["task"] == "narrative_rewrite_from_source"
+        assert call["input_data"]["source_scene_text"] == "米莉说出了她不应知道的秘密。"
+        assert json.loads(call["input_data"]["rewrite_requirements_json"]) == [
+            "重写米莉的反应，使她不知道这个秘密；保留其余内容。"
+        ]
+
+    def test_recomposer_never_receives_source_scene_text(self):
+        gateway = _SpyGateway(json.loads(_build_outline_response()))
+
+        NarrativeRecomposer(gateway).recompose(
+            _make_context(),
+            RecomposeRequest(requirements=["不得使用不在现场的旧地图，重新设计演出。"]),
+        )
+
+        call = gateway.calls[0]
+        assert call["task"] == "narrative_recompose"
+        assert "source_scene_text" not in call["input_data"]
+        assert "previous_scene_text" not in call["input_data"]
+
+    def test_rewrite_selector_returns_structured_strategy(self):
+        gateway = _SpyGateway({
+            "strategy": "recompose",
+            "reason_code": "causal_backbone_invalid",
+            "reasoning": "旧地图不在现场，原文主要行动方式失效。",
+            "rewrite_requirements": ["不要使用旧地图，重新设计成功结果的实现方式。"],
+        })
+
+        decision = RewriteStrategySelector(gateway).select(
+            context=_make_context(),
+            source_scene_text="你用旧地图击倒了敌人。",
+            user_feedback="旧地图不在身边。",
+        )
+
+        assert decision.strategy == "recompose"
+        assert gateway.calls[0]["task"] == "narrative_rewrite_select"
+
+    def test_rewrite_prompts_are_physically_separate(self):
+        compose_prompt = Path("app/prompts/generation/narrative_compose_v1.md").read_text(encoding="utf-8")
+        source_prompt = Path("app/prompts/generation/narrative_rewrite_from_source_v1.md").read_text(encoding="utf-8")
+        recompose_prompt = Path("app/prompts/generation/narrative_recompose_v1.md").read_text(encoding="utf-8")
+
+        assert "source_scene_text" not in compose_prompt
+        assert "source_scene_text" in source_prompt
+        assert "source_scene_text" not in recompose_prompt
+        assert "rewrite_requirements_json" in source_prompt
+        assert "rewrite_requirements_json" in recompose_prompt
 
     def test_prompt_input_omits_action_parse_result(self):
         context = _make_context()
@@ -334,9 +380,8 @@ class TestNarrativeComposerAgent:
         assert "所有字段必须描述完全相同的人物、动作、结果和状态" in prompt
         assert "scene_text" in prompt
         assert "closing_prompt" in prompt
-        assert "Revision Request" in prompt
-        assert "revision_request_json" in prompt
-        assert "不得创造新的圆场解释" in prompt
+        assert "Revision Request" not in prompt
+        assert "revision_request_json" not in prompt
 
     def test_planned_events_have_required_fields(self):
         context = _make_context()

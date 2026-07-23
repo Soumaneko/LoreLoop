@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import InitConfig, build_core_memory, build_initial_current_state
-from app.domain.narrative_composer.agent import _JSONStringFieldStream
+from app.domain.narrative_composer.runner import _JSONStringFieldStream
 from app.domain.scene_writer.opening import OpeningSceneAgent
 from app.domain.scene_writer.schemas import SceneWriterResult
 

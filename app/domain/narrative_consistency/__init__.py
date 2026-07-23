@@ -3,6 +3,7 @@ from .schemas import (
     NarrativeCanonFinding,
     NarrativeConsistencyAssertion,
     NarrativeConsistencyReview,
+    NarrativeConsistencyWarning,
     render_revision_instruction,
 )
 
@@ -11,5 +12,6 @@ __all__ = [
     "NarrativeCanonFinding",
     "NarrativeConsistencyAssertion",
     "NarrativeConsistencyReview",
+    "NarrativeConsistencyWarning",
     "render_revision_instruction",
 ]

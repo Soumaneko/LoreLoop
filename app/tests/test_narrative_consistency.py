@@ -12,6 +12,7 @@ from app.domain.narrative_consistency import (
     NarrativeConsistencyAgent,
     NarrativeConsistencyAssertion,
     NarrativeConsistencyReview,
+    NarrativeConsistencyWarning,
     render_revision_instruction,
 )
 from app.domain.narrative_consistency.agent import _segment_paragraphs
@@ -331,7 +332,7 @@ def test_insufficient_is_valid_without_canon_revision_assertion():
     assert review.canon_findings[0].verdict == "insufficient"
 
 
-def test_canon_assertion_rejects_unavailable_evidence_reference():
+def test_unknown_canon_assertion_is_ignored_with_warning():
     gateway = _SpyGateway({
         "audit_summary": "发现冲突。",
         "canon_findings": [],
@@ -344,8 +345,18 @@ def test_canon_assertion_rejects_unavailable_evidence_reference():
         )],
     })
 
-    with pytest.raises(ValueError, match="unavailable query"):
-        _check(gateway, "错误正文。")
+    agent = NarrativeConsistencyAgent(gateway)
+    review = agent.check(
+        user_input="行动",
+        current_state=_current_state(),
+        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        composition=_composition("错误正文。"),
+        trace_id="trace-1",
+    )
+
+    assert review.decision == "pass"
+    assert review.assertions == []
+    assert agent.last_warnings[0].reason == "unknown_query_id"
 
 
 def test_canon_assertion_may_cite_evidence_retrieved_by_another_query():
@@ -408,7 +419,7 @@ def test_canon_assertion_may_cite_evidence_retrieved_by_another_query():
             {
                 "query_id": "q1",
                 "verdict": "contradiction",
-                "reasoning": "希尔达首次告知的历史与提前探索不能同时成立。",
+                "reasoning": "q2 召回的首次告知历史与提前探索不能同时成立。",
                 "evidence_ids": ["turn_4_p002"],
             },
             {
@@ -427,15 +438,214 @@ def test_canon_assertion_may_cite_evidence_retrieved_by_another_query():
         )],
     })
 
-    review = _check(
-        gateway,
-        "埃利奥说自己早已探索过灰烬图书馆。",
-        query_set=query_set,
-        evidence_set=evidence_set,
+    agent = NarrativeConsistencyAgent(gateway)
+    review = agent.check(
+        user_input="行动",
+        current_state=_current_state(),
+        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        composition=_composition("埃利奥说自己早已探索过灰烬图书馆。"),
+        canon_query_set=query_set,
+        canon_evidence_set=evidence_set,
+        trace_id="trace-1",
     )
 
+    assert review.decision == "revise"
+    assert len(review.assertions) == 1
     assert review.assertions[0].canon_query_id == "q1"
     assert review.assertions[0].evidence_ids == ["turn_4_p002"]
+    assert agent.last_warnings == []
+
+
+def test_unknown_evidence_assertion_is_ignored_while_valid_one_is_retained():
+    query_set = NarrativeCanonQuerySet(
+        thought_process="核对历史。",
+        queries=[NarrativeCanonQuery(
+            query_id="q1",
+            paragraph_ids=["P001"],
+            claim="埃利奥此前去过灰烬图书馆。",
+            claim_type="past_event",
+            entities=["埃利奥", "灰烬图书馆"],
+            lookup_queries=["埃利奥是否去过灰烬图书馆"],
+            priority="high",
+        )],
+    )
+    evidence_set = CanonEvidenceSet(results=[CanonQueryEvidence(
+        query_id="q1",
+        claim=query_set.queries[0].claim,
+        evidence=[CanonEvidenceHit(
+            evidence_id="turn_4_p002",
+            source_type="scene_paragraph",
+            turn_index=4,
+            scene_id="scene_4",
+            paragraph_index=2,
+            text="希尔达首次告诉埃利奥灰烬图书馆的名字。",
+            score=0.9,
+        )],
+    )])
+    gateway = _SpyGateway({
+        "audit_summary": "发现历史冲突。",
+        "canon_findings": [{
+            "query_id": "q1",
+            "verdict": "contradiction",
+            "reasoning": "首次告知历史与提前探索不能同时成立。",
+            "evidence_ids": ["turn_4_p002"],
+        }],
+        "decision": "revise",
+        "assertions": [
+            _assertion_payload(
+                issue_type="canon_contradiction",
+                authority_refs=["Historical Canon Evidence"],
+                canon_query_id="q1",
+                evidence_ids=["turn_4_p002"],
+            ),
+            _assertion_payload(
+                issue_type="canon_contradiction",
+                authority_refs=["Historical Canon Evidence"],
+                canon_query_id="q1",
+                evidence_ids=["missing"],
+            ),
+        ],
+    })
+    agent = NarrativeConsistencyAgent(gateway)
+
+    review = agent.check(
+        user_input="行动",
+        current_state=_current_state(),
+        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        composition=_composition("埃利奥说自己早已探索过灰烬图书馆。"),
+        canon_query_set=query_set,
+        canon_evidence_set=evidence_set,
+        trace_id="trace-1",
+    )
+
+    assert review.decision == "revise"
+    assert len(review.assertions) == 1
+    assert review.assertions[0].evidence_ids == ["turn_4_p002"]
+    assert agent.last_warnings[0].reason == "unknown_evidence"
+
+
+@pytest.mark.parametrize(
+    ("assertion_query_id", "warning_reason"),
+    [
+        (None, "missing_query_id"),
+        ("q1", "non_contradiction_finding"),
+    ],
+)
+def test_invalid_canon_assertion_is_ignored_and_decision_becomes_pass(
+    assertion_query_id,
+    warning_reason,
+):
+    query_set = NarrativeCanonQuerySet(
+        thought_process="核对身份。",
+        queries=[NarrativeCanonQuery(
+            query_id="q1",
+            paragraph_ids=["P001"],
+            claim="莱尔已经抵达广场。",
+            claim_type="location_or_presence",
+            entities=["莱尔"],
+            lookup_queries=["莱尔 抵达 广场"],
+            priority="high",
+        )],
+    )
+    evidence_set = CanonEvidenceSet(results=[CanonQueryEvidence(
+        query_id="q1",
+        claim=query_set.queries[0].claim,
+        evidence=[CanonEvidenceHit(
+            evidence_id="turn_1_p001",
+            source_type="scene_paragraph",
+            turn_index=1,
+            scene_id="scene_1",
+            paragraph_index=1,
+            text="莱尔抵达广场。",
+            score=0.9,
+        )],
+    )])
+    gateway = _SpyGateway({
+        "audit_summary": "错误地发现了另一项冲突。",
+        "canon_findings": [{
+            "query_id": "q1",
+            "verdict": "explicitly_confirmed",
+            "reasoning": "历史明确确认莱尔抵达广场。",
+            "evidence_ids": ["turn_1_p001"],
+        }],
+        "decision": "revise",
+        "assertions": [_assertion_payload(
+            issue_type="canon_contradiction",
+            authority_refs=["Historical Canon Evidence"],
+            canon_query_id=assertion_query_id,
+            evidence_ids=["turn_1_p001"],
+        )],
+    })
+    agent = NarrativeConsistencyAgent(gateway)
+
+    review = agent.check(
+        user_input="行动",
+        current_state=_current_state(),
+        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        composition=_composition("莱尔抵达广场。"),
+        canon_query_set=query_set,
+        canon_evidence_set=evidence_set,
+        trace_id="trace-1",
+    )
+
+    assert review.decision == "pass"
+    assert review.assertions == []
+    assert agent.last_warnings[0].reason == warning_reason
+
+
+def test_contradiction_finding_without_valid_assertion_still_fails():
+    query_set = NarrativeCanonQuerySet(
+        thought_process="核对历史。",
+        queries=[NarrativeCanonQuery(
+            query_id="q1",
+            paragraph_ids=["P001"],
+            claim="莱尔此前离开过广场。",
+            claim_type="past_event",
+            entities=["莱尔"],
+            lookup_queries=["莱尔 离开 广场"],
+            priority="high",
+        )],
+    )
+    evidence_set = CanonEvidenceSet(results=[CanonQueryEvidence(
+        query_id="q1",
+        claim=query_set.queries[0].claim,
+        evidence=[CanonEvidenceHit(
+            evidence_id="turn_1_p001",
+            source_type="scene_paragraph",
+            turn_index=1,
+            scene_id="scene_1",
+            paragraph_index=1,
+            text="莱尔始终留在广场。",
+            score=0.9,
+        )],
+    )])
+    gateway = _SpyGateway({
+        "audit_summary": "发现历史冲突。",
+        "canon_findings": [{
+            "query_id": "q1",
+            "verdict": "contradiction",
+            "reasoning": "历史明确写出莱尔始终没有离开。",
+            "evidence_ids": ["turn_1_p001"],
+        }],
+        "decision": "revise",
+        "assertions": [_assertion_payload(
+            issue_type="canon_contradiction",
+            authority_refs=["Historical Canon Evidence"],
+            canon_query_id=None,
+            evidence_ids=["turn_1_p001"],
+        )],
+    })
+
+    with pytest.raises(
+        ValueError,
+        match="each contradiction finding requires exactly one valid canon assertion",
+    ):
+        _check(
+            gateway,
+            "莱尔声称自己此前离开过广场。",
+            query_set=query_set,
+            evidence_set=evidence_set,
+        )
 
 
 def test_schema_rejects_pass_with_assertions_and_revise_without_assertions():
@@ -491,7 +701,10 @@ def test_check_node_stores_review_without_mutating_composition(monkeypatch):
 
     class _FakeAgent:
         def __init__(self, _gateway):
-            pass
+            self.last_warnings = [NarrativeConsistencyWarning(
+                assertion_index=1,
+                reason="missing_query_id",
+            )]
 
         def check(self, **_kwargs):
             return review
@@ -508,8 +721,10 @@ def test_check_node_stores_review_without_mutating_composition(monkeypatch):
     })
 
     assert result["narrative_consistency_review"] == review
+    assert result["narrative_consistency_warnings"][0].reason == "missing_query_id"
     assert "narrative_composition" not in result
     assert result["events"][0]["data"]["revision_required"] is True
+    assert result["events"][0]["data"]["warnings"][0]["reason"] == "missing_query_id"
 
 
 def test_revision_node_reuses_composer_with_rendered_assertions(monkeypatch):
@@ -524,18 +739,23 @@ def test_revision_node_reuses_composer_with_rendered_assertions(monkeypatch):
     captured = {}
     streamed = []
 
-    class _FakeComposer:
+    class _FakeSourceRewriter:
         def __init__(self, _gateway):
             pass
 
-        def compose(self, context, **kwargs):
+        def rewrite(self, context, request, **kwargs):
             captured["context"] = context
+            captured["request"] = request
             captured.update(kwargs)
             kwargs["on_stream_start"](1)
             kwargs["on_scene_text_delta"]("正确正文。")
             return revised
 
-    monkeypatch.setattr(generation_nodes, "NarrativeComposerAgent", _FakeComposer)
+    monkeypatch.setattr(
+        generation_nodes,
+        "SourceNarrativeRewriter",
+        _FakeSourceRewriter,
+    )
     monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
     monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
     monkeypatch.setattr(
@@ -557,9 +777,9 @@ def test_revision_node_reuses_composer_with_rendered_assertions(monkeypatch):
         "trace_id": "trace-1",
     })
 
-    request = captured["revision_request"]
-    assert request.previous_scene_text == "错误正文。"
-    assert "正文错误：正文写成莱尔向埃利奥支付了两枚金币。" in request.instruction
+    request = captured["request"]
+    assert request.source_scene_text == "错误正文。"
+    assert "正文错误：正文写成莱尔向埃利奥支付了两枚金币。" in request.requirements[0]
     assert result["scene_result"].scene_text == "正确正文。"
     assert result["events"][0]["step"] == "narrative_revised"
     assert [event["step"] for event in streamed] == [

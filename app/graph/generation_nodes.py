@@ -11,8 +11,13 @@ from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.director_event.consumer import DirectorEventConsumer
 from app.domain.narrative_composer import (
     NarrativeComposerAgent,
-    NarrativeRevisionRequest,
     build_entity_retrieval_anchors,
+)
+from app.domain.narrative_rewrite import (
+    NarrativeRecomposer,
+    RecomposeRequest,
+    SourceNarrativeRewriter,
+    SourceRewriteRequest,
 )
 from app.domain.narrative_canon_query import (
     NarrativeCanonQueryAgent,
@@ -56,6 +61,8 @@ def _composition_output_state(
         *(action_parse_result.anchors if action_parse_result is not None else []),
         *beat_entity_anchors,
     ]
+    # Context profiles were selected before composition. Re-select from the final
+    # outline so newly planned entities are represented and NPCs use public views.
     with (
         _store_factory(state, "entity")() as ent_store,
         _store_factory(state, "npc_profile")() as npc_store,
@@ -422,6 +429,53 @@ def rephrase_narrative_node(state: GenerationState) -> GenerationState:
     )
 
 
+def rewrite_from_source_node(state: GenerationState) -> GenerationState:
+    decision = state["rewrite_strategy_decision"]
+    composition = _run_source_rewrite(
+        state,
+        SourceRewriteRequest(
+            source_scene_text=state["rewrite_source_scene_text"],
+            requirements=decision.rewrite_requirements,
+        ),
+        event_kind="feedback_source",
+    )
+    output_state = _composition_output_state(state, composition)
+    return {
+        **output_state,
+        "events": [{
+            "step": "feedback_source_rewrite_done",
+            "data": {
+                "trace_id": state["trace_id"],
+                "plot_outline": model_data(output_state["outline"]),
+            },
+        }],
+    }
+
+
+def recompose_from_feedback_node(state: GenerationState) -> GenerationState:
+    decision = state["rewrite_strategy_decision"]
+    runtime_kwargs = _rewrite_runtime_kwargs(
+        state,
+        rewrite_mode="recompose",
+    )
+    composition = NarrativeRecomposer(gateway_for(state)).recompose(
+        state["context"],
+        RecomposeRequest(requirements=decision.rewrite_requirements),
+        **runtime_kwargs,
+    )
+    output_state = _composition_output_state(state, composition)
+    return {
+        **output_state,
+        "events": [{
+            "step": "feedback_recompose_done",
+            "data": {
+                "trace_id": state["trace_id"],
+                "plot_outline": model_data(output_state["outline"]),
+            },
+        }],
+    }
+
+
 def generate_canon_queries_node(state: GenerationState) -> GenerationState:
     get_stream_writer()({
         "step": "canon_query_started",
@@ -499,7 +553,8 @@ def retrieve_canon_evidence_node(state: GenerationState) -> GenerationState:
 
 def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
     composition = state["narrative_composition"]
-    review = NarrativeConsistencyAgent(gateway_for(state)).check(
+    agent = NarrativeConsistencyAgent(gateway_for(state))
+    review = agent.check(
         user_input=state["user_input"],
         current_state=state["current_state"],
         turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
@@ -508,13 +563,16 @@ def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
         canon_evidence_set=state.get("canon_evidence_set"),
         trace_id=state["trace_id"],
     )
+    warnings = list(agent.last_warnings)
     return {
         "narrative_consistency_review": review,
+        "narrative_consistency_warnings": warnings,
         "events": [{
             "step": "narrative_checked",
             "data": {
                 "trace_id": state["trace_id"],
                 "narrative_consistency_review": model_data(review),
+                "warnings": model_data(warnings),
                 "revision_required": review.decision == "revise",
             },
         }],
@@ -522,38 +580,15 @@ def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
 
 
 def revise_narrative_node(state: GenerationState) -> GenerationState:
-    stream_writer = get_stream_writer()
     review = state["narrative_consistency_review"]
     instruction = render_revision_instruction(review)
-    stream_writer({
-        "step": "narrative_revision_started",
-        "data": {"trace_id": state["trace_id"]},
-    })
-    composition = NarrativeComposerAgent(gateway_for(state)).compose(
-        state["context"],
-        recent_scene=state.get("recent_scene"),
-        turn_index=state["next_turn_index"],
-        revision_request=NarrativeRevisionRequest(
-            previous_scene_text=state["narrative_composition"].scene_text,
-            instruction=instruction,
+    composition = _run_source_rewrite(
+        state,
+        SourceRewriteRequest(
+            source_scene_text=state["narrative_composition"].scene_text,
+            requirements=[instruction],
         ),
-        trace_id=state["trace_id"],
-        on_stream_start=lambda attempt: stream_writer({
-            "step": "scene_stream_started",
-            "data": {
-                "attempt": attempt,
-                "revision": True,
-                "trace_id": state["trace_id"],
-            },
-        }),
-        on_scene_text_delta=lambda delta: stream_writer({
-            "step": "scene_text_delta",
-            "data": {
-                "delta": delta,
-                "revision": True,
-                "trace_id": state["trace_id"],
-            },
-        }),
+        event_kind="consistency",
     )
     output_state = _composition_output_state(state, composition)
     return {
@@ -568,4 +603,64 @@ def revise_narrative_node(state: GenerationState) -> GenerationState:
                 "scene_result": model_data(output_state["scene_result"]),
             },
         }],
+    }
+
+
+def _run_source_rewrite(
+    state: GenerationState,
+    request: SourceRewriteRequest,
+    *,
+    event_kind: str,
+):
+    runtime_kwargs = _rewrite_runtime_kwargs(
+        state,
+        rewrite_mode="revise_from_source",
+        rewrite_origin=event_kind,
+    )
+    return SourceNarrativeRewriter(gateway_for(state)).rewrite(
+        state["context"],
+        request,
+        **runtime_kwargs,
+    )
+
+
+def _rewrite_runtime_kwargs(
+    state: GenerationState,
+    *,
+    rewrite_mode: str,
+    rewrite_origin: str | None = None,
+):
+    stream_writer = get_stream_writer()
+    if rewrite_origin is not None:
+        stream_writer({
+            "step": "narrative_revision_started",
+            "data": {
+                "trace_id": state["trace_id"],
+                "rewrite_mode": rewrite_mode,
+                "rewrite_origin": rewrite_origin,
+            },
+        })
+    revision = rewrite_mode == "revise_from_source"
+    return {
+        "recent_scene": state.get("recent_scene"),
+        "turn_index": state["next_turn_index"],
+        "trace_id": state["trace_id"],
+        "on_stream_start": lambda attempt: stream_writer({
+            "step": "scene_stream_started",
+            "data": {
+                "attempt": attempt,
+                "revision": revision,
+                "rewrite_mode": rewrite_mode,
+                "trace_id": state["trace_id"],
+            },
+        }),
+        "on_scene_text_delta": lambda delta: stream_writer({
+            "step": "scene_text_delta",
+            "data": {
+                "delta": delta,
+                "revision": revision,
+                "rewrite_mode": rewrite_mode,
+                "trace_id": state["trace_id"],
+            },
+        }),
     }

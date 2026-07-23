@@ -446,6 +446,8 @@ select option, select optgroup { background: #1c1c16; color: var(--ink); }
 .modal form { padding: 30px; }.modal h2 { margin: 0 0 10px; font-family: var(--serif); font-size: 30px; font-weight: 500; }.modal form > p:not(.eyebrow) { color: var(--muted); line-height: 1.7; }
 .modal input { margin-top: 10px; }.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }.modal-actions button:not(.primary-action) { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 11px 16px; cursor: pointer; transition: all 0.2s ease; }.modal-actions button:not(.primary-action):hover { border-color: rgba(228,201,138,.38); background: var(--gold-soft); }
 .model-config-modal { width: min(610px, calc(100% - 28px)); }
+.feedback-rewrite-modal { width: min(620px, calc(100% - 28px)); }
+.feedback-rewrite-modal textarea { min-height: 150px; margin-top: 10px; resize: vertical; line-height: 1.65; }
 .model-config-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .model-config-header h2 { margin-bottom: 0; }
 .model-config-fields { display: grid; gap: 16px; margin-top: 22px; }

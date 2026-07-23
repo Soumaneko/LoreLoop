@@ -2,6 +2,7 @@
 
 from app.graph.confirmation_graph import confirm_stream
 from app.graph.generation_graph import (
+    feedback_rewrite_stream,
     generate_turn_stream,
     rephrase_turn_stream,
     reroll_turn_stream,
@@ -134,6 +135,32 @@ def start_reroll_operation(
         reroll_turn_stream,
         turn_id,
         request_id=request_id,
+    )
+
+
+def start_feedback_rewrite_operation(
+    turn_id: str,
+    *,
+    source_scene_text: str,
+    user_feedback: str,
+    request_id: str | None = None,
+) -> str:
+    runtime = get_campaign_runtime()
+    pending = runtime.pending_turns.get(turn_id)
+    if pending is None:
+        raise ValueError("Pending turn not found. Generate a scene before rewriting.")
+    return _submit_managed_operation(
+        "feedback_rewrite",
+        feedback_rewrite_stream,
+        turn_id,
+        source_scene_text=source_scene_text,
+        user_feedback=user_feedback,
+        request_id=request_id,
+        metadata={
+            "turn_id": turn_id,
+            "group_id": pending.group_id,
+            "user_input": pending.user_input,
+        },
     )
 
 
@@ -301,6 +328,7 @@ __all__ = [
     "start_batch_classify_operation",
     "start_confirmation_operation",
     "start_generation_operation",
+    "start_feedback_rewrite_operation",
     "start_initialization_operation",
     "start_memory_maintain_operation",
     "start_rephrase_operation",

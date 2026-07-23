@@ -441,6 +441,49 @@ def test_public_api_starts_retry_modes_with_pending_turn_metadata(
         "generation",
         "rephrase",
         "reroll",
+        "feedback_rewrite",
+    )
+
+
+def test_public_api_starts_feedback_rewrite_with_current_draft(monkeypatch):
+    runtime = get_campaign_runtime()
+    runtime.pending_turns.add(SimpleNamespace(
+        turn_id="turn-v1",
+        group_id="group-1",
+        version_index=1,
+        user_input="调查钟楼",
+    ))
+    captured = {}
+
+    def rewrite_stream(turn_id, *, source_scene_text, user_feedback):
+        captured.update({
+            "turn_id": turn_id,
+            "source_scene_text": source_scene_text,
+            "user_feedback": user_feedback,
+        })
+        yield {"step": "feedback_rewrite_started", "data": {}}
+
+    monkeypatch.setattr(api, "feedback_rewrite_stream", rewrite_stream)
+    operation_id = api.start_feedback_rewrite_operation(
+        "turn-v1",
+        source_scene_text="浏览器中编辑后的正文",
+        user_feedback="角色不应知道秘密",
+        request_id="request-feedback-rewrite",
+    )
+    snapshot = runtime.operations.wait(operation_id, timeout=2)
+
+    assert snapshot.status == "succeeded"
+    assert snapshot.operation_type == "feedback_rewrite"
+    assert captured == {
+        "turn_id": "turn-v1",
+        "source_scene_text": "浏览器中编辑后的正文",
+        "user_feedback": "角色不应知道秘密",
+    }
+    assert snapshot.supersedes_recoverable_types == (
+        "generation",
+        "rephrase",
+        "reroll",
+        "feedback_rewrite",
     )
 
 
@@ -484,6 +527,7 @@ def test_public_api_starts_confirmation_with_pending_turn_metadata(monkeypatch):
         "generation",
         "rephrase",
         "reroll",
+        "feedback_rewrite",
         "initialization_opening",
     )
     assert captured == {

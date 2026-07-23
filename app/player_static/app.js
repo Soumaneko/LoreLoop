@@ -25,6 +25,8 @@ const els = {
   closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelApiKey: $("modelApiKey"),
   modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"),
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
+  feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
+  feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
   difficultySelect: $("difficultySelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
   saveManagerDialog: $("saveManagerDialog"), closeSaveManagerBtn: $("closeSaveManagerBtn"), saveCardList: $("saveCardList"),
@@ -55,6 +57,10 @@ const progressLabels = {
   narrative_checked: "正在检查前后逻辑",
   narrative_revision_started: "发现明确问题，正在重新编写",
   narrative_revised: "修订完成",
+  feedback_rewrite_started: "正在理解修改意见",
+  feedback_rewrite_strategy_selected: "修改方式已经确定",
+  feedback_source_rewrite_done: "局部修订完成",
+  feedback_recompose_done: "重新构思完成",
   confirm_started: "正在读取最终正文",
   scene_facts_done: "正在提取场景事实",
   state_update_done: "正在更新世界状态",
@@ -277,6 +283,7 @@ function renderPending() {
   const confirming = state.mode === "confirming";
   const edit = node("button", "soft-button", "编辑正文");
   const rephrase = node("button", "soft-button", "重新措辞");
+  const feedbackRewrite = node("button", "soft-button", "根据意见修改");
   const reroll = node("button", "soft-button", "重新判定");
   const discard = node("button", "soft-button danger-button", "删除");
   const confirm = node("button", "primary-action", "确认采用");
@@ -285,6 +292,9 @@ function renderPending() {
   rephrase.disabled = pending.kind === "opening" || ["generating", "confirming"].includes(state.mode);
   rephrase.title = "保留本次判定与导演输入，只重新生成正文";
   rephrase.onclick = () => retryTurn("rephrase");
+  feedbackRewrite.disabled = rephrase.disabled;
+  feedbackRewrite.title = "根据具体意见决定局部修订、重新构思或不重写";
+  feedbackRewrite.onclick = openFeedbackRewrite;
   reroll.disabled = rephrase.disabled;
   reroll.title = "重新运行完整生成管线并重新投骰";
   reroll.onclick = () => retryTurn("reroll");
@@ -293,7 +303,7 @@ function renderPending() {
   confirm.disabled = confirming;
   confirm.textContent = confirming ? "正在确认……" : "确认采用";
   confirm.onclick = confirmTurn;
-  actions.append(edit, rephrase, reroll);
+  actions.append(edit, rephrase, feedbackRewrite, reroll);
   if (pending.kind !== "opening") actions.appendChild(discard);
   actions.appendChild(confirm);
   els.pendingCard.append(toolbar, display);
@@ -957,8 +967,17 @@ function handleGenerationEvent(event, { retryMode = null } = {}) {
     els.streamingLabel.textContent = "正在恢复最新生成进度";
   }
   setProgress(event.step);
+  if (event.step === "feedback_rewrite_strategy_selected") {
+    const strategy = event.data?.strategy;
+    if (strategy === "revise_from_source") els.streamingLabel.textContent = "正在基于原文修订";
+    if (strategy === "recompose") els.streamingLabel.textContent = "正在重新构思正文";
+  }
   if (event.step === "scene_stream_started") startStreaming(
-    event.data?.revision
+    event.data?.rewrite_mode === "recompose"
+      ? "正在重新构思正文"
+      : retryMode === "feedback_rewrite"
+        ? "正在基于原文修订"
+      : event.data?.revision
       ? "正在根据问题断言重新编写"
       : retryMode === "rephrase"
         ? "正在重新措辞"
@@ -972,7 +991,7 @@ function handleGenerationEvent(event, { retryMode = null } = {}) {
 }
 
 async function resumeGenerationOperation(operation) {
-  const retryMode = ["rephrase", "reroll"].includes(operation.operation_type)
+  const retryMode = ["rephrase", "reroll", "feedback_rewrite"].includes(operation.operation_type)
     ? operation.operation_type
     : null;
   const userInput = operation.metadata?.user_input || "";
@@ -984,16 +1003,26 @@ async function resumeGenerationOperation(operation) {
       ? "正在恢复重新措辞"
       : retryMode === "reroll"
         ? "正在恢复重新判定"
+        : retryMode === "feedback_rewrite"
+          ? "正在恢复意见重写"
         : "正在恢复生成进度",
   );
+  let feedbackDecision = null;
   try {
     await subscribe(
       `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
-      (event) => handleGenerationEvent(event, { retryMode }),
+      (event) => {
+        if (event.step === "feedback_rewrite_strategy_selected") feedbackDecision = event.data;
+        handleGenerationEvent(event, { retryMode });
+      },
     );
     await acknowledgeHandledOperation(operation.operation_id);
     stopStreaming();
-    if (retryMode) showToast("新版本已生成，旧版本仍然保留");
+    if (retryMode === "feedback_rewrite" && feedbackDecision?.strategy === "no_rewrite") {
+      showToast(feedbackNoRewriteMessage(feedbackDecision.reason_code));
+    } else if (retryMode) {
+      showToast("新版本已生成，旧版本仍然保留");
+    }
     return true;
   } catch (error) {
     stopStreaming();
@@ -1085,6 +1114,59 @@ async function retryTurn(retryMode) {
     }, (event) => handleGenerationEvent(event, { retryMode }));
     await acknowledgeHandledOperation(operationId);
     stopStreaming(); await loadAll({ scroll: "smooth" }); showToast("新版本已生成，旧版本仍然保留");
+  } catch (error) {
+    stopStreaming(); setMode("pending"); renderAll(); showError(error);
+    await acknowledgeFailedOperation(error);
+  }
+}
+
+function openFeedbackRewrite() {
+  const pending = activePending(); const variant = selectedVariant();
+  if (!pending || !variant || pending.kind === "opening") return;
+  els.feedbackRewriteDialog.showModal();
+  window.setTimeout(() => els.feedbackRewriteInput.focus(), 0);
+}
+
+function feedbackNoRewriteMessage(reasonCode) {
+  if (["changes_player_action", "changes_resolved_outcome"].includes(reasonCode)) {
+    return "这项意见会改变玩家行动或判定结果，请使用重新判定";
+  }
+  if (reasonCode === "conflicts_with_authority") {
+    return "这项意见与当前已经确定的事实冲突，未执行重写";
+  }
+  if (reasonCode === "no_actionable_request") {
+    return "没有识别到明确可执行的修改要求";
+  }
+  return "这项意见不适用于正文重写，原版本保持不变";
+}
+
+async function rewriteFromFeedback() {
+  const pending = activePending(); const variant = selectedVariant();
+  const userFeedback = els.feedbackRewriteInput.value.trim();
+  if (!pending || !variant || pending.kind === "opening" || !userFeedback) return;
+  els.feedbackRewriteDialog.close();
+  setMode("generating"); renderControls();
+  startStreaming("正在理解修改意见");
+  let decision = null;
+  try {
+    const operationId = await stream("/api/player/feedback-rewrite", {
+      turn_id: variant.turn_id,
+      source_scene_text: readDraft(variant),
+      user_feedback: userFeedback,
+      request_id: newRequestId(),
+    }, (event) => {
+      if (event.step === "feedback_rewrite_strategy_selected") decision = event.data;
+      handleGenerationEvent(event, { retryMode: "feedback_rewrite" });
+    });
+    await acknowledgeHandledOperation(operationId);
+    stopStreaming();
+    await loadAll({ scroll: decision?.strategy === "no_rewrite" ? "instant" : "smooth" });
+    els.feedbackRewriteInput.value = "";
+    if (decision?.strategy === "no_rewrite") {
+      showToast(feedbackNoRewriteMessage(decision.reason_code));
+    } else {
+      showToast("新版本已生成，旧版本仍然保留");
+    }
   } catch (error) {
     stopStreaming(); setMode("pending"); renderAll(); showError(error);
     await acknowledgeFailedOperation(error);
@@ -1399,6 +1481,11 @@ for (const input of els.modelConfigForm.querySelectorAll("input")) {
 }
 els.modelConfigDialog.addEventListener("cancel", (event) => {
   if (els.modelConfigDialog.dataset.required === "true") event.preventDefault();
+});
+els.feedbackRewriteCancelBtn.onclick = () => els.feedbackRewriteDialog.close();
+els.feedbackRewriteForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  rewriteFromFeedback();
 });
 els.closeSaveManagerBtn.onclick = () => els.saveManagerDialog.close();
 els.importSaveBtn.onclick = () => els.importSaveInput.click();

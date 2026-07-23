@@ -34,8 +34,8 @@ from app.domain.narrative_composer import (
     NarrativeComposerAgent,
     NarrativeComposerContext,
     NarrativeComposerResult,
-    NarrativeRevisionRequest,
 )
+from app.domain.narrative_rewrite import SourceNarrativeRewriter, SourceRewriteRequest
 from app.domain.narrative_consistency import (
     NarrativeConsistencyAgent,
     render_revision_instruction,
@@ -257,14 +257,14 @@ def test_real_llm_check_assertions_then_composer_revision(tmp_path):
     print("\n=== Program-rendered Revision Instruction ===")
     print(instruction)
 
-    revised = NarrativeComposerAgent(gateway).compose(
+    revised = SourceNarrativeRewriter(gateway).rewrite(
         _composer_context(),
+        SourceRewriteRequest(
+            source_scene_text=flawed_composition.scene_text,
+            requirements=[instruction],
+        ),
         recent_scene=None,
         turn_index=26,
-        revision_request=NarrativeRevisionRequest(
-            previous_scene_text=flawed_composition.scene_text,
-            instruction=instruction,
-        ),
         trace_id=trace_id,
     )
 

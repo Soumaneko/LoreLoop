@@ -8,10 +8,12 @@ from app.runtime.graph_cache import get_cached_graph
 
 from app.domain.roll.schemas import Difficulty
 from app.domain.short_term_memory import ShortTermMemory
+from app.domain.narrative_rewrite import RewriteStrategySelector
 from app.runtime.session import get_campaign_runtime
 
 from .generation_helpers import (
     finalize_pending_turn,
+    gateway_for,
     prepare_generation_state,
 )
 from .generation_events import GenerationEventPresenter
@@ -24,6 +26,8 @@ from .generation_nodes import (
     maybe_director_npc_node,
     parse_action_node,
     rephrase_narrative_node,
+    recompose_from_feedback_node,
+    rewrite_from_source_node,
     resolve_turn_node,
     generate_canon_queries_node,
     retrieve_canon_evidence_node,
@@ -139,6 +143,58 @@ def _route_after_consistency_check(state: GenerationState) -> str:
     return "revise" if review.decision == "revise" else "pass"
 
 
+def _route_feedback_rewrite(state: GenerationState) -> str:
+    return state["rewrite_strategy_decision"].strategy
+
+
+def build_feedback_rewrite_graph():
+    dependencies = (
+        rewrite_from_source_node,
+        recompose_from_feedback_node,
+        generate_canon_queries_node,
+        retrieve_canon_evidence_node,
+        check_narrative_consistency_node,
+        revise_narrative_node,
+        _route_feedback_rewrite,
+        _route_after_consistency_check,
+    )
+    return get_cached_graph(
+        "generation_feedback_rewrite",
+        dependencies,
+        _compile_feedback_rewrite_graph,
+    )
+
+
+def _compile_feedback_rewrite_graph():
+    graph = StateGraph(GenerationState)
+    graph.add_node("rewrite_from_source", rewrite_from_source_node)
+    graph.add_node("recompose", recompose_from_feedback_node)
+    graph.add_node("generate_canon_queries", generate_canon_queries_node)
+    graph.add_node("retrieve_canon_evidence", retrieve_canon_evidence_node)
+    graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
+    graph.add_node("revise_narrative", revise_narrative_node)
+    graph.add_conditional_edges(
+        START,
+        _route_feedback_rewrite,
+        {
+            "revise_from_source": "rewrite_from_source",
+            "recompose": "recompose",
+            "no_rewrite": END,
+        },
+    )
+    graph.add_edge("rewrite_from_source", "generate_canon_queries")
+    graph.add_edge("recompose", "generate_canon_queries")
+    graph.add_edge("generate_canon_queries", "retrieve_canon_evidence")
+    graph.add_edge("retrieve_canon_evidence", "check_narrative_consistency")
+    graph.add_conditional_edges(
+        "check_narrative_consistency",
+        _route_after_consistency_check,
+        {"pass": END, "revise": "revise_narrative"},
+    )
+    graph.add_edge("revise_narrative", END)
+    return graph.compile()
+
+
 def generate_turn_stream(
     user_input: str,
     difficulty: Difficulty = "困难",
@@ -174,8 +230,11 @@ def rephrase_turn_stream(turn_id: str):
     with runtime.confirmation_lock:
         pending, version_index = _retry_source(runtime, turn_id)
         trace_id = str(uuid.uuid4())
-        state: GenerationState = {
-            "events": [{
+        state = _pending_context_state(
+            runtime,
+            pending,
+            trace_id=trace_id,
+            events=[{
                 "step": "rephrase_started",
                 "data": {
                     "turn_id": turn_id,
@@ -184,26 +243,110 @@ def rephrase_turn_stream(turn_id: str):
                     "trace_id": trace_id,
                 },
             }],
-            "runtime_services": runtime.services,
-            "runtime": runtime,
-            "user_input": pending.user_input,
-            "difficulty": pending.difficulty,
-            "max_chars": pending.max_chars,
-            "trace_id": trace_id,
-            "current_state": pending.state_before,
-            "short_term_memory": pending.short_term_memory or ShortTermMemory(),
-            "turn_index": pending.turn_index,
-            "next_turn_index": pending.turn_index,
-            "context": pending.context,
-            "turn_resolution": pending.context.turn_resolution,
-            "director_npc_result": pending.director_npc_result,
-        }
+        )
         yield from _stream_generation_graph(
             state,
             build_rephrase_graph(),
             group_id=pending.group_id,
             version_index=version_index,
         )
+
+
+def feedback_rewrite_stream(
+    turn_id: str,
+    *,
+    source_scene_text: str,
+    user_feedback: str,
+):
+    source_scene_text = source_scene_text.strip()
+    user_feedback = user_feedback.strip()
+    if not source_scene_text:
+        raise ValueError("source_scene_text is required")
+    if not user_feedback:
+        raise ValueError("user_feedback is required")
+    if len(user_feedback) > 2000:
+        raise ValueError("user_feedback must not exceed 2000 characters")
+
+    runtime = get_campaign_runtime()
+    with runtime.confirmation_lock:
+        pending, version_index = _retry_source(runtime, turn_id)
+        trace_id = str(uuid.uuid4())
+        state = _pending_context_state(
+            runtime,
+            pending,
+            trace_id=trace_id,
+            events=[{
+                "step": "feedback_rewrite_started",
+                "data": {
+                    "turn_id": turn_id,
+                    "group_id": pending.group_id,
+                    "version_index": version_index,
+                    "trace_id": trace_id,
+                },
+            }],
+        )
+        state.update({
+            "rewrite_feedback": user_feedback,
+            "rewrite_source_scene_text": source_scene_text,
+        })
+        decision = RewriteStrategySelector(gateway_for(state)).select(
+            context=pending.context,
+            source_scene_text=source_scene_text,
+            user_feedback=user_feedback,
+            recent_scene=state.get("recent_scene"),
+            turn_index=pending.turn_index,
+            trace_id=trace_id,
+        )
+        state["rewrite_strategy_decision"] = decision
+        state["events"].append({
+            "step": "feedback_rewrite_strategy_selected",
+            "data": {
+                "trace_id": trace_id,
+                "strategy": decision.strategy,
+                "reason_code": decision.reason_code,
+            },
+        })
+        if decision.strategy == "no_rewrite":
+            yield from state["events"]
+            return
+        yield from _stream_generation_graph(
+            state,
+            build_feedback_rewrite_graph(),
+            group_id=pending.group_id,
+            version_index=version_index,
+        )
+
+
+def _pending_context_state(
+    runtime,
+    pending,
+    *,
+    trace_id: str,
+    events: list[GenerationEvent],
+) -> GenerationState:
+    short_term_memory = pending.short_term_memory or ShortTermMemory()
+    recent_scene = (
+        short_term_memory.recent_scenes[-1]
+        if short_term_memory.recent_scenes
+        else None
+    )
+    return {
+        "events": events,
+        "runtime_services": runtime.services,
+        "runtime": runtime,
+        "user_input": pending.user_input,
+        "difficulty": pending.difficulty,
+        "max_chars": pending.max_chars,
+        "trace_id": trace_id,
+        "current_state": pending.state_before,
+        "short_term_memory": short_term_memory,
+        "turn_index": pending.turn_index,
+        "next_turn_index": pending.turn_index,
+        "context": pending.context,
+        "turn_resolution": pending.context.turn_resolution,
+        "director_npc_result": pending.director_npc_result,
+        "recent_scene": recent_scene,
+    }
 
 
 def _retry_source(runtime, turn_id: str):

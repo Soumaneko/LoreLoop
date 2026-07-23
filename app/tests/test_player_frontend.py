@@ -81,6 +81,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "/api/player/${endpoint}" in source
     assert 'retryTurn("rephrase")' in source
     assert 'retryTurn("reroll")' in source
+    assert "/api/player/feedback-rewrite" in source
+    assert 'id="feedbackRewriteDialog"' in html
+    assert '"根据意见修改"' in source
     assert '"重新措辞"' in source
     assert '"重新判定"' in source
     assert "/api/player/confirm" in source

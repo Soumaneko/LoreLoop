@@ -187,6 +187,22 @@
     </form>
   </dialog>
 
+  <dialog id="feedbackRewriteDialog" class="modal feedback-rewrite-modal">
+    <form id="feedbackRewriteForm">
+      <p class="eyebrow">REWRITE WITH FEEDBACK</p>
+      <h2>根据意见修改</h2>
+      <p>说明正文哪里需要改变。系统会判断应保留原文局部修订、抛弃原文重新构思，或不执行重写。</p>
+      <label>
+        <span>修改意见</span>
+        <textarea id="feedbackRewriteInput" maxlength="2000" rows="6" required placeholder="例如：柳若兰不知道密室的秘密，请重写她听到这个消息时的反应。"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button id="feedbackRewriteCancelBtn" type="button">取消</button>
+        <button class="primary-action" type="submit">判断并修改</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="initDialog" class="modal init-modal">
     <form method="dialog" id="initForm">
       <p class="eyebrow">BEGIN A NEW STORY</p>

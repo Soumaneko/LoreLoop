@@ -20,9 +20,16 @@ ConsistencyIssueType = Literal[
     "canon_contradiction",
     "other",
 ]
+ConsistencyWarningReason = Literal[
+    "missing_query_id",
+    "unknown_query_id",
+    "non_contradiction_finding",
+    "missing_evidence",
+    "unknown_evidence",
+]
 
 
-class NarrativeConsistencyAssertion(BaseModel):
+class NarrativeConsistencyAssertionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     issue_type: ConsistencyIssueType
@@ -43,6 +50,8 @@ class NarrativeConsistencyAssertion(BaseModel):
     canon_query_id: str | None = None
     evidence_ids: list[str] = Field(default_factory=list, max_length=8)
 
+
+class NarrativeConsistencyAssertion(NarrativeConsistencyAssertionDraft):
     @model_validator(mode="after")
     def _validate_canon_references(self):
         if self.issue_type == "canon_contradiction":
@@ -66,12 +75,19 @@ class NarrativeCanonFinding(BaseModel):
     evidence_ids: list[str] = Field(min_length=1, max_length=8)
 
 
-class NarrativeConsistencyReview(BaseModel):
+class NarrativeConsistencyReviewDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     audit_summary: str = Field(min_length=1)
     canon_findings: list[NarrativeCanonFinding] = Field(max_length=12)
     decision: ConsistencyDecision
+    assertions: list[NarrativeConsistencyAssertionDraft] = Field(
+        default_factory=list,
+        max_length=6,
+    )
+
+
+class NarrativeConsistencyReview(NarrativeConsistencyReviewDraft):
     assertions: list[NarrativeConsistencyAssertion] = Field(
         default_factory=list,
         max_length=6,
@@ -84,6 +100,15 @@ class NarrativeConsistencyReview(BaseModel):
         if self.decision == "revise" and not self.assertions:
             raise ValueError("revise requires at least one assertion")
         return self
+
+
+class NarrativeConsistencyWarning(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal["ignored_canon_assertion"] = "ignored_canon_assertion"
+    assertion_index: int = Field(ge=1)
+    canon_query_id: str | None = None
+    reason: ConsistencyWarningReason
 
 
 def render_revision_instruction(review: NarrativeConsistencyReview) -> str:

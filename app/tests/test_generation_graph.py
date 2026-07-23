@@ -4,6 +4,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph import generation_graph, generation_nodes
 from app.domain.narrative_canon_query.schemas import NarrativeCanonQuerySet
+from app.domain.narrative_rewrite.schemas import RewriteStrategyDecision
 from app.graph.generation_events import GenerationEventPresenter
 from app.graph.generation_state import GenerationState
 from app.domain.scene_writer.schemas import SceneWriterResult
@@ -33,6 +34,80 @@ def test_rephrase_graph_runs_only_composer_and_consistency_tail():
         "consume_director_events",
         "maybe_director_npc",
     } for _source, target in edges)
+
+
+def test_feedback_rewrite_graph_keeps_two_composer_paths_separate():
+    graph = generation_graph.build_feedback_rewrite_graph().get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+
+    assert ("__start__", "rewrite_from_source") in edges
+    assert ("__start__", "recompose") in edges
+    assert ("__start__", "__end__") in edges
+    assert ("rewrite_from_source", "generate_canon_queries") in edges
+    assert ("recompose", "generate_canon_queries") in edges
+    assert ("check_narrative_consistency", "revise_narrative") in edges
+    assert not any(target in {
+        "parse_action",
+        "evaluate_roll_modifiers",
+        "resolve_turn",
+        "consume_director_events",
+        "maybe_director_npc",
+    } for _source, target in edges)
+
+
+def test_feedback_rewrite_graph_accepts_no_rewrite_as_terminal_state():
+    decision = RewriteStrategyDecision(
+        strategy="no_rewrite",
+        reason_code="no_actionable_request",
+        reasoning="没有明确修改要求。",
+    )
+
+    result = generation_graph.build_feedback_rewrite_graph().invoke({
+        "events": [],
+        "rewrite_strategy_decision": decision,
+    })
+
+    assert result["rewrite_strategy_decision"] == decision
+
+
+def test_rewrite_stream_callbacks_share_mode_aware_event_projection(monkeypatch):
+    streamed = []
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
+    state = {
+        "recent_scene": "recent",
+        "next_turn_index": 4,
+        "trace_id": "trace-rewrite",
+    }
+
+    kwargs = generation_nodes._rewrite_runtime_kwargs(
+        state,
+        rewrite_mode="recompose",
+    )
+    kwargs["on_stream_start"](2)
+    kwargs["on_scene_text_delta"]("新正文")
+
+    assert kwargs["recent_scene"] == "recent"
+    assert kwargs["turn_index"] == 4
+    assert streamed == [
+        {
+            "step": "scene_stream_started",
+            "data": {
+                "attempt": 2,
+                "revision": False,
+                "rewrite_mode": "recompose",
+                "trace_id": "trace-rewrite",
+            },
+        },
+        {
+            "step": "scene_text_delta",
+            "data": {
+                "delta": "新正文",
+                "revision": False,
+                "rewrite_mode": "recompose",
+                "trace_id": "trace-rewrite",
+            },
+        },
+    ]
 
 
 def test_consumer_composer_and_consistency_checker_run_in_order():
@@ -440,3 +515,68 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     assert state["short_term_memory"] is short_term
     assert state["director_npc_result"] is director_npc_result
     assert events[-1]["data"]["turn_id"] == "turn_v2"
+
+
+def test_feedback_no_rewrite_does_not_create_or_stream_a_variant(
+    monkeypatch,
+    configure_runtime_services,
+):
+    turn_id = "turn_v1"
+    state_before = object()
+    context = SimpleNamespace(turn_resolution=object())
+    runtime = get_campaign_runtime()
+    runtime.pending_turns.add(PendingTurn(
+        turn_id=turn_id,
+        group_id="group_1",
+        version_index=1,
+        user_input="观察门外",
+        difficulty="普通",
+        max_chars=900,
+        state_before=state_before,
+        context=context,
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="版本一"),
+        turn_index=3,
+        short_term_memory=ShortTermMemory(),
+    ))
+
+    class _StateStore:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def load_or_default(self): return state_before
+
+    class _Selector:
+        def __init__(self, _gateway): pass
+        def select(self, **_kwargs):
+            return RewriteStrategyDecision(
+                strategy="no_rewrite",
+                reason_code="no_actionable_request",
+                reasoning="输入不构成修改要求。",
+            )
+
+    configure_runtime_services(current_state=_StateStore)
+    monkeypatch.setattr(generation_graph, "RewriteStrategySelector", _Selector)
+    monkeypatch.setattr(
+        generation_graph,
+        "_stream_generation_graph",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("no_rewrite must not enter a generation graph")
+        ),
+    )
+
+    try:
+        events = list(generation_graph.feedback_rewrite_stream(
+            turn_id,
+            source_scene_text="版本一",
+            user_feedback="123456",
+        ))
+        variants = runtime.pending_turns.variants("group_1")
+    finally:
+        runtime.pending_turns.remove(turn_id)
+
+    assert [event["step"] for event in events] == [
+        "feedback_rewrite_started",
+        "feedback_rewrite_strategy_selected",
+    ]
+    assert events[-1]["data"]["strategy"] == "no_rewrite"
+    assert len(variants) == 1
