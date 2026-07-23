@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-from app.core.llm import MockLLM
+from app.core.llm import MockLLM, PromptLoader
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
@@ -337,7 +337,7 @@ class TestNarrativeComposerAgent:
         assert result.planned_events[0].event_fact == "主角仔细观察酒馆里的客人，并清楚发现其中存在可疑行为。"
 
     def test_prompt_contains_outcome_following_requirements(self):
-        prompt = Path("app/prompts/generation/narrative_compose_v1.md").read_text(encoding="utf-8")
+        prompt, _ = PromptLoader().load("narrative_compose")
 
         assert "TurnResolutionResult" in prompt
         assert "ActionParseResult" not in prompt

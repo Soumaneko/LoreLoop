@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.core.diagnostics import DiagnosticLogger
 from app.domain.canon_evidence.schemas import CanonEvidenceHit, CanonEvidenceSet, CanonQueryEvidence
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.narrative_canon_query.schemas import NarrativeCanonQuery, NarrativeCanonQuerySet
@@ -690,7 +691,10 @@ def test_prompt_defines_assertions_and_forbids_patch_replacement():
     assert "每个 query 恰好输出一项" in prompt
 
 
-def test_check_node_stores_review_without_mutating_composition(monkeypatch):
+def test_check_node_stores_review_without_mutating_composition(
+    monkeypatch,
+    tmp_path,
+):
     composition = _composition("原始正文。")
     review = NarrativeConsistencyReview(
         audit_summary="发现错误。",
@@ -711,6 +715,7 @@ def test_check_node_stores_review_without_mutating_composition(monkeypatch):
 
     monkeypatch.setattr(generation_nodes, "NarrativeConsistencyAgent", _FakeAgent)
     monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
 
     result = generation_nodes.check_narrative_consistency_node({
         "user_input": "行动",
@@ -718,6 +723,7 @@ def test_check_node_stores_review_without_mutating_composition(monkeypatch):
         "turn_resolution": _turn_resolution(),
         "narrative_composition": composition,
         "trace_id": "trace-1",
+        "runtime_services": SimpleNamespace(diagnostics=diagnostics),
     })
 
     assert result["narrative_consistency_review"] == review
@@ -725,6 +731,9 @@ def test_check_node_stores_review_without_mutating_composition(monkeypatch):
     assert "narrative_composition" not in result
     assert result["events"][0]["data"]["revision_required"] is True
     assert result["events"][0]["data"]["warnings"][0]["reason"] == "missing_query_id"
+    diagnostic = diagnostics.read(trace_id="trace-1")[0]
+    assert diagnostic["code"] == "ignored_canon_assertion"
+    assert diagnostic["details"]["reason"] == "missing_query_id"
 
 
 def test_revision_node_reuses_composer_with_rendered_assertions(monkeypatch):

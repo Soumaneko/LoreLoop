@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from app import api
+from app.core.diagnostics import DiagnosticLogger
 from app.runtime.operation_models import OperationEventBuffer
 from app.runtime.operations import OperationManager
 from app.runtime.session import get_campaign_runtime
@@ -62,8 +63,15 @@ def test_operation_manager_drains_stream_and_retains_result_and_events():
         manager.shutdown()
 
 
-def test_operation_manager_records_stream_failure_without_losing_prior_events():
-    manager = OperationManager("campaign-1", max_workers=1)
+def test_operation_manager_records_stream_failure_without_losing_prior_events(
+    tmp_path,
+):
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
+    manager = OperationManager(
+        "campaign-1",
+        max_workers=1,
+        diagnostics=diagnostics,
+    )
 
     def stream():
         yield {"step": "started", "data": {}}
@@ -87,6 +95,11 @@ def test_operation_manager_records_stream_failure_without_losing_prior_events():
             operation.operation_id
             for operation in manager.list(recoverable_only=True)
         ] == [operation_id]
+        diagnostic = diagnostics.read()[0]
+        assert diagnostic["severity"] == "error"
+        assert diagnostic["code"] == "operation_failed"
+        assert diagnostic["operation_id"] == operation_id
+        assert diagnostic["operation_type"] == "confirmation"
     finally:
         manager.shutdown()
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from langgraph.config import get_stream_writer
 
+from app.core.diagnostics import NullDiagnosticLogger
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
@@ -47,6 +48,15 @@ from .generation_state import GenerationState
 
 def _store_factory(state: GenerationState, name: str):
     return getattr(state["runtime_services"].stores, name)
+
+
+def _diagnostics(state: GenerationState):
+    services = state.get("runtime_services")
+    return (
+        getattr(services, "diagnostics", None)
+        if services is not None
+        else None
+    ) or NullDiagnosticLogger()
 
 
 def _composition_output_state(
@@ -126,6 +136,14 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
         }
     except Exception as exc:
         error = str(exc)
+        _diagnostics(state).warning(
+            source="context_extractor",
+            code="context_extract_failed",
+            message=error,
+            trace_id=state["trace_id"],
+            task="context_extract",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+        )
         return {
             "context_facts": ContextFactSet(
                 turn_focus="Context extract failed",
@@ -564,6 +582,20 @@ def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
         trace_id=state["trace_id"],
     )
     warnings = list(agent.last_warnings)
+    for warning in warnings:
+        warning_data = model_data(warning)
+        _diagnostics(state).warning(
+            source="narrative_consistency",
+            code=warning.code,
+            message=(
+                "Ignored a canon contradiction assertion without a valid "
+                "finding/evidence chain"
+            ),
+            trace_id=state["trace_id"],
+            task="narrative_consistency_check",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+            details=warning_data,
+        )
     return {
         "narrative_consistency_review": review,
         "narrative_consistency_warnings": warnings,

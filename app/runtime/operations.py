@@ -4,11 +4,13 @@ import concurrent.futures
 import copy
 import threading
 import time
+import traceback
 import uuid
 from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger
 from app.runtime.operation_models import (
     TERMINAL_OPERATION_STATUSES,
     OperationEvent,
@@ -74,6 +76,7 @@ class OperationManager:
         max_workers: int = 2,
         max_history: int = 200,
         max_events_per_operation: int = 500,
+        diagnostics: DiagnosticLogger | NullDiagnosticLogger | None = None,
     ) -> None:
         if max_workers < 1:
             raise ValueError("max_workers must be >= 1")
@@ -82,6 +85,7 @@ class OperationManager:
         if max_events_per_operation < 1:
             raise ValueError("max_events_per_operation must be >= 1")
         self.campaign_id = campaign_id
+        self.diagnostics = diagnostics or NullDiagnosticLogger()
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
         self._max_history = max_history
         self._max_events_per_operation = max_events_per_operation
@@ -228,6 +232,9 @@ class OperationManager:
                 raise RuntimeError("cannot append events to a terminal operation")
             event = record.event_buffer.append(step, data)
             record.current_step = event.step
+            trace_id = (data or {}).get("trace_id")
+            if trace_id and not record.metadata.get("trace_id"):
+                record.metadata["trace_id"] = str(trace_id)
             self._condition.notify_all()
             return event
 
@@ -370,6 +377,37 @@ class OperationManager:
                 data = raw_event.get("data", {})
                 self.emit(operation_id, step, data)
         except BaseException as exc:
+            with self._guard:
+                failed = self._records.get(operation_id)
+                metadata = dict(failed.metadata) if failed is not None else {}
+                current_step = failed.current_step if failed is not None else None
+                operation_type = failed.operation_type if failed is not None else None
+            details = {
+                key: metadata[key]
+                for key in (
+                    "turn_id",
+                    "group_id",
+                    "kind",
+                    "stage",
+                    "maintenance_job_id",
+                )
+                if metadata.get(key) is not None
+            }
+            if current_step is not None:
+                details["current_step"] = current_step
+            details["error_type"] = type(exc).__name__
+            details["traceback"] = traceback.format_exc()
+            self.diagnostics.error(
+                source="operation_manager",
+                code="operation_failed",
+                message=str(exc),
+                trace_id=metadata.get("trace_id"),
+                operation_id=operation_id,
+                campaign_id=self.campaign_id,
+                operation_type=operation_type,
+                turn_index=metadata.get("turn_index"),
+                details=details or None,
+            )
             self._finish(
                 operation_id,
                 status="failed",

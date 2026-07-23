@@ -21,6 +21,7 @@ from app.runtime.stores import StoreBundle
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 from app.runtime.model_config import effective_gateway_factory
+from app.core.diagnostics import NullDiagnosticLogger
 from app.runtime.serialization import model_data
 from app.runtime.turn_history import CampaignHistory
 
@@ -195,10 +196,19 @@ class CampaignRuntime:
         self.paths = paths or DEFAULT_CAMPAIGN_PATHS
         self.stores = stores or StoreBundle(self.paths)
         self.gateway_factory = gateway_factory or effective_gateway_factory()
+        self.diagnostics = getattr(
+            self.gateway_factory,
+            "diagnostic_logger",
+            NullDiagnosticLogger(),
+        )
         self._max_workers = max_workers
         self.pending_turns = PendingTurnRepository()
         self.pending_openings = PendingOpeningRepository()
-        self.operations = OperationManager(campaign_id, max_workers=max_workers)
+        self.operations = OperationManager(
+            campaign_id,
+            max_workers=max_workers,
+            diagnostics=self.diagnostics,
+        )
         self.jobs = MaintenanceJobCoordinator(
             max_workers=max_workers,
             operation_manager=self.operations,
@@ -207,6 +217,7 @@ class CampaignRuntime:
             stores=self.stores,
             gateway_factory=self.gateway_factory,
             jobs=self.jobs,
+            diagnostics=self.diagnostics,
         )
         self._confirmation_lock = threading.RLock()
         self._lifecycle_lock = threading.RLock()
@@ -246,10 +257,17 @@ class CampaignRuntime:
                 if persist is not None:
                     persist()
                 self.gateway_factory = factory
+                self.diagnostics = getattr(
+                    factory,
+                    "diagnostic_logger",
+                    self.diagnostics,
+                )
+                self.operations.diagnostics = self.diagnostics
                 self.services = RuntimeServices(
                     stores=self.stores,
                     gateway_factory=factory,
                     jobs=self.jobs,
+                    diagnostics=self.diagnostics,
                 )
 
     def configure_save_touch(self, callback) -> None:
@@ -484,6 +502,7 @@ class CampaignRuntime:
             stores=self.stores,
             gateway_factory=self.gateway_factory,
             jobs=self.jobs,
+            diagnostics=self.diagnostics,
         )
 
     def reconfigure(
@@ -515,6 +534,7 @@ class CampaignRuntime:
             self.operations = OperationManager(
                 campaign_id,
                 max_workers=self._max_workers,
+                diagnostics=self.diagnostics,
             )
             self.jobs = MaintenanceJobCoordinator(
                 max_workers=self._max_workers,
@@ -524,6 +544,7 @@ class CampaignRuntime:
                 stores=self.stores,
                 gateway_factory=self.gateway_factory,
                 jobs=self.jobs,
+                diagnostics=self.diagnostics,
             )
             self.history = CampaignHistory(paths.data_dir)
             self.history.recover_interrupted()

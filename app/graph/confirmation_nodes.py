@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.core.diagnostics import NullDiagnosticLogger
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.current_state import StateChangeSet, StateUpdater
 from app.domain.director_event.reviewer import DirectorEventReviewer
@@ -125,6 +126,7 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
     updated_state = cache.get("updated_state")
     state_change_set = cache.get("state_change_set")
     state_update_warnings = cache.get("state_update_warnings")
+    update_executed = updated_state is None
     if updated_state is None:
         gateway = _gateway_for(state)
         updater = StateUpdater(gateway)
@@ -152,6 +154,24 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
         )
     if state_update_warnings is None:
         state_update_warnings = []
+    services = state.get("runtime_services")
+    diagnostics = (
+        getattr(services, "diagnostics", None)
+        if services is not None
+        else None
+    ) or NullDiagnosticLogger()
+    if update_executed:
+        for warning in state_update_warnings:
+            warning_data = model_data(warning)
+            diagnostics.warning(
+                source="state_update",
+                code=warning.code,
+                message=warning.message,
+                trace_id=trace_id,
+                task="state_update",
+                turn_index=getattr(pipeline_input, "turn_index", None),
+                details=warning_data,
+            )
     return {
         "updated_state": updated_state,
         "state_change_set": state_change_set,

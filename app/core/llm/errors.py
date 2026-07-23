@@ -16,3 +16,7 @@ class LLMOutputValidationError(LLMError):
 
 class PromptNotFoundError(LLMError):
     pass
+
+
+class PromptRenderError(LLMError):
+    pass

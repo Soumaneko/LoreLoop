@@ -170,7 +170,6 @@ def run_director_npc_restock(
             f"created_count={len(created_drafts)} created={created_names}"
         )
     except Exception:
-        print("[debug-server] director npc restock failed")
         traceback.print_exc()
         raise
 
@@ -195,7 +194,6 @@ def run_scene_summary_maintenance(
             f"condensed={len(result.condensed_ids)}"
         )
     except Exception:
-        print("[debug-server] scene summary maintenance failed")
         traceback.print_exc()
         raise
 
@@ -235,7 +233,6 @@ def run_memory_batch_maintenance(
                 f"cursor={maintenance_result.cursor_after}"
             )
     except Exception:
-        print("[debug-server] memory batch maintenance failed")
         traceback.print_exc()
         raise
 

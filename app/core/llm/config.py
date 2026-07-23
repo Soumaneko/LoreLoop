@@ -5,6 +5,8 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
+from app.core.diagnostics import DiagnosticLogger, diagnostic_path_for_trace
+
 load_dotenv()
 
 
@@ -91,6 +93,8 @@ def create_gateway(
     if log_path:
         tracer_kwargs["log_path"] = log_path
 
+    diagnostic_path = diagnostic_path_for_trace(log_path) if log_path else None
+    diagnostics = DiagnosticLogger(diagnostic_path)
     return LLMGateway(
         provider=OpenAICompatibleProvider(
             api_key=config.api_key,
@@ -99,7 +103,7 @@ def create_gateway(
             thinking=config.thinking,
         ),
         prompt_loader=PromptLoader(prompts_dir=prompts_dir),
-        tracer=TraceLogger(**tracer_kwargs),
+        tracer=TraceLogger(**tracer_kwargs, diagnostics=diagnostics),
         default_model=config.model,
     )
 
@@ -114,11 +118,15 @@ class SharedGatewayFactory:
         log_path: Optional[str] = None,
         *,
         config: GatewayConfig | None = None,
+        diagnostic_path: str | None = None,
     ) -> None:
         self.config = config or GatewayConfig.from_env(model=model)
         self.model = self.config.model
         self.prompts_dir = prompts_dir
         self.log_path = log_path
+        if diagnostic_path is None and log_path is not None:
+            diagnostic_path = str(diagnostic_path_for_trace(log_path))
+        self.diagnostic_logger = DiagnosticLogger(diagnostic_path)
         self._components = None
         self._lock = threading.Lock()
 
@@ -164,7 +172,10 @@ class SharedGatewayFactory:
                         thinking=self.config.thinking,
                     ),
                     PromptLoader(prompts_dir=self.prompts_dir),
-                    TraceLogger(**tracer_kwargs),
+                    TraceLogger(
+                        **tracer_kwargs,
+                        diagnostics=self.diagnostic_logger,
+                    ),
                     default_model,
                 )
         return self._components

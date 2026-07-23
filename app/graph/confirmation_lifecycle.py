@@ -13,6 +13,15 @@ from app.runtime.services import RuntimeServices
 from .confirmation_state import ConfirmationState
 
 
+def _diagnostic_turn_index(state: ConfirmationState) -> int | None:
+    pipeline_input = state.get("pipeline_input")
+    if isinstance(pipeline_input, dict):
+        value = pipeline_input.get("turn_index")
+    else:
+        value = getattr(pipeline_input, "turn_index", None)
+    return value if isinstance(value, int) else None
+
+
 @dataclass(frozen=True)
 class ConfirmationPreparationServices:
     current_state_store: Callable
@@ -538,8 +547,15 @@ class ConfirmationFinalizer:
 
         try:
             restock_scheduled = self.scheduler.schedule_restock(state)
-        except Exception:
-            print("[debug-server] failed to schedule director npc restock")
+        except Exception as exc:
+            self.runtime.services.diagnostics.warning(
+                source="confirmation",
+                code="director_npc_restock_schedule_failed",
+                message=str(exc),
+                trace_id=state["trace_id"],
+                operation_type="confirmation",
+                turn_index=_diagnostic_turn_index(state),
+            )
             traceback.print_exc()
             restock_scheduled = bool(
                 state.get("director_npc_restock_scheduled")
@@ -550,8 +566,15 @@ class ConfirmationFinalizer:
                 commit_result,
                 director_npc_restock_scheduled=restock_scheduled,
             )
-        except Exception:
-            print("[debug-server] failed to schedule confirmation maintenance")
+        except Exception as exc:
+            self.runtime.services.diagnostics.warning(
+                source="confirmation",
+                code="confirmation_maintenance_schedule_failed",
+                message=str(exc),
+                trace_id=state["trace_id"],
+                operation_type="confirmation",
+                turn_index=_diagnostic_turn_index(state),
+            )
             traceback.print_exc()
             schedule_result = ConfirmationScheduleResult(
                 director_npc_restock_scheduled=restock_scheduled,

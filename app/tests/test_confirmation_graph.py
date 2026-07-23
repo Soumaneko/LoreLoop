@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 from langgraph.graph import END, START, StateGraph
 
+from app.core.diagnostics import DiagnosticLogger
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
@@ -34,7 +35,10 @@ def test_confirmation_first_wave_preserves_parallel_extract_dependencies():
     assert ("scene_summarize", "__end__") in edges
 
 
-def test_state_update_warning_is_emitted_and_cached(monkeypatch):
+def test_state_update_warning_is_emitted_cached_and_diagnosed(
+    monkeypatch,
+    tmp_path,
+):
     current_state = CurrentState(
         scene=SceneState(scene_id="scene-1", location="门外"),
         player=PlayerState(name="主角"),
@@ -58,6 +62,7 @@ def test_state_update_warning_is_emitted_and_cached(monkeypatch):
 
     monkeypatch.setattr(confirmation_nodes, "StateUpdater", _Updater)
     monkeypatch.setattr(confirmation_nodes, "_gateway_for", lambda _state: object())
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
     state = {
         "pipeline_input": object(),
         "trace_id": "trace-1",
@@ -69,6 +74,7 @@ def test_state_update_warning_is_emitted_and_cached(monkeypatch):
         "events": [],
         "node_errors": [],
         "write_db": True,
+        "runtime_services": SimpleNamespace(diagnostics=diagnostics),
     }
 
     update = confirmation_nodes.state_update_node(state)
@@ -77,6 +83,9 @@ def test_state_update_warning_is_emitted_and_cached(monkeypatch):
     assert update["state_update_warnings"] == [warning]
     assert events[0]["data"]["warnings"][0]["code"] == "npc_target_not_present"
     assert state["cache"]["state_update_warnings"] == [warning]
+    diagnostic = diagnostics.read(trace_id="trace-1")[0]
+    assert diagnostic["source"] == "state_update"
+    assert diagnostic["code"] == "npc_target_not_present"
 
 
 def test_only_selection_summaries_append_current_turn_summary():

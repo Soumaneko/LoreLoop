@@ -9,6 +9,7 @@ from app.core.llm.errors import (
     LLMOutputValidationError,
     LLMProviderError,
     PromptNotFoundError,
+    PromptRenderError,
 )
 from app.core.llm.gateway import LLMGateway
 from app.core.llm.mock import MockLLM
@@ -223,6 +224,7 @@ class TestTraceLogging:
             assert trace["parsed_output"] == {"text": "hello", "length": 5}
             assert trace["input_data"] == {"text": "hello"}
             assert trace["latency_ms"] >= 0
+            assert len(trace["prompt_fingerprint"]) == 64
         finally:
             os.unlink(trace_path)
 
@@ -254,8 +256,14 @@ class TestTraceLogging:
             trace = traces[0]
             assert trace["schema_valid"] is False
             assert trace["error"] is not None
+            diagnostics = tracer.diagnostics.read(trace_id="test-trace-fail")
+            assert len(diagnostics) == 1
+            assert diagnostics[0]["severity"] == "error"
+            assert diagnostics[0]["code"] == "llm_output_parse_failed"
         finally:
             os.unlink(trace_path)
+            if os.path.exists(tracer.diagnostics.log_path):
+                os.unlink(tracer.diagnostics.log_path)
 
     def test_trace_id_auto_generated(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
@@ -317,6 +325,54 @@ class TestPromptNotFound:
                     output_schema=EchoResult,
                     # version is internally "v1", but no v1 file exists in tempdir
                 )
+
+
+class TestPromptRendering:
+    def test_missing_template_variable_raises_specific_error(self):
+        gateway = LLMGateway(
+            provider=MockProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=NullTraceLogger(),
+        )
+
+        with pytest.raises(
+            PromptRenderError,
+            match="Missing prompt template variable: text",
+        ):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={},
+                output_schema=EchoResult,
+            )
+
+    def test_json_braces_inside_input_value_are_not_reinterpreted(self):
+        gateway = LLMGateway(
+            provider=MockProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=NullTraceLogger(),
+        )
+
+        assert gateway._build_prompt(
+            "Payload: {payload}",
+            {"payload": '{"nested": "{not_a_template_variable}"}'},
+        ) == 'Payload: {"nested": "{not_a_template_variable}"}'
+
+    def test_invalid_diagnostic_severity_is_rejected(self):
+        gateway = LLMGateway(
+            provider=MockProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=NullTraceLogger(),
+        )
+
+        with pytest.raises(ValueError, match="Unsupported diagnostic severity"):
+            gateway._log_diagnostic(
+                severity="warn",  # type: ignore[arg-type]
+                code="test",
+                message="test",
+                trace_id="trace",
+                task="task",
+                attempt=1,
+            )
 
 
 class TestMockProviderFeatures:
@@ -501,3 +557,70 @@ class TestPromptLoader:
         assert "echo_structured_test" in tasks
         assert "memory_draft_extract" in tasks
         assert "memory_batch_classify" in tasks
+
+    def test_expands_root_relative_prompt_include(self, tmp_path):
+        shared = tmp_path / "_shared"
+        shared.mkdir()
+        (shared / "contract.txt").write_text(
+            "Shared {value}",
+            encoding="utf-8",
+        )
+        (tmp_path / "composed_v1.md").write_text(
+            "Before\n[[include: _shared/contract.txt]]\nAfter",
+            encoding="utf-8",
+        )
+
+        content, _ = PromptLoader(prompts_dir=tmp_path).load("composed")
+
+        assert content == "Before\nShared {value}\nAfter"
+
+    @pytest.mark.parametrize(
+        "include_path",
+        ["/tmp/outside.txt", "../outside.txt"],
+    )
+    def test_rejects_prompt_include_outside_root(self, tmp_path, include_path):
+        (tmp_path / "composed_v1.md").write_text(
+            f"[[include: {include_path}]]",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="Invalid prompt include path"):
+            PromptLoader(prompts_dir=tmp_path).load("composed")
+
+    def test_rejects_circular_prompt_include(self, tmp_path):
+        (tmp_path / "composed_v1.md").write_text(
+            "[[include: shared.txt]]",
+            encoding="utf-8",
+        )
+        (tmp_path / "shared.txt").write_text(
+            "[[include: composed_v1.md]]",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="Circular prompt include"):
+            PromptLoader(prompts_dir=tmp_path).load("composed")
+
+    def test_narrative_prompt_modes_share_contract_without_leaking_inputs(self):
+        loader = PromptLoader()
+        compose, _ = loader.load("narrative_compose")
+        source, _ = loader.load("narrative_rewrite_from_source")
+        recompose, _ = loader.load("narrative_recompose")
+
+        shared_markers = [
+            "# 权威上下文",
+            "# 输出规范",
+            "# 共同创作契约",
+            "严禁替玩家作出输入之外的新决定",
+            "CoreMemory、CurrentState、TurnResolutionResult、DirectorEvent",
+        ]
+        for prompt in (compose, source, recompose):
+            assert "[[include:" not in prompt
+            for marker in shared_markers:
+                assert prompt.count(marker) == 1
+
+        assert "Source Scene Text" not in compose
+        assert "Source Scene Text" in source
+        assert "Source Scene Text" not in recompose
+        assert "Rewrite Requirements" not in compose
+        assert "Rewrite Requirements" in source
+        assert "Recompose Requirements" in recompose

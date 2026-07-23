@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger
 from app.runtime.stores import StoreBundle
 
 
@@ -13,6 +14,9 @@ class RuntimeServices:
     stores: StoreBundle
     gateway_factory: Callable[[], Any]
     jobs: Any
+    diagnostics: DiagnosticLogger | NullDiagnosticLogger = field(
+        default_factory=NullDiagnosticLogger
+    )
 
     def gateway(
         self,
