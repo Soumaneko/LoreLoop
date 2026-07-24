@@ -122,6 +122,20 @@ class OperationSnapshot:
 
 
 @dataclass(frozen=True)
+class OperationCancellationResult:
+    operation_id: str
+    status: Literal[
+        "cancellation_requested",
+        "cancelled",
+        "already_completed",
+    ]
+    operation_status: OperationStatus
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class OperationEventBatch:
     operation_id: str
     status: OperationStatus

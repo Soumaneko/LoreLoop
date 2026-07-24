@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from app.core.cancellation import commit_if_not_cancelled
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -148,7 +149,7 @@ def finalize_pending_turn(
             state["roll_results"],
             state["turn_resolution"],
         )
-    runtime.pending_turns.add(PendingTurn(
+    pending = PendingTurn(
         turn_id=turn_id,
         group_id=group_id,
         version_index=version_index,
@@ -163,7 +164,8 @@ def finalize_pending_turn(
         player_resolution=player_resolution,
         turn_index=state["next_turn_index"],
         short_term_memory=state["short_term_memory"],
-    ))
+    )
+    commit_if_not_cancelled(lambda: runtime.pending_turns.add(pending))
     finalized = {
         **state,
         "turn_id": turn_id,

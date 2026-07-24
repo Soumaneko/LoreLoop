@@ -1,9 +1,11 @@
 import threading
+from concurrent.futures import CancelledError
 from types import SimpleNamespace
 
 import pytest
 
 from app import api
+from app.core.cancellation import CancellationToken, commit_if_not_cancelled
 from app.core.diagnostics import DiagnosticLogger
 from app.runtime.operation_models import OperationEventBuffer
 from app.runtime.operations import OperationManager
@@ -61,6 +63,115 @@ def test_operation_manager_drains_stream_and_retains_result_and_events():
         assert batch.status == "succeeded"
     finally:
         manager.shutdown()
+
+
+def test_running_operation_cancels_at_checkpoint_without_emitting_failure():
+    manager = OperationManager("campaign-1", max_workers=1)
+    waiting = threading.Event()
+    release = threading.Event()
+
+    def stream():
+        yield {"step": "started", "data": {}}
+        waiting.set()
+        assert release.wait(timeout=2)
+        yield {"step": "must_not_be_emitted", "data": {}}
+
+    try:
+        operation_id = manager.submit_stream(
+            "generation",
+            stream,
+            requires_ack=True,
+        )
+        assert waiting.wait(timeout=2)
+
+        cancellation = manager.cancel(operation_id)
+        assert cancellation.status == "cancellation_requested"
+        release.set()
+
+        snapshot = manager.wait(operation_id, timeout=2)
+        assert snapshot.status == "cancelled"
+        assert snapshot.error_type is None
+        assert snapshot.error_message is None
+        assert [
+            event.step for event in manager.read_events(operation_id).events
+        ] == ["started", "cancellation_requested"]
+    finally:
+        release.set()
+        manager.shutdown()
+
+
+def test_queued_operation_is_cancelled_before_it_starts():
+    manager = OperationManager("campaign-1", max_workers=1)
+    occupied = threading.Event()
+    release = threading.Event()
+    queued_started = threading.Event()
+
+    def blocking_stream():
+        occupied.set()
+        assert release.wait(timeout=2)
+        yield {"step": "finished", "data": {}}
+
+    def queued_stream():
+        queued_started.set()
+        yield {"step": "must_not_run", "data": {}}
+
+    try:
+        first_id = manager.submit_stream("generation", blocking_stream)
+        assert occupied.wait(timeout=2)
+        queued_id = manager.submit_stream("queued-generation", queued_stream)
+
+        cancellation = manager.cancel(queued_id)
+
+        assert cancellation.status == "cancelled"
+        assert manager.get(queued_id).status == "cancelled"
+        assert queued_started.is_set() is False
+        release.set()
+        assert manager.wait(first_id, timeout=2).status == "succeeded"
+    finally:
+        release.set()
+        manager.shutdown()
+
+
+def test_cancelled_operation_cannot_cross_final_commit_boundary():
+    manager = OperationManager("campaign-1", max_workers=1)
+    waiting = threading.Event()
+    release = threading.Event()
+    pending = []
+
+    def stream():
+        yield {"step": "pipeline_started", "data": {}}
+        waiting.set()
+        assert release.wait(timeout=2)
+        commit_if_not_cancelled(lambda: pending.append("pending-turn"))
+        yield {"step": "pending_created", "data": {}}
+
+    try:
+        operation_id = manager.submit_stream("generation", stream)
+        assert waiting.wait(timeout=2)
+        assert manager.cancel(operation_id).status == "cancellation_requested"
+        release.set()
+
+        assert manager.wait(operation_id, timeout=2).status == "cancelled"
+        assert pending == []
+    finally:
+        release.set()
+        manager.shutdown()
+
+
+def test_cancellation_token_rejects_cancel_after_atomic_commit():
+    token = CancellationToken()
+    committed = []
+
+    token.commit(lambda: committed.append("done"))
+
+    assert token.request() is False
+    assert committed == ["done"]
+
+    cancelled = CancellationToken()
+    assert cancelled.request() is True
+    with pytest.raises(CancelledError):
+        cancelled.commit(lambda: committed.append("must-not-run"))
+    assert committed == ["done"]
 
 
 def test_operation_manager_records_stream_failure_without_losing_prior_events(
@@ -394,6 +505,35 @@ def test_public_api_starts_generation_as_background_operation(monkeypatch):
         "difficulty": "普通",
         "max_chars": 1200,
     }
+
+
+def test_public_api_cancels_only_player_generation_operations():
+    runtime = get_campaign_runtime()
+    waiting = threading.Event()
+    release = threading.Event()
+
+    def stream():
+        waiting.set()
+        assert release.wait(timeout=2)
+        yield {"step": "finished", "data": {}}
+
+    generation_id = runtime.operations.submit_stream("generation", stream)
+    assert waiting.wait(timeout=2)
+    try:
+        result = api.cancel_operation(generation_id)
+        assert result["status"] == "cancellation_requested"
+        release.set()
+        assert runtime.operations.wait(generation_id, timeout=2).status == "cancelled"
+
+        confirmation_id = runtime.operations.submit_stream(
+            "confirmation",
+            lambda: iter(()),
+        )
+        runtime.operations.wait(confirmation_id, timeout=2)
+        with pytest.raises(ValueError, match="cannot be cancelled"):
+            api.cancel_operation(confirmation_id)
+    finally:
+        release.set()
 
 
 def test_public_api_rejects_model_operations_before_configuration(monkeypatch):

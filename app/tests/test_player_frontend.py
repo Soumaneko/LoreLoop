@@ -1,3 +1,4 @@
+import io
 import shutil
 import subprocess
 import threading
@@ -200,6 +201,11 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert '"恢复原文"' in source
     assert "已恢复该版本的原始正文" in source
     assert "discard_pending" not in source
+    assert "stopActiveGeneration" in source
+    assert "operation_cancelled" in source
+    assert "已停止生成" in source
+    assert 'id="stopGenerationBtn"' in html
+    assert "/cancel" in (STATIC_DIR / "api.js").read_text(encoding="utf-8")
     assert "/api/player/dice-display" in source
     assert 'id="sceneSummary"' in html
     assert 'id="codexDialog"' in html
@@ -328,6 +334,50 @@ def test_pipeline_operation_continues_after_subscriber_disconnect(
 
         assert manager.wait(operation_id, timeout=2).status == "succeeded"
         assert completed == ["continued", "finished"]
+    finally:
+        release.set()
+        manager.shutdown()
+
+
+def test_cancelled_player_operation_ends_sse_without_failure_payload(monkeypatch):
+    manager = OperationManager("cancel-stream-test", max_workers=1)
+    handler = object.__new__(DebugHandler)
+    handler.send_response = lambda _status: None
+    handler.send_header = lambda _name, _value: None
+    handler.end_headers = lambda: None
+    handler.wfile = io.BytesIO()
+    handler.path = "/api/player/generate"
+    waiting = threading.Event()
+    release = threading.Event()
+
+    def generation_events():
+        yield {"step": "state_loaded", "data": {}}
+        waiting.set()
+        assert release.wait(timeout=2)
+        yield {"step": "must_not_be_emitted", "data": {}}
+
+    monkeypatch.setattr(
+        debug_server,
+        "get_campaign_runtime",
+        lambda: SimpleNamespace(operations=manager),
+    )
+    try:
+        operation_id = manager.submit_stream("generation", generation_events)
+        assert waiting.wait(timeout=2)
+        subscriber = threading.Thread(
+            target=handler._handle_operation_event_stream,
+            args=(operation_id, urlparse(handler.path)),
+            kwargs={"player": True, "resumed": False},
+        )
+        subscriber.start()
+        manager.cancel(operation_id)
+        release.set()
+        subscriber.join(timeout=2)
+
+        payload = handler.wfile.getvalue().decode("utf-8")
+        assert '"step": "operation_cancelled"' in payload
+        assert '"step": "done"' in payload
+        assert '"ok": false' not in payload
     finally:
         release.set()
         manager.shutdown()
@@ -597,14 +647,21 @@ def test_completed_player_operation_is_returned_until_acknowledged(monkeypatch):
 
 
 def test_operation_ack_path_parser_rejects_ambiguous_paths():
-    assert DebugHandler._operation_id_from_ack_path(
+    assert DebugHandler._operation_id_from_action_path(
         "/api/player/operations/operation-1/ack",
         player=True,
+        action="ack",
+    ) == "operation-1"
+    assert DebugHandler._operation_id_from_action_path(
+        "/api/player/operations/operation-1/cancel",
+        player=True,
+        action="cancel",
     ) == "operation-1"
     with pytest.raises(ValueError, match="Invalid"):
-        DebugHandler._operation_id_from_ack_path(
+        DebugHandler._operation_id_from_action_path(
             "/api/player/operations/operation-1/extra/ack",
             player=True,
+            action="ack",
         )
 
 

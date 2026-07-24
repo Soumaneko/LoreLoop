@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from app.core.llm import TraceLogger
 from app.api import (
     acknowledge_operation,
+    cancel_operation,
     copy_save,
     create_save,
     delete_save,
@@ -160,6 +161,11 @@ class DebugHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/player/operations/") and path.endswith("/ack"):
             self._handle_player_json(
                 lambda: self._acknowledge_player_operation(path)
+            )
+            return
+        if path.startswith("/api/player/operations/") and path.endswith("/cancel"):
+            self._handle_player_json(
+                lambda: self._cancel_player_operation(path)
             )
             return
         if path.startswith("/api/operations/") and path.endswith("/ack"):
@@ -542,25 +548,47 @@ class DebugHandler(BaseHTTPRequestHandler):
         }
 
     @staticmethod
-    def _operation_id_from_ack_path(path: str, *, player: bool) -> str:
+    def _operation_id_from_action_path(
+        path: str,
+        *,
+        player: bool,
+        action: str,
+    ) -> str:
         parts = path.strip("/").split("/")
         expected_length = 5 if player else 4
-        if len(parts) != expected_length or parts[-1] != "ack":
-            raise ValueError("Invalid Operation ACK path")
+        if len(parts) != expected_length or parts[-1] != action:
+            raise ValueError(f"Invalid Operation {action} path")
         operation_id = parts[-2].strip()
         if not operation_id:
             raise ValueError("operation_id is required")
         return operation_id
 
     def _acknowledge_player_operation(self, path: str) -> dict[str, Any]:
-        operation_id = self._operation_id_from_ack_path(path, player=True)
+        operation_id = self._operation_id_from_action_path(
+            path,
+            player=True,
+            action="ack",
+        )
         self._load_player_operation(operation_id)
         acknowledge_operation(operation_id)
         return {"operation_id": operation_id, "acknowledged": True}
 
     def _acknowledge_operation(self, path: str) -> dict[str, Any]:
-        operation_id = self._operation_id_from_ack_path(path, player=False)
+        operation_id = self._operation_id_from_action_path(
+            path,
+            player=False,
+            action="ack",
+        )
         return {"operation": acknowledge_operation(operation_id)}
+
+    def _cancel_player_operation(self, path: str) -> dict[str, Any]:
+        operation_id = self._operation_id_from_action_path(
+            path,
+            player=True,
+            action="cancel",
+        )
+        self._load_player_operation(operation_id)
+        return cancel_operation(operation_id)
 
     def _handle_player_operation_get(self, path: str, parsed_url) -> None:
         parts = path.strip("/").split("/")
@@ -721,7 +749,15 @@ class DebugHandler(BaseHTTPRequestHandler):
                 if batch.status == "succeeded":
                     self._write_sse_payload({"ok": True, "step": "done"})
                     break
-                if batch.status in {"failed", "cancelled"}:
+                if batch.status == "cancelled":
+                    self._write_sse_payload({
+                        "ok": True,
+                        "step": "operation_cancelled",
+                        "data": {},
+                    })
+                    self._write_sse_payload({"ok": True, "step": "done"})
+                    break
+                if batch.status == "failed":
                     failed = runtime.operations.get(operation_id)
                     message = (
                         failed.error_message if failed is not None else None

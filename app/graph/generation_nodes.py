@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import CancelledError
+
 from langgraph.config import get_stream_writer
 
 from app.core.diagnostics import NullDiagnosticLogger
@@ -134,6 +136,8 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                 },
             }],
         }
+    except CancelledError:
+        raise
     except Exception as exc:
         error = str(exc)
         _diagnostics(state).warning(

@@ -253,6 +253,17 @@ def acknowledge_operation(operation_id: str) -> dict:
     return get_campaign_runtime().operations.acknowledge(operation_id).as_dict()
 
 
+def cancel_operation(operation_id: str) -> dict:
+    runtime = get_campaign_runtime()
+    operation = runtime.operations.get(operation_id)
+    if operation is None:
+        raise ValueError("Operation not found")
+    policy = operation_policy(operation.operation_type)
+    if not policy.player_visible or not policy.cancellable:
+        raise ValueError("This operation cannot be cancelled")
+    return runtime.operations.cancel(operation_id).as_dict()
+
+
 def list_operations(
     *,
     status: OperationStatus | None = None,
@@ -308,6 +319,7 @@ def discard_pending_turn(turn_id: str) -> dict:
 
 __all__ = [
     "acknowledge_operation",
+    "cancel_operation",
     "create_save",
     "copy_save",
     "delete_save",

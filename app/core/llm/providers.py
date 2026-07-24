@@ -156,6 +156,7 @@ class OpenAICompatibleProvider(LLMProvider):
     ) -> Iterator[ProviderResult]:
         from .errors import LLMProviderError
 
+        response = None
         try:
             request: dict[str, Any] = {
                 "model": model or self._default_model,
@@ -180,6 +181,13 @@ class OpenAICompatibleProvider(LLMProvider):
             raise LLMProviderError(
                 f"OpenAI-compatible streaming API call failed: {e}"
             ) from e
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
 
 
 def _extract_usage(usage_obj: Any) -> dict | None:

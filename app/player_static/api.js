@@ -101,6 +101,13 @@ export async function acknowledgeOperation(operationId) {
   );
 }
 
+export async function cancelOperation(operationId) {
+  return request(
+    `/api/player/operations/${encodeURIComponent(operationId)}/cancel`,
+    { method: "POST" },
+  );
+}
+
 export async function stream(path, body, onEvent) {
   const response = await fetch(path, {
     method: "POST",

@@ -1,9 +1,15 @@
 import os
 import tempfile
+from concurrent.futures import CancelledError
 from types import SimpleNamespace
 
 import pytest
 
+from app.core.cancellation import (
+    CancellationToken,
+    bind_cancellation_token,
+    reset_cancellation_token,
+)
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
@@ -87,6 +93,42 @@ class TestLLMGatewayNormalFlow:
         assert result == EchoResult(text="hello", length=5)
         assert chunks == ['{"text": "hel', 'lo", "length": 5}']
         assert attempts == [1]
+
+    def test_streaming_cancellation_does_not_retry_or_log_an_llm_failure(self):
+        calls = []
+
+        class _StreamingProvider(MockProvider):
+            def stream_generate(self, *_args, **_kwargs):
+                calls.append("called")
+                yield ProviderResult(content='{"text": "hel')
+                yield ProviderResult(content='lo", "length": 5}')
+
+        tracer = NullTraceLogger()
+        gateway = LLMGateway(
+            provider=_StreamingProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=tracer,
+        )
+        cancellation = CancellationToken()
+        context_token = bind_cancellation_token(cancellation)
+        chunks = []
+        try:
+            with pytest.raises(CancelledError):
+                gateway.run(
+                    task="echo_structured_test",
+                    input_data={"text": "hello"},
+                    output_schema=EchoResult,
+                    on_chunk=lambda chunk: (
+                        chunks.append(chunk),
+                        cancellation.request(),
+                    ),
+                )
+        finally:
+            reset_cancellation_token(context_token)
+
+        assert calls == ["called"]
+        assert chunks == ['{"text": "hel']
+        assert tracer.read_traces() == []
 
 
 class TestLLMGatewayRetryFlow:

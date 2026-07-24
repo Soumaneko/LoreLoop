@@ -10,9 +10,16 @@ from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from app.core.cancellation import (
+    CancellationToken,
+    bind_cancellation_token,
+    raise_if_cancelled,
+    reset_cancellation_token,
+)
 from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger
 from app.runtime.operation_models import (
     TERMINAL_OPERATION_STATUSES,
+    OperationCancellationResult,
     OperationEvent,
     OperationEventBatch,
     OperationEventBuffer,
@@ -43,6 +50,7 @@ class _OperationRecord:
     error_type: str | None = None
     error_message: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    cancellation: CancellationToken = field(default_factory=CancellationToken)
 
     def snapshot(self) -> OperationSnapshot:
         return OperationSnapshot(
@@ -286,6 +294,43 @@ class OperationManager:
                 self._condition.notify_all()
             return record.snapshot()
 
+    def cancel(self, operation_id: str) -> OperationCancellationResult:
+        with self._condition:
+            record = self._require_record_locked(operation_id)
+            if record.status in TERMINAL_OPERATION_STATUSES:
+                return OperationCancellationResult(
+                    operation_id=operation_id,
+                    status="already_completed",
+                    operation_status=record.status,
+                )
+
+            already_requested = record.cancellation.requested
+            if not record.cancellation.request():
+                return OperationCancellationResult(
+                    operation_id=operation_id,
+                    status="already_completed",
+                    operation_status=record.status,
+                )
+
+            future = self._futures.get(operation_id)
+            if record.status == "queued" and future is not None and future.cancel():
+                self._finish(operation_id, status="cancelled")
+                return OperationCancellationResult(
+                    operation_id=operation_id,
+                    status="cancelled",
+                    operation_status="cancelled",
+                )
+
+            if not already_requested:
+                record.event_buffer.append("cancellation_requested", {})
+                record.current_step = "cancellation_requested"
+            self._condition.notify_all()
+            return OperationCancellationResult(
+                operation_id=operation_id,
+                status="cancellation_requested",
+                operation_status=record.status,
+            )
+
     def status_counts(self) -> dict[str, int]:
         with self._guard:
             return dict(Counter(record.status for record in self._records.values()))
@@ -363,19 +408,28 @@ class OperationManager:
             record.status = "running"
             record.started_at = operation_timestamp()
             self._condition.notify_all()
+        stream = None
+        cancelled = False
+        context_token = bind_cancellation_token(record.cancellation)
         try:
+            raise_if_cancelled()
             stream = iter(stream_factory(*args, **kwargs))
             while True:
+                raise_if_cancelled()
                 try:
                     raw_event = next(stream)
                 except StopIteration as stop:
                     result = stop.value
                     break
+                raise_if_cancelled()
                 if not isinstance(raw_event, dict):
                     raise TypeError("operation stream events must be dicts")
                 step = raw_event.get("step")
                 data = raw_event.get("data", {})
                 self.emit(operation_id, step, data)
+            raise_if_cancelled()
+        except concurrent.futures.CancelledError:
+            cancelled = True
         except BaseException as exc:
             with self._guard:
                 failed = self._records.get(operation_id)
@@ -415,6 +469,18 @@ class OperationManager:
                 error_message=str(exc),
             )
             raise
+        finally:
+            if stream is not None:
+                close = getattr(stream, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:
+                        pass
+            reset_cancellation_token(context_token)
+        if cancelled:
+            self._finish(operation_id, status="cancelled")
+            return None
         self._finish(operation_id, status="succeeded", result=result)
         return result
 

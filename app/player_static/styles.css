@@ -307,7 +307,49 @@ select option, select optgroup { background: #1c1c16; color: var(--ink); font-fa
 }
 
 .streaming-card { min-height: 180px; margin-top: 32px; overflow-anchor: none; }
-.streaming-text:empty::after { content: "故事正在显现……"; color: var(--faint); }
+.streaming-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.streaming-header .narrative-kicker { margin-bottom: 0; }
+.stop-generation-button {
+  flex: none;
+  height: 28px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 12px;
+  border: 1px solid rgba(213, 150, 137, 0.38);
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(42, 26, 24, 0.8), rgba(26, 17, 15, 0.95));
+  color: #e2a89c;
+  font-family: var(--serif);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s var(--ease-smooth);
+}
+.stop-generation-button::before {
+  content: "■";
+  font-size: 8px;
+  color: rgba(226, 168, 156, 0.85);
+  transform: translateY(-0.5px);
+}
+.stop-generation-button:hover:not(:disabled) {
+  border-color: rgba(213, 150, 137, 0.72);
+  background: linear-gradient(135deg, rgba(58, 34, 30, 0.92), rgba(36, 21, 19, 0.98));
+  color: #f5c4b9;
+  box-shadow: 0 4px 14px rgba(180, 50, 40, 0.28), 0 0 10px rgba(213, 150, 137, 0.18);
+}
+.stop-generation-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+  box-shadow: none;
+}
+.streaming-text:empty::after { content: ""; }
 .writing-indicator { display: flex; gap: 6px; margin-top: 24px; }
 .writing-indicator span { width: 4px; height: 4px; border-radius: 50%; background: var(--gold); animation: blink 1.2s infinite; }
 .writing-indicator span:nth-child(2) { animation-delay: .16s; }.writing-indicator span:nth-child(3) { animation-delay: .32s; }

@@ -1,4 +1,4 @@
-import { acknowledgeOperation, downloadSave, importSaveArchive, request, stream, subscribe } from "./api.js";
+import { acknowledgeOperation, cancelOperation, downloadSave, importSaveArchive, request, stream, subscribe } from "./api.js";
 import {
   activePending,
   clearDraft,
@@ -18,6 +18,7 @@ const els = {
   story: $("story"), welcome: $("welcome"), history: $("history"),
   activePlayerAction: $("activePlayerAction"),
   streamingCard: $("streamingCard"), streamingText: $("streamingText"), streamingLabel: $("streamingLabel"),
+  stopGenerationBtn: $("stopGenerationBtn"),
   pendingCard: $("pendingCard"), suggestions: $("suggestions"), suggestionList: $("suggestionList"),
   errorCard: $("errorCard"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
@@ -88,6 +89,7 @@ let saveManagerBusy = false;
 let selectedImportFile = null;
 let modelConfigBusy = false;
 let modelConnectionVerified = false;
+let activeGenerationRun = null;
 const HISTORY_PAGE_SIZE = 5;
 const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
 const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
@@ -1599,6 +1601,76 @@ function setProgress(step) {
   if (label && confirmationLabel) confirmationLabel.textContent = label;
 }
 
+function prepareGenerationRun(operationType, userInput, operationId = null) {
+  activeGenerationRun = {
+    operationId,
+    operationType,
+    userInput: userInput || "",
+    cancellationRequested: false,
+    cancelled: false,
+  };
+}
+
+function finishGenerationRun() {
+  activeGenerationRun = null;
+  els.stopGenerationBtn.hidden = true;
+  els.stopGenerationBtn.disabled = true;
+  els.stopGenerationBtn.textContent = "停止生成";
+}
+
+function updateGenerationRunFromEvent(event) {
+  if (!activeGenerationRun) return;
+  if (event.step === "operation_started") {
+    activeGenerationRun.operationId = event.data?.operation_id || activeGenerationRun.operationId;
+    activeGenerationRun.operationType = event.data?.operation_type || activeGenerationRun.operationType;
+    els.stopGenerationBtn.disabled = !activeGenerationRun.operationId;
+  } else if (event.step === "cancellation_requested") {
+    activeGenerationRun.cancellationRequested = true;
+    els.streamingLabel.textContent = "正在停止生成";
+  } else if (event.step === "operation_cancelled") {
+    activeGenerationRun.cancelled = true;
+  }
+}
+
+async function stopActiveGeneration() {
+  const run = activeGenerationRun;
+  if (!run?.operationId || run.cancellationRequested) return;
+  run.cancellationRequested = true;
+  els.stopGenerationBtn.disabled = true;
+  els.stopGenerationBtn.textContent = "正在停止……";
+  els.streamingLabel.textContent = "正在停止生成";
+  els.streamingText.replaceChildren();
+  try {
+    const result = await cancelOperation(run.operationId);
+    if (result.status === "already_completed") {
+      run.cancellationRequested = false;
+      els.stopGenerationBtn.textContent = "停止生成";
+      els.streamingLabel.textContent = "生成已经完成，正在载入";
+    }
+  } catch (error) {
+    run.cancellationRequested = false;
+    els.stopGenerationBtn.disabled = false;
+    els.stopGenerationBtn.textContent = "停止生成";
+    showError(error);
+  }
+}
+
+function settleCancelledGeneration({ retryMode = null, userInput = "" } = {}) {
+  stopStreaming();
+  if (retryMode) {
+    setMode("pending");
+    renderAll();
+  } else {
+    showActivePlayerAction("");
+    els.playerInput.value = userInput;
+    autoSizeInput();
+    setMode("idle");
+    renderControls();
+    els.playerInput.focus();
+  }
+  showToast("已停止生成");
+}
+
 function startStreaming(label = "世界正在回应") {
   streamBuffer = "";
   followStream = true;
@@ -1607,6 +1679,12 @@ function startStreaming(label = "世界正在回应") {
   els.streamingText.replaceChildren();
   els.streamingLabel.textContent = label;
   els.streamingCard.hidden = false;
+  els.stopGenerationBtn.hidden = false;
+  els.stopGenerationBtn.disabled = !activeGenerationRun?.operationId
+    || activeGenerationRun.cancellationRequested;
+  els.stopGenerationBtn.textContent = activeGenerationRun?.cancellationRequested
+    ? "正在停止……"
+    : "停止生成";
   els.pendingCard.hidden = true;
   scrollToBottom("smooth");
 }
@@ -1653,6 +1731,7 @@ async function acknowledgeFailedOperation(error, operationId = null) {
 }
 
 function handleGenerationEvent(event, { retryMode = null } = {}) {
+  updateGenerationRunFromEvent(event);
   if (event.step === "operation_events_truncated") {
     els.streamingLabel.textContent = "正在恢复最新生成进度";
   }
@@ -1685,6 +1764,7 @@ async function resumeGenerationOperation(operation) {
     ? operation.operation_type
     : null;
   const userInput = operation.metadata?.user_input || "";
+  prepareGenerationRun(operation.operation_type, userInput, operation.operation_id);
   setMode("generating");
   renderControls();
   showActivePlayerAction(userInput);
@@ -1707,6 +1787,10 @@ async function resumeGenerationOperation(operation) {
       },
     );
     await acknowledgeHandledOperation(operation.operation_id);
+    if (activeGenerationRun?.cancelled) {
+      settleCancelledGeneration({ retryMode, userInput });
+      return false;
+    }
     stopStreaming();
     if (retryMode === "feedback_rewrite" && feedbackDecision?.strategy === "no_rewrite") {
       showToast(feedbackNoRewriteMessage(feedbackDecision.reason_code));
@@ -1729,6 +1813,8 @@ async function resumeGenerationOperation(operation) {
     showError(error);
     await acknowledgeFailedOperation(error, operation.operation_id);
     return false;
+  } finally {
+    finishGenerationRun();
   }
 }
 
@@ -1770,6 +1856,7 @@ async function rewriteFromFeedbackText(userFeedback) {
   const pending = activePending(); const variant = selectedVariant();
   if (!pending || !variant || pending.kind === "opening" || !userFeedback) return;
   if (els.feedbackRewriteDialog?.open) els.feedbackRewriteDialog.close();
+  prepareGenerationRun("feedback_rewrite", pending.user_input || "");
   setMode("generating"); renderControls();
   startStreaming("正在理解修改意见");
   let decision = null;
@@ -1784,6 +1871,10 @@ async function rewriteFromFeedbackText(userFeedback) {
       handleGenerationEvent(event, { retryMode: "feedback_rewrite" });
     });
     await acknowledgeHandledOperation(operationId);
+    if (activeGenerationRun?.cancelled) {
+      settleCancelledGeneration({ retryMode: "feedback_rewrite" });
+      return;
+    }
     stopStreaming();
     await loadAll({ scroll: decision?.strategy === "no_rewrite" ? "instant" : "smooth" });
     els.feedbackRewriteInput.value = "";
@@ -1795,6 +1886,8 @@ async function rewriteFromFeedbackText(userFeedback) {
   } catch (error) {
     stopStreaming(); setMode("pending"); renderAll(); showError(error);
     await acknowledgeFailedOperation(error);
+  } finally {
+    finishGenerationRun();
   }
 }
 
@@ -1813,6 +1906,7 @@ async function generateTurn() {
     return;
   }
   if (!userInput || state.mode !== "idle") return;
+  prepareGenerationRun("generation", userInput);
   clearError(); setMode("generating"); state.suggestions = []; renderSuggestions(); renderControls();
   showActivePlayerAction(userInput);
   els.playerInput.value = ""; autoSizeInput(); renderControls();
@@ -1824,6 +1918,10 @@ async function generateTurn() {
       request_id: newRequestId(),
     }, (event) => handleGenerationEvent(event));
     await acknowledgeHandledOperation(operationId);
+    if (activeGenerationRun?.cancelled) {
+      settleCancelledGeneration({ userInput });
+      return;
+    }
     stopStreaming();
     await loadAll({ scroll: "smooth" });
   } catch (error) {
@@ -1831,6 +1929,8 @@ async function generateTurn() {
     els.playerInput.value = userInput; autoSizeInput();
     showError(error);
     await acknowledgeFailedOperation(error);
+  } finally {
+    finishGenerationRun();
   }
 }
 
@@ -1839,6 +1939,7 @@ async function retryTurn(retryMode) {
   if (!pending || !variant || pending.kind === "opening") return;
   const rephrase = retryMode === "rephrase";
   const endpoint = rephrase ? "rephrase" : "reroll";
+  prepareGenerationRun(retryMode, pending.user_input || "");
   setMode("generating"); renderControls();
   startStreaming(rephrase ? "正在重新措辞" : "正在重新判定");
   try {
@@ -1847,10 +1948,16 @@ async function retryTurn(retryMode) {
       request_id: newRequestId(),
     }, (event) => handleGenerationEvent(event, { retryMode }));
     await acknowledgeHandledOperation(operationId);
+    if (activeGenerationRun?.cancelled) {
+      settleCancelledGeneration({ retryMode });
+      return;
+    }
     stopStreaming(); await loadAll({ scroll: "smooth" }); showToast("新版本已生成，旧版本仍然保留");
   } catch (error) {
     stopStreaming(); setMode("pending"); renderAll(); showError(error);
     await acknowledgeFailedOperation(error);
+  } finally {
+    finishGenerationRun();
   }
 }
 
@@ -2179,6 +2286,7 @@ els.playerInput.addEventListener("focus", autoSizeInput);
 els.playerInput.addEventListener("blur", () => { els.playerInput.style.height = ""; });
 els.playerInput.addEventListener("keydown", (event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); generateTurn(); } });
 els.generateBtn.onclick = generateTurn;
+els.stopGenerationBtn.onclick = stopActiveGeneration;
 els.dismissErrorBtn.onclick = clearError;
 els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer;
 if (els.openLeftDrawerBtn) els.openLeftDrawerBtn.onclick = openLeftDrawer;

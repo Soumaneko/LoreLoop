@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 import hashlib
 import time
@@ -7,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from app.core.cancellation import raise_if_cancelled
 from app.core.diagnostics import DiagnosticSeverity
 
 from .errors import (
@@ -79,6 +81,7 @@ class LLMGateway:
         for attempt in range(1, max_retries + 2):
             latency_ms = 0.0
             try:
+                raise_if_cancelled()
                 if on_attempt_start is not None:
                     on_attempt_start(attempt)
                 if on_chunk is None:
@@ -93,6 +96,7 @@ class LLMGateway:
                         on_chunk=on_chunk,
                     )
                 last_raw_output = raw_output
+                raise_if_cancelled()
 
                 parsed = self._parse_json(raw_output)
 
@@ -116,6 +120,9 @@ class LLMGateway:
                     prompt_fingerprint=prompt_fingerprint,
                 )
                 return validated
+
+            except concurrent.futures.CancelledError:
+                raise
 
             except (LLMOutputParseError, LLMOutputValidationError) as e:
                 last_error = str(e)
@@ -281,12 +288,16 @@ class LLMGateway:
     ) -> tuple[str, float, dict | None]:
         start = time.time()
         try:
+            raise_if_cancelled()
             result = self._provider.generate(
                 prompt,
                 model=model,
                 temperature=temperature,
             )
+            raise_if_cancelled()
         except LLMError:
+            raise
+        except concurrent.futures.CancelledError:
             raise
         except Exception as e:
             raise LLMProviderError(f"Provider call failed: {e}") from e
@@ -305,17 +316,21 @@ class LLMGateway:
         parts: list[str] = []
         token_usage: dict | None = None
         try:
+            raise_if_cancelled()
             for result in self._provider.stream_generate(
                 prompt,
                 model=model,
                 temperature=temperature,
             ):
+                raise_if_cancelled()
                 if result.content:
                     parts.append(result.content)
                     on_chunk(result.content)
                 if result.usage is not None:
                     token_usage = result.usage
         except LLMError:
+            raise
+        except concurrent.futures.CancelledError:
             raise
         except Exception as e:
             raise LLMProviderError(f"Provider streaming call failed: {e}") from e

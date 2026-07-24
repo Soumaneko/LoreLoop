@@ -13,6 +13,7 @@ class OperationPolicy:
     exclusive_key: str
     requires_ack: bool
     player_visible: bool = False
+    cancellable: bool = False
     recovery_kind: RecoveryKind | None = None
     supersedes: tuple[str, ...] = ()
 
@@ -25,6 +26,7 @@ OPERATION_POLICIES = {
             "generation",
             True,
             player_visible=True,
+            cancellable=True,
             recovery_kind="generation",
         ),
         OperationPolicy(
@@ -32,6 +34,7 @@ OPERATION_POLICIES = {
             "generation",
             True,
             player_visible=True,
+            cancellable=True,
             recovery_kind="generation",
             supersedes=("generation", "rephrase", "reroll", "feedback_rewrite"),
         ),
@@ -40,6 +43,7 @@ OPERATION_POLICIES = {
             "generation",
             True,
             player_visible=True,
+            cancellable=True,
             recovery_kind="generation",
             supersedes=("generation", "rephrase", "reroll", "feedback_rewrite"),
         ),
@@ -48,6 +52,7 @@ OPERATION_POLICIES = {
             "generation",
             True,
             player_visible=True,
+            cancellable=True,
             recovery_kind="generation",
             supersedes=("generation", "rephrase", "reroll", "feedback_rewrite"),
         ),
