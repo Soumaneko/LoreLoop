@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _new_id() -> str:
@@ -55,13 +55,34 @@ class NPCProfileUpdateInput(BaseModel):
     current_intent: str | None = None
 
 
-class NPCProfileIndexedUpdate(BaseModel):
-    npc_index: int
-    profile: NPCProfileUpdateInput
+NPCResolution = Literal["existing", "alias_match", "new", "ignore"]
+
+
+class ExistingNPCProfilePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    public_summary: str | None = None
+    current_location: str | None = None
+    attitude_to_player: str | None = None
+    current_intent: str | None = None
+
+
+class NPCProfileCandidateResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_index: int
+    resolution: NPCResolution
+    matched_npc_index: int | None = None
+    persist_alias: bool = False
+    turn_observation: str | None = None
+    profile_patch: ExistingNPCProfilePatch | None = None
+    new_profile: NPCProfileUpdateInput | None = None
 
 
 class NPCProfileUpdateBatch(BaseModel):
-    npcs: list[NPCProfileIndexedUpdate] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[NPCProfileCandidateResult] = Field(default_factory=list)
 
 
 class NPCProfileBackfillOutput(BaseModel):
@@ -77,27 +98,13 @@ class NPCProfileBackfillOutput(BaseModel):
     social_style: str = Field(min_length=1)
 
 
-class NPCAliasMatch(BaseModel):
-    extracted_text: str
-    matched_npc_index: int | None = None
-    matched_npc_name: str
-    new_alias: str | None = None
-
-
-NPCSource = Literal["exact_match", "alias_match", "new"]
-
-
-class RetrievedNPC(BaseModel):
+class NPCMention(BaseModel):
     name: str
-    source: NPCSource
-    matched_npc_index: int | None = None
-    matched_npc_name: str | None = None
-    context_span: str | None = None
+    context_span: str
 
 
 class NPCExtractionResult(BaseModel):
-    alias_matches: list[NPCAliasMatch] = Field(default_factory=list)
-    retrieved_npcs: list[RetrievedNPC] = Field(default_factory=list)
+    mentions: list[NPCMention] = Field(default_factory=list)
 
 
 class NPCProfile(BaseModel):

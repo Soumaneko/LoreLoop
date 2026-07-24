@@ -1,31 +1,31 @@
 from .extractor import NPCProfileExtractor
 from .schemas import (
-    NPCAliasMatch,
+    ExistingNPCProfilePatch,
     NPCExtractionResult,
+    NPCMention,
     NPCProfile,
     NPCProfileBackfillOutput,
+    NPCProfileCandidateResult,
     NPCProfileDirectorView,
-    NPCProfileIndexedUpdate,
     NPCProfilePublicView,
     NPCProfileUpdateBatch,
     NPCProfileUpdateInput,
-    RetrievedNPC,
 )
 from .store import NPCProfileStore
 from .updater import NPCProfileUpdater
 
 __all__ = [
-    "NPCAliasMatch",
+    "ExistingNPCProfilePatch",
     "NPCExtractionResult",
+    "NPCMention",
     "NPCProfile",
     "NPCProfileBackfillOutput",
+    "NPCProfileCandidateResult",
     "NPCProfileDirectorView",
     "NPCProfileExtractor",
-    "NPCProfileIndexedUpdate",
     "NPCProfilePublicView",
     "NPCProfileStore",
     "NPCProfileUpdateBatch",
     "NPCProfileUpdateInput",
     "NPCProfileUpdater",
-    "RetrievedNPC",
 ]

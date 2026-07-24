@@ -72,23 +72,7 @@ def _entity_extraction_mentions(
 def _npc_extraction_mentions(extraction: NPCExtractionResult | None) -> list[str]:
     if extraction is None:
         return []
-    values = [
-        value
-        for match in extraction.alias_matches
-        for value in (
-            match.extracted_text,
-            match.matched_npc_name,
-            match.new_alias,
-        )
-        if value
-    ]
-    values.extend(
-        value
-        for npc in extraction.retrieved_npcs
-        for value in (npc.name, npc.matched_npc_name)
-        if value
-    )
-    return list(dict.fromkeys(values))
+    return list(dict.fromkeys(mention.name for mention in extraction.mentions))
 
 
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
@@ -249,10 +233,7 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
         gateway = _gateway_for(state)
         extractor = NPCProfileExtractor(gateway)
         npc_extraction = extractor.extract(
-            core_memory=state["core_memory"],
             scene_facts=state["scene_facts_json"],
-            existing_profiles=state["existing_npc_profiles"],
-            director_events=active_events,
             trace_id=trace_id,
         )
     return {

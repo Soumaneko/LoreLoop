@@ -1202,7 +1202,7 @@ function stepSummary(name, data) {
   if (name === "scene_facts_done") return `${data.scene_facts?.facts?.length || 0} facts`;
   if (name === "memory_draft_extract_done") return `${data.pending_items_count || 0} pending`;
   if (name === "entity_extract_done") return `${data.entity_extraction?.retrieved_entities?.length || 0} entities`;
-  if (name === "npc_extract_done") return `${data.npc_extraction?.retrieved_npcs?.length || 0} npcs`;
+  if (name === "npc_extract_done") return `${data.npc_extraction?.mentions?.length || 0} npcs`;
   if (name === "batch_classified") return `${data.final_memories?.length || 0} final`;
   if (name === "memory_maintain_done") return `${data.changed || 0} changed`;
   if (name === "finish") return data.status || "done";
@@ -1730,20 +1730,12 @@ function renderEntityExtraction(data, updatedIds = []) {
 
 function renderNpcExtraction(data, updatedIds = []) {
   if (!data) return `<div class="empty">No write_db or 暂无 NPC 提取。</div>`;
-  const aliasMatches = data.alias_matches || [];
-  const retrieved = data.retrieved_npcs || [];
+  const mentions = data.mentions || [];
   return `
-    ${metrics([metric("别名匹配", aliasMatches.length, "info"), metric("NPC", retrieved.length), metric("更新档案", updatedIds?.length || 0, "ok")])}
-    ${aliasMatches.map((m) => `<div class="section-card">${kv([
-      ["称呼", esc(text(m.extracted_text))],
-      ["匹配NPC", esc(text(m.matched_npc_name))],
-      ["新增别名", esc(text(m.new_alias))],
-    ])}</div>`).join("")}
-    ${retrieved.map((e) => `<div class="section-card">${kv([
-      ["名称", esc(text(e.name))],
-      ["来源", esc(text(e.source))],
-      ["匹配NPC", esc(text(e.matched_npc_name))],
-      ["原文", esc(text(e.context_span))],
+    ${metrics([metric("NPC 称呼", mentions.length), metric("更新档案", updatedIds?.length || 0, "ok")])}
+    ${mentions.map((mention) => `<div class="section-card">${kv([
+      ["称呼", esc(text(mention.name))],
+      ["证据", esc(text(mention.context_span))],
     ])}</div>`).join("")}
     ${updatedIds?.length ? card("更新 NPC 档案ID", chips(updatedIds)) : ""}
   `;
