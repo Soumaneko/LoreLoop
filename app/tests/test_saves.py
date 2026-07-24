@@ -1,12 +1,48 @@
 import threading
-from types import SimpleNamespace
 
 import pytest
 
+from app.domain.core_memory import CoreMemory, InitConfig, build_initial_current_state
 from app.domain.current_state import PlayerState, make_default_state
+from app.domain.narrative_composer.schemas import NarrativeComposerContext
+from app.domain.plot_outline.schemas import PlotOutlineResult
+from app.domain.scene_writer.schemas import SceneWriterResult
+from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.paths import CampaignPaths, PROJECT_ROOT, SAVES_DIR, validate_save_name
 from app.runtime.saves import SaveManager
-from app.runtime.session import CampaignRuntime
+from app.runtime.session import CampaignRuntime, PendingOpening, PendingTurn
+from app.runtime.turn_history import CampaignHistory
+
+
+def _pending_turn(
+    *,
+    turn_id: str,
+    group_id: str,
+    version_index: int,
+    state_before,
+) -> PendingTurn:
+    context = NarrativeComposerContext(
+        user_input="推开门",
+        current_state=state_before,
+        turn_resolution=TurnResolutionResult(),
+        core_memory=CoreMemory(items=[]),
+    )
+    return PendingTurn(
+        turn_id=turn_id,
+        group_id=group_id,
+        version_index=version_index,
+        user_input="推开门",
+        difficulty="普通",
+        max_chars=900,
+        state_before=state_before,
+        context=context,
+        outline=PlotOutlineResult(
+            planning_reasoning="推进当前行动。",
+            scene_stopping_point="门被推开。",
+        ),
+        scene_result=SceneWriterResult(scene_text=f"待确认版本 {version_index}"),
+        turn_index=1,
+    )
 
 
 @pytest.mark.parametrize(
@@ -59,7 +95,7 @@ def test_save_manager_creates_lists_switches_and_isolates_state(tmp_path):
     finally:
         runtime.close()
 
-def test_switch_requires_explicitly_discarding_pending_content(tmp_path):
+def test_switch_preserves_and_restores_pending_turn_variants(tmp_path):
     root = tmp_path / "saves"
     runtime = CampaignRuntime(
         "default",
@@ -70,20 +106,77 @@ def test_switch_requires_explicitly_discarding_pending_content(tmp_path):
     try:
         other = manager.create("other", activate=False)
         original_id = manager.active_id
-        runtime.pending_turns.add(
-            SimpleNamespace(turn_id="pending", group_id="g", version_index=1)
-        )
+        state_before = make_default_state()
+        runtime.pending_turns.add(_pending_turn(
+            turn_id="turn-v1",
+            group_id="group-1",
+            version_index=1,
+            state_before=state_before,
+        ))
+        runtime.pending_turns.add(_pending_turn(
+            turn_id="turn-v2",
+            group_id="group-1",
+            version_index=2,
+            state_before=state_before,
+        ))
 
-        with pytest.raises(RuntimeError, match="pending content"):
-            manager.switch(other.save_id)
-
-        assert runtime.campaign_id == original_id
-        assert runtime.pending_turns.get("pending") is not None
-
-        manager.switch(other.save_id, discard_pending=True)
-
+        manager.switch(other.save_id)
         assert runtime.campaign_id == other.save_id
-        assert runtime.pending_turns.get("pending") is None
+        assert runtime.pending_turns.values() == []
+        source_history = CampaignHistory(root / original_id)
+        assert [
+            record["status"] for record in source_history.pending_records()
+        ] == ["awaiting_confirm", "awaiting_confirm"]
+        with pytest.raises(RuntimeError, match="pending content"):
+            manager.copy(original_id)
+        with pytest.raises(RuntimeError, match="pending content"):
+            manager.export_to(original_id, tmp_path / "pending.zip")
+
+        manager.switch(original_id)
+
+        restored = runtime.pending_turns.variants("group-1")
+        assert [pending.turn_id for pending in restored] == ["turn-v1", "turn-v2"]
+        assert [pending.version_index for pending in restored] == [1, 2]
+        assert [pending.scene_result.scene_text for pending in restored] == [
+            "待确认版本 1",
+            "待确认版本 2",
+        ]
+        assert restored[0].context.user_input == "推开门"
+    finally:
+        runtime.close()
+
+
+def test_create_and_activate_preserves_pending_opening_in_source_save(tmp_path):
+    root = tmp_path / "saves"
+    runtime = CampaignRuntime(
+        "default",
+        paths=CampaignPaths.from_data_dir(root / "default"),
+        max_workers=1,
+    )
+    manager = SaveManager(root, runtime=runtime)
+    try:
+        original_id = manager.active_id
+        config = InitConfig(
+            world_name="泰瑞大陆",
+            world_style="奇幻",
+            ability_system="魔法",
+            protagonist_name="莱尔",
+        )
+        runtime.pending_openings.add(PendingOpening(
+            turn_id="opening-1",
+            config=config,
+            current_state=build_initial_current_state(config),
+            scene_result=SceneWriterResult(scene_text="待确认的开场。"),
+        ))
+
+        created = manager.create("另一段旅程")
+
+        assert created.active is True
+        assert runtime.pending_openings.values() == []
+        manager.switch(original_id)
+        restored = runtime.pending_openings.get("opening-1")
+        assert restored is not None
+        assert restored.scene_result.scene_text == "待确认的开场。"
     finally:
         runtime.close()
 

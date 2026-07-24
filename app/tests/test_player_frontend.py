@@ -151,6 +151,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "`[${values.join(\", \")}] → ${keptValue}`" in source
     assert "`最终值 ${finalValue}/${sides}　${outcome}`" in source
     assert "修正明细未记录" in source
+    assert "confirmDiscardUnsavedPendingEdit" in source
+    assert "切换存档会丢失尚未保存的修改" in source
+    assert "discard_pending" not in source
     assert "/api/player/dice-display" in source
     assert 'id="sceneSummary"' in html
     assert 'id="codexDialog"' in html

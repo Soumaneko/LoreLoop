@@ -517,8 +517,6 @@ class CampaignRuntime:
         self,
         campaign_id: str,
         paths: CampaignPaths,
-        *,
-        discard_pending: bool = False,
     ) -> None:
         """Switch this runtime to another persisted campaign directory."""
         with self._confirmation_lock:
@@ -527,15 +525,13 @@ class CampaignRuntime:
                     "Current save has an active operation. Wait for it to finish "
                     "before switching saves."
                 )
-            if self.has_pending_content() and not discard_pending:
-                raise RuntimeError(
-                    "Current save has pending content. Confirm it or explicitly "
-                    "discard pending content before switching saves."
-                )
             self.operations.shutdown(wait=True)
             self.jobs.shutdown(wait=True)
-            self.pending_turns.clear(discard=discard_pending)
-            self.pending_openings.clear(discard=discard_pending)
+            # Pending content belongs to the source campaign's durable journal.
+            # Switching only unloads its in-memory projection; it must not
+            # mutate the source journal.
+            self.pending_turns.clear(discard=False)
+            self.pending_openings.clear(discard=False)
             self.campaign_id = campaign_id
             self.paths = paths
             self.stores = StoreBundle(paths)

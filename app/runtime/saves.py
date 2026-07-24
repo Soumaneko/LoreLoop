@@ -22,6 +22,7 @@ from .save_manifest import (
     load_save_metadata,
 )
 from .session import CampaignRuntime, get_campaign_runtime
+from .turn_history import CampaignHistory
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,6 @@ class SaveManager:
         name: str,
         *,
         activate: bool = True,
-        discard_pending: bool = False,
     ) -> SaveInfo:
         with self.runtime.save_task(), self._lock:
             clean_name = self._available_name(name)
@@ -107,19 +107,16 @@ class SaveManager:
             save_id = path.name
             try:
                 if activate:
-                    self._switch_locked(save_id, discard_pending=discard_pending)
+                    self._switch_locked(save_id)
                 return self._describe(path)
             except BaseException:
                 if self.active_id != save_id:
                     shutil.rmtree(path, ignore_errors=True)
                 raise
 
-    def switch(self, save_id: str, *, discard_pending: bool = False) -> SaveInfo:
+    def switch(self, save_id: str) -> SaveInfo:
         with self.runtime.save_task(), self._lock:
-            return self._switch_locked(
-                self._validate_save_id(save_id),
-                discard_pending=discard_pending,
-            )
+            return self._switch_locked(self._validate_save_id(save_id))
 
     def rename(self, save_id: str, name: str) -> SaveInfo:
         clean_id = self._validate_save_id(save_id)
@@ -193,7 +190,7 @@ class SaveManager:
                 )
                 if replacement == clean_id:
                     raise ValueError("Replacement save must be different")
-                self._switch_locked(replacement, discard_pending=False)
+                self._switch_locked(replacement)
             trash = self.root / f".trash-{uuid4()}"
             os.replace(path, trash)
             try:
@@ -250,13 +247,12 @@ class SaveManager:
             "saves": [save.as_dict() for save in self.list()],
         }
 
-    def _switch_locked(self, save_id: str, *, discard_pending: bool) -> SaveInfo:
+    def _switch_locked(self, save_id: str) -> SaveInfo:
         path = self._require_save(save_id)
         if save_id != self.runtime.campaign_id:
             self.runtime.reconfigure(
                 save_id,
                 CampaignPaths.from_data_dir(path),
-                discard_pending=discard_pending,
             )
         self._write_active_id(save_id)
         return self._describe(path)
@@ -355,7 +351,12 @@ class SaveManager:
         os.replace(temporary, self.active_file)
 
     def _require_no_pending_source(self, save_id: str, action: str) -> None:
-        if save_id == self.active_id and self.runtime.has_pending_content():
+        history = (
+            self.runtime.history
+            if save_id == self.active_id
+            else CampaignHistory(self._save_path(save_id))
+        )
+        if history.pending_records():
             raise RuntimeError(
                 f"Confirm or discard pending content before {action}ing this save"
             )
@@ -385,16 +386,12 @@ def create_save(payload: dict[str, Any]) -> dict[str, Any]:
     save = SAVE_MANAGER.create(
         str(payload.get("name", "")),
         activate=bool(payload.get("activate", True)),
-        discard_pending=bool(payload.get("discard_pending", False)),
     )
     return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
 
 
 def switch_save(payload: dict[str, Any]) -> dict[str, Any]:
-    save = SAVE_MANAGER.switch(
-        str(payload.get("save_id", "")),
-        discard_pending=bool(payload.get("discard_pending", False)),
-    )
+    save = SAVE_MANAGER.switch(str(payload.get("save_id", "")))
     return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
 
 

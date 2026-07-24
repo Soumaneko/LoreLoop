@@ -57,7 +57,6 @@ def isolate_default_campaign_runtime(tmp_path):
     runtime.reconfigure(
         "pytest",
         CampaignPaths.from_data_dir(tmp_path / "campaign-runtime"),
-        discard_pending=False,
     )
     try:
         yield

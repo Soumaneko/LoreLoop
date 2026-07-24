@@ -1809,22 +1809,34 @@ async function changeHistory(action) {
   catch (error) { showError(error); }
 }
 
+function confirmDiscardUnsavedPendingEdit() {
+  if (!els.pendingCard.querySelector(".scene-editor")) return true;
+  return window.confirm("当前正文仍在编辑，切换存档会丢失尚未保存的修改。是否继续？");
+}
+
 async function switchSave(saveId) {
   if (!saveId || saveId === state.activeSave) return;
-  const hasPending = Boolean(activePending());
-  if (hasPending && !window.confirm("当前存档有未确认内容。切换后这些内容会被删除，是否继续？")) { els.saveSelect.value = state.activeSave; return; }
+  if (!confirmDiscardUnsavedPendingEdit()) {
+    els.saveSelect.value = state.activeSave;
+    return;
+  }
   setMode("switching"); renderControls();
   try {
-    await request("/api/player/saves/switch", { method: "POST", body: JSON.stringify({ save_id: saveId, discard_pending: hasPending }) });
+    await request("/api/player/saves/switch", {
+      method: "POST",
+      body: JSON.stringify({ save_id: saveId }),
+    });
     state.suggestions = []; await loadAll({ scroll: "instant" }); closeDrawer();
   } catch (error) { els.saveSelect.value = state.activeSave; showError(error); }
 }
 
 async function createSave(name) {
-  const hasPending = Boolean(activePending());
-  if (hasPending && !window.confirm("创建并切换存档会删除当前未确认内容，是否继续？")) return;
+  if (!confirmDiscardUnsavedPendingEdit()) return;
   setMode("switching"); renderControls();
-  await request("/api/player/saves/create", { method: "POST", body: JSON.stringify({ name, activate: true, discard_pending: hasPending }) });
+  await request("/api/player/saves/create", {
+    method: "POST",
+    body: JSON.stringify({ name, activate: true }),
+  });
   state.suggestions = []; await loadAll({ scroll: "instant" });
 }
 
