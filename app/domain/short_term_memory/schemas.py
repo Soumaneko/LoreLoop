@@ -137,6 +137,17 @@ class ShortTermMemoryStore:
         ).fetchall()
         return [self._row_to_scene(row) for row in rows]
 
+    def list_navigation_entries(self) -> list[tuple[int, str]]:
+        """Return the minimal ordered fields needed by history navigation."""
+        rows = self._conn.execute(
+            """
+            SELECT turn_index, user_input
+            FROM short_term_scenes
+            ORDER BY turn_index ASC, id ASC
+            """
+        ).fetchall()
+        return [(row["turn_index"], row["user_input"]) for row in rows]
+
     def list_page(
         self,
         *,

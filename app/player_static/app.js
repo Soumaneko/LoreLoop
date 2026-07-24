@@ -20,6 +20,8 @@ const els = {
   streamingCard: $("streamingCard"), streamingText: $("streamingText"), streamingLabel: $("streamingLabel"),
   stopGenerationBtn: $("stopGenerationBtn"),
   pendingCard: $("pendingCard"), suggestions: $("suggestions"), suggestionList: $("suggestionList"),
+  turnNavigator: $("turnNavigator"), turnNavigatorList: $("turnNavigatorList"),
+  turnNavigatorLatest: $("turnNavigatorLatest"),
   errorCard: $("errorCard"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
   composerModeBadge: $("composerModeBadge"),
@@ -90,7 +92,16 @@ let selectedImportFile = null;
 let modelConfigBusy = false;
 let modelConnectionVerified = false;
 let activeGenerationRun = null;
+let historyLoadPromise = null;
+let historyLoadSaveName = null;
+let navigationRenderSignature = "";
+let navigationFrame = 0;
+let navigationJumpSequence = 0;
+let pinnedNavigationKey = null;
+let navigationSettleTimer = 0;
+let navigationScrollEndHandler = null;
 const HISTORY_PAGE_SIZE = 5;
+const HISTORY_NAVIGATION_LOAD_SIZE = 20;
 const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
 const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
 
@@ -172,6 +183,7 @@ function renderControls() {
   els.redoBtn.disabled = busy || (pending && !canRedoPending) || !controls.can_redo;
   els.difficultySelect.disabled = busy;
   els.diceDisplaySelect.disabled = busy;
+  renderTurnNavigator();
 }
 
 function renderHeader() {
@@ -406,49 +418,305 @@ function renderHistory() {
   els.history.appendChild(fragment);
 }
 
+function navigationEntries() {
+  const confirmed = (state.playerState?.history_navigation || []).map((item) => ({
+    key: `turn:${item.turn_index}`,
+    turnIndex: Number(item.turn_index),
+    label: Number(item.turn_index) === 0 ? "开场" : `回合${item.turn_index}`,
+    excerpt: item.user_input_excerpt || "",
+    status: "confirmed",
+  }));
+  const pending = activePending();
+  if (pending) {
+    const variant = selectedVariant() || pending.variants?.[0];
+    const turnIndex = Number(variant?.turn_index ?? 0);
+    const regenerating = state.mode === "generating" && Boolean(activeGenerationRun);
+    confirmed.push({
+      key: regenerating ? "streaming" : "pending",
+      turnIndex,
+      label: pending.kind === "opening" ? "开场" : `回合${turnIndex}`,
+      excerpt: pending.user_input || "",
+      status: state.mode === "confirming"
+        ? "confirming"
+        : regenerating
+          ? "regenerating"
+          : "pending",
+    });
+  } else if (state.mode === "generating" && activeGenerationRun) {
+    confirmed.push({
+      key: "streaming",
+      turnIndex: null,
+      label: "正在生成",
+      excerpt: activeGenerationRun.userInput || "",
+      status: "generating",
+    });
+  }
+  return confirmed;
+}
+
+function navigationItemText(entry) {
+  if (entry.status === "pending") return `${entry.label} · 待确认`;
+  if (entry.status === "confirming") return `${entry.label} · 正在确认`;
+  if (entry.status === "regenerating") return `${entry.label} · 正在生成新版本`;
+  return entry.label;
+}
+
+function renderTurnNavigator() {
+  if (!els.turnNavigator || !els.turnNavigatorList) return;
+  const entries = navigationEntries();
+  const signature = JSON.stringify(entries);
+  els.turnNavigator.hidden = entries.length === 0;
+  if (signature === navigationRenderSignature) {
+    scheduleNavigationActiveUpdate();
+    return;
+  }
+  navigationRenderSignature = signature;
+  els.turnNavigatorList.replaceChildren();
+  const fragment = document.createDocumentFragment();
+  const totalEntries = entries.length;
+  for (let i = 0; i < totalEntries; i++) {
+    const entry = entries[i];
+    const isOpening = entry.turnIndex === 0 || entry.label === "开场";
+    const isLatest = i === totalEntries - 1;
+    const isMultipleOfFive = entry.turnIndex !== null && entry.turnIndex > 0 && (entry.turnIndex % 5 === 0);
+    const showLabel = isOpening || isLatest || isMultipleOfFive;
+
+    const isMilestone = isOpening || isMultipleOfFive;
+    const button = node("button", `turn-nav-item turn-nav-${entry.status}${showLabel ? " show-label" : ""}${isMilestone ? " turn-nav-milestone" : ""}`);
+    button.type = "button";
+    button.dataset.navKey = entry.key;
+    if (entry.turnIndex !== null) button.dataset.turnIndex = String(entry.turnIndex);
+    const text = navigationItemText(entry);
+    button.setAttribute(
+      "aria-label",
+      entry.excerpt ? `${text}：${entry.excerpt}` : text,
+    );
+    button.title = entry.excerpt ? `${text}\n${entry.excerpt}` : text;
+    button.append(
+      node("span", "turn-nav-label", text),
+      node("span", "turn-nav-dot"),
+    );
+    button.onclick = () => {
+      if (entry.status === "confirmed") jumpToHistoryTurn(entry.turnIndex);
+      else jumpToCurrentTurn(entry.key);
+    };
+    fragment.appendChild(button);
+  }
+  els.turnNavigatorList.appendChild(fragment);
+  scheduleNavigationActiveUpdate();
+}
+
+function visibleNavigationAnchors() {
+  const anchors = [...els.history.querySelectorAll(".turn[data-turn-index]")].map(
+    (element) => ({
+      key: `turn:${element.dataset.turnIndex}`,
+      element,
+    }),
+  );
+  if (!els.streamingCard.hidden) {
+    anchors.push({ key: "streaming", element: els.streamingCard });
+  } else if (!els.pendingCard.hidden) {
+    anchors.push({ key: "pending", element: els.pendingCard });
+  }
+  return anchors;
+}
+
+function updateNavigationActive() {
+  navigationFrame = 0;
+  if (!els.turnNavigator || els.turnNavigator.hidden) return;
+  const anchors = visibleNavigationAnchors();
+  if (!anchors.length) return;
+  const readingLine = Math.max(82, window.innerHeight * 0.3);
+  let active = anchors[0];
+  for (const candidate of anchors) {
+    if (candidate.element.getBoundingClientRect().top <= readingLine) {
+      active = candidate;
+    } else {
+      break;
+    }
+  }
+  const activeKey = pinnedNavigationKey || active.key;
+  for (const button of els.turnNavigatorList.querySelectorAll(".turn-nav-item")) {
+    const selected = button.dataset.navKey === activeKey;
+    const wasSelected = button.getAttribute("aria-current") === "step";
+    button.classList.toggle("active", selected);
+    if (selected) {
+      button.setAttribute("aria-current", "step");
+      if (!wasSelected) {
+        button.scrollIntoView({ block: "nearest", behavior: "auto" });
+      }
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  }
+}
+
+function scheduleNavigationActiveUpdate() {
+  if (navigationFrame) return;
+  navigationFrame = window.requestAnimationFrame(updateNavigationActive);
+}
+
+function cancelNavigationSettlement() {
+  window.clearTimeout(navigationSettleTimer);
+  navigationSettleTimer = 0;
+  if (navigationScrollEndHandler) {
+    window.removeEventListener("scrollend", navigationScrollEndHandler);
+    navigationScrollEndHandler = null;
+  }
+}
+
+function settleNavigationTarget(key) {
+  if (pinnedNavigationKey !== key) return;
+  cancelNavigationSettlement();
+  pinnedNavigationKey = null;
+  scheduleNavigationActiveUpdate();
+}
+
+function scrollToNavigationTarget(element, key) {
+  cancelNavigationSettlement();
+  pinnedNavigationKey = key;
+  if ("onscrollend" in window) {
+    navigationScrollEndHandler = () => settleNavigationTarget(key);
+    window.addEventListener("scrollend", navigationScrollEndHandler, { once: true });
+  }
+  navigationSettleTimer = window.setTimeout(
+    () => settleNavigationTarget(key),
+    2000,
+  );
+  element.scrollIntoView({ block: "start", behavior: "smooth" });
+  scheduleNavigationActiveUpdate();
+}
+
+async function jumpToHistoryTurn(turnIndex) {
+  const jumpSequence = ++navigationJumpSequence;
+  let target = els.history.querySelector(`[data-turn-index="${turnIndex}"]`);
+  while (!target) {
+    const history = state.playerState?.history || [];
+    const pagination = state.playerState?.history_pagination || {};
+    const oldestTurn = Number(history[0]?.turn_index);
+    if (
+      !pagination.has_more
+      || !Number.isFinite(oldestTurn)
+      || oldestTurn <= turnIndex
+    ) {
+      break;
+    }
+    const limit = Math.min(
+      HISTORY_NAVIGATION_LOAD_SIZE,
+      Math.max(1, oldestTurn - turnIndex),
+    );
+    const loaded = await loadEarlierHistory({ force: true, limit });
+    if (jumpSequence !== navigationJumpSequence) return;
+    if (!loaded) break;
+    target = els.history.querySelector(`[data-turn-index="${turnIndex}"]`);
+  }
+  if (jumpSequence !== navigationJumpSequence) return;
+  if (!target) {
+    showToast(`第 ${turnIndex} 回合暂时无法载入`);
+    return;
+  }
+  scrollToNavigationTarget(target, `turn:${turnIndex}`);
+}
+
+function jumpToCurrentTurn(key) {
+  ++navigationJumpSequence;
+  const target = key === "streaming" ? els.streamingCard : els.pendingCard;
+  if (!target.hidden) scrollToNavigationTarget(target, key);
+}
+
+function jumpToLatestTurn() {
+  ++navigationJumpSequence;
+  const pending = activePending();
+  if (state.mode === "generating" && !els.streamingCard.hidden) {
+    jumpToCurrentTurn("streaming");
+    return;
+  }
+  if (pending && !els.pendingCard.hidden) {
+    jumpToCurrentTurn("pending");
+    return;
+  }
+  const turns = els.history.querySelectorAll(".turn[data-turn-index]");
+  const latest = turns[turns.length - 1];
+  if (latest) scrollToNavigationTarget(latest, `turn:${latest.dataset.turnIndex}`);
+}
+
 function showActivePlayerAction(text) {
   els.activePlayerAction.textContent = text || "";
   els.activePlayerAction.hidden = !text;
 }
 
-async function loadEarlierHistory() {
+async function loadEarlierHistory({
+  force = false,
+  limit = HISTORY_PAGE_SIZE,
+} = {}) {
+  if (historyLoadPromise && historyLoadSaveName === state.activeSave) {
+    return historyLoadPromise;
+  }
   const pagination = state.playerState?.history_pagination || {};
   const history = state.playerState?.history || [];
-  if (!state.historyPagingEnabled || state.historyLoading || !pagination.has_more || !history.length) return;
+  if (
+    (!force && !state.historyPagingEnabled)
+    || !pagination.has_more
+    || !history.length
+  ) {
+    return 0;
+  }
 
-  state.historyLoading = true;
-  const saveName = state.activeSave;
-  const previousHeight = document.documentElement.scrollHeight;
-  const previousY = window.scrollY;
-  try {
-    const page = await request(
-      `/api/player/history?before_turn=${encodeURIComponent(history[0].turn_index)}&limit=${HISTORY_PAGE_SIZE}`,
-    );
-    if (saveName !== state.activeSave) return;
-    const knownHighlights = state.playerState.highlights || [];
-    const seenHighlights = new Set(knownHighlights.map((item) => item.surface.toLocaleLowerCase()));
-    for (const item of page.highlights || []) {
-      const key = item.surface.toLocaleLowerCase();
-      if (!seenHighlights.has(key)) {
-        knownHighlights.push(item);
-        seenHighlights.add(key);
+  const loadPromise = (async () => {
+    state.historyLoading = true;
+    const saveName = state.activeSave;
+    const previousHeight = document.documentElement.scrollHeight;
+    const previousY = window.scrollY;
+    try {
+      const page = await request(
+        `/api/player/history?before_turn=${encodeURIComponent(history[0].turn_index)}&limit=${encodeURIComponent(limit)}`,
+      );
+      if (saveName !== state.activeSave) return 0;
+      const knownHighlights = state.playerState.highlights || [];
+      const seenHighlights = new Set(knownHighlights.map((item) => item.surface.toLocaleLowerCase()));
+      for (const item of page.highlights || []) {
+        const key = item.surface.toLocaleLowerCase();
+        if (!seenHighlights.has(key)) {
+          knownHighlights.push(item);
+          seenHighlights.add(key);
+        }
       }
+      state.playerState.highlights = knownHighlights;
+      const earlier = page.history || [];
+      let insertedCount = 0;
+      if (earlier.length) {
+        const knownTurnIndexes = new Set(
+          state.playerState.history.map((turn) => Number(turn.turn_index)),
+        );
+        const uniqueEarlier = earlier.filter(
+          (turn) => !knownTurnIndexes.has(Number(turn.turn_index)),
+        );
+        insertedCount = uniqueEarlier.length;
+        state.playerState.history = [...uniqueEarlier, ...state.playerState.history];
+        const fragment = document.createDocumentFragment();
+        uniqueEarlier.forEach((turn) => fragment.appendChild(renderTurn(turn)));
+        els.history.prepend(fragment);
+        const addedHeight = document.documentElement.scrollHeight - previousHeight;
+        window.scrollTo({ top: previousY + addedHeight, behavior: "auto" });
+      }
+      state.playerState.history_pagination = page.pagination || { has_more: false };
+      scheduleNavigationActiveUpdate();
+      return insertedCount;
+    } catch (error) {
+      showToast(error.message || "更早的故事暂时无法载入");
+      return 0;
     }
-    state.playerState.highlights = knownHighlights;
-    const earlier = page.history || [];
-    if (earlier.length) {
-      state.playerState.history = [...earlier, ...state.playerState.history];
-      const fragment = document.createDocumentFragment();
-      earlier.forEach((turn) => fragment.appendChild(renderTurn(turn)));
-      els.history.prepend(fragment);
-      const addedHeight = document.documentElement.scrollHeight - previousHeight;
-      window.scrollTo({ top: previousY + addedHeight, behavior: "auto" });
-    }
-    state.playerState.history_pagination = page.pagination || { has_more: false };
-  } catch (error) {
-    showToast(error.message || "更早的故事暂时无法载入");
+  })();
+  historyLoadPromise = loadPromise;
+  historyLoadSaveName = state.activeSave;
+  try {
+    return await loadPromise;
   } finally {
-    state.historyLoading = false;
+    if (historyLoadPromise === loadPromise) {
+      historyLoadPromise = null;
+      historyLoadSaveName = null;
+      state.historyLoading = false;
+    }
   }
 }
 
@@ -1481,6 +1749,10 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   const saves = await request("/api/player/saves");
   state.saves = saves.saves || [];
   state.activeSave = saves.active;
+  ++navigationJumpSequence;
+  cancelNavigationSettlement();
+  pinnedNavigationKey = null;
+  navigationRenderSignature = "";
   renderSaves();
   renderControls();
 
@@ -1686,6 +1958,7 @@ function startStreaming(label = "世界正在回应") {
     ? "正在停止……"
     : "停止生成";
   els.pendingCard.hidden = true;
+  renderTurnNavigator();
   scrollToBottom("smooth");
 }
 
@@ -1710,7 +1983,11 @@ function flushStreamingText() {
   streamBuffer = "";
 }
 
-function stopStreaming() { flushStreamingText(); els.streamingCard.hidden = true; }
+function stopStreaming() {
+  flushStreamingText();
+  els.streamingCard.hidden = true;
+  renderTurnNavigator();
+}
 
 function newRequestId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -2370,6 +2647,7 @@ els.diceDisplaySelect.onchange = async () => {
   }
 };
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
+els.turnNavigatorLatest.onclick = jumpToLatestTurn;
 els.initFanfic.onchange = toggleInitWorldFields;
 els.initAbilitySystem.onchange = toggleCustomAbilityField;
 els.addCoreMemoryBtn.onclick = () => addExtraCoreMemoryRow();
@@ -2380,7 +2658,9 @@ els.initForm.addEventListener("submit", (event) => { event.preventDefault(); ini
 els.initDialog.addEventListener("cancel", (event) => event.preventDefault());
 window.addEventListener("scroll", () => {
   if (window.scrollY <= 220) loadEarlierHistory();
+  scheduleNavigationActiveUpdate();
 }, { passive: true });
+window.addEventListener("resize", scheduleNavigationActiveUpdate, { passive: true });
 
 toggleInitWorldFields();
 bootstrap().catch(showError);

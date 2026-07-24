@@ -8,6 +8,7 @@ from .settings import load_settings, normalize_dice_display
 
 
 PLAYER_HISTORY_PAGE_SIZE = 5
+HISTORY_NAVIGATION_EXCERPT_LENGTH = 32
 
 
 def _project_history(turns) -> list[dict[str, Any]]:
@@ -21,6 +22,25 @@ def _project_history(turns) -> list[dict[str, Any]]:
             "player_resolution": model_data(turn.player_resolution),
         }
         for turn in turns
+    ]
+
+
+def _user_input_excerpt(user_input: str) -> str:
+    text = " ".join(user_input.split())
+    if len(text) <= HISTORY_NAVIGATION_EXCERPT_LENGTH:
+        return text
+    return f"{text[:HISTORY_NAVIGATION_EXCERPT_LENGTH - 1]}…"
+
+
+def _history_navigation(runtime: CampaignRuntime) -> list[dict[str, Any]]:
+    with runtime.stores.short_term() as short_store:
+        entries = short_store.list_navigation_entries()
+    return [
+        {
+            "turn_index": turn_index,
+            "user_input_excerpt": _user_input_excerpt(user_input),
+        }
+        for turn_index, user_input in entries
     ]
 
 
@@ -221,6 +241,7 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
             "resources": model_data(resources),
         },
         "history": history,
+        "history_navigation": _history_navigation(runtime),
         "action_preview": (
             history[-1]["action_preview"] if history else None
         ),

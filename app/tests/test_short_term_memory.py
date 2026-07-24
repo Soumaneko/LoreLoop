@@ -103,6 +103,16 @@ class TestShortTermMemoryStore:
         assert [scene.turn_index for scene in oldest] == [1, 2]
         assert has_more is False
 
+    def test_list_navigation_entries_returns_only_ordered_index_fields(self):
+        store = ShortTermMemoryStore(max_items=2)
+        store.add_turn("s2", 2, "第二个行动", "不应进入导航的正文")
+        store.add_turn("s1", 1, "第一个行动", "同样不应进入导航的正文")
+
+        assert store.list_navigation_entries() == [
+            (1, "第一个行动"),
+            (2, "第二个行动"),
+        ]
+
     def test_empty_store_returns_empty(self):
         store = ShortTermMemoryStore()
         memory = store.get_recent()

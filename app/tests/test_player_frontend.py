@@ -151,6 +151,19 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'await request("/api/player/state")' in source
     assert "Promise.all([" not in source
     assert "/api/player/history?before_turn=" in source
+    assert 'id="turnNavigator"' in html
+    assert 'id="turnNavigatorList"' in html
+    assert 'aria-label="回合导航"' in html
+    assert "function renderTurnNavigator()" in source
+    assert "function jumpToHistoryTurn(turnIndex)" in source
+    assert "function scheduleNavigationActiveUpdate()" in source
+    assert "HISTORY_NAVIGATION_LOAD_SIZE = 20" in source
+    assert 'button.setAttribute("aria-current", "step")' in source
+    assert 'if ("onscrollend" in window)' in source
+    assert "if (!wasSelected)" in source
+    assert "return insertedCount;" in source
+    assert ".turn-navigator-list::before" in styles
+    assert ".turn-nav-item.active .turn-nav-dot" in styles
     assert "/api/player/generate" in source
     assert "/api/player/${endpoint}" in source
     assert 'retryTurn("rephrase")' in source
@@ -455,8 +468,8 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
 
     assert set(payload) == {
         "save", "needs_init", "difficulty", "campaign", "history",
-        "history_pagination", "highlights", "pending", "history_controls",
-        "action_preview", "dice_display",
+        "history_navigation", "history_pagination", "highlights", "pending",
+        "history_controls", "action_preview", "dice_display",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
     assert payload["campaign"]["scene_conditions"] == ["房间正在燃烧"]
@@ -475,6 +488,10 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     assert payload["pending"][0]["variants"][0]["closing_prompt"] == "你准备如何回应？"
     assert payload["action_preview"] == _action_preview().model_dump(mode="json")
     assert payload["history"][0]["player_resolution"] == _player_resolution().model_dump(mode="json")
+    assert payload["history_navigation"] == [{
+        "turn_index": 6,
+        "user_input_excerpt": "询问木偶的事。",
+    }]
     assert payload["dice_display"] == "outcome"
 
 
@@ -491,6 +508,7 @@ def test_player_history_loads_five_turn_pages_oldest_to_newest():
 
     initial = load_player_state()
     assert [turn["turn_index"] for turn in initial["history"]] == [8, 9, 10, 11, 12]
+    assert [item["turn_index"] for item in initial["history_navigation"]] == list(range(1, 13))
     assert initial["history_pagination"]["has_more"] is True
 
     previous = load_player_history(before_turn_index=8, limit=5)
@@ -500,6 +518,45 @@ def test_player_history_loads_five_turn_pages_oldest_to_newest():
     oldest = load_player_history(before_turn_index=3, limit=5)
     assert [turn["turn_index"] for turn in oldest["history"]] == [1, 2]
     assert oldest["pagination"]["has_more"] is False
+
+
+def test_player_history_navigation_normalizes_and_truncates_user_input():
+    runtime = get_campaign_runtime()
+    with runtime.stores.short_term() as store:
+        store.add_turn("opening", 0, "", "开场正文")
+        store.add_turn(
+            "scene-1",
+            1,
+            "  这是一个包含换行\n和   多余空白、并且长度明显超过导航摘要上限的玩家行动输入  ",
+            "第一回合正文",
+        )
+
+    navigation = load_player_state()["history_navigation"]
+
+    assert navigation == [
+        {"turn_index": 0, "user_input_excerpt": ""},
+        {
+            "turn_index": 1,
+            "user_input_excerpt": "这是一个包含换行 和 多余空白、并且长度明显超过导航摘要上限的…",
+        },
+    ]
+    assert len(navigation[1]["user_input_excerpt"]) == 32
+
+
+def test_player_history_navigation_preserves_sparse_turn_indexes():
+    runtime = get_campaign_runtime()
+    with runtime.stores.short_term() as store:
+        store.add_turn("scene-2", 2, "第二回合行动", "第二回合正文")
+        store.add_turn("scene-7", 7, "第七回合行动", "第七回合正文")
+
+    assert load_player_state()["history_navigation"] == [
+        {"turn_index": 2, "user_input_excerpt": "第二回合行动"},
+        {"turn_index": 7, "user_input_excerpt": "第七回合行动"},
+    ]
+
+
+def test_player_history_navigation_is_empty_without_confirmed_turns():
+    assert load_player_state()["history_navigation"] == []
 
 
 def test_player_event_projection_removes_internal_generation_data():
