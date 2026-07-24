@@ -30,7 +30,11 @@ from app.runtime.player_state import (
 )
 from app.runtime.operations import OperationManager
 from app.runtime.session import get_campaign_runtime
-from app.runtime.settings import load_settings, save_dice_display
+from app.runtime.settings import (
+    load_settings,
+    save_dice_display,
+    save_reader_preferences,
+)
 
 
 STATIC_DIR = Path(__file__).parents[1] / "player_static"
@@ -136,6 +140,59 @@ def test_dice_display_setting_is_per_save_and_normalized():
     assert save_dice_display({"dice_display": "invalid"}) == {
         "dice_display": "outcome"
     }
+
+
+def test_reader_preferences_setting_is_per_save_and_normalized():
+    assert save_reader_preferences({
+        "font_size": "18",
+        "font_family": "kaiti",
+        "theme": "sepia",
+    }) == {
+        "font_size": "18",
+        "font_family": "kaiti",
+        "theme": "sepia",
+    }
+    settings = load_settings()
+    assert settings["font_size"] == "18"
+    assert settings["font_family"] == "kaiti"
+    assert settings["theme"] == "sepia"
+    assert save_reader_preferences({"font_size": "invalid", "font_family": "bad", "theme": "none"}) == {
+        "font_size": "16.5",
+        "font_family": "serif",
+        "theme": "dark",
+    }
+
+
+def test_player_themes_use_semantic_tokens_without_component_overrides():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert styles.count('html[data-theme="') == 2
+    assert "ULTIMATE THEME OVERRIDES" not in styles
+    assert 'html[data-theme="light"] .' not in styles
+    assert 'html[data-theme="sepia"] .' not in styles
+    assert "select { color-scheme: dark; }" not in styles
+    assert styles.count("/* Rewrite Dropdown Menu Component */") == 1
+    for token in (
+        "--surface-raised:",
+        "--editor-bg:",
+        "--positive-text:",
+        "--warning-text:",
+        "--negative-text:",
+        "--highlight-player-text:",
+        "--highlight-npc-text:",
+        "--highlight-entity-text:",
+        "--backdrop:",
+    ):
+        assert styles.count(token) == 3
+
+    assert 'const READER_PREFERENCES_CACHE_KEY = "tvg:reader-preferences"' in source
+    assert "readerPreferencesSaveQueue" in source
+    assert "themeColorMeta.content = themeColor" in source
+    assert "applyReaderPreferences(state.playerState || {})" in source
+    assert 'localStorage.getItem("tvg:reader-preferences")' in html
+    assert 'meta name="theme-color" content="#11110e"' in html
 
 
 def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
@@ -470,6 +527,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "save", "needs_init", "difficulty", "campaign", "history",
         "history_navigation", "history_pagination", "highlights", "pending",
         "history_controls", "action_preview", "dice_display",
+        "font_size", "font_family", "theme",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
     assert payload["campaign"]["scene_conditions"] == ["房间正在燃烧"]

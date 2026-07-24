@@ -4,7 +4,13 @@ from typing import Any
 
 from .serialization import model_data
 from .session import CampaignRuntime, get_campaign_runtime
-from .settings import load_settings, normalize_dice_display
+from .settings import (
+    load_settings,
+    normalize_dice_display,
+    normalize_font_family,
+    normalize_font_size,
+    normalize_theme,
+)
 
 
 PLAYER_HISTORY_PAGE_SIZE = 5
@@ -225,6 +231,9 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
         "needs_init": core_memory is None,
         "difficulty": settings.get("difficulty", "困难"),
         "dice_display": normalize_dice_display(settings.get("dice_display")),
+        "font_size": normalize_font_size(settings.get("font_size")),
+        "font_family": normalize_font_family(settings.get("font_family")),
+        "theme": normalize_theme(settings.get("theme")),
         "campaign": {
             "turn_index": history[-1]["turn_index"] if history else 0,
             "world_time": current_state.world_clock.label,

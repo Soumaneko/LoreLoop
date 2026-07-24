@@ -3,8 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#141410" />
+  <meta name="theme-color" content="#11110e" />
   <title>TVG · 你的故事</title>
+  <script>
+    (() => {
+      try {
+        const prefs = JSON.parse(localStorage.getItem("tvg:reader-preferences") || "null");
+        if (!prefs) return;
+        const themes = new Set(["dark", "sepia", "light"]);
+        const fonts = new Set(["serif", "kaiti", "ming", "sans"]);
+        if (themes.has(prefs.theme) && prefs.theme !== "dark") {
+          document.documentElement.dataset.theme = prefs.theme;
+        }
+        if (fonts.has(prefs.font_family) && prefs.font_family !== "serif") {
+          document.documentElement.dataset.fontFamily = prefs.font_family;
+        }
+        if (/^(14|15|16\.5|18|20)$/.test(String(prefs.font_size || ""))) {
+          document.documentElement.style.setProperty("--narrative-font-size", `${prefs.font_size}px`);
+        }
+        if (/^#[0-9a-f]{6}$/i.test(String(prefs.theme_color || ""))) {
+          document.querySelector('meta[name="theme-color"]').content = prefs.theme_color;
+        }
+      } catch (_error) {
+        localStorage.removeItem("tvg:reader-preferences");
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="/assets/styles.css" />
 </head>
 <body>
@@ -136,6 +160,34 @@
         <option value="hidden">完全不显示</option>
         <option value="outcome">只显示结果状态</option>
         <option value="full">显示骰点、修正与结果</option>
+      </select>
+    </section>
+    <section class="drawer-section">
+      <div class="section-title">沉浸阅读</div>
+      <label for="fontSizeSelect">字号大小</label>
+      <select id="fontSizeSelect">
+        <option value="14">精小 (14px)</option>
+        <option value="15">标准 (15px)</option>
+        <option value="16.5" selected>适中 (16.5px)</option>
+        <option value="18">大字 (18px)</option>
+        <option value="20">特大 (20px)</option>
+      </select>
+    </section>
+    <section class="drawer-section">
+      <label for="fontFamilySelect">字体风骨</label>
+      <select id="fontFamilySelect">
+        <option value="serif">沉香宋体 (典雅)</option>
+        <option value="kaiti">苍劲楷体 (侠风)</option>
+        <option value="ming">雕版明朝 (厚重)</option>
+        <option value="sans">现代无衬线 (清晰)</option>
+      </select>
+    </section>
+    <section class="drawer-section">
+      <label for="themeSelect">主题调性</label>
+      <select id="themeSelect">
+        <option value="dark">玄金暗影 (深色)</option>
+        <option value="sepia">宣纸护眼 (暖阳)</option>
+        <option value="light">月白明彩 (浅色)</option>
       </select>
     </section>
     <section class="drawer-section">

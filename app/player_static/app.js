@@ -33,7 +33,7 @@ const els = {
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
-  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
+  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), closeCodexBtn: $("closeCodexBtn"),
   codexConfirmDialog: $("codexConfirmDialog"), codexConfirmEyebrow: $("codexConfirmEyebrow"), codexConfirmTitle: $("codexConfirmTitle"), codexConfirmMessage: $("codexConfirmMessage"), codexConfirmCancelBtn: $("codexConfirmCancelBtn"), codexConfirmOkBtn: $("codexConfirmOkBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
@@ -104,6 +104,14 @@ const HISTORY_PAGE_SIZE = 5;
 const HISTORY_NAVIGATION_LOAD_SIZE = 20;
 const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
 const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
+const READER_PREFERENCES_CACHE_KEY = "tvg:reader-preferences";
+const THEME_CHROME_COLORS = {
+  dark: "#11110e",
+  sepia: "#e6ddcc",
+  light: "#dce0e6",
+};
+let readerPreferencesSaveQueue = Promise.resolve();
+let readerPreferencesSaveSequence = 0;
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -183,6 +191,14 @@ function renderControls() {
   els.redoBtn.disabled = busy || (pending && !canRedoPending) || !controls.can_redo;
   els.difficultySelect.disabled = busy;
   els.diceDisplaySelect.disabled = busy;
+  [
+    els.saveSelect,
+    els.difficultySelect,
+    els.diceDisplaySelect,
+    els.fontSizeSelect,
+    els.fontFamilySelect,
+    els.themeSelect,
+  ].forEach(syncCustomSelect);
   renderTurnNavigator();
 }
 
@@ -1248,10 +1264,14 @@ function renderDrawer() {
     resourceGroup("固定资产", resources.fixed_assets || [], "fixed"),
     resourceGroup("临时资产", resources.temporary_assets || [], "temporary"),
   );
+  applyReaderPreferences(state.playerState);
   els.difficultySelect.value = state.playerState?.difficulty || "困难";
   els.diceDisplaySelect.value = state.playerState?.dice_display || "outcome";
   enhanceCustomSelect(els.difficultySelect);
   enhanceCustomSelect(els.diceDisplaySelect);
+  enhanceCustomSelect(els.fontSizeSelect);
+  enhanceCustomSelect(els.fontFamilySelect);
+  enhanceCustomSelect(els.themeSelect);
 }
 
 function renderSaves() {
@@ -1282,7 +1302,10 @@ function enhanceCustomSelect(selectElement) {
   selectElement.style.display = "none";
 
   const wrapper = node("div", "codex-custom-select-wrapper");
-  const trigger = node("div", "codex-custom-select-trigger");
+  const trigger = node("button", "codex-custom-select-trigger");
+  trigger.type = "button";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
   const labelSpan = node("span", "codex-custom-select-label");
   const arrowSpan = node("span", "codex-custom-select-arrow", "▼");
 
@@ -1290,6 +1313,7 @@ function enhanceCustomSelect(selectElement) {
   wrapper.appendChild(trigger);
 
   const menu = node("div", "codex-custom-select-menu");
+  menu.setAttribute("role", "listbox");
   menu.hidden = true;
   wrapper.appendChild(menu);
 
@@ -1300,6 +1324,9 @@ function enhanceCustomSelect(selectElement) {
   function syncTrigger() {
     const selectedOption = Array.from(selectElement.options).find(o => o.value === selectElement.value) || selectElement.options[0];
     labelSpan.textContent = selectedOption ? selectedOption.textContent : "请选择";
+    trigger.disabled = selectElement.disabled;
+    wrapper.classList.toggle("is-disabled", selectElement.disabled);
+    trigger.setAttribute("aria-disabled", String(selectElement.disabled));
   }
 
   function renderMenuOptions() {
@@ -1307,13 +1334,17 @@ function enhanceCustomSelect(selectElement) {
     Array.from(selectElement.options).forEach((opt) => {
       if (opt.disabled) return;
       const isSelected = opt.value === selectElement.value;
-      const item = node("div", `codex-custom-select-option ${isSelected ? "is-selected" : ""}`);
+      const item = node("button", `codex-custom-select-option ${isSelected ? "is-selected" : ""}`);
+      item.type = "button";
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", String(isSelected));
       item.appendChild(node("span", "", opt.textContent));
       if (isSelected) {
         item.appendChild(node("span", "check-mark", "✦"));
       }
       item.onclick = (e) => {
         e.stopPropagation();
+        if (selectElement.disabled) return;
         selectElement.value = opt.value;
         selectElement.dispatchEvent(new Event("change", { bubbles: true }));
         closeMenu();
@@ -1326,6 +1357,7 @@ function enhanceCustomSelect(selectElement) {
   function closeMenu() {
     menu.hidden = true;
     trigger.classList.remove("is-open");
+    trigger.setAttribute("aria-expanded", "false");
     document.removeEventListener("click", onOutsideClick);
   }
 
@@ -1337,14 +1369,19 @@ function enhanceCustomSelect(selectElement) {
 
   trigger.onclick = (e) => {
     e.stopPropagation();
+    if (selectElement.disabled) return;
     const willOpen = menu.hidden;
     document.querySelectorAll(".codex-custom-select-menu").forEach(m => m.hidden = true);
-    document.querySelectorAll(".codex-custom-select-trigger").forEach(t => t.classList.remove("is-open"));
+    document.querySelectorAll(".codex-custom-select-trigger").forEach((otherTrigger) => {
+      otherTrigger.classList.remove("is-open");
+      otherTrigger.setAttribute("aria-expanded", "false");
+    });
 
     if (willOpen) {
       renderMenuOptions();
       menu.hidden = false;
       trigger.classList.add("is-open");
+      trigger.setAttribute("aria-expanded", "true");
       setTimeout(() => document.addEventListener("click", onOutsideClick), 0);
     }
   };
@@ -1357,10 +1394,22 @@ function syncCustomSelect(selectElement) {
   const wrapper = selectElement.nextElementSibling;
   if (!wrapper || !wrapper.classList.contains("codex-custom-select-wrapper")) return;
   const labelSpan = wrapper.querySelector(".codex-custom-select-label");
+  const trigger = wrapper.querySelector(".codex-custom-select-trigger");
   const selectedOption = Array.from(selectElement.options).find(o => o.value === selectElement.value) || selectElement.options[0];
   if (labelSpan && selectedOption) {
     labelSpan.textContent = selectedOption.textContent;
   }
+  if (trigger) {
+    trigger.disabled = selectElement.disabled;
+    trigger.setAttribute("aria-disabled", String(selectElement.disabled));
+    if (selectElement.disabled) {
+      trigger.classList.remove("is-open");
+      trigger.setAttribute("aria-expanded", "false");
+      const menu = wrapper.querySelector(".codex-custom-select-menu");
+      if (menu) menu.hidden = true;
+    }
+  }
+  wrapper.classList.toggle("is-disabled", selectElement.disabled);
 }
 
 function formatLastPlayed(value) {
@@ -2629,6 +2678,87 @@ els.importSaveForm.onsubmit = (event) => {
     els.importSaveForm.hidden = true;
   }, "存档已导入");
 };
+function applyReaderPreferences(prefs = {}) {
+  const fontSize = prefs.font_size || "16.5";
+  const fontFamily = prefs.font_family || "serif";
+  const theme = prefs.theme || "dark";
+
+  document.documentElement.style.setProperty("--narrative-font-size", fontSize + "px");
+
+  if (fontFamily === "serif") {
+    document.documentElement.removeAttribute("data-font-family");
+  } else {
+    document.documentElement.setAttribute("data-font-family", fontFamily);
+  }
+
+  if (theme === "dark") {
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.setAttribute("data-theme", theme);
+  }
+  const themeColor = THEME_CHROME_COLORS[theme] || THEME_CHROME_COLORS.dark;
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeColorMeta) themeColorMeta.content = themeColor;
+  try {
+    localStorage.setItem(READER_PREFERENCES_CACHE_KEY, JSON.stringify({
+      font_size: fontSize,
+      font_family: fontFamily,
+      theme,
+      theme_color: themeColor,
+    }));
+  } catch (_error) {
+    // Appearance caching is a best-effort pre-paint optimization.
+  }
+
+  if (els.fontSizeSelect) {
+    els.fontSizeSelect.value = fontSize;
+    syncCustomSelect(els.fontSizeSelect);
+  }
+  if (els.fontFamilySelect) {
+    els.fontFamilySelect.value = fontFamily;
+    syncCustomSelect(els.fontFamilySelect);
+  }
+  if (els.themeSelect) {
+    els.themeSelect.value = theme;
+    syncCustomSelect(els.themeSelect);
+  }
+}
+
+async function saveCurrentReaderPreferences() {
+  const payload = {
+    font_size: els.fontSizeSelect?.value || "16.5",
+    font_family: els.fontFamilySelect?.value || "serif",
+    theme: els.themeSelect?.value || "dark",
+  };
+  applyReaderPreferences(payload);
+  const sequence = ++readerPreferencesSaveSequence;
+  const saveJob = readerPreferencesSaveQueue
+    .catch(() => undefined)
+    .then(() => request("/api/player/reader-preferences", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }));
+  readerPreferencesSaveQueue = saveJob;
+  try {
+    const result = await saveJob;
+    if (state.playerState) {
+      state.playerState.font_size = result.font_size;
+      state.playerState.font_family = result.font_family;
+      state.playerState.theme = result.theme;
+    }
+    if (sequence === readerPreferencesSaveSequence) {
+      applyReaderPreferences(result);
+      cachePlayerShell();
+      showToast("沉浸阅读偏好已保存");
+    }
+  } catch (error) {
+    if (sequence === readerPreferencesSaveSequence) {
+      applyReaderPreferences(state.playerState || {});
+      showError(error);
+    }
+  }
+}
+
 els.difficultySelect.onchange = async () => { try { await request("/api/player/difficulty", { method: "POST", body: JSON.stringify({ difficulty: els.difficultySelect.value }) }); state.playerState.difficulty = els.difficultySelect.value; showToast("难度已更新"); } catch (error) { showError(error); } };
 els.diceDisplaySelect.onchange = async () => {
   const previous = state.playerState.dice_display || "outcome";
@@ -2646,6 +2776,9 @@ els.diceDisplaySelect.onchange = async () => {
     showError(error);
   }
 };
+els.fontSizeSelect.onchange = saveCurrentReaderPreferences;
+els.fontFamilySelect.onchange = saveCurrentReaderPreferences;
+els.themeSelect.onchange = saveCurrentReaderPreferences;
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.turnNavigatorLatest.onclick = jumpToLatestTurn;
 els.initFanfic.onchange = toggleInitWorldFields;

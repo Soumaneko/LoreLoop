@@ -19,6 +19,7 @@ from app.runtime.settings import (
     save_dice_display,
     save_difficulty,
     save_max_chars,
+    save_reader_preferences,
 )
 from app.runtime.model_config import (
     model_config_status,
@@ -342,6 +343,7 @@ __all__ = [
     "save_difficulty",
     "save_max_chars",
     "save_model_config",
+    "save_reader_preferences",
     "start_batch_classify_operation",
     "start_confirmation_operation",
     "start_generation_operation",

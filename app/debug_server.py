@@ -36,6 +36,7 @@ from app.api import (
     save_difficulty,
     save_max_chars,
     save_model_config,
+    save_reader_preferences,
     start_batch_classify_operation,
     start_confirmation_operation,
     start_generation_operation,
@@ -221,6 +222,9 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/dice-display":
             self._handle_player_json(lambda: save_dice_display(_read_json(self)))
+            return
+        if path == "/api/player/reader-preferences":
+            self._handle_player_json(lambda: save_reader_preferences(_read_json(self)))
             return
         if path == "/api/player/model-config/test":
             self._handle_player_json(
