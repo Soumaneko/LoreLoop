@@ -84,6 +84,49 @@ def test_player_frontend_javascript_is_syntactically_valid():
         assert result.returncode == 0, result.stderr
 
 
+def test_player_drafts_can_restore_original_across_reload_and_save_switch():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "state.js").resolve().as_uri()
+    script = f"""
+const values = new Map();
+globalThis.localStorage = {{
+  getItem: (key) => values.has(key) ? values.get(key) : null,
+  setItem: (key, value) => values.set(key, String(value)),
+  removeItem: (key) => values.delete(key),
+}};
+const first = await import("{module_url}?first");
+const variant = {{ turn_id: "turn-1", scene_text: "原始正文" }};
+first.state.activeSave = "save-a";
+if (first.hasDraft(variant)) throw new Error("fresh variant must not have a draft");
+first.writeDraft(variant, "玩家修改");
+if (!first.hasDraft(variant) || first.readDraft(variant) !== "玩家修改") {{
+  throw new Error("saved draft was not retained");
+}}
+first.state.activeSave = "save-b";
+if (first.readDraft(variant) !== "原始正文") throw new Error("draft leaked across saves");
+const reloaded = await import("{module_url}?reloaded");
+reloaded.state.activeSave = "save-a";
+if (!reloaded.hasDraft(variant) || reloaded.readDraft(variant) !== "玩家修改") {{
+  throw new Error("draft did not survive module reload");
+}}
+reloaded.clearDraft(variant);
+if (reloaded.hasDraft(variant) || reloaded.readDraft(variant) !== "原始正文") {{
+  throw new Error("original text was not restored");
+}}
+reloaded.writeDraft(variant, "原始正文");
+if (reloaded.hasDraft(variant)) throw new Error("original text must not create a draft");
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_dice_display_setting_is_per_save_and_normalized():
     assert save_dice_display({"dice_display": "full"}) == {
         "dice_display": "full"
@@ -153,6 +196,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "修正明细未记录" in source
     assert "confirmDiscardUnsavedPendingEdit" in source
     assert "切换存档会丢失尚未保存的修改" in source
+    assert "restoreOriginalScene" in source
+    assert '"恢复原文"' in source
+    assert "已恢复该版本的原始正文" in source
     assert "discard_pending" not in source
     assert "/api/player/dice-display" in source
     assert 'id="sceneSummary"' in html

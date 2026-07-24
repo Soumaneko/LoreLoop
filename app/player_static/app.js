@@ -1,7 +1,9 @@
 import { acknowledgeOperation, downloadSave, importSaveArchive, request, stream, subscribe } from "./api.js";
 import {
   activePending,
+  clearDraft,
   clearDrafts,
+  hasDraft,
   modeLabels,
   readDraft,
   selectedVariant,
@@ -30,6 +32,7 @@ const els = {
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
   difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), closeCodexBtn: $("closeCodexBtn"),
+  codexConfirmDialog: $("codexConfirmDialog"), codexConfirmEyebrow: $("codexConfirmEyebrow"), codexConfirmTitle: $("codexConfirmTitle"), codexConfirmMessage: $("codexConfirmMessage"), codexConfirmCancelBtn: $("codexConfirmCancelBtn"), codexConfirmOkBtn: $("codexConfirmOkBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
   saveManagerDialog: $("saveManagerDialog"), closeSaveManagerBtn: $("closeSaveManagerBtn"), saveCardList: $("saveCardList"),
   importSaveBtn: $("importSaveBtn"), importSaveInput: $("importSaveInput"), importSaveForm: $("importSaveForm"),
@@ -484,6 +487,7 @@ function renderPending() {
   const confirming = state.mode === "confirming";
   const confirm = node("button", "primary-action confirm-button", "确认采用");
   const edit = node("button", "soft-button", "编辑正文");
+  const restoreOriginal = node("button", "soft-button", "恢复原文");
   const rephrase = node("button", "soft-button dropdown-item", "重新措辞");
   const feedbackRewrite = node("button", "soft-button dropdown-item", "根据意见修改");
   const reroll = node("button", "soft-button dropdown-item", "重新判定");
@@ -495,6 +499,9 @@ function renderPending() {
 
   edit.onclick = () => beginEdit(display, closing, actions, variant);
   edit.disabled = confirming;
+
+  restoreOriginal.onclick = () => restoreOriginalScene(variant);
+  restoreOriginal.disabled = confirming;
 
   rephrase.disabled = pending.kind === "opening" || ["generating", "confirming"].includes(state.mode);
   rephrase.title = "保留本次判定与导演输入，只重新生成正文";
@@ -513,6 +520,7 @@ function renderPending() {
 
   actions.appendChild(confirm);
   actions.appendChild(edit);
+  if (hasDraft(variant)) actions.appendChild(restoreOriginal);
 
   if (pending.kind !== "opening") {
     const dropdown = node("div", "rewrite-dropdown");
@@ -566,6 +574,80 @@ function beginEdit(display, closing, actions, variant) {
     const targetY = window.scrollY + rect.top - 100;
     window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
   }, 30);
+}
+
+function showConfirmModal({
+  title = "请确认操作",
+  message = "是否确定继续执行此操作？",
+  eyebrow = "CONFIRMATION",
+  confirmText = "确定",
+  cancelText = "取消",
+  isDanger = false,
+} = {}) {
+  return new Promise((resolve) => {
+    if (!els.codexConfirmDialog) {
+      resolve(window.confirm(message));
+      return;
+    }
+    if (els.codexConfirmEyebrow) els.codexConfirmEyebrow.textContent = eyebrow;
+    if (els.codexConfirmTitle) els.codexConfirmTitle.textContent = title;
+    if (els.codexConfirmMessage) els.codexConfirmMessage.textContent = message;
+    if (els.codexConfirmCancelBtn) els.codexConfirmCancelBtn.textContent = cancelText;
+
+    const okBtn = els.codexConfirmOkBtn;
+    if (okBtn) {
+      okBtn.textContent = confirmText;
+      okBtn.classList.toggle("danger-confirm", isDanger);
+      okBtn.classList.toggle("primary-action", !isDanger);
+    }
+
+    function cleanup() {
+      els.codexConfirmDialog.close();
+      els.codexConfirmCancelBtn.removeEventListener("click", onCancel);
+      els.codexConfirmOkBtn.removeEventListener("click", onConfirm);
+      els.codexConfirmDialog.removeEventListener("cancel", onCancel);
+      els.codexConfirmDialog.removeEventListener("click", onBackdrop);
+    }
+
+    function onConfirm(e) {
+      if (e) e.preventDefault();
+      cleanup();
+      resolve(true);
+    }
+
+    function onCancel(e) {
+      if (e) e.preventDefault();
+      cleanup();
+      resolve(false);
+    }
+
+    function onBackdrop(e) {
+      if (e.target === els.codexConfirmDialog) {
+        onCancel(e);
+      }
+    }
+
+    els.codexConfirmCancelBtn.addEventListener("click", onCancel);
+    els.codexConfirmOkBtn.addEventListener("click", onConfirm);
+    els.codexConfirmDialog.addEventListener("cancel", onCancel);
+    els.codexConfirmDialog.addEventListener("click", onBackdrop);
+
+    els.codexConfirmDialog.showModal();
+  });
+}
+
+async function restoreOriginalScene(variant) {
+  if (!variant || !hasDraft(variant)) return;
+  const confirmed = await showConfirmModal({
+    title: "恢复版本确认",
+    message: "恢复后，当前版本已保存的正文修改将被删除。是否继续？",
+    confirmText: "恢复原始正文",
+    isDanger: true,
+  });
+  if (!confirmed) return;
+  clearDraft(variant);
+  renderPending();
+  showToast("已恢复该版本的原始正文");
 }
 
 function selectVariant(index) {
@@ -694,24 +776,31 @@ function openCodexProfile(profile, triggerElement) {
   els.codexTitle.textContent = profile.name || "典籍条目";
   els.codexContent.replaceChildren();
 
+  const isNPC = profile.kind === "npc" || profile.entity_type === "npc" || profile.type === "npc";
+  const isItem = profile.kind === "item" || profile.entity_type === "item" || profile.type === "item";
+
   const typeLabels = {
     npc: "人物档案",
     item: "物品图鉴",
     location: "地理风物",
     organization: "势力名录",
   };
-  const entityType = profile.kind === "npc" ? "npc" : profile.entity_type;
+  const entityType = isNPC ? "npc" : (isItem ? "item" : (profile.entity_type || profile.kind || "location"));
   const typeBadge = node("span", "codex-kind-tag", typeLabels[entityType] || "典籍");
 
   let subText = "";
-  if (profile.kind === "npc") {
+  if (isNPC) {
     const roleText = profile.role || "未知身份";
     const factionText = profile.faction || "无归属";
     subText = `${roleText} ｜ ${factionText}`;
+  } else if (isItem) {
+    const typeText = profile.item_type || "无";
+    const sourceText = profile.item_source || "无";
+    subText = `${typeText} ｜ ${sourceText}`;
   } else {
-    const primary = profile.item_type || profile.location_type || "公开典籍";
-    const secondary = profile.parent_location || profile.item_source || "无归属";
-    subText = `${primary} ｜ ${secondary}`;
+    const typeText = profile.location_type || "无";
+    const parentText = profile.parent_location ? `上级地点：${profile.parent_location}` : "上级地点：无";
+    subText = `${typeText} ｜ ${parentText}`;
   }
 
   if (subText.length > 28) subText = subText.slice(0, 28) + "…";
@@ -722,9 +811,9 @@ function openCodexProfile(profile, triggerElement) {
   els.codexContent.appendChild(subHeader);
 
   // 2. 顶部引文区：展示外貌描写 (appearance) 或 summary
-  const quoteText = profile.kind === "npc"
+  const quoteText = isNPC
     ? (profile.appearance || profile.public_summary || "")
-    : (profile.summary || "");
+    : (profile.summary || profile.public_summary || profile.description || "");
 
   if (quoteText) {
     const quoteBox = node("div", "codex-quote-box", `“${quoteText}”`);
@@ -749,7 +838,7 @@ function openCodexProfile(profile, triggerElement) {
     els.codexContent.appendChild(pillsContainer);
   }
 
-  // 4. 渐进式折叠详查区：展示 public_summary (标题为"详细信息")，彻底删除 description
+  // 4. 渐进式折叠详查区
   const detailsPanel = node("div", "codex-details-panel");
   detailsPanel.hidden = true;
 
@@ -760,14 +849,31 @@ function openCodexProfile(profile, triggerElement) {
     detailsPanel.appendChild(row);
   };
 
-  if (profile.kind === "npc") {
+  if (isNPC) {
     if (profile.public_summary && profile.public_summary !== quoteText) {
       appendDetailText("详细信息", profile.public_summary);
     }
     if (profile.current_location) appendDetailText("最后活动地点", profile.current_location);
+  } else if (isItem) {
+    if (profile.description && profile.description !== quoteText) {
+      appendDetailText("详细信息", profile.description);
+    }
+    if (profile.item_source && profile.item_source !== "无") {
+      appendDetailText("物品来源", profile.item_source);
+    }
+    if (profile.parent_location) {
+      appendDetailText("所属地点", profile.parent_location);
+    }
+    if (profile.public_summary && profile.public_summary !== quoteText && profile.public_summary !== profile.description) {
+      appendDetailText("详细信息", profile.public_summary);
+    }
   } else {
-    if (profile.item_source) appendDetailText("物品来源", profile.item_source);
-    if (profile.parent_location) appendDetailText("所属地点", profile.parent_location);
+    if (profile.description && profile.description !== quoteText) {
+      appendDetailText("详细信息", profile.description);
+    }
+    if (profile.public_summary && profile.public_summary !== quoteText && profile.public_summary !== profile.description) {
+      appendDetailText("详细信息", profile.public_summary);
+    }
   }
 
   if (detailsPanel.childNodes.length > 0) {
@@ -1792,7 +1898,14 @@ async function confirmTurn() {
 
 async function discardPending() {
   const pending = activePending(); const variant = selectedVariant();
-  if (!pending || !variant || !window.confirm("删除全部未确认版本，并回到输入行动之前？")) return;
+  if (!pending || !variant) return;
+  const confirmed = await showConfirmModal({
+    title: "删除待确认段落",
+    message: "删除全部未确认版本，并回到输入行动之前？",
+    confirmText: "确定删除",
+    isDanger: true,
+  });
+  if (!confirmed) return;
   setMode("switching"); renderControls();
   try {
     const result = await request("/api/player/pending/discard", { method: "POST", body: JSON.stringify({ turn_id: variant.turn_id }) });
@@ -1809,15 +1922,22 @@ async function changeHistory(action) {
   catch (error) { showError(error); }
 }
 
-function confirmDiscardUnsavedPendingEdit() {
+async function confirmDiscardUnsavedPendingEdit() {
   if (!els.pendingCard.querySelector(".scene-editor")) return true;
-  return window.confirm("当前正文仍在编辑，切换存档会丢失尚未保存的修改。是否继续？");
+  return showConfirmModal({
+    title: "放弃当前编辑",
+    message: "当前正文仍在编辑，切换存档会丢失尚未保存的修改。是否继续？",
+    confirmText: "放弃修改并切换",
+    isDanger: true,
+  });
 }
 
 async function switchSave(saveId) {
   if (!saveId || saveId === state.activeSave) return;
-  if (!confirmDiscardUnsavedPendingEdit()) {
+  const canContinue = await confirmDiscardUnsavedPendingEdit();
+  if (!canContinue) {
     els.saveSelect.value = state.activeSave;
+    syncCustomSelect(els.saveSelect);
     return;
   }
   setMode("switching"); renderControls();
@@ -1827,11 +1947,12 @@ async function switchSave(saveId) {
       body: JSON.stringify({ save_id: saveId }),
     });
     state.suggestions = []; await loadAll({ scroll: "instant" }); closeDrawer();
-  } catch (error) { els.saveSelect.value = state.activeSave; showError(error); }
+  } catch (error) { els.saveSelect.value = state.activeSave; syncCustomSelect(els.saveSelect); showError(error); }
 }
 
 async function createSave(name) {
-  if (!confirmDiscardUnsavedPendingEdit()) return;
+  const canContinue = await confirmDiscardUnsavedPendingEdit();
+  if (!canContinue) return;
   setMode("switching"); renderControls();
   await request("/api/player/saves/create", {
     method: "POST",

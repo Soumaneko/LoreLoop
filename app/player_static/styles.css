@@ -902,6 +902,55 @@ select option, select optgroup { background: #1c1c16; color: var(--ink); font-fa
 .init-card-panel > p:not(.eyebrow) { color: var(--muted); line-height: 1.7; }
 .init-card-panel textarea { width: 100%; min-height: 140px; margin-top: 12px; resize: vertical; }
 
+/* Custom Codex Confirm Dialog Styles */
+.codex-confirm-modal {
+  width: min(480px, calc(100% - 28px));
+  border: 1px solid rgba(228, 201, 138, 0.42);
+  border-radius: 12px;
+  background: linear-gradient(155deg, rgba(28, 27, 21, 0.98), rgba(18, 17, 13, 0.99));
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75), 0 0 2px rgba(228, 201, 138, 0.3);
+  padding: 0;
+  color: var(--ink);
+}
+.codex-confirm-shell {
+  padding: 26px 28px 24px;
+}
+.codex-confirm-shell h2 {
+  margin: 4px 0 10px;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--gold-bright);
+}
+.codex-confirm-shell p:not(.eyebrow) {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.codex-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+.codex-confirm-actions button {
+  font-family: var(--serif);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.codex-confirm-actions .danger-confirm {
+  border: 1px solid rgba(213, 150, 137, 0.5);
+  background: linear-gradient(135deg, rgba(160, 50, 40, 0.85), rgba(110, 30, 25, 0.95));
+  color: #f7d5cf;
+  box-shadow: 0 4px 14px rgba(180, 50, 40, 0.35);
+}
+.codex-confirm-actions .danger-confirm:hover:not(:disabled) {
+  filter: brightness(1.15);
+  box-shadow: 0 6px 18px rgba(180, 50, 40, 0.5);
+}
+
 @keyframes blink { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
 @keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }

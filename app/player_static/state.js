@@ -45,12 +45,27 @@ export function readDraft(variant) {
   return localStorage.getItem(draftKey(variant.turn_id)) ?? variant.scene_text ?? "";
 }
 
+export function hasDraft(variant) {
+  if (!variant?.turn_id) return false;
+  const draft = localStorage.getItem(draftKey(variant.turn_id));
+  return draft !== null && draft !== (variant.scene_text ?? "");
+}
+
 export function writeDraft(variant, value) {
-  if (variant?.turn_id) localStorage.setItem(draftKey(variant.turn_id), value);
+  if (!variant?.turn_id) return;
+  if (value === (variant.scene_text ?? "")) {
+    clearDraft(variant);
+    return;
+  }
+  localStorage.setItem(draftKey(variant.turn_id), value);
+}
+
+export function clearDraft(variant) {
+  if (variant?.turn_id) localStorage.removeItem(draftKey(variant.turn_id));
 }
 
 export function clearDrafts(pending) {
   for (const variant of pending?.variants || []) {
-    localStorage.removeItem(draftKey(variant.turn_id));
+    clearDraft(variant);
   }
 }
