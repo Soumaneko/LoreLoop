@@ -1,23 +1,109 @@
-function errorMessage(payload, fallback = "请求没有完成，请稍后重试。") {
-  if (typeof payload?.error === "string") return payload.error;
-  return payload?.error?.message || fallback;
+export class ApiError extends Error {
+  constructor(message, {
+    status = 0,
+    code = "request_failed",
+    retryable = false,
+    operationId = null,
+    details = null,
+  } = {}) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.retryable = retryable;
+    this.operationId = operationId;
+    this.details = details;
+  }
 }
 
-export async function request(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
+function errorDetails(payload, fallback = "请求没有完成，请稍后重试。") {
+  const error = payload?.error;
+  if (typeof error === "string") {
+    return { message: error, code: "request_failed", retryable: false };
+  }
+  return {
+    message: error?.message || fallback,
+    code: error?.code || "request_failed",
+    retryable: Boolean(error?.recoverable ?? error?.retryable),
+    details: error?.details || null,
+  };
+}
+
+function apiError(payload, {
+  status = 0,
+  fallback,
+  operationId = null,
+} = {}) {
+  const details = errorDetails(payload, fallback);
+  return new ApiError(details.message, {
+    status,
+    code: details.code,
+    retryable: details.retryable,
+    operationId,
+    details: details.details,
   });
+}
+
+async function fetchWithTimeout(path, options, timeoutMs) {
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  const abortFromExternal = () => controller.abort(externalSignal.reason);
+  if (externalSignal) {
+    if (externalSignal.aborted) abortFromExternal();
+    else externalSignal.addEventListener("abort", abortFromExternal, { once: true });
+  }
+  const timer = window.setTimeout(
+    () => controller.abort(new DOMException("Request timed out", "TimeoutError")),
+    timeoutMs,
+  );
+  try {
+    return await fetch(path, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      const timedOut = controller.signal.reason?.name === "TimeoutError";
+      throw new ApiError(
+        timedOut ? "请求超时，请检查本地服务或模型连接。" : "请求已取消。",
+        {
+          code: timedOut ? "request_timeout" : "request_cancelled",
+          retryable: timedOut,
+        },
+      );
+    }
+    throw new ApiError(error?.message || "无法连接本地服务。", {
+      code: "connection_failed",
+      retryable: true,
+    });
+  } finally {
+    window.clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", abortFromExternal);
+  }
+}
+
+export async function request(path, {
+  timeoutMs = 60_000,
+  headers = {},
+  ...options
+} = {}) {
+  const response = await fetchWithTimeout(path, {
+    headers: { "Content-Type": "application/json", ...headers },
+    ...options,
+  }, timeoutMs);
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok) {
-    throw new Error(errorMessage(payload, `请求失败（${response.status}）`));
+    throw apiError(payload, {
+      status: response.status,
+      fallback: `请求失败（${response.status}）`,
+    });
   }
   return payload.data;
 }
 
-async function responseError(response) {
+async function responseError(response, fallback) {
   const payload = await response.json().catch(() => null);
-  return new Error(errorMessage(payload, `请求失败（${response.status}）`));
+  return apiError(payload, {
+    status: response.status,
+    fallback: fallback || `请求失败（${response.status}）`,
+  });
 }
 
 export async function downloadSave(saveId) {
@@ -50,47 +136,87 @@ export async function importSaveArchive(file, name) {
   );
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok) {
-    throw new Error(errorMessage(payload, `导入失败（${response.status}）`));
+    throw apiError(payload, {
+      status: response.status,
+      fallback: `导入失败（${response.status}）`,
+    });
   }
   return payload.data;
 }
 
+export function parseSSEFrames(buffer, { flush = false } = {}) {
+  const normalized = buffer.replace(/\r\n/g, "\n");
+  const blocks = normalized.split("\n\n");
+  const remainder = flush ? "" : blocks.pop() || "";
+  if (flush && blocks.at(-1) === "") blocks.pop();
+  const frames = [];
+  for (const block of blocks) {
+    const data = block
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).replace(/^ /, ""))
+      .join("\n");
+    if (!data) continue;
+    try {
+      frames.push(JSON.parse(data));
+    } catch (error) {
+      throw new ApiError("任务事件格式无效，刷新后可尝试恢复。", {
+        code: "stream_protocol_error",
+        retryable: true,
+        details: { cause: error.message },
+      });
+    }
+  }
+  if (flush && normalized.trim() && !normalized.includes("\n\n")) {
+    return parseSSEFrames(`${normalized}\n\n`);
+  }
+  return { frames, remainder };
+}
+
 async function readStream(response, onEvent) {
   if (!response.ok || !response.body) {
-    throw new Error(`请求失败（${response.status}）`);
+    throw await responseError(response);
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let operationId = null;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() || "";
-    for (const chunk of chunks) {
-      const line = chunk.split("\n").find((item) => item.startsWith("data: "));
-      if (!line) continue;
-      const event = JSON.parse(line.slice(6));
+
+  const handleFrames = async (frames) => {
+    for (const event of frames) {
       if (!event.ok) {
-        const error = new Error(errorMessage(event));
-        error.operationId = operationId;
-        throw error;
+        throw apiError(event, { operationId });
       }
       if (event.step === "operation_started") {
         operationId = event.data?.operation_id || operationId;
       }
       if (event.step === "done") {
         await reader.cancel();
-        return operationId;
+        return true;
       }
-      onEvent(event);
+      await onEvent(event);
     }
+    return false;
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      buffer += decoder.decode();
+      const parsed = parseSSEFrames(buffer, { flush: true });
+      if (await handleFrames(parsed.frames)) return operationId;
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const parsed = parseSSEFrames(buffer);
+    buffer = parsed.remainder;
+    if (await handleFrames(parsed.frames)) return operationId;
   }
-  const error = new Error("任务连接已中断，刷新后将继续恢复。");
-  error.operationId = operationId;
-  throw error;
+  throw new ApiError("任务连接已中断，刷新后将继续恢复。", {
+    code: "operation_stream_interrupted",
+    retryable: true,
+    operationId,
+  });
 }
 
 export async function acknowledgeOperation(operationId) {

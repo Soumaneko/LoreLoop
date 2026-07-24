@@ -1,15 +1,23 @@
 import { acknowledgeOperation, cancelOperation, downloadSave, importSaveArchive, request, stream, subscribe } from "./api.js";
 import {
+  enhanceCustomSelect,
+  syncCustomSelect,
+  syncCustomSelects,
+} from "./custom_select.js";
+import { createReaderPreferencesController } from "./reader_preferences.js";
+import {
+  installClientDiagnostics,
+  reportClientError,
+} from "./client_diagnostics.js";
+import {
   activePending,
-  clearDraft,
-  clearDrafts,
+  applySavedDraft,
   hasDraft,
   modeLabels,
   readDraft,
   selectedVariant,
   setMode,
   state,
-  writeDraft,
 } from "./state.js";
 
 const $ = (id) => document.getElementById(id);
@@ -95,23 +103,36 @@ let activeGenerationRun = null;
 let historyLoadPromise = null;
 let historyLoadSaveName = null;
 let navigationRenderSignature = "";
-let navigationFrame = 0;
+let navigationObserver = null;
+let navigationObservedAnchors = [];
+let navigationObservedKey = null;
+let navigationActiveKey = null;
+let navigationButtons = new Map();
 let navigationJumpSequence = 0;
 let pinnedNavigationKey = null;
 let navigationSettleTimer = 0;
 let navigationScrollEndHandler = null;
+let highlightCacheSignature = "";
+let highlightCache = null;
+let highlightCacheSource = null;
+const highlightProfiles = new WeakMap();
+let highlightPointerState = null;
 const HISTORY_PAGE_SIZE = 5;
 const HISTORY_NAVIGATION_LOAD_SIZE = 20;
 const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
 const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
-const READER_PREFERENCES_CACHE_KEY = "tvg:reader-preferences";
-const THEME_CHROME_COLORS = {
-  dark: "#11110e",
-  sepia: "#e6ddcc",
-  light: "#dce0e6",
-};
-let readerPreferencesSaveQueue = Promise.resolve();
-let readerPreferencesSaveSequence = 0;
+const readerPreferences = createReaderPreferencesController({
+  elements: {
+    fontSize: els.fontSizeSelect,
+    fontFamily: els.fontFamilySelect,
+    theme: els.themeSelect,
+  },
+  request,
+  state,
+  showToast,
+  showError,
+});
+installClientDiagnostics();
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -128,6 +149,7 @@ function showToast(message) {
 }
 
 function showError(error, fallback = "之前的故事没有受到影响，你可以重新尝试。") {
+  reportClientError(error, "displayed_error");
   state.lastError = error;
   setMode("error");
   els.errorMessage.textContent = error?.message || fallback;
@@ -156,7 +178,7 @@ function setInputHintText(actionText) {
   );
 }
 
-function renderControls() {
+function renderControls({ updateNavigation = true } = {}) {
   const busy = saveManagerBusy || modelConfigBusy || ["booting", "needs_model", "generating", "confirming", "switching"].includes(state.mode);
   const pending = Boolean(activePending());
   els.statusPill.dataset.mode = state.mode;
@@ -191,15 +213,15 @@ function renderControls() {
   els.redoBtn.disabled = busy || (pending && !canRedoPending) || !controls.can_redo;
   els.difficultySelect.disabled = busy;
   els.diceDisplaySelect.disabled = busy;
-  [
+  syncCustomSelects([
     els.saveSelect,
     els.difficultySelect,
     els.diceDisplaySelect,
     els.fontSizeSelect,
     els.fontFamilySelect,
     els.themeSelect,
-  ].forEach(syncCustomSelect);
-  renderTurnNavigator();
+  ]);
+  if (updateNavigation) renderTurnNavigator();
 }
 
 function renderHeader() {
@@ -212,17 +234,34 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function appendHighlightedText(element, text) {
+function currentHighlightMatcher() {
   const highlights = state.playerState?.highlights || [];
-  if (!text || !highlights.length) {
-    element.textContent = text || "";
-    return element;
+  const signature = highlights
+    .map((item) => `${item.kind || ""}\0${item.surface || ""}`)
+    .join("\u0001");
+  if (
+    highlightCache
+    && highlights === highlightCacheSource
+    && signature === highlightCacheSignature
+  ) {
+    return highlightCache;
   }
   const terms = [...highlights].sort((a, b) => b.surface.length - a.surface.length);
   const lookup = new Map(terms.map((item) => [item.surface.toLocaleLowerCase(), item]));
   const pattern = terms.map((item) => escapeRegExp(item.surface)).join("|");
-  if (!pattern) {
-    element.textContent = text;
+  highlightCacheSignature = signature;
+  highlightCacheSource = highlights;
+  highlightCache = {
+    lookup,
+    pattern,
+  };
+  return highlightCache;
+}
+
+function appendHighlightedText(element, text) {
+  const { lookup, pattern } = currentHighlightMatcher();
+  if (!text || !pattern) {
+    element.textContent = text || "";
     return element;
   }
   const matcher = new RegExp(pattern, "giu");
@@ -238,45 +277,62 @@ function appendHighlightedText(element, text) {
       mark.tabIndex = 0;
       mark.setAttribute("role", "button");
       mark.setAttribute("aria-label", `查看${value}的典籍条目`);
-      let isDragging = false;
-      let startX = 0;
-      let startY = 0;
-
-      mark.onmousedown = (event) => {
-        isDragging = false;
-        startX = event.clientX;
-        startY = event.clientY;
-        if (event.detail > 1) {
-          event.preventDefault();
-        }
-      };
-
-      mark.onmousemove = (event) => {
-        if (Math.hypot(event.clientX - startX, event.clientY - startY) > 4) {
-          isDragging = true;
-        }
-      };
-
-      mark.onclick = (event) => {
-        if (isDragging) {
-          return;
-        }
-        event.preventDefault();
-        window.getSelection()?.removeAllRanges();
-        openCodexProfile(highlight.profile, event.currentTarget);
-      };
-      mark.onkeydown = (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openCodexProfile(highlight.profile, event.currentTarget);
-        }
-      };
+      highlightProfiles.set(mark, highlight.profile);
     }
     element.appendChild(mark);
     cursor = start + value.length;
   }
   if (cursor < text.length) element.appendChild(document.createTextNode(text.slice(cursor)));
   return element;
+}
+
+function highlightedTarget(event) {
+  return event.target.closest?.(".story-highlight-clickable") || null;
+}
+
+function handleHighlightPointerDown(event) {
+  const target = highlightedTarget(event);
+  if (!target) return;
+  highlightPointerState = {
+    target,
+    startX: event.clientX,
+    startY: event.clientY,
+    dragging: false,
+  };
+  if (event.detail > 1) event.preventDefault();
+}
+
+function handleHighlightPointerMove(event) {
+  const pointer = highlightPointerState;
+  if (!pointer || pointer.target !== highlightedTarget(event)) return;
+  if (Math.hypot(
+    event.clientX - pointer.startX,
+    event.clientY - pointer.startY,
+  ) > 4) {
+    pointer.dragging = true;
+  }
+}
+
+function handleHighlightClick(event) {
+  const target = highlightedTarget(event);
+  const profile = target && highlightProfiles.get(target);
+  if (!target || !profile) return;
+  const dragged = highlightPointerState?.target === target
+    && highlightPointerState.dragging;
+  highlightPointerState = null;
+  if (dragged) return;
+  event.preventDefault();
+  window.getSelection()?.removeAllRanges();
+  openCodexProfile(profile, target);
+}
+
+function handleHighlightKeydown(event) {
+  if (!["Enter", " "].includes(event.key)) return;
+  const target = highlightedTarget(event);
+  const profile = target && highlightProfiles.get(target);
+  if (!target || !profile) return;
+  event.preventDefault();
+  openCodexProfile(profile, target);
 }
 
 function renderTurn(turn, { showClosing = false } = {}) {
@@ -483,10 +539,12 @@ function renderTurnNavigator() {
   const signature = JSON.stringify(entries);
   els.turnNavigator.hidden = entries.length === 0;
   if (signature === navigationRenderSignature) {
-    scheduleNavigationActiveUpdate();
+    refreshNavigationObserver();
     return;
   }
   navigationRenderSignature = signature;
+  navigationButtons = new Map();
+  navigationActiveKey = null;
   els.turnNavigatorList.replaceChildren();
   const fragment = document.createDocumentFragment();
   const totalEntries = entries.length;
@@ -516,10 +574,11 @@ function renderTurnNavigator() {
       if (entry.status === "confirmed") jumpToHistoryTurn(entry.turnIndex);
       else jumpToCurrentTurn(entry.key);
     };
+    navigationButtons.set(entry.key, button);
     fragment.appendChild(button);
   }
   els.turnNavigatorList.appendChild(fragment);
-  scheduleNavigationActiveUpdate();
+  refreshNavigationObserver({ force: true });
 }
 
 function visibleNavigationAnchors() {
@@ -537,12 +596,28 @@ function visibleNavigationAnchors() {
   return anchors;
 }
 
-function updateNavigationActive() {
-  navigationFrame = 0;
-  if (!els.turnNavigator || els.turnNavigator.hidden) return;
-  const anchors = visibleNavigationAnchors();
-  if (!anchors.length) return;
-  const readingLine = Math.max(82, window.innerHeight * 0.3);
+function setNavigationActive(key) {
+  const nextKey = pinnedNavigationKey || key;
+  if (!nextKey || navigationActiveKey === nextKey) return;
+  const previous = navigationButtons.get(navigationActiveKey);
+  if (previous) {
+    previous.classList.remove("active");
+    previous.removeAttribute("aria-current");
+  }
+  const next = navigationButtons.get(nextKey);
+  navigationActiveKey = nextKey;
+  if (!next) return;
+  next.classList.add("active");
+  next.setAttribute("aria-current", "step");
+  next.scrollIntoView({ block: "nearest", behavior: "auto" });
+}
+
+function navigationKeyAtReadingLine(anchors) {
+  if (!anchors.length) return null;
+  const readingLine = Math.min(
+    Math.max(0, window.innerHeight - 1),
+    Math.max(82, window.innerHeight * 0.3),
+  );
   let active = anchors[0];
   for (const candidate of anchors) {
     if (candidate.element.getBoundingClientRect().top <= readingLine) {
@@ -551,25 +626,66 @@ function updateNavigationActive() {
       break;
     }
   }
-  const activeKey = pinnedNavigationKey || active.key;
-  for (const button of els.turnNavigatorList.querySelectorAll(".turn-nav-item")) {
-    const selected = button.dataset.navKey === activeKey;
-    const wasSelected = button.getAttribute("aria-current") === "step";
-    button.classList.toggle("active", selected);
-    if (selected) {
-      button.setAttribute("aria-current", "step");
-      if (!wasSelected) {
-        button.scrollIntoView({ block: "nearest", behavior: "auto" });
-      }
-    } else {
-      button.removeAttribute("aria-current");
-    }
-  }
+  return active.key;
 }
 
-function scheduleNavigationActiveUpdate() {
-  if (navigationFrame) return;
-  navigationFrame = window.requestAnimationFrame(updateNavigationActive);
+function sameNavigationAnchors(left, right) {
+  return left.length === right.length && left.every(
+    (anchor, index) => (
+      anchor.key === right[index].key
+      && anchor.element === right[index].element
+    ),
+  );
+}
+
+function refreshNavigationObserver({ force = false } = {}) {
+  if (!els.turnNavigator || els.turnNavigator.hidden) {
+    navigationObserver?.disconnect();
+    navigationObserver = null;
+    navigationObservedAnchors = [];
+    return;
+  }
+  const anchors = visibleNavigationAnchors();
+  if (!force && sameNavigationAnchors(anchors, navigationObservedAnchors)) {
+    setNavigationActive(navigationObservedKey);
+    return;
+  }
+  navigationObserver?.disconnect();
+  navigationObserver = null;
+  navigationObservedAnchors = anchors;
+  navigationObservedKey = navigationKeyAtReadingLine(anchors);
+  setNavigationActive(navigationObservedKey);
+  if (!anchors.length) return;
+
+  const readingLine = Math.min(
+    Math.max(0, window.innerHeight - 1),
+    Math.max(82, Math.round(window.innerHeight * 0.3)),
+  );
+  const lowerMargin = Math.max(0, window.innerHeight - readingLine - 1);
+  const intersecting = new Set();
+  const observer = new IntersectionObserver((entries) => {
+    if (navigationObserver !== observer) return;
+    for (const entry of entries) {
+      const key = entry.target.dataset.navigationAnchorKey;
+      if (entry.isIntersecting) intersecting.add(key);
+      else intersecting.delete(key);
+    }
+    const active = navigationObservedAnchors.find(
+      (anchor) => intersecting.has(anchor.key),
+    );
+    if (!active) return;
+    navigationObservedKey = active.key;
+    setNavigationActive(active.key);
+  }, {
+    root: null,
+    rootMargin: `-${readingLine}px 0px -${lowerMargin}px 0px`,
+    threshold: 0,
+  });
+  navigationObserver = observer;
+  for (const anchor of anchors) {
+    anchor.element.dataset.navigationAnchorKey = anchor.key;
+    navigationObserver.observe(anchor.element);
+  }
 }
 
 function cancelNavigationSettlement() {
@@ -585,7 +701,7 @@ function settleNavigationTarget(key) {
   if (pinnedNavigationKey !== key) return;
   cancelNavigationSettlement();
   pinnedNavigationKey = null;
-  scheduleNavigationActiveUpdate();
+  setNavigationActive(navigationObservedKey);
 }
 
 function scrollToNavigationTarget(element, key) {
@@ -600,7 +716,7 @@ function scrollToNavigationTarget(element, key) {
     2000,
   );
   element.scrollIntoView({ block: "start", behavior: "smooth" });
-  scheduleNavigationActiveUpdate();
+  setNavigationActive(key);
 }
 
 async function jumpToHistoryTurn(turnIndex) {
@@ -716,7 +832,7 @@ async function loadEarlierHistory({
         window.scrollTo({ top: previousY + addedHeight, behavior: "auto" });
       }
       state.playerState.history_pagination = page.pagination || { has_more: false };
-      scheduleNavigationActiveUpdate();
+      refreshNavigationObserver({ force: true });
       return insertedCount;
     } catch (error) {
       showToast(error.message || "更早的故事暂时无法载入");
@@ -848,10 +964,25 @@ function beginEdit(display, closing, actions, variant) {
   editor.after(editActions);
 
   cancel.onclick = () => renderPending();
-  save.onclick = () => {
-    writeDraft(variant, editor.value);
-    renderPending();
-    showToast("修改已保存在此浏览器中");
+  save.onclick = async () => {
+    save.disabled = true;
+    cancel.disabled = true;
+    try {
+      const result = await request("/api/player/pending/edit", {
+        method: "POST",
+        body: JSON.stringify({
+          turn_id: variant.turn_id,
+          scene_text: editor.value,
+        }),
+      });
+      applySavedDraft(variant, result);
+      renderPending();
+      showToast("正文修改已保存");
+    } catch (error) {
+      save.disabled = false;
+      cancel.disabled = false;
+      showError(error);
+    }
   };
   editActions.append(cancel, save);
   editor.focus();
@@ -931,9 +1062,20 @@ async function restoreOriginalScene(variant) {
     isDanger: true,
   });
   if (!confirmed) return;
-  clearDraft(variant);
-  renderPending();
-  showToast("已恢复该版本的原始正文");
+  try {
+    const result = await request("/api/player/pending/edit", {
+      method: "POST",
+      body: JSON.stringify({
+        turn_id: variant.turn_id,
+        scene_text: null,
+      }),
+    });
+    applySavedDraft(variant, result);
+    renderPending();
+    showToast("已恢复该版本的原始正文");
+  } catch (error) {
+    showError(error);
+  }
 }
 
 function selectVariant(index) {
@@ -1264,7 +1406,7 @@ function renderDrawer() {
     resourceGroup("固定资产", resources.fixed_assets || [], "fixed"),
     resourceGroup("临时资产", resources.temporary_assets || [], "temporary"),
   );
-  applyReaderPreferences(state.playerState);
+  readerPreferences.apply(state.readerPreferences);
   els.difficultySelect.value = state.playerState?.difficulty || "困难";
   els.diceDisplaySelect.value = state.playerState?.dice_display || "outcome";
   enhanceCustomSelect(els.difficultySelect);
@@ -1290,126 +1432,6 @@ function renderSaves() {
   }
   enhanceCustomSelect(els.saveSelect);
   if (els.saveManagerDialog.open) renderSaveManager();
-}
-
-function enhanceCustomSelect(selectElement) {
-  if (!selectElement) return;
-  if (selectElement.dataset.customEnhanced === "true") {
-    syncCustomSelect(selectElement);
-    return;
-  }
-  selectElement.dataset.customEnhanced = "true";
-  selectElement.style.display = "none";
-
-  const wrapper = node("div", "codex-custom-select-wrapper");
-  const trigger = node("button", "codex-custom-select-trigger");
-  trigger.type = "button";
-  trigger.setAttribute("aria-haspopup", "listbox");
-  trigger.setAttribute("aria-expanded", "false");
-  const labelSpan = node("span", "codex-custom-select-label");
-  const arrowSpan = node("span", "codex-custom-select-arrow", "▼");
-
-  trigger.append(labelSpan, arrowSpan);
-  wrapper.appendChild(trigger);
-
-  const menu = node("div", "codex-custom-select-menu");
-  menu.setAttribute("role", "listbox");
-  menu.hidden = true;
-  wrapper.appendChild(menu);
-
-  if (selectElement.parentNode) {
-    selectElement.parentNode.insertBefore(wrapper, selectElement.nextSibling);
-  }
-
-  function syncTrigger() {
-    const selectedOption = Array.from(selectElement.options).find(o => o.value === selectElement.value) || selectElement.options[0];
-    labelSpan.textContent = selectedOption ? selectedOption.textContent : "请选择";
-    trigger.disabled = selectElement.disabled;
-    wrapper.classList.toggle("is-disabled", selectElement.disabled);
-    trigger.setAttribute("aria-disabled", String(selectElement.disabled));
-  }
-
-  function renderMenuOptions() {
-    menu.replaceChildren();
-    Array.from(selectElement.options).forEach((opt) => {
-      if (opt.disabled) return;
-      const isSelected = opt.value === selectElement.value;
-      const item = node("button", `codex-custom-select-option ${isSelected ? "is-selected" : ""}`);
-      item.type = "button";
-      item.setAttribute("role", "option");
-      item.setAttribute("aria-selected", String(isSelected));
-      item.appendChild(node("span", "", opt.textContent));
-      if (isSelected) {
-        item.appendChild(node("span", "check-mark", "✦"));
-      }
-      item.onclick = (e) => {
-        e.stopPropagation();
-        if (selectElement.disabled) return;
-        selectElement.value = opt.value;
-        selectElement.dispatchEvent(new Event("change", { bubbles: true }));
-        closeMenu();
-        syncTrigger();
-      };
-      menu.appendChild(item);
-    });
-  }
-
-  function closeMenu() {
-    menu.hidden = true;
-    trigger.classList.remove("is-open");
-    trigger.setAttribute("aria-expanded", "false");
-    document.removeEventListener("click", onOutsideClick);
-  }
-
-  function onOutsideClick(e) {
-    if (!wrapper.contains(e.target)) {
-      closeMenu();
-    }
-  }
-
-  trigger.onclick = (e) => {
-    e.stopPropagation();
-    if (selectElement.disabled) return;
-    const willOpen = menu.hidden;
-    document.querySelectorAll(".codex-custom-select-menu").forEach(m => m.hidden = true);
-    document.querySelectorAll(".codex-custom-select-trigger").forEach((otherTrigger) => {
-      otherTrigger.classList.remove("is-open");
-      otherTrigger.setAttribute("aria-expanded", "false");
-    });
-
-    if (willOpen) {
-      renderMenuOptions();
-      menu.hidden = false;
-      trigger.classList.add("is-open");
-      trigger.setAttribute("aria-expanded", "true");
-      setTimeout(() => document.addEventListener("click", onOutsideClick), 0);
-    }
-  };
-
-  syncTrigger();
-}
-
-function syncCustomSelect(selectElement) {
-  if (!selectElement) return;
-  const wrapper = selectElement.nextElementSibling;
-  if (!wrapper || !wrapper.classList.contains("codex-custom-select-wrapper")) return;
-  const labelSpan = wrapper.querySelector(".codex-custom-select-label");
-  const trigger = wrapper.querySelector(".codex-custom-select-trigger");
-  const selectedOption = Array.from(selectElement.options).find(o => o.value === selectElement.value) || selectElement.options[0];
-  if (labelSpan && selectedOption) {
-    labelSpan.textContent = selectedOption.textContent;
-  }
-  if (trigger) {
-    trigger.disabled = selectElement.disabled;
-    trigger.setAttribute("aria-disabled", String(selectElement.disabled));
-    if (selectElement.disabled) {
-      trigger.classList.remove("is-open");
-      trigger.setAttribute("aria-expanded", "false");
-      const menu = wrapper.querySelector(".codex-custom-select-menu");
-      if (menu) menu.hidden = true;
-    }
-  }
-  wrapper.classList.toggle("is-disabled", selectElement.disabled);
 }
 
 function formatLastPlayed(value) {
@@ -1626,6 +1648,8 @@ function cachePlayerShell() {
   if (!state.playerState) return;
   try {
     sessionStorage.setItem(PLAYER_SHELL_CACHE_KEY, JSON.stringify({
+      version: 1,
+      cachedAt: Date.now(),
       activeSave: state.activeSave,
       saves: state.saves,
       playerState: state.playerState,
@@ -1638,7 +1662,7 @@ function cachePlayerShell() {
 function restorePlayerShell() {
   try {
     const cached = JSON.parse(sessionStorage.getItem(PLAYER_SHELL_CACHE_KEY) || "null");
-    if (!cached?.playerState) return false;
+    if (cached?.version !== 1 || !cached.playerState) return false;
     state.activeSave = cached.activeSave || null;
     state.saves = cached.saves || [];
     state.playerState = cached.playerState;
@@ -1862,6 +1886,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
 }
 
 async function bootstrap() {
+  await readerPreferences.load();
   const modelConfig = await request("/api/player/model-config");
   state.modelConfig = modelConfig;
   if (!modelConfig.configured) {
@@ -2164,7 +2189,6 @@ async function resumeConfirmationOperation(operation) {
       handleConfirmationEvent,
     );
     await acknowledgeHandledOperation(operation.operation_id);
-    if (pending) clearDrafts(pending);
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
     showToast("这一回合已经写入旅程");
     return true;
@@ -2319,7 +2343,7 @@ async function confirmTurn() {
       request_id: newRequestId(),
     }, handleConfirmationEvent);
     await acknowledgeHandledOperation(operationId);
-    clearDrafts(pending); await loadAll({ scroll: "smooth" }); showToast("这一回合已经写入旅程");
+    await loadAll({ scroll: "smooth" }); showToast("这一回合已经写入旅程");
   } catch (error) {
     setMode("pending"); renderAll(); showError(error);
     await acknowledgeFailedOperation(error);
@@ -2342,7 +2366,7 @@ async function discardPending() {
   setMode("switching"); renderControls();
   try {
     const result = await request("/api/player/pending/discard", { method: "POST", body: JSON.stringify({ turn_id: variant.turn_id }) });
-    clearDrafts(pending); await loadAll(); els.playerInput.value = result.user_input || ""; autoSizeInput(); renderControls(); els.playerInput.focus(); showToast("未确认内容已删除");
+    await loadAll(); els.playerInput.value = result.user_input || ""; autoSizeInput(); renderControls(); els.playerInput.focus(); showToast("未确认内容已删除");
   } catch (error) { showError(error); }
 }
 
@@ -2607,7 +2631,14 @@ function scrollToBottom(mode = "smooth", onSettled = null) {
 }
 function autoSizeInput() { els.playerInput.style.height = "auto"; els.playerInput.style.height = `${Math.min(210, els.playerInput.scrollHeight)}px`; }
 
-els.playerInput.addEventListener("input", () => { autoSizeInput(); renderControls(); });
+els.playerInput.addEventListener("input", () => {
+  autoSizeInput();
+  renderControls({ updateNavigation: false });
+});
+els.story.addEventListener("mousedown", handleHighlightPointerDown);
+els.story.addEventListener("mousemove", handleHighlightPointerMove);
+els.story.addEventListener("click", handleHighlightClick);
+els.story.addEventListener("keydown", handleHighlightKeydown);
 els.playerInput.addEventListener("focus", autoSizeInput);
 els.playerInput.addEventListener("blur", () => { els.playerInput.style.height = ""; });
 els.playerInput.addEventListener("keydown", (event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); generateTurn(); } });
@@ -2678,87 +2709,6 @@ els.importSaveForm.onsubmit = (event) => {
     els.importSaveForm.hidden = true;
   }, "存档已导入");
 };
-function applyReaderPreferences(prefs = {}) {
-  const fontSize = prefs.font_size || "16.5";
-  const fontFamily = prefs.font_family || "serif";
-  const theme = prefs.theme || "dark";
-
-  document.documentElement.style.setProperty("--narrative-font-size", fontSize + "px");
-
-  if (fontFamily === "serif") {
-    document.documentElement.removeAttribute("data-font-family");
-  } else {
-    document.documentElement.setAttribute("data-font-family", fontFamily);
-  }
-
-  if (theme === "dark") {
-    document.documentElement.removeAttribute("data-theme");
-  } else {
-    document.documentElement.setAttribute("data-theme", theme);
-  }
-  const themeColor = THEME_CHROME_COLORS[theme] || THEME_CHROME_COLORS.dark;
-  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-  if (themeColorMeta) themeColorMeta.content = themeColor;
-  try {
-    localStorage.setItem(READER_PREFERENCES_CACHE_KEY, JSON.stringify({
-      font_size: fontSize,
-      font_family: fontFamily,
-      theme,
-      theme_color: themeColor,
-    }));
-  } catch (_error) {
-    // Appearance caching is a best-effort pre-paint optimization.
-  }
-
-  if (els.fontSizeSelect) {
-    els.fontSizeSelect.value = fontSize;
-    syncCustomSelect(els.fontSizeSelect);
-  }
-  if (els.fontFamilySelect) {
-    els.fontFamilySelect.value = fontFamily;
-    syncCustomSelect(els.fontFamilySelect);
-  }
-  if (els.themeSelect) {
-    els.themeSelect.value = theme;
-    syncCustomSelect(els.themeSelect);
-  }
-}
-
-async function saveCurrentReaderPreferences() {
-  const payload = {
-    font_size: els.fontSizeSelect?.value || "16.5",
-    font_family: els.fontFamilySelect?.value || "serif",
-    theme: els.themeSelect?.value || "dark",
-  };
-  applyReaderPreferences(payload);
-  const sequence = ++readerPreferencesSaveSequence;
-  const saveJob = readerPreferencesSaveQueue
-    .catch(() => undefined)
-    .then(() => request("/api/player/reader-preferences", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }));
-  readerPreferencesSaveQueue = saveJob;
-  try {
-    const result = await saveJob;
-    if (state.playerState) {
-      state.playerState.font_size = result.font_size;
-      state.playerState.font_family = result.font_family;
-      state.playerState.theme = result.theme;
-    }
-    if (sequence === readerPreferencesSaveSequence) {
-      applyReaderPreferences(result);
-      cachePlayerShell();
-      showToast("沉浸阅读偏好已保存");
-    }
-  } catch (error) {
-    if (sequence === readerPreferencesSaveSequence) {
-      applyReaderPreferences(state.playerState || {});
-      showError(error);
-    }
-  }
-}
-
 els.difficultySelect.onchange = async () => { try { await request("/api/player/difficulty", { method: "POST", body: JSON.stringify({ difficulty: els.difficultySelect.value }) }); state.playerState.difficulty = els.difficultySelect.value; showToast("难度已更新"); } catch (error) { showError(error); } };
 els.diceDisplaySelect.onchange = async () => {
   const previous = state.playerState.dice_display || "outcome";
@@ -2776,9 +2726,9 @@ els.diceDisplaySelect.onchange = async () => {
     showError(error);
   }
 };
-els.fontSizeSelect.onchange = saveCurrentReaderPreferences;
-els.fontFamilySelect.onchange = saveCurrentReaderPreferences;
-els.themeSelect.onchange = saveCurrentReaderPreferences;
+els.fontSizeSelect.onchange = readerPreferences.save;
+els.fontFamilySelect.onchange = readerPreferences.save;
+els.themeSelect.onchange = readerPreferences.save;
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.turnNavigatorLatest.onclick = jumpToLatestTurn;
 els.initFanfic.onchange = toggleInitWorldFields;
@@ -2791,9 +2741,10 @@ els.initForm.addEventListener("submit", (event) => { event.preventDefault(); ini
 els.initDialog.addEventListener("cancel", (event) => event.preventDefault());
 window.addEventListener("scroll", () => {
   if (window.scrollY <= 220) loadEarlierHistory();
-  scheduleNavigationActiveUpdate();
 }, { passive: true });
-window.addEventListener("resize", scheduleNavigationActiveUpdate, { passive: true });
+window.addEventListener("resize", () => {
+  refreshNavigationObserver({ force: true });
+}, { passive: true });
 
 toggleInitWorldFields();
 bootstrap().catch(showError);

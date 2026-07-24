@@ -45,6 +45,45 @@ def _pending_turn(
     )
 
 
+def test_pending_scene_edit_survives_runtime_restart(tmp_path):
+    paths = CampaignPaths.from_data_dir(tmp_path / "pending-edit")
+    runtime = CampaignRuntime("pending-edit", paths=paths, max_workers=1)
+    try:
+        pending = _pending_turn(
+            turn_id="turn-1",
+            group_id="group-1",
+            version_index=1,
+            state_before=make_default_state(),
+        )
+        runtime.pending_turns.add(pending)
+
+        edited = runtime.save_pending_scene_edit("turn-1", "玩家保存的正文")
+
+        assert edited == {
+            "turn_id": "turn-1",
+            "scene_text": "待确认版本 1",
+            "saved_scene_text": "玩家保存的正文",
+        }
+    finally:
+        runtime.close()
+
+    restarted = CampaignRuntime("pending-edit", paths=paths, max_workers=1)
+    try:
+        restored = restarted.pending_turns.get("turn-1")
+        assert restored is not None
+        assert restored.original_scene_text == "待确认版本 1"
+        assert restored.scene_result.scene_text == "玩家保存的正文"
+
+        original = restarted.save_pending_scene_edit("turn-1", None)
+
+        assert original["scene_text"] == "待确认版本 1"
+        assert original["saved_scene_text"] is None
+        assert restored.original_scene_text is None
+        assert restored.scene_result.scene_text == "待确认版本 1"
+    finally:
+        restarted.close()
+
+
 @pytest.mark.parametrize(
     "name",
     ["", " ", ".", "..", ".hidden", "../escape", "a/b", "a\\b", "bad\0name"],

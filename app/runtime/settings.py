@@ -5,6 +5,7 @@ from typing import Any
 
 DICE_DISPLAY_MODES = {"hidden", "outcome", "full"}
 DEFAULT_DICE_DISPLAY = "outcome"
+CAMPAIGN_SETTING_KEYS = {"difficulty", "dice_display", "max_chars"}
 
 
 def normalize_dice_display(value: Any) -> str:
@@ -20,7 +21,14 @@ def _settings_path():
 
 def load_settings() -> dict[str, Any]:
     try:
-        return json.loads(_settings_path().read_text(encoding="utf-8"))
+        payload = json.loads(_settings_path().read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return {}
+        return {
+            key: value
+            for key, value in payload.items()
+            if key in CAMPAIGN_SETTING_KEYS
+        }
     except (FileNotFoundError, json.JSONDecodeError, ValueError):
         return {}
 
@@ -35,7 +43,15 @@ def save_settings(settings: dict[str, Any]) -> None:
         temporary = settings_path.with_name(f".{settings_path.name}.tmp")
         try:
             temporary.write_text(
-                json.dumps(settings, ensure_ascii=False, indent=2),
+                json.dumps(
+                    {
+                        key: value
+                        for key, value in settings.items()
+                        if key in CAMPAIGN_SETTING_KEYS
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
                 encoding="utf-8",
             )
             os.replace(temporary, settings_path)
@@ -71,45 +87,3 @@ def save_max_chars(payload: dict[str, Any]) -> dict[str, int]:
     settings["max_chars"] = max_chars
     save_settings(settings)
     return {"max_chars": max_chars}
-
-
-FONT_SIZES = {"14", "15", "16.5", "18", "20"}
-DEFAULT_FONT_SIZE = "16.5"
-
-FONT_FAMILIES = {"serif", "kaiti", "ming", "sans"}
-DEFAULT_FONT_FAMILY = "serif"
-
-THEMES = {"dark", "sepia", "light"}
-DEFAULT_THEME = "dark"
-
-
-def normalize_font_size(value: Any) -> str:
-    val = str(value or "").strip()
-    return val if val in FONT_SIZES else DEFAULT_FONT_SIZE
-
-
-def normalize_font_family(value: Any) -> str:
-    val = str(value or "").strip()
-    return val if val in FONT_FAMILIES else DEFAULT_FONT_FAMILY
-
-
-def normalize_theme(value: Any) -> str:
-    val = str(value or "").strip()
-    return val if val in THEMES else DEFAULT_THEME
-
-
-def save_reader_preferences(payload: dict[str, Any]) -> dict[str, str]:
-    font_size = normalize_font_size(payload.get("font_size"))
-    font_family = normalize_font_family(payload.get("font_family"))
-    theme = normalize_theme(payload.get("theme"))
-
-    settings = load_settings()
-    settings["font_size"] = font_size
-    settings["font_family"] = font_family
-    settings["theme"] = theme
-    save_settings(settings)
-    return {
-        "font_size": font_size,
-        "font_family": font_family,
-        "theme": theme,
-    }

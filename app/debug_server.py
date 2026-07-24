@@ -28,6 +28,7 @@ from app.api import (
     load_debug_state,
     load_player_history,
     load_player_state,
+    load_reader_preferences,
     model_config_status,
     preview_core_memory,
     rename_save,
@@ -36,6 +37,8 @@ from app.api import (
     save_difficulty,
     save_max_chars,
     save_model_config,
+    save_pending_scene_edit,
+    record_player_diagnostic,
     save_reader_preferences,
     start_batch_classify_operation,
     start_confirmation_operation,
@@ -107,6 +110,9 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/model-config":
             self._handle_player_json(model_config_status)
+            return
+        if path == "/api/player/reader-preferences":
+            self._handle_player_json(load_reader_preferences)
             return
         if path == "/api/player/history":
             query = parse_qs(parsed_url.query)
@@ -204,6 +210,14 @@ class DebugHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/pending/discard":
             self._handle_player_json(lambda: self._discard_pending_turn())
+            return
+        if path == "/api/player/pending/edit":
+            self._handle_player_json(lambda: self._save_pending_scene_edit())
+            return
+        if path == "/api/player/diagnostics":
+            self._handle_player_json(
+                lambda: record_player_diagnostic(_read_json(self))
+            )
             return
         if path == "/api/player/init":
             self._handle_operation_start_stream(
@@ -950,6 +964,16 @@ class DebugHandler(BaseHTTPRequestHandler):
         if not turn_id:
             raise ValueError("turn_id is required")
         return discard_pending_turn(turn_id)
+
+    def _save_pending_scene_edit(self):
+        payload = _read_json(self)
+        turn_id = str(payload.get("turn_id", "")).strip()
+        if not turn_id:
+            raise ValueError("turn_id is required")
+        scene_text = payload.get("scene_text")
+        if scene_text is not None and not isinstance(scene_text, str):
+            raise ValueError("scene_text must be a string or null")
+        return save_pending_scene_edit(turn_id, scene_text)
 
     def _start_batch_classify_operation(self) -> str:
         payload = _read_json(self)

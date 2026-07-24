@@ -46,6 +46,7 @@ class PendingTurn:
     turn_index: int = 1
     short_term_memory: ShortTermMemory | None = None
     confirmation_cache: dict[str, Any] = field(default_factory=dict)
+    original_scene_text: str | None = None
 
 
 @dataclass
@@ -55,6 +56,7 @@ class PendingOpening:
     current_state: CurrentState
     scene_result: SceneWriterResult
     confirmation_cache: dict[str, Any] = field(default_factory=dict)
+    original_scene_text: str | None = None
 
 
 class PendingTurnRepository:
@@ -329,6 +331,50 @@ class CampaignRuntime:
                 "discarded_turn_ids": discarded_turn_ids,
             }
 
+    def save_pending_scene_edit(
+        self,
+        turn_id: str,
+        scene_text: str | None,
+    ) -> dict[str, Any]:
+        with self._confirmation_lock:
+            pending = self.pending_turns.get(turn_id)
+            opening = self.pending_openings.get(turn_id)
+            selected = pending or opening
+            if selected is None:
+                raise ValueError("Pending turn not found")
+
+            source_text = (
+                selected.original_scene_text
+                if selected.original_scene_text is not None
+                else selected.scene_result.scene_text
+            )
+            requested_text = source_text if scene_text is None else str(scene_text)
+            if not requested_text.strip():
+                raise ValueError("Scene text cannot be empty")
+
+            selected.scene_result = selected.scene_result.model_copy(
+                update={"scene_text": requested_text}
+            )
+            selected.original_scene_text = (
+                None if requested_text == source_text else source_text
+            )
+            persisted = (
+                self._persist_pending_turn(selected)
+                if isinstance(selected, PendingTurn)
+                else self._persist_pending_opening(selected)
+            )
+            if not persisted:
+                raise RuntimeError("Pending scene edit could not be persisted")
+            return {
+                "turn_id": selected.turn_id,
+                "scene_text": source_text,
+                "saved_scene_text": (
+                    selected.scene_result.scene_text
+                    if selected.original_scene_text is not None
+                    else None
+                ),
+            }
+
     def _configure_pending_persistence(self) -> None:
         self.pending_turns.configure_callbacks(
             on_add=self._persist_pending_turn,
@@ -366,6 +412,7 @@ class CampaignRuntime:
             "player_resolution": model_data(pending.player_resolution),
             "turn_index": pending.turn_index,
             "short_term_memory": model_data(pending.short_term_memory),
+            "original_scene_text": pending.original_scene_text,
             # Futures and locks in the in-process cache are deliberately not
             # durable. Confirmation will rebuild these values after restart.
             "confirmation_cache": {},
@@ -392,6 +439,7 @@ class CampaignRuntime:
             "config": model_data(pending.config),
             "current_state": model_data(pending.current_state),
             "scene_result": model_data(pending.scene_result),
+            "original_scene_text": pending.original_scene_text,
             "confirmation_cache": {},
         }
         self.history.save_pending(
@@ -435,6 +483,7 @@ class CampaignRuntime:
                         ShortTermMemory.model_validate(data["short_term_memory"])
                         if data.get("short_term_memory") else None
                     ),
+                    original_scene_text=data["original_scene_text"],
                 ))
             else:
                 self.pending_openings.restore(PendingOpening(
@@ -442,6 +491,7 @@ class CampaignRuntime:
                     config=InitConfig.model_validate(data["config"]),
                     current_state=CurrentState.model_validate(data["current_state"]),
                     scene_result=SceneWriterResult.model_validate(data["scene_result"]),
+                    original_scene_text=data["original_scene_text"],
                 ))
 
     def begin_confirmation(

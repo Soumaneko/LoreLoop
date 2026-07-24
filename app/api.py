@@ -1,5 +1,7 @@
 """Public application API used by the debug server and local tools."""
 
+from typing import Any
+
 from app.graph.confirmation_graph import confirm_stream
 from app.graph.generation_graph import (
     feedback_rewrite_stream,
@@ -19,6 +21,9 @@ from app.runtime.settings import (
     save_dice_display,
     save_difficulty,
     save_max_chars,
+)
+from app.runtime.reader_preferences import (
+    load_reader_preferences,
     save_reader_preferences,
 )
 from app.runtime.model_config import (
@@ -199,6 +204,40 @@ def start_confirmation_operation(
     )
 
 
+def save_pending_scene_edit(
+    turn_id: str,
+    scene_text: str | None,
+) -> dict:
+    return get_campaign_runtime().save_pending_scene_edit(turn_id, scene_text)
+
+
+def record_player_diagnostic(payload: dict[str, Any]) -> dict[str, bool]:
+    severity = str(payload.get("severity", "error")).strip().lower()
+    if severity not in {"warning", "error"}:
+        raise ValueError("severity must be warning or error")
+    code = str(payload.get("code", "player_frontend_error")).strip()
+    if not code or len(code) > 120:
+        raise ValueError("diagnostic code must contain 1-120 characters")
+    message = str(payload.get("message", "")).strip()
+    if not message:
+        raise ValueError("diagnostic message is required")
+    runtime = get_campaign_runtime()
+    logger = runtime.diagnostics
+    log = logger.warning if severity == "warning" else logger.error
+    log(
+        source="player_frontend",
+        code=code,
+        message=message[:2000],
+        campaign_id=runtime.campaign_id,
+        details={
+            "context": str(payload.get("context", ""))[:120],
+            "stack": str(payload.get("stack", ""))[:8000],
+            "path": str(payload.get("path", ""))[:500],
+        },
+    )
+    return {"recorded": True}
+
+
 def start_batch_classify_operation(*, request_id: str | None = None) -> str:
     return _submit_managed_operation(
         "maintenance_batch_classify_manual",
@@ -332,6 +371,7 @@ __all__ = [
     "load_debug_state",
     "load_player_history",
     "load_player_state",
+    "load_reader_preferences",
     "model_config_status",
     "list_maintenance_jobs",
     "list_operations",
@@ -343,6 +383,8 @@ __all__ = [
     "save_difficulty",
     "save_max_chars",
     "save_model_config",
+    "save_pending_scene_edit",
+    "record_player_diagnostic",
     "save_reader_preferences",
     "start_batch_classify_operation",
     "start_confirmation_operation",

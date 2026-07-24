@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SAVES_DIR = PROJECT_ROOT / "saves"
+APP_CONFIG_DIR = SAVES_DIR / ".app"
 ACTIVE_SAVE_FILE = SAVES_DIR / ".active_save"
 
 

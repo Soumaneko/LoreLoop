@@ -11,10 +11,9 @@ from typing import Any, Callable
 from app.core.llm.config import GatewayConfig, SharedGatewayFactory
 from app.core.llm.providers import OpenAICompatibleProvider
 
-from .paths import SAVES_DIR
+from .paths import APP_CONFIG_DIR
 
 
-APP_CONFIG_DIR = SAVES_DIR / ".app"
 MODEL_CONFIG_FILE = APP_CONFIG_DIR / "model_config.json"
 _CONFIG_WRITE_LOCK = threading.RLock()
 

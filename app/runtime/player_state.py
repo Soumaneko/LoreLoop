@@ -7,9 +7,6 @@ from .session import CampaignRuntime, get_campaign_runtime
 from .settings import (
     load_settings,
     normalize_dice_display,
-    normalize_font_family,
-    normalize_font_size,
-    normalize_theme,
 )
 
 
@@ -161,6 +158,15 @@ def load_player_history(
         )
 
 
+def _pending_scene_projection(pending) -> dict[str, str | None]:
+    original = getattr(pending, "original_scene_text", None)
+    current = pending.scene_result.scene_text
+    return {
+        "scene_text": original if original is not None else current,
+        "saved_scene_text": current if original is not None else None,
+    }
+
+
 def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
     stores = runtime.stores
     core_memory = stores.core_memory().load()
@@ -187,7 +193,7 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
                     "turn_id": variant.turn_id,
                     "version_index": variant.version_index,
                     "turn_index": variant.turn_index,
-                    "scene_text": variant.scene_result.scene_text,
+                    **_pending_scene_projection(variant),
                     "closing_prompt": variant.scene_result.closing_prompt,
                     "player_resolution": model_data(
                         getattr(variant, "player_resolution", None)
@@ -206,7 +212,7 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
                 "turn_id": opening.turn_id,
                 "version_index": 1,
                 "turn_index": 0,
-                "scene_text": opening.scene_result.scene_text,
+                **_pending_scene_projection(opening),
                 "closing_prompt": opening.scene_result.closing_prompt,
             }],
         }
@@ -231,9 +237,6 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
         "needs_init": core_memory is None,
         "difficulty": settings.get("difficulty", "困难"),
         "dice_display": normalize_dice_display(settings.get("dice_display")),
-        "font_size": normalize_font_size(settings.get("font_size")),
-        "font_family": normalize_font_family(settings.get("font_family")),
-        "theme": normalize_theme(settings.get("theme")),
         "campaign": {
             "turn_index": history[-1]["turn_index"] if history else 0,
             "world_time": current_state.world_clock.label,

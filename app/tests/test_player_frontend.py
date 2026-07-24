@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 import pytest
 
 from app import debug_server
+from app.api import record_player_diagnostic
+from app.core.diagnostics import DiagnosticLogger
 from app.debug_server import DebugHandler
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
@@ -30,11 +32,12 @@ from app.runtime.player_state import (
 )
 from app.runtime.operations import OperationManager
 from app.runtime.session import get_campaign_runtime
-from app.runtime.settings import (
-    load_settings,
-    save_dice_display,
+from app.runtime.reader_preferences import (
+    ReaderPreferencesStore,
+    load_reader_preferences,
     save_reader_preferences,
 )
+from app.runtime.settings import load_settings, save_dice_display
 
 
 STATIC_DIR = Path(__file__).parents[1] / "player_static"
@@ -79,9 +82,19 @@ def test_player_frontend_javascript_is_syntactically_valid():
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    for filename in ("api.js", "state.js", "app.js"):
+    for filename in (
+        "api.js",
+        "app.js",
+        "client_diagnostics.js",
+        "custom_select.js",
+        "prepaint.js",
+        "reader_preferences.js",
+        "state.js",
+    ):
+        source = (STATIC_DIR / filename).read_text(encoding="utf-8")
         result = subprocess.run(
-            [node, "--check", str(STATIC_DIR / filename)],
+            [node, "--input-type=module", "--check"],
+            input=source,
             capture_output=True,
             text=True,
             check=False,
@@ -89,39 +102,68 @@ def test_player_frontend_javascript_is_syntactically_valid():
         assert result.returncode == 0, result.stderr
 
 
-def test_player_drafts_can_restore_original_across_reload_and_save_switch():
+def test_player_saved_edits_are_projected_without_browser_storage():
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
     module_url = (STATIC_DIR / "state.js").resolve().as_uri()
     script = f"""
-const values = new Map();
-globalThis.localStorage = {{
-  getItem: (key) => values.has(key) ? values.get(key) : null,
-  setItem: (key, value) => values.set(key, String(value)),
-  removeItem: (key) => values.delete(key),
+const module = await import("{module_url}");
+const variant = {{
+  turn_id: "turn-1",
+  scene_text: "原始正文",
+  saved_scene_text: null,
 }};
-const first = await import("{module_url}?first");
-const variant = {{ turn_id: "turn-1", scene_text: "原始正文" }};
-first.state.activeSave = "save-a";
-if (first.hasDraft(variant)) throw new Error("fresh variant must not have a draft");
-first.writeDraft(variant, "玩家修改");
-if (!first.hasDraft(variant) || first.readDraft(variant) !== "玩家修改") {{
-  throw new Error("saved draft was not retained");
+if (module.hasDraft(variant)) throw new Error("fresh variant must not be edited");
+module.applySavedDraft(variant, {{
+  scene_text: "原始正文",
+  saved_scene_text: "玩家修改",
+}});
+if (!module.hasDraft(variant) || module.readDraft(variant) !== "玩家修改") {{
+  throw new Error("server-projected edit was not selected");
 }}
-first.state.activeSave = "save-b";
-if (first.readDraft(variant) !== "原始正文") throw new Error("draft leaked across saves");
-const reloaded = await import("{module_url}?reloaded");
-reloaded.state.activeSave = "save-a";
-if (!reloaded.hasDraft(variant) || reloaded.readDraft(variant) !== "玩家修改") {{
-  throw new Error("draft did not survive module reload");
-}}
-reloaded.clearDraft(variant);
-if (reloaded.hasDraft(variant) || reloaded.readDraft(variant) !== "原始正文") {{
+module.applySavedDraft(variant, {{
+  scene_text: "原始正文",
+  saved_scene_text: null,
+}});
+if (module.hasDraft(variant) || module.readDraft(variant) !== "原始正文") {{
   throw new Error("original text was not restored");
 }}
-reloaded.writeDraft(variant, "原始正文");
-if (reloaded.hasDraft(variant)) throw new Error("original text must not create a draft");
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_player_sse_parser_handles_split_crlf_and_multiline_frames():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "api.js").resolve().as_uri()
+    script = f"""
+const {{ parseSSEFrames }} = await import("{module_url}");
+const first = parseSSEFrames(
+  'data: {{"ok":true,"step":"one"}}\\r\\n\\r\\ndata: {{"ok":true',
+);
+if (first.frames.length !== 1 || first.frames[0].step !== "one") {{
+  throw new Error("complete CRLF frame was not parsed");
+}}
+const second = parseSSEFrames(
+  first.remainder + ',"step":"two"}}\\n\\n',
+);
+if (second.frames.length !== 1 || second.frames[0].step !== "two") {{
+  throw new Error("split frame was not reassembled");
+}}
+const multiline = parseSSEFrames(
+  'data: {{"ok":true,\\ndata: "step":"three"}}\\n\\n',
+);
+if (multiline.frames[0].step !== "three") {{
+  throw new Error("multiline data frame was not parsed");
+}}
 """
     result = subprocess.run(
         [node, "--input-type=module", "--eval", script],
@@ -142,30 +184,68 @@ def test_dice_display_setting_is_per_save_and_normalized():
     }
 
 
-def test_reader_preferences_setting_is_per_save_and_normalized():
+def test_reader_preferences_are_application_global_and_normalized(tmp_path):
+    store = ReaderPreferencesStore(tmp_path / ".app" / "reader_preferences.json")
     assert save_reader_preferences({
         "font_size": "18",
         "font_family": "kaiti",
         "theme": "sepia",
-    }) == {
+    }, store=store) == {
         "font_size": "18",
         "font_family": "kaiti",
         "theme": "sepia",
     }
-    settings = load_settings()
-    assert settings["font_size"] == "18"
-    assert settings["font_family"] == "kaiti"
-    assert settings["theme"] == "sepia"
-    assert save_reader_preferences({"font_size": "invalid", "font_family": "bad", "theme": "none"}) == {
+    assert load_reader_preferences(store=store) == {
+        "font_size": "18",
+        "font_family": "kaiti",
+        "theme": "sepia",
+    }
+    assert not {"font_size", "font_family", "theme"} & load_settings().keys()
+    assert save_reader_preferences({
+        "font_size": "invalid",
+        "font_family": "bad",
+        "theme": "none",
+    }, store=store) == {
         "font_size": "16.5",
         "font_family": "serif",
         "theme": "dark",
     }
 
 
+def test_player_diagnostics_are_written_to_the_separate_diagnostic_log(
+    monkeypatch,
+    tmp_path,
+):
+    runtime = get_campaign_runtime()
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
+    monkeypatch.setattr(runtime, "diagnostics", diagnostics)
+
+    assert record_player_diagnostic({
+        "severity": "error",
+        "code": "player_frontend_error",
+        "message": "render failed",
+        "context": "window_error",
+        "stack": "Error: render failed",
+        "path": "/",
+    }) == {"recorded": True}
+
+    entry = diagnostics.read()[0]
+    assert entry["source"] == "player_frontend"
+    assert entry["campaign_id"] == "pytest"
+    assert entry["details"] == {
+        "context": "window_error",
+        "stack": "Error: render failed",
+        "path": "/",
+    }
+
+
 def test_player_themes_use_semantic_tokens_without_component_overrides():
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    preferences_source = (
+        STATIC_DIR / "reader_preferences.js"
+    ).read_text(encoding="utf-8")
+    prepaint_source = (STATIC_DIR / "prepaint.js").read_text(encoding="utf-8")
     styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert styles.count('html[data-theme="') == 2
@@ -187,11 +267,12 @@ def test_player_themes_use_semantic_tokens_without_component_overrides():
     ):
         assert styles.count(token) == 3
 
-    assert 'const READER_PREFERENCES_CACHE_KEY = "tvg:reader-preferences"' in source
-    assert "readerPreferencesSaveQueue" in source
-    assert "themeColorMeta.content = themeColor" in source
-    assert "applyReaderPreferences(state.playerState || {})" in source
-    assert 'localStorage.getItem("tvg:reader-preferences")' in html
+    assert 'const CACHE_KEY = "tvg:reader-preferences"' in preferences_source
+    assert "let saveQueue = Promise.resolve()" in preferences_source
+    assert "themeColorMeta.content = themeColor" in preferences_source
+    assert 'request("/api/player/reader-preferences")' in preferences_source
+    assert 'localStorage.getItem(cacheKey)' in prepaint_source
+    assert 'src="/assets/prepaint.js"' in html
     assert 'meta name="theme-color" content="#11110e"' in html
 
 
@@ -213,11 +294,14 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'aria-label="回合导航"' in html
     assert "function renderTurnNavigator()" in source
     assert "function jumpToHistoryTurn(turnIndex)" in source
-    assert "function scheduleNavigationActiveUpdate()" in source
+    assert "new IntersectionObserver(" in source
+    assert "function refreshNavigationObserver(" in source
+    assert "function setNavigationActive(key)" in source
+    assert "scheduleNavigationActiveUpdate" not in source
     assert "HISTORY_NAVIGATION_LOAD_SIZE = 20" in source
-    assert 'button.setAttribute("aria-current", "step")' in source
+    assert 'next.setAttribute("aria-current", "step")' in source
     assert 'if ("onscrollend" in window)' in source
-    assert "if (!wasSelected)" in source
+    assert "navigationActiveKey === nextKey" in source
     assert "return insertedCount;" in source
     assert ".turn-navigator-list::before" in styles
     assert ".turn-nav-item.active .turn-nav-dot" in styles
@@ -268,6 +352,7 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "confirmDiscardUnsavedPendingEdit" in source
     assert "切换存档会丢失尚未保存的修改" in source
     assert "restoreOriginalScene" in source
+    assert 'request("/api/player/pending/edit"' in source
     assert '"恢复原文"' in source
     assert "已恢复该版本的原始正文" in source
     assert "discard_pending" not in source
@@ -296,6 +381,12 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert ".resource-group-inventory .resource-items" in styles
     assert "width: min(1040px" in styles
     assert "backdrop-filter" not in styles
+    assert 'class="ambient ' not in html
+    assert ".ambient {" not in styles
+    assert ".narrative-card::before" not in styles
+    assert "transform: translateZ(0)" not in styles
+    assert "0 0 13px var(--gold-glow)" not in styles
+    assert "0 0 12px var(--gold-glow)" not in styles
     assert ".init-modal [hidden]" in styles
     assert "select option, select optgroup" in styles
     assert "confirmation-status" in source
@@ -527,7 +618,6 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "save", "needs_init", "difficulty", "campaign", "history",
         "history_navigation", "history_pagination", "highlights", "pending",
         "history_controls", "action_preview", "dice_display",
-        "font_size", "font_family", "theme",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
     assert payload["campaign"]["scene_conditions"] == ["房间正在燃烧"]

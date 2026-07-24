@@ -9,6 +9,11 @@ export const state = {
   lastError: null,
   historyLoading: false,
   historyPagingEnabled: false,
+  readerPreferences: {
+    font_size: "16.5",
+    font_family: "serif",
+    theme: "dark",
+  },
 };
 
 export const modeLabels = {
@@ -24,6 +29,9 @@ export const modeLabels = {
 };
 
 export function setMode(mode) {
+  if (!(mode in modeLabels)) {
+    throw new Error(`Unknown player mode: ${mode}`);
+  }
   state.mode = mode;
 }
 
@@ -36,36 +44,17 @@ export function selectedVariant() {
   return pending?.variants?.[state.selectedPendingIndex] || null;
 }
 
-export function draftKey(turnId) {
-  return `tvg:draft:${state.activeSave || "default"}:${turnId}`;
-}
-
 export function readDraft(variant) {
-  if (!variant?.turn_id) return variant?.scene_text || "";
-  return localStorage.getItem(draftKey(variant.turn_id)) ?? variant.scene_text ?? "";
+  return variant?.saved_scene_text ?? variant?.scene_text ?? "";
 }
 
 export function hasDraft(variant) {
-  if (!variant?.turn_id) return false;
-  const draft = localStorage.getItem(draftKey(variant.turn_id));
-  return draft !== null && draft !== (variant.scene_text ?? "");
+  return variant?.saved_scene_text !== null
+    && variant?.saved_scene_text !== undefined;
 }
 
-export function writeDraft(variant, value) {
-  if (!variant?.turn_id) return;
-  if (value === (variant.scene_text ?? "")) {
-    clearDraft(variant);
-    return;
-  }
-  localStorage.setItem(draftKey(variant.turn_id), value);
-}
-
-export function clearDraft(variant) {
-  if (variant?.turn_id) localStorage.removeItem(draftKey(variant.turn_id));
-}
-
-export function clearDrafts(pending) {
-  for (const variant of pending?.variants || []) {
-    clearDraft(variant);
-  }
+export function applySavedDraft(variant, payload) {
+  if (!variant || !payload) return;
+  variant.scene_text = payload.scene_text ?? variant.scene_text;
+  variant.saved_scene_text = payload.saved_scene_text ?? null;
 }
