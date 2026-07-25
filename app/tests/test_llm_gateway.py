@@ -168,6 +168,29 @@ class TestLLMGatewayRetryFlow:
         assert result.text == "hello"
         assert result.length == 5
 
+    def test_output_validator_failure_retries_then_succeeds(self):
+        mock = MockLLM()
+        mock.set_responses([
+            '{"text": "wrong", "length": 5}',
+            '{"text": "hello", "length": 5}',
+        ])
+        gateway = _make_gateway(mock)
+
+        def validate(result):
+            if result.text != "hello":
+                raise ValueError("text must be hello")
+
+        result = gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+            output_validator=validate,
+            max_retries=2,
+        )
+
+        assert result.text == "hello"
+        assert result.length == 5
+
     def test_exceeds_max_retries_raises_error(self):
         mock = MockLLM()
         mock.set_responses(["not json", "also not json", "still bad"])

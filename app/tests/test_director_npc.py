@@ -12,6 +12,12 @@ from app.domain.director_npc.schemas import (
     DirectorNPCDraft,
     DirectorNPCWorkflowResult,
 )
+from app.domain.world_setting.schemas import (
+    SettingAnchorPacket,
+    SettingSeedCandidate,
+    SettingSourceDocument,
+)
+from app.domain.world_setting.store import WorldSettingStore
 from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
@@ -95,6 +101,17 @@ class SpyGateway:
         return kwargs["output_schema"].model_validate(json.loads(self.response))
 
 
+class QueueSpyGateway:
+    def __init__(self, responses: list[str]):
+        self.responses = list(responses)
+        self.calls = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        response = self.responses.pop(0)
+        return kwargs["output_schema"].model_validate(json.loads(response))
+
+
 def _state() -> CurrentState:
     return CurrentState(
         scene=SceneState(
@@ -122,6 +139,7 @@ def _director_event(role: str, title: str) -> DirectorEvent:
 
 def _draft_response(name="艾琳娜", *, draft_id: str | None = None) -> str:
     payload = {
+        "setting_expansion_note": "这个 NPC 让旧药路从背景运输网络变成具体的人际接口：TA 依靠旧药路谋生，也因旧药路的风险形成秘密与行动边界。",
         "name": name,
         "role": "流浪药剂师",
         "appearance": "背着旧药箱、披着灰绿色旅行斗篷的年轻药剂师。",
@@ -132,7 +150,11 @@ def _draft_response(name="艾琳娜", *, draft_id: str | None = None) -> str:
         "hidden_secret": "她正在寻找一份被自己弄丢的导师手稿。",
         "conflict_style": "先谈条件，必要时用药粉拖延。",
         "social_style": "礼貌但保持距离，习惯用交易掩饰求助。",
-        "encounter_potentials": ["交换药材", "误认徽记", "共同避险"],
+        "encounter_potentials": [
+            "沿旧药路交换药材",
+            "在渡口行会误认徽记",
+            "于山地驿道共同避险",
+        ],
         "status": "standby",
         "created_turn": 4,
         "dispatched_turn": None,
@@ -141,6 +163,79 @@ def _draft_response(name="艾琳娜", *, draft_id: str | None = None) -> str:
         payload["draft_id"] = draft_id
     return json.dumps(
         payload,
+        ensure_ascii=False,
+    )
+
+
+def _draft_response_with(name: str = "艾琳娜", **updates) -> str:
+    payload = json.loads(_draft_response(name))
+    payload.update(updates)
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _setting_anchor(
+    setting_id: str,
+    label: str = "旧药路",
+) -> SettingAnchorPacket:
+    return SettingAnchorPacket(
+        setting_id=setting_id,
+        label=label,
+        kind="resource_or_network",
+        definition=f"{label}是一条仍被地方药商使用的旧运输网络。",
+        setting_facts=[
+            f"{label}是一条仍被地方药商使用的旧运输网络。",
+            "它只覆盖北郡周边，不是跨国商路。",
+        ],
+        relation_to_known_world=["连接北郡与周边药材产地。"],
+        world_effects=["它改变北郡药材、消息和风险的流动方式。"],
+        scope_and_boundaries=["只覆盖北郡周边，不是跨国商路。"],
+        player_known_facts=[0],
+        director_private_facts=[1],
+    )
+
+
+def _world_setting_store(*labels: str) -> tuple[WorldSettingStore, list[SettingAnchorPacket]]:
+    store = WorldSettingStore(":memory:")
+    anchors = []
+    for index, label in enumerate(labels, start=1):
+        document = SettingSourceDocument(
+            source_key=f"scene:{index}",
+            source_type="scene_text",
+            source_ref=f"scene_{index}",
+            visibility="player_known",
+            content=f"正文提到了{label}。",
+        )
+        saved = store.apply_extraction(
+            [
+                SettingSeedCandidate(
+                    label=label,
+                    kind="resource_or_network",
+                    basic_concept=f"{label}是已经出现的地方运输网络。",
+                    source_key=document.source_key,
+                    source_span=label,
+                    resolution="new",
+                )
+            ],
+            source_documents={document.source_key: document},
+            turn_index=index,
+        )
+        anchors.append(_setting_anchor(saved[0], label))
+    return store, anchors
+
+
+def _preparation_response(anchors: list[SettingAnchorPacket]) -> str:
+    return json.dumps(
+        {
+            "preparations": [
+                {
+                    "setting_id": anchor.setting_id,
+                    "decision": "develop",
+                    "reason": "基础概念可靠，需要最低限度明确世界影响。",
+                    "anchor": anchor.model_dump(mode="json"),
+                }
+                for anchor in anchors
+            ]
+        },
         ensure_ascii=False,
     )
 
@@ -208,6 +303,7 @@ class TestDirectorNPCWorkflow:
 
     def test_create_standby_creates_one_draft(self):
         director_store = DirectorNPCStore(":memory:")
+        setting_store, anchors = _world_setting_store("旧药路")
         creator = MockLLM()
         creator.set_responses([_draft_response()])
 
@@ -216,14 +312,59 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
+            setting_anchor=anchors[0],
+            world_setting_store=setting_store,
             creator_gateway=creator.build_gateway(),
         )
 
         assert created.status == "standby"
+        assert created.source_setting_id == anchors[0].setting_id
+        assert created.creative_brief is not None
         assert len(director_store.list_standby()) == 1
+        assert setting_store.get_by_id(anchors[0].setting_id).availability == "consumed"
+
+    def test_create_standby_retries_when_business_fields_do_not_use_exact_setting_label(self):
+        director_store = DirectorNPCStore(":memory:")
+        setting_store, anchors = _world_setting_store("禁忌魔法：意识转移")
+        creator = MockLLM()
+        creator.set_responses(
+            [
+                _draft_response_with(
+                    "艾琳娜",
+                    setting_expansion_note="禁忌魔法：意识转移会改变她的生活接口。",
+                    core_motivation="想研究被教廷审查的禁书。",
+                    encounter_potentials=[
+                        "交换禁书残页",
+                        "躲避教廷审查",
+                        "寻找失落手稿",
+                    ],
+                ),
+                _draft_response_with(
+                    "薇拉",
+                    core_motivation="想证明禁忌魔法：意识转移不是单纯的邪术，而是能解释自我连续性的危险技术。",
+                ),
+            ]
+        )
+
+        created = create_director_npc_standby(
+            core_memory=CoreMemory(items=[]),
+            protagonist_name="主角",
+            turn_index=4,
+            director_npc_store=director_store,
+            setting_anchor=anchors[0],
+            world_setting_store=setting_store,
+            creator_gateway=creator.build_gateway(),
+        )
+
+        assert created.name == "薇拉"
+        assert "禁忌魔法：意识转移" in created.core_motivation
+        assert "禁忌魔法：意识转移" not in created.model_dump_json(
+            exclude={"core_motivation"},
+        )
 
     def test_create_standby_assigns_program_fields(self):
         director_store = DirectorNPCStore(":memory:")
+        setting_store, anchors = _world_setting_store("旧药路")
         gateway = SpyGateway(_draft_response(draft_id="llm_supplied_id"))
 
         created = create_director_npc_standby(
@@ -231,6 +372,8 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=7,
             director_npc_store=director_store,
+            setting_anchor=anchors[0],
+            world_setting_store=setting_store,
             creator_gateway=gateway,
         )
 
@@ -246,15 +389,22 @@ class TestDirectorNPCWorkflow:
 
     def test_restock_standby_creates_when_pool_is_empty(self):
         director_store = DirectorNPCStore(":memory:")
+        setting_store, anchors = _world_setting_store("旧药路", "渡口行会", "山地驿道")
         creator = MockLLM()
-        creator.set_responses(_draft_responses("艾琳娜", "薇拉", "洛珊"))
+        creator.set_responses([
+            _preparation_response(anchors),
+            *_draft_responses("艾琳娜", "薇拉", "洛珊"),
+        ])
 
         created = restock_director_npc_standby(
             core_memory=CoreMemory(items=[]),
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
+            world_setting_store=setting_store,
             creator_gateway=creator.build_gateway(),
+            setting_preparer_gateway=creator.build_gateway(),
+            reservation_owner="test-restock",
         )
 
         assert len(created) == DIRECTOR_NPC_STANDBY_TARGET
@@ -263,17 +413,24 @@ class TestDirectorNPCWorkflow:
 
     def test_restock_standby_fills_partial_pool(self):
         director_store = DirectorNPCStore(":memory:")
+        setting_store, anchors = _world_setting_store("渡口行会", "山地驿道")
         draft = DirectorNPCDraft.model_validate(json.loads(_draft_response()))
         director_store.save(draft)
         creator = MockLLM()
-        creator.set_responses(_draft_responses("薇拉", "洛珊"))
+        creator.set_responses([
+            _preparation_response(anchors),
+            *_draft_responses("薇拉", "洛珊"),
+        ])
 
         created = restock_director_npc_standby(
             core_memory=CoreMemory(items=[]),
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
+            world_setting_store=setting_store,
             creator_gateway=creator.build_gateway(),
+            setting_preparer_gateway=creator.build_gateway(),
+            reservation_owner="test-partial",
         )
 
         assert len(created) == 2
@@ -281,6 +438,7 @@ class TestDirectorNPCWorkflow:
 
     def test_restock_standby_does_not_create_when_pool_is_full(self):
         director_store = DirectorNPCStore(":memory:")
+        setting_store = WorldSettingStore(":memory:")
         for response in _draft_responses("艾琳娜", "薇拉", "洛珊"):
             director_store.save(DirectorNPCDraft.model_validate(json.loads(response)))
         creator = MockLLM()
@@ -290,27 +448,104 @@ class TestDirectorNPCWorkflow:
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
+            world_setting_store=setting_store,
             creator_gateway=creator.build_gateway(),
+            setting_preparer_gateway=creator.build_gateway(),
+            reservation_owner="test-full",
         )
 
         assert created == []
         assert len(director_store.list_standby()) == DIRECTOR_NPC_STANDBY_TARGET
 
+    def test_restock_does_not_fall_back_to_unanchored_creation(self):
+        director_store = DirectorNPCStore(":memory:")
+        setting_store = WorldSettingStore(":memory:")
+        creator = MockLLM()
+
+        created = restock_director_npc_standby(
+            core_memory=CoreMemory(items=[]),
+            protagonist_name="主角",
+            turn_index=4,
+            director_npc_store=director_store,
+            world_setting_store=setting_store,
+            creator_gateway=creator.build_gateway(),
+            setting_preparer_gateway=creator.build_gateway(),
+            reservation_owner="test-no-settings",
+        )
+
+        assert created == []
+        assert director_store.list_standby() == []
+
+    def test_restock_persists_consumer_rejections_without_calling_creator(self):
+        director_store = DirectorNPCStore(":memory:")
+        setting_store, anchors = _world_setting_store(
+            "旧药路",
+            "渡口行会",
+            "山地驿道",
+        )
+        gateway = QueueSpyGateway([
+            json.dumps(
+                {
+                    "preparations": [
+                        {
+                            "setting_id": anchor.setting_id,
+                            "decision": "reject",
+                            "reason": "只是一次性描述，无法形成世界影响。",
+                            "anchor": None,
+                        }
+                        for anchor in anchors
+                    ]
+                },
+                ensure_ascii=False,
+            )
+        ])
+
+        created = restock_director_npc_standby(
+            core_memory=CoreMemory(items=[]),
+            protagonist_name="主角",
+            turn_index=4,
+            director_npc_store=director_store,
+            world_setting_store=setting_store,
+            creator_gateway=gateway,
+            setting_preparer_gateway=gateway,
+            reservation_owner="test-rejected-settings",
+        )
+
+        assert created == []
+        assert [call["task"] for call in gateway.calls] == [
+            "setting_anchor_prepare"
+        ]
+        assert {
+            setting.availability for setting in setting_store.list_all()
+        } == {"rejected"}
+
     def test_restock_passes_current_standby_as_reserved_names(self):
         director_store = DirectorNPCStore(":memory:")
         director_store.save(DirectorNPCDraft.model_validate(json.loads(_draft_response("艾琳娜"))))
-        gateway = SpyGateway(_draft_response("薇拉"))
+        setting_store, anchors = _world_setting_store("渡口行会", "山地驿道")
+        gateway = QueueSpyGateway([
+            _preparation_response(anchors),
+            *_draft_responses("薇拉", "洛珊"),
+        ])
 
         restock_director_npc_standby(
             core_memory=CoreMemory(items=[]),
             protagonist_name="主角",
             turn_index=4,
             director_npc_store=director_store,
+            world_setting_store=setting_store,
             creator_gateway=gateway,
+            setting_preparer_gateway=gateway,
+            reservation_owner="test-existing",
         )
 
-        first_call_existing = json.loads(gateway.calls[0]["input_data"]["existing_npcs_json"])
-        second_call_existing = json.loads(gateway.calls[1]["input_data"]["existing_npcs_json"])
+        create_traces = [
+            call
+            for call in gateway.calls
+            if call["task"] == "director_npc_create"
+        ]
+        first_call_existing = json.loads(create_traces[0]["input_data"]["existing_npcs_json"])
+        second_call_existing = json.loads(create_traces[1]["input_data"]["existing_npcs_json"])
         assert first_call_existing == [
             {
                 "name": "艾琳娜",
@@ -350,12 +585,15 @@ class TestDirectorNPCWorkflow:
             )
         )
         gateway = SpyGateway(_draft_response())
+        setting_store, anchors = _world_setting_store("旧药路")
 
-        restock_director_npc_standby(
+        create_director_npc_standby(
             core_memory=CoreMemory(items=[]),
             protagonist_name="克莱",
             turn_index=4,
             director_npc_store=director_store,
+            setting_anchor=anchors[0],
+            world_setting_store=setting_store,
             npc_profile_store=npc_profile_store,
             creator_gateway=gateway,
         )
@@ -363,6 +601,18 @@ class TestDirectorNPCWorkflow:
         input_data = gateway.calls[0]["input_data"]
         existing = json.loads(input_data["existing_npcs_json"])
         assert input_data["protagonist_name"] == "克莱"
+        setting_anchor_view = json.loads(input_data["setting_anchor_json"])
+        assert setting_anchor_view == {
+            "label": anchors[0].label,
+            "kind": anchors[0].kind,
+            "definition": anchors[0].definition,
+            "setting_facts": anchors[0].setting_facts,
+            "world_effects": anchors[0].world_effects,
+        }
+        assert "setting_label" not in input_data
+        assert "setting_definition" not in input_data
+        assert "setting_facts_json" not in input_data
+        assert "setting_world_effects_json" not in input_data
         assert existing == [
             {
                 "name": "塞琳",

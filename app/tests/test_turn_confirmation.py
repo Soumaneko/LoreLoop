@@ -441,7 +441,11 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
     def _restock(*_args, **_kwargs):
         calls["restock"] += 1
 
-    monkeypatch.setattr(confirmation_helpers, "run_director_npc_restock", _restock)
+    monkeypatch.setattr(
+        confirmation_helpers,
+        "run_director_npc_maintenance",
+        _restock,
+    )
 
     try:
         events = list(

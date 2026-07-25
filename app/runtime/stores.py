@@ -11,6 +11,7 @@ from app.domain.recall_memory.store import MemoryStore
 from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.short_term_memory import ShortTermMemoryStore
 from app.domain.canon_evidence import CanonEvidenceStore
+from app.domain.world_setting import WorldSettingStore
 
 from .paths import CampaignPaths
 
@@ -67,4 +68,8 @@ class StoreBundle:
     def director_npc(self) -> DirectorNPCStore:
         self._ensure_data_dir()
         return DirectorNPCStore(str(self.paths.director_npc_db))
+
+    def world_setting(self) -> WorldSettingStore:
+        self._ensure_data_dir()
+        return WorldSettingStore(str(self.paths.world_setting_db))
 from dataclasses import dataclass

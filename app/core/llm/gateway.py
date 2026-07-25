@@ -64,6 +64,7 @@ class LLMGateway:
         trace_id: str | None = None,
         on_chunk: Callable[[str], None] | None = None,
         on_attempt_start: Callable[[int], None] | None = None,
+        output_validator: Callable[[BaseModel], None] | None = None,
     ) -> BaseModel:
         prompt_template, prompt_version = self._prompt_loader.load(task)
         prompt_fingerprint = hashlib.sha256(
@@ -101,6 +102,7 @@ class LLMGateway:
                 parsed = self._parse_json(raw_output)
 
                 validated = self._validate_schema(parsed, output_schema)
+                self._validate_output_contract(validated, output_validator)
 
                 self._tracer.log(
                     trace_id=trace_id,
@@ -362,3 +364,17 @@ class LLMGateway:
             raise LLMOutputValidationError(
                 f"Schema validation failed for {output_schema.__name__}: {e}"
             ) from e
+
+    def _validate_output_contract(
+        self,
+        validated: BaseModel,
+        output_validator: Callable[[BaseModel], None] | None,
+    ) -> None:
+        if output_validator is None:
+            return
+        try:
+            output_validator(validated)
+        except LLMOutputValidationError:
+            raise
+        except ValueError as e:
+            raise LLMOutputValidationError(str(e)) from e

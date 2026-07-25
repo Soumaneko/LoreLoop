@@ -13,6 +13,9 @@ from app.domain.recall_memory.maintenance import (
 from app.domain.recall_memory.schemas import PendingMemoryItem
 from app.domain.recall_memory.schemas import MemoryDraftExtractResult
 from app.domain.scene_summary.maintenance import SceneSummaryMaintenanceResult
+from app.domain.world_setting.workflows import (
+    SettingSeedExtractionWorkflowResult,
+)
 from app.runtime.services import RuntimeServices
 
 
@@ -52,11 +55,15 @@ class MemoryMaintenanceState(TypedDict, total=False):
     maintenance_result: MaintainMemoriesWorkflowResult
 
 
-class DirectorNPCRestockState(TypedDict, total=False):
+class DirectorNPCMaintenanceState(TypedDict, total=False):
     runtime_services: RuntimeServices
     events: Annotated[list[MaintenanceEvent], add]
     trace_id: str
     turn_index: int
     core_memory: CoreMemory
     protagonist_name: str
+    scene_text: str
+    scene_facts_json: str
+    new_npc_profile_ids: list[str]
+    setting_seed_result: SettingSeedExtractionWorkflowResult
     created_drafts: list[DirectorNPCDraft]

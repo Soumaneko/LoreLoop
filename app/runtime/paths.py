@@ -89,6 +89,10 @@ class CampaignPaths:
         return self.data_dir / "director_npcs.db"
 
     @property
+    def world_setting_db(self) -> Path:
+        return self.data_dir / "world_settings.db"
+
+    @property
     def core_memory_json(self) -> Path:
         return self.data_dir / "core_memory.json"
 

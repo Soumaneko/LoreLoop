@@ -197,7 +197,7 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
             return object()
 
     class _Scheduler:
-        def schedule_restock(self, _state):
+        def schedule_director_npc_maintenance(self, _state):
             calls.append("restock")
             return True
 

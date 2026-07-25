@@ -12,9 +12,10 @@ from app.runtime.session import (
     get_campaign_runtime,
 )
 from app.graph.maintenance_graph import (
-    run_director_npc_restock,
+    run_director_npc_maintenance,
     run_memory_batch_maintenance,
     run_scene_summary_maintenance,
+    run_setting_seed_maintenance,
 )
 from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
 from .confirmation_lifecycle import (
@@ -42,6 +43,7 @@ _WRITE_CACHED_NODE_RESULTS = {
     "entity_extraction",
     "npc_extraction",
     "director_event_result",
+    "director_event_promoted_npc_profile_ids",
     "updated_entity_ids",
     "updated_npc_profile_ids",
 }
@@ -321,7 +323,8 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
         runtime,
         ConfirmationMaintenanceServices(
             director_npc_store=stores.director_npc,
-            run_director_npc_restock=run_director_npc_restock,
+            run_director_npc_maintenance=run_director_npc_maintenance,
+            run_setting_seed_maintenance=run_setting_seed_maintenance,
             run_scene_summary_maintenance=run_scene_summary_maintenance,
             run_memory_batch_maintenance=run_memory_batch_maintenance,
         ),

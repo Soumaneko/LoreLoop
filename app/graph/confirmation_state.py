@@ -63,6 +63,7 @@ class ConfirmationCache(TypedDict, total=False):
     npc_director_events: list[DirectorEvent]
     action_preview: ActionPreviewResult
     director_event_result: DirectorEventWorkflowBatchResult | None
+    director_event_promoted_npc_profile_ids: list[str]
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
     existing_entity_profiles: list[EntityProfile]
@@ -72,6 +73,9 @@ class ConfirmationCache(TypedDict, total=False):
     director_npc_restock_scheduled: bool
     director_npc_restock_job_id: str | None
     director_npc_restock_operation_id: str | None
+    setting_seed_maintenance_scheduled: bool
+    setting_seed_maintenance_job_id: str | None
+    setting_seed_maintenance_operation_id: str | None
     director_npc_last_dispatch_turn_set: bool
     turn_summary_saved: bool
     turn_summary_id: str
@@ -124,3 +128,4 @@ class ConfirmationState(TypedDict, total=False):
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
     director_event_result: DirectorEventWorkflowBatchResult | None
+    director_event_promoted_npc_profile_ids: list[str]

@@ -1,8 +1,13 @@
+import random
+
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.director_npc.creator import DirectorNPCCreator
+from app.domain.director_npc.creative_brief import (
+    draw_director_npc_creative_brief,
+)
 from app.domain.director_npc.dispatcher import DirectorNPCDispatcher
 from app.domain.director_npc.schemas import (
     DirectorNPCDraft,
@@ -16,6 +21,10 @@ from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.world_setting.preparer import SettingAnchorPreparer
+from app.domain.world_setting.sampler import reserve_setting_candidates
+from app.domain.world_setting.schemas import SettingAnchorPacket
+from app.domain.world_setting.store import WorldSettingStore
 
 
 DIRECTOR_NPC_FIRST_FORCED_TURN = 1
@@ -104,11 +113,18 @@ def create_director_npc_standby(
     protagonist_name: str,
     turn_index: int,
     director_npc_store: DirectorNPCStore,
+    setting_anchor: SettingAnchorPacket,
+    world_setting_store: WorldSettingStore,
     npc_profile_store: NPCProfileStore | None = None,
     creator_gateway: LLMGateway,
+    creative_brief_rng: random.Random | None = None,
     trace_id: str | None = None,
 ) -> DirectorNPCDraft:
     owned_profile_store = npc_profile_store or NPCProfileStore(":memory:")
+    creative_brief = draw_director_npc_creative_brief(
+        setting_anchor.kind,
+        rng=creative_brief_rng,
+    )
     created = DirectorNPCCreator(creator_gateway).create(
         core_memory=core_memory,
         existing_npcs=owned_profile_store.list_all(),
@@ -121,11 +137,17 @@ def create_director_npc_standby(
             }
             for npc in director_npc_store.list_standby()
         ],
+        setting_anchor=setting_anchor,
+        creative_brief=creative_brief,
         protagonist_name=protagonist_name,
         turn_index=turn_index,
         trace_id=trace_id,
     )
     director_npc_store.save(created)
+    world_setting_store.mark_consumed(
+        setting_anchor.setting_id,
+        director_npc_id=created.draft_id,
+    )
     return created
 
 
@@ -135,25 +157,120 @@ def restock_director_npc_standby(
     protagonist_name: str,
     turn_index: int,
     director_npc_store: DirectorNPCStore,
+    world_setting_store: WorldSettingStore,
     npc_profile_store: NPCProfileStore | None = None,
     creator_gateway: LLMGateway,
+    setting_preparer_gateway: LLMGateway,
+    reservation_owner: str,
+    setting_rng: random.Random | None = None,
+    creative_brief_rng: random.Random | None = None,
     trace_id: str | None = None,
 ) -> list[DirectorNPCDraft]:
     created_drafts: list[DirectorNPCDraft] = []
     owned_profile_store = npc_profile_store or NPCProfileStore(":memory:")
-    for _ in range(director_npc_standby_missing_count(director_npc_store)):
-        created_drafts.append(
-            create_director_npc_standby(
+    _reconcile_setting_consumption(
+        director_npc_store=director_npc_store,
+        world_setting_store=world_setting_store,
+    )
+    missing_count = director_npc_standby_missing_count(director_npc_store)
+    if missing_count <= 0:
+        return []
+
+    reserved = reserve_setting_candidates(
+        world_setting_store,
+        owner=reservation_owner,
+        count=missing_count * 3,
+        rng=setting_rng,
+    )
+    if not reserved:
+        return []
+    reserved_ids = {setting.setting_id for setting in reserved}
+    try:
+        preparation_batch = SettingAnchorPreparer(
+            setting_preparer_gateway
+        ).prepare(
+            core_memory=core_memory,
+            settings=reserved,
+            trace_id=trace_id,
+        )
+        preparation_by_id = {
+            preparation.setting_id: preparation
+            for preparation in preparation_batch.preparations
+            if preparation.setting_id in reserved_ids
+        }
+        groups = [
+            reserved[index::missing_count]
+            for index in range(missing_count)
+        ]
+        chosen_ids: set[str] = set()
+        for group in groups:
+            selected_anchor = None
+            for setting in group:
+                preparation = preparation_by_id.get(setting.setting_id)
+                if preparation is None:
+                    continue
+                if preparation.decision == "reject":
+                    world_setting_store.mark_rejected(
+                        setting.setting_id,
+                        reason=preparation.reason,
+                    )
+                    continue
+                if preparation.anchor is None:
+                    continue
+                if (
+                    preparation.anchor.label != setting.label
+                    or preparation.anchor.kind != setting.kind
+                ):
+                    continue
+                world_setting_store.save_preparation(
+                    setting.setting_id,
+                    preparation.anchor,
+                )
+                selected_anchor = preparation.anchor
+                break
+            if selected_anchor is None:
+                continue
+            created = create_director_npc_standby(
                 core_memory=core_memory,
                 protagonist_name=protagonist_name,
                 turn_index=turn_index,
                 director_npc_store=director_npc_store,
+                setting_anchor=selected_anchor,
+                world_setting_store=world_setting_store,
                 npc_profile_store=owned_profile_store,
                 creator_gateway=creator_gateway,
+                creative_brief_rng=creative_brief_rng,
                 trace_id=trace_id,
             )
-        )
+            created_drafts.append(created)
+            chosen_ids.add(selected_anchor.setting_id)
+    except BaseException:
+        world_setting_store.release_reservations(reservation_owner)
+        raise
+    world_setting_store.release_reservations(
+        reservation_owner,
+        except_setting_ids=chosen_ids,
+    )
     return created_drafts
+
+
+def _reconcile_setting_consumption(
+    *,
+    director_npc_store: DirectorNPCStore,
+    world_setting_store: WorldSettingStore,
+) -> None:
+    for draft in director_npc_store.list_all():
+        if not draft.source_setting_id:
+            continue
+        setting = world_setting_store.get_by_id(draft.source_setting_id)
+        if (
+            setting is not None
+            and setting.consumed_by_director_npc_id != draft.draft_id
+        ):
+            world_setting_store.mark_consumed(
+                setting.setting_id,
+                director_npc_id=draft.draft_id,
+            )
 
 
 def _director_npc_trigger_reason(

@@ -32,6 +32,7 @@ def configure_runtime_services(monkeypatch):
                 "core_memory",
                 "director_event",
                 "director_npc",
+                "world_setting",
             )
         })
         services = RuntimeServices(

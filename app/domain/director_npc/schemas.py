@@ -5,10 +5,18 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from app.domain.npc_profile.schemas import NPCProfilePublicView
-
-
 DirectorNPCStatus = Literal["standby", "dispatched", "discarded"]
 DirectorNPCDispatchAction = Literal["dispatch_standby", "recall_existing", "none"]
+
+
+class DirectorNPCCreativeBrief(BaseModel):
+    setting_relation: str = Field(min_length=1)
+    social_position: str = Field(min_length=1)
+    life_phase: str = Field(min_length=1)
+    desire_pattern: str = Field(min_length=1)
+    optional_dimension: str = Field(min_length=1)
+
+
 def _new_id() -> str:
     return f"director_npc_{uuid.uuid4().hex[:12]}"
 
@@ -30,6 +38,8 @@ class DirectorNPCDraft(BaseModel):
     appearance: str = Field(min_length=1)
     name: str = Field(min_length=1)
     encounter_potentials: list[str] = Field(min_length=3, max_length=5)
+    source_setting_id: str | None = None
+    creative_brief: DirectorNPCCreativeBrief | None = None
     status: DirectorNPCStatus = "standby"
     created_turn: int = Field(ge=0)
     dispatched_turn: int | None = Field(default=None, ge=0)
@@ -56,6 +66,7 @@ class DirectorNPCDraft(BaseModel):
 
 
 class DirectorNPCCreateOutput(BaseModel):
+    setting_expansion_note: str = Field(min_length=1)
     core_motivation: str = Field(min_length=1)
     hidden_secret: str = Field(min_length=1)
     conflict_style: str = Field(min_length=1)

@@ -37,6 +37,7 @@ _ROOT_FILES = {
     "scene_summaries.db",
     "settings.json",
     "short_term.db",
+    "world_settings.db",
 }
 
 

@@ -294,6 +294,10 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
     trace_id = state["trace_id"]
     cache = state["cache"]
     director_event_result = cache.get("director_event_result")
+    promoted_npc_profile_ids = cache.get(
+        "director_event_promoted_npc_profile_ids",
+        [],
+    )
     if director_event_result is None and "director_event_result" not in cache:
         with (
             _store_factory(state, "director_event")() as director_store,
@@ -315,6 +319,7 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
             )
             npc_mentions = _npc_extraction_mentions(state.get("npc_extraction"))
             results = {}
+            promoted_npc_profile_ids = []
             for role in ("arc", "ambient"):
                 reviewer_gateway = _gateway_for(state)
                 intervention_review_gateway = _gateway_for(state)
@@ -360,8 +365,14 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                         raise ValueError(
                             "DirectorEvent references an unavailable DirectorNPC"
                         )
+                    promoted_npc_profile_ids.append(promoted.npc_id)
             director_event_result = DirectorEventWorkflowBatchResult(**results)
-    return {"director_event_result": director_event_result}
+    return {
+        "director_event_result": director_event_result,
+        "director_event_promoted_npc_profile_ids": list(
+            dict.fromkeys(promoted_npc_profile_ids)
+        ),
+    }
 
 
 def entity_profile_update_node(state: ConfirmationState) -> ConfirmationState:
