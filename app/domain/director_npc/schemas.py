@@ -19,16 +19,16 @@ def utc_now() -> str:
 
 class DirectorNPCDraft(BaseModel):
     draft_id: str = Field(default_factory=_new_id)
-    name: str = Field(min_length=1)
-    role: str = Field(min_length=1)
-    appearance: str = Field(min_length=1)
-    personality_traits: list[str] = Field(min_length=2, max_length=5)
-    known_abilities: list[str] = Field(default_factory=list, max_length=5)
-    faction: str | None = None
     core_motivation: str = Field(min_length=1)
     hidden_secret: str = Field(min_length=1)
     conflict_style: str = Field(min_length=1)
     social_style: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    faction: str | None = None
+    personality_traits: list[str] = Field(min_length=2, max_length=5)
+    known_abilities: list[str] = Field(default_factory=list, max_length=5)
+    appearance: str = Field(min_length=1)
+    name: str = Field(min_length=1)
     encounter_potentials: list[str] = Field(min_length=3, max_length=5)
     status: DirectorNPCStatus = "standby"
     created_turn: int = Field(ge=0)
@@ -56,31 +56,31 @@ class DirectorNPCDraft(BaseModel):
 
 
 class DirectorNPCCreateOutput(BaseModel):
-    name: str = Field(min_length=1)
-    role: str = Field(min_length=1)
-    appearance: str = Field(min_length=1)
-    personality_traits: list[str] = Field(min_length=2, max_length=5)
-    known_abilities: list[str] = Field(default_factory=list, max_length=5)
-    faction: str | None = None
     core_motivation: str = Field(min_length=1)
     hidden_secret: str = Field(min_length=1)
     conflict_style: str = Field(min_length=1)
     social_style: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    faction: str | None = None
+    personality_traits: list[str] = Field(min_length=2, max_length=5)
+    known_abilities: list[str] = Field(default_factory=list, max_length=5)
+    appearance: str = Field(min_length=1)
+    name: str = Field(min_length=1)
     encounter_potentials: list[str] = Field(min_length=3, max_length=5)
 
 
 class DirectorNPCPrivateProfile(BaseModel):
     draft_id: str
-    name: str
-    role: str
-    appearance: str
-    personality_traits: list[str] = Field(default_factory=list)
-    known_abilities: list[str] = Field(default_factory=list)
-    faction: str | None = None
     core_motivation: str
     hidden_secret: str
     conflict_style: str
     social_style: str
+    role: str
+    faction: str | None = None
+    personality_traits: list[str] = Field(default_factory=list)
+    known_abilities: list[str] = Field(default_factory=list)
+    appearance: str
+    name: str
     encounter_potentials: list[str] = Field(default_factory=list)
     created_turn: int
     dispatched_turn: int | None = None

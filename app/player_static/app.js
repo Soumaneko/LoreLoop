@@ -1601,6 +1601,32 @@ function renderSaveManager() {
   });
 }
 
+function autoExpandTextarea(textarea) {
+  if (!textarea) return;
+  textarea.style.height = "auto";
+  const scrollHeight = textarea.scrollHeight;
+  const computed = window.getComputedStyle(textarea);
+  const minHeight = parseFloat(computed.minHeight) || 0;
+  const maxHeight = parseFloat(computed.maxHeight) || Infinity;
+  const targetHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+  textarea.style.height = `${targetHeight}px`;
+  textarea.style.overflowY = scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
+function initAutoExpandingTextareas() {
+  document.addEventListener("input", (event) => {
+    if (event.target && event.target.tagName === "TEXTAREA") {
+      autoExpandTextarea(event.target);
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    document.querySelectorAll("textarea").forEach(autoExpandTextarea);
+  }, { passive: true });
+
+  document.querySelectorAll("textarea").forEach(autoExpandTextarea);
+}
+
 function setTextareaValueWithUndo(textarea, text) {
   textarea.focus();
   textarea.select();
@@ -1614,6 +1640,7 @@ function setTextareaValueWithUndo(textarea, text) {
     textarea.value = text;
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
   }
+  autoExpandTextarea(textarea);
 }
 
 function renderSuggestions() {
@@ -1886,6 +1913,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
 }
 
 async function bootstrap() {
+  initAutoExpandingTextareas();
   await readerPreferences.load();
   const modelConfig = await request("/api/player/model-config");
   state.modelConfig = modelConfig;

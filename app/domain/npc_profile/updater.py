@@ -91,12 +91,21 @@ class NPCProfileUpdater:
                     ),
                     "existing_npc_options_json": json.dumps(
                         [
-                            _existing_option_for_prompt(index, profile)
-                            for index, profile in enumerate(existing_profiles)
+                            *(_existing_option_for_prompt(i, p) for i, p in enumerate(existing_profiles)),
+                            {
+                                "npc_index": len(existing_profiles),
+                                "name": current_state.player.name,
+                                "aliases": [],
+                                "role": None,
+                                "public_summary": None,
+                                "appearance": None,
+                                "faction": None,
+                                "current_location": None,
+                            },
                         ],
                         ensure_ascii=False,
                         indent=2,
-                    ) if existing_profiles else "null",
+                    ),
                     "output_schema_json": json.dumps(
                         NPCProfileUpdateBatch.model_json_schema(),
                         ensure_ascii=False,
