@@ -254,6 +254,7 @@ def director_npc_restock_node(
             world_setting_store=setting_store,
             npc_profile_store=profile_store,
             creator_gateway=gateway,
+            setting_maintainer_gateway=gateway,
             setting_preparer_gateway=gateway,
             reservation_owner=f"{state['trace_id']}:{state['turn_index']}",
             trace_id=state["trace_id"],

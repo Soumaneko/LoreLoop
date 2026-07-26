@@ -19,8 +19,8 @@ SettingKind = Literal[
 SettingVisibility = Literal["player_known", "director_private", "mixed"]
 SettingMaturity = Literal["seed", "usable"]
 SettingAvailability = Literal["available", "reserved", "consumed", "rejected"]
-SettingSeedResolution = Literal["new", "existing", "ignore"]
 SettingPreparationDecision = Literal["use_as_is", "develop", "reject"]
+SettingMaintenanceResolution = Literal["independent", "supplement", "contained"]
 
 
 def _new_setting_id() -> str:
@@ -54,19 +54,6 @@ class SettingSeedCandidate(BaseModel):
     basic_concept: str = Field(min_length=1)
     source_key: str = Field(min_length=1)
     source_span: str = Field(min_length=1)
-    resolution: SettingSeedResolution
-    matched_setting_id: str | None = None
-    related_setting_ids: list[str] = Field(default_factory=list, max_length=5)
-
-    @model_validator(mode="after")
-    def _validate_resolution(self):
-        if self.resolution == "existing" and not self.matched_setting_id:
-            raise ValueError("matched_setting_id is required for existing resolution")
-        if self.resolution != "existing" and self.matched_setting_id is not None:
-            raise ValueError(
-                "matched_setting_id is only valid for existing resolution"
-            )
-        return self
 
 
 class SettingSeedExtractionResult(BaseModel):
@@ -142,6 +129,104 @@ class SettingAnchorPreparationBatch(BaseModel):
         if len(setting_ids) != len(set(setting_ids)):
             raise ValueError("preparation setting_id values must be unique")
         return self
+
+
+class SettingFactAddition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fact: str = Field(min_length=1)
+    source_seed_ids: list[str] = Field(min_length=1)
+
+
+class SettingMaintenanceGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    seed_ids: list[str] = Field(min_length=1)
+    resolution: SettingMaintenanceResolution
+    reason: str = Field(min_length=1)
+    target_setting_id: str | None = None
+    canonical_seed_id: str | None = None
+    canonical_label: str | None = None
+    canonical_kind: SettingKind | None = None
+    canonical_basic_concept: str | None = None
+    supplemented_basic_concept: str | None = None
+    supplemented_definition: str | None = None
+    fact_additions: list[SettingFactAddition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_resolution_fields(self):
+        if len(self.seed_ids) != len(set(self.seed_ids)):
+            raise ValueError("seed_ids must be unique within a maintenance group")
+        seed_ids = set(self.seed_ids)
+        for addition in self.fact_additions:
+            if not set(addition.source_seed_ids).issubset(seed_ids):
+                raise ValueError(
+                    "fact addition source_seed_ids must belong to the group"
+                )
+
+        if self.resolution == "independent":
+            if self.target_setting_id is not None:
+                raise ValueError("independent group must not have a target")
+            if self.canonical_seed_id not in seed_ids:
+                raise ValueError(
+                    "independent group canonical_seed_id must belong to seed_ids"
+                )
+            if not self.canonical_label or self.canonical_kind is None:
+                raise ValueError(
+                    "independent group requires canonical label and kind"
+                )
+            if not self.canonical_basic_concept:
+                raise ValueError(
+                    "independent group requires canonical basic concept"
+                )
+            if (
+                self.supplemented_basic_concept is not None
+                or self.supplemented_definition is not None
+                or self.fact_additions
+            ):
+                raise ValueError(
+                    "independent group must not include a supplement patch"
+                )
+            return self
+
+        if not self.target_setting_id:
+            raise ValueError(
+                "supplement and contained groups require target_setting_id"
+            )
+        if any(
+            value is not None
+            for value in (
+                self.canonical_seed_id,
+                self.canonical_label,
+                self.canonical_kind,
+                self.canonical_basic_concept,
+            )
+        ):
+            raise ValueError(
+                "supplement and contained groups must not define a canonical seed"
+            )
+        if self.resolution == "contained":
+            if (
+                self.supplemented_basic_concept is not None
+                or self.supplemented_definition is not None
+                or self.fact_additions
+            ):
+                raise ValueError("contained group must not include a supplement patch")
+            return self
+
+        if not self.supplemented_basic_concept:
+            raise ValueError(
+                "supplement group requires supplemented_basic_concept"
+            )
+        if not self.fact_additions:
+            raise ValueError("supplement group requires at least one fact addition")
+        return self
+
+
+class SettingMaintenanceResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    groups: list[SettingMaintenanceGroup] = Field(default_factory=list)
 
 
 class WorldSetting(BaseModel):

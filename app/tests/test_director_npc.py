@@ -213,7 +213,6 @@ def _world_setting_store(*labels: str) -> tuple[WorldSettingStore, list[SettingA
                     basic_concept=f"{label}是已经出现的地方运输网络。",
                     source_key=document.source_key,
                     source_span=label,
-                    resolution="new",
                 )
             ],
             source_documents={document.source_key: document},
@@ -232,6 +231,32 @@ def _preparation_response(anchors: list[SettingAnchorPacket]) -> str:
                     "decision": "develop",
                     "reason": "基础概念可靠，需要最低限度明确世界影响。",
                     "anchor": anchor.model_dump(mode="json"),
+                }
+                for anchor in anchors
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+
+def _maintenance_response(anchors: list[SettingAnchorPacket]) -> str:
+    return json.dumps(
+        {
+            "groups": [
+                {
+                    "seed_ids": [anchor.setting_id],
+                    "resolution": "independent",
+                    "reason": "没有相同的成熟设定。",
+                    "target_setting_id": None,
+                    "canonical_seed_id": anchor.setting_id,
+                    "canonical_label": anchor.label,
+                    "canonical_kind": anchor.kind,
+                    "canonical_basic_concept": (
+                        f"{anchor.label}是已经出现的地方运输网络。"
+                    ),
+                    "supplemented_basic_concept": None,
+                    "supplemented_definition": None,
+                    "fact_additions": [],
                 }
                 for anchor in anchors
             ]
@@ -392,6 +417,7 @@ class TestDirectorNPCWorkflow:
         setting_store, anchors = _world_setting_store("旧药路", "渡口行会", "山地驿道")
         creator = MockLLM()
         creator.set_responses([
+            _maintenance_response(anchors),
             _preparation_response(anchors),
             *_draft_responses("艾琳娜", "薇拉", "洛珊"),
         ])
@@ -403,6 +429,7 @@ class TestDirectorNPCWorkflow:
             director_npc_store=director_store,
             world_setting_store=setting_store,
             creator_gateway=creator.build_gateway(),
+            setting_maintainer_gateway=creator.build_gateway(),
             setting_preparer_gateway=creator.build_gateway(),
             reservation_owner="test-restock",
         )
@@ -418,6 +445,7 @@ class TestDirectorNPCWorkflow:
         director_store.save(draft)
         creator = MockLLM()
         creator.set_responses([
+            _maintenance_response(anchors),
             _preparation_response(anchors),
             *_draft_responses("薇拉", "洛珊"),
         ])
@@ -429,12 +457,89 @@ class TestDirectorNPCWorkflow:
             director_npc_store=director_store,
             world_setting_store=setting_store,
             creator_gateway=creator.build_gateway(),
+            setting_maintainer_gateway=creator.build_gateway(),
             setting_preparer_gateway=creator.build_gateway(),
             reservation_owner="test-partial",
         )
 
         assert len(created) == 2
         assert len(director_store.list_standby()) == DIRECTOR_NPC_STANDBY_TARGET
+
+    def test_restock_persists_every_successful_preparation(self):
+        director_store = DirectorNPCStore(":memory:")
+        director_store.save(
+            DirectorNPCDraft.model_validate(json.loads(_draft_response("艾琳娜")))
+        )
+        director_store.save(
+            DirectorNPCDraft.model_validate(json.loads(_draft_response("薇拉")))
+        )
+        setting_store, anchors = _world_setting_store(
+            "旧药路",
+            "渡口行会",
+            "山地驿道",
+        )
+        gateway = QueueSpyGateway(
+            [
+                _maintenance_response(anchors),
+                _preparation_response(anchors),
+                _draft_response("洛珊"),
+            ]
+        )
+
+        created = restock_director_npc_standby(
+            core_memory=CoreMemory(items=[]),
+            protagonist_name="主角",
+            turn_index=4,
+            director_npc_store=director_store,
+            world_setting_store=setting_store,
+            creator_gateway=gateway,
+            setting_maintainer_gateway=gateway,
+            setting_preparer_gateway=gateway,
+            reservation_owner="test-persist-all-preparations",
+        )
+
+        settings = setting_store.list_all()
+        assert len(created) == 1
+        assert sum(
+            setting.availability == "consumed" for setting in settings
+        ) == 1
+        unused = [
+            setting
+            for setting in settings
+            if setting.availability == "available"
+        ]
+        assert len(unused) == 2
+        assert all(setting.maturity == "usable" for setting in unused)
+        assert all(setting.prepared_anchor is not None for setting in unused)
+
+    def test_restock_reuses_usable_anchor_without_maintain_or_prepare(self):
+        director_store = DirectorNPCStore(":memory:")
+        director_store.save(
+            DirectorNPCDraft.model_validate(json.loads(_draft_response("艾琳娜")))
+        )
+        director_store.save(
+            DirectorNPCDraft.model_validate(json.loads(_draft_response("薇拉")))
+        )
+        setting_store, anchors = _world_setting_store("旧药路")
+        setting_store.save_preparation(anchors[0].setting_id, anchors[0])
+        gateway = QueueSpyGateway([_draft_response("洛珊")])
+
+        created = restock_director_npc_standby(
+            core_memory=CoreMemory(items=[]),
+            protagonist_name="主角",
+            turn_index=4,
+            director_npc_store=director_store,
+            world_setting_store=setting_store,
+            creator_gateway=gateway,
+            setting_maintainer_gateway=gateway,
+            setting_preparer_gateway=gateway,
+            reservation_owner="test-reuse-prepared",
+        )
+
+        assert len(created) == 1
+        assert [call["task"] for call in gateway.calls] == [
+            "director_npc_create"
+        ]
 
     def test_restock_standby_does_not_create_when_pool_is_full(self):
         director_store = DirectorNPCStore(":memory:")
@@ -450,6 +555,7 @@ class TestDirectorNPCWorkflow:
             director_npc_store=director_store,
             world_setting_store=setting_store,
             creator_gateway=creator.build_gateway(),
+            setting_maintainer_gateway=creator.build_gateway(),
             setting_preparer_gateway=creator.build_gateway(),
             reservation_owner="test-full",
         )
@@ -469,6 +575,7 @@ class TestDirectorNPCWorkflow:
             director_npc_store=director_store,
             world_setting_store=setting_store,
             creator_gateway=creator.build_gateway(),
+            setting_maintainer_gateway=creator.build_gateway(),
             setting_preparer_gateway=creator.build_gateway(),
             reservation_owner="test-no-settings",
         )
@@ -484,6 +591,7 @@ class TestDirectorNPCWorkflow:
             "山地驿道",
         )
         gateway = QueueSpyGateway([
+            _maintenance_response(anchors),
             json.dumps(
                 {
                     "preparations": [
@@ -507,12 +615,14 @@ class TestDirectorNPCWorkflow:
             director_npc_store=director_store,
             world_setting_store=setting_store,
             creator_gateway=gateway,
+            setting_maintainer_gateway=gateway,
             setting_preparer_gateway=gateway,
             reservation_owner="test-rejected-settings",
         )
 
         assert created == []
         assert [call["task"] for call in gateway.calls] == [
+            "setting_maintain",
             "setting_anchor_prepare"
         ]
         assert {
@@ -524,6 +634,7 @@ class TestDirectorNPCWorkflow:
         director_store.save(DirectorNPCDraft.model_validate(json.loads(_draft_response("艾琳娜"))))
         setting_store, anchors = _world_setting_store("渡口行会", "山地驿道")
         gateway = QueueSpyGateway([
+            _maintenance_response(anchors),
             _preparation_response(anchors),
             *_draft_responses("薇拉", "洛珊"),
         ])
@@ -535,6 +646,7 @@ class TestDirectorNPCWorkflow:
             director_npc_store=director_store,
             world_setting_store=setting_store,
             creator_gateway=gateway,
+            setting_maintainer_gateway=gateway,
             setting_preparer_gateway=gateway,
             reservation_owner="test-existing",
         )

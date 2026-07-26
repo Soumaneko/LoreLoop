@@ -8,7 +8,9 @@ from app.domain.core_memory.schemas import CoreMemory
 from app.domain.npc_profile.store import NPCProfileStore
 
 from .extractor import SettingSeedExtractor
+from .maintainer import SettingMaintainer
 from .schemas import (
+    SettingMaintenanceResult,
     SettingSeedCandidate,
     SettingSeedExtractionResult,
     SettingSourceDocument,
@@ -21,6 +23,47 @@ class SettingSeedExtractionWorkflowResult:
     extraction: SettingSeedExtractionResult
     saved_setting_ids: list[str]
     ignored_candidate_count: int
+
+
+@dataclass(frozen=True)
+class SettingMaintenanceWorkflowResult:
+    maintenance: SettingMaintenanceResult
+    retained_setting_ids: list[str]
+
+
+def maintain_setting_seeds(
+    *,
+    core_memory: CoreMemory,
+    turn_index: int,
+    world_setting_store: WorldSettingStore,
+    gateway: LLMGateway,
+    trace_id: str | None = None,
+) -> SettingMaintenanceWorkflowResult:
+    if world_setting_store.last_maintained_turn() == turn_index:
+        return SettingMaintenanceWorkflowResult(
+            maintenance=SettingMaintenanceResult(),
+            retained_setting_ids=[],
+        )
+    seeds = world_setting_store.list_maintenance_seeds()
+    if not seeds:
+        return SettingMaintenanceWorkflowResult(
+            maintenance=SettingMaintenanceResult(),
+            retained_setting_ids=[],
+        )
+    maintenance = SettingMaintainer(gateway).maintain(
+        core_memory=core_memory,
+        seeds=seeds,
+        mature_settings=world_setting_store.list_maintenance_targets(),
+        trace_id=trace_id,
+    )
+    retained_ids = world_setting_store.apply_maintenance(
+        maintenance,
+        turn_index=turn_index,
+    )
+    return SettingMaintenanceWorkflowResult(
+        maintenance=maintenance,
+        retained_setting_ids=retained_ids,
+    )
 
 
 def extract_setting_seeds(
@@ -43,12 +86,10 @@ def extract_setting_seeds(
         npc_profile_store=npc_profile_store,
         include_core_memory=world_setting_store.count() == 0,
     )
-    existing = world_setting_store.list_all()
     extraction = SettingSeedExtractor(gateway).extract(
         core_memory=core_memory,
         scene_facts_json=scene_facts_json,
         source_documents=documents,
-        existing_settings=existing,
         trace_id=trace_id,
     )
     documents_by_key = {

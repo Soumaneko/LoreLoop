@@ -1,6 +1,7 @@
 import json
 import random
 
+from app.core.llm import MockLLM
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.director_npc.creative_brief import (
     draw_director_npc_creative_brief,
@@ -14,7 +15,10 @@ from app.domain.world_setting.schemas import (
     SettingSourceDocument,
 )
 from app.domain.world_setting.store import WorldSettingStore
-from app.domain.world_setting.workflows import extract_setting_seeds
+from app.domain.world_setting.workflows import (
+    extract_setting_seeds,
+    maintain_setting_seeds,
+)
 
 
 class SpyGateway:
@@ -53,7 +57,7 @@ def _add_setting(
     turn_index: int = 1,
 ) -> str:
     document = SettingSourceDocument(
-        source_key=f"source:{label}",
+        source_key=f"source:{turn_index}:{label}",
         source_type="scene_text",
         source_ref=f"scene:{turn_index}",
         visibility=visibility,
@@ -67,7 +71,6 @@ def _add_setting(
                 basic_concept=f"{label}是一场仍有影响的旧事。",
                 source_key=document.source_key,
                 source_span=label,
-                resolution="new",
             )
         ],
         source_documents={document.source_key: document},
@@ -75,7 +78,7 @@ def _add_setting(
     )[0]
 
 
-def test_store_merges_exact_identity_without_overwriting_basic_concept():
+def test_store_preserves_each_extraction_as_seed_for_later_maintenance():
     store = WorldSettingStore(":memory:")
     setting_id = _add_setting(store, label="知识焚毁事件")
     private_document = SettingSourceDocument(
@@ -94,21 +97,362 @@ def test_store_merges_exact_identity_without_overwriting_basic_concept():
                 basic_concept="这段概括不得覆盖原始概念。",
                 source_key=private_document.source_key,
                 source_span="知识焚毁事件",
-                resolution="existing",
-                matched_setting_id=setting_id,
             )
         ],
         source_documents={private_document.source_key: private_document},
         turn_index=2,
     )
 
-    setting = store.get_by_id(setting_id)
-    assert saved == [setting_id]
-    assert setting is not None
-    assert setting.label == "知识焚毁事件"
-    assert setting.basic_concept == "知识焚毁事件是一场仍有影响的旧事。"
-    assert setting.visibility == "mixed"
-    assert len(setting.sources) == 2
+    assert saved != [setting_id]
+    assert len(store.list_all()) == 2
+    original = store.get_by_id(setting_id)
+    extracted = store.get_by_id(saved[0])
+    assert original is not None
+    assert extracted is not None
+    assert original.basic_concept == "知识焚毁事件是一场仍有影响的旧事。"
+    assert extracted.basic_concept == "这段概括不得覆盖原始概念。"
+    assert extracted.visibility == "director_private"
+
+
+def test_maintenance_supplements_consumed_setting_and_removes_duplicate_seeds():
+    store = WorldSettingStore(":memory:")
+    target_id = _add_setting(store, label="灰烬图书馆")
+    anchor = SettingAnchorPacket(
+        setting_id=target_id,
+        label="灰烬图书馆",
+        kind="historical_event",
+        definition="灰烬图书馆是知识焚毁事件留下的藏书遗址。",
+        setting_facts=["灰烬图书馆在知识焚毁事件中遭到破坏。"],
+        player_known_facts=[0],
+    )
+    store.save_preparation(target_id, anchor)
+    store.mark_consumed(target_id, director_npc_id="director_npc_1")
+    first_seed_id = _add_setting(
+        store,
+        label="焚毁后的地下藏书区",
+        turn_index=3,
+    )
+    second_seed_id = _add_setting(
+        store,
+        label="未登记禁书目录",
+        visibility="director_private",
+        turn_index=4,
+    )
+    gateway = MockLLM()
+    gateway.set_responses(
+        [
+            json.dumps(
+                {
+                    "groups": [
+                        {
+                            "seed_ids": [first_seed_id, second_seed_id],
+                            "resolution": "supplement",
+                            "reason": "两个 seed 都是灰烬图书馆的新信息。",
+                            "target_setting_id": target_id,
+                            "canonical_seed_id": None,
+                            "canonical_label": None,
+                            "canonical_kind": None,
+                            "canonical_basic_concept": None,
+                            "supplemented_basic_concept": (
+                                "灰烬图书馆是知识焚毁事件留下、地下仍保存"
+                                "未登记禁书目录的藏书遗址。"
+                            ),
+                            "supplemented_definition": (
+                                "灰烬图书馆是知识焚毁事件留下的藏书遗址，"
+                                "其地下藏书区仍保存未登记禁书目录。"
+                            ),
+                            "fact_additions": [
+                                {
+                                    "fact": "灰烬图书馆地下仍保存未登记禁书目录。",
+                                    "source_seed_ids": [
+                                        first_seed_id,
+                                        second_seed_id,
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+        ]
+    )
+
+    result = maintain_setting_seeds(
+        core_memory=CoreMemory(items=[]),
+        turn_index=4,
+        world_setting_store=store,
+        gateway=gateway.build_gateway(),
+        trace_id="maintain-consumed",
+    )
+
+    maintained = store.get_by_id(target_id)
+    assert result.retained_setting_ids == [target_id]
+    assert maintained is not None
+    assert maintained.availability == "consumed"
+    assert maintained.maturity == "usable"
+    assert len(maintained.sources) == 3
+    assert maintained.prepared_anchor is not None
+    assert maintained.prepared_anchor.definition.endswith(
+        "其地下藏书区仍保存未登记禁书目录。"
+    )
+    assert maintained.prepared_anchor.setting_facts[-1] == (
+        "灰烬图书馆地下仍保存未登记禁书目录。"
+    )
+    assert maintained.prepared_anchor.setting_facts.index(
+        "灰烬图书馆地下仍保存未登记禁书目录。"
+    ) in maintained.prepared_anchor.player_known_facts
+    assert maintained.prepared_anchor.setting_facts.index(
+        "灰烬图书馆地下仍保存未登记禁书目录。"
+    ) in maintained.prepared_anchor.director_private_facts
+    assert store.get_by_id(first_seed_id) is None
+    assert store.get_by_id(second_seed_id) is None
+
+
+def test_store_supplement_ignores_blank_fact_additions():
+    store = WorldSettingStore(":memory:")
+    target_id = _add_setting(store, label="灰烬图书馆")
+    anchor = SettingAnchorPacket(
+        setting_id=target_id,
+        label="灰烬图书馆",
+        kind="historical_event",
+        definition="灰烬图书馆是知识焚毁事件留下的藏书遗址。",
+        setting_facts=["灰烬图书馆在知识焚毁事件中遭到破坏。"],
+        player_known_facts=[0],
+    )
+    store.save_preparation(target_id, anchor)
+
+    store._apply_supplement(
+        target_id=target_id,
+        basic_concept="灰烬图书馆是一处藏书遗址。",
+        definition=anchor.definition,
+        fact_additions=[("   ", {"player_known"})],
+    )
+
+    maintained = store.get_by_id(target_id)
+    assert maintained is not None
+    assert maintained.prepared_anchor is not None
+    assert maintained.prepared_anchor.setting_facts == anchor.setting_facts
+    assert "" not in maintained.prepared_anchor.setting_facts
+
+
+def test_maintenance_merges_duplicate_seeds_into_one_independent_seed():
+    store = WorldSettingStore(":memory:")
+    first_id = _add_setting(store, label="灰烬藏书馆", turn_index=2)
+    second_id = _add_setting(store, label="焚毁后的藏书遗址", turn_index=3)
+    gateway = MockLLM()
+    gateway.set_responses(
+        [
+            json.dumps(
+                {
+                    "groups": [
+                        {
+                            "seed_ids": [first_id, second_id],
+                            "resolution": "independent",
+                            "reason": "两个 seed 指向同一处藏书遗址。",
+                            "target_setting_id": None,
+                            "canonical_seed_id": first_id,
+                            "canonical_label": "灰烬图书馆",
+                            "canonical_kind": "historical_event",
+                            "canonical_basic_concept": (
+                                "灰烬图书馆是一处仍有影响的焚毁藏书遗址。"
+                            ),
+                            "supplemented_basic_concept": None,
+                            "supplemented_definition": None,
+                            "fact_additions": [],
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+        ]
+    )
+
+    maintain_setting_seeds(
+        core_memory=CoreMemory(items=[]),
+        turn_index=3,
+        world_setting_store=store,
+        gateway=gateway.build_gateway(),
+    )
+    maintain_setting_seeds(
+        core_memory=CoreMemory(items=[]),
+        turn_index=3,
+        world_setting_store=store,
+        gateway=gateway.build_gateway(),
+    )
+
+    settings = store.list_all()
+    assert gateway.provider._index == 1
+    assert len(settings) == 1
+    assert settings[0].setting_id == first_id
+    assert settings[0].label == "灰烬图书馆"
+    assert len(settings[0].sources) == 2
+
+
+def test_store_absorb_removes_relations_to_every_absorbed_setting():
+    store = WorldSettingStore(":memory:")
+    target_id = _add_setting(store, label="灰烬图书馆", turn_index=1)
+    first_absorbed_id = _add_setting(
+        store,
+        label="灰烬藏书馆",
+        turn_index=2,
+    )
+    second_absorbed_id = _add_setting(
+        store,
+        label="焚毁后的藏书遗址",
+        turn_index=3,
+    )
+    store._conn.execute(
+        """
+        UPDATE world_settings
+        SET related_setting_ids_json = ?
+        WHERE setting_id = ?
+        """,
+        (
+            json.dumps([second_absorbed_id]),
+            first_absorbed_id,
+        ),
+    )
+    store._conn.commit()
+
+    store._absorb_settings(
+        target_id=target_id,
+        absorbed_ids=[first_absorbed_id, second_absorbed_id],
+    )
+
+    maintained = store.get_by_id(target_id)
+    assert maintained is not None
+    assert maintained.related_setting_ids == []
+    assert store.get_by_id(first_absorbed_id) is None
+    assert store.get_by_id(second_absorbed_id) is None
+
+
+def test_maintenance_contained_seed_only_attaches_provenance():
+    store = WorldSettingStore(":memory:")
+    target_id = _add_setting(store, label="禁书管制令")
+    anchor = SettingAnchorPacket(
+        setting_id=target_id,
+        label="禁书管制令",
+        kind="historical_event",
+        definition="禁书管制令是限制违禁知识持有和流通的制度。",
+        setting_facts=["禁书管制令限制违禁知识的持有和流通。"],
+        player_known_facts=[0],
+    )
+    store.save_preparation(target_id, anchor)
+    duplicate_id = _add_setting(
+        store,
+        label="违禁知识持有限制",
+        turn_index=5,
+    )
+    gateway = MockLLM()
+    gateway.set_responses(
+        [
+            json.dumps(
+                {
+                    "groups": [
+                        {
+                            "seed_ids": [duplicate_id],
+                            "resolution": "contained",
+                            "reason": "成熟设定已经完整包含该限制。",
+                            "target_setting_id": target_id,
+                            "canonical_seed_id": None,
+                            "canonical_label": None,
+                            "canonical_kind": None,
+                            "canonical_basic_concept": None,
+                            "supplemented_basic_concept": None,
+                            "supplemented_definition": None,
+                            "fact_additions": [],
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+        ]
+    )
+
+    maintain_setting_seeds(
+        core_memory=CoreMemory(items=[]),
+        turn_index=5,
+        world_setting_store=store,
+        gateway=gateway.build_gateway(),
+    )
+
+    maintained = store.get_by_id(target_id)
+    assert maintained is not None
+    assert len(maintained.sources) == 2
+    assert maintained.prepared_anchor == anchor
+    assert store.get_by_id(duplicate_id) is None
+
+
+def test_maintenance_retries_independent_group_that_matches_mature_label():
+    store = WorldSettingStore(":memory:")
+    target_id = _add_setting(store, label="禁书管制令")
+    anchor = SettingAnchorPacket(
+        setting_id=target_id,
+        label="禁书管制令",
+        kind="historical_event",
+        definition="禁书管制令限制违禁知识的持有和流通。",
+        setting_facts=["禁书管制令限制违禁知识的持有和流通。"],
+        player_known_facts=[0],
+    )
+    store.save_preparation(target_id, anchor)
+    duplicate_id = _add_setting(
+        store,
+        label="禁书管制令",
+        turn_index=6,
+    )
+    invalid = {
+        "groups": [
+            {
+                "seed_ids": [duplicate_id],
+                "resolution": "independent",
+                "reason": "错误地当成独立设定。",
+                "target_setting_id": None,
+                "canonical_seed_id": duplicate_id,
+                "canonical_label": "禁书管制令",
+                "canonical_kind": "historical_event",
+                "canonical_basic_concept": "禁书管制令是一项旧制度。",
+                "supplemented_basic_concept": None,
+                "supplemented_definition": None,
+                "fact_additions": [],
+            }
+        ]
+    }
+    valid = {
+        "groups": [
+            {
+                "seed_ids": [duplicate_id],
+                "resolution": "contained",
+                "reason": "成熟设定已经包含该 seed。",
+                "target_setting_id": target_id,
+                "canonical_seed_id": None,
+                "canonical_label": None,
+                "canonical_kind": None,
+                "canonical_basic_concept": None,
+                "supplemented_basic_concept": None,
+                "supplemented_definition": None,
+                "fact_additions": [],
+            }
+        ]
+    }
+    gateway = MockLLM()
+    gateway.set_responses(
+        [
+            json.dumps(invalid, ensure_ascii=False),
+            json.dumps(valid, ensure_ascii=False),
+        ]
+    )
+
+    maintain_setting_seeds(
+        core_memory=CoreMemory(items=[]),
+        turn_index=6,
+        world_setting_store=store,
+        gateway=gateway.build_gateway(),
+    )
+
+    assert gateway.provider._index == 2
+    assert store.get_by_id(duplicate_id) is None
+    assert len(store.get_by_id(target_id).sources) == 2
 
 
 def test_seed_workflow_batches_scene_and_new_profile_private_sources():
@@ -133,9 +477,6 @@ def test_seed_workflow_batches_scene_and_new_profile_private_sources():
                     "basic_concept": "正文中出现的一处图书馆遗址。",
                     "source_key": "scene:7",
                     "source_span": "灰烬图书馆",
-                    "resolution": "new",
-                    "matched_setting_id": None,
-                    "related_setting_ids": [],
                 },
                 {
                     "label": "知识焚毁事件",
@@ -143,9 +484,6 @@ def test_seed_workflow_batches_scene_and_new_profile_private_sources():
                     "basic_concept": "与希尔达家族秘密有关的知识毁灭事件。",
                     "source_key": f"npc:{npc_id}:private",
                     "source_span": "知识焚毁事件",
-                    "resolution": "new",
-                    "matched_setting_id": None,
-                    "related_setting_ids": [],
                 },
             ]
         }
@@ -173,9 +511,21 @@ def test_seed_workflow_batches_scene_and_new_profile_private_sources():
     source_documents = json.loads(
         gateway.calls[0]["input_data"]["source_documents_json"]
     )
+    output_schema = json.loads(
+        gateway.calls[0]["input_data"]["output_schema_json"]
+    )
     assert {document["source_key"] for document in source_documents} >= {
         "scene:7",
         f"npc:{npc_id}:private",
+    }
+    assert "existing_settings_json" not in gateway.calls[0]["input_data"]
+    candidate_schema = output_schema["$defs"]["SettingSeedCandidate"]
+    assert set(candidate_schema["properties"]) == {
+        "label",
+        "kind",
+        "basic_concept",
+        "source_key",
+        "source_span",
     }
 
 
@@ -191,9 +541,6 @@ def test_seed_workflow_discards_candidate_without_literal_source_support():
                     "basic_concept": "模型自行补写的组织。",
                     "source_key": "scene:2",
                     "source_span": "正文里并没有这句话",
-                    "resolution": "new",
-                    "matched_setting_id": None,
-                    "related_setting_ids": [],
                 }
             ]
         }

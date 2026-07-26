@@ -29,13 +29,6 @@ Scene Facts 只用于判断正文中的内容是否已成立；`source_key` 和 
 ```
 
 
-# 当前存档已有设定种子
-
-```json
-{existing_settings_json}
-```
-
-
 # 输出规范
 
 只返回符合以下 schema 的有效 JSON，不含任何解释或 Markdown。
@@ -51,12 +44,8 @@ Scene Facts 只用于判断正文中的内容是否已成立；`source_key` 和 
 - `basic_concept`：只概括来源已经支持的最低限度含义，不添加历史、原因、范围、参与方或规则。
 - `source_key`：必须对应输入中的一份来源。
 - `source_span`：引用该来源中直接支持此种子的短文本，不要填写解释。连续原文片段，不允许省略号、不允许拼接、不允许改写
-- `resolution`：
-  - `new`：现有目录中没有同一个世界对象或同一事件。
-  - `existing`：明确是目录中同一个世界对象或同一事件。
-  - `ignore`：不是可复用的世界设定。
-- `matched_setting_id`：仅 `existing` 时填写。
-- `related_setting_ids`：可以记录有关联但不是同一对象的已有设定；不得用关联关系代替 identity 匹配。
+
+不符合提取标准的内容直接省略，不要输出占位候选。你不接收已有 Setting 目录，也不负责判断 new/existing、去重、合并或关联；这些工作统一由消费前的 SettingMaintainer 完成。
 
 
 # 应提取的内容：具有拓展性与留白价值的概念
@@ -94,7 +83,4 @@ Scene Facts 只用于判断正文中的内容是否已成立；`source_key` 和 
 
 1. 只能依据已确认来源提取；CoreMemory 只用于判断世界边界，除非它本身以 `source_key` 出现在来源列表中。
 2. `player_known` 与 `director_private` 由来源决定，你不得改变或推断其公开程度。
-3. “高度相关”不等于“同一个设定”。例如历史事件、该事件中的建筑和执行事件的组织应是相关的不同设定。
-4. `existing` 必须是明确同一指称；无法确认时使用 `new`，不要因为名字相似或主题相近而错误合并。
-5. 对 existing 仍然使用本次来源中的 label、basic_concept 和 source_span；程序只追加来源，不会让你覆盖原记录。
- 6. NPC Profile 提取：NPC 档案中的深层背景（如履历、归属派系、背负的契约/禁忌、持有的特殊信物/资产来源），若涉及能够独立于该 NPC 本人存在、并影响更广泛世界结构的概念，应当提炼为 Setting Seed。
+3. NPC Profile 提取：NPC 档案中的深层背景（如履历、归属派系、背负的契约/禁忌、持有的特殊信物/资产来源），若涉及能够独立于该 NPC 本人存在、并影响更广泛世界结构的概念，应当提炼为 Setting Seed。

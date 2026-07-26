@@ -22,9 +22,9 @@ from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.world_setting.preparer import SettingAnchorPreparer
-from app.domain.world_setting.sampler import reserve_setting_candidates
 from app.domain.world_setting.schemas import SettingAnchorPacket
 from app.domain.world_setting.store import WorldSettingStore
+from app.domain.world_setting.workflows import maintain_setting_seeds
 
 
 DIRECTOR_NPC_FIRST_FORCED_TURN = 1
@@ -144,6 +144,10 @@ def create_director_npc_standby(
         trace_id=trace_id,
     )
     director_npc_store.save(created)
+    world_setting_store.save_preparation(
+        setting_anchor.setting_id,
+        setting_anchor,
+    )
     world_setting_store.mark_consumed(
         setting_anchor.setting_id,
         director_npc_id=created.draft_id,
@@ -160,6 +164,7 @@ def restock_director_npc_standby(
     world_setting_store: WorldSettingStore,
     npc_profile_store: NPCProfileStore | None = None,
     creator_gateway: LLMGateway,
+    setting_maintainer_gateway: LLMGateway,
     setting_preparer_gateway: LLMGateway,
     reservation_owner: str,
     setting_rng: random.Random | None = None,
@@ -176,38 +181,66 @@ def restock_director_npc_standby(
     if missing_count <= 0:
         return []
 
-    reserved = reserve_setting_candidates(
-        world_setting_store,
-        owner=reservation_owner,
-        count=missing_count * 3,
-        rng=setting_rng,
-    )
-    if not reserved:
-        return []
-    reserved_ids = {setting.setting_id for setting in reserved}
-    try:
-        preparation_batch = SettingAnchorPreparer(
-            setting_preparer_gateway
-        ).prepare(
+    world_setting_store.release_reservations(reservation_owner)
+    available_usable = [
+        setting
+        for setting in world_setting_store.list_available()
+        if setting.maturity == "usable"
+        and setting.prepared_anchor is not None
+    ]
+    if len(available_usable) < missing_count:
+        maintain_setting_seeds(
             core_memory=core_memory,
-            settings=reserved,
+            turn_index=turn_index,
+            world_setting_store=world_setting_store,
+            gateway=setting_maintainer_gateway,
             trace_id=trace_id,
         )
-        preparation_by_id = {
-            preparation.setting_id: preparation
-            for preparation in preparation_batch.preparations
-            if preparation.setting_id in reserved_ids
-        }
-        groups = [
-            reserved[index::missing_count]
-            for index in range(missing_count)
-        ]
-        chosen_ids: set[str] = set()
-        for group in groups:
-            selected_anchor = None
-            for setting in group:
-                preparation = preparation_by_id.get(setting.setting_id)
-                if preparation is None:
+
+    random_source = setting_rng or random.SystemRandom()
+    available_usable = [
+        setting
+        for setting in world_setting_store.list_available()
+        if setting.maturity == "usable"
+        and setting.prepared_anchor is not None
+    ]
+    random_source.shuffle(available_usable)
+    reserved_usable = world_setting_store.reserve(
+        [
+            setting.setting_id
+            for setting in available_usable[:missing_count]
+        ],
+        owner=reservation_owner,
+    )
+    remaining_count = missing_count - len(reserved_usable)
+    available_seeds = world_setting_store.list_maintenance_seeds()
+    random_source.shuffle(available_seeds)
+    reserved_seeds = world_setting_store.reserve(
+        [
+            setting.setting_id
+            for setting in available_seeds[: remaining_count * 3]
+        ],
+        owner=reservation_owner,
+    )
+    if not reserved_usable and not reserved_seeds:
+        return []
+
+    try:
+        prepared_anchors: dict[str, SettingAnchorPacket] = {}
+        if reserved_seeds:
+            preparation_batch = SettingAnchorPreparer(
+                setting_preparer_gateway
+            ).prepare(
+                core_memory=core_memory,
+                settings=reserved_seeds,
+                trace_id=trace_id,
+            )
+            reserved_seed_by_id = {
+                setting.setting_id: setting for setting in reserved_seeds
+            }
+            for preparation in preparation_batch.preparations:
+                setting = reserved_seed_by_id.get(preparation.setting_id)
+                if setting is None:
                     continue
                 if preparation.decision == "reject":
                     world_setting_store.mark_rejected(
@@ -215,21 +248,28 @@ def restock_director_npc_standby(
                         reason=preparation.reason,
                     )
                     continue
-                if preparation.anchor is None:
+                anchor = preparation.anchor
+                if anchor is None:
                     continue
-                if (
-                    preparation.anchor.label != setting.label
-                    or preparation.anchor.kind != setting.kind
-                ):
+                if anchor.label != setting.label or anchor.kind != setting.kind:
                     continue
                 world_setting_store.save_preparation(
                     setting.setting_id,
-                    preparation.anchor,
+                    anchor,
                 )
-                selected_anchor = preparation.anchor
-                break
-            if selected_anchor is None:
-                continue
+                prepared_anchors[setting.setting_id] = anchor
+
+        candidate_anchors = [
+            setting.prepared_anchor
+            for setting in reserved_usable
+            if setting.prepared_anchor is not None
+        ]
+        candidate_anchors.extend(
+            prepared_anchors[setting.setting_id]
+            for setting in reserved_seeds
+            if setting.setting_id in prepared_anchors
+        )
+        for selected_anchor in candidate_anchors[:missing_count]:
             created = create_director_npc_standby(
                 core_memory=core_memory,
                 protagonist_name=protagonist_name,
@@ -243,14 +283,10 @@ def restock_director_npc_standby(
                 trace_id=trace_id,
             )
             created_drafts.append(created)
-            chosen_ids.add(selected_anchor.setting_id)
     except BaseException:
         world_setting_store.release_reservations(reservation_owner)
         raise
-    world_setting_store.release_reservations(
-        reservation_owner,
-        except_setting_ids=chosen_ids,
-    )
+    world_setting_store.release_reservations(reservation_owner)
     return created_drafts
 
 
