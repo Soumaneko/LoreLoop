@@ -361,6 +361,47 @@ class TestDebugCoreMemoryPreview:
                         "content": "剧情聚焦好莱坞经纪公司的经营成长、演员发掘、行业合作与浪漫关系。",
                         "currency_unit": "美元",
                     })
+                if task == "init_world_setting_create":
+                    return output_schema.model_validate({
+                        "settings": [
+                            {
+                                "setting_id": "setting_studio_union",
+                                "label": "银幕工会仲裁庭",
+                                "kind": "institution_or_custom",
+                                "definition": "处理演员工会合约争议的行业仲裁机构。",
+                                "setting_facts": [
+                                    "仲裁庭可以冻结存在重大争议的演艺合同。"
+                                ],
+                                "relation_to_known_world": [
+                                    "它属于好莱坞演艺产业的合约体系。"
+                                ],
+                                "world_effects": [
+                                    "经纪公司必须评估合约进入仲裁的风险。"
+                                ],
+                                "scope_and_boundaries": [
+                                    "只处理加入相关工会的从业者合约。"
+                                ],
+                            },
+                            {
+                                "setting_id": "setting_screening_route",
+                                "label": "午夜试映线路",
+                                "kind": "resource_or_network",
+                                "definition": "独立制片人交换未发行影片反馈的私下试映网络。",
+                                "setting_facts": [
+                                    "线路通过少数影院经理安排非公开午夜场。"
+                                ],
+                                "relation_to_known_world": [
+                                    "它连接好莱坞的独立制片人与影院资源。"
+                                ],
+                                "world_effects": [
+                                    "新人作品可以在正式发行前获得业内口碑。"
+                                ],
+                                "scope_and_boundaries": [
+                                    "线路不能替代正式发行与公开票房。"
+                                ],
+                            },
+                        ]
+                    })
                 if task == "opening_scene":
                     return output_schema.model_validate({
                         "scene_text": "清晨，你站在刚租下的经纪公司办公室里。",
@@ -394,8 +435,15 @@ class TestDebugCoreMemoryPreview:
         result = initialization_events[-1]["data"]
 
         try:
-            assert [task for task, _ in calls] == ["story_direction", "opening_scene"]
-            opening_core = json.loads(calls[1][1]["core_memory_json"])
+            assert [task for task, _ in calls] == [
+                "story_direction",
+                "init_world_setting_create",
+                "opening_scene",
+            ]
+            initial_setting_core = json.loads(calls[1][1]["core_memory_json"])
+            opening_core = json.loads(calls[2][1]["core_memory_json"])
+            assert initial_setting_core == opening_core
+            assert calls[1][1]["story_direction"].startswith("用户修改后")
             direction_item = next(
                 item for item in opening_core["items"]
                 if item["id"] == "core_story_direction"

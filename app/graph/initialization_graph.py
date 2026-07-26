@@ -11,12 +11,13 @@ from .initialization_helpers import (
     initialization_result,
     prepare_initialization_state,
 )
-from .initialization_nodes import opening_scene_node
+from .initialization_nodes import initial_world_setting_node, opening_scene_node
 from .initialization_state import InitializationState
 
 
 def build_initialization_graph():
     dependencies = (
+        initial_world_setting_node,
         opening_scene_node,
     )
     return get_cached_graph(
@@ -28,8 +29,10 @@ def build_initialization_graph():
 
 def _compile_initialization_graph():
     graph = StateGraph(InitializationState)
+    graph.add_node("initial_world_setting", initial_world_setting_node)
     graph.add_node("opening_scene", opening_scene_node)
-    graph.add_edge(START, "opening_scene")
+    graph.add_edge(START, "initial_world_setting")
+    graph.add_edge("initial_world_setting", "opening_scene")
     graph.add_edge("opening_scene", END)
     return graph.compile()
 

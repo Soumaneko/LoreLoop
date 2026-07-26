@@ -159,6 +159,7 @@ def initialization_result(state: InitializationState) -> dict[str, Any]:
         "config": model_data(state["config"]),
         "core_memory": model_data(state["core_memory"]),
         "current_state": model_data(state["current_state"]),
+        "initial_world_settings": model_data(state["initial_world_settings"]),
         "opening_scene": model_data(state["opening_scene"]),
         "status": state["status"],
     }

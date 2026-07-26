@@ -88,6 +88,7 @@ const progressLabels = {
   entity_profiles_updated: "正在写入旅程",
   story_direction_started: "正在规划长期故事方向",
   initialization_started: "正在准备开场",
+  initial_world_settings_ready: "初始世界设定已经建立",
   opening_scene_done: "开场已经生成",
   initialization_pending: "正在保存待确认开场",
 };

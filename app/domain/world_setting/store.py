@@ -16,6 +16,8 @@ from .schemas import (
     utc_now,
 )
 
+_INITIAL_WORLD_SETTINGS_META_KEY = "initial_world_setting_ids"
+
 
 class WorldSettingStore:
     def __init__(self, db_path: str = ":memory:"):
@@ -207,6 +209,95 @@ class WorldSettingStore:
             "SELECT COUNT(*) AS count FROM world_settings"
         ).fetchone()
         return int(row["count"])
+
+    def load_initial_anchors(self) -> list[SettingAnchorPacket]:
+        row = self._conn.execute(
+            "SELECT value FROM world_setting_meta WHERE key = ?",
+            (_INITIAL_WORLD_SETTINGS_META_KEY,),
+        ).fetchone()
+        if row is None:
+            return []
+        try:
+            setting_ids = json.loads(row["value"])
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Initial world-setting metadata is corrupt") from exc
+        if (
+            not isinstance(setting_ids, list)
+            or len(setting_ids) != 2
+            or any(not isinstance(setting_id, str) for setting_id in setting_ids)
+        ):
+            raise RuntimeError("Initial world-setting metadata is invalid")
+        anchors: list[SettingAnchorPacket] = []
+        for setting_id in setting_ids:
+            setting = self.get_by_id(setting_id)
+            if (
+                setting is None
+                or setting.maturity != "usable"
+                or setting.prepared_anchor is None
+            ):
+                raise RuntimeError(
+                    "Initial world-setting metadata references an unusable setting"
+                )
+            anchors.append(setting.prepared_anchor)
+        return anchors
+
+    def save_initial_anchors(
+        self,
+        anchors: list[SettingAnchorPacket],
+    ) -> list[SettingAnchorPacket]:
+        existing = self.load_initial_anchors()
+        if existing:
+            return existing
+        if len(anchors) != 2:
+            raise ValueError("Initialization must save exactly two world settings")
+        if len({anchor.setting_id for anchor in anchors}) != 2:
+            raise ValueError("Initial world-setting IDs must be unique")
+
+        with transaction(self._conn):
+            for anchor in anchors:
+                if self.get_by_id(anchor.setting_id) is not None:
+                    raise ValueError(
+                        f"Initial world-setting ID already exists: {anchor.setting_id}"
+                    )
+                setting = WorldSetting(
+                    setting_id=anchor.setting_id,
+                    label=anchor.label,
+                    kind=anchor.kind,
+                    basic_concept=anchor.definition,
+                    visibility="director_private",
+                    maturity="usable",
+                    availability="available",
+                    prepared_anchor=anchor,
+                    created_turn=0,
+                    last_seen_turn=0,
+                )
+                self._insert_setting(setting)
+                self._insert_source(
+                    anchor.setting_id,
+                    document=SettingSourceDocument(
+                        source_key=f"initial-setting:{anchor.setting_id}",
+                        source_type="initial_world_setting",
+                        source_ref="initialization",
+                        visibility="director_private",
+                        content=anchor.model_dump_json(),
+                    ),
+                    source_span=anchor.definition,
+                    turn_index=0,
+                )
+            self._conn.execute(
+                """
+                INSERT INTO world_setting_meta(key, value)
+                VALUES (?, ?)
+                """,
+                (
+                    _INITIAL_WORLD_SETTINGS_META_KEY,
+                    json.dumps(
+                        [anchor.setting_id for anchor in anchors],
+                        ensure_ascii=False,
+                    ),
+                ),
+            )
+        return list(anchors)
 
     def apply_extraction(
         self,
