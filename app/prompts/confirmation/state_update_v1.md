@@ -62,58 +62,43 @@
 
 ## 场景
 
-- `location_change`：角色在**场景结束**时实际到达了不同地点。填写 `location`。
+- `location_change`：角色在场景结束时实际到达了不同地点。填写 `location`。
 - `participant_add`：角色实际进入、加入或随玩家到达当前场景。填写 `name`。
 - `participant_remove`：角色明确离开，或地点改变且明确没有跟随玩家。填写 `name`。禁止移除玩家。
-- `scene_condition_add`：新增客观的、会影响行动可能性的场景状态，填写 `condition` 和 `expires_after_phases`。主观的氛围和发生的事情不应该被记录。
-- `scene_condition_remove`：Scene Facts 明确显示某个场景状态结束时，填写 `condition`。
 
-CurrentState 中 participants 是当前**在场人物**的唯一权威列表。仅被提及、回忆或远程谈论的角色不得加入。
+CurrentState 中 participants 是当前在场人物的唯一权威列表。仅被提及、回忆或远程谈论的角色不得加入。
 
 当存在 location_change 时，必须逐一审计除玩家外的所有 participants：
-  - 明确显示角色抵达新地点、跟随进入新地点或在场景结束时位于新地点：保留。
-  - 没有上述明确证据：必须输出 participant_remove。
 
-当存在 location_change 时，必须逐一审计所有 scene conditions：
-  - 明确证明该 condition 在新地点仍然成立：保留。
-  - 否则必须输出 scene_condition_remove。
+- 明确显示角色抵达新地点、跟随进入新地点或在场景结束时位于新地点：保留。
+- 没有上述明确证据：必须输出 participant_remove。
 
-scene_condition 只记录客观状态，例如“房间正在燃烧”“一片漆黑”“毒物弥漫”“出口被落石封堵”。不得把“紧张”“压抑”“诡异”等主观气氛、观感或文风写入 scene_condition。
+## 在场人物
 
-## 在场人物状态
-
-- `npc_condition_add`：在场非玩家人物获得身体或精神状态，填写 `name`、`condition` 和 `expires_after_phases`。持有物/身份/职业/动机绝对不能被记录。
-- `npc_condition_remove`：明确显示在场非玩家人物的某项状态解除，填写 `name` 和 `condition`。
 - `participant_attitude_change`：在场非玩家人物对玩家的公开态度发生明确、持续到场景结束的变化。填写 `name` 和 `attitude_to_player`；设为 null 表示明确清除旧态度。
 
-若人物本回合刚加入，应先输出 `participant_add`，再输出该人物的 npc condition/attitude 操作。不要记录人物的即时动作意图、下一步打算或隐藏心理。
-
-所有 `scene_condition_add` 和 `npc_condition_add` 都必须填写期限：
-- 正整数：还可持续几个 world phase。
-- 禁止填写 0。没有明确持续时间且无法可靠判断时使用 1，不要猜测。
+若人物本回合刚加入，应先输出 `participant_add`，再输出该人物的 attitude 操作。不要记录人物的身体或精神状态、即时动作意图、下一步打算或隐藏心理。
 
 ## 时间
 
 - `world_clock_advance`：Scene Facts 明确支持跨越一个或多个时段时填写 `phases`。
 
-一天固定六个时段：凌晨 → 上午 → 下午 → 黄昏 → 晚上 → 深夜 → 次日凌晨。只输出推进的时段数量，不输出最终日期。几分钟内的动作不推进时间；禁止倒退。
+一天固定七个时段：凌晨 → 清晨 → 上午 → 下午 → 黄昏 → 晚上 → 深夜 → 次日凌晨。只输出推进的时段数量，不输出最终日期。几分钟内的动作不推进时间；禁止倒退。
 
 ## 玩家
 
-- `player_condition_add` / `player_condition_remove`：玩家明确获得或解除身体、精神状态。填写 `condition`。身份/职业/动机不应该被记录。
-- `player_visible_status_change`：玩家对外可见的总体状态明确变化。填写 `visible_status`；明确恢复到无特殊可见状态时填 null。
+- `player_visible_status_change`：玩家稳定、对外可见的整体外观或公开呈现明确变化。填写 `visible_status`；明确恢复到无特殊外观时填 null。
 
-不要通过 npc condition 操作修改玩家。玩家 condition 不使用自动期限。
+CurrentState 不保存玩家、NPC 或场景 condition。身体状态、精神状态、能力、天赋、事件经过、环境声音、气味、天气、氛围和临时场景表现都不得通过其他字段绕行写入。
 
 ## 资源
 
-注意：对每个涉及物品、资产或金钱的事实，必须先回答“场景结束时由谁实际持有或控制”。
-只有最终持有人或控制者是玩家时，才允许输出任何玩家资源增加操作。
+对每个涉及物品、资产或金钱的事实，必须先判断场景结束时由谁实际持有或控制。只有最终持有人或控制者是玩家时，才允许输出玩家资源增加操作。
 
 - `inventory_delta`：物品明确获得、失去或消耗。填写 `item` 和 `delta`。增加为正，减少为负。
-- `money_delta`：明确知道数额的收入或支出。填写 `delta`。收入为正，支出为负。如果 Scene Facts 中的货币单位与基础 money 单位不同，**绝对禁止使用此操作**。
-- `fixed_asset_add` / `fixed_asset_remove`：只用于玩家明确取得长期控制权的建筑、土地、产业、设施，其他可由角色携带的具体物品，绝对不得加入 fixed_assets。
-- `temporary_asset_add` / `temporary_asset_remove`：临时物品、借用品的明确取得/失去。填写 `asset`。承诺/情报等非实体不应该处理。
+- `money_delta`：明确知道数额的收入或支出。填写 `delta`。收入为正，支出为负。如果 Scene Facts 中的货币单位与基础 money 单位不同，绝对禁止使用此操作。
+- `fixed_asset_add` / `fixed_asset_remove`：只用于玩家明确取得长期控制权的建筑、土地、产业、设施。
+- `temporary_asset_add` / `temporary_asset_remove`：临时物品、借用品的明确取得或失去。填写 `asset`。
 
 物品仅被展示、佩戴或非消耗性使用时不改变库存。没有明确金额时不得猜测 money delta。删除操作必须针对 CurrentState 中真实存在的内容。
 
@@ -124,16 +109,8 @@ scene_condition 只记录客观状态，例如“房间正在燃烧”“一片�
 2. 绝对忠于 Scene Facts，不根据计划、暗示或常识补写变化。
 3. 操作按故事发生顺序排列；后续操作可以依赖前面的操作。
 4. location 采用稳定、可复用的地点粒度。
-5. condition 使用简短的当前状态；状态解除使用 remove 操作。
-6. money 如果单位不一致，严禁进行 money_delta 操作。
-7. Condition 提取门槛极高，在进行任何 `scene_condition_add`、`npc_condition_add` 或 `player_condition_add` 前，必须先通过“类别测试”：
-  - 动作不是状态！瞬时动作或演出细节绝对禁止作为 condition 提取！
-  - 已经发生了什么不是状态！叙事流水账绝对禁止作为 condition 提取！
-  - 获得/持有物品不是状态！绝对禁止作为 condition 提取！
-再通过以下“持久性测试”：
-  - 是否跨越回合？如果该表现会在短时间内自然消失，绝对不提取。
-  - 是否有机制级影响？该状态必须能实质性限制或增强后续互动的可能性（如：[重伤流血]会扣血，[大门焊死]导致无法离开，[致盲]导致无法观察，[极度醉酒]导致无法正常对话）。
-
+5. money 如果单位不一致，严禁进行 money_delta 操作。
+6. schema 未声明任何 condition 操作；不得用 visible_status、location、attitude 或资源字段代替 condition。
 
 
 # 禁止事项
@@ -142,9 +119,8 @@ scene_condition 只记录客观状态，例如“房间正在燃烧”“一片�
 2. 禁止重复输出同一变化，或输出互相抵消的冗余操作。
 3. 禁止根据计划、暗示、常识或未确认的结果修改状态。
 4. 禁止把人物站姿、房间内几步距离或其他过细位置作为新 location。
-5. 禁止在 condition 中记录事件经过或“不再受伤”之类否定状态。
-6. 禁止在 condition 中记录不值得跨回合保持的即时行为。
-7. 禁止在遇到货币单位不匹配时，依然强行输出 money_delta 操作。
+5. 禁止输出任何玩家、NPC 或场景 condition。
+6. 禁止在遇到货币单位不匹配时，依然强行输出 money_delta 操作。
 
 
 # 例子

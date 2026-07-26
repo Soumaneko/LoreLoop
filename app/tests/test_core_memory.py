@@ -293,7 +293,7 @@ class TestBuildInitialCurrentState:
         assert state.player.name == "卢西安"
         assert not hasattr(state.player, "position")
         assert state.player.visible_status == "男性，18岁"
-        assert state.world_clock.label == "第1日上午"
+        assert state.world_clock.label == "第1日清晨"
 
     def test_original_world_falls_back_to_world_name_as_location(self):
         state = build_initial_current_state(InitConfig(

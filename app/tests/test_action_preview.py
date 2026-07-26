@@ -31,7 +31,6 @@ def _make_state() -> CurrentState:
         ),
         player=PlayerState(
             name="卢西安",
-            condition=[],
         ),
         resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),
     )

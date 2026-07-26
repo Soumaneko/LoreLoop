@@ -1,5 +1,6 @@
 import json
 import random
+from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.core_memory.schemas import CoreMemory
@@ -31,6 +32,28 @@ class SpyGateway:
     def run(self, **kwargs):
         self.calls.append(kwargs)
         return kwargs["output_schema"].model_validate(self.payload)
+
+
+def test_setting_prompts_distinguish_specific_thin_seeds_from_generic_categories():
+    extractor = Path(
+        "app/prompts/maintenance/setting_seed_extract_v1.md"
+    ).read_text(encoding="utf-8")
+    maintainer = Path(
+        "app/prompts/maintenance/setting_maintain_v1.md"
+    ).read_text(encoding="utf-8")
+    preparer = Path(
+        "app/prompts/maintenance/setting_anchor_prepare_v1.md"
+    ).read_text(encoding="utf-8")
+
+    assert "信息稀薄不等于粒度宽泛" in extractor
+    assert "通用建筑、商铺、设施、职业场所" in extractor
+    assert "必须区分“信息薄弱”和“概念宽泛”" in maintainer
+    assert "每个 group 只能是以下四种 resolution" in maintainer
+    assert "必须逐字复制“已 Prepare 或已消费的权威 Settings”" in maintainer
+    assert "不得填写 CoreMemory item ID" in maintainer
+    assert "应使用 `reject`" in maintainer
+    assert "薄弱本身不是 reject 理由" in preparer
+    assert "develop 的职责正是补足特定但薄弱的概念" in preparer
 
 
 def test_anchor_boundary_fields_store_fact_indexes():
@@ -449,6 +472,50 @@ def test_maintenance_contained_seed_only_attaches_provenance():
     assert len(maintained.sources) == 2
     assert maintained.prepared_anchor == anchor
     assert store.get_by_id(duplicate_id) is None
+
+
+def test_maintenance_reject_marks_seed_without_deleting_provenance():
+    store = WorldSettingStore(":memory:")
+    seed_id = _add_setting(store, label="普通背景设施", turn_index=5)
+    gateway = MockLLM()
+    gateway.set_responses(
+        [
+            json.dumps(
+                {
+                    "groups": [
+                        {
+                            "seed_ids": [seed_id],
+                            "resolution": "reject",
+                            "reason": "仅是场景中的通用类别，没有独立世界身份。",
+                            "target_setting_id": None,
+                            "canonical_seed_id": None,
+                            "canonical_label": None,
+                            "canonical_kind": None,
+                            "canonical_basic_concept": None,
+                            "supplemented_basic_concept": None,
+                            "supplemented_definition": None,
+                            "fact_additions": [],
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+        ]
+    )
+
+    result = maintain_setting_seeds(
+        core_memory=CoreMemory(items=[]),
+        turn_index=5,
+        world_setting_store=store,
+        gateway=gateway.build_gateway(),
+    )
+
+    rejected = store.get_by_id(seed_id)
+    assert result.retained_setting_ids == []
+    assert rejected is not None
+    assert rejected.availability == "rejected"
+    assert rejected.rejection_reason == "仅是场景中的通用类别，没有独立世界身份。"
+    assert len(rejected.sources) == 1
 
 
 def test_maintenance_retries_independent_group_that_matches_mature_label():

@@ -127,6 +127,8 @@ def _validate_maintenance_result(
     }
     supplement_targets: set[str] = set()
     for group in result.groups:
+        if group.resolution == "reject":
+            continue
         if group.resolution == "independent":
             normalized_label = _normalize(group.canonical_label or "")
             if normalized_label in mature_labels or any(

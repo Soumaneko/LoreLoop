@@ -19,10 +19,9 @@ def make_default_state(scene_id: str = "scene_001") -> CurrentState:
             location="",
             participants=[],
         ),
-        world_clock=WorldClock(day=1, phase="上午"),
+        world_clock=WorldClock(day=1, phase="清晨"),
         player=PlayerState(
             name="",
-            condition=[],
             visible_status=None,
         ),
         resources=ResourcesState(
@@ -50,8 +49,32 @@ class CurrentStateStore:
             )
             """
         )
-        ensure_schema_version(self._conn, "current_state", 3)
+        ensure_schema_version(self._conn, "current_state", 4)
+        self._migrate_removed_condition_fields()
         self._conn.commit()
+
+    def _migrate_removed_condition_fields(self) -> None:
+        row = self._conn.execute(
+            "SELECT state_json FROM current_state WHERE id = 1"
+        ).fetchone()
+        if row is None:
+            return
+        raw_json = str(row["state_json"])
+        state = CurrentState.model_validate_json(raw_json)
+        migrated_json = state.model_dump_json()
+        if migrated_json == raw_json:
+            return
+        self._conn.execute(
+            """
+            UPDATE current_state
+            SET state_json = ?, updated_at = ?
+            WHERE id = 1
+            """,
+            (
+                migrated_json,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
 
     def save(self, state: CurrentState) -> None:
         now = datetime.now(timezone.utc).isoformat()

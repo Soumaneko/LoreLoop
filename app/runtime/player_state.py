@@ -241,13 +241,9 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
             "turn_index": history[-1]["turn_index"] if history else 0,
             "world_time": current_state.world_clock.label,
             "location": scene.location,
-            "scene_conditions": [
-                condition.condition for condition in scene.scene_condition
-            ],
             "participants": scene.participant_names,
             "player": {
                 "name": player.name,
-                "conditions": list(player.condition),
                 "visible_status": player.visible_status,
             },
             "resources": model_data(resources),

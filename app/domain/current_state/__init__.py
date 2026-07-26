@@ -6,7 +6,6 @@ from .schemas import (
     PlayerState,
     ResourcesState,
     SceneState,
-    TimedCondition,
     WorldClock,
     WorldPhase,
 )
@@ -37,6 +36,5 @@ __all__ = [
     "apply_state_changes",
     "WorldClock",
     "WorldPhase",
-    "TimedCondition",
     "make_default_state",
 ]

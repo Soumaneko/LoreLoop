@@ -45,7 +45,7 @@ def test_state_update_warning_is_emitted_cached_and_diagnosed(
     )
     warning = StateChangeWarning(
         operation_id="op2",
-        operation_type="npc_condition_add",
+        operation_type="participant_attitude_change",
         target="米莉",
         code="npc_target_not_present",
         message="target missing",

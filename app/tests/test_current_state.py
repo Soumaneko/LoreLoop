@@ -1,13 +1,14 @@
-import pytest
+import json
+import sqlite3
 
 from app.domain.current_state import (
     CurrentState,
+    CurrentStateStore,
     InventoryItem,
     ParticipantState,
     PlayerState,
     ResourcesState,
     SceneState,
-    TimedCondition,
     WorldClock,
 )
 
@@ -26,6 +27,9 @@ class TestSceneState:
 
 
 class TestWorldClock:
+    def test_default_phase_is_early_morning(self):
+        assert WorldClock().label == "第1日清晨"
+
     def test_label_and_phase_advance(self):
         clock = WorldClock(day=1, phase="深夜")
         advanced = clock.advance_phase()
@@ -40,8 +44,8 @@ class TestPlayerState:
     def test_defaults_are_empty_or_none(self):
         state = PlayerState(name="卢西安")
 
-        assert state.condition == []
         assert state.visible_status is None
+        assert not hasattr(state, "condition")
         assert not hasattr(state, "position")
 
 
@@ -49,20 +53,11 @@ class TestParticipantState:
     def test_current_participant_state(self):
         state = ParticipantState(
             name="米莉",
-            npc_conditions=[
-                TimedCondition(condition="疲惫", expires_after_phases=-1)
-            ],
             attitude_to_player="感激主角",
         )
 
-        assert state.npc_conditions == [
-            TimedCondition(condition="疲惫", expires_after_phases=-1)
-        ]
         assert state.attitude_to_player == "感激主角"
-
-    def test_timed_condition_rejects_zero_expiry(self):
-        with pytest.raises(ValueError, match="expires_after_phases"):
-            TimedCondition(condition="中毒", expires_after_phases=0)
+        assert not hasattr(state, "npc_conditions")
 
 
 class TestResourcesState:
@@ -108,7 +103,6 @@ class TestCurrentState:
             world_clock=WorldClock(day=1, phase="上午"),
             player=PlayerState(
                 name="卢西安",
-                condition=["疲惫"],
                 visible_status="衣袍沾着泥水",
             ),
             resources=ResourcesState(fixed_assets=["葡萄园"]),
@@ -127,6 +121,9 @@ class TestCurrentState:
                 "location": "酒馆",
                 "participants": ["主角", "米莉"],
                 "atmosphere": "紧张",
+                "scene_condition": [
+                    {"condition": "房间正在燃烧", "expires_after_phases": 2}
+                ],
             },
             "player": {
                 "name": "主角",
@@ -148,10 +145,72 @@ class TestCurrentState:
         })
 
         assert state.scene.participant_names == ["主角", "米莉"]
-        assert state.scene.participants[1].npc_conditions == [
-            TimedCondition(condition="疲惫", expires_after_phases=-1)
-        ]
         assert state.scene.participants[1].attitude_to_player == "友好"
         assert not hasattr(state.scene, "atmosphere")
+        assert not hasattr(state.scene, "scene_condition")
+        assert not hasattr(state.scene.participants[1], "npc_conditions")
+        assert not hasattr(state.player, "condition")
         assert not hasattr(state.player, "position")
         assert not hasattr(state, "npcs")
+
+    def test_store_migration_persistently_removes_legacy_conditions(self, tmp_path):
+        db_path = tmp_path / "current_state.db"
+        with CurrentStateStore(db_path):
+            pass
+        legacy_state = {
+            "scene": {
+                "scene_id": "scene_003",
+                "location": "酒馆",
+                "participants": [
+                    {
+                        "name": "米莉",
+                        "npc_conditions": [
+                            {
+                                "condition": "疲惫",
+                                "expires_after_phases": 2,
+                            }
+                        ],
+                    }
+                ],
+                "scene_condition": [
+                    {
+                        "condition": "烟雾弥漫",
+                        "expires_after_phases": 1,
+                    }
+                ],
+            },
+            "player": {
+                "name": "主角",
+                "condition": ["轻伤"],
+            },
+        }
+        connection = sqlite3.connect(db_path)
+        connection.execute(
+            """
+            INSERT INTO current_state(id, state_json, updated_at)
+            VALUES (1, ?, 'legacy')
+            """,
+            (json.dumps(legacy_state, ensure_ascii=False),),
+        )
+        connection.execute(
+            """
+            UPDATE schema_versions
+            SET version = 3
+            WHERE component = 'current_state'
+            """
+        )
+        connection.commit()
+        connection.close()
+
+        with CurrentStateStore(db_path) as store:
+            state = store.load()
+
+        persisted = sqlite3.connect(db_path).execute(
+            "SELECT state_json FROM current_state WHERE id = 1"
+        ).fetchone()[0]
+        persisted_data = json.loads(persisted)
+        assert state is not None
+        assert not hasattr(state.player, "condition")
+        assert "condition" not in persisted_data["player"]
+        assert "scene_condition" not in persisted_data["scene"]
+        assert "npc_conditions" not in persisted_data["scene"]["participants"][0]

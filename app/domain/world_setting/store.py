@@ -397,6 +397,21 @@ class WorldSettingStore:
         retained_ids: list[str] = []
         with transaction(self._conn):
             for group in result.groups:
+                if group.resolution == "reject":
+                    now = utc_now()
+                    for setting_id in group.seed_ids:
+                        self._conn.execute(
+                            """
+                            UPDATE world_settings
+                            SET availability = 'rejected',
+                                reserved_by = NULL,
+                                rejection_reason = ?,
+                                updated_at = ?
+                            WHERE setting_id = ?
+                            """,
+                            (group.reason, now, setting_id),
+                        )
+                    continue
                 if group.resolution == "independent":
                     target_id = str(group.canonical_seed_id)
                     self._conn.execute(

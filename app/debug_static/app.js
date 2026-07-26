@@ -853,13 +853,11 @@ function renderStatePanel() {
       ["场景", esc(text(scene.scene_id))],
       ["地点", esc(text(scene.location))],
       ["时间", esc(`第${current.world_clock?.day || "?"}日 ${current.world_clock?.phase || "?"}`)],
-      ["场景状态", chips(timedConditionLabels(scene.scene_condition))],
       ["在场", chips(participantNames(participants))],
     ]))}
     ${card("主角", kv([
       ["姓名", esc(text(player.name))],
       ["外观", esc(text(player.visible_status))],
-      ["状态", chips(player.condition)],
     ]))}
     ${card("资源", kv([
       ["金钱", esc(money(resources))],
@@ -868,7 +866,7 @@ function renderStatePanel() {
       ["临时", chips(resources.temporary_assets)],
     ]))}
     ${details(`Core Memory (${coreItems.length})`, coreItems.map(coreMemoryItemCard).join("") || `<div class="empty">暂无 Core Memory</div>`)}
-    ${details(`在场人物状态 (${participants.length})`, participants.length ? participants.map(participantCard).join("") : `<div class="empty">当前无人</div>`)}
+    ${details(`在场人物 (${participants.length})`, participants.length ? participants.map(participantCard).join("") : `<div class="empty">当前无人</div>`)}
     ${details(`NPC 档案 (${data.npc_active_profile_count ?? 0}/${data.npc_profile_count ?? 0})`, renderNpcStateGroup(data.npc_profiles || []))}
     ${details("导演", `
       ${metrics([
@@ -928,20 +926,10 @@ function participantNames(participants) {
   return (participants || []).map((participant) => typeof participant === "string" ? participant : participant?.name).filter(Boolean);
 }
 
-function timedConditionLabels(conditions) {
-  return (conditions || []).map((item) => {
-    if (typeof item === "string") return item;
-    const expiry = item?.expires_after_phases;
-    const suffix = expiry === -1 ? "无期限" : `剩余${text(expiry)}时段`;
-    return `${text(item?.condition)} · ${suffix}`;
-  });
-}
-
 function participantCard(participant) {
   if (typeof participant === "string") participant = { name: participant };
   return `<div class="section-card">${kv([
     ["姓名", esc(text(participant.name))],
-    ["状态", chips(timedConditionLabels(participant.npc_conditions))],
     ["对玩家态度", esc(text(participant.attitude_to_player))],
   ])}</div>`;
 }
@@ -1616,12 +1604,10 @@ function diffRows(before, after) {
   const fields = [
     ["scene.scene_id", "场景ID"],
     ["scene.location", "地点"],
-    ["scene.scene_condition", "场景状态"],
     ["scene.participants", "在场"],
     ["world_clock.day", "日期"],
     ["world_clock.phase", "时段"],
     ["player.visible_status", "主角外观"],
-    ["player.condition", "主角状态"],
     ["resources.money", "金钱"],
     ["resources.inventory", "物品"],
     ["resources.fixed_assets", "固定资产"],
@@ -1654,10 +1640,8 @@ function stateSummary(s) {
     ["场景", esc(text(s.scene?.scene_id))],
     ["地点", esc(text(s.scene?.location))],
     ["时间", esc(`第${s.world_clock?.day || "?"}日 ${s.world_clock?.phase || "?"}`)],
-    ["场景状态", chips(timedConditionLabels(s.scene?.scene_condition))],
     ["在场", chips(participantNames(s.scene?.participants))],
     ["主角", esc(text(s.player?.name))],
-    ["状态", chips(s.player?.condition)],
     ["物品", inventory(s.resources?.inventory)],
   ]);
 }

@@ -1348,18 +1348,11 @@ function openCodexProfile(profile, triggerElement) {
 function renderDrawer() {
   const campaign = state.playerState?.campaign || {};
   const player = campaign.player || {};
-  const conditions = player.conditions || [];
   els.playerSummary.replaceChildren();
   els.playerSummary.appendChild(node("strong", "", player.name || "尚未命名"));
-  els.playerSummary.appendChild(node("div", "", player.visible_status || "状态正常"));
-  if (conditions.length) {
-    const tags = node("div", "tags");
-    conditions.forEach((item) => tags.appendChild(node("span", "tag", item)));
-    els.playerSummary.appendChild(tags);
-  }
+  els.playerSummary.appendChild(node("div", "", player.visible_status || "暂无特殊外观"));
 
   const participants = campaign.participants || [];
-  const sceneConditions = campaign.scene_conditions || [];
   els.sceneSummary.replaceChildren();
   const appendSceneGroup = (label, items, emptyText) => {
     const group = node("section", "scene-summary-group");
@@ -1374,7 +1367,6 @@ function renderDrawer() {
     els.sceneSummary.appendChild(group);
   };
   appendSceneGroup("在场角色", participants, "暂无");
-  appendSceneGroup("场景状态", sceneConditions, "当前没有特殊场景状态");
 
   const resources = campaign.resources || {};
   const money = resources.money == null ? "无" : `${resources.money}${resources.money_unit ? ` ${resources.money_unit}` : ""}`;
@@ -1799,6 +1791,7 @@ function restorePlayerShell() {
       );
       renderAll();
     }
+    scrollToBottom("instant");
     return true;
   } catch (_error) {
     sessionStorage.removeItem(PLAYER_SHELL_CACHE_KEY);

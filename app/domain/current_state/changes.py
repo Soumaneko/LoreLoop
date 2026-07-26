@@ -6,7 +6,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .schemas import CurrentState, InventoryItem, ParticipantState, TimedCondition
+from .schemas import CurrentState, InventoryItem, ParticipantState
 
 
 class StateChangeError(ValueError):
@@ -51,42 +51,6 @@ class ParticipantRemove(_Operation):
     name: str = Field(min_length=1)
 
 
-class SceneConditionAdd(_Operation):
-    type: Literal["scene_condition_add"]
-    condition: str = Field(min_length=1)
-    expires_after_phases: int = Field(ge=-1)
-
-    @model_validator(mode="after")
-    def _expiry_must_be_permanent_or_positive(self):
-        if self.expires_after_phases == 0:
-            raise ValueError("expires_after_phases must be -1 or positive")
-        return self
-
-
-class SceneConditionRemove(_Operation):
-    type: Literal["scene_condition_remove"]
-    condition: str = Field(min_length=1)
-
-
-class NPCConditionAdd(_Operation):
-    type: Literal["npc_condition_add"]
-    name: str = Field(min_length=1)
-    condition: str = Field(min_length=1)
-    expires_after_phases: int = Field(ge=-1)
-
-    @model_validator(mode="after")
-    def _expiry_must_be_permanent_or_positive(self):
-        if self.expires_after_phases == 0:
-            raise ValueError("expires_after_phases must be -1 or positive")
-        return self
-
-
-class NPCConditionRemove(_Operation):
-    type: Literal["npc_condition_remove"]
-    name: str = Field(min_length=1)
-    condition: str = Field(min_length=1)
-
-
 class ParticipantAttitudeChange(_Operation):
     type: Literal["participant_attitude_change"]
     name: str = Field(min_length=1)
@@ -96,16 +60,6 @@ class ParticipantAttitudeChange(_Operation):
 class WorldClockAdvance(_Operation):
     type: Literal["world_clock_advance"]
     phases: int = Field(ge=1)
-
-
-class PlayerConditionAdd(_Operation):
-    type: Literal["player_condition_add"]
-    condition: str = Field(min_length=1)
-
-
-class PlayerConditionRemove(_Operation):
-    type: Literal["player_condition_remove"]
-    condition: str = Field(min_length=1)
 
 
 class PlayerVisibleStatusChange(_Operation):
@@ -161,14 +115,8 @@ StateOperation = Annotated[
         LocationChange,
         ParticipantAdd,
         ParticipantRemove,
-        SceneConditionAdd,
-        SceneConditionRemove,
-        NPCConditionAdd,
-        NPCConditionRemove,
         ParticipantAttitudeChange,
         WorldClockAdvance,
-        PlayerConditionAdd,
-        PlayerConditionRemove,
         PlayerVisibleStatusChange,
         InventoryDelta,
         MoneyDelta,
@@ -222,46 +170,6 @@ def apply_state_changes(
             if _norm(participant.name) == _norm(state.player.name):
                 raise StateChangeError("the player cannot be removed from participants")
             state.scene.participants.remove(participant)
-        elif isinstance(operation, SceneConditionAdd):
-            _add_timed_condition(
-                state.scene.scene_condition,
-                operation.condition,
-                operation.expires_after_phases,
-            )
-        elif isinstance(operation, SceneConditionRemove):
-            _remove_timed_condition(
-                state.scene.scene_condition,
-                operation.condition,
-                "scene condition",
-            )
-        elif isinstance(operation, NPCConditionAdd):
-            participant = _resolve_npc_attachment_target(
-                state,
-                operation,
-                aliases,
-                warnings,
-            )
-            if participant is None:
-                continue
-            _add_timed_condition(
-                participant.npc_conditions,
-                operation.condition,
-                operation.expires_after_phases,
-            )
-        elif isinstance(operation, NPCConditionRemove):
-            participant = _resolve_npc_attachment_target(
-                state,
-                operation,
-                aliases,
-                warnings,
-            )
-            if participant is None:
-                continue
-            _remove_timed_condition(
-                participant.npc_conditions,
-                operation.condition,
-                "NPC condition",
-            )
         elif isinstance(operation, ParticipantAttitudeChange):
             participant = _resolve_npc_attachment_target(
                 state,
@@ -279,10 +187,6 @@ def apply_state_changes(
             participant.attitude_to_player = updated_attitude
         elif isinstance(operation, WorldClockAdvance):
             clock_advance_phases += operation.phases
-        elif isinstance(operation, PlayerConditionAdd):
-            _add_unique(state.player.condition, operation.condition)
-        elif isinstance(operation, PlayerConditionRemove):
-            _remove_existing(state.player.condition, operation.condition, "condition")
         elif isinstance(operation, PlayerVisibleStatusChange):
             updated_status = _clean_optional(operation.visible_status)
             if updated_status == state.player.visible_status:
@@ -307,7 +211,6 @@ def apply_state_changes(
 
     if clock_advance_phases:
         state.world_clock = state.world_clock.advance_phase(clock_advance_phases)
-        _advance_condition_expiries(state, clock_advance_phases)
 
     return StateApplyResult(
         state=CurrentState.model_validate(state.model_dump(mode="python")),
@@ -351,62 +254,6 @@ def _apply_money_delta(state: CurrentState, delta: int) -> None:
     state.resources.money = updated
 
 
-def _add_timed_condition(
-    conditions: list[TimedCondition],
-    condition: str,
-    expires_after_phases: int,
-) -> None:
-    clean = condition.strip()
-    if any(_norm(item.condition) == _norm(clean) for item in conditions):
-        raise StateChangeError(f"condition already exists: {clean}")
-    conditions.append(
-        TimedCondition(
-            condition=clean,
-            expires_after_phases=expires_after_phases,
-        )
-    )
-
-
-def _remove_timed_condition(
-    conditions: list[TimedCondition],
-    condition: str,
-    label: str,
-) -> None:
-    existing = next(
-        (
-            item
-            for item in conditions
-            if _norm(item.condition) == _norm(condition)
-        ),
-        None,
-    )
-    if existing is None:
-        raise StateChangeError(f"cannot remove missing {label}: {condition}")
-    conditions.remove(existing)
-
-
-def _advance_condition_expiries(state: CurrentState, phases: int) -> None:
-    condition_lists = [
-        state.scene.scene_condition,
-        *[
-            participant.npc_conditions
-            for participant in state.scene.participants
-        ],
-    ]
-    for conditions in condition_lists:
-        retained: list[TimedCondition] = []
-        for item in conditions:
-            if item.expires_after_phases == -1:
-                retained.append(item)
-                continue
-            remaining = item.expires_after_phases - phases
-            if remaining > 0:
-                retained.append(
-                    item.model_copy(update={"expires_after_phases": remaining})
-                )
-        conditions[:] = retained
-
-
 def _find_participant(
     state: CurrentState,
     name: str,
@@ -435,7 +282,7 @@ def _require_participant(
 
 def _resolve_npc_attachment_target(
     state: CurrentState,
-    operation: NPCConditionAdd | NPCConditionRemove | ParticipantAttitudeChange,
+    operation: ParticipantAttitudeChange,
     aliases: dict[str, str],
     warnings: list[StateChangeWarning],
 ) -> ParticipantState | None:
@@ -454,7 +301,7 @@ def _resolve_npc_attachment_target(
         return None
     if _norm(participant.name) == _norm(state.player.name):
         raise StateChangeError(
-            "player condition/status must use player-specific operations"
+            "participant attitude cannot target the player"
         )
     return participant
 

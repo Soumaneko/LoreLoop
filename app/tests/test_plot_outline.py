@@ -46,7 +46,6 @@ def _make_context() -> NarrativeComposerContext:
             ),
             player=PlayerState(
                 name="主角",
-                condition=[],
                 visible_status="正常",
             ),
             resources=ResourcesState(inventory=[InventoryItem(name="旧地图")], money=50),

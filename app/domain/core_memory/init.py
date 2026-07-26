@@ -105,10 +105,9 @@ def build_initial_current_state(
             location=location,
             participants=[{"name": protagonist_name}],
         ),
-        world_clock=WorldClock(day=1, phase="上午"),
+        world_clock=WorldClock(day=1, phase="清晨"),
         player=PlayerState(
             name=protagonist_name,
-            condition=[],
             visible_status="，".join(visible_parts),
         ),
         resources=ResourcesState(

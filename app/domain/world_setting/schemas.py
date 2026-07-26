@@ -20,7 +20,12 @@ SettingVisibility = Literal["player_known", "director_private", "mixed"]
 SettingMaturity = Literal["seed", "usable"]
 SettingAvailability = Literal["available", "reserved", "consumed", "rejected"]
 SettingPreparationDecision = Literal["use_as_is", "develop", "reject"]
-SettingMaintenanceResolution = Literal["independent", "supplement", "contained"]
+SettingMaintenanceResolution = Literal[
+    "independent",
+    "supplement",
+    "contained",
+    "reject",
+]
 
 
 def _new_setting_id() -> str:
@@ -207,6 +212,25 @@ class SettingMaintenanceGroup(BaseModel):
                 raise ValueError(
                     "fact addition source_seed_ids must belong to the group"
                 )
+
+        if self.resolution == "reject":
+            if any(
+                value is not None
+                for value in (
+                    self.target_setting_id,
+                    self.canonical_seed_id,
+                    self.canonical_label,
+                    self.canonical_kind,
+                    self.canonical_basic_concept,
+                    self.supplemented_basic_concept,
+                    self.supplemented_definition,
+                )
+            ) or self.fact_additions:
+                raise ValueError(
+                    "reject group must not define a target, canonical seed, "
+                    "or supplement patch"
+                )
+            return self
 
         if self.resolution == "independent":
             if self.target_setting_id is not None:

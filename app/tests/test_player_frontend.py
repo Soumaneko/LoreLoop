@@ -19,7 +19,6 @@ from app.domain.current_state import (
     PlayerState,
     ResourcesState,
     SceneState,
-    TimedCondition,
     WorldClock,
 )
 from app.domain.entity.schemas import EntityProfile
@@ -565,20 +564,12 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
                     "莱尔",
                     {
                         "name": "埃利奥",
-                        "npc_conditions": [TimedCondition(
-                            condition="暗中恐惧",
-                            expires_after_phases=-1,
-                        )],
                         "attitude_to_player": "表面友好，实际警惕",
                     },
                 ],
-                scene_condition=[TimedCondition(
-                    condition="房间正在燃烧",
-                    expires_after_phases=2,
-                )],
             ),
             world_clock=WorldClock(day=4, phase="晚上"),
-            player=PlayerState(name="莱尔", condition=["疲惫"]),
+            player=PlayerState(name="莱尔"),
             resources=ResourcesState(money=17, money_unit="金币"),
         ))
     with runtime.stores.short_term() as store:
@@ -627,7 +618,8 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "history_controls", "action_preview", "dice_display",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
-    assert payload["campaign"]["scene_conditions"] == ["房间正在燃烧"]
+    assert "scene_conditions" not in payload["campaign"]
+    assert "conditions" not in payload["campaign"]["player"]
     assert "attitude_to_player" not in str(payload)
     assert "暗中恐惧" not in str(payload)
     assert "不可泄露" not in str(payload)
