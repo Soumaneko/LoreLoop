@@ -322,6 +322,10 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "/api/player/operations/${encodeURIComponent(operation.operation_id)}/events" in source
     assert "request_id: newRequestId()" in source
     assert "function resumeConfirmationOperation(" in source
+    assert 'GENERATION_IN_FLIGHT_KEY = "tvg:generation-in-flight"' in source
+    assert "function restoreGenerationRunPlaceholder(" in source
+    assert "activeGenerationOperation" in source
+    assert 'if (entry.status === "generating") return `${entry.label} · 正在生成`;' in source
     assert "acknowledgeOperation" in source
     assert 'from "./api.js"' in source
     assert "/api/player/init/story-direction" in source
@@ -342,6 +346,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "openCodexProfile" in source
     assert "preview.good_result" in source
     assert "renderPlayerResolution" in source
+    assert "function hasVisibleRoll(action)" in source
+    assert "resolution-auto-detail" not in source
+    assert "系统自动判定（无需骰点）" not in source
     assert 'if (mode === "outcome")' in source
     assert '"resolution-outcome resolution-outcome-line"' in source
     assert "`${item.label} ${valueText}`" in source

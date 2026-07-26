@@ -121,6 +121,7 @@ const HISTORY_PAGE_SIZE = 5;
 const HISTORY_NAVIGATION_LOAD_SIZE = 20;
 const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
 const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
+const GENERATION_IN_FLIGHT_KEY = "tvg:generation-in-flight";
 const readerPreferences = createReaderPreferencesController({
   elements: {
     fontSize: els.fontSizeSelect,
@@ -363,7 +364,7 @@ const outcomeLabels = {
 
 function renderPlayerResolution(resolution) {
   const mode = state.playerState?.dice_display || "outcome";
-  const actions = resolution?.actions || [];
+  const actions = (resolution?.actions || []).filter(hasVisibleRoll);
   if (mode === "hidden" || !actions.length) return null;
   const panel = node("section", "resolution-panel");
   actions.forEach((action) => {
@@ -382,15 +383,17 @@ function renderPlayerResolution(resolution) {
       row.appendChild(outcomeSeal);
     }
     if (mode === "full") {
-      row.appendChild(
-        action.resolution_source === "roll"
-          ? renderRollDetail(action)
-          : node("div", "resolution-detail resolution-auto-detail", "✦ 系统自动判定（无需骰点）"),
-      );
+      row.appendChild(renderRollDetail(action));
     }
     panel.appendChild(row);
   });
   return panel;
+}
+
+function hasVisibleRoll(action) {
+  return action?.resolution_source === "roll"
+    && Array.isArray(action.raw_values)
+    && action.raw_values.length > 0;
 }
 
 function renderRollDetail(action) {
@@ -515,10 +518,11 @@ function navigationEntries() {
           : "pending",
     });
   } else if (state.mode === "generating" && activeGenerationRun) {
+    const turnIndex = activeGenerationRun.turnIndex ?? nextGeneratedTurnIndex();
     confirmed.push({
       key: "streaming",
-      turnIndex: null,
-      label: "正在生成",
+      turnIndex,
+      label: turnIndex === null ? "正在生成" : `回合${turnIndex}`,
       excerpt: activeGenerationRun.userInput || "",
       status: "generating",
     });
@@ -530,6 +534,7 @@ function navigationItemText(entry) {
   if (entry.status === "pending") return `${entry.label} · 待确认`;
   if (entry.status === "confirming") return `${entry.label} · 正在确认`;
   if (entry.status === "regenerating") return `${entry.label} · 正在生成新版本`;
+  if (entry.status === "generating") return `${entry.label} · 正在生成`;
   return entry.label;
 }
 
@@ -1686,6 +1691,87 @@ function cachePlayerShell() {
   }
 }
 
+function activeOperation(operation) {
+  return operation && !["succeeded", "failed", "cancelled"].includes(operation.status);
+}
+
+function nextGeneratedTurnIndex() {
+  const entries = state.playerState?.history_navigation || [];
+  const maxTurn = entries.reduce(
+    (current, entry) => Math.max(current, Number(entry.turn_index ?? -1)),
+    -1,
+  );
+  return maxTurn >= 0 ? maxTurn + 1 : null;
+}
+
+function generationRunSnapshot(run = activeGenerationRun) {
+  if (!run) return null;
+  return {
+    operationId: run.operationId || null,
+    operationType: run.operationType || "generation",
+    userInput: run.userInput || "",
+    turnIndex: run.turnIndex ?? nextGeneratedTurnIndex(),
+    cancellationRequested: Boolean(run.cancellationRequested),
+  };
+}
+
+function persistGenerationRun() {
+  const snapshot = generationRunSnapshot();
+  if (!snapshot) return;
+  try {
+    sessionStorage.setItem(GENERATION_IN_FLIGHT_KEY, JSON.stringify(snapshot));
+  } catch (_error) {
+    // The marker is only a refresh-time display fallback.
+  }
+}
+
+function clearGenerationRunMarker() {
+  sessionStorage.removeItem(GENERATION_IN_FLIGHT_KEY);
+}
+
+function readGenerationRunMarker() {
+  try {
+    const marker = JSON.parse(sessionStorage.getItem(GENERATION_IN_FLIGHT_KEY) || "null");
+    if (!marker || typeof marker !== "object") return null;
+    return marker;
+  } catch (_error) {
+    clearGenerationRunMarker();
+    return null;
+  }
+}
+
+function generationRunFromOperation(operation) {
+  if (!operation || operation.recovery_kind !== "generation") return null;
+  return {
+    operationId: operation.operation_id || null,
+    operationType: operation.operation_type || "generation",
+    userInput: operation.metadata?.user_input || "",
+    turnIndex: nextGeneratedTurnIndex(),
+    cancellationRequested: operation.current_step === "cancellation_requested",
+  };
+}
+
+function restoreGenerationRunPlaceholder(run) {
+  if (!run) return false;
+  prepareGenerationRun(
+    run.operationType || "generation",
+    run.userInput || "",
+    run.operationId || null,
+    {
+      turnIndex: run.turnIndex ?? nextGeneratedTurnIndex(),
+      cancellationRequested: Boolean(run.cancellationRequested),
+    },
+  );
+  setMode("generating");
+  showActivePlayerAction(activeGenerationRun.userInput);
+  startStreaming(
+    activeGenerationRun.cancellationRequested
+      ? "正在停止生成"
+      : "正在恢复生成进度",
+  );
+  return true;
+}
+
 function restorePlayerShell() {
   try {
     const cached = JSON.parse(sessionStorage.getItem(PLAYER_SHELL_CACHE_KEY) || "null");
@@ -1696,16 +1782,22 @@ function restorePlayerShell() {
     state.suggestions = cached.playerState.action_preview?.previews || [];
     state.selectedPendingIndex = Math.max(0, (activePending()?.variants?.length || 1) - 1);
     const confirmationInFlight = sessionStorage.getItem(CONFIRMATION_IN_FLIGHT_KEY) === "1";
-    setMode(
-      confirmationInFlight
-        ? "confirming"
-        : cached.playerState.needs_init
-          ? "needs_init"
-          : activePending()
-            ? "pending"
-            : "idle",
-    );
-    renderAll();
+    const generationInFlight = readGenerationRunMarker();
+    if (generationInFlight) {
+      restoreGenerationRunPlaceholder(generationInFlight);
+      renderAll();
+    } else {
+      setMode(
+        confirmationInFlight
+          ? "confirming"
+          : cached.playerState.needs_init
+            ? "needs_init"
+            : activePending()
+              ? "pending"
+              : "idle",
+      );
+      renderAll();
+    }
     return true;
   } catch (_error) {
     sessionStorage.removeItem(PLAYER_SHELL_CACHE_KEY);
@@ -1853,6 +1945,13 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   cancelNavigationSettlement();
   pinnedNavigationKey = null;
   navigationRenderSignature = "";
+  if (
+    resumeOperation
+    && !activeGenerationRun
+    && !["booting", "generating", "confirming", "switching"].includes(state.mode)
+  ) {
+    setMode("booting");
+  }
   renderSaves();
   renderControls();
 
@@ -1860,11 +1959,23 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     ? (await request("/api/player/operations/recoverable")).operations || []
     : [];
   const firstOperation = recoverableOperations[0] || null;
+  const activeGenerationOperation = recoverableOperations.find(
+    (operation) => operation.recovery_kind === "generation" && activeOperation(operation),
+  );
   const preserveCachedState = recoverableOperations.some(
     (operation) => ["confirmation", "initialization"].includes(
       operation.recovery_kind,
     ),
-  );
+  ) || Boolean(activeGenerationOperation && state.playerState);
+  if (activeGenerationOperation) {
+    restoreGenerationRunPlaceholder(generationRunFromOperation(activeGenerationOperation));
+  } else {
+    if (activeGenerationRun) {
+      finishGenerationRun();
+      stopStreaming();
+    }
+    clearGenerationRunMarker();
+  }
   const playerState = preserveCachedState && state.playerState
     ? state.playerState
     : await request("/api/player/state");
@@ -1874,9 +1985,17 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   state.playerState = playerState;
   state.suggestions = playerState.action_preview?.previews || [];
   state.selectedPendingIndex = Math.max(0, (activePending()?.variants?.length || 1) - 1);
+  if (activeGenerationRun && activeGenerationRun.turnIndex === null) {
+    activeGenerationRun.turnIndex = nextGeneratedTurnIndex();
+    persistGenerationRun();
+  }
   setMode(
-    firstOperation
-      ? firstOperation.recovery_kind === "confirmation" ? "confirming" : "generating"
+    activeGenerationOperation
+      ? "generating"
+      : firstOperation?.recovery_kind === "confirmation"
+        ? "confirming"
+        : firstOperation?.recovery_kind === "initialization"
+          ? "generating"
       : playerState.needs_init
         ? "needs_init"
         : activePending()
@@ -1975,18 +2094,21 @@ function setProgress(step) {
   if (label && confirmationLabel) confirmationLabel.textContent = label;
 }
 
-function prepareGenerationRun(operationType, userInput, operationId = null) {
+function prepareGenerationRun(operationType, userInput, operationId = null, options = {}) {
   activeGenerationRun = {
     operationId,
     operationType,
     userInput: userInput || "",
-    cancellationRequested: false,
+    turnIndex: options.turnIndex ?? nextGeneratedTurnIndex(),
+    cancellationRequested: Boolean(options.cancellationRequested),
     cancelled: false,
   };
+  persistGenerationRun();
 }
 
 function finishGenerationRun() {
   activeGenerationRun = null;
+  clearGenerationRunMarker();
   els.stopGenerationBtn.hidden = true;
   els.stopGenerationBtn.disabled = true;
   els.stopGenerationBtn.textContent = "停止生成";
@@ -1998,11 +2120,14 @@ function updateGenerationRunFromEvent(event) {
     activeGenerationRun.operationId = event.data?.operation_id || activeGenerationRun.operationId;
     activeGenerationRun.operationType = event.data?.operation_type || activeGenerationRun.operationType;
     els.stopGenerationBtn.disabled = !activeGenerationRun.operationId;
+    persistGenerationRun();
   } else if (event.step === "cancellation_requested") {
     activeGenerationRun.cancellationRequested = true;
     els.streamingLabel.textContent = "正在停止生成";
+    persistGenerationRun();
   } else if (event.step === "operation_cancelled") {
     activeGenerationRun.cancelled = true;
+    persistGenerationRun();
   }
 }
 
