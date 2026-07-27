@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.crash_logging import write_desktop_crash
-from app.desktop import WINDOW_TITLE, run_desktop
+from app.desktop import WINFORMS_RUNTIME_CHECK, WINDOW_TITLE, run_desktop
 from app.player_server import make_player_handler
 from app.runtime.app_paths import resolve_application_paths
 from app.runtime.single_instance import AlreadyRunningError, SingleInstanceLock
@@ -61,6 +61,38 @@ def test_player_handler_exposes_only_authenticated_player_surface():
         server.shutdown()
         thread.join()
         server.server_close()
+
+
+def test_winforms_runtime_check_does_not_start_the_desktop(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "app.desktop._check_winforms_runtime",
+        lambda: calls.append("checked"),
+    )
+    monkeypatch.setattr(
+        "app.desktop.run_desktop",
+        lambda *_args: pytest.fail("desktop must not start during runtime check"),
+    )
+
+    from app import desktop
+
+    assert desktop.main([WINFORMS_RUNTIME_CHECK]) == 0
+    assert calls == ["checked"]
+
+
+def test_winforms_runtime_check_returns_failure_without_showing_ui(monkeypatch):
+    monkeypatch.setattr(
+        "app.desktop._check_winforms_runtime",
+        lambda: (_ for _ in ()).throw(RuntimeError("broken CLR")),
+    )
+    monkeypatch.setattr(
+        "app.desktop._show_message",
+        lambda *_args, **_kwargs: pytest.fail("self-test must not show a dialog"),
+    )
+
+    from app import desktop
+
+    assert desktop.main([WINFORMS_RUNTIME_CHECK]) == 1
 
 
 def test_single_instance_lock_rejects_second_owner_and_can_be_reacquired(tmp_path):

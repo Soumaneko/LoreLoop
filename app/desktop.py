@@ -14,6 +14,7 @@ from app.runtime.webview2 import (
 
 
 WINDOW_TITLE = "续章 · LoreLoop"
+WINFORMS_RUNTIME_CHECK = "--check-winforms-runtime"
 
 
 class DesktopHTTPServer(ThreadingHTTPServer):
@@ -96,7 +97,20 @@ def run_desktop(
             raise cleanup_errors[0]
 
 
-def main() -> int:
+def _check_winforms_runtime() -> None:
+    """Import the frozen Windows GUI backend without creating a window."""
+    import webview.platforms.winforms  # noqa: F401
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = sys.argv[1:] if argv is None else list(argv)
+    if arguments == [WINFORMS_RUNTIME_CHECK]:
+        try:
+            _check_winforms_runtime()
+        except BaseException:
+            return 1
+        return 0
+
     logs_dir = None
     try:
         from app.runtime.app_paths import (

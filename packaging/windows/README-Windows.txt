@@ -12,3 +12,5 @@
    %LOCALAPPDATA%\LoreLoop\logs\desktop-crash.log
 
 本测试包未签名，Windows SmartScreen 可能显示未知发布者提示。
+如果旧测试包报告 Python.Runtime.Loader.Initialize 错误：
+请删除已解压目录，右键最外层下载的 ZIP，选择“属性”→“解除锁定/Unblock”→“应用”，然后重新解压。

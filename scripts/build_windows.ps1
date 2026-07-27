@@ -108,8 +108,13 @@ finally {
 }
 
 $Executable = Join-Path $PackageDir "LoreLoop.exe"
+$ExecutableConfig = Join-Path $PackageDir "LoreLoop.exe.config"
+$PythonRuntimeDll = Join-Path $PackageDir "_internal\pythonnet\runtime\Python.Runtime.dll"
 if (-not (Test-Path $Executable)) {
     throw "Expected executable was not produced: $Executable"
+}
+if (-not (Test-Path $PythonRuntimeDll)) {
+    throw "Python.Runtime.dll is missing from the frozen bundle."
 }
 if (-not (Test-Path (Join-Path $PackageDir "_internal\app\prompts"))) {
     throw "Prompt resources are missing from the frozen bundle."
@@ -123,6 +128,24 @@ if (Test-Path (Join-Path $PackageDir "_internal\app\debug_static")) {
 
 Copy-Item (Join-Path $RepoRoot "packaging\windows\README-Windows.txt") $PackageDir
 Copy-Item (Join-Path $RepoRoot "packaging\windows\Install-WebView2.cmd") $PackageDir
+Copy-Item (Join-Path $RepoRoot "packaging\windows\LoreLoop.exe.config") $ExecutableConfig
+
+# Files extracted from an Internet-downloaded ZIP can inherit Mark of the Web.
+# Reproduce that state and prove the frozen WinForms/pythonnet backend still
+# loads with the application configuration shipped beside LoreLoop.exe.
+Set-Content -LiteralPath $PythonRuntimeDll -Stream "Zone.Identifier" -Value @(
+    "[ZoneTransfer]"
+    "ZoneId=3"
+)
+try {
+    & $Executable --check-winforms-runtime
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frozen WinForms runtime self-test failed with Mark of the Web."
+    }
+}
+finally {
+    Unblock-File -LiteralPath $PythonRuntimeDll
+}
 
 if (-not $SkipWebView2Bootstrapper) {
     $Bootstrapper = Join-Path $PackageDir "MicrosoftEdgeWebview2Setup.exe"

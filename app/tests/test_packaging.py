@@ -192,6 +192,9 @@ def test_windows_build_dependencies_and_release_assets_are_fixed():
     version_info = (
         ROOT / "packaging" / "windows" / "version_info.txt"
     ).read_text(encoding="utf-8")
+    executable_config = (
+        ROOT / "packaging" / "windows" / "LoreLoop.exe.config"
+    ).read_text(encoding="utf-8")
     ast.parse(version_info)
 
     assert ">=" not in desktop_requirements
@@ -222,6 +225,12 @@ def test_windows_build_dependencies_and_release_assets_are_fixed():
     assert "SHA256SUMS.txt" in script
     assert "Compress-Archive" in script
     assert "Get-FileHash -Algorithm SHA256" in script
+    assert "LoreLoop.exe.config" in script
+    assert "Python.Runtime.dll" in script
+    assert 'Stream "Zone.Identifier"' in script
+    assert "--check-winforms-runtime" in script
+    assert "Unblock-File -LiteralPath" in script
+    assert '<loadFromRemoteSources enabled="true"/>' in executable_config
     assert "FileVersion', '0.1.0" in version_info
     assert "ProductName', 'LoreLoop（续章）" in version_info
 
