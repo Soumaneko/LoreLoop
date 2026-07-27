@@ -10,6 +10,7 @@ import pytest
 from app.runtime.save_archive import (
     ArchiveLimits,
     SaveArchiveError,
+    _safe_members,
     create_consistent_snapshot,
     export_save,
     extract_archive,
@@ -177,7 +178,7 @@ def test_import_rebase_rejects_windows_absolute_snapshot_path(tmp_path):
         rebase_history_paths(data_dir)
 
 
-@pytest.mark.parametrize("member", ["../escape.db", "/absolute.db", "save\\bad.db"])
+@pytest.mark.parametrize("member", ["../escape.db", "/absolute.db"])
 def test_inspection_rejects_zip_slip_paths(tmp_path, member):
     archive = tmp_path / "unsafe.zip"
     with zipfile.ZipFile(archive, "w") as bundle:
@@ -185,6 +186,22 @@ def test_inspection_rejects_zip_slip_paths(tmp_path, member):
         bundle.writestr(member, b"bad")
     with pytest.raises(SaveArchiveError, match="Unsafe archive path"):
         inspect_archive(archive)
+
+
+def test_member_validation_rejects_raw_backslash_path():
+    info = zipfile.ZipInfo("save/bad.db")
+    # ZipFile.writestr normalizes backslashes on Windows before writing them.
+    # Set the fields directly to exercise validation of a raw non-canonical name.
+    info.filename = r"save\bad.db"
+    info.orig_filename = r"save\bad.db"
+
+    class _Bundle:
+        @staticmethod
+        def infolist():
+            return [info]
+
+    with pytest.raises(SaveArchiveError, match="Unsafe archive path"):
+        _safe_members(_Bundle(), ArchiveLimits())
 
 
 def test_inspection_rejects_duplicate_members(tmp_path):
