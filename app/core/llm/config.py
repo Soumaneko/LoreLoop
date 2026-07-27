@@ -3,11 +3,10 @@ from dataclasses import dataclass
 import threading
 from typing import Optional
 
-from dotenv import load_dotenv
-
 from app.core.diagnostics import DiagnosticLogger, diagnostic_path_for_trace
+from app.runtime.environment import load_source_dotenv
 
-load_dotenv()
+load_source_dotenv()
 
 
 @dataclass(frozen=True)

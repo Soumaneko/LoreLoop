@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import pytest
 
-from app import debug_server
+from app import debug_server, player_server
 from app.api import record_player_diagnostic
 from app.core.diagnostics import DiagnosticLogger
 from app.debug_server import DebugHandler
@@ -641,7 +641,7 @@ def test_pipeline_operation_continues_after_subscriber_disconnect(
         completed.append("finished")
 
     monkeypatch.setattr(
-        debug_server,
+        player_server,
         "get_campaign_runtime",
         lambda: SimpleNamespace(operations=manager),
     )
@@ -680,7 +680,7 @@ def test_cancelled_player_operation_ends_sse_without_failure_payload(monkeypatch
         yield {"step": "must_not_be_emitted", "data": {}}
 
     monkeypatch.setattr(
-        debug_server,
+        player_server,
         "get_campaign_runtime",
         lambda: SimpleNamespace(operations=manager),
     )
@@ -993,7 +993,7 @@ def test_completed_player_operation_is_returned_until_acknowledged(monkeypatch):
             },
         ]
 
-    monkeypatch.setattr(debug_server, "list_operations", list_recoverable)
+    monkeypatch.setattr(player_server, "list_operations", list_recoverable)
     handler = object.__new__(DebugHandler)
 
     result = handler._load_recoverable_player_operations()

@@ -12,7 +12,8 @@ from typing import Mapping
 from uuid import UUID
 
 from platformdirs import user_data_path
-from dotenv import load_dotenv
+
+from app.runtime.environment import load_source_dotenv
 
 
 APP_NAME = "LoreLoop"
@@ -20,7 +21,7 @@ DATA_DIR_ENV = "LORELOOP_DATA_DIR"
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 LEGACY_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-load_dotenv()
+load_source_dotenv()
 
 
 @dataclass(frozen=True)
@@ -196,13 +197,20 @@ def validate_resource_paths(paths: ApplicationPaths) -> None:
         for directory in (
             paths.prompts_dir,
             paths.player_static_dir,
-            paths.debug_static_dir,
         )
         if not directory.is_dir()
     ]
     if missing:
         raise RuntimeError(
             "LoreLoop read-only resources are missing: " + ", ".join(missing)
+        )
+
+
+def validate_debug_resource_paths(paths: ApplicationPaths) -> None:
+    if not paths.debug_static_dir.is_dir():
+        raise RuntimeError(
+            "LoreLoop debug resources are missing: "
+            + str(paths.debug_static_dir)
         )
 
 

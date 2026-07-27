@@ -1,0 +1,50 @@
+name: Build Windows Test Package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: loreloop-windows-test-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Windows x64
+    runs-on: windows-2025
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python 3.11 x64
+        id: python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+          architecture: x64
+          update-environment: false
+
+      - name: Build and test package
+        shell: pwsh
+        run: >
+          .\scripts\build_windows.ps1
+          -PythonExecutable "${{ steps.python.outputs.python-path }}"
+
+      - name: Upload test package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: LoreLoop-0.1.0-win-x64-test-${{ github.run_number }}
+          path: |
+            release/LoreLoop-0.1.0-win-x64-test.zip
+            release/SHA256SUMS.txt
+            release/build-requirements-freeze.txt
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

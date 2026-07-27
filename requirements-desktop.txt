@@ -1,2 +1,7 @@
--r requirements.txt
+pydantic==2.13.4
+openai==2.41.0
+python-dotenv==1.2.2
+langgraph==1.2.8
+platformdirs==4.11.0
 pywebview==6.2.1
+pythonnet==3.1.0; sys_platform == "win32"

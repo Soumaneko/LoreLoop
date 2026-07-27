@@ -1,9 +1,13 @@
 .env
 .venv/
+/.venv-build-windows/
 __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+/build/
+/dist/
+/release/
 logs/
 data/
 docs/

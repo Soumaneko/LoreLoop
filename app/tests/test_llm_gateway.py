@@ -27,7 +27,11 @@ from app.core.llm.providers import (
 )
 from app.core.llm.prompts import PromptLoader
 from app.core.llm.schemas import EchoResult
-from app.core.llm.tracing import NullTraceLogger, TraceLogger
+from app.core.llm.tracing import (
+    TRACE_LOG_MAX_BYTES,
+    NullTraceLogger,
+    TraceLogger,
+)
 from app.debug_prompt_runner import FilePromptProvider
 
 
@@ -243,6 +247,9 @@ class TestLLMGatewayRetryFlow:
 
 
 class TestTraceLogging:
+    def test_trace_log_default_limit_is_fifty_mib(self):
+        assert TRACE_LOG_MAX_BYTES == 50 * 1024 * 1024
+
     def test_mock_gateway_uses_null_tracer_by_default(self):
         mock = MockLLM()
         mock.set_responses(['{"text": "hello", "length": 5}'])
@@ -329,6 +336,70 @@ class TestTraceLogging:
             os.unlink(trace_path)
             if os.path.exists(tracer.diagnostics.log_path):
                 os.unlink(tracer.diagnostics.log_path)
+
+    def test_trace_log_keeps_one_bounded_file_and_newest_complete_entries(
+        self,
+        tmp_path,
+    ):
+        trace_path = tmp_path / "llm_traces.jsonl"
+        tracer = TraceLogger(log_path=str(trace_path), max_bytes=4096)
+
+        for index in range(20):
+            tracer.log(
+                trace_id=f"trace-{index}",
+                task="bounded",
+                model="test-model",
+                prompt_version="v1",
+                input_data={"turn": index, "context": "中" * 180},
+                raw_output="out" * 180,
+                parsed_output={"turn": index},
+                schema_valid=True,
+                latency_ms=1.0,
+                error=None,
+            )
+
+        assert trace_path.stat().st_size <= 4096
+        traces = tracer.read_traces()
+        assert traces
+        assert traces[-1]["trace_id"] == "trace-19"
+        assert traces[0]["trace_id"] != "trace-0"
+        assert [
+            path for path in tmp_path.iterdir()
+            if path.name.startswith("llm_traces")
+        ] == [trace_path]
+
+    def test_single_oversized_trace_is_replaced_by_valid_marker(self, tmp_path):
+        trace_path = tmp_path / "llm_traces.jsonl"
+        tracer = TraceLogger(log_path=str(trace_path), max_bytes=1024)
+
+        tracer.log(
+            trace_id="oversized",
+            task="bounded",
+            model="test-model",
+            prompt_version="v1",
+            input_data={"context": "x" * 5000},
+            raw_output="y" * 5000,
+            parsed_output={"result": "z" * 5000},
+            schema_valid=True,
+            latency_ms=1.0,
+            error=None,
+        )
+
+        assert trace_path.stat().st_size <= 1024
+        traces = tracer.read_traces()
+        assert len(traces) == 1
+        marker = traces[0]
+        assert marker == {
+            "trace_id": "oversized",
+            "task": "bounded",
+            "model": "test-model",
+            "prompt_version": "v1",
+            "schema_valid": True,
+            "latency_ms": 1.0,
+            "timestamp": marker["timestamp"],
+            "trace_entry_truncated": True,
+            "original_entry_bytes": marker["original_entry_bytes"],
+        }
 
     def test_trace_id_auto_generated(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:

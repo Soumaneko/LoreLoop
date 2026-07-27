@@ -18,9 +18,11 @@ from app.runtime.app_paths import (
     resolve_application_paths,
     resolve_data_root,
     validate_resource_paths,
+    validate_debug_resource_paths,
 )
 from app.runtime.model_config import MODEL_CONFIG_FILE
 from app.runtime.reader_preferences import READER_PREFERENCES_FILE
+from app.runtime.environment import load_source_dotenv
 
 
 def test_data_root_override_is_absolute_and_has_priority(tmp_path):
@@ -33,6 +35,22 @@ def test_data_root_override_is_absolute_and_has_priority(tmp_path):
 def test_relative_data_root_override_is_rejected():
     with pytest.raises(RuntimeError, match="must be an absolute path"):
         resolve_data_root({DATA_DIR_ENV: "relative/data"})
+
+
+def test_dotenv_is_loaded_only_for_source_mode():
+    calls = []
+
+    assert load_source_dotenv(
+        frozen=False,
+        loader=lambda: calls.append("loaded") or True,
+    )
+    assert calls == ["loaded"]
+
+    assert not load_source_dotenv(
+        frozen=True,
+        loader=lambda: calls.append("must-not-load") or True,
+    )
+    assert calls == ["loaded"]
 
 
 def test_platform_default_uses_single_loreloop_directory(monkeypatch, tmp_path):
@@ -79,6 +97,18 @@ def test_ensure_user_directories_creates_only_user_layout(tmp_path):
         assert (tmp_path / name).is_dir()
     assert not (tmp_path / "prompts").exists()
     assert not (tmp_path / "player_static").exists()
+
+
+def test_desktop_resource_validation_does_not_require_debug_assets(tmp_path):
+    paths = resolve_application_paths({DATA_DIR_ENV: str(tmp_path)})
+    desktop_paths = replace(
+        paths,
+        debug_static_dir=tmp_path / "missing-debug-static",
+    )
+
+    validate_resource_paths(desktop_paths)
+    with pytest.raises(RuntimeError, match="debug resources are missing"):
+        validate_debug_resource_paths(desktop_paths)
 
 
 def test_legacy_migration_copies_without_deleting_source(tmp_path):

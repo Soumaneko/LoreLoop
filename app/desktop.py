@@ -7,6 +7,10 @@ from typing import Any, Callable
 
 from app.core.crash_logging import write_desktop_crash
 from app.runtime.single_instance import AlreadyRunningError, SingleInstanceLock
+from app.runtime.webview2 import (
+    WebView2RuntimeMissingError,
+    require_webview2_runtime,
+)
 
 
 WINDOW_TITLE = "续章 · LoreLoop"
@@ -105,11 +109,15 @@ def main() -> int:
         ensure_user_directories(APP_PATHS)
         logs_dir = APP_PATHS.logs_dir
         with SingleInstanceLock(APP_PATHS.config_dir / "desktop.lock"):
+            require_webview2_runtime()
             run_desktop(APP_PATHS)
         return 0
     except AlreadyRunningError:
         _show_message("续章已经在运行。", error=False)
         return 0
+    except WebView2RuntimeMissingError as error:
+        _show_message(str(error), error=True)
+        return 2
     except BaseException as error:
         crash_path = write_desktop_crash(
             error,
