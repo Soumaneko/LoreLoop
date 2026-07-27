@@ -1,5 +1,5 @@
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from app.runtime.app_paths import APP_PATHS
 
@@ -59,9 +59,17 @@ class PromptLoader:
         next_stack = (*stack, resolved)
 
         def replace(match: re.Match[str]) -> str:
-            relative = Path(match.group(1).strip())
-            if relative.is_absolute() or ".." in relative.parts:
-                raise ValueError(f"Invalid prompt include path: {relative}")
+            value = match.group(1).strip()
+            posix_path = PurePosixPath(value)
+            windows_path = PureWindowsPath(value)
+            if (
+                "\\" in value
+                or posix_path.is_absolute()
+                or windows_path.is_absolute()
+                or ".." in posix_path.parts
+            ):
+                raise ValueError(f"Invalid prompt include path: {value}")
+            relative = Path(*posix_path.parts)
             included = root / relative
             return self._expand_includes(included, stack=next_stack).rstrip()
 

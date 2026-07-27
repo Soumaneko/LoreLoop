@@ -5,9 +5,10 @@ import shutil
 import sqlite3
 import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .sqlite import connect_sqlite, ensure_column
 
@@ -30,8 +31,14 @@ class CampaignHistory:
         self._lock = threading.RLock()
         self._init_schema()
 
-    def _connect(self):
-        return connect_sqlite(self.db_path)
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        connection = connect_sqlite(self.db_path)
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _stored_snapshot_path(self, path: Path) -> str:
         return path.relative_to(self.data_dir).as_posix()

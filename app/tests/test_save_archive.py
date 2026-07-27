@@ -159,6 +159,24 @@ def test_import_rebase_rejects_absolute_snapshot_path(tmp_path):
         rebase_history_paths(data_dir)
 
 
+def test_import_rebase_rejects_windows_absolute_snapshot_path(tmp_path):
+    data_dir = tmp_path / "imported"
+    snapshot = data_dir / ".snapshots" / "undo-one"
+    snapshot.mkdir(parents=True)
+    history = data_dir / ".runtime" / "turn_history.db"
+    history.parent.mkdir()
+    with sqlite3.connect(history) as connection:
+        connection.execute(
+            "CREATE TABLE turn_snapshots (sequence INTEGER, path TEXT, redo_path TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO turn_snapshots VALUES (1, ?, NULL)",
+            (r"C:\old\save\.snapshots\undo-one",),
+        )
+    with pytest.raises(SaveArchiveError, match="must be relative"):
+        rebase_history_paths(data_dir)
+
+
 @pytest.mark.parametrize("member", ["../escape.db", "/absolute.db", "save\\bad.db"])
 def test_inspection_rejects_zip_slip_paths(tmp_path, member):
     archive = tmp_path / "unsafe.zip"

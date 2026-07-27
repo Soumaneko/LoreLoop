@@ -97,6 +97,7 @@ def test_player_frontend_javascript_is_syntactically_valid():
             input=source,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
         assert result.returncode == 0, result.stderr
@@ -134,6 +135,7 @@ if (module.hasDraft(variant) || module.readDraft(variant) !== "原始正文") {{
         [node, "--input-type=module", "--eval", script],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -217,6 +219,7 @@ if (root.dataset.theme !== "sepia" || root.dataset.fontFamily !== "kaiti") {{
         [node, "--input-type=module", "--eval", script],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -252,6 +255,7 @@ if (multiline.frames[0].step !== "three") {{
         [node, "--input-type=module", "--eval", script],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -293,6 +297,7 @@ if (captured.options.headers["X-LoreLoop-Token"] !== "desktop-token") {{
         [node, "--input-type=module", "--eval", script],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -320,6 +325,7 @@ if ("X-LoreLoop-Token" in headers) {{
         [node, "--input-type=module", "--eval", script],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stderr

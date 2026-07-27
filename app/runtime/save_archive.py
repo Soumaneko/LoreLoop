@@ -7,8 +7,9 @@ import sqlite3
 import stat
 import tempfile
 import zipfile
+from contextlib import closing
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Iterable
 
 from app.domain.core_memory import CoreMemory
@@ -217,7 +218,7 @@ def quick_check_database(database: Path) -> None:
     path = Path(database)
     uri = f"file:{path.resolve().as_posix()}?mode=ro"
     try:
-        with sqlite3.connect(uri, uri=True) as connection:
+        with closing(sqlite3.connect(uri, uri=True)) as connection:
             rows = connection.execute("PRAGMA quick_check").fetchall()
             tables = {
                 row[0]
@@ -285,10 +286,13 @@ def rebase_history_paths(data_dir: Path) -> None:
 
 
 def _portable_snapshot_path(value: str, root: Path) -> str:
-    raw = Path(value)
-    if raw.is_absolute():
+    posix_path = PurePosixPath(value)
+    windows_path = PureWindowsPath(value)
+    if posix_path.is_absolute() or windows_path.is_absolute():
         raise SaveArchiveError("Turn-history snapshot paths must be relative")
-    relative = raw
+    if "\\" in value:
+        raise SaveArchiveError("Turn-history snapshot paths must use forward slashes")
+    relative = Path(*posix_path.parts)
     if not relative.parts or relative.parts[0] != ".snapshots":
         raise SaveArchiveError("Turn-history path is outside .snapshots")
     target = (root / relative).resolve()
@@ -329,8 +333,12 @@ def _iter_save_files(root: Path) -> Iterable[tuple[Path, Path]]:
 def _backup_database(source: Path, destination: Path) -> None:
     source_uri = f"file:{source.resolve().as_posix()}?mode=ro"
     try:
-        with sqlite3.connect(source_uri, uri=True, timeout=30) as source_connection:
-            with sqlite3.connect(str(destination), timeout=30) as target_connection:
+        with closing(
+            sqlite3.connect(source_uri, uri=True, timeout=30)
+        ) as source_connection:
+            with closing(
+                sqlite3.connect(str(destination), timeout=30)
+            ) as target_connection:
                 source_connection.backup(target_connection)
                 target_connection.commit()
                 # `journal_mode` is persistent and is copied with the database.
@@ -375,9 +383,10 @@ def _safe_members(bundle: zipfile.ZipFile, limits: ArchiveLimits) -> list[zipfil
     names: set[str] = set()
     total = 0
     for info in infos:
+        raw_name = getattr(info, "orig_filename", info.filename)
         name = info.filename
-        if not name or "\\" in name:
-            raise SaveArchiveError(f"Unsafe archive path: {name!r}")
+        if not raw_name or "\\" in raw_name:
+            raise SaveArchiveError(f"Unsafe archive path: {raw_name!r}")
         path = PurePosixPath(name)
         if path.is_absolute() or ".." in path.parts or "." in path.parts:
             raise SaveArchiveError(f"Unsafe archive path: {name!r}")
@@ -476,7 +485,7 @@ def _validate_save_payload(data_dir: Path) -> None:
         state_db = data_dir / "current_state.db"
         if state_db.is_file():
             uri = f"file:{state_db.resolve().as_posix()}?mode=ro"
-            with sqlite3.connect(uri, uri=True) as connection:
+            with closing(sqlite3.connect(uri, uri=True)) as connection:
                 row = connection.execute(
                     "SELECT state_json FROM current_state WHERE id=1"
                 ).fetchone()

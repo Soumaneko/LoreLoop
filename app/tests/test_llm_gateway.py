@@ -712,7 +712,7 @@ class TestPromptLoader:
 
     @pytest.mark.parametrize(
         "include_path",
-        ["/tmp/outside.txt", "../outside.txt"],
+        ["/tmp/outside.txt", r"C:\tmp\outside.txt", "../outside.txt"],
     )
     def test_rejects_prompt_include_outside_root(self, tmp_path, include_path):
         (tmp_path / "composed_v1.md").write_text(

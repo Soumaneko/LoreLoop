@@ -12,6 +12,13 @@ from app.runtime.operations import OperationManager
 from app.runtime.session import get_campaign_runtime
 
 
+@pytest.fixture
+def configured_runtime(monkeypatch):
+    runtime = get_campaign_runtime()
+    monkeypatch.setattr(runtime, "is_model_configured", lambda: True)
+    return runtime
+
+
 def test_event_buffer_assigns_sequences_and_reports_truncation():
     buffer = OperationEventBuffer("operation-1", max_events=2)
     payload = {"value": 1}
@@ -530,8 +537,11 @@ def test_exclusive_key_rejects_parallel_operation_and_releases_on_finish():
         manager.shutdown()
 
 
-def test_public_api_starts_generation_as_background_operation(monkeypatch):
-    runtime = get_campaign_runtime()
+def test_public_api_starts_generation_as_background_operation(
+    monkeypatch,
+    configured_runtime,
+):
+    runtime = configured_runtime
     captured = {}
 
     def generation_stream(user_input, difficulty, max_chars):
@@ -616,11 +626,12 @@ def test_public_api_rejects_model_operations_before_configuration(monkeypatch):
 )
 def test_public_api_starts_retry_modes_with_pending_turn_metadata(
     monkeypatch,
+    configured_runtime,
     operation_type,
     stream_attribute,
     starter,
 ):
-    runtime = get_campaign_runtime()
+    runtime = configured_runtime
     runtime.pending_turns.add(SimpleNamespace(
         turn_id="turn-v1",
         group_id="group-1",
@@ -655,8 +666,11 @@ def test_public_api_starts_retry_modes_with_pending_turn_metadata(
     )
 
 
-def test_public_api_starts_feedback_rewrite_with_current_draft(monkeypatch):
-    runtime = get_campaign_runtime()
+def test_public_api_starts_feedback_rewrite_with_current_draft(
+    monkeypatch,
+    configured_runtime,
+):
+    runtime = configured_runtime
     runtime.pending_turns.add(SimpleNamespace(
         turn_id="turn-v1",
         group_id="group-1",
@@ -697,8 +711,11 @@ def test_public_api_starts_feedback_rewrite_with_current_draft(monkeypatch):
     )
 
 
-def test_public_api_starts_confirmation_with_pending_turn_metadata(monkeypatch):
-    runtime = get_campaign_runtime()
+def test_public_api_starts_confirmation_with_pending_turn_metadata(
+    monkeypatch,
+    configured_runtime,
+):
+    runtime = configured_runtime
     runtime.pending_turns.add(SimpleNamespace(
         turn_id="turn-confirm",
         group_id="group-confirm",
@@ -747,8 +764,11 @@ def test_public_api_starts_confirmation_with_pending_turn_metadata(monkeypatch):
     }
 
 
-def test_public_api_starts_manual_maintenance_as_operation(monkeypatch):
-    runtime = get_campaign_runtime()
+def test_public_api_starts_manual_maintenance_as_operation(
+    monkeypatch,
+    configured_runtime,
+):
+    runtime = configured_runtime
 
     def maintenance_stream():
         yield {"step": "memory_draft_started", "data": {}}
@@ -769,8 +789,11 @@ def test_public_api_starts_manual_maintenance_as_operation(monkeypatch):
     ] == ["memory_draft_started", "finish"]
 
 
-def test_public_api_starts_both_initialization_stages_as_operations(monkeypatch):
-    runtime = get_campaign_runtime()
+def test_public_api_starts_both_initialization_stages_as_operations(
+    monkeypatch,
+    configured_runtime,
+):
+    runtime = configured_runtime
 
     def direction_stream(payload):
         yield {

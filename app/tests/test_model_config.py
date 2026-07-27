@@ -1,4 +1,5 @@
 import json
+import os
 import stat
 import threading
 
@@ -47,7 +48,8 @@ def test_local_model_config_overrides_environment_and_never_exposes_key(
     }
     assert "api_key" not in status
     assert "local-secret" not in json.dumps(status)
-    assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
 
 
 def test_environment_is_bootstrap_when_no_local_config(tmp_path, monkeypatch):

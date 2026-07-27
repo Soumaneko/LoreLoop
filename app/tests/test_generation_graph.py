@@ -556,7 +556,12 @@ def test_feedback_no_rewrite_does_not_create_or_stream_a_variant(
                 reasoning="输入不构成修改要求。",
             )
 
-    configure_runtime_services(current_state=_StateStore)
+    configure_runtime_services(
+        current_state=_StateStore,
+        gateway_factory=lambda: SimpleNamespace(
+            set_trace_context=lambda **_kwargs: None
+        ),
+    )
     monkeypatch.setattr(generation_graph, "RewriteStrategySelector", _Selector)
     monkeypatch.setattr(
         generation_graph,
