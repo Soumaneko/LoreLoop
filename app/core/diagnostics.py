@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Any, Literal
 
+from app.runtime.app_paths import APP_PATHS
+
 
 DiagnosticSeverity = Literal["warning", "error"]
 _WRITE_LOCK = threading.Lock()
@@ -24,7 +26,7 @@ class DiagnosticLogger:
 
     def __init__(self, log_path: str | os.PathLike[str] | None = None) -> None:
         if log_path is None:
-            log_path = Path(__file__).resolve().parents[2] / "logs" / "diagnostics.jsonl"
+            log_path = APP_PATHS.logs_dir / "diagnostics.jsonl"
         self._log_path = Path(log_path)
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
 

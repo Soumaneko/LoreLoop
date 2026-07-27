@@ -89,6 +89,7 @@ def test_player_frontend_javascript_is_syntactically_valid():
         "prepaint.js",
         "reader_preferences.js",
         "state.js",
+        "storage_migration.js",
     ):
         source = (STATIC_DIR / filename).read_text(encoding="utf-8")
         result = subprocess.run(
@@ -127,6 +128,83 @@ module.applySavedDraft(variant, {{
 }});
 if (module.hasDraft(variant) || module.readDraft(variant) !== "原始正文") {{
   throw new Error("original text was not restored");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_legacy_browser_storage_keys_migrate_once():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    migration_url = (STATIC_DIR / "storage_migration.js").resolve().as_uri()
+    prepaint_url = (STATIC_DIR / "prepaint.js").resolve().as_uri()
+    script = f"""
+class Storage {{
+  constructor(entries = []) {{ this.values = new Map(entries); }}
+  getItem(key) {{ return this.values.has(key) ? this.values.get(key) : null; }}
+  setItem(key, value) {{ this.values.set(key, String(value)); }}
+  removeItem(key) {{ this.values.delete(key); }}
+}}
+const {{ migrateStorageKey }} = await import("{migration_url}");
+const session = new Storage([["tvg:player-shell", "legacy-shell"]]);
+if (!migrateStorageKey(
+  session,
+  "tvg:player-shell",
+  "loreloop:player-shell",
+)) throw new Error("session migration failed");
+if (session.getItem("loreloop:player-shell") !== "legacy-shell") {{
+  throw new Error("legacy session value was not copied");
+}}
+if (session.getItem("tvg:player-shell") !== null) {{
+  throw new Error("legacy session key was not removed");
+}}
+const newer = new Storage([
+  ["tvg:generation-in-flight", "legacy"],
+  ["loreloop:generation-in-flight", "current"],
+]);
+migrateStorageKey(
+  newer,
+  "tvg:generation-in-flight",
+  "loreloop:generation-in-flight",
+);
+if (newer.getItem("loreloop:generation-in-flight") !== "current") {{
+  throw new Error("current session value was overwritten");
+}}
+
+globalThis.localStorage = new Storage([[
+  "tvg:reader-preferences",
+  JSON.stringify({{
+    font_size: "18",
+    font_family: "kaiti",
+    theme: "sepia",
+    theme_color: "#e6ddcc",
+  }}),
+]]);
+const root = {{
+  dataset: {{}},
+  style: {{ setProperty(name, value) {{ this[name] = value; }} }},
+}};
+const themeMeta = {{ content: "#11110e" }};
+globalThis.document = {{
+  documentElement: root,
+  querySelector() {{ return themeMeta; }},
+}};
+await import("{prepaint_url}");
+if (localStorage.getItem("tvg:reader-preferences") !== null) {{
+  throw new Error("legacy reader key was not removed");
+}}
+if (localStorage.getItem("loreloop:reader-preferences") === null) {{
+  throw new Error("reader preferences were not migrated");
+}}
+if (root.dataset.theme !== "sepia" || root.dataset.fontFamily !== "kaiti") {{
+  throw new Error("migrated reader preferences were not applied");
 }}
 """
     result = subprocess.run(
@@ -266,7 +344,7 @@ def test_player_themes_use_semantic_tokens_without_component_overrides():
     ):
         assert styles.count(token) == 3
 
-    assert 'const CACHE_KEY = "tvg:reader-preferences"' in preferences_source
+    assert 'const CACHE_KEY = "loreloop:reader-preferences"' in preferences_source
     assert "let saveQueue = Promise.resolve()" in preferences_source
     assert "themeColorMeta.content = themeColor" in preferences_source
     assert 'request("/api/player/reader-preferences")' in preferences_source
@@ -280,6 +358,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
+    assert "<title>续章 · 你的故事</title>" in html
+    assert "<strong>续章</strong>" in html
+    assert "LORELOOP · YOUR LIVING STORY" in html
     assert "/api/player/state" in source
     assert 'await request("/api/player/model-config")' in source
     assert 'request("/api/player/model-config/test"' in source
@@ -321,7 +402,8 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "/api/player/operations/${encodeURIComponent(operation.operation_id)}/events" in source
     assert "request_id: newRequestId()" in source
     assert "function resumeConfirmationOperation(" in source
-    assert 'GENERATION_IN_FLIGHT_KEY = "tvg:generation-in-flight"' in source
+    assert 'GENERATION_IN_FLIGHT_KEY = "loreloop:generation-in-flight"' in source
+    assert 'CONFIRMATION_IN_FLIGHT_KEY = "loreloop:confirmation-in-flight"' in source
     assert "function restoreGenerationRunPlaceholder(" in source
     assert "activeGenerationOperation" in source
     assert 'if (entry.status === "generating") return `${entry.label} · 正在生成`;' in source
@@ -398,7 +480,7 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "confirmation-status" in source
     assert "activePlayerAction" in source
     assert "showActivePlayerAction(userInput)" in source
-    assert 'const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell"' in source
+    assert 'const PLAYER_SHELL_CACHE_KEY = "loreloop:player-shell"' in source
     assert "function restorePlayerShell()" in source
     assert 'sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1")' in source
     assert "restorePlayerShell();" in source

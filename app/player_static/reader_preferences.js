@@ -1,6 +1,6 @@
 import { syncCustomSelect } from "./custom_select.js";
 
-const CACHE_KEY = "tvg:reader-preferences";
+const CACHE_KEY = "loreloop:reader-preferences";
 const THEME_COLORS = {
   dark: "#11110e",
   sepia: "#e6ddcc",

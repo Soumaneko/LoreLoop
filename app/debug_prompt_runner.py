@@ -12,6 +12,7 @@ from typing import Any
 
 from app.core.llm import LLMGateway, LLMProvider, PromptLoader, TraceLogger
 from app.core.llm.providers import ProviderResult
+from app.runtime.app_paths import APP_PATHS
 
 
 class FilePromptExchange:
@@ -258,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--session-dir",
         type=Path,
-        help="prompt/response 输出目录，默认写入 debug_prompts/<时间戳>",
+        help="prompt/response 输出目录，默认写入 LoreLoop 用户数据目录",
     )
     parser.add_argument("--poll-interval", type=float, default=0.5)
     parser.add_argument("--timeout", type=float, default=3600)
@@ -275,7 +276,7 @@ def main() -> None:
         raise SystemExit("玩家行动不能为空")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_dir = args.session_dir or Path("debug_prompts") / (
+    session_dir = args.session_dir or APP_PATHS.debug_prompts_dir / (
         f"{timestamp}_{uuid.uuid4().hex[:6]}"
     )
     exchange = FilePromptExchange(

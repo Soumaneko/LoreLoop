@@ -1,7 +1,19 @@
 (() => {
-  const cacheKey = "tvg:reader-preferences";
+  const cacheKey = "loreloop:reader-preferences";
+  const legacyCacheKey = "tvg:reader-preferences";
   try {
-    const preferences = JSON.parse(localStorage.getItem(cacheKey) || "null");
+    let serialized = localStorage.getItem(cacheKey);
+    if (serialized === null) {
+      const legacy = localStorage.getItem(legacyCacheKey);
+      if (legacy !== null) {
+        localStorage.setItem(cacheKey, legacy);
+        localStorage.removeItem(legacyCacheKey);
+        serialized = legacy;
+      }
+    } else {
+      localStorage.removeItem(legacyCacheKey);
+    }
+    const preferences = JSON.parse(serialized || "null");
     if (!preferences) return;
     const themes = new Set(["dark", "sepia", "light"]);
     const fonts = new Set(["serif", "kaiti", "ming", "sans"]);

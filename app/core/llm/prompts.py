@@ -1,6 +1,7 @@
-import os
 import re
 from pathlib import Path
+
+from app.runtime.app_paths import APP_PATHS
 
 from .errors import PromptNotFoundError
 
@@ -14,7 +15,7 @@ _INCLUDE_PATTERN = re.compile(
 class PromptLoader:
     def __init__(self, prompts_dir: str | None = None):
         if prompts_dir is None:
-            prompts_dir = os.path.join(os.path.dirname(__file__), "..", "..", "prompts")
+            prompts_dir = str(APP_PATHS.prompts_dir)
         self._prompts_dir = Path(prompts_dir)
 
     @property

@@ -9,6 +9,7 @@ from app.core.diagnostics import (
     NullDiagnosticLogger,
     diagnostic_path_for_trace,
 )
+from app.runtime.app_paths import APP_PATHS
 
 
 class TraceLogger:
@@ -19,10 +20,8 @@ class TraceLogger:
         diagnostics: DiagnosticLogger | NullDiagnosticLogger | None = None,
     ):
         if log_path is None:
-            log_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "logs", "llm_traces.jsonl"
-            )
-        self._log_path = log_path
+            log_path = str(APP_PATHS.logs_dir / "llm_traces.jsonl")
+        self._log_path = str(log_path)
         self._diagnostics = diagnostics or DiagnosticLogger(
             diagnostic_path_for_trace(log_path)
         )

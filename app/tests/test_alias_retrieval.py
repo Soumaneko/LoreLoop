@@ -61,7 +61,7 @@ class TestAliasStore:
 
 
 class TestAliasRetrieval:
-    def test_retriever_closes_only_owned_alias_store(self, monkeypatch):
+    def test_retriever_uses_only_explicit_alias_store(self):
         class _FakeAliasStore:
             def __init__(self):
                 self.closed = False
@@ -69,26 +69,18 @@ class TestAliasRetrieval:
             def close(self):
                 self.closed = True
 
-        owned = _FakeAliasStore()
-        monkeypatch.setattr(
-            CandidateRetriever,
-            "_load_default_alias_store",
-            staticmethod(lambda: owned),
-        )
-
-        with CandidateRetriever(MemoryStore(":memory:")):
-            pass
-
-        assert owned.closed is True
-
         injected = _FakeAliasStore()
-        with CandidateRetriever(
+        retriever = CandidateRetriever(
             MemoryStore(":memory:"),
             alias_store=injected,
-        ):
-            pass
+        )
 
+        assert retriever.alias_store is injected
+        retriever.close()
         assert injected.closed is False
+
+        default = CandidateRetriever(MemoryStore(":memory:"))
+        assert default.alias_store is None
 
     def test_alias_entity_match_passes_gate(self):
         store = MemoryStore(":memory:")

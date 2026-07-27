@@ -8,7 +8,14 @@ from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.turn_resolution.schemas import TurnResolutionResult
-from app.runtime.paths import CampaignPaths, PROJECT_ROOT, SAVES_DIR, validate_save_name
+from app.runtime.app_paths import APP_PATHS
+from app.runtime.paths import (
+    ACTIVE_SAVE_FILE,
+    APP_CONFIG_DIR,
+    CampaignPaths,
+    SAVES_DIR,
+    validate_save_name,
+)
 from app.runtime.saves import SaveManager
 from app.runtime.session import CampaignRuntime, PendingOpening, PendingTurn
 from app.runtime.turn_history import CampaignHistory
@@ -93,8 +100,10 @@ def test_validate_save_name_rejects_unsafe_display_names(name):
         validate_save_name(name)
 
 
-def test_default_saves_directory_is_at_project_root():
-    assert SAVES_DIR == PROJECT_ROOT / "saves"
+def test_default_runtime_paths_are_under_user_data_root():
+    assert SAVES_DIR == APP_PATHS.data_root / "saves"
+    assert APP_CONFIG_DIR == APP_PATHS.data_root / "config"
+    assert ACTIVE_SAVE_FILE == APP_PATHS.data_root / "config" / "active_save"
 
 
 def test_save_manager_creates_lists_switches_and_isolates_state(tmp_path):

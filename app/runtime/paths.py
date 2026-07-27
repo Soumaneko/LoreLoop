@@ -3,11 +3,21 @@ import os
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from .app_paths import (
+    APP_PATHS,
+    ensure_user_directories,
+    migrate_legacy_user_data,
+)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SAVES_DIR = PROJECT_ROOT / "saves"
-APP_CONFIG_DIR = SAVES_DIR / ".app"
-ACTIVE_SAVE_FILE = SAVES_DIR / ".active_save"
+
+migrate_legacy_user_data(APP_PATHS)
+ensure_user_directories(APP_PATHS)
+
+SAVES_DIR = APP_PATHS.saves_dir
+APP_CONFIG_DIR = APP_PATHS.config_dir
+LOGS_DIR = APP_PATHS.logs_dir
+WEBVIEW_DIR = APP_PATHS.webview_dir
+ACTIVE_SAVE_FILE = APP_CONFIG_DIR / "active_save"
 
 
 def validate_save_name(name: str) -> str:
@@ -24,7 +34,6 @@ def validate_save_name(name: str) -> str:
 
 
 def configured_save_id() -> str:
-    SAVES_DIR.mkdir(parents=True, exist_ok=True)
     try:
         raw = ACTIVE_SAVE_FILE.read_text(encoding="utf-8").strip()
         save_id = str(UUID(raw))

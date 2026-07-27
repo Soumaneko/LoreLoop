@@ -70,6 +70,8 @@ def test_debug_frontend_exposes_runtime_content():
         assert marker in source
 
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert "<title>LoreLoop（续章）Debugger</title>" in html
+    assert "LoreLoop · 续章" in html
     assert 'href="/debug-assets/styles.css"' in html
     assert 'src="/debug-assets/app.js"' in html
     assert 'id="saveSelect"' in html

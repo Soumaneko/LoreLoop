@@ -19,6 +19,7 @@ import {
   setMode,
   state,
 } from "./state.js";
+import { migrateStorageKey } from "./storage_migration.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -120,9 +121,29 @@ const highlightProfiles = new WeakMap();
 let highlightPointerState = null;
 const HISTORY_PAGE_SIZE = 5;
 const HISTORY_NAVIGATION_LOAD_SIZE = 20;
-const PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
-const CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
-const GENERATION_IN_FLIGHT_KEY = "tvg:generation-in-flight";
+const PLAYER_SHELL_CACHE_KEY = "loreloop:player-shell";
+const CONFIRMATION_IN_FLIGHT_KEY = "loreloop:confirmation-in-flight";
+const GENERATION_IN_FLIGHT_KEY = "loreloop:generation-in-flight";
+const LEGACY_PLAYER_SHELL_CACHE_KEY = "tvg:player-shell";
+const LEGACY_CONFIRMATION_IN_FLIGHT_KEY = "tvg:confirmation-in-flight";
+const LEGACY_GENERATION_IN_FLIGHT_KEY = "tvg:generation-in-flight";
+
+migrateStorageKey(
+  sessionStorage,
+  LEGACY_PLAYER_SHELL_CACHE_KEY,
+  PLAYER_SHELL_CACHE_KEY,
+);
+migrateStorageKey(
+  sessionStorage,
+  LEGACY_CONFIRMATION_IN_FLIGHT_KEY,
+  CONFIRMATION_IN_FLIGHT_KEY,
+);
+migrateStorageKey(
+  sessionStorage,
+  LEGACY_GENERATION_IN_FLIGHT_KEY,
+  GENERATION_IN_FLIGHT_KEY,
+);
+
 const readerPreferences = createReaderPreferencesController({
   elements: {
     fontSize: els.fontSizeSelect,

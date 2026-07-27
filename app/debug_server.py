@@ -59,11 +59,12 @@ from app.runtime.operation_types import (
     PLAYER_OPERATION_TYPES,
     operation_policy,
 )
+from app.runtime.app_paths import APP_PATHS
 
 # python -m app.debug_server
 
-DEBUG_STATIC_DIR = Path(__file__).with_name("debug_static")
-PLAYER_STATIC_DIR = Path(__file__).with_name("player_static")
+DEBUG_STATIC_DIR = APP_PATHS.debug_static_dir
+PLAYER_STATIC_DIR = APP_PATHS.player_static_dir
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, data: dict[str, Any]) -> None:
@@ -392,14 +393,14 @@ class DebugHandler(BaseHTTPRequestHandler):
         temporary_path: Path | None = None
         response_started = False
         try:
-            descriptor, raw_path = tempfile.mkstemp(prefix="tvg-save-", suffix=".zip")
+            descriptor, raw_path = tempfile.mkstemp(prefix="loreloop-save-", suffix=".zip")
             os.close(descriptor)
             temporary_path = Path(raw_path)
             temporary_path.unlink()
             export_save_archive(save_id, temporary_path)
             saves = list_saves().get("saves", [])
             save = next((item for item in saves if item.get("save_id") == save_id), None)
-            display_name = str(save.get("name", "TVG-save")) if save else "TVG-save"
+            display_name = str(save.get("name", "LoreLoop-save")) if save else "LoreLoop-save"
             payload_size = temporary_path.stat().st_size
             self.send_response(200)
             self.send_header("Content-Type", "application/zip")
@@ -436,7 +437,7 @@ class DebugHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             if length < 1 or length > 512 * 1024 * 1024:
                 raise ValueError("ZIP archive size must be between 1 byte and 512 MB")
-            descriptor, raw_path = tempfile.mkstemp(prefix="tvg-import-", suffix=".zip")
+            descriptor, raw_path = tempfile.mkstemp(prefix="loreloop-import-", suffix=".zip")
             temporary_path = Path(raw_path)
             remaining = length
             with os.fdopen(descriptor, "wb") as destination:
@@ -989,13 +990,13 @@ class DebugHandler(BaseHTTPRequestHandler):
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run TVG Memory.")
+    parser = argparse.ArgumentParser(description="Run LoreLoop (续章).")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
 
     server = ThreadingHTTPServer((args.host, args.port), DebugHandler)
-    print(f"TVG Memory: http://{args.host}:{args.port}")
+    print(f"LoreLoop / 续章: http://{args.host}:{args.port}")
     print(f"Debug Console: http://{args.host}:{args.port}/debug")
     server.serve_forever()
 

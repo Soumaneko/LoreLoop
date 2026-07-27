@@ -1,9 +1,6 @@
-from pathlib import Path
-
 from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
 from app.domain.recall_memory.schemas import MemoryRecord
 from app.domain.recall_memory.store import MemoryStore
-from app.domain.retrieval.alias_store import AliasStore
 from app.domain.retrieval.config import (
     LOW_WEIGHT_ANCHOR_KINDS,
     RetrievalConfig,
@@ -45,21 +42,8 @@ class CandidateRetriever:
         self.config = config or RetrievalConfig()
         if alias_store is not None:
             self.alias_store = alias_store
-            self._owns_alias_store = False
         else:
-            self.alias_store = self._load_default_alias_store()
-            self._owns_alias_store = self.alias_store is not None
-
-    @staticmethod
-    def _load_default_alias_store():
-        repo_root = Path(__file__).resolve().parents[3]
-        db_path = repo_root / "data" / "aliases.db"
-        if not db_path.exists():
-            return None
-        try:
-            return AliasStore(str(db_path))
-        except Exception:
-            return None
+            self.alias_store = None
 
     def retrieve(
         self,
@@ -109,10 +93,7 @@ class CandidateRetriever:
         )
 
     def close(self) -> None:
-        if self._owns_alias_store and self.alias_store is not None:
-            self.alias_store.close()
-            self.alias_store = None
-            self._owns_alias_store = False
+        return None
 
     def __enter__(self):
         return self

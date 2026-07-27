@@ -52,7 +52,12 @@ class SaveManager:
     ) -> None:
         self.root = Path(root)
         self.runtime = runtime or get_campaign_runtime()
-        self.active_file = Path(active_file) if active_file else self.root / ACTIVE_SAVE_FILE.name
+        if active_file is not None:
+            self.active_file = Path(active_file)
+        elif self.root == SAVES_DIR:
+            self.active_file = ACTIVE_SAVE_FILE
+        else:
+            self.active_file = self.root / ".active_save"
         self._lock = threading.RLock()
         self.root.mkdir(parents=True, exist_ok=True)
         self._cleanup_staging()
