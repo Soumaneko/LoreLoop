@@ -1,3 +1,5 @@
+import { desktopHeaders } from "./api.js";
+
 const ENDPOINT = "/api/player/diagnostics";
 const SECRET_PATTERNS = [
   /\bsk-[A-Za-z0-9_-]{12,}\b/g,
@@ -16,7 +18,7 @@ function sanitize(value, limit) {
 function send(payload) {
   fetch(ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: desktopHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
     keepalive: true,
   }).catch(() => undefined);

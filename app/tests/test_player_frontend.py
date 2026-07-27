@@ -139,6 +139,12 @@ if (module.hasDraft(variant) || module.readDraft(variant) !== "原始正文") {{
     assert result.returncode == 0, result.stderr
 
 
+def test_client_diagnostics_uses_desktop_session_token():
+    source = (STATIC_DIR / "client_diagnostics.js").read_text(encoding="utf-8")
+    assert 'import { desktopHeaders } from "./api.js"' in source
+    assert 'headers: desktopHeaders({ "Content-Type": "application/json" })' in source
+
+
 def test_legacy_browser_storage_keys_migrate_once():
     node = shutil.which("node")
     if node is None:
@@ -240,6 +246,74 @@ const multiline = parseSSEFrames(
 );
 if (multiline.frames[0].step !== "three") {{
   throw new Error("multiline data frame was not parsed");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_player_api_sends_desktop_session_token_when_present():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "api.js").resolve().as_uri()
+    script = f"""
+globalThis.window = globalThis;
+globalThis.document = {{
+  querySelector: () => ({{ getAttribute: () => "desktop-token" }}),
+}};
+let captured = null;
+globalThis.fetch = async (path, options) => {{
+  captured = {{ path, options }};
+  return {{
+    ok: true,
+    status: 200,
+    json: async () => ({{ ok: true, data: {{ value: 1 }} }}),
+  }};
+}};
+const {{ cancelOperation, request }} = await import("{module_url}");
+await request("/api/player/state");
+if (captured.options.headers["X-LoreLoop-Token"] !== "desktop-token") {{
+  throw new Error("desktop token header was not attached");
+}}
+await cancelOperation("operation-1");
+if (captured.path !== "/api/player/operations/operation-1/cancel") {{
+  throw new Error("cancel operation used the wrong endpoint");
+}}
+if (captured.options.headers["X-LoreLoop-Token"] !== "desktop-token") {{
+  throw new Error("cancel operation did not inherit the desktop token");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_player_api_omits_empty_desktop_token_in_web_mode():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "api.js").resolve().as_uri()
+    script = f"""
+globalThis.document = {{
+  querySelector: () => ({{ getAttribute: () => "" }}),
+}};
+const {{ desktopHeaders }} = await import("{module_url}");
+const headers = desktopHeaders({{ Accept: "application/json" }});
+if (headers.Accept !== "application/json") {{
+  throw new Error("existing web headers were not preserved");
+}}
+if ("X-LoreLoop-Token" in headers) {{
+  throw new Error("web mode must not send an empty desktop token");
 }}
 """
     result = subprocess.run(

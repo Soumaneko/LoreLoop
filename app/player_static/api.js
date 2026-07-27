@@ -44,6 +44,15 @@ function apiError(payload, {
   });
 }
 
+export function desktopHeaders(headers = {}) {
+  const token = document
+    .querySelector('meta[name="loreloop-session-token"]')
+    ?.getAttribute("content") || "";
+  return token
+    ? { ...headers, "X-LoreLoop-Token": token }
+    : { ...headers };
+}
+
 async function fetchWithTimeout(path, options, timeoutMs) {
   const controller = new AbortController();
   const externalSignal = options.signal;
@@ -57,7 +66,11 @@ async function fetchWithTimeout(path, options, timeoutMs) {
     timeoutMs,
   );
   try {
-    return await fetch(path, { ...options, signal: controller.signal });
+    return await fetch(path, {
+      ...options,
+      headers: desktopHeaders(options.headers),
+      signal: controller.signal,
+    });
   } catch (error) {
     if (controller.signal.aborted) {
       const timedOut = controller.signal.reason?.name === "TimeoutError";
@@ -109,6 +122,7 @@ async function responseError(response, fallback) {
 export async function downloadSave(saveId) {
   const response = await fetch(
     `/api/player/saves/export?save_id=${encodeURIComponent(saveId)}`,
+    { headers: desktopHeaders() },
   );
   if (!response.ok) throw await responseError(response);
   const disposition = response.headers.get("Content-Disposition") || "";
@@ -130,7 +144,7 @@ export async function importSaveArchive(file, name) {
     `/api/player/saves/import?name=${encodeURIComponent(name)}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/zip" },
+      headers: desktopHeaders({ "Content-Type": "application/zip" }),
       body: file,
     },
   );
@@ -237,7 +251,7 @@ export async function cancelOperation(operationId) {
 export async function stream(path, body, onEvent) {
   const response = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: desktopHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body || {}),
   });
   return readStream(response, onEvent);
@@ -245,7 +259,7 @@ export async function stream(path, body, onEvent) {
 
 export async function subscribe(path, onEvent) {
   const response = await fetch(path, {
-    headers: { Accept: "text/event-stream" },
+    headers: desktopHeaders({ Accept: "text/event-stream" }),
   });
   return readStream(response, onEvent);
 }

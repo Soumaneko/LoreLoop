@@ -609,6 +609,9 @@ class CampaignRuntime:
         self.operations.shutdown(wait=wait_for_jobs)
         self.jobs.shutdown(wait=wait_for_jobs)
 
+    def begin_shutdown(self) -> int:
+        return self.operations.cancel_active(stop_accepting_new=True)
+
 
 DEFAULT_CAMPAIGN_RUNTIME = CampaignRuntime(
     configured_save_id(),

@@ -100,6 +100,63 @@ def test_running_operation_cancels_at_checkpoint_without_emitting_failure():
         manager.shutdown()
 
 
+def test_cancel_active_requests_cancellation_for_all_non_terminal_operations():
+    manager = OperationManager("campaign-1", max_workers=2)
+    started = [threading.Event(), threading.Event()]
+    release = threading.Event()
+
+    def stream(index):
+        yield {"step": "started", "data": {}}
+        started[index].set()
+        assert release.wait(timeout=2)
+        yield {"step": "must_not_be_emitted", "data": {}}
+
+    try:
+        operation_ids = [
+            manager.submit_stream("generation", stream, index)
+            for index in range(2)
+        ]
+        assert all(event.wait(timeout=2) for event in started)
+
+        assert manager.cancel_active() == 2
+        release.set()
+
+        assert [
+            manager.wait(operation_id, timeout=2).status
+            for operation_id in operation_ids
+        ] == ["cancelled", "cancelled"]
+        assert manager.cancel_active() == 0
+    finally:
+        release.set()
+        manager.shutdown()
+
+
+def test_cancel_active_can_atomically_close_submission_gate():
+    manager = OperationManager("campaign-1", max_workers=1)
+    started = threading.Event()
+    release = threading.Event()
+
+    def stream():
+        yield {"step": "started", "data": {}}
+        started.set()
+        assert release.wait(timeout=2)
+        yield {"step": "must_not_be_emitted", "data": {}}
+
+    try:
+        operation_id = manager.submit_stream("generation", stream)
+        assert started.wait(timeout=2)
+
+        assert manager.cancel_active(stop_accepting_new=True) == 1
+        with pytest.raises(RuntimeError, match="operation manager is shut down"):
+            manager.submit_stream("late-generation", stream)
+
+        release.set()
+        assert manager.wait(operation_id, timeout=2).status == "cancelled"
+    finally:
+        release.set()
+        manager.shutdown()
+
+
 def test_queued_operation_is_cancelled_before_it_starts():
     manager = OperationManager("campaign-1", max_workers=1)
     occupied = threading.Event()

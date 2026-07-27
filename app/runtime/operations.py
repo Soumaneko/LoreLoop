@@ -331,6 +331,21 @@ class OperationManager:
                 operation_status=record.status,
             )
 
+    def cancel_active(self, *, stop_accepting_new: bool = False) -> int:
+        """Cancel current work, optionally closing the submission gate atomically."""
+        with self._condition:
+            if stop_accepting_new:
+                self._shutdown = True
+            operation_ids = [
+                record.operation_id
+                for record in self._records.values()
+                if record.status not in TERMINAL_OPERATION_STATUSES
+            ]
+            self._condition.notify_all()
+        for operation_id in operation_ids:
+            self.cancel(operation_id)
+        return len(operation_ids)
+
     def status_counts(self) -> dict[str, int]:
         with self._guard:
             return dict(Counter(record.status for record in self._records.values()))
