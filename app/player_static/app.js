@@ -9,6 +9,7 @@ import {
   installClientDiagnostics,
   reportClientError,
 } from "./client_diagnostics.js";
+import { createTokenUsageController, renderCardTokenFooter } from "./token_usage.js";
 import {
   activePending,
   applySavedDraft,
@@ -42,7 +43,7 @@ const els = {
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
-  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
+  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), closeCodexBtn: $("closeCodexBtn"),
   codexConfirmDialog: $("codexConfirmDialog"), codexConfirmEyebrow: $("codexConfirmEyebrow"), codexConfirmTitle: $("codexConfirmTitle"), codexConfirmMessage: $("codexConfirmMessage"), codexConfirmCancelBtn: $("codexConfirmCancelBtn"), codexConfirmOkBtn: $("codexConfirmOkBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
@@ -95,7 +96,6 @@ const progressLabels = {
 };
 let streamBuffer = "";
 let streamFrame = 0;
-let followStream = true;
 let initConfigSnapshot = null;
 let saveManagerBusy = false;
 let selectedImportFile = null;
@@ -144,16 +144,35 @@ migrateStorageKey(
   GENERATION_IN_FLIGHT_KEY,
 );
 
+const tokenUsage = createTokenUsageController({
+  node,
+});
+
 const readerPreferences = createReaderPreferencesController({
   elements: {
     fontSize: els.fontSizeSelect,
     fontFamily: els.fontFamilySelect,
     theme: els.themeSelect,
+    tokenUsage: els.tokenUsageSelect,
   },
   request,
   state,
   showToast,
   showError,
+  onTokenUsageVisibilityChange: (visible) => {
+    if (tokenUsage.isVisible() === visible) return;
+    tokenUsage.setVisible(visible);
+
+    const pending = activePending();
+    if (!pending || pending.variants.length <= 1) return;
+
+    const oldFooter = els.pendingCard.querySelector(".turn-token-footer");
+    if (oldFooter) oldFooter.remove();
+
+    const variant = selectedVariant();
+    const footer = _buildPendingFooter(pending, variant);
+    if (footer) els.pendingCard.appendChild(footer);
+  },
 });
 installClientDiagnostics();
 
@@ -243,6 +262,7 @@ function renderControls({ updateNavigation = true } = {}) {
     els.fontSizeSelect,
     els.fontFamilySelect,
     els.themeSelect,
+    els.tokenUsageSelect,
   ]);
   if (updateNavigation) renderTurnNavigator();
 }
@@ -372,6 +392,9 @@ function renderTurn(turn, { showClosing = false } = {}) {
   if (showClosing && turn.closing_prompt) {
     card.appendChild(node("div", "closing-prompt", turn.closing_prompt));
   }
+  const usageData = turn.token_usage || tokenUsage.turnUsageStore.get(String(turn.turn_index)) || tokenUsage.turnUsageStore.get(String(turn.turn_id));
+  const tokenFooter = renderCardTokenFooter(usageData, { visible: tokenUsage.isVisible(), detailButtons: tokenUsage.isVisible() });
+  if (tokenFooter) card.appendChild(tokenFooter);
   wrap.appendChild(card);
   return wrap;
 }
@@ -879,6 +902,38 @@ async function loadEarlierHistory({
   }
 }
 
+function _buildVersionControl(pending) {
+  const versions = node("div", "version-control");
+  const previous = node("button", "", "‹");
+  const position = node("span", "", `${state.selectedPendingIndex + 1} / ${pending.variants.length}`);
+  const next = node("button", "", "›");
+  previous.disabled = state.selectedPendingIndex === 0;
+  next.disabled = state.selectedPendingIndex === pending.variants.length - 1;
+  previous.onclick = () => selectVariant(state.selectedPendingIndex - 1);
+  next.onclick = () => selectVariant(state.selectedPendingIndex + 1);
+  versions.append(previous, position, next);
+  return versions;
+}
+
+function _buildPendingFooter(pending, variant) {
+  const usageData = variant.token_usage || tokenUsage.getVariantUsage(variant.turn_id) || tokenUsage.getCurrentPendingUsage();
+  const showToken = tokenUsage.isVisible();
+  const showVersions = pending.variants.length > 1;
+  if (!showToken && !showVersions) return null;
+  if (showToken) {
+    return renderCardTokenFooter(usageData, {
+      visible: true,
+      detailButtons: true,
+      appendToRow: showVersions ? _buildVersionControl(pending) : null,
+    });
+  }
+  const footer = node("div", "turn-token-footer turn-version-footer");
+  const row = node("div", "turn-token-row");
+  row.appendChild(_buildVersionControl(pending));
+  footer.appendChild(row);
+  return footer;
+}
+
 function renderPending() {
   const pending = activePending();
   if (!pending) {
@@ -899,16 +954,7 @@ function renderPending() {
   const toolbar = node("div", "pending-toolbar");
   const kicker = node("div", "narrative-kicker");
   kicker.append(node("span", "quill", "✦"), node("span", "", pending.kind === "opening" ? "开场 · 待确认" : "新场景 · 待确认"));
-  const versions = node("div", "version-control");
-  const previous = node("button", "", "‹");
-  const position = node("span", "", `${state.selectedPendingIndex + 1} / ${pending.variants.length}`);
-  const next = node("button", "", "›");
-  previous.disabled = state.selectedPendingIndex === 0;
-  next.disabled = state.selectedPendingIndex === pending.variants.length - 1;
-  previous.onclick = () => selectVariant(state.selectedPendingIndex - 1);
-  next.onclick = () => selectVariant(state.selectedPendingIndex + 1);
-  versions.append(previous, position, next);
-  toolbar.append(kicker, versions);
+  toolbar.append(kicker);
 
   const display = appendHighlightedText(node("div", "scene-text"), readDraft(variant));
   const closing = variant.closing_prompt ? node("div", "closing-prompt", variant.closing_prompt) : null;
@@ -965,6 +1011,9 @@ function renderPending() {
   if (closing) els.pendingCard.appendChild(closing);
   const resolution = renderPlayerResolution(variant.player_resolution);
   if (resolution) els.pendingCard.appendChild(resolution);
+  const pendingFooter = _buildPendingFooter(pending, variant);
+  if (pendingFooter) els.pendingCard.appendChild(pendingFooter);
+
   if (confirming) {
     const progress = node("div", "confirmation-status");
     progress.id = "confirmationProgress";
@@ -1110,6 +1159,7 @@ function selectVariant(index) {
   if (!pending || index < 0 || index >= pending.variants.length) return;
   state.selectedPendingIndex = index;
   renderPending();
+  scrollToBottom("instant");
 }
 
 let activeCodexProfile = null;
@@ -1433,6 +1483,7 @@ function renderDrawer() {
   enhanceCustomSelect(els.fontSizeSelect);
   enhanceCustomSelect(els.fontFamilySelect);
   enhanceCustomSelect(els.themeSelect);
+  enhanceCustomSelect(els.tokenUsageSelect);
 }
 
 function renderSaves() {
@@ -2034,6 +2085,13 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
         reloadAfterRecovery = (
           await resumeGenerationOperation(operation)
         ) || reloadAfterRecovery;
+        if (!reloadAfterRecovery) {
+          const pendingAfterResume = activePending();
+          if (pendingAfterResume) {
+            const latest = pendingAfterResume.variants[pendingAfterResume.variants.length - 1];
+            if (latest) tokenUsage.saveVariantGenerationUsage(latest.turn_id);
+          }
+        }
       }
     }
     if (reloadAfterRecovery) {
@@ -2060,6 +2118,7 @@ async function bootstrap() {
 }
 
 function handleInitializationEvent(event) {
+  tokenUsage.handleEvent(event);
   setProgress(event.step);
   if (event.step === "story_direction_done") {
     showStoryDirectionStage(event.data || {});
@@ -2187,7 +2246,6 @@ function settleCancelledGeneration({ retryMode = null, userInput = "" } = {}) {
 
 function startStreaming(label = "世界正在回应") {
   streamBuffer = "";
-  followStream = true;
   if (streamFrame) window.cancelAnimationFrame(streamFrame);
   streamFrame = 0;
   els.streamingText.replaceChildren();
@@ -2201,20 +2259,16 @@ function startStreaming(label = "世界正在回应") {
     : "停止生成";
   els.pendingCard.hidden = true;
   renderTurnNavigator();
-  scrollToBottom("smooth");
 }
 
 function appendStreamingText(delta) {
   if (!delta) return;
   streamBuffer += delta;
-  followStream = followStream || isNearBottom();
   if (streamFrame) return;
   streamFrame = window.requestAnimationFrame(() => {
     if (streamBuffer) els.streamingText.appendChild(document.createTextNode(streamBuffer));
     streamBuffer = "";
     streamFrame = 0;
-    if (followStream) scrollToBottom("instant");
-    followStream = false;
   });
 }
 
@@ -2250,6 +2304,7 @@ async function acknowledgeFailedOperation(error, operationId = null) {
 }
 
 function handleGenerationEvent(event, { retryMode = null } = {}) {
+  tokenUsage.handleEvent(event);
   updateGenerationRunFromEvent(event);
   if (event.step === "operation_events_truncated") {
     els.streamingLabel.textContent = "正在恢复最新生成进度";
@@ -2338,6 +2393,7 @@ async function resumeGenerationOperation(operation) {
 }
 
 function handleConfirmationEvent(event) {
+  tokenUsage.handleEvent(event);
   setProgress(event.step);
   if (event.step === "action_preview_done" || event.step === "finish") {
     const previews = event.data?.action_preview?.previews;
@@ -2396,10 +2452,15 @@ async function rewriteFromFeedbackText(userFeedback) {
     stopStreaming();
     await loadAll({ scroll: decision?.strategy === "no_rewrite" ? "instant" : "smooth" });
     els.feedbackRewriteInput.value = "";
-    if (decision?.strategy === "no_rewrite") {
-      showToast(feedbackNoRewriteMessage(decision.reason_code));
-    } else {
+    if (decision?.strategy !== "no_rewrite") {
+      const pendingAfterRewrite = activePending();
+      if (pendingAfterRewrite) {
+        const latest = pendingAfterRewrite.variants[pendingAfterRewrite.variants.length - 1];
+        if (latest) tokenUsage.saveVariantGenerationUsage(latest.turn_id);
+      }
       showToast("新版本已生成，旧版本仍然保留");
+    } else {
+      showToast(feedbackNoRewriteMessage(decision.reason_code));
     }
   } catch (error) {
     stopStreaming(); setMode("pending"); renderAll(); showError(error);
@@ -2442,6 +2503,11 @@ async function generateTurn() {
     }
     stopStreaming();
     await loadAll({ scroll: "smooth" });
+    const pendingAfterGen = activePending();
+    if (pendingAfterGen) {
+      const latest = pendingAfterGen.variants[pendingAfterGen.variants.length - 1];
+      if (latest) tokenUsage.saveVariantGenerationUsage(latest.turn_id);
+    }
   } catch (error) {
     stopStreaming(); showActivePlayerAction("");
     els.playerInput.value = userInput; autoSizeInput();
@@ -2470,7 +2536,13 @@ async function retryTurn(retryMode) {
       settleCancelledGeneration({ retryMode });
       return;
     }
-    stopStreaming(); await loadAll({ scroll: "smooth" }); showToast("新版本已生成，旧版本仍然保留");
+    stopStreaming(); await loadAll({ scroll: "smooth" });
+    const pendingAfterRetry = activePending();
+    if (pendingAfterRetry) {
+      const latest = pendingAfterRetry.variants[pendingAfterRetry.variants.length - 1];
+      if (latest) tokenUsage.saveVariantGenerationUsage(latest.turn_id);
+    }
+    showToast("新版本已生成，旧版本仍然保留");
   } catch (error) {
     stopStreaming(); setMode("pending"); renderAll(); showError(error);
     await acknowledgeFailedOperation(error);
@@ -2511,7 +2583,20 @@ async function confirmTurn() {
       request_id: newRequestId(),
     }, handleConfirmationEvent);
     await acknowledgeHandledOperation(operationId);
-    await loadAll({ scroll: "smooth" }); showToast("这一回合已经写入旅程");
+    const storedUsage = tokenUsage.getVariantUsage(variant.turn_id);
+    const genUsage = storedUsage?.generation || tokenUsage.getCurrentPendingUsage().generation;
+    const confUsage = tokenUsage.getCurrentPendingUsage().confirmation;
+    tokenUsage.saveFullVariantUsage(variant.turn_id, {
+      generation: genUsage,
+      confirmation: confUsage,
+    });
+    tokenUsage.cleanUpUnconfirmedVariants(
+      variant.turn_id,
+      pending.variants.map((v) => v.turn_id),
+    );
+    await loadAll({ scroll: "smooth" });
+    tokenUsage.clearPendingUsage();
+    showToast("这一回合已经写入旅程");
   } catch (error) {
     setMode("pending"); renderAll(); showError(error);
     await acknowledgeFailedOperation(error);
@@ -2778,10 +2863,6 @@ function closeDrawer() {
     els.drawerBackdrop.hidden = true;
   }
 }
-function isNearBottom() {
-  return document.documentElement.scrollHeight - window.innerHeight - window.scrollY < 180;
-}
-
 function scrollToBottom(mode = "smooth", onSettled = null) {
   const behavior = mode === "smooth" ? "smooth" : "auto";
   const move = () => window.scrollTo({
@@ -2828,9 +2909,14 @@ els.manageSavesBtn.onclick = () => {
 };
 els.modelSettingsBtn.onclick = () => {
   closeDrawer();
-  openModelConfig(state.modelConfig, { required: false });
 };
 els.closeModelConfigBtn.onclick = () => els.modelConfigDialog.close();
+els.tokenUsageDialog.addEventListener("click", (e) => {
+  if (e.target === els.tokenUsageDialog) {
+    if (els.tokenUsageDialog.hidePopover) els.tokenUsageDialog.hidePopover();
+    else els.tokenUsageDialog.close();
+  }
+});
 els.testModelBtn.onclick = testModelConnection;
 els.modelConfigForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -2897,6 +2983,7 @@ els.diceDisplaySelect.onchange = async () => {
 els.fontSizeSelect.onchange = readerPreferences.save;
 els.fontFamilySelect.onchange = readerPreferences.save;
 els.themeSelect.onchange = readerPreferences.save;
+els.tokenUsageSelect.onchange = readerPreferences.save;
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.turnNavigatorLatest.onclick = jumpToLatestTurn;
 els.initFanfic.onchange = toggleInitWorldFields;

@@ -1052,6 +1052,162 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   background-color: var(--surface);
   box-shadow: var(--card-shadow);
 }
+/* 卡片页脚 Token 用量模块 */
+.turn-token-footer {
+  margin-top: 20px;
+  font-family: var(--serif);
+  font-size: calc(var(--narrative-font-size, 16.5px) * 0.7);
+  color: var(--muted);
+  line-height: 1.4;
+}
+.turn-token-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.turn-token-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.turn-token-item .token-tag {
+  color: var(--gold-bright);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.turn-token-item .token-val {
+  color: var(--ink);
+}
+.turn-token-divider {
+  color: var(--faint);
+  font-size: 0.85em;
+  opacity: 0.5;
+}
+.turn-token-total .token-tag {
+  color: var(--gold-bright);
+}
+.turn-token-total .token-val {
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+.turn-token-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gold-bright);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+.turn-token-detail-btn:hover,
+.turn-token-detail-btn:focus-visible {
+  opacity: 1;
+  color: var(--gold-bright);
+}
+.turn-token-row .version-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.turn-token-row .version-control button {
+  height: 24px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.turn-token-row .version-control button:hover {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+}
+.turn-token-row .version-control button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.turn-token-row .version-control span {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 模型用量明细悬浮窗 */
+.token-usage-popover {
+  position: fixed;
+  inset: unset;
+  margin: 0;
+  width: max-content;
+  max-width: 500px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-focus);
+  padding: 0;
+}
+.token-usage-popover::backdrop {
+  background: transparent;
+}
+.token-usage-dialog-shell {
+  padding: 12px 14px;
+}
+.token-usage-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.token-usage-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.token-usage-dialog-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 32px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.token-usage-dialog-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.token-usage-dialog-name {
+  color: var(--ink);
+  font-size: 12px;
+}
+.token-usage-dialog-counts {
+  display: flex;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.token-usage-dialog-empty {
+  color: var(--faint);
+  font-size: 12px;
+}
+
 
 /* 黑金典籍古风下拉选项浮层 */
 .codex-custom-select-wrapper {

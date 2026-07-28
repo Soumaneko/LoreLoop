@@ -196,7 +196,13 @@ def _extract_usage(usage_obj: Any) -> dict | None:
 
     usage = {
         key: value
-        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+        for key in (
+            "prompt_tokens",
+            "completion_tokens",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+        )
         if (value := getattr(usage_obj, key, None)) is not None
     }
     return usage or None

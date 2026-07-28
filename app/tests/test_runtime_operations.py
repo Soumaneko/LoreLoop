@@ -1,3 +1,4 @@
+import concurrent.futures
 import threading
 from concurrent.futures import CancelledError
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ import pytest
 from app import api
 from app.core.cancellation import CancellationToken, commit_if_not_cancelled
 from app.core.diagnostics import DiagnosticLogger
+from app.core.llm.token_usage import get_trace_token_usage, publish_token_usage
 from app.runtime.operation_models import OperationEventBuffer
 from app.runtime.operations import OperationManager
 from app.runtime.session import get_campaign_runtime
@@ -68,6 +70,136 @@ def test_operation_manager_drains_stream_and_retains_result_and_events():
         assert [event.sequence for event in batch.events] == [1, 2]
         assert [event.step for event in batch.events] == ["started", "written"]
         assert batch.status == "succeeded"
+    finally:
+        manager.shutdown()
+
+
+def test_operation_manager_records_player_llm_usage_but_not_maintenance():
+    manager = OperationManager("campaign-1", max_workers=1)
+
+    def stream():
+        publish_token_usage(
+            call_id="call-1",
+            task="narrative_compose",
+            attempt=1,
+            token_usage={
+                "prompt_tokens": 120,
+                "completion_tokens": 30,
+                "total_tokens": 150,
+            },
+            session_type="generation",
+        )
+        publish_token_usage(
+            call_id="call-1",
+            task="narrative_compose",
+            attempt=2,
+            token_usage={"input_tokens": 140, "output_tokens": 25},
+            session_type="generation",
+        )
+        publish_token_usage(
+            call_id="maintenance-call",
+            task="memory_maintain",
+            attempt=1,
+            token_usage={"prompt_tokens": 999, "completion_tokens": 999},
+            session_type="maintenance",
+        )
+        if False:
+            yield None
+
+    try:
+        operation_id = manager.submit_stream("generation", stream)
+        manager.wait(operation_id, timeout=2)
+
+        usage_events = [
+            event
+            for event in manager.read_events(operation_id).events
+            if event.step == "llm_usage"
+        ]
+
+        assert [event.data for event in usage_events] == [
+            {
+                "task": "narrative_compose",
+                "attempt": 1,
+                "input_tokens": 120,
+                "output_tokens": 30,
+                "total_tokens": 150,
+                "reported": True,
+                "call_index": 1,
+            },
+            {
+                "task": "narrative_compose",
+                "attempt": 2,
+                "input_tokens": 140,
+                "output_tokens": 25,
+                "total_tokens": None,
+                "reported": True,
+                "call_index": 1,
+            },
+        ]
+    finally:
+        manager.shutdown()
+
+
+def test_operation_manager_records_usage_published_from_graph_worker_thread():
+    manager = OperationManager("campaign-1", max_workers=1)
+
+    def stream():
+        yield {
+            "step": "state_loaded",
+            "data": {"trace_id": "trace-from-graph"},
+        }
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(
+                publish_token_usage,
+                trace_id="trace-from-graph",
+                call_id="worker-call",
+                task="context_extract",
+                attempt=1,
+                token_usage={"prompt_tokens": 321, "completion_tokens": 45},
+                session_type="generation",
+            ).result(timeout=2)
+        yield {
+            "step": "usage_snapshot",
+            "data": get_trace_token_usage("trace-from-graph"),
+        }
+
+    try:
+        operation_id = manager.submit_stream("generation", stream)
+        manager.wait(operation_id, timeout=2)
+
+        usage_events = [
+            event
+            for event in manager.read_events(operation_id).events
+            if event.step == "llm_usage"
+        ]
+        assert [event.data for event in usage_events] == [{
+            "task": "context_extract",
+            "attempt": 1,
+            "input_tokens": 321,
+            "output_tokens": 45,
+            "total_tokens": None,
+            "reported": True,
+            "call_index": 1,
+        }]
+        snapshot_event = next(
+            event
+            for event in manager.read_events(operation_id).events
+            if event.step == "usage_snapshot"
+        )
+        assert snapshot_event.data == {
+            "input_tokens": 321,
+            "output_tokens": 45,
+            "total_tokens": 366,
+            "calls": [{
+                "task": "context_extract",
+                "call_index": 1,
+                "attempt": 1,
+                "input_tokens": 321,
+                "output_tokens": 45,
+                "total_tokens": None,
+                "reported": True,
+            }],
+        }
     finally:
         manager.shutdown()
 
@@ -249,7 +381,7 @@ def test_operation_manager_records_stream_failure_without_losing_prior_events(
     )
 
     def stream():
-        yield {"step": "started", "data": {}}
+        yield {"step": "started", "data": {"trace_id": "failed-trace"}}
         raise ValueError("broken pipeline")
 
     try:
@@ -275,6 +407,7 @@ def test_operation_manager_records_stream_failure_without_losing_prior_events(
         assert diagnostic["code"] == "operation_failed"
         assert diagnostic["operation_id"] == operation_id
         assert diagnostic["operation_type"] == "confirmation"
+        assert get_trace_token_usage("failed-trace") is None
     finally:
         manager.shutdown()
 

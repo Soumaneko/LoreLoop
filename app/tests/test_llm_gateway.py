@@ -32,6 +32,11 @@ from app.core.llm.tracing import (
     NullTraceLogger,
     TraceLogger,
 )
+from app.core.llm.token_usage import (
+    bind_token_usage_sink,
+    normalize_token_usage,
+    reset_token_usage_sink,
+)
 from app.debug_prompt_runner import FilePromptProvider
 
 
@@ -299,6 +304,53 @@ class TestTraceLogging:
             assert len(trace["prompt_fingerprint"]) == 64
         finally:
             os.unlink(trace_path)
+
+    def test_trace_publishes_player_usage_without_prompt_or_output(self, tmp_path):
+        class _UsageProvider(MockProvider):
+            def generate(self, *_args, **_kwargs):
+                return ProviderResult(
+                    content='{"text": "hello", "length": 5}',
+                    usage={
+                        "prompt_tokens": 12,
+                        "completion_tokens": 4,
+                        "total_tokens": 16,
+                    },
+                )
+
+        events = []
+        context_token = bind_token_usage_sink(events.append)
+        try:
+            gateway = LLMGateway(
+                provider=_UsageProvider(),
+                prompt_loader=MockLLM().prompt_loader,
+                tracer=TraceLogger(
+                    log_path=str(tmp_path / "llm_traces.jsonl")
+                ),
+            )
+            gateway.set_trace_context(session_type="generation")
+
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "private prompt input"},
+                output_schema=EchoResult,
+            )
+        finally:
+            reset_token_usage_sink(context_token)
+
+        assert len(events) == 1
+        assert events[0] == {
+            "_call_id": events[0]["_call_id"],
+            "task": "echo_structured_test",
+            "call_index": 1,
+            "attempt": 1,
+            "input_tokens": 12,
+            "output_tokens": 4,
+            "total_tokens": 16,
+            "reported": True,
+        }
+        assert events[0]["_call_id"]
+        assert "private prompt input" not in str(events)
+        assert "hello" not in str(events)
 
     def test_trace_written_on_failure(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
@@ -664,12 +716,41 @@ class TestProviderCompatibility:
         assert result.usage is None
 
     def test_usage_extraction_accepts_partial_compatible_response(self):
-        usage = _extract_usage(SimpleNamespace(total_tokens=12))
+        usage = _extract_usage(SimpleNamespace(
+            input_tokens=8,
+            output_tokens=4,
+            total_tokens=12,
+        ))
 
-        assert usage == {"total_tokens": 12}
+        assert usage == {
+            "input_tokens": 8,
+            "output_tokens": 4,
+            "total_tokens": 12,
+        }
 
     def test_usage_extraction_returns_none_when_fields_are_missing(self):
         assert _extract_usage(SimpleNamespace()) is None
+
+    def test_public_usage_normalizes_both_provider_naming_conventions(self):
+        assert normalize_token_usage({
+            "prompt_tokens": 12,
+            "completion_tokens": 4,
+            "total_tokens": 16,
+        }) == {
+            "input_tokens": 12,
+            "output_tokens": 4,
+            "total_tokens": 16,
+            "reported": True,
+        }
+        assert normalize_token_usage({
+            "input_tokens": 8,
+            "output_tokens": 3,
+        }) == {
+            "input_tokens": 8,
+            "output_tokens": 3,
+            "total_tokens": None,
+            "reported": True,
+        }
 
 
 class TestPromptLoader:

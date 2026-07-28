@@ -42,6 +42,18 @@ class TestShortTermMemoryStore:
             "s1", 1, "观察四周", "第一段剧情", "接下来做什么？",
             action_preview=_action_preview(),
             player_resolution=_player_resolution(),
+            token_usage={
+                "generation": {
+                    "input_tokens": 120,
+                    "output_tokens": 30,
+                    "total_tokens": 150,
+                },
+                "confirmation": {
+                    "input_tokens": 40,
+                    "output_tokens": 10,
+                    "total_tokens": 50,
+                },
+            },
         )
         store.add_turn("s2", 2, "与米莉交谈", "第二段剧情")
 
@@ -53,6 +65,18 @@ class TestShortTermMemoryStore:
         assert memory.recent_scenes[0].closing_prompt == "接下来做什么？"
         assert memory.recent_scenes[0].action_preview == _action_preview()
         assert memory.recent_scenes[0].player_resolution == _player_resolution()
+        assert memory.recent_scenes[0].token_usage == {
+            "generation": {
+                "input_tokens": 120,
+                "output_tokens": 30,
+                "total_tokens": 150,
+            },
+            "confirmation": {
+                "input_tokens": 40,
+                "output_tokens": 10,
+                "total_tokens": 50,
+            },
+        }
         assert memory.recent_scenes[1].scene_id == "s2"
         assert memory.recent_scenes[1].user_input == "与米莉交谈"
         assert memory.recent_scenes[1].scene_text == "第二段剧情"

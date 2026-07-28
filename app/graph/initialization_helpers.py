@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.core_memory import (
     CoreMemory,
     InitConfig,
@@ -138,6 +139,10 @@ def finalize_initialization_state(
         config=state["config"],
         current_state=state["current_state"],
         scene_result=state["opening_scene"],
+        token_usage={
+            "generation": get_trace_token_usage(state["trace_id"]),
+            "confirmation": None,
+        },
     ))
     return {
         **state,

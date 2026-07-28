@@ -17,6 +17,12 @@ from app.core.cancellation import (
     reset_cancellation_token,
 )
 from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger
+from app.core.llm.token_usage import (
+    bind_token_usage_sink,
+    bind_token_usage_trace,
+    reset_token_usage_sink,
+    reset_token_usage_traces,
+)
 from app.runtime.operation_models import (
     TERMINAL_OPERATION_STATUSES,
     OperationCancellationResult,
@@ -51,6 +57,7 @@ class _OperationRecord:
     error_message: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     cancellation: CancellationToken = field(default_factory=CancellationToken)
+    usage_trace_ids: set[str] = field(default_factory=set)
 
     def snapshot(self) -> OperationSnapshot:
         return OperationSnapshot(
@@ -243,8 +250,34 @@ class OperationManager:
             trace_id = (data or {}).get("trace_id")
             if trace_id and not record.metadata.get("trace_id"):
                 record.metadata["trace_id"] = str(trace_id)
+            if trace_id and bind_token_usage_trace(str(trace_id)):
+                record.usage_trace_ids.add(str(trace_id))
             self._condition.notify_all()
             return event
+
+    def _emit_llm_usage(
+        self,
+        operation_id: str,
+        raw_data: dict[str, Any],
+    ) -> None:
+        with self._condition:
+            record = self._require_record_locked(operation_id)
+            if record.status in TERMINAL_OPERATION_STATUSES:
+                return
+            data = dict(raw_data)
+            data.pop("_call_id", None)
+            task = str(data.get("task", "")).strip()
+            if not task:
+                return
+            call_index = data.get("call_index")
+            if (
+                not isinstance(call_index, int)
+                or isinstance(call_index, bool)
+                or call_index < 1
+            ):
+                return
+            record.event_buffer.append("llm_usage", data)
+            self._condition.notify_all()
 
     def get(self, operation_id: str) -> OperationSnapshot | None:
         with self._guard:
@@ -426,6 +459,9 @@ class OperationManager:
         stream = None
         cancelled = False
         context_token = bind_cancellation_token(record.cancellation)
+        usage_context_token = bind_token_usage_sink(
+            lambda data: self._emit_llm_usage(operation_id, data)
+        )
         try:
             raise_if_cancelled()
             stream = iter(stream_factory(*args, **kwargs))
@@ -492,6 +528,8 @@ class OperationManager:
                         close()
                     except Exception:
                         pass
+            reset_token_usage_traces(record.usage_trace_ids)
+            reset_token_usage_sink(usage_context_token)
             reset_cancellation_token(context_token)
         if cancelled:
             self._finish(operation_id, status="cancelled")

@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -20,6 +21,7 @@ class ShortTermScene(BaseModel):
     closing_prompt: str = ""
     action_preview: ActionPreviewResult | None = None
     player_resolution: PlayerTurnResolution | None = None
+    token_usage: dict | None = None
     created_at: str | None = None
 
 
@@ -49,6 +51,7 @@ class ShortTermMemoryStore:
                 closing_prompt TEXT NOT NULL DEFAULT '',
                 action_preview_json TEXT,
                 player_resolution_json TEXT,
+                token_usage_json TEXT,
                 created_at TEXT NOT NULL
             )
             """
@@ -71,7 +74,13 @@ class ShortTermMemoryStore:
             "player_resolution_json",
             "TEXT",
         )
-        ensure_schema_version(self._conn, "short_term_memory", 4)
+        ensure_column(
+            self._conn,
+            "short_term_scenes",
+            "token_usage_json",
+            "TEXT",
+        )
+        ensure_schema_version(self._conn, "short_term_memory", 5)
         self._conn.commit()
 
     def add_turn(
@@ -83,6 +92,7 @@ class ShortTermMemoryStore:
         closing_prompt: str = "",
         action_preview: ActionPreviewResult | None = None,
         player_resolution: PlayerTurnResolution | None = None,
+        token_usage: dict | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with transaction(self._conn):
@@ -95,9 +105,9 @@ class ShortTermMemoryStore:
                 INSERT INTO short_term_scenes (
                     scene_id, turn_index, user_input, scene_text,
                     closing_prompt, action_preview_json,
-                    player_resolution_json, created_at
+                    player_resolution_json, token_usage_json, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     scene_id,
@@ -109,6 +119,11 @@ class ShortTermMemoryStore:
                     (
                         player_resolution.model_dump_json()
                         if player_resolution is not None
+                        else None
+                    ),
+                    (
+                        json.dumps(token_usage, ensure_ascii=False)
+                        if token_usage is not None
                         else None
                     ),
                     now,
@@ -197,6 +212,11 @@ class ShortTermMemoryStore:
                     row["player_resolution_json"]
                 )
                 if row["player_resolution_json"]
+                else None
+            ),
+            token_usage=(
+                json.loads(row["token_usage_json"])
+                if row["token_usage_json"]
                 else None
             ),
             created_at=row["created_at"],

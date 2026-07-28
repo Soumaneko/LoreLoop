@@ -587,3 +587,84 @@ def test_feedback_no_rewrite_does_not_create_or_stream_a_variant(
     ]
     assert events[-1]["data"]["strategy"] == "no_rewrite"
     assert len(variants) == 1
+
+
+def test_feedback_rewrite_retains_started_event_in_generation_state(
+    monkeypatch,
+    configure_runtime_services,
+):
+    turn_id = "turn_v1"
+    state_before = object()
+    context = SimpleNamespace(turn_resolution=object())
+    runtime = get_campaign_runtime()
+    runtime.pending_turns.add(PendingTurn(
+        turn_id=turn_id,
+        group_id="group_1",
+        version_index=1,
+        user_input="观察门外",
+        difficulty="普通",
+        max_chars=900,
+        state_before=state_before,
+        context=context,
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="版本一"),
+        turn_index=3,
+        short_term_memory=ShortTermMemory(),
+    ))
+
+    class _StateStore:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def load_or_default(self): return state_before
+
+    class _Selector:
+        def __init__(self, _gateway): pass
+        def select(self, **_kwargs):
+            return RewriteStrategyDecision(
+                strategy="revise_from_source",
+                reason_code="localized_correction",
+                reasoning="局部修改。",
+                rewrite_requirements=["收紧最后一句"],
+            )
+
+    captured = {}
+
+    def _stream(state, _graph, **kwargs):
+        captured["steps"] = [event["step"] for event in state["events"]]
+        captured["emitted_event_count"] = kwargs["emitted_event_count"]
+        yield from state["events"][kwargs["emitted_event_count"]:]
+
+    configure_runtime_services(
+        current_state=_StateStore,
+        gateway_factory=lambda: SimpleNamespace(
+            set_trace_context=lambda **_kwargs: None
+        ),
+    )
+    monkeypatch.setattr(generation_graph, "RewriteStrategySelector", _Selector)
+    monkeypatch.setattr(generation_graph, "_stream_generation_graph", _stream)
+    monkeypatch.setattr(
+        generation_graph,
+        "build_feedback_rewrite_graph",
+        lambda: object(),
+    )
+
+    try:
+        events = list(generation_graph.feedback_rewrite_stream(
+            turn_id,
+            source_scene_text="版本一",
+            user_feedback="收紧最后一句",
+        ))
+    finally:
+        runtime.pending_turns.remove(turn_id)
+
+    assert captured == {
+        "steps": [
+            "feedback_rewrite_started",
+            "feedback_rewrite_strategy_selected",
+        ],
+        "emitted_event_count": 1,
+    }
+    assert [event["step"] for event in events] == [
+        "feedback_rewrite_started",
+        "feedback_rewrite_strategy_selected",
+    ]

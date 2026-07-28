@@ -22,6 +22,7 @@ class ReaderPreferences:
     font_size: str = "16.5"
     font_family: str = "serif"
     theme: str = "dark"
+    show_token_usage: bool = False
 
     @classmethod
     def from_dict(cls, payload: object) -> "ReaderPreferences":
@@ -31,9 +32,10 @@ class ReaderPreferences:
             font_size=normalize_font_size(payload.get("font_size")),
             font_family=normalize_font_family(payload.get("font_family")),
             theme=normalize_theme(payload.get("theme")),
+            show_token_usage=payload.get("show_token_usage") is True,
         )
 
-    def public_payload(self) -> dict[str, str]:
+    def public_payload(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -83,7 +85,7 @@ def normalize_theme(value: Any) -> str:
 def load_reader_preferences(
     *,
     store: ReaderPreferencesStore | None = None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     return (store or ReaderPreferencesStore()).load().public_payload()
 
 
@@ -91,7 +93,7 @@ def save_reader_preferences(
     payload: dict[str, Any],
     *,
     store: ReaderPreferencesStore | None = None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     preferences = ReaderPreferences.from_dict(payload)
     with _PREFERENCES_WRITE_LOCK:
         (store or ReaderPreferencesStore()).save(preferences)

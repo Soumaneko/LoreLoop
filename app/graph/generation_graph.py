@@ -285,6 +285,7 @@ def feedback_rewrite_stream(
                 },
             }],
         )
+        yield state["events"][0]
         state.update({
             "rewrite_feedback": user_feedback,
             "rewrite_source_scene_text": source_scene_text,
@@ -307,13 +308,14 @@ def feedback_rewrite_stream(
             },
         })
         if decision.strategy == "no_rewrite":
-            yield from state["events"]
+            yield from state["events"][1:]
             return
         yield from _stream_generation_graph(
             state,
             build_feedback_rewrite_graph(),
             group_id=pending.group_id,
             version_index=version_index,
+            emitted_event_count=1,
         )
 
 
@@ -393,9 +395,10 @@ def _stream_generation_graph(
     *,
     group_id: str | None,
     version_index: int,
+    emitted_event_count: int = 0,
 ):
-    event_count = 0
-    for event in state.get("events", []):
+    event_count = emitted_event_count
+    for event in state.get("events", [])[emitted_event_count:]:
         event_count += 1
         yield event
 

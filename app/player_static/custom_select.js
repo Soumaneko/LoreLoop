@@ -92,7 +92,7 @@ export function enhanceCustomSelect(selectElement) {
         selectElement.dispatchEvent(new Event("change", { bubbles: true }));
         closeSelect(wrapper);
         syncCustomSelect(selectElement);
-        trigger.focus();
+        trigger.focus({ preventScroll: true });
       };
       menu.appendChild(item);
     }

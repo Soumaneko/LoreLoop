@@ -11,6 +11,7 @@ const DEFAULTS = {
   font_size: "16.5",
   font_family: "serif",
   theme: "dark",
+  show_token_usage: false,
 };
 
 function normalized(preferences = {}) {
@@ -18,6 +19,7 @@ function normalized(preferences = {}) {
     font_size: preferences.font_size || DEFAULTS.font_size,
     font_family: preferences.font_family || DEFAULTS.font_family,
     theme: preferences.theme || DEFAULTS.theme,
+    show_token_usage: preferences.show_token_usage === true,
   };
 }
 
@@ -27,6 +29,7 @@ export function createReaderPreferencesController({
   state,
   showToast,
   showError,
+  onTokenUsageVisibilityChange,
 }) {
   let saveQueue = Promise.resolve();
   let saveSequence = 0;
@@ -59,6 +62,14 @@ export function createReaderPreferencesController({
     syncCustomSelect(elements.fontSize);
     syncCustomSelect(elements.fontFamily);
     syncCustomSelect(elements.theme);
+
+    if (elements.tokenUsage) {
+      elements.tokenUsage.value = current.show_token_usage ? "shown" : "hidden";
+      syncCustomSelect(elements.tokenUsage);
+    }
+    if (onTokenUsageVisibilityChange) {
+      onTokenUsageVisibilityChange(current.show_token_usage);
+    }
   };
 
   const load = async () => {
@@ -74,6 +85,7 @@ export function createReaderPreferencesController({
       font_size: elements.fontSize.value || DEFAULTS.font_size,
       font_family: elements.fontFamily.value || DEFAULTS.font_family,
       theme: elements.theme.value || DEFAULTS.theme,
+      show_token_usage: elements.tokenUsage ? elements.tokenUsage.value === "shown" : false,
     };
     apply(requested);
     const sequence = ++saveSequence;

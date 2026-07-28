@@ -347,17 +347,22 @@ def test_reader_preferences_are_application_global_and_normalized(tmp_path):
         "font_size": "18",
         "font_family": "kaiti",
         "theme": "sepia",
+        "show_token_usage": True,
     }, store=store) == {
         "font_size": "18",
         "font_family": "kaiti",
         "theme": "sepia",
+        "show_token_usage": True,
     }
     assert load_reader_preferences(store=store) == {
         "font_size": "18",
         "font_family": "kaiti",
         "theme": "sepia",
+        "show_token_usage": True,
     }
-    assert not {"font_size", "font_family", "theme"} & load_settings().keys()
+    assert not {
+        "font_size", "font_family", "theme", "show_token_usage",
+    } & load_settings().keys()
     assert save_reader_preferences({
         "font_size": "invalid",
         "font_family": "bad",
@@ -366,6 +371,7 @@ def test_reader_preferences_are_application_global_and_normalized(tmp_path):
         "font_size": "16.5",
         "font_family": "serif",
         "theme": "dark",
+        "show_token_usage": False,
     }
 
 
@@ -535,6 +541,18 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'id="diceDisplaySelect"' in html
     assert "innerHTML" not in source
     assert "appendStreamingText" in source
+    assert "followStream" not in source
+    assert "isNearBottom" not in source
+    assert 'id="tokenUsageSelect"' in html
+    assert 'id="tokenUsageDialog"' in html
+    assert "createTokenUsageController" in source
+    assert "tokenUsage.handleEvent(event)" in source
+    assert "_openPipelineDialog" in (
+        STATIC_DIR / "token_usage.js"
+    ).read_text(encoding="utf-8")
+    assert "show_token_usage" in (
+        STATIC_DIR / "reader_preferences.js"
+    ).read_text(encoding="utf-8")
     assert 'event.step === "done"' in (
         STATIC_DIR / "api.js"
     ).read_text(encoding="utf-8")
@@ -743,6 +761,18 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             "继续追问吗？",
             action_preview=_action_preview(),
             player_resolution=_player_resolution(),
+            token_usage={
+                "generation": {
+                    "input_tokens": 120,
+                    "output_tokens": 30,
+                    "total_tokens": 150,
+                },
+                "confirmation": {
+                    "input_tokens": 40,
+                    "output_tokens": 10,
+                    "total_tokens": 50,
+                },
+            },
         )
     with runtime.stores.entity() as store:
         store.upsert(EntityProfile(
@@ -754,7 +784,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     with runtime.stores.npc_profile() as store:
         store.upsert(NPCProfile(
             name="埃利奥",
-            aliases=["木偶师"],
+            aliases=["木偶师", "莱尔"],
             role="流浪木偶师",
             public_summary="一名公开身份不明的木偶师。",
             hidden_secret="不应投影的 NPC 秘密",
@@ -770,6 +800,14 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             scene_text="埃利奥终于开口。",
             closing_prompt="你准备如何回应？",
         ),
+        token_usage={
+            "generation": {
+                "input_tokens": 90,
+                "output_tokens": 20,
+                "total_tokens": 110,
+            },
+            "confirmation": None,
+        },
     ))
 
     payload = load_player_state()
@@ -789,14 +827,23 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     assert "流浪木偶师" in str(payload)
     assert "不应投影的 NPC 秘密" not in str(payload)
     assert {item["surface"] for item in payload["highlights"]} == {
-        "莱尔", "图书馆", "木偶师", "埃利奥",
+        "图书馆", "木偶师", "埃利奥",
     }
     assert {item["kind"] for item in payload["highlights"]} == {
-        "player", "npc", "entity",
+        "npc", "entity",
     }
+    assert not any(
+        item["surface"] == "莱尔"
+        for item in payload["highlights"]
+    )
     assert payload["pending"][0]["variants"][0]["closing_prompt"] == "你准备如何回应？"
+    assert payload["pending"][0]["variants"][0]["token_usage"]["generation"][
+        "total_tokens"
+    ] == 110
     assert payload["action_preview"] == _action_preview().model_dump(mode="json")
     assert payload["history"][0]["player_resolution"] == _player_resolution().model_dump(mode="json")
+    assert payload["history"][0]["token_usage"]["generation"]["total_tokens"] == 150
+    assert payload["history"][0]["token_usage"]["confirmation"]["total_tokens"] == 50
     assert payload["history_navigation"] == [{
         "turn_index": 6,
         "user_input_excerpt": "询问木偶的事。",
@@ -918,6 +965,38 @@ def test_player_event_projection_preserves_revision_stream_marker():
             "revision": True,
         },
     }
+
+
+def test_player_event_projection_exposes_only_safe_llm_usage_counts():
+    event = DebugHandler._player_event({
+        "step": "llm_usage",
+        "data": {
+            "task": "narrative_compose",
+            "call_index": 2,
+            "attempt": 1,
+            "input_tokens": 1200,
+            "output_tokens": 340,
+            "total_tokens": 1540,
+            "reported": True,
+            "trace_id": "private-trace",
+            "prompt": "private prompt",
+            "raw_output": "private output",
+        },
+    })
+
+    assert event == {
+        "step": "llm_usage",
+        "data": {
+            "task": "narrative_compose",
+            "call_index": 2,
+            "attempt": 1,
+            "input_tokens": 1200,
+            "output_tokens": 340,
+            "total_tokens": 1540,
+            "reported": True,
+        },
+    }
+    assert "private" not in str(event)
 
 
 def test_player_story_direction_event_exposes_only_editable_result():

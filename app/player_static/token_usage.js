@@ -1,0 +1,416 @@
+const TASK_LABELS = {
+  action_extract: "行动解析",
+  anchor_extract: "行动锚点提取",
+  context_extract: "上下文提取",
+  roll_modifier: "判定修正",
+  turn_resolution: "行动结算",
+  director_event_consume: "导演事件消费",
+  director_npc_dispatch: "导演角色调度",
+  director_npc_create: "导演角色创建",
+  narrative_compose: "正文生成",
+  narrative_recompose: "正文重构",
+  narrative_rewrite_select: "重写策略",
+  narrative_rewrite_from_source: "原文修订",
+  narrative_canon_query: "历史事实查询",
+  narrative_consistency_check: "叙事一致性检查",
+  story_direction: "长期故事方向",
+  init_world_setting_create: "初始世界设定",
+  opening_scene: "开场生成",
+  scene_fact_extract: "场景事实提取",
+  state_update: "世界状态更新",
+  memory_draft_extract: "本轮记忆提取",
+  entity_extract: "实体提取",
+  entity_profile_update: "实体资料更新",
+  npc_profile_extract: "人物资料提取",
+  npc_profile_backfill: "人物资料补全",
+  npc_profile_update: "人物资料更新",
+  action_preview: "行动建议",
+  director_event_review: "导演事件检查",
+  director_event_select_arc: "主线事件选择",
+  director_event_select_ambient: "环境事件选择",
+  director_event_intervention_plan: "事件介入规划",
+  director_event_intervention_review: "事件介入检查",
+};
+
+const PIPELINE_LABELS = {
+  generation: "生成管线",
+  confirmation: "确认管线",
+};
+
+function tokenCount(value) {
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function formatted(value) {
+  return value === null ? "未提供" : value.toLocaleString("zh-CN");
+}
+
+export function renderCardTokenFooter(usageData, { visible = true, detailButtons = false, appendToRow = null } = {}) {
+  const gen = usageData?.generation;
+  const conf = usageData?.confirmation;
+
+  if (!gen && !conf) return null;
+
+  const footer = document.createElement("div");
+  footer.className = "turn-token-footer";
+  if (!visible) footer.hidden = true;
+
+  const row = document.createElement("div");
+  row.className = "turn-token-row";
+
+  let totalInput = 0;
+  let totalOutput = 0;
+  let hasInput = false;
+  let hasOutput = false;
+
+  if (gen) {
+    const item = document.createElement("div");
+    item.className = "turn-token-item";
+    const tag = document.createElement("span");
+    tag.className = "token-tag";
+    tag.textContent = "生成管线";
+    const val = document.createElement("span");
+    val.className = "token-val";
+    val.textContent = `入 ${formatted(gen.input_tokens)} · 出 ${formatted(gen.output_tokens)}`;
+    item.append(tag, val);
+    row.appendChild(item);
+
+    if (gen.input_tokens != null) { totalInput += gen.input_tokens; hasInput = true; }
+    if (gen.output_tokens != null) { totalOutput += gen.output_tokens; hasOutput = true; }
+
+    if (detailButtons && (gen.calls?.length > 0)) {
+      const genBtn = document.createElement("button");
+      genBtn.className = "turn-token-detail-btn";
+      genBtn.type = "button";
+      genBtn.textContent = "ⓘ";
+      genBtn.title = "生成管线模块明细";
+      genBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        genBtn.blur();
+        _openPipelineDialog(usageData, "generation", genBtn);
+      });
+      row.appendChild(genBtn);
+    }
+  }
+
+  if (conf) {
+    if (gen) {
+      const divider = document.createElement("span");
+      divider.className = "turn-token-divider";
+      divider.textContent = "│";
+      row.appendChild(divider);
+    }
+    const item = document.createElement("div");
+    item.className = "turn-token-item";
+    const tag = document.createElement("span");
+    tag.className = "token-tag";
+    tag.textContent = "确认管线";
+    const val = document.createElement("span");
+    val.className = "token-val";
+    val.textContent = `入 ${formatted(conf.input_tokens)} · 出 ${formatted(conf.output_tokens)}`;
+    item.append(tag, val);
+    row.appendChild(item);
+
+    if (conf.input_tokens != null) { totalInput += conf.input_tokens; hasInput = true; }
+    if (conf.output_tokens != null) { totalOutput += conf.output_tokens; hasOutput = true; }
+
+    if (detailButtons && (conf.calls?.length > 0)) {
+      const confBtn = document.createElement("button");
+      confBtn.className = "turn-token-detail-btn";
+      confBtn.type = "button";
+      confBtn.textContent = "ⓘ";
+      confBtn.title = "确认管线模块明细";
+      confBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        confBtn.blur();
+        _openPipelineDialog(usageData, "confirmation", confBtn);
+      });
+      row.appendChild(confBtn);
+    }
+  }
+
+
+  if ((hasInput || hasOutput) && (gen && conf)) {
+    const divider = document.createElement("span");
+    divider.className = "turn-token-divider";
+    divider.textContent = "│";
+    row.appendChild(divider);
+
+    const totalItem = document.createElement("div");
+    totalItem.className = "turn-token-item turn-token-total";
+    const tag = document.createElement("span");
+    tag.className = "token-tag";
+    tag.textContent = "合计";
+    const val = document.createElement("span");
+    val.className = "token-val";
+    val.textContent = `${(totalInput + totalOutput).toLocaleString("zh-CN")} tok`;
+    totalItem.append(tag, val);
+    row.appendChild(totalItem);
+  }
+
+  if (appendToRow) {
+    row.appendChild(appendToRow);
+  }
+
+  footer.appendChild(row);
+  return footer;
+}
+
+const _USAGE_STORAGE_KEY = "loreloop_token_usage_v1";
+
+function _persistUsageStore(store) {
+  try {
+    const data = {};
+    for (const [key, val] of store) {
+      data[key] = val;
+    }
+    sessionStorage.setItem(_USAGE_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Quota exceeded or storage unavailable — non-critical.
+  }
+}
+
+function _restoreUsageStore() {
+  try {
+    const raw = sessionStorage.getItem(_USAGE_STORAGE_KEY);
+    if (!raw) return new Map();
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return new Map();
+    const map = new Map();
+    for (const [key, val] of Object.entries(data)) {
+      if (val && typeof val === "object") map.set(key, val);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+export function createTokenUsageController({ node }) {
+  let visible = false;
+  let operationId = null;
+  let operationType = "";
+  let records = [];
+
+  let pendingGenerationUsage = null;
+  let pendingConfirmationUsage = null;
+  const turnUsageStore = _restoreUsageStore();
+
+  const render = () => {
+    document.querySelectorAll(".turn-token-footer:not(.turn-version-footer)").forEach((el) => {
+      el.hidden = !visible;
+    });
+  };
+
+  const setVisible = (nextVisible) => {
+    visible = nextVisible === true;
+    render();
+  };
+
+  const calculateCurrentSummary = () => {
+    let input = 0;
+    let output = 0;
+    let hasInput = false;
+    let hasOutput = false;
+    for (const r of records) {
+      if (r.input !== null) { input += r.input; hasInput = true; }
+      if (r.output !== null) { output += r.output; hasOutput = true; }
+    }
+    return {
+      input_tokens: hasInput ? input : null,
+      output_tokens: hasOutput ? output : null,
+    };
+  };
+
+  const handleEvent = (event) => {
+    if (event.step === "operation_started") {
+      const nextOperationId = event.data?.operation_id || null;
+      if (nextOperationId !== operationId || event.data?.resumed === true) {
+        operationId = nextOperationId;
+        records = [];
+      }
+      operationType = event.data?.operation_type || "";
+      return;
+    }
+    if (event.step !== "llm_usage") return;
+    const data = event.data || {};
+    const task = String(data.task || "").trim();
+    if (!task) return;
+    records.push({
+      task,
+      callIndex: Math.max(1, Number(data.call_index) || 1),
+      attempt: Math.max(1, Number(data.attempt) || 1),
+      input: tokenCount(data.input_tokens),
+      output: tokenCount(data.output_tokens),
+    });
+
+    const summary = calculateCurrentSummary();
+    if (["generation", "rephrase", "reroll", "feedback_rewrite", "initialization_opening"].includes(operationType)) {
+      pendingGenerationUsage = summary;
+    } else if (operationType === "confirmation") {
+      pendingConfirmationUsage = summary;
+    }
+  };
+
+  const getCurrentPendingUsage = () => ({
+    generation: pendingGenerationUsage,
+    confirmation: pendingConfirmationUsage,
+  });
+
+  const clearPendingUsage = () => {
+    pendingGenerationUsage = null;
+    pendingConfirmationUsage = null;
+  };
+
+  const getVariantUsage = (turnId) => {
+    if (!turnId) return null;
+    return turnUsageStore.get(String(turnId)) || null;
+  };
+
+  const saveVariantGenerationUsage = (turnId) => {
+    if (!turnId || !pendingGenerationUsage) return;
+    const key = String(turnId);
+    const existing = turnUsageStore.get(key) || {};
+    turnUsageStore.set(key, {
+      generation: { ...pendingGenerationUsage },
+      confirmation: existing.confirmation || null,
+    });
+    _persistUsageStore(turnUsageStore);
+  };
+
+  const saveVariantConfirmationUsage = (turnId) => {
+    if (!turnId) return;
+    const key = String(turnId);
+    const existing = turnUsageStore.get(key) || {};
+    const conf = pendingConfirmationUsage
+      ? { ...pendingConfirmationUsage }
+      : null;
+    if (!existing.generation && !conf) return;
+    turnUsageStore.set(key, {
+      generation: existing.generation || null,
+      confirmation: conf,
+    });
+    _persistUsageStore(turnUsageStore);
+  };
+
+  const saveFullVariantUsage = (turnId, usage) => {
+    if (!turnId) return;
+    const key = String(turnId);
+    const gen = usage?.generation || null;
+    const conf = usage?.confirmation || null;
+    if (!gen && !conf) return;
+    turnUsageStore.set(key, { generation: gen, confirmation: conf });
+    _persistUsageStore(turnUsageStore);
+  };
+
+  const removeVariantUsage = (turnId) => {
+    if (!turnId) return;
+    turnUsageStore.delete(String(turnId));
+    _persistUsageStore(turnUsageStore);
+  };
+
+  const cleanUpUnconfirmedVariants = (keepTurnId, allVariantTurnIds) => {
+    const keep = String(keepTurnId);
+    let changed = false;
+    for (const id of allVariantTurnIds) {
+      const key = String(id);
+      if (key !== keep && turnUsageStore.has(key)) {
+        turnUsageStore.delete(key);
+        changed = true;
+      }
+    }
+    if (changed) _persistUsageStore(turnUsageStore);
+  };
+
+  const isVisible = () => visible;
+
+  return {
+    handleEvent,
+    setVisible,
+    isVisible,
+    getCurrentPendingUsage,
+    clearPendingUsage,
+    getVariantUsage,
+    showVariantUsage: (usage) => {}, // no-op: panel is removed
+    saveVariantGenerationUsage,
+    saveVariantConfirmationUsage,
+    saveFullVariantUsage,
+    removeVariantUsage,
+    cleanUpUnconfirmedVariants,
+    turnUsageStore,
+  };
+}
+
+function _openPipelineDialog(usageData, pipeline, anchorEl) {
+  const dialog = document.getElementById("tokenUsageDialog");
+  const contentEl = document.getElementById("tokenUsageDialogContent");
+
+  if (!dialog || !contentEl) return;
+
+  const calls = usageData?.[pipeline]?.calls || [];
+  contentEl.replaceChildren();
+
+  if (calls.length === 0) {
+    contentEl.appendChild(
+      _el("div", "token-usage-dialog-empty", "当前凭证无记录调用明细"),
+    );
+    totalEl.textContent = "";
+  } else {
+    let totalInput = 0;
+    let totalOutput = 0;
+    let hasInput = false;
+    let hasOutput = false;
+
+    for (const call of calls) {
+      const task = String(call.task || "").trim();
+      const callIndex = Math.max(1, Number(call.call_index) || 1);
+      const attempt = Math.max(1, Number(call.attempt) || 1);
+      const inp = tokenCount(call.input_tokens);
+      const out = tokenCount(call.output_tokens);
+
+      const row = _el("div", "token-usage-dialog-row");
+      const name = _el(
+        "div",
+        "token-usage-dialog-name",
+        `${TASK_LABELS[task] || task}${
+          callIndex > 1 ? ` #${callIndex}` : ""
+        }${attempt > 1 ? ` · 尝试 ${attempt}` : ""}`,
+      );
+      const counts = _el("div", "token-usage-dialog-counts");
+      counts.append(
+        _el("span", "", `输入 ${formatted(inp)}`),
+        _el("span", "", `输出 ${formatted(out)}`),
+      );
+      row.append(name, counts);
+      contentEl.appendChild(row);
+    }
+  }
+
+  if (dialog.showPopover) dialog.showPopover();
+
+  if (anchorEl) {
+    const rect = anchorEl.getBoundingClientRect();
+    const dialogRect = dialog.getBoundingClientRect();
+    let top = rect.bottom + 8;
+    let left = rect.left - dialogRect.width / 2 + rect.width / 2;
+    if (left < 10) left = 10;
+    if (left + dialogRect.width > window.innerWidth - 10) {
+      left = window.innerWidth - dialogRect.width - 10;
+    }
+    if (top + dialogRect.height > window.innerHeight - 10) {
+      top = Math.max(10, rect.top - dialogRect.height - 8);
+    }
+    dialog.style.margin = "0";
+    dialog.style.bottom = "auto";
+    dialog.style.right = "auto";
+    dialog.style.top = `${top}px`;
+    dialog.style.left = `${left}px`;
+  }
+}
+
+function _el(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}

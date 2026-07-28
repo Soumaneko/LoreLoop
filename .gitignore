@@ -9,6 +9,7 @@ __pycache__/
 /dist/
 /release/
 logs/
+llm_traces.jsonl
 data/
 docs/
 debug_py/

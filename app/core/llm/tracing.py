@@ -12,6 +12,8 @@ from app.core.diagnostics import (
 )
 from app.runtime.app_paths import APP_PATHS
 
+from .token_usage import publish_token_usage
+
 
 TRACE_LOG_MAX_BYTES = 50 * 1024 * 1024
 _TRACE_WRITE_LOCK = threading.Lock()
@@ -63,6 +65,7 @@ class TraceLogger:
         turn_index: int | None = None,
         session_type: str | None = None,
         prompt_fingerprint: str | None = None,
+        call_id: str | None = None,
     ) -> None:
         entry = {
             "trace_id": trace_id,
@@ -87,6 +90,8 @@ class TraceLogger:
             entry["session_type"] = session_type
         if prompt_fingerprint is not None:
             entry["prompt_fingerprint"] = prompt_fingerprint
+        if call_id is not None:
+            entry["call_id"] = call_id
 
         payload = _bounded_entry_payload(entry, self._max_bytes)
         with self._lock:
@@ -95,6 +100,14 @@ class TraceLogger:
                 payload,
                 max_bytes=self._max_bytes,
             )
+        publish_token_usage(
+            trace_id=trace_id,
+            call_id=call_id or "",
+            task=task,
+            attempt=attempt,
+            token_usage=token_usage,
+            session_type=session_type,
+        )
 
     def read_traces(self, trace_id: str | None = None) -> list[dict[str, Any]]:
         if not os.path.exists(self._log_path):
@@ -207,6 +220,7 @@ class NullTraceLogger:
         turn_index: int | None = None,
         session_type: str | None = None,
         prompt_fingerprint: str | None = None,
+        call_id: str | None = None,
     ) -> None:
         return None
 

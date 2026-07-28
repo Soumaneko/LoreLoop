@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from app.core.cancellation import commit_if_not_cancelled
+from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -149,6 +150,10 @@ def finalize_pending_turn(
             state["roll_results"],
             state["turn_resolution"],
         )
+    token_usage = {
+        "generation": get_trace_token_usage(state["trace_id"]),
+        "confirmation": None,
+    }
     pending = PendingTurn(
         turn_id=turn_id,
         group_id=group_id,
@@ -164,6 +169,7 @@ def finalize_pending_turn(
         player_resolution=player_resolution,
         turn_index=state["next_turn_index"],
         short_term_memory=state["short_term_memory"],
+        token_usage=token_usage,
     )
     commit_if_not_cancelled(lambda: runtime.pending_turns.add(pending))
     finalized = {
@@ -175,6 +181,7 @@ def finalize_pending_turn(
         "status": "awaiting_confirm",
         "pending_turn_status": "awaiting_confirm",
         "player_resolution": player_resolution,
+        "token_usage": token_usage,
     }
     finalized["events"] = [
         *state.get("events", []),
@@ -222,6 +229,7 @@ def scene_written_event(state: dict[str, Any]) -> GenerationEvent:
             "version_index": state["version_index"],
             "trace_id": state["trace_id"],
             "turn_index": state["turn_index"],
+            "token_usage": state.get("token_usage"),
             "composer_entity_profiles": model_data(
                 state.get("composer_entity_profile_views", [])
             ),

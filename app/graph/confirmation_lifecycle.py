@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, PendingTurn
@@ -235,6 +236,13 @@ class ConfirmationCommitter:
                         "player_resolution",
                         None,
                     ),
+                    token_usage={
+                        "generation": (
+                            getattr(pipeline_input.pending, "token_usage", None)
+                            or {}
+                        ).get("generation"),
+                        "confirmation": get_trace_token_usage(state["trace_id"]),
+                    },
                 )
                 cache["short_term_saved"] = True
             short_term_after = short_store.get_recent()

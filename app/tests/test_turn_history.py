@@ -34,6 +34,14 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
         config=config,
         current_state=build_initial_current_state(config),
         scene_result=SceneWriterResult(scene_text="莱尔在晨雾中醒来。"),
+        token_usage={
+            "generation": {
+                "input_tokens": 700,
+                "output_tokens": 300,
+                "total_tokens": 1000,
+            },
+            "confirmation": None,
+        },
     )
     first = CampaignRuntime("restart-test", paths=paths)
     first.pending_openings.add(pending)
@@ -46,6 +54,7 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
         assert restored.config.world_name == "泰瑞大陆"
         assert restored.current_state.player.name == "莱尔"
         assert restored.scene_result.scene_text == "莱尔在晨雾中醒来。"
+        assert restored.token_usage == pending.token_usage
     finally:
         second.close()
 

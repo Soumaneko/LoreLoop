@@ -383,6 +383,16 @@ class PlayerHandler(BaseHTTPRequestHandler):
             }
             if data.get("rewrite_mode") is not None:
                 public_data["rewrite_mode"] = data.get("rewrite_mode")
+        elif step == "llm_usage":
+            public_data = {
+                "task": data.get("task"),
+                "call_index": data.get("call_index"),
+                "attempt": data.get("attempt"),
+                "input_tokens": data.get("input_tokens"),
+                "output_tokens": data.get("output_tokens"),
+                "total_tokens": data.get("total_tokens"),
+                "reported": bool(data.get("reported", False)),
+            }
         elif step in {"rephrase_started", "reroll_started", "feedback_rewrite_started"}:
             public_data = {"version_index": data.get("version_index")}
         elif step == "feedback_rewrite_strategy_selected":

@@ -161,6 +161,11 @@
         <option value="sepia">宣纸护眼 (暖阳)</option>
         <option value="light">月白明彩 (浅色)</option>
       </select>
+      <label for="tokenUsageSelect" style="margin-top: 14px;">模型用量</label>
+      <select id="tokenUsageSelect">
+        <option value="hidden" selected>隐藏用量信息</option>
+        <option value="shown">显示每次用量</option>
+      </select>
     </section>
     <section class="drawer-section">
       <label for="saveSelect">当前存档</label>
@@ -338,6 +343,13 @@
       <div id="storyDirectionActions" class="modal-actions" hidden><button id="editInitConfigBtn" type="button">返回修改设定</button><button id="regenerateStoryDirectionBtn" type="button">重新生成方向</button><button id="initSubmitBtn" class="primary-action" value="default">生成开场</button></div>
     </form>
   </dialog>
+
+  <div id="tokenUsageDialog" class="token-usage-popover" popover="auto">
+    <section class="token-usage-dialog-shell">
+
+      <div id="tokenUsageDialogContent"></div>
+    </section>
+  </div>
 
   <div id="toast" class="toast" hidden></div>
   <script type="module" src="/assets/app.js"></script>

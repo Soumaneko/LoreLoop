@@ -72,6 +72,7 @@ class LLMGateway:
         ).hexdigest()
         model = model or self._default_model
         trace_id = trace_id or uuid.uuid4().hex
+        call_id = uuid.uuid4().hex
 
         base_prompt = self._build_prompt(prompt_template, input_data)
         current_prompt = base_prompt
@@ -120,6 +121,7 @@ class LLMGateway:
                     turn_index=self._trace_context.get("turn_index"),
                     session_type=self._trace_context.get("session_type"),
                     prompt_fingerprint=prompt_fingerprint,
+                    call_id=call_id,
                 )
                 return validated
 
@@ -144,6 +146,7 @@ class LLMGateway:
                     turn_index=self._trace_context.get("turn_index"),
                     session_type=self._trace_context.get("session_type"),
                     prompt_fingerprint=prompt_fingerprint,
+                    call_id=call_id,
                 )
                 self._log_diagnostic(
                     severity="warning" if attempt <= max_retries else "error",
@@ -182,6 +185,7 @@ class LLMGateway:
                     turn_index=self._trace_context.get("turn_index"),
                     session_type=self._trace_context.get("session_type"),
                     prompt_fingerprint=prompt_fingerprint,
+                    call_id=call_id,
                 )
                 self._log_diagnostic(
                     severity="warning" if attempt <= max_retries else "error",
@@ -209,10 +213,11 @@ class LLMGateway:
                     latency_ms=0,
                     error=last_error,
                     attempt=attempt,
-                    token_usage=None,
+                    token_usage=token_usage,
                     turn_index=self._trace_context.get("turn_index"),
                     session_type=self._trace_context.get("session_type"),
                     prompt_fingerprint=prompt_fingerprint,
+                    call_id=call_id,
                 )
                 self._log_diagnostic(
                     severity="error",

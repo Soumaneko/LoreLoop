@@ -47,6 +47,7 @@ class PendingTurn:
     short_term_memory: ShortTermMemory | None = None
     confirmation_cache: dict[str, Any] = field(default_factory=dict)
     original_scene_text: str | None = None
+    token_usage: dict[str, Any] | None = None
 
 
 @dataclass
@@ -57,6 +58,7 @@ class PendingOpening:
     scene_result: SceneWriterResult
     confirmation_cache: dict[str, Any] = field(default_factory=dict)
     original_scene_text: str | None = None
+    token_usage: dict[str, Any] | None = None
 
 
 class PendingTurnRepository:
@@ -413,6 +415,7 @@ class CampaignRuntime:
             "turn_index": pending.turn_index,
             "short_term_memory": model_data(pending.short_term_memory),
             "original_scene_text": pending.original_scene_text,
+            "token_usage": pending.token_usage,
             # Futures and locks in the in-process cache are deliberately not
             # durable. Confirmation will rebuild these values after restart.
             "confirmation_cache": {},
@@ -440,6 +443,7 @@ class CampaignRuntime:
             "current_state": model_data(pending.current_state),
             "scene_result": model_data(pending.scene_result),
             "original_scene_text": pending.original_scene_text,
+            "token_usage": pending.token_usage,
             "confirmation_cache": {},
         }
         self.history.save_pending(
@@ -484,6 +488,7 @@ class CampaignRuntime:
                         if data.get("short_term_memory") else None
                     ),
                     original_scene_text=data["original_scene_text"],
+                    token_usage=data.get("token_usage"),
                 ))
             else:
                 self.pending_openings.restore(PendingOpening(
@@ -492,6 +497,7 @@ class CampaignRuntime:
                     current_state=CurrentState.model_validate(data["current_state"]),
                     scene_result=SceneWriterResult.model_validate(data["scene_result"]),
                     original_scene_text=data["original_scene_text"],
+                    token_usage=data.get("token_usage"),
                 ))
 
     def begin_confirmation(

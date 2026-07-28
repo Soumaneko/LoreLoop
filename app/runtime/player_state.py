@@ -23,6 +23,7 @@ def _project_history(turns) -> list[dict[str, Any]]:
             "closing_prompt": turn.closing_prompt,
             "action_preview": model_data(turn.action_preview),
             "player_resolution": model_data(turn.player_resolution),
+            "token_usage": turn.token_usage,
         }
         for turn in turns
     ]
@@ -58,9 +59,6 @@ def _project_text_highlights(
         return []
 
     candidates: list[tuple[str, str, dict[str, Any] | None]] = []
-    clean_player_name = player_name.strip()
-    if clean_player_name:
-        candidates.append((clean_player_name, "player", None))
     with runtime.stores.npc_profile() as store:
         for profile in store.list_all():
             public_profile = {
@@ -93,10 +91,16 @@ def _project_text_highlights(
 
     projected: list[dict[str, Any]] = []
     seen: set[str] = set()
+    player_key = player_name.strip().casefold()
     for raw_surface, kind, profile in candidates:
         surface = str(raw_surface).strip()
         key = surface.casefold()
-        if not surface or key in seen or key not in folded_text:
+        if (
+            not surface
+            or key == player_key
+            or key in seen
+            or key not in folded_text
+        ):
             continue
         seen.add(key)
         item = {
@@ -198,6 +202,7 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
                     "player_resolution": model_data(
                         getattr(variant, "player_resolution", None)
                     ),
+                    "token_usage": getattr(variant, "token_usage", None),
                 }
                 for variant in variants
             ],
@@ -214,6 +219,7 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
                 "turn_index": 0,
                 **_pending_scene_projection(opening),
                 "closing_prompt": opening.scene_result.closing_prompt,
+                "token_usage": getattr(opening, "token_usage", None),
             }],
         }
         for opening in runtime.pending_openings.values()
