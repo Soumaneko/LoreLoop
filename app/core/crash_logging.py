@@ -8,6 +8,8 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.version import APP_VERSION
+
 
 def write_desktop_crash(
     error: BaseException,
@@ -40,6 +42,7 @@ def _append_crash(path: Path, error: BaseException, *, phase: str) -> None:
     rendered = _redact_known_secrets(rendered)
     header = (
         f"[{datetime.now(timezone.utc).isoformat()}] phase={phase}\n"
+        f"app_version={APP_VERSION}\n"
         f"platform={platform.platform()}\n"
         f"python={sys.version.split()[0]}\n"
     )

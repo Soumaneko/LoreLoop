@@ -127,6 +127,7 @@ def test_crash_log_redacts_environment_secrets(tmp_path, monkeypatch):
 
     content = path.read_text(encoding="utf-8")
     assert "phase=test" in content
+    assert "app_version=0.1.0" in content
     assert "RuntimeError" in content
     assert "secret-value-for-test" not in content
     assert "[REDACTED]" in content

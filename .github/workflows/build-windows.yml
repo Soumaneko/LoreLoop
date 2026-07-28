@@ -40,9 +40,9 @@ jobs:
       - name: Upload test package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: LoreLoop-0.1.0-win-x64-test-${{ github.run_number }}
+          name: LoreLoop-Windows-test-${{ github.run_number }}
           path: |
-            release/LoreLoop-0.1.0-win-x64-test.zip
+            release/LoreLoop-*-win-x64-test.zip
             release/SHA256SUMS.txt
             release/build-requirements-freeze.txt
           if-no-files-found: error

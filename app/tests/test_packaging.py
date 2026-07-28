@@ -7,12 +7,18 @@ from pathlib import Path
 
 import pytest
 
-from app import desktop
+from app import __version__, desktop
+from app.version import APP_VERSION
 from app.runtime.webview2 import (
     WEBVIEW2_CLIENT_GUID,
     WebView2RuntimeMissingError,
     require_webview2_runtime,
     webview2_runtime_version,
+)
+from scripts.generate_build_metadata import (
+    build_information,
+    parse_application_version,
+    render_windows_version_info,
 )
 
 
@@ -174,6 +180,10 @@ def test_windows_packaging_contract_is_onedir_player_only():
     assert 'console=False' in spec_source
     assert 'contents_directory="_internal"' in spec_source
     assert 'name="LoreLoop"' in spec_source
+    assert (
+        'project_root / "build" / "metadata" / "version_info.txt"'
+        in spec_source
+    )
 
 
 def test_windows_build_dependencies_and_release_assets_are_fixed():
@@ -189,14 +199,15 @@ def test_windows_build_dependencies_and_release_assets_are_fixed():
     script = (
         ROOT / "scripts" / "build_windows.ps1"
     ).read_text(encoding="utf-8")
-    version_info = (
-        ROOT / "packaging" / "windows" / "version_info.txt"
+    workflow = (
+        ROOT / ".github" / "workflows" / "build-windows.yml"
     ).read_text(encoding="utf-8")
     executable_config = (
         ROOT / "packaging" / "windows" / "LoreLoop.exe.config"
     ).read_text(encoding="utf-8")
-    ast.parse(version_info)
-
+    windows_readme = (
+        ROOT / "packaging" / "windows" / "README-Windows.txt"
+    ).read_text(encoding="utf-8")
     assert ">=" not in desktop_requirements
     assert "pywebview==6.2.1" in desktop_requirements
     assert 'pythonnet==3.1.0; sys_platform == "win32"' in desktop_requirements
@@ -231,8 +242,46 @@ def test_windows_build_dependencies_and_release_assets_are_fixed():
     assert "--check-winforms-runtime" in script
     assert "Unblock-File -LiteralPath" in script
     assert '<loadFromRemoteSources enabled="true"/>' in executable_config
+    assert "generate_build_metadata.py" in script
+    assert "--print-version" in script
+    assert "--version-info" in script
+    assert "--build-info" in script
+    assert (
+        "New-Item -ItemType Directory -Force $BuildMetadataDir"
+        in script
+    )
+    assert "--workpath $PyInstallerWorkDir" in script
+    assert "Copy-Item $BuildInfo" in script
+    assert "LoreLoop-$Version-win-x64-test.zip" in script
+    assert "LoreLoop-*-win-x64-test.zip" in workflow
+    assert not (ROOT / "packaging" / "windows" / "version_info.txt").exists()
+    assert "DPAPI" in windows_readme
+    assert "build_info.json" in windows_readme
+
+
+def test_application_version_generates_windows_and_build_metadata():
+    assert APP_VERSION == "0.1.0"
+    assert __version__ == APP_VERSION
+    assert parse_application_version(APP_VERSION) == (0, 1, 0, 0)
+    assert parse_application_version("1.2.3-alpha.7") == (1, 2, 3, 7)
+
+    version_info = render_windows_version_info(APP_VERSION)
+    ast.parse(version_info)
+    assert "filevers=(0, 1, 0, 0)" in version_info
     assert "FileVersion', '0.1.0" in version_info
+    assert "ProductVersion', '0.1.0" in version_info
     assert "ProductName', 'LoreLoop（续章）" in version_info
+
+    info = build_information(
+        environ={
+            "GITHUB_SHA": "a" * 40,
+            "GITHUB_RUN_NUMBER": "42",
+        },
+    )
+    assert info["version"] == APP_VERSION
+    assert info["commit"] == "a" * 40
+    assert info["github_run_number"] == "42"
+    assert info["built_at"].endswith("Z")
 
 
 def test_github_windows_build_is_manual_read_only_and_pinned():

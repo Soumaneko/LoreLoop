@@ -18,7 +18,7 @@ $BuildDir = Join-Path $RepoRoot "build"
 $DistDir = Join-Path $RepoRoot "dist"
 $ReleaseDir = Join-Path $RepoRoot "release"
 $PackageDir = Join-Path $DistDir "LoreLoop"
-$Version = "0.1.0"
+$MetadataScript = Join-Path $RepoRoot "scripts\generate_build_metadata.py"
 $BootstrapperUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 $BootstrapperSha256 = $null
 
@@ -46,6 +46,12 @@ if ($LASTEXITCODE -ne 0) {
 if ($BaseRuntime.Trim() -ne "3.11|64bit") {
     throw "The build interpreter must be 64-bit Python 3.11, got $($BaseRuntime.Trim())."
 }
+
+$Version = & $BasePython @BasePythonArguments $MetadataScript --print-version
+if ($LASTEXITCODE -ne 0 -or -not $Version.Trim()) {
+    throw "Failed to read the application version."
+}
+$Version = $Version.Trim()
 
 if (Test-Path $BuildVenv) {
     Remove-Item -Recurse -Force $BuildVenv
@@ -96,9 +102,22 @@ foreach ($Path in @($BuildDir, $DistDir, $ReleaseDir)) {
     }
 }
 
+$BuildMetadataDir = Join-Path $BuildDir "metadata"
+$PyInstallerWorkDir = Join-Path $BuildDir "pyinstaller"
+$VersionInfo = Join-Path $BuildMetadataDir "version_info.txt"
+$BuildInfo = Join-Path $BuildMetadataDir "build_info.json"
+New-Item -ItemType Directory -Force $BuildMetadataDir | Out-Null
+& $Python $MetadataScript --version-info $VersionInfo --build-info $BuildInfo
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to generate build metadata."
+}
+
 Push-Location $RepoRoot
 try {
-    & $Python -m PyInstaller --clean --noconfirm "packaging\loreloop.spec"
+    & $Python -m PyInstaller --clean --noconfirm `
+        --workpath $PyInstallerWorkDir `
+        --distpath $DistDir `
+        "packaging\loreloop.spec"
     if ($LASTEXITCODE -ne 0) {
         throw "PyInstaller build failed."
     }
@@ -129,6 +148,10 @@ if (Test-Path (Join-Path $PackageDir "_internal\app\debug_static")) {
 Copy-Item (Join-Path $RepoRoot "packaging\windows\README-Windows.txt") $PackageDir
 Copy-Item (Join-Path $RepoRoot "packaging\windows\Install-WebView2.cmd") $PackageDir
 Copy-Item (Join-Path $RepoRoot "packaging\windows\LoreLoop.exe.config") $ExecutableConfig
+Copy-Item $BuildInfo (Join-Path $PackageDir "build_info.json")
+if (-not (Test-Path (Join-Path $PackageDir "build_info.json"))) {
+    throw "build_info.json is missing from the package."
+}
 
 # Files extracted from an Internet-downloaded ZIP can inherit Mark of the Web.
 # Reproduce that state and prove the frozen WinForms/pythonnet backend still

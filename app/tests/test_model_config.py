@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+import sys
 import threading
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from app.core.llm.config import SharedGatewayFactory
 from app.core.llm.providers import ProviderResult
 from app.runtime.model_config import (
+    MODEL_CONFIG_FORMAT_VERSION,
     ModelConfigStore,
     StoredModelConfig,
     effective_gateway_factory,
@@ -15,7 +17,20 @@ from app.runtime.model_config import (
     test_model_connection as check_model_connection,
 )
 from app.runtime.paths import CampaignPaths
+from app.runtime.secret_protection import DPAPICurrentUserProtector
 from app.runtime.session import CampaignRuntime
+
+
+class _ReversibleProtector:
+    scheme = "test-current-user"
+
+    def protect(self, secret):
+        return f"protected:{secret[::-1]}"
+
+    def unprotect(self, protected):
+        if not protected.startswith("protected:"):
+            raise RuntimeError("invalid protected value")
+        return protected.removeprefix("protected:")[::-1]
 
 
 def _payload(**overrides):
@@ -48,8 +63,133 @@ def test_local_model_config_overrides_environment_and_never_exposes_key(
     }
     assert "api_key" not in status
     assert "local-secret" not in json.dumps(status)
+    persisted = store.path.read_text(encoding="utf-8")
+    if sys.platform == "win32":
+        assert "local-secret" not in persisted
+        assert '"api_key_protection": "dpapi-current-user"' in persisted
+    else:
+        assert '"api_key": "local-secret"' in persisted
     if os.name != "nt":
         assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows DPAPI only")
+def test_windows_dpapi_current_user_round_trip():
+    protector = DPAPICurrentUserProtector()
+
+    protected = protector.protect("测试-api-key")
+
+    assert protected
+    assert "测试-api-key" not in protected
+    assert protector.unprotect(protected) == "测试-api-key"
+
+
+def test_protected_store_never_writes_plaintext_api_key(tmp_path):
+    path = tmp_path / "model_config.json"
+    store = ModelConfigStore(
+        path,
+        secret_protector=_ReversibleProtector(),
+    )
+
+    store.save(StoredModelConfig.from_dict(_payload()))
+
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted == {
+        "format_version": MODEL_CONFIG_FORMAT_VERSION,
+        "api_key_protection": "test-current-user",
+        "api_key_protected": "protected:terces-lacol",
+        "base_url": "https://example.test/v1",
+        "model": "story-model",
+        "thinking": True,
+    }
+    assert "local-secret" not in path.read_text(encoding="utf-8")
+    assert store.load_local().api_key == "local-secret"
+
+
+def test_protected_store_atomically_migrates_legacy_plaintext(tmp_path):
+    path = tmp_path / "model_config.json"
+    path.write_text(
+        json.dumps(_payload(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    store = ModelConfigStore(
+        path,
+        secret_protector=_ReversibleProtector(),
+    )
+
+    loaded = store.load_local()
+
+    assert loaded.api_key == "local-secret"
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert "api_key" not in persisted
+    assert persisted["api_key_protection"] == "test-current-user"
+    assert persisted["api_key_protected"] == "protected:terces-lacol"
+
+
+def test_failed_plaintext_migration_preserves_original_file(tmp_path):
+    class BrokenProtector(_ReversibleProtector):
+        def protect(self, _secret):
+            raise RuntimeError("protection failed")
+
+    path = tmp_path / "model_config.json"
+    original = json.dumps(_payload(), ensure_ascii=False)
+    path.write_text(original, encoding="utf-8")
+    store = ModelConfigStore(path, secret_protector=BrokenProtector())
+
+    with pytest.raises(RuntimeError, match="protection failed"):
+        store.load_local()
+
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_protected_config_does_not_fall_back_when_secret_cannot_be_recovered(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "model_config.json"
+    path.write_text(
+        json.dumps({
+            "format_version": MODEL_CONFIG_FORMAT_VERSION,
+            "api_key_protection": "other-scheme",
+            "api_key_protected": "ciphertext",
+            "base_url": "https://example.test/v1",
+            "model": "story-model",
+            "thinking": False,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "environment-secret")
+    store = ModelConfigStore(
+        path,
+        secret_protector=_ReversibleProtector(),
+    )
+
+    with pytest.raises(RuntimeError, match="protection scheme"):
+        store.load_effective()
+
+
+def test_unsupported_protected_format_is_preserved_for_future_migration(
+    tmp_path,
+):
+    path = tmp_path / "model_config.json"
+    original = json.dumps({
+        "format_version": MODEL_CONFIG_FORMAT_VERSION + 1,
+        "api_key_protection": "test-current-user",
+        "api_key_protected": "protected:terces-lacol",
+        "base_url": "https://example.test/v1",
+        "model": "story-model",
+        "thinking": False,
+    })
+    path.write_text(original, encoding="utf-8")
+    store = ModelConfigStore(
+        path,
+        secret_protector=_ReversibleProtector(),
+    )
+
+    with pytest.raises(RuntimeError, match="configuration version"):
+        store.load_effective()
+
+    assert path.read_text(encoding="utf-8") == original
 
 
 def test_environment_is_bootstrap_when_no_local_config(tmp_path, monkeypatch):

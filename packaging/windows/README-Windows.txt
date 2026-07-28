@@ -8,8 +8,10 @@
    - 前往 https://developer.microsoft.com/microsoft-edge/webview2/ 安装。
 5. 存档、模型配置和日志位于：
    %LOCALAPPDATA%\LoreLoop
+   API Key 使用当前 Windows 用户的 DPAPI 加密，不能通过复制 model_config.json 迁移到其他用户或电脑。
 6. 反馈问题时请附上：
    %LOCALAPPDATA%\LoreLoop\logs\desktop-crash.log
+   同时附上程序目录中的 build_info.json。
 
 本测试包未签名，Windows SmartScreen 可能显示未知发布者提示。
 如果旧测试包报告 Python.Runtime.Loader.Initialize 错误：

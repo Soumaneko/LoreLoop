@@ -12,9 +12,16 @@ from app.core.llm.config import GatewayConfig, SharedGatewayFactory
 from app.core.llm.providers import OpenAICompatibleProvider
 
 from .paths import APP_CONFIG_DIR
+from .secret_protection import (
+    SecretProtectionError,
+    SecretProtector,
+    default_secret_protector,
+)
 
 
 MODEL_CONFIG_FILE = APP_CONFIG_DIR / "model_config.json"
+_PROTECTED_CONFIG_V2 = 2
+MODEL_CONFIG_FORMAT_VERSION = _PROTECTED_CONFIG_V2
 _CONFIG_WRITE_LOCK = threading.RLock()
 
 
@@ -65,17 +72,41 @@ class StoredModelConfig:
 
 
 class ModelConfigStore:
-    def __init__(self, path: str | Path = MODEL_CONFIG_FILE) -> None:
+    def __init__(
+        self,
+        path: str | Path = MODEL_CONFIG_FILE,
+        *,
+        secret_protector: SecretProtector | None = None,
+        use_platform_protector: bool = True,
+    ) -> None:
         self.path = Path(path)
+        self._secret_protector = (
+            default_secret_protector()
+            if secret_protector is None and use_platform_protector
+            else secret_protector
+        )
 
     def load_local(self) -> StoredModelConfig | None:
-        try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return None
-        except json.JSONDecodeError as exc:
-            raise ValueError("Local model configuration is not valid JSON") from exc
-        return StoredModelConfig.from_dict(payload)
+        with _CONFIG_WRITE_LOCK:
+            try:
+                payload = json.loads(self.path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                return None
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "Local model configuration is not valid JSON"
+                ) from exc
+            if not isinstance(payload, dict):
+                raise ValueError("Model configuration must be a JSON object")
+            if "api_key_protected" in payload or "api_key_protection" in payload:
+                return self._load_protected(payload)
+
+            config = StoredModelConfig.from_dict(payload)
+            if self._secret_protector is not None:
+                # Upgrade legacy plaintext only after protection succeeds. The
+                # atomic writer leaves the original file intact on failure.
+                self._write_payload(self._protected_payload(config))
+            return config
 
     def load_effective(self) -> StoredModelConfig:
         try:
@@ -96,19 +127,12 @@ class ModelConfigStore:
 
     def save(self, config: StoredModelConfig) -> None:
         with _CONFIG_WRITE_LOCK:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            _best_effort_chmod(self.path.parent, 0o700)
-            temporary = self.path.with_name(f".{self.path.name}.tmp")
-            try:
-                temporary.write_text(
-                    json.dumps(asdict(config), ensure_ascii=False, indent=2) + "\n",
-                    encoding="utf-8",
-                )
-                _best_effort_chmod(temporary, 0o600)
-                os.replace(temporary, self.path)
-                _best_effort_chmod(self.path, 0o600)
-            finally:
-                temporary.unlink(missing_ok=True)
+            payload = (
+                self._protected_payload(config)
+                if self._secret_protector is not None
+                else asdict(config)
+            )
+            self._write_payload(payload)
 
     def public_status(self) -> dict[str, Any]:
         config = self.load_effective()
@@ -142,6 +166,74 @@ class ModelConfigStore:
                 else payload["thinking"]
             ),
         })
+
+    def _load_protected(self, payload: dict[str, Any]) -> StoredModelConfig:
+        version = payload.get("format_version")
+        if version == _PROTECTED_CONFIG_V2:
+            return self._load_protected_v2(payload)
+        raise SecretProtectionError(
+            "Unsupported protected model configuration version"
+        )
+
+    def _load_protected_v2(
+        self,
+        payload: dict[str, Any],
+    ) -> StoredModelConfig:
+        """Load the v2 DPAPI/entropy-v1 contract.
+
+        Keep this reader when introducing later formats so an upgrade can
+        recover the old secret before atomically rewriting it.
+        """
+        protector = self._secret_protector
+        if protector is None:
+            raise SecretProtectionError(
+                "This platform cannot recover the protected API Key"
+            )
+        if payload.get("api_key_protection") != protector.scheme:
+            raise SecretProtectionError(
+                "Unsupported API Key protection scheme"
+            )
+        protected = payload.get("api_key_protected")
+        if not isinstance(protected, str):
+            raise SecretProtectionError("Protected API Key is missing")
+        api_key = protector.unprotect(protected)
+        return StoredModelConfig.from_dict({
+            "api_key": api_key,
+            "base_url": payload.get("base_url"),
+            "model": payload.get("model"),
+            "thinking": payload.get("thinking"),
+        })
+
+    def _protected_payload(self, config: StoredModelConfig) -> dict[str, Any]:
+        protector = self._secret_protector
+        if protector is None:
+            raise SecretProtectionError("API Key protection is unavailable")
+        protected = protector.protect(config.api_key)
+        if protector.unprotect(protected) != config.api_key:
+            raise SecretProtectionError("API Key protection verification failed")
+        return {
+            "format_version": MODEL_CONFIG_FORMAT_VERSION,
+            "api_key_protection": protector.scheme,
+            "api_key_protected": protected,
+            "base_url": config.base_url,
+            "model": config.model,
+            "thinking": config.thinking,
+        }
+
+    def _write_payload(self, payload: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        _best_effort_chmod(self.path.parent, 0o700)
+        temporary = self.path.with_name(f".{self.path.name}.tmp")
+        try:
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            _best_effort_chmod(temporary, 0o600)
+            os.replace(temporary, self.path)
+            _best_effort_chmod(self.path, 0o600)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 ProviderFactory = Callable[[StoredModelConfig], OpenAICompatibleProvider]

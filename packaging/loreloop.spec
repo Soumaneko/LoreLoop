@@ -6,7 +6,7 @@ if sys.platform != "win32":
     raise SystemExit("LoreLoop Windows artifacts must be built on Windows")
 
 project_root = Path(SPEC).resolve().parent.parent
-version_file = project_root / "packaging" / "windows" / "version_info.txt"
+version_file = project_root / "build" / "metadata" / "version_info.txt"
 
 
 def collect_data_tree(source, destination):
