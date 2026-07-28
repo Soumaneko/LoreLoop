@@ -64,8 +64,7 @@ export function createReaderPreferencesController({
     syncCustomSelect(elements.theme);
 
     if (elements.tokenUsage) {
-      elements.tokenUsage.value = current.show_token_usage ? "shown" : "hidden";
-      syncCustomSelect(elements.tokenUsage);
+      elements.tokenUsage.checked = current.show_token_usage;
     }
     if (onTokenUsageVisibilityChange) {
       onTokenUsageVisibilityChange(current.show_token_usage);
@@ -80,12 +79,13 @@ export function createReaderPreferencesController({
     return state.readerPreferences;
   };
 
-  const save = async () => {
+  const save = async (options = {}) => {
+    const silent = options?.silent === true;
     const requested = {
       font_size: elements.fontSize.value || DEFAULTS.font_size,
       font_family: elements.fontFamily.value || DEFAULTS.font_family,
       theme: elements.theme.value || DEFAULTS.theme,
-      show_token_usage: elements.tokenUsage ? elements.tokenUsage.value === "shown" : false,
+      show_token_usage: elements.tokenUsage ? elements.tokenUsage.checked : false,
     };
     apply(requested);
     const sequence = ++saveSequence;
@@ -102,7 +102,7 @@ export function createReaderPreferencesController({
       state.readerPreferences = saved;
       if (sequence === saveSequence) {
         apply(saved);
-        showToast("沉浸阅读偏好已保存");
+        if (!silent) showToast("沉浸阅读偏好已保存");
       }
     } catch (error) {
       if (sequence === saveSequence) {

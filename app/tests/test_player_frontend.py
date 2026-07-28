@@ -519,7 +519,7 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
 
     assert "<title>续章 · 你的故事</title>" in html
     assert "<strong>续章</strong>" in html
-    assert "LORELOOP · YOUR LIVING STORY" in html
+    assert "<small>LORELOOP</small>" in html
     assert "/api/player/state" in source
     assert 'await request("/api/player/model-config")' in source
     assert 'request("/api/player/model-config/test"' in source

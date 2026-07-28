@@ -1024,8 +1024,91 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .close-button { border: 0; background: none; color: var(--muted); font-size: 30px; cursor: pointer; transition: color 0.2s ease; }
 .close-button:hover { color: var(--gold-bright); }
 .drawer-section { padding: 22px 0; border-bottom: 1px solid var(--line); }
-.drawer-section label, .section-title { display: block; margin-bottom: 12px; color: var(--gold-bright); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; opacity: .85; }
+.drawer-section .section-title { display: block; margin-bottom: 12px; color: var(--gold-bright); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; opacity: .85; }
+.drawer-section label { display: block; margin-bottom: 10px; color: var(--gold-bright); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; opacity: .85; }
 .drawer-section label:not(:first-of-type) { margin-top: 16px; }
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+.setting-row:first-child { padding-top: 0; }
+.setting-row:last-child { padding-bottom: 0; }
+.setting-label {
+  flex-shrink: 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+.setting-note {
+  text-transform: none;
+  letter-spacing: .04em;
+  opacity: .55;
+  font-weight: 400;
+}
+.setting-row .codex-custom-select-wrapper {
+  width: auto;
+  flex: 1;
+  max-width: 62%;
+}
+.setting-row .pipeline-toggle {
+  width: auto;
+  min-width: 180px;
+}
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.toggle-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-track {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  transition: background 0.22s var(--ease-smooth), border-color 0.22s var(--ease-smooth);
+  position: relative;
+}
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.22s var(--ease-smooth), background 0.22s var(--ease-smooth);
+}
+.toggle-switch input:checked + .toggle-track {
+  background: var(--gold-glow);
+  border-color: var(--gold);
+}
+.toggle-switch input:checked + .toggle-track::after {
+  transform: translateX(18px);
+  background: var(--gold-bright);
+}
+.toggle-switch input:disabled + .toggle-track {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.setting-row .manage-saves-button {
+  width: auto;
+  margin-top: 0;
+}
 .pipeline-toggle {
   width: 100%;
   min-height: 42px;
@@ -1044,12 +1127,6 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   color: var(--gold-bright);
 }
 .pipeline-toggle:disabled { cursor: not-allowed; opacity: 0.55; }
-.drawer-help {
-  margin: 9px 0 0;
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.6;
-}
 .drawer input, .modal input, .modal textarea, .modal select { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--ink); padding: 11px 12px; outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
 .modal input:focus, .modal textarea:focus, .modal select:focus { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold-glow); }
 .drawer select {
@@ -1872,4 +1949,22 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   .turn-nav-item { grid-template-columns: 1fr; gap: 0; }
   .turn-navigator-list::before { right: 7px; }
   .turn-nav-dot { margin-left: auto; margin-right: 4px; }
+}
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  max-width: 480px;
+  padding: 10px 22px;
+  border-radius: 99px;
+  background: var(--surface);
+  border: 1px solid var(--gold);
+  color: var(--gold-bright);
+  font-family: var(--serif);
+  font-size: 13px;
+  text-align: center;
+  box-shadow: var(--shadow);
+  pointer-events: none;
 }

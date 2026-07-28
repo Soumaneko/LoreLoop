@@ -14,7 +14,7 @@
     <header class="topbar">
       <a class="brand" href="/" aria-label="续章首页">
         <span class="brand-mark">续</span>
-        <span><strong>续章</strong><small>LORELOOP · YOUR LIVING STORY</small></span>
+        <span><strong>续章</strong><small>LORELOOP</small></span>
       </a>
       <div class="world-meta" aria-live="polite">
         <span id="worldTime">尚未启程</span>
@@ -123,59 +123,7 @@
       <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
     </div>
     <section class="drawer-section">
-      <label for="difficultySelect">判定难度</label>
-      <select id="difficultySelect">
-        <option value="简单">简单 · 三骰取高</option>
-        <option value="普通">普通 · 双骰取高</option>
-        <option value="困难">困难 · 单骰判定</option>
-      </select>
-    </section>
-    <section class="drawer-section">
-      <label for="diceDisplaySelect">判定显示</label>
-      <select id="diceDisplaySelect">
-        <option value="hidden">完全不显示</option>
-        <option value="outcome">只显示结果状态</option>
-        <option value="full">显示骰点、修正与结果</option>
-      </select>
-    </section>
-    <section class="drawer-section">
-      <div class="section-title">叙事校验</div>
-      <button id="canonValidationBtn" class="pipeline-toggle" type="button" aria-pressed="false">
-        Canon 校验链：关闭
-      </button>
-      <p class="drawer-help">开启后，每次生成及改写都会追加历史查询、证据检索、一致性检查和必要修订。</p>
-    </section>
-    <section class="drawer-section">
-      <div class="section-title">沉浸阅读</div>
-      <label for="fontSizeSelect">字号大小</label>
-      <select id="fontSizeSelect">
-        <option value="14">精小 (14px)</option>
-        <option value="15">标准 (15px)</option>
-        <option value="16.5" selected>适中 (16.5px)</option>
-        <option value="18">大字 (18px)</option>
-        <option value="20">特大 (20px)</option>
-      </select>
-      <label for="fontFamilySelect" style="margin-top: 14px;">字体风骨</label>
-      <select id="fontFamilySelect">
-        <option value="serif">沉香宋体 (典雅)</option>
-        <option value="kaiti">苍劲楷体 (侠风)</option>
-        <option value="ming">雕版明朝 (厚重)</option>
-        <option value="sans">现代无衬线 (清晰)</option>
-      </select>
-      <label for="themeSelect" style="margin-top: 14px;">主题调性</label>
-      <select id="themeSelect">
-        <option value="dark">玄金暗影 (深色)</option>
-        <option value="sepia">宣纸护眼 (暖阳)</option>
-        <option value="light">月白明彩 (浅色)</option>
-      </select>
-      <label for="tokenUsageSelect" style="margin-top: 14px;">模型用量</label>
-      <select id="tokenUsageSelect">
-        <option value="hidden" selected>隐藏用量信息</option>
-        <option value="shown">显示每次用量</option>
-      </select>
-    </section>
-    <section class="drawer-section">
-      <label for="saveSelect">当前存档</label>
+      <label for="saveSelect">存档切换</label>
       <div class="inline-control">
         <select id="saveSelect"></select>
         <button id="newSaveBtn" type="button" title="新建存档">＋</button>
@@ -183,8 +131,73 @@
       <button id="manageSavesBtn" class="manage-saves-button" type="button">管理本地存档</button>
     </section>
     <section class="drawer-section">
-      <div class="section-title">模型服务</div>
-      <button id="modelSettingsBtn" class="manage-saves-button" type="button">模型设置与连接检查</button>
+      <div class="section-title">游戏运行</div>
+      <div class="setting-row">
+        <span class="setting-label">难度</span>
+        <select id="difficultySelect">
+          <option value="简单">简单 · 三骰取高</option>
+          <option value="普通">普通 · 双骰取高</option>
+          <option value="困难">困难 · 单骰判定</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">骰点</span>
+        <select id="diceDisplaySelect">
+          <option value="hidden">完全不显示</option>
+          <option value="outcome">只显示结果状态</option>
+          <option value="full">显示骰点、修正与结果</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">后校验<span class="setting-note">（关闭可节省 token）</span></span>
+        <label class="toggle-switch">
+          <input id="canonValidationBtn" type="checkbox" />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">用量</span>
+        <label class="toggle-switch">
+          <input id="tokenUsageSelect" type="checkbox" />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+    </section>
+    <section class="drawer-section">
+      <div class="section-title">沉浸阅读</div>
+      <div class="setting-row">
+        <span class="setting-label">字号</span>
+        <select id="fontSizeSelect">
+          <option value="14">精小 (14px)</option>
+          <option value="15">标准 (15px)</option>
+          <option value="16.5" selected>适中 (16.5px)</option>
+          <option value="18">大字 (18px)</option>
+          <option value="20">特大 (20px)</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">字体</span>
+        <select id="fontFamilySelect">
+          <option value="serif">沉香宋体 (典雅)</option>
+          <option value="kaiti">苍劲楷体 (侠风)</option>
+          <option value="ming">雕版明朝 (厚重)</option>
+          <option value="sans">现代无衬线 (清晰)</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">主题</span>
+        <select id="themeSelect">
+          <option value="dark">玄金暗影 (深色)</option>
+          <option value="sepia">宣纸护眼 (暖阳)</option>
+          <option value="light">月白明彩 (浅色)</option>
+        </select>
+      </div>
+    </section>
+    <section class="drawer-section">
+      <div class="setting-row">
+        <span class="setting-label">模型服务</span>
+        <button id="modelSettingsBtn" class="manage-saves-button" type="button">设置与检查</button>
+      </div>
     </section>
   </aside>
 
@@ -256,7 +269,7 @@
     <form id="feedbackRewriteForm">
       <p class="eyebrow">REWRITE WITH FEEDBACK</p>
       <h2>根据意见修改</h2>
-      <p>说明正文哪里需要改变。系统会判断应保留原文局部修订、抛弃原文重新构思，或不执行重写。</p>
+      <p>说明正文哪里需要改变。系统会根据反馈进行重写。</p>
       <label>
         <span>修改意见</span>
         <textarea id="feedbackRewriteInput" maxlength="2000" rows="6" required placeholder="例如：柳若兰不知道密室的秘密，请重写她听到这个消息时的反应。"></textarea>

@@ -171,7 +171,10 @@ const readerPreferences = createReaderPreferencesController({
 
     const variant = selectedVariant();
     const footer = _buildPendingFooter(pending, variant);
-    if (footer) els.pendingCard.appendChild(footer);
+    if (footer) {
+      const actions = els.pendingCard.querySelector(".pending-actions");
+      els.pendingCard.insertBefore(footer, actions);
+    }
   },
 });
 installClientDiagnostics();
@@ -264,7 +267,6 @@ function renderControls({ updateNavigation = true } = {}) {
     els.fontSizeSelect,
     els.fontFamilySelect,
     els.themeSelect,
-    els.tokenUsageSelect,
   ]);
   if (updateNavigation) renderTurnNavigator();
 }
@@ -277,8 +279,7 @@ function renderHeader() {
 
 function renderCanonValidation() {
   const enabled = Boolean(state.playerState?.canon_validation_enabled);
-  els.canonValidationBtn.setAttribute("aria-pressed", String(enabled));
-  els.canonValidationBtn.textContent = `Canon 校验链：${enabled ? "开启" : "关闭"}`;
+  els.canonValidationBtn.checked = enabled;
 }
 
 function escapeRegExp(value) {
@@ -1492,7 +1493,6 @@ function renderDrawer() {
   enhanceCustomSelect(els.fontSizeSelect);
   enhanceCustomSelect(els.fontFamilySelect);
   enhanceCustomSelect(els.themeSelect);
-  enhanceCustomSelect(els.tokenUsageSelect);
 }
 
 function renderSaves() {
@@ -2920,6 +2920,7 @@ els.manageSavesBtn.onclick = () => {
 };
 els.modelSettingsBtn.onclick = () => {
   closeDrawer();
+  openModelConfig();
 };
 els.closeModelConfigBtn.onclick = () => els.modelConfigDialog.close();
 els.tokenUsageDialog.addEventListener("click", (e) => {
@@ -2991,9 +2992,9 @@ els.diceDisplaySelect.onchange = async () => {
     showError(error);
   }
 };
-els.canonValidationBtn.onclick = async () => {
-  const previous = Boolean(state.playerState?.canon_validation_enabled);
-  const enabled = !previous;
+els.canonValidationBtn.onchange = async () => {
+  const enabled = els.canonValidationBtn.checked;
+  const previous = !enabled;
   els.canonValidationBtn.disabled = true;
   try {
     const result = await request("/api/player/canon-validation", {
@@ -3002,7 +3003,7 @@ els.canonValidationBtn.onclick = async () => {
     });
     state.playerState.canon_validation_enabled = result.canon_validation_enabled;
     renderCanonValidation();
-    showToast(`Canon 校验链已${result.canon_validation_enabled ? "开启" : "关闭"}`);
+    showToast(`后校验已${result.canon_validation_enabled ? "开启" : "关闭"}`);
   } catch (error) {
     state.playerState.canon_validation_enabled = previous;
     renderCanonValidation();
@@ -3014,7 +3015,7 @@ els.canonValidationBtn.onclick = async () => {
 els.fontSizeSelect.onchange = readerPreferences.save;
 els.fontFamilySelect.onchange = readerPreferences.save;
 els.themeSelect.onchange = readerPreferences.save;
-els.tokenUsageSelect.onchange = readerPreferences.save;
+els.tokenUsageSelect.onchange = () => readerPreferences.save({ silent: true });
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.turnNavigatorLatest.onclick = jumpToLatestTurn;
 els.initFanfic.onchange = toggleInitWorldFields;
