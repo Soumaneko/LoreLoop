@@ -18,6 +18,7 @@ from app.graph.maintenance_graph import batch_classify_stream, memory_maintain_s
 from app.runtime.debug_state import load_debug_state
 from app.runtime.player_state import load_player_history, load_player_state
 from app.runtime.settings import (
+    save_canon_validation,
     save_dice_display,
     save_difficulty,
     save_max_chars,
@@ -380,6 +381,7 @@ __all__ = [
     "preview_core_memory",
     "redo_last_turn",
     "save_dice_display",
+    "save_canon_validation",
     "save_difficulty",
     "save_max_chars",
     "save_model_config",

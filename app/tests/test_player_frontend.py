@@ -30,13 +30,20 @@ from app.runtime.player_state import (
     player_saves_payload,
 )
 from app.runtime.operations import OperationManager
+from app.runtime import settings as runtime_settings
 from app.runtime.session import get_campaign_runtime
 from app.runtime.reader_preferences import (
     ReaderPreferencesStore,
     load_reader_preferences,
     save_reader_preferences,
 )
-from app.runtime.settings import load_settings, save_dice_display
+from app.runtime.settings import (
+    director_enabled,
+    load_settings,
+    save_canon_validation,
+    save_dice_display,
+    save_initialization_settings,
+)
 
 
 STATIC_DIR = Path(__file__).parents[1] / "player_static"
@@ -341,6 +348,72 @@ def test_dice_display_setting_is_per_save_and_normalized():
     }
 
 
+def test_pipeline_settings_have_product_defaults_and_are_persisted_per_save():
+    assert save_canon_validation({"enabled": True}) == {
+        "canon_validation_enabled": True,
+    }
+    assert load_settings()["canon_validation_enabled"] is True
+
+    save_initialization_settings(director_is_enabled=False)
+
+    assert director_enabled() is False
+    assert load_settings()["director_enabled"] is False
+
+
+def test_initialization_and_public_setting_updates_do_not_lose_each_other(
+    monkeypatch,
+):
+    original_write = runtime_settings._write_settings
+    initialization_write_started = threading.Event()
+    allow_initialization_write = threading.Event()
+    public_call_started = threading.Event()
+    errors = []
+
+    def blocking_write(settings):
+        if (
+            settings.get("director_enabled") is False
+            and not initialization_write_started.is_set()
+        ):
+            initialization_write_started.set()
+            if not allow_initialization_write.wait(timeout=2):
+                raise TimeoutError("test did not release initialization write")
+        original_write(settings)
+
+    monkeypatch.setattr(runtime_settings, "_write_settings", blocking_write)
+
+    def run_initialization_write():
+        try:
+            save_initialization_settings(director_is_enabled=False)
+        except Exception as exc:  # pragma: no cover - asserted below
+            errors.append(exc)
+
+    def run_public_write():
+        try:
+            public_call_started.set()
+            save_canon_validation({"enabled": True})
+        except Exception as exc:  # pragma: no cover - asserted below
+            errors.append(exc)
+
+    initialization_thread = threading.Thread(target=run_initialization_write)
+    initialization_thread.start()
+    assert initialization_write_started.wait(timeout=2)
+
+    public_thread = threading.Thread(target=run_public_write)
+    public_thread.start()
+    assert public_call_started.wait(timeout=2)
+    public_thread.join(timeout=0.05)
+    assert public_thread.is_alive()
+    allow_initialization_write.set()
+    initialization_thread.join(timeout=2)
+    public_thread.join(timeout=2)
+
+    assert not initialization_thread.is_alive()
+    assert not public_thread.is_alive()
+    assert errors == []
+    assert load_settings()["director_enabled"] is False
+    assert load_settings()["canon_validation_enabled"] is True
+
+
 def test_reader_preferences_are_application_global_and_normalized(tmp_path):
     store = ReaderPreferencesStore(tmp_path / ".app" / "reader_preferences.json")
     assert save_reader_preferences({
@@ -453,6 +526,12 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'request("/api/player/model-config"' in source
     assert 'const saves = await request("/api/player/saves")' in source
     assert 'await request("/api/player/state")' in source
+    assert 'id="canonValidationBtn"' in html
+    assert 'id="initDirectorEnabled"' in html
+    assert 'name="director_enabled" type="checkbox" checked' in html
+    assert 'request("/api/player/canon-validation"' in source
+    assert "director_enabled: els.initDirectorEnabled.checked" in source
+    assert "els.initDirectorEnabled.disabled = !state.playerState?.needs_init" in source
     assert "Promise.all([" not in source
     assert "/api/player/history?before_turn=" in source
     assert 'id="turnNavigator"' in html
@@ -816,6 +895,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "save", "needs_init", "difficulty", "campaign", "history",
         "history_navigation", "history_pagination", "highlights", "pending",
         "history_controls", "action_preview", "dice_display",
+        "canon_validation_enabled", "director_enabled",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
     assert "scene_conditions" not in payload["campaign"]
@@ -849,6 +929,8 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "user_input_excerpt": "询问木偶的事。",
     }]
     assert payload["dice_display"] == "outcome"
+    assert payload["canon_validation_enabled"] is False
+    assert payload["director_enabled"] is True
 
 
 def test_player_history_loads_five_turn_pages_oldest_to_newest():

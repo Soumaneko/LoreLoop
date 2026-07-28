@@ -17,6 +17,7 @@ from app.domain.core_memory import (
 from app.domain.current_state import CurrentState
 from app.runtime.serialization import model_data
 from app.runtime.session import PendingOpening, get_campaign_runtime
+from app.runtime.settings import save_initialization_settings
 
 from .initialization_state import InitializationState
 
@@ -129,6 +130,9 @@ def finalize_initialization_state(
     state: InitializationState,
 ) -> InitializationState:
     stores = state["runtime_services"].stores
+    save_initialization_settings(
+        director_is_enabled=state["config"].director_enabled,
+    )
     stores.core_memory().save(state["core_memory"])
     with stores.current_state() as state_store:
         state_store.save(state["current_state"])

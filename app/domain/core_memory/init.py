@@ -32,6 +32,7 @@ class InitConfig(BaseModel):
     version: int = 1
 
     fanfic: bool = False
+    director_enabled: bool = True
     work_name: str | None = None
     birth_location: str | None = None
     story_era: str | None = None

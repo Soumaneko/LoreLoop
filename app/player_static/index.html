@@ -139,6 +139,13 @@
       </select>
     </section>
     <section class="drawer-section">
+      <div class="section-title">叙事校验</div>
+      <button id="canonValidationBtn" class="pipeline-toggle" type="button" aria-pressed="false">
+        Canon 校验链：关闭
+      </button>
+      <p class="drawer-help">开启后，每次生成及改写都会追加历史查询、证据检索、一致性检查和必要修订。</p>
+    </section>
+    <section class="drawer-section">
       <div class="section-title">沉浸阅读</div>
       <label for="fontSizeSelect">字号大小</label>
       <select id="fontSizeSelect">
@@ -291,6 +298,7 @@
       <fieldset id="initConfigFields" class="init-fieldset">
         <div class="form-grid">
           <label class="wide toggle-label"><input id="initFanfic" name="fanfic" type="checkbox" /><span>同人世界</span></label>
+          <label class="wide toggle-label"><input id="initDirectorEnabled" name="director_enabled" type="checkbox" checked /><span>启用导演系统（完成初始化后不可修改）</span></label>
 
           <div id="initOriginalFields" class="form-subgrid wide">
             <label><span>世界名称</span><input name="world_name" required placeholder="泰瑞大陆" /></label>
@@ -334,7 +342,7 @@
 
       <section id="storyDirectionStage" class="story-direction-stage" hidden>
         <div class="section-heading"><span>长期故事方向</span><i></i></div>
-        <p>这是开场与后续导演系统使用的长期方向。你可以直接修改后再生成开场。</p>
+        <p>这是开场与后续剧情推进使用的长期方向。你可以直接修改后再生成开场。</p>
         <label><span>故事方向</span><textarea id="storyDirectionContent" maxlength="800"></textarea></label>
         <label><span>默认货币单位</span><input id="storyDirectionCurrency" maxlength="40" placeholder="可留空，例如：金币" /></label>
       </section>

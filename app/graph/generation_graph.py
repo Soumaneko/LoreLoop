@@ -5,6 +5,7 @@ import uuid
 
 from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
+from app.runtime.settings import canon_validation_enabled, director_enabled
 
 from app.domain.roll.schemas import Difficulty
 from app.domain.short_term_memory import ShortTermMemory
@@ -36,7 +37,11 @@ from .generation_nodes import (
 from .generation_state import GenerationEvent, GenerationState
 
 
-def build_generation_graph():
+def build_generation_graph(
+    *,
+    director_is_enabled: bool,
+    canon_validation_is_enabled: bool,
+):
     dependencies = (
         extract_context_facts_node,
         consume_director_events_node,
@@ -52,53 +57,57 @@ def build_generation_graph():
         _route_after_consistency_check,
     )
     return get_cached_graph(
-        "generation",
+        (
+            "generation"
+            f":director={int(director_is_enabled)}"
+            f":canon={int(canon_validation_is_enabled)}"
+        ),
         dependencies,
-        _compile_generation_graph,
+        lambda: _compile_generation_graph(
+            director_is_enabled=director_is_enabled,
+            canon_validation_is_enabled=canon_validation_is_enabled,
+        ),
     )
 
 
-def _compile_generation_graph():
+def _compile_generation_graph(
+    *,
+    director_is_enabled: bool,
+    canon_validation_is_enabled: bool,
+):
     graph = StateGraph(GenerationState)
     graph.add_node("extract_context_facts", extract_context_facts_node)
-    graph.add_node("consume_director_events", consume_director_events_node)
     graph.add_node("parse_action", parse_action_node)
     graph.add_node("evaluate_roll_modifiers", evaluate_roll_modifiers_node)
     graph.add_node("resolve_turn", resolve_turn_node)
-    graph.add_node("maybe_director_npc", maybe_director_npc_node)
     graph.add_node("compose_narrative", compose_narrative_node)
-    graph.add_node("generate_canon_queries", generate_canon_queries_node)
-    graph.add_node("retrieve_canon_evidence", retrieve_canon_evidence_node)
-    graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
-    graph.add_node("revise_narrative", revise_narrative_node)
 
     graph.add_edge(START, "extract_context_facts")
     graph.add_edge(START, "parse_action")
     graph.add_edge("parse_action", "evaluate_roll_modifiers")
     graph.add_edge(["extract_context_facts", "evaluate_roll_modifiers"], "resolve_turn")
-    graph.add_edge("resolve_turn", "consume_director_events")
-    graph.add_edge("resolve_turn", "maybe_director_npc")
-    graph.add_edge(
-        ["maybe_director_npc", "consume_director_events"],
-        "compose_narrative",
+    if director_is_enabled:
+        graph.add_node("consume_director_events", consume_director_events_node)
+        graph.add_node("maybe_director_npc", maybe_director_npc_node)
+        graph.add_edge("resolve_turn", "consume_director_events")
+        graph.add_edge("resolve_turn", "maybe_director_npc")
+        graph.add_edge(
+            ["maybe_director_npc", "consume_director_events"],
+            "compose_narrative",
+        )
+    else:
+        graph.add_edge("resolve_turn", "compose_narrative")
+
+    _add_canon_validation_tail(
+        graph,
+        source_nodes=("compose_narrative",),
+        enabled=canon_validation_is_enabled,
     )
-    graph.add_edge("compose_narrative", "generate_canon_queries")
-    graph.add_edge("generate_canon_queries", "retrieve_canon_evidence")
-    graph.add_edge("retrieve_canon_evidence", "check_narrative_consistency")
-    graph.add_conditional_edges(
-        "check_narrative_consistency",
-        _route_after_consistency_check,
-        {
-            "pass": END,
-            "revise": "revise_narrative",
-        },
-    )
-    graph.add_edge("revise_narrative", END)
 
     return graph.compile()
 
 
-def build_rephrase_graph():
+def build_rephrase_graph(*, canon_validation_is_enabled: bool):
     dependencies = (
         rephrase_narrative_node,
         generate_canon_queries_node,
@@ -108,33 +117,24 @@ def build_rephrase_graph():
         _route_after_consistency_check,
     )
     return get_cached_graph(
-        "generation_rephrase",
+        f"generation_rephrase:canon={int(canon_validation_is_enabled)}",
         dependencies,
-        _compile_rephrase_graph,
+        lambda: _compile_rephrase_graph(
+            canon_validation_is_enabled=canon_validation_is_enabled,
+        ),
     )
 
 
-def _compile_rephrase_graph():
+def _compile_rephrase_graph(*, canon_validation_is_enabled: bool):
     graph = StateGraph(GenerationState)
     graph.add_node("rephrase_narrative", rephrase_narrative_node)
-    graph.add_node("generate_canon_queries", generate_canon_queries_node)
-    graph.add_node("retrieve_canon_evidence", retrieve_canon_evidence_node)
-    graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
-    graph.add_node("revise_narrative", revise_narrative_node)
 
     graph.add_edge(START, "rephrase_narrative")
-    graph.add_edge("rephrase_narrative", "generate_canon_queries")
-    graph.add_edge("generate_canon_queries", "retrieve_canon_evidence")
-    graph.add_edge("retrieve_canon_evidence", "check_narrative_consistency")
-    graph.add_conditional_edges(
-        "check_narrative_consistency",
-        _route_after_consistency_check,
-        {
-            "pass": END,
-            "revise": "revise_narrative",
-        },
+    _add_canon_validation_tail(
+        graph,
+        source_nodes=("rephrase_narrative",),
+        enabled=canon_validation_is_enabled,
     )
-    graph.add_edge("revise_narrative", END)
     return graph.compile()
 
 
@@ -147,7 +147,7 @@ def _route_feedback_rewrite(state: GenerationState) -> str:
     return state["rewrite_strategy_decision"].strategy
 
 
-def build_feedback_rewrite_graph():
+def build_feedback_rewrite_graph(*, canon_validation_is_enabled: bool):
     dependencies = (
         rewrite_from_source_node,
         recompose_from_feedback_node,
@@ -159,20 +159,18 @@ def build_feedback_rewrite_graph():
         _route_after_consistency_check,
     )
     return get_cached_graph(
-        "generation_feedback_rewrite",
+        f"generation_feedback_rewrite:canon={int(canon_validation_is_enabled)}",
         dependencies,
-        _compile_feedback_rewrite_graph,
+        lambda: _compile_feedback_rewrite_graph(
+            canon_validation_is_enabled=canon_validation_is_enabled,
+        ),
     )
 
 
-def _compile_feedback_rewrite_graph():
+def _compile_feedback_rewrite_graph(*, canon_validation_is_enabled: bool):
     graph = StateGraph(GenerationState)
     graph.add_node("rewrite_from_source", rewrite_from_source_node)
     graph.add_node("recompose", recompose_from_feedback_node)
-    graph.add_node("generate_canon_queries", generate_canon_queries_node)
-    graph.add_node("retrieve_canon_evidence", retrieve_canon_evidence_node)
-    graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
-    graph.add_node("revise_narrative", revise_narrative_node)
     graph.add_conditional_edges(
         START,
         _route_feedback_rewrite,
@@ -182,8 +180,31 @@ def _compile_feedback_rewrite_graph():
             "no_rewrite": END,
         },
     )
-    graph.add_edge("rewrite_from_source", "generate_canon_queries")
-    graph.add_edge("recompose", "generate_canon_queries")
+    _add_canon_validation_tail(
+        graph,
+        source_nodes=("rewrite_from_source", "recompose"),
+        enabled=canon_validation_is_enabled,
+    )
+    return graph.compile()
+
+
+def _add_canon_validation_tail(
+    graph: StateGraph,
+    *,
+    source_nodes: tuple[str, ...],
+    enabled: bool,
+) -> None:
+    if not enabled:
+        for source_node in source_nodes:
+            graph.add_edge(source_node, END)
+        return
+
+    graph.add_node("generate_canon_queries", generate_canon_queries_node)
+    graph.add_node("retrieve_canon_evidence", retrieve_canon_evidence_node)
+    graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
+    graph.add_node("revise_narrative", revise_narrative_node)
+    for source_node in source_nodes:
+        graph.add_edge(source_node, "generate_canon_queries")
     graph.add_edge("generate_canon_queries", "retrieve_canon_evidence")
     graph.add_edge("retrieve_canon_evidence", "check_narrative_consistency")
     graph.add_conditional_edges(
@@ -192,7 +213,6 @@ def _compile_feedback_rewrite_graph():
         {"pass": END, "revise": "revise_narrative"},
     )
     graph.add_edge("revise_narrative", END)
-    return graph.compile()
 
 
 def generate_turn_stream(
@@ -246,7 +266,9 @@ def rephrase_turn_stream(turn_id: str):
         )
         yield from _stream_generation_graph(
             state,
-            build_rephrase_graph(),
+            build_rephrase_graph(
+                canon_validation_is_enabled=canon_validation_enabled(),
+            ),
             group_id=pending.group_id,
             version_index=version_index,
         )
@@ -312,7 +334,9 @@ def feedback_rewrite_stream(
             return
         yield from _stream_generation_graph(
             state,
-            build_feedback_rewrite_graph(),
+            build_feedback_rewrite_graph(
+                canon_validation_is_enabled=canon_validation_enabled(),
+            ),
             group_id=pending.group_id,
             version_index=version_index,
             emitted_event_count=1,
@@ -383,7 +407,10 @@ def _generate_turn_stream(
     state: dict[str, Any] = prepare_generation_state(user_input, difficulty, max_chars)
     yield from _stream_generation_graph(
         state,
-        build_generation_graph(),
+        build_generation_graph(
+            director_is_enabled=director_enabled(),
+            canon_validation_is_enabled=canon_validation_enabled(),
+        ),
         group_id=group_id,
         version_index=version_index,
     )

@@ -9,6 +9,7 @@ from app.runtime.graph_cache import get_cached_graph
 from app.runtime.session import (
     get_campaign_runtime,
 )
+from app.runtime.settings import director_enabled
 
 from .confirmation_helpers import (
     finalize_confirmation_state,
@@ -246,6 +247,7 @@ def _confirm_turn_stream_locked(
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before confirming.")
 
+    director_is_enabled = director_enabled()
     yield from _confirm_pipeline_locked(
         ConfirmationPipelineInput(
             turn_id=turn_id,
@@ -258,8 +260,8 @@ def _confirm_turn_stream_locked(
                 "Pending turn is stale because CurrentState changed after generation. "
                 "Generate the turn again before confirming."
             ),
-            update_director_event=True,
-            handle_director_npc=True,
+            update_director_event=director_is_enabled,
+            handle_director_npc=director_is_enabled,
         ),
         write_db=write_db,
         scene_text=scene_text,
@@ -318,6 +320,7 @@ def _confirm_opening_stream_locked(
     if pending is None:
         raise ValueError("Pending opening not found. Initialize again before confirming.")
 
+    director_is_enabled = getattr(pending.config, "director_enabled", True)
     yield from _confirm_pipeline_locked(
         ConfirmationPipelineInput(
             turn_id=turn_id,
@@ -331,8 +334,8 @@ def _confirm_opening_stream_locked(
                 "Initialize again before confirming."
             ),
             update_director_event=False,
-            handle_director_npc=True,
-            director_npc_restock_sync=True,
+            handle_director_npc=director_is_enabled,
+            director_npc_restock_sync=director_is_enabled,
             clear_short_term_before_save=True,
             dry_run_memory_reason=(
                 "DB writes are disabled; opening scene was not saved."

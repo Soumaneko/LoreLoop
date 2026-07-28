@@ -124,8 +124,14 @@ def test_memory_batch_single_flight_tracks_superseded_rerun():
 
 def test_compiled_generation_graph_is_cached_and_dependency_aware(monkeypatch):
     clear_compiled_graph_cache("generation")
-    first = generation_graph.build_generation_graph()
-    second = generation_graph.build_generation_graph()
+    first = generation_graph.build_generation_graph(
+        director_is_enabled=True,
+        canon_validation_is_enabled=True,
+    )
+    second = generation_graph.build_generation_graph(
+        director_is_enabled=True,
+        canon_validation_is_enabled=True,
+    )
     assert first is second
 
     original = generation_graph.compose_narrative_node
@@ -134,5 +140,8 @@ def test_compiled_generation_graph_is_cached_and_dependency_aware(monkeypatch):
         return original(state)
 
     monkeypatch.setattr(generation_graph, "compose_narrative_node", replacement)
-    rebuilt = generation_graph.build_generation_graph()
+    rebuilt = generation_graph.build_generation_graph(
+        director_is_enabled=True,
+        canon_validation_is_enabled=True,
+    )
     assert rebuilt is not first

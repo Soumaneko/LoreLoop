@@ -1026,6 +1026,30 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .drawer-section { padding: 22px 0; border-bottom: 1px solid var(--line); }
 .drawer-section label, .section-title { display: block; margin-bottom: 12px; color: var(--gold-bright); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; opacity: .85; }
 .drawer-section label:not(:first-of-type) { margin-top: 16px; }
+.pipeline-toggle {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+.pipeline-toggle[aria-pressed="true"] {
+  border-color: var(--gold);
+  background: var(--gold-glow);
+  color: var(--gold-bright);
+}
+.pipeline-toggle:disabled { cursor: not-allowed; opacity: 0.55; }
+.drawer-help {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
 .drawer input, .modal input, .modal textarea, .modal select { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--ink); padding: 11px 12px; outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
 .modal input:focus, .modal textarea:focus, .modal select:focus { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold-glow); }
 .drawer select {

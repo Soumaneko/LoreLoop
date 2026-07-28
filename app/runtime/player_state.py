@@ -5,6 +5,8 @@ from typing import Any
 from .serialization import model_data
 from .session import CampaignRuntime, get_campaign_runtime
 from .settings import (
+    canon_validation_enabled,
+    director_enabled,
     load_settings,
     normalize_dice_display,
 )
@@ -243,6 +245,8 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
         "needs_init": core_memory is None,
         "difficulty": settings.get("difficulty", "困难"),
         "dice_display": normalize_dice_display(settings.get("dice_display")),
+        "canon_validation_enabled": canon_validation_enabled(settings),
+        "director_enabled": director_enabled(settings),
         "campaign": {
             "turn_index": history[-1]["turn_index"] if history else 0,
             "world_time": current_state.world_clock.label,

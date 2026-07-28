@@ -54,6 +54,72 @@ def _state() -> CurrentState:
     )
 
 
+def test_turn_confirmation_skips_all_director_work_when_disabled(monkeypatch):
+    runtime = get_campaign_runtime()
+    turn_id = "director-disabled-turn"
+    state = _state()
+    runtime.pending_turns.add(PendingTurn(
+        turn_id=turn_id,
+        group_id=turn_id,
+        version_index=1,
+        user_input="观察四周",
+        difficulty="困难",
+        max_chars=1500,
+        state_before=state,
+        context=SimpleNamespace(turn_resolution=SimpleNamespace()),
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="场景正文"),
+    ))
+    captured = {}
+
+    def _capture(pipeline_input, **_kwargs):
+        captured["input"] = pipeline_input
+        return iter(())
+
+    monkeypatch.setattr(turn_confirmation, "director_enabled", lambda: False)
+    monkeypatch.setattr(
+        turn_confirmation,
+        "_confirm_pipeline_locked",
+        _capture,
+    )
+    try:
+        list(turn_confirmation._confirm_turn_stream_locked(turn_id))
+    finally:
+        runtime.pending_turns.remove(turn_id)
+
+    assert captured["input"].update_director_event is False
+    assert captured["input"].handle_director_npc is False
+
+
+def test_opening_confirmation_honors_initial_director_choice(monkeypatch):
+    runtime = get_campaign_runtime()
+    turn_id = "director-disabled-opening"
+    runtime.pending_openings.add(PendingOpening(
+        turn_id=turn_id,
+        config=SimpleNamespace(director_enabled=False),
+        current_state=_state(),
+        scene_result=SceneWriterResult(scene_text="开场正文"),
+    ))
+    captured = {}
+
+    def _capture(pipeline_input, **_kwargs):
+        captured["input"] = pipeline_input
+        return iter(())
+
+    monkeypatch.setattr(
+        turn_confirmation,
+        "_confirm_pipeline_locked",
+        _capture,
+    )
+    try:
+        list(turn_confirmation._confirm_opening_stream_locked(turn_id))
+    finally:
+        runtime.pending_openings.remove(turn_id)
+
+    assert captured["input"].handle_director_npc is False
+    assert captured["input"].director_npc_restock_sync is False
+
+
 def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
     monkeypatch,
     configure_runtime_services,

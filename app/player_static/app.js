@@ -43,7 +43,7 @@ const els = {
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
-  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
+  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), canonValidationBtn: $("canonValidationBtn"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), closeCodexBtn: $("closeCodexBtn"),
   codexConfirmDialog: $("codexConfirmDialog"), codexConfirmEyebrow: $("codexConfirmEyebrow"), codexConfirmTitle: $("codexConfirmTitle"), codexConfirmMessage: $("codexConfirmMessage"), codexConfirmCancelBtn: $("codexConfirmCancelBtn"), codexConfirmOkBtn: $("codexConfirmOkBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
@@ -53,7 +53,7 @@ const els = {
   saveManagerError: $("saveManagerError"),
   initDialog: $("initDialog"), initForm: $("initForm"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
   initConfigFields: $("initConfigFields"), initOriginalFields: $("initOriginalFields"), initFanficFields: $("initFanficFields"),
-  initFanfic: $("initFanfic"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
+  initFanfic: $("initFanfic"), initDirectorEnabled: $("initDirectorEnabled"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
   initConfigActions: $("initConfigActions"), storyDirectionActions: $("storyDirectionActions"), storyDirectionStage: $("storyDirectionStage"),
   storyDirectionBtn: $("storyDirectionBtn"), regenerateStoryDirectionBtn: $("regenerateStoryDirectionBtn"), editInitConfigBtn: $("editInitConfigBtn"),
   storyDirectionContent: $("storyDirectionContent"), storyDirectionCurrency: $("storyDirectionCurrency"),
@@ -255,6 +255,8 @@ function renderControls({ updateNavigation = true } = {}) {
   els.redoBtn.disabled = busy || (pending && !canRedoPending) || !controls.can_redo;
   els.difficultySelect.disabled = busy;
   els.diceDisplaySelect.disabled = busy;
+  els.canonValidationBtn.disabled = busy;
+  els.initDirectorEnabled.disabled = !state.playerState?.needs_init;
   syncCustomSelects([
     els.saveSelect,
     els.difficultySelect,
@@ -271,6 +273,12 @@ function renderHeader() {
   const campaign = state.playerState?.campaign || {};
   els.worldTime.textContent = campaign.world_time || "尚未启程";
   els.worldLocation.textContent = campaign.location || "等待世界载入";
+}
+
+function renderCanonValidation() {
+  const enabled = Boolean(state.playerState?.canon_validation_enabled);
+  els.canonValidationBtn.setAttribute("aria-pressed", String(enabled));
+  els.canonValidationBtn.textContent = `Canon 校验链：${enabled ? "开启" : "关闭"}`;
 }
 
 function escapeRegExp(value) {
@@ -1478,6 +1486,7 @@ function renderDrawer() {
   readerPreferences.apply(state.readerPreferences);
   els.difficultySelect.value = state.playerState?.difficulty || "困难";
   els.diceDisplaySelect.value = state.playerState?.dice_display || "outcome";
+  renderCanonValidation();
   enhanceCustomSelect(els.difficultySelect);
   enhanceCustomSelect(els.diceDisplaySelect);
   enhanceCustomSelect(els.fontSizeSelect);
@@ -2668,6 +2677,7 @@ async function createSave(name) {
     method: "POST",
     body: JSON.stringify({ name, activate: true }),
   });
+  els.initDirectorEnabled.checked = true;
   state.suggestions = []; await loadAll({ scroll: "instant" });
 }
 
@@ -2700,6 +2710,7 @@ function readInitConfig(form) {
   return {
     version: 1,
     fanfic,
+    director_enabled: els.initDirectorEnabled.checked,
     work_name: fanfic ? formValue(form, "work_name") || null : null,
     birth_location: fanfic ? formValue(form, "birth_location") || null : null,
     story_era: fanfic ? formValue(form, "story_era") || null : null,
@@ -2978,6 +2989,26 @@ els.diceDisplaySelect.onchange = async () => {
   } catch (error) {
     els.diceDisplaySelect.value = previous;
     showError(error);
+  }
+};
+els.canonValidationBtn.onclick = async () => {
+  const previous = Boolean(state.playerState?.canon_validation_enabled);
+  const enabled = !previous;
+  els.canonValidationBtn.disabled = true;
+  try {
+    const result = await request("/api/player/canon-validation", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    });
+    state.playerState.canon_validation_enabled = result.canon_validation_enabled;
+    renderCanonValidation();
+    showToast(`Canon 校验链已${result.canon_validation_enabled ? "开启" : "关闭"}`);
+  } catch (error) {
+    state.playerState.canon_validation_enabled = previous;
+    renderCanonValidation();
+    showError(error);
+  } finally {
+    renderControls();
   }
 };
 els.fontSizeSelect.onchange = readerPreferences.save;

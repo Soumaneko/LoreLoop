@@ -13,13 +13,18 @@ from app.runtime.session import PendingTurn, get_campaign_runtime
 
 
 def test_generation_graph_compiles():
-    graph = generation_graph.build_generation_graph()
+    graph = generation_graph.build_generation_graph(
+        director_is_enabled=True,
+        canon_validation_is_enabled=True,
+    )
 
     assert graph is not None
 
 
 def test_rephrase_graph_runs_only_composer_and_consistency_tail():
-    graph = generation_graph.build_rephrase_graph().get_graph()
+    graph = generation_graph.build_rephrase_graph(
+        canon_validation_is_enabled=True,
+    ).get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
     assert ("__start__", "rephrase_narrative") in edges
@@ -37,7 +42,9 @@ def test_rephrase_graph_runs_only_composer_and_consistency_tail():
 
 
 def test_feedback_rewrite_graph_keeps_two_composer_paths_separate():
-    graph = generation_graph.build_feedback_rewrite_graph().get_graph()
+    graph = generation_graph.build_feedback_rewrite_graph(
+        canon_validation_is_enabled=True,
+    ).get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
     assert ("__start__", "rewrite_from_source") in edges
@@ -62,7 +69,9 @@ def test_feedback_rewrite_graph_accepts_no_rewrite_as_terminal_state():
         reasoning="没有明确修改要求。",
     )
 
-    result = generation_graph.build_feedback_rewrite_graph().invoke({
+    result = generation_graph.build_feedback_rewrite_graph(
+        canon_validation_is_enabled=True,
+    ).invoke({
         "events": [],
         "rewrite_strategy_decision": decision,
     })
@@ -111,7 +120,10 @@ def test_rewrite_stream_callbacks_share_mode_aware_event_projection(monkeypatch)
 
 
 def test_consumer_composer_and_consistency_checker_run_in_order():
-    graph = generation_graph.build_generation_graph().get_graph()
+    graph = generation_graph.build_generation_graph(
+        director_is_enabled=True,
+        canon_validation_is_enabled=True,
+    ).get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
     assert ("resolve_turn", "consume_director_events") in edges
@@ -126,6 +138,45 @@ def test_consumer_composer_and_consistency_checker_run_in_order():
     assert ("compose_narrative", "check_narrative_consistency") not in edges
     assert ("compose_narrative", "__end__") not in edges
     assert ("extract_context_facts", "consume_director_events") not in edges
+
+
+def test_compact_generation_graph_skips_director_and_canon_nodes():
+    graph = generation_graph.build_generation_graph(
+        director_is_enabled=False,
+        canon_validation_is_enabled=False,
+    ).get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+    node_ids = set(graph.nodes)
+
+    assert ("resolve_turn", "compose_narrative") in edges
+    assert ("compose_narrative", "__end__") in edges
+    assert not {
+        "consume_director_events",
+        "maybe_director_npc",
+        "generate_canon_queries",
+        "retrieve_canon_evidence",
+        "check_narrative_consistency",
+        "revise_narrative",
+    } & node_ids
+
+
+def test_compact_rewrite_graphs_skip_canon_tail():
+    rephrase = generation_graph.build_rephrase_graph(
+        canon_validation_is_enabled=False,
+    ).get_graph()
+    feedback = generation_graph.build_feedback_rewrite_graph(
+        canon_validation_is_enabled=False,
+    ).get_graph()
+    rephrase_edges = {(edge.source, edge.target) for edge in rephrase.edges}
+    feedback_edges = {(edge.source, edge.target) for edge in feedback.edges}
+
+    assert ("rephrase_narrative", "__end__") in rephrase_edges
+    assert ("rewrite_from_source", "__end__") in feedback_edges
+    assert ("recompose", "__end__") in feedback_edges
+    assert not any(
+        edge[1] == "generate_canon_queries"
+        for edge in [*rephrase_edges, *feedback_edges]
+    )
 
 
 def test_consistency_route_revises_only_when_assertions_exist():
@@ -248,7 +299,11 @@ def test_generate_turn_stream_forwards_state_events(monkeypatch):
             "events": [{"step": "prepared", "data": {}}],
         },
     )
-    monkeypatch.setattr(generation_graph, "build_generation_graph", lambda: _FakeGraph())
+    monkeypatch.setattr(
+        generation_graph,
+        "build_generation_graph",
+        lambda **_kwargs: _FakeGraph(),
+    )
     monkeypatch.setattr(
         generation_graph,
         "finalize_pending_turn",
@@ -291,7 +346,11 @@ def test_generation_pipeline_reloads_store_context_on_every_invocation(monkeypat
         }
 
     monkeypatch.setattr(generation_graph, "prepare_generation_state", _prepare)
-    monkeypatch.setattr(generation_graph, "build_generation_graph", _EmptyGraph)
+    monkeypatch.setattr(
+        generation_graph,
+        "build_generation_graph",
+        lambda **_kwargs: _EmptyGraph(),
+    )
     monkeypatch.setattr(
         generation_graph,
         "finalize_pending_turn",
@@ -334,7 +393,11 @@ def test_generation_buffers_context_events_until_action_parsed(monkeypatch):
             "events": [{"step": "prepared", "data": {}}],
         },
     )
-    monkeypatch.setattr(generation_graph, "build_generation_graph", lambda: _FakeGraph())
+    monkeypatch.setattr(
+        generation_graph,
+        "build_generation_graph",
+        lambda **_kwargs: _FakeGraph(),
+    )
     monkeypatch.setattr(
         generation_graph,
         "finalize_pending_turn",
@@ -491,7 +554,11 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
         yield {"step": "scene_written", "data": {"turn_id": "turn_v2"}}
 
     configure_runtime_services(current_state=_StateStore)
-    monkeypatch.setattr(generation_graph, "build_rephrase_graph", lambda: graph)
+    monkeypatch.setattr(
+        generation_graph,
+        "build_rephrase_graph",
+        lambda **_kwargs: graph,
+    )
     monkeypatch.setattr(generation_graph, "_stream_generation_graph", _stream)
     monkeypatch.setattr(
         generation_graph,
@@ -645,7 +712,7 @@ def test_feedback_rewrite_retains_started_event_in_generation_state(
     monkeypatch.setattr(
         generation_graph,
         "build_feedback_rewrite_graph",
-        lambda: object(),
+        lambda **_kwargs: object(),
     )
 
     try:
