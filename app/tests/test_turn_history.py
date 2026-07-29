@@ -30,13 +30,19 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
         world_style="奇幻",
         ability_system="魔法",
         protagonist_name="莱尔",
+        story_expectation="探索世界。",
     )
     pending = PendingOpening(
         turn_id="opening-1",
         group_id="opening-group-1",
         version_index=1,
+        initialization_fingerprint="fingerprint-1",
         config=config,
-        current_state=build_initial_current_state(config),
+        current_state=build_initial_current_state(
+            config,
+            location="泰瑞大陆",
+            currency_unit="金币",
+        ),
         scene_result=SceneWriterResult(scene_text="莱尔在晨雾中醒来。"),
         token_usage={
             "generation": {
@@ -84,7 +90,10 @@ def test_pending_opening_requires_the_current_storage_contract(tmp_path):
 
     with pytest.raises(
         RuntimeError,
-        match=r"current storage contract; missing fields: group_id, version_index",
+        match=(
+            r"current storage contract; missing fields: "
+            r"group_id, initialization_fingerprint, version_index"
+        ),
     ):
         CampaignRuntime("invalid-pending-opening", paths=paths)
 
@@ -111,6 +120,40 @@ def test_interrupted_confirmation_restores_pre_turn_database(tmp_path):
     assert restarted.recover_interrupted() is True
     assert _read_value(game_db) == "before"
     assert restarted.pending_records()[0]["status"] == "awaiting_confirm"
+
+
+def test_failed_opening_confirmation_restores_initialization_and_absent_state(
+    tmp_path,
+):
+    data_dir = tmp_path / "save"
+    data_dir.mkdir()
+    initialization = data_dir / "initialization.json"
+    initialization.write_text(
+        '{"phase":"opening_pending"}',
+        encoding="utf-8",
+    )
+    history = CampaignHistory(data_dir)
+    history.save_pending(
+        turn_id="opening-1",
+        kind="opening",
+        group_id="opening-1",
+        turn_index=0,
+        payload={"turn_id": "opening-1"},
+    )
+    history.begin_confirmation(
+        "opening-1",
+        write_db=True,
+        scene_text=None,
+    )
+
+    _write_value(data_dir / "current_state.db", "partially-created")
+    initialization.write_text('{"phase":"completed"}', encoding="utf-8")
+    history.fail_confirmation("opening-1", RuntimeError("confirmation failed"))
+
+    assert not (data_dir / "current_state.db").exists()
+    assert initialization.read_text(encoding="utf-8") == (
+        '{"phase":"opening_pending"}'
+    )
 
 
 def test_failed_confirmation_restores_wal_database_with_live_connection(tmp_path):
@@ -247,13 +290,19 @@ def test_runtime_undo_restores_edited_opening_as_pending_and_redo_clears_it(tmp_
         world_style="奇幻",
         ability_system="魔法",
         protagonist_name="莱尔",
+        story_expectation="探索世界。",
     )
     pending = PendingOpening(
         turn_id="opening-1",
         group_id="opening-group-1",
         version_index=1,
+        initialization_fingerprint="fingerprint-1",
         config=config,
-        current_state=build_initial_current_state(config),
+        current_state=build_initial_current_state(
+            config,
+            location="泰瑞大陆",
+            currency_unit="金币",
+        ),
         scene_result=SceneWriterResult(scene_text="最初生成的开场。"),
     )
     runtime = CampaignRuntime("undo-opening", paths=paths, max_workers=1)

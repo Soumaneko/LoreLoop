@@ -14,6 +14,7 @@ from typing import Any, Iterable
 
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState
+from app.runtime.initialization import InitializationRecord
 
 from .save_manifest import SaveManifest
 from .sqlite import SUPPORTED_SCHEMA_VERSIONS
@@ -31,6 +32,7 @@ _ROOT_FILES = {
     "director_events.db",
     "director_npcs.db",
     "entities.db",
+    "initialization.json",
     "memories.db",
     "npc_profiles.db",
     "pending_memories.db",
@@ -482,6 +484,11 @@ def _validate_save_payload(data_dir: Path) -> None:
             json.loads(settings.read_text(encoding="utf-8")), dict
         ):
             raise ValueError("settings.json must contain an object")
+        initialization = data_dir / "initialization.json"
+        if initialization.is_file():
+            InitializationRecord.model_validate_json(
+                initialization.read_text(encoding="utf-8")
+            )
         state_db = data_dir / "current_state.db"
         if state_db.is_file():
             uri = f"file:{state_db.resolve().as_posix()}?mode=ro"

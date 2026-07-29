@@ -1,5 +1,4 @@
 from .extractor import SettingSeedExtractor
-from .initial_creator import InitialWorldSettingCreator
 from .maintainer import SettingMaintainer
 from .preparer import SettingAnchorPreparer
 from .sampler import reserve_setting_candidates
@@ -22,7 +21,6 @@ from .store import WorldSettingStore
 
 __all__ = [
     "InitialWorldSettingCreationResult",
-    "InitialWorldSettingCreator",
     "InitialWorldSettingDraft",
     "SettingAnchorPacket",
     "SettingAnchorPreparation",

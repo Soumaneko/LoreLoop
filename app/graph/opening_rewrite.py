@@ -18,6 +18,14 @@ def rewrite_opening_stream(turn_id: str):
 
         variants = runtime.pending_openings.variants(source.group_id)
         version_index = max(item.version_index for item in variants) + 1
+        initialization = runtime.initialization.load()
+        if (
+            initialization is None
+            or initialization.phase != "opening_pending"
+            or initialization.foundation is None
+            or initialization.fingerprint != source.initialization_fingerprint
+        ):
+            raise RuntimeError("Opening Foundation is missing or does not match")
         trace_id = str(uuid.uuid4())
         yield {
             "step": "opening_rewrite_started",
@@ -33,9 +41,9 @@ def rewrite_opening_stream(turn_id: str):
         scene_result = OpeningSceneAgent(
             runtime.services.gateway(session_type="init")
         ).generate(
-            config=source.config,
             current_state=source.current_state,
             core_memory=core_memory,
+            opening_foundation=initialization.foundation,
             trace_id=trace_id,
         )
 
@@ -44,6 +52,7 @@ def rewrite_opening_stream(turn_id: str):
             turn_id=rewritten_turn_id,
             group_id=source.group_id,
             version_index=version_index,
+            initialization_fingerprint=source.initialization_fingerprint,
             config=source.config,
             current_state=source.current_state,
             scene_result=scene_result,

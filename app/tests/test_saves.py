@@ -209,13 +209,19 @@ def test_create_and_activate_preserves_pending_opening_in_source_save(tmp_path):
             world_style="奇幻",
             ability_system="魔法",
             protagonist_name="莱尔",
+            story_expectation="探索世界。",
         )
         runtime.pending_openings.add(PendingOpening(
             turn_id="opening-1",
             group_id="opening-1",
             version_index=1,
+            initialization_fingerprint="fingerprint-1",
             config=config,
-            current_state=build_initial_current_state(config),
+            current_state=build_initial_current_state(
+                config,
+                location="泰瑞大陆",
+                currency_unit="金币",
+            ),
             scene_result=SceneWriterResult(scene_text="待确认的开场。"),
         ))
 

@@ -53,9 +53,10 @@ def _make_core_memory() -> CoreMemory:
         items=[
             CoreMemoryItem(
                 id="core_player_identity",
-                category="player",
-                content="主角是卢西安，人类法师。",
-                priority=100,
+                    kind="protagonist_invariant",
+                    strength="hard_constraint",
+                    source="player",
+                    content="主角是卢西安，人类法师。",
             ),
         ]
     )

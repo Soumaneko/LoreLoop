@@ -14,7 +14,12 @@ from app.api import record_player_diagnostic
 from app.core.diagnostics import DiagnosticLogger
 from app.debug_server import DebugHandler
 from app.domain.action_preview.schemas import ActionPreviewResult
-from app.domain.core_memory import CoreMemory, CoreMemoryItem
+from app.domain.core_memory import (
+    CampaignSetupProposal,
+    CoreMemory,
+    CoreMemoryItem,
+    InitConfig,
+)
 from app.domain.current_state import (
     CurrentState,
     PlayerState,
@@ -31,6 +36,7 @@ from app.runtime.player_state import (
     player_saves_payload,
 )
 from app.runtime.operations import OperationManager
+from app.runtime.initialization import InitializationRecord
 from app.runtime import settings as runtime_settings
 from app.runtime.session import get_campaign_runtime
 from app.runtime.reader_preferences import (
@@ -112,8 +118,8 @@ def test_player_frontend_javascript_is_syntactically_valid():
 
 
 def test_initialization_draft_route_dispatches_by_http_method(monkeypatch):
-    loaded = {"version": 1, "stage": "config", "form": {}}
-    saved = {"version": 1, "stage": "story_direction", "form": {}}
+    loaded = {"version": 2, "stage": "config", "form": {}}
+    saved = {"version": 2, "stage": "campaign_setup", "form": {}}
     received = []
     monkeypatch.setattr(player_server, "load_initialization_draft", lambda: loaded)
     monkeypatch.setattr(
@@ -569,7 +575,7 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'name="director_enabled" type="checkbox" checked' in html
     assert 'request("/api/player/canon-validation"' in source
     assert "director_enabled: els.initDirectorEnabled.checked" in source
-    assert "els.initDirectorEnabled.disabled = !state.playerState?.needs_init" in source
+    assert 'state.playerState?.initialization?.phase !== "config"' in source
     assert "Promise.all([" not in source
     assert "/api/player/history?before_turn=" in source
     assert 'id="turnNavigator"' in html
@@ -612,11 +618,11 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'if (entry.status === "generating") return `${entry.label} · 正在生成`;' in source
     assert "acknowledgeOperation" in source
     assert 'from "./api.js"' in source
-    assert "/api/player/init/story-direction" in source
+    assert "/api/player/init/campaign-setup" in source
     assert 'operation.recovery_kind === "initialization"' in source
     assert "for (const operation of recoverableOperations)" in source
     assert "function resumeInitializationOperation(" in source
-    assert "story_direction_done" in source
+    assert "campaign_setup_done" in source
     assert "/api/state" not in source
     assert "/api/traces" not in source
     assert "/api/maintenance-jobs" not in source
@@ -704,30 +710,34 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
         Path(__file__).parents[1] / "debug_server.py"
     ).read_text(encoding="utf-8")
     assert "playerState.action_preview?.previews" in source
-    assert 'els.initOriginalFields.querySelectorAll("input, textarea, select")' in source
-    assert 'els.initFanficFields.querySelectorAll("input, textarea, select")' in source
+    assert "fanfic: false" not in source
+    assert "version: 3" in source
     for field in (
-        "initFanfic",
-        'name="work_name"',
-        'name="birth_location"',
-        'name="story_era"',
         'name="world_name"',
         'name="world_style"',
         'name="ability_system"',
         'name="custom_ability_system"',
         'name="protagonist_age"',
-        'name="protagonist_background"',
-        'name="narrative_tone"',
+        'name="protagonist_introduction"',
         'name="story_expectation"',
+        'name="failure_severity"',
         "ability-name",
         "ability-description",
-        "extraCoreMemoryList",
-        "storyDirectionContent",
-        "storyDirectionCurrency",
+        "setupCurrencyUnit",
+        "setupPowerSource",
+        "setupPowerPrevalence",
+        "setupPowerLearningDifficulty",
+        "setupPowerLimitation",
     ):
         assert field in html
-    assert "story_direction" in source
+    assert "campaign_setup" in source
+    assert 'name="work_name"' not in html
+    assert "extraCoreMemoryList" not in html
+    assert 'name="narrative_tone"' not in html
     assert "initConfigSnapshot" in source
+    assert "function setCampaignSetupControlsDisabled(disabled)" in source
+    assert '"input, textarea, select"' in source
+    assert "if (!regenerate) await persistInitializationDraft();" in source
     assert 'id="manageSavesBtn"' in html
     assert 'id="modelSettingsBtn"' in html
     assert 'id="modelConfigDialog"' in html
@@ -756,7 +766,7 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     [
         "generation",
         "confirmation",
-        "initialization_story_direction",
+        "initialization_campaign_setup",
         "initialization_opening",
         "opening_rewrite",
     ],
@@ -850,9 +860,37 @@ def test_cancelled_player_operation_ends_sse_without_failure_payload(monkeypatch
 
 def test_player_state_is_allow_listed_and_restores_pending_content():
     runtime = get_campaign_runtime()
-    runtime.stores.core_memory().save(CoreMemory(items=[
-        CoreMemoryItem(id="secret", category="director", content="不可泄露")
-    ]))
+    core_memory = CoreMemory(items=[
+        CoreMemoryItem(
+            id="secret",
+            kind="world_invariant",
+            strength="hard_constraint",
+            source="player",
+            content="不可泄露",
+        )
+    ])
+    runtime.stores.core_memory().save(core_memory)
+    runtime.initialization.save(InitializationRecord(
+        phase="completed",
+        fingerprint="test-fingerprint",
+        config=InitConfig(
+            world_name="测试世界",
+            world_style="奇幻",
+            ability_system="魔法",
+            protagonist_name="莱尔",
+            story_expectation="探索世界。",
+        ),
+        campaign_setup=CampaignSetupProposal(
+            currency_unit="金币",
+            public_power_baseline={
+                "source": "魔法",
+                "prevalence": "少数人掌握",
+                "learning_difficulty": "困难",
+                "limitation": "不能复活死者。",
+            },
+        ),
+        core_memory=core_memory,
+    ))
     with runtime.stores.current_state() as store:
         store.save(CurrentState(
             scene=SceneState(
@@ -935,6 +973,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "history_navigation", "history_pagination", "highlights", "pending",
         "history_controls", "action_preview", "dice_display",
         "canon_validation_enabled", "director_enabled",
+        "initialization",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
     assert "scene_conditions" not in payload["campaign"]
@@ -1120,22 +1159,38 @@ def test_player_event_projection_exposes_only_safe_llm_usage_counts():
     assert "private" not in str(event)
 
 
-def test_player_story_direction_event_exposes_only_editable_result():
+def test_player_campaign_setup_event_exposes_only_editable_result():
     event = DebugHandler._player_event({
-        "step": "story_direction_done",
+        "step": "campaign_setup_done",
         "data": {
             "config": {"protagonist_name": "莱尔"},
-            "story_direction": {"content": "向北探索", "currency_unit": "金币"},
+            "campaign_setup": {
+                "currency_unit": "银币",
+                "public_power_baseline": {
+                    "source": "魔法",
+                    "prevalence": "少数人掌握",
+                    "learning_difficulty": "困难",
+                    "limitation": "不能复活死者。",
+                },
+            },
             "core_memory": {"items": [{"content": "internal"}]},
             "trace_id": "private-trace",
         },
     })
 
     assert event == {
-        "step": "story_direction_done",
+        "step": "campaign_setup_done",
         "data": {
             "config": {"protagonist_name": "莱尔"},
-            "story_direction": {"content": "向北探索", "currency_unit": "金币"},
+            "campaign_setup": {
+                "currency_unit": "银币",
+                "public_power_baseline": {
+                    "source": "魔法",
+                    "prevalence": "少数人掌握",
+                    "learning_difficulty": "困难",
+                    "limitation": "不能复活死者。",
+                },
+            },
         },
     }
 
@@ -1190,12 +1245,12 @@ def test_completed_player_operation_is_returned_until_acknowledged(monkeypatch):
             },
             {
                 "operation_id": "operation-finished",
-                "operation_type": "initialization_story_direction",
+                "operation_type": "initialization_campaign_setup",
                 "status": "succeeded",
-                "current_step": "story_direction_done",
+                "current_step": "campaign_setup_done",
                 "submitted_at": "earlier",
                 "started_at": "earlier",
-                "metadata": {"stage": "story_direction"},
+                "metadata": {"stage": "campaign_setup"},
             },
         ]
 
@@ -1235,10 +1290,10 @@ def test_player_ack_removes_completed_operation_from_recovery():
     runtime = get_campaign_runtime()
 
     def stream():
-        yield {"step": "story_direction_done", "data": {}}
+        yield {"step": "campaign_setup_done", "data": {}}
 
     operation_id = runtime.operations.submit_stream(
-        "initialization_story_direction",
+        "initialization_campaign_setup",
         stream,
         requires_ack=True,
     )

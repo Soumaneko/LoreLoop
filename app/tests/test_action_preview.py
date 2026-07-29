@@ -40,9 +40,10 @@ def _make_core_memory() -> CoreMemory:
     return CoreMemory(items=[
         CoreMemoryItem(
             id="core_world",
-            category="world",
-            content="当前世界是经典旧世时代的艾泽拉斯。",
-            priority=100,
+                kind="world_invariant",
+                strength="hard_constraint",
+                source="player",
+                content="当前世界是经典旧世时代的艾泽拉斯。",
         )
     ])
 

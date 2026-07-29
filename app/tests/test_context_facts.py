@@ -46,9 +46,10 @@ def _core_memory() -> CoreMemory:
     return CoreMemory(items=[
         CoreMemoryItem(
             id="core_world",
-            category="world",
+            kind="world_invariant",
+            strength="hard_constraint",
+            source="player",
             content="当前世界为武侠原创世界。",
-            priority=100,
         )
     ])
 

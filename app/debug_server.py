@@ -14,7 +14,7 @@ from app.api import (
     list_operations,
     list_saves,
     load_debug_state,
-    preview_core_memory,
+    preview_initialization_config,
     redo_last_turn,
     save_difficulty,
     save_max_chars,
@@ -106,11 +106,13 @@ class DebugHandler(PlayerHandler):
             )
             return
         if path == "/api/init/preview":
-            self._handle_json(lambda: preview_core_memory(_read_json(self)))
+            self._handle_json(
+                lambda: preview_initialization_config(_read_json(self))
+            )
             return
-        if path == "/api/init/story-direction":
+        if path == "/api/init/campaign-setup":
             self._handle_operation_start_stream(
-                self._start_story_direction_operation,
+                self._start_campaign_setup_operation,
             )
             return
         if path == "/api/init/apply":

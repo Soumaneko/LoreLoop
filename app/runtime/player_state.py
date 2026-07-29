@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .current_state_access import load_effective_current_state
 from .serialization import model_data
 from .session import CampaignRuntime, get_campaign_runtime
 from .settings import (
@@ -176,8 +177,10 @@ def _pending_scene_projection(pending) -> dict[str, str | None]:
 def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
     stores = runtime.stores
     core_memory = stores.core_memory().load()
-    with stores.current_state() as state_store:
-        current_state = state_store.load_or_default()
+    current_state = load_effective_current_state(runtime)
+    initialization = runtime.initialization.load()
+    if initialization is None and core_memory is not None:
+        raise RuntimeError("CoreMemory exists without an initialization record")
     history_page = _history_page(runtime, limit=PLAYER_HISTORY_PAGE_SIZE)
     history = history_page["history"]
 
@@ -242,12 +245,30 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
     scene = current_state.scene
     player = current_state.player
     resources = current_state.resources
+    initialization_phase = (
+        initialization.phase if initialization is not None else "config"
+    )
+    initialization_completed = initialization_phase == "completed"
+    needs_init = not initialization_completed and not pending_openings
     return {
         "save": {
             "save_id": runtime.campaign_id,
-            "initialized": core_memory is not None,
+            "initialized": initialization_completed,
         },
-        "needs_init": core_memory is None,
+        "needs_init": needs_init,
+        "initialization": {
+            "phase": initialization_phase,
+            "config": (
+                model_data(initialization.config)
+                if initialization is not None
+                else None
+            ),
+            "campaign_setup": (
+                model_data(initialization.campaign_setup)
+                if initialization is not None
+                else None
+            ),
+        },
         "difficulty": settings.get("difficulty", "困难"),
         "dice_display": normalize_dice_display(settings.get("dice_display")),
         "canon_validation_enabled": canon_validation_enabled(settings),

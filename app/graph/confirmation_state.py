@@ -49,6 +49,8 @@ class ConfirmationPipelineInput:
     )
     confirm_started_extra: dict[str, Any] = field(default_factory=dict)
     finish_extra: dict[str, Any] = field(default_factory=dict)
+    bootstrap_state_before_confirmation: bool = False
+    complete_initialization: bool = False
 
 
 class ConfirmationCache(TypedDict, total=False):

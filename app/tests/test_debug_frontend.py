@@ -59,13 +59,13 @@ def test_debug_frontend_exposes_runtime_content():
         'Composer Revision Instruction',
         'narrative_revised: ["narrative_compose"]',
         'details("完整 JSON"',
-        '/api/init/story-direction',
-        '"initialization_story_direction"',
+        '/api/init/campaign-setup',
+        '"initialization_campaign_setup"',
         '"initialization_opening"',
         'handleInitializationPipelineEvent',
         'init-ability-name',
         'init-ability-description',
-        'initDirectionContent',
+        'initCampaignSetup',
     ):
         assert marker in source
 

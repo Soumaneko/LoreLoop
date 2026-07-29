@@ -539,7 +539,7 @@ class CampaignHistory:
                 dst_conn.close()
                 src_conn.close()
             files.append(source.name)
-        for name in ("core_memory.json", "settings.json"):
+        for name in ("core_memory.json", "settings.json", "initialization.json"):
             source = self.data_dir / name
             if source.is_file():
                 shutil.copy2(source, destination / name)
@@ -557,7 +557,7 @@ class CampaignHistory:
                 for suffix in ("-wal", "-shm"):
                     Path(f"{current}{suffix}").unlink(missing_ok=True)
                 current.unlink()
-        for name in ("core_memory.json", "settings.json"):
+        for name in ("core_memory.json", "settings.json", "initialization.json"):
             current = self.data_dir / name
             if current.exists() and name not in expected:
                 current.unlink()

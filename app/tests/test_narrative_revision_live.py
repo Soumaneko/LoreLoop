@@ -194,7 +194,9 @@ def _composer_context() -> NarrativeComposerContext:
         turn_resolution=_turn_resolution(),
         core_memory=CoreMemory(items=[CoreMemoryItem(
             id="core_1",
-            category="world",
+            kind="world_invariant",
+            strength="hard_constraint",
+            source="player",
             content="这是重视行动后果、角色认知来源和连续性的文字冒险。",
         )]),
         context_facts=_context_facts(),

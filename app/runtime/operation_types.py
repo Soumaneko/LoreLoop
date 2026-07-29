@@ -81,7 +81,7 @@ OPERATION_POLICIES = {
             ),
         ),
         OperationPolicy(
-            "initialization_story_direction",
+            "initialization_campaign_setup",
             "initialization",
             True,
             player_visible=True,
@@ -93,7 +93,7 @@ OPERATION_POLICIES = {
             True,
             player_visible=True,
             recovery_kind="initialization",
-            supersedes=("initialization_story_direction",),
+            supersedes=("initialization_campaign_setup",),
         ),
         OperationPolicy(
             "maintenance_batch_classify_manual",

@@ -63,7 +63,7 @@ const state = {
   chatRestored: false,
   coreMemoryInitialized: true,
   initConfigSnapshot: null,
-  initStoryDirection: null,
+  initCampaignSetup: null,
   operationStatus: "Ready",
   activeOperationId: null,
   saves: [],
@@ -75,7 +75,7 @@ const RESUMABLE_OPERATION_TYPES = new Set([
   "generation",
   "retry",
   "confirmation",
-  "initialization_story_direction",
+  "initialization_campaign_setup",
   "initialization_opening",
   "maintenance_batch_classify_manual",
   "maintenance_memory_maintain_manual",
@@ -632,7 +632,6 @@ function appendPendingVariant(data) {
 }
 
 function readInitConfig() {
-  const fanfic = $("initFanfic")?.checked || false;
   const abilityNames = [...document.querySelectorAll(".init-ability-name")];
   const abilityDescriptions = [...document.querySelectorAll(".init-ability-description")];
   const abilities = abilityNames.map((el, index) => {
@@ -641,16 +640,10 @@ function readInitConfig() {
     if (Boolean(name) !== Boolean(description)) throw new Error(`能力 ${index + 1} 的名称和解释需要同时填写`);
     return name ? { name, description } : null;
   }).filter(Boolean).slice(0, 3);
-  let extraItems = [];
-  const extraRaw = $("initExtraItems")?.value.trim();
-  if (extraRaw) extraItems = JSON.parse(extraRaw);
   const age = $("initAge")?.value.trim();
-  const config = {
-    version: 1,
-    fanfic,
-    work_name: $("initWorkName")?.value.trim() || null,
-    birth_location: $("initBirthLocation")?.value.trim() || null,
-    story_era: $("initStoryEra")?.value.trim() || null,
+  return {
+    version: 3,
+    director_enabled: true,
     world_name: $("initWorldName")?.value.trim() || null,
     world_style: $("initWorldStyle")?.value.trim() || null,
     ability_system: $("initAbilitySystem")?.value || null,
@@ -658,43 +651,26 @@ function readInitConfig() {
     protagonist_gender: $("initGender")?.value || "男",
     protagonist_name: $("initName")?.value.trim() || "",
     protagonist_age: age ? Number(age) : null,
-    protagonist_background: $("initBackground")?.value.trim() || null,
+    protagonist_introduction: $("initBackground")?.value.trim() || null,
     protagonist_abilities: abilities,
-    narrative_tone: $("initTone")?.value.trim() || null,
-    story_expectation: $("initStoryExpectation")?.value.trim() || null,
-    extra_core_memory_items: extraItems,
+    story_expectation: $("initStoryExpectation")?.value.trim() || "",
+    failure_severity: $("initFailureSeverity")?.value || "适中",
   };
-  if (fanfic) {
-    config.world_name = null;
-    config.world_style = null;
-    config.ability_system = null;
-    config.custom_ability_system = null;
-  } else {
-    config.work_name = null;
-    config.birth_location = null;
-    config.story_era = null;
-    if (config.ability_system !== "自定义") config.custom_ability_system = null;
-  }
-  return config;
 }
 
 function renderInitPanel() {
   state.coreMemoryInitialized = false;
   state.initConfigSnapshot = null;
-  state.initStoryDirection = null;
+  state.initCampaignSetup = null;
   setStatus("需要初始化 Core Memory");
   els.turnInfo.textContent = "未初始化";
   els.statePanel.innerHTML = `
-    ${card("初始化", `<div class="empty">先生成并编辑 Story Direction，再用确认后的方向生成开场。</div>`)}
+    ${card("初始化", `<div class="empty">生成并编辑公开世界惯例，提交后再生成私有开局基础与开场。</div>`)}
     <section class="card init-grid">
-      <label><input id="initFanfic" type="checkbox" /> 同人世界</label>
       <input id="initName" placeholder="主角姓名" />
       <select id="initGender"><option>男</option><option>女</option><option>其他</option></select>
       <input id="initAge" type="number" min="0" placeholder="年龄，可选" />
-      <textarea id="initBackground" placeholder="主角背景，可选"></textarea>
-      <input id="initWorkName" placeholder="同人作品名" />
-      <input id="initBirthLocation" placeholder="同人出生地点" />
-      <input id="initStoryEra" placeholder="同人故事时代" />
+      <textarea id="initBackground" placeholder="人物介绍，可选"></textarea>
       <input id="initWorldName" placeholder="原创世界名" />
       <input id="initWorldStyle" placeholder="世界风格" />
       <select id="initAbilitySystem">
@@ -713,27 +689,35 @@ function renderInitPanel() {
       <input class="init-ability-description" placeholder="能力 2 解释" />
       <input class="init-ability-name" placeholder="能力 3 名称" />
       <input class="init-ability-description" placeholder="能力 3 解释" />
-      <input id="initTone" placeholder="叙事基调，可选" />
-      <textarea id="initStoryExpectation" placeholder="剧情主旨与游玩期待"></textarea>
-      <textarea id="initExtraItems" placeholder='额外核心记忆 JSON，可选'></textarea>
+      <textarea id="initStoryExpectation" placeholder="希望长期体验的故事"></textarea>
+      <select id="initFailureSeverity"><option>幻想世界</option><option selected>适中</option><option>真实世界</option></select>
       <button id="initPreviewBtn">预览</button>
-      <button id="initDirectionBtn" class="primary-button">生成 Story Direction</button>
-      <textarea id="initDirectionContent" placeholder="生成后可在这里修改 Story Direction" disabled></textarea>
-      <input id="initCurrencyUnit" placeholder="默认货币单位，可选" disabled />
-      <button id="initSaveBtn" class="primary-button" disabled>使用当前方向生成开场</button>
+      <button id="initSetupBtn" class="primary-button">生成公开世界惯例</button>
+      <textarea id="initSetupJson" placeholder="生成后可编辑公开世界惯例 JSON" disabled></textarea>
+      <button id="initSaveBtn" class="primary-button" disabled>确认惯例并生成开场</button>
       <pre id="initPreview" class="json-block">等待预览...</pre>
     </section>
   `;
   $("initPreviewBtn").onclick = previewInit;
-  $("initDirectionBtn").onclick = generateInitDirection;
+  $("initSetupBtn").onclick = generateInitSetup;
   $("initSaveBtn").onclick = applyInit;
+  const committed = state.serverState?.initialization;
+  if (committed?.config && committed?.campaign_setup) {
+    state.initConfigSnapshot = committed.config;
+    state.initCampaignSetup = committed.campaign_setup;
+    $("initSetupJson").disabled = true;
+    $("initSetupJson").value = JSON.stringify(committed.campaign_setup, null, 2);
+    $("initSetupBtn").disabled = true;
+    $("initSaveBtn").disabled = false;
+    $("initPreview").textContent = `初始化阶段：${committed.phase}\n公开 Proposal 已提交。`;
+  }
 }
 
 async function previewInit() {
   const box = $("initPreview");
   try {
     const data = await api("/api/init/preview", { method: "POST", body: JSON.stringify(readInitConfig()) });
-    box.textContent = data.valid ? JSON.stringify(data.core_memory.items, null, 2) : JSON.stringify(data.validation_errors || [], null, 2);
+    box.textContent = data.valid ? JSON.stringify(data.identity_core_memory.items, null, 2) : JSON.stringify(data.validation_errors || [], null, 2);
   } catch (err) {
     box.textContent = err.message || "预览失败";
   }
@@ -743,17 +727,14 @@ async function applyInit() {
   const btn = $("initSaveBtn");
   btn.disabled = true;
   try {
-    const content = $("initDirectionContent").value.trim();
-    if (!state.initConfigSnapshot || !content) throw new Error("请先生成并确认 Story Direction");
+    const proposal = JSON.parse($("initSetupJson").value);
+    if (!state.initConfigSnapshot || !proposal) throw new Error("请先生成并确认公开世界惯例");
     const response = await fetch("/api/init/apply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         config: state.initConfigSnapshot,
-        story_direction: {
-          content,
-          currency_unit: $("initCurrencyUnit").value.trim() || null,
-        },
+        campaign_setup: proposal,
         request_id: newRequestId(),
       }),
     });
@@ -774,11 +755,11 @@ async function applyInit() {
   }
 }
 
-async function generateInitDirection() {
-  const btn = $("initDirectionBtn");
+async function generateInitSetup() {
+  const btn = $("initSetupBtn");
   btn.disabled = true;
   try {
-    const response = await fetch("/api/init/story-direction", {
+    const response = await fetch("/api/init/campaign-setup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -794,7 +775,7 @@ async function generateInitDirection() {
     );
     await acknowledgeOperation(operationId);
   } catch (err) {
-    $("initPreview").textContent = err.message || "Story Direction 生成失败";
+    $("initPreview").textContent = err.message || "公开世界惯例生成失败";
     await acknowledgeOperation(err?.operationId);
   } finally {
     btn.disabled = false;
@@ -803,15 +784,13 @@ async function generateInitDirection() {
 
 function handleInitializationPipelineEvent(event) {
   const data = event.data || {};
-  if (event.step === "story_direction_done") {
+  if (event.step === "campaign_setup_done") {
     state.initConfigSnapshot = data.config;
-    state.initStoryDirection = data.story_direction;
-    $("initDirectionContent").disabled = false;
-    $("initCurrencyUnit").disabled = false;
-    $("initDirectionContent").value = data.story_direction?.content || "";
-    $("initCurrencyUnit").value = data.story_direction?.currency_unit || "";
+    state.initCampaignSetup = data.campaign_setup;
+    $("initSetupJson").disabled = false;
+    $("initSetupJson").value = JSON.stringify(data.campaign_setup, null, 2);
     $("initSaveBtn").disabled = false;
-    $("initPreview").textContent = JSON.stringify(data.story_direction, null, 2);
+    $("initPreview").textContent = JSON.stringify(data.campaign_setup, null, 2);
   }
   if (event.step === "initialization_pending") {
     state.coreMemoryInitialized = true;
@@ -2165,16 +2144,16 @@ async function failResumedOperation(err, label, operationId) {
 }
 
 async function resumeInitializationOperation(operation) {
-  const storyDirection = (
-    operation.operation_type === "initialization_story_direction"
+  const campaignSetup = (
+    operation.operation_type === "initialization_campaign_setup"
   );
   state.activeOperationId = operation.operation_id;
   resetRun("initialization");
   setStatus(
-    storyDirection ? "正在恢复 Story Direction..." : "正在恢复开场生成...",
+    campaignSetup ? "正在恢复公开世界惯例..." : "正在恢复开场生成...",
     true,
   );
-  setDebugStatus(storyDirection ? "Story Direction" : "开场生成中");
+  setDebugStatus(campaignSetup ? "公开世界惯例" : "开场生成中");
   renderStatePanel();
   renderDebug();
   try {
@@ -2183,8 +2162,8 @@ async function resumeInitializationOperation(operation) {
       "initialization",
       handleInitializationPipelineEvent,
     );
-    if (storyDirection) {
-      setStatus("Story Direction 已生成");
+    if (campaignSetup) {
+      setStatus("公开世界惯例已生成");
     } else {
       await refreshState({ preserveStatus: true });
       setStatus("开场已生成 - 待确认");

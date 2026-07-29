@@ -1,6 +1,9 @@
+import json
+
 import pytest
 
-from app.domain.core_memory import CoreMemory
+from app.domain.core_memory import CampaignSetupProposal, InitConfig
+from app.runtime.initialization import InitializationStore, commit_campaign_setup
 from app.runtime.initialization_draft import (
     InitializationDraft,
     clear_initialization_draft,
@@ -12,14 +15,21 @@ from app.runtime.session import get_campaign_runtime
 
 def _draft():
     return {
-        "version": 1,
-        "stage": "story_direction",
+        "version": 3,
+        "stage": "campaign_setup",
         "form": {
-            "fanfic": False,
             "fields": {"world_name": "艾兰"},
         },
-        "config": {"world_name": "艾兰"},
-        "story_direction": {"content": "向北探索"},
+        "config": {"version": 3, "world_name": "艾兰"},
+        "campaign_setup": {
+            "currency_unit": "银币",
+            "public_power_baseline": {
+                "source": "魔法",
+                "prevalence": "少数人掌握",
+                "learning_difficulty": "困难",
+                "limitation": "不能复活死者。",
+            },
+        },
     }
 
 
@@ -36,13 +46,77 @@ def test_initialization_draft_round_trip_and_clear():
     assert load_initialization_draft() is None
 
 
+def test_corrupted_initialization_json_is_not_treated_as_missing(tmp_path):
+    path = tmp_path / "initialization.json"
+    path.write_text("{broken", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        InitializationStore(path).load()
+
+
 def test_initialization_draft_rejects_unknown_contract_fields():
     with pytest.raises(ValueError):
         save_initialization_draft({**_draft(), "legacy_stage": "old"})
 
 
 def test_initialization_draft_cannot_be_written_after_initialization():
-    get_campaign_runtime().stores.core_memory().save(CoreMemory(items=[]))
+    commit_campaign_setup(
+        InitConfig(
+            world_name="艾兰",
+            world_style="西幻",
+            ability_system="魔法",
+            protagonist_name="卢西安",
+            story_expectation="探索世界。",
+            failure_severity="适中",
+        ),
+        CampaignSetupProposal(
+            currency_unit="银币",
+            public_power_baseline={
+                "source": "魔法",
+                "prevalence": "少数人掌握",
+                "learning_difficulty": "困难",
+                "limitation": "不能复活死者。",
+            },
+        ),
+    )
 
-    with pytest.raises(RuntimeError, match="already complete"):
+    with pytest.raises(RuntimeError, match="already committed"):
         save_initialization_draft(_draft())
+
+
+def test_committed_core_memory_must_match_config_and_proposal_projection():
+    config = InitConfig(
+        world_name="艾兰",
+        world_style="西幻",
+        ability_system="魔法",
+        protagonist_name="卢西安",
+        story_expectation="探索世界。",
+        failure_severity="适中",
+    )
+    proposal = CampaignSetupProposal(
+        currency_unit="银币",
+        public_power_baseline={
+            "source": "魔法",
+            "prevalence": "少数人掌握",
+            "learning_difficulty": "困难",
+            "limitation": "不能复活死者。",
+        },
+    )
+    record = commit_campaign_setup(config, proposal)
+    corrupted_item = record.core_memory.items[0].model_copy(
+        update={"content": "与配置不一致的世界"}
+    )
+    corrupted_core = record.core_memory.model_copy(update={
+        "items": [corrupted_item, *record.core_memory.items[1:]],
+    })
+    runtime = get_campaign_runtime()
+    runtime.initialization.save(record.model_copy(update={
+        "core_memory": corrupted_core,
+    }))
+    runtime.stores.core_memory().save(corrupted_core)
+
+    with pytest.raises(
+        RuntimeError,
+        match="does not match its config and campaign setup",
+    ):
+        commit_campaign_setup(config, proposal)

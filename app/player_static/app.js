@@ -52,12 +52,14 @@ const els = {
   importSaveName: $("importSaveName"), importSaveFileName: $("importSaveFileName"), cancelImportSaveBtn: $("cancelImportSaveBtn"),
   saveManagerError: $("saveManagerError"),
   initDialog: $("initDialog"), initForm: $("initForm"), closeInitDialogBtn: $("closeInitDialogBtn"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
-  initConfigFields: $("initConfigFields"), initOriginalFields: $("initOriginalFields"), initFanficFields: $("initFanficFields"),
-  initFanfic: $("initFanfic"), initDirectorEnabled: $("initDirectorEnabled"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
-  initConfigActions: $("initConfigActions"), storyDirectionActions: $("storyDirectionActions"), storyDirectionStage: $("storyDirectionStage"),
-  storyDirectionBtn: $("storyDirectionBtn"), regenerateStoryDirectionBtn: $("regenerateStoryDirectionBtn"), editInitConfigBtn: $("editInitConfigBtn"),
-  storyDirectionContent: $("storyDirectionContent"), storyDirectionCurrency: $("storyDirectionCurrency"),
-  addCoreMemoryBtn: $("addCoreMemoryBtn"), extraCoreMemoryList: $("extraCoreMemoryList"), initStageHint: $("initStageHint"),
+  initConfigFields: $("initConfigFields"), initOriginalFields: $("initOriginalFields"),
+  initDirectorEnabled: $("initDirectorEnabled"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
+  initConfigActions: $("initConfigActions"), campaignSetupActions: $("campaignSetupActions"), campaignSetupStage: $("campaignSetupStage"),
+  campaignSetupBtn: $("campaignSetupBtn"), regenerateCampaignSetupBtn: $("regenerateCampaignSetupBtn"), editInitConfigBtn: $("editInitConfigBtn"),
+  setupCurrencyUnit: $("setupCurrencyUnit"), setupPowerSource: $("setupPowerSource"),
+  setupPowerPrevalence: $("setupPowerPrevalence"), setupPowerLearningDifficulty: $("setupPowerLearningDifficulty"),
+  setupPowerLimitation: $("setupPowerLimitation"),
+  storyInspirationTags: $("storyInspirationTags"), initStageHint: $("initStageHint"),
   toast: $("toast"),
 };
 
@@ -89,15 +91,16 @@ const progressLabels = {
   memory_draft_metadata_filled: "正在准备确认结果",
   action_preview_done: "下一步方向已经生成",
   entity_profiles_updated: "正在写入旅程",
-  story_direction_started: "正在规划长期故事方向",
+  campaign_setup_started: "正在生成公开世界惯例",
   initialization_started: "正在准备开场",
-  initial_world_settings_ready: "初始世界设定已经建立",
+  opening_foundation_ready: "私有开局基础已经准备完成",
   opening_scene_done: "开场已经生成",
   initialization_pending: "正在保存待确认开场",
 };
 let streamBuffer = "";
 let streamFrame = 0;
 let initConfigSnapshot = null;
+let campaignSetupCommitted = false;
 let saveManagerBusy = false;
 let selectedImportFile = null;
 let modelConfigBusy = false;
@@ -268,7 +271,9 @@ function renderControls({ updateNavigation = true } = {}) {
   els.difficultySelect.disabled = busy;
   els.diceDisplaySelect.disabled = busy;
   els.canonValidationBtn.disabled = busy;
-  els.initDirectorEnabled.disabled = !state.playerState?.needs_init;
+  els.initDirectorEnabled.disabled = (
+    state.playerState?.initialization?.phase !== "config"
+  );
   els.continueInitBtn.disabled = state.mode === "switching";
   syncCustomSelects([
     els.saveSelect,
@@ -2157,33 +2162,33 @@ async function bootstrap() {
 async function handleInitializationEvent(event) {
   tokenUsage.handleEvent(event);
   setProgress(event.step);
-  if (event.step === "story_direction_done") {
-    showStoryDirectionStage(event.data || {});
+  if (event.step === "campaign_setup_done") {
+    showCampaignSetupStage(event.data || {});
     try {
       await persistInitializationDraft();
     } catch (error) {
       reportClientError(error, "initialization_draft_save_failed");
-      showToast("故事方向已生成，但初始化草稿暂未保存");
+      showToast("公开世界惯例已生成，但初始化草稿暂未保存");
     }
   }
 }
 
 async function resumeInitializationOperation(operation) {
-  const storyDirection = operation.metadata?.stage === "story_direction";
+  const campaignSetup = operation.metadata?.stage === "campaign_setup";
   setMode("generating");
   renderControls();
   if (!els.initDialog.open) els.initDialog.showModal();
-  const button = storyDirection ? els.storyDirectionBtn : els.initSubmitBtn;
+  const button = campaignSetup ? els.campaignSetupBtn : els.initSubmitBtn;
   const oldText = button.textContent;
   button.disabled = true;
-  button.textContent = storyDirection ? "正在生成……" : "正在生成开场……";
+  button.textContent = campaignSetup ? "正在生成……" : "正在生成开场……";
   try {
     await subscribe(
       `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
       handleInitializationEvent,
     );
     await acknowledgeHandledOperation(operation.operation_id);
-    if (storyDirection) {
+    if (campaignSetup) {
       setMode("needs_init");
       renderControls();
       return false;
@@ -2762,7 +2767,6 @@ function formValue(form, name) {
 }
 
 function readInitConfig(form) {
-  const fanfic = els.initFanfic.checked;
   const abilityNames = [...form.querySelectorAll(".ability-name")];
   const abilityDescriptions = [...form.querySelectorAll(".ability-description")];
   const protagonistAbilities = abilityNames.map((input, index) => {
@@ -2773,67 +2777,46 @@ function readInitConfig(form) {
     }
     return name ? { name, description } : null;
   }).filter(Boolean);
-  const extraCoreMemoryItems = [...els.extraCoreMemoryList.querySelectorAll(".extra-memory-row")].map((row, index) => {
-    const id = row.querySelector(".extra-memory-id").value.trim();
-    const category = row.querySelector(".extra-memory-category").value.trim();
-    const content = row.querySelector(".extra-memory-content").value.trim();
-    const priorityRaw = row.querySelector(".extra-memory-priority").value.trim();
-    if (!id || !category || !content) throw new Error(`额外核心设定 ${index + 1} 尚未填写完整`);
-    return { id, category, content, priority: priorityRaw ? Number(priorityRaw) : 100 };
-  });
   const age = formValue(form, "protagonist_age");
-  const abilitySystem = fanfic ? null : formValue(form, "ability_system") || null;
+  const abilitySystem = formValue(form, "ability_system") || null;
   return {
-    version: 1,
-    fanfic,
+    version: 3,
     director_enabled: els.initDirectorEnabled.checked,
-    work_name: fanfic ? formValue(form, "work_name") || null : null,
-    birth_location: fanfic ? formValue(form, "birth_location") || null : null,
-    story_era: fanfic ? formValue(form, "story_era") || null : null,
-    world_name: fanfic ? null : formValue(form, "world_name") || null,
-    world_style: fanfic ? null : formValue(form, "world_style") || null,
+    world_name: formValue(form, "world_name") || null,
+    world_style: formValue(form, "world_style") || null,
     ability_system: abilitySystem,
     custom_ability_system: abilitySystem === "自定义" ? formValue(form, "custom_ability_system") || null : null,
     protagonist_gender: formValue(form, "protagonist_gender") || "男",
     protagonist_name: formValue(form, "protagonist_name"),
     protagonist_age: age ? Number(age) : null,
-    protagonist_background: formValue(form, "protagonist_background") || null,
+    protagonist_introduction: formValue(form, "protagonist_introduction") || null,
     protagonist_abilities: protagonistAbilities,
-    narrative_tone: formValue(form, "narrative_tone") || null,
-    story_expectation: formValue(form, "story_expectation") || null,
-    extra_core_memory_items: extraCoreMemoryItems,
+    story_expectation: formValue(form, "story_expectation"),
+    failure_severity: formValue(form, "failure_severity") || "适中",
   };
 }
 
 function captureInitializationForm() {
   const fields = {};
   for (const control of els.initForm.querySelectorAll("[name]")) {
-    if (["fanfic", "director_enabled"].includes(control.name)) continue;
+    if (control.name === "director_enabled") continue;
     fields[control.name] = control.value;
   }
   const abilityDescriptions = [
     ...els.initForm.querySelectorAll(".ability-description"),
   ];
   return {
-    fanfic: els.initFanfic.checked,
     director_enabled: els.initDirectorEnabled.checked,
     fields,
     protagonist_abilities: [...els.initForm.querySelectorAll(".ability-name")].map((input, index) => ({
       name: input.value,
       description: abilityDescriptions[index].value,
     })),
-    extra_core_memory_items: [...els.extraCoreMemoryList.querySelectorAll(".extra-memory-row")].map((row) => ({
-      id: row.querySelector(".extra-memory-id").value,
-      category: row.querySelector(".extra-memory-category").value,
-      priority: row.querySelector(".extra-memory-priority").value,
-      content: row.querySelector(".extra-memory-content").value,
-    })),
   };
 }
 
 function restoreInitializationForm(form = {}) {
   els.initForm.reset();
-  els.initFanfic.checked = Boolean(form.fanfic);
   els.initDirectorEnabled.checked = form.director_enabled !== false;
   for (const [name, value] of Object.entries(form.fields || {})) {
     const control = els.initForm.elements[name];
@@ -2846,28 +2829,41 @@ function restoreInitializationForm(form = {}) {
     input.value = abilities[index]?.name || "";
     abilityDescriptions[index].value = abilities[index]?.description || "";
   });
-  els.extraCoreMemoryList.replaceChildren();
-  for (const item of form.extra_core_memory_items || []) {
-    addExtraCoreMemoryRow(item);
-  }
-  toggleInitWorldFields();
+  toggleCustomAbilityField();
+}
+
+function readCampaignSetup() {
+  const currencyUnit = els.setupCurrencyUnit.value.trim();
+  const powerSource = els.setupPowerSource.value.trim();
+  const limitation = els.setupPowerLimitation.value.trim();
+  if (!currencyUnit) throw new Error("默认货币单位不能为空");
+  if (!powerSource) throw new Error("力量来源不能为空");
+  if (!limitation) throw new Error("力量限制不能为空");
+  return {
+    version: 1,
+    currency_unit: currencyUnit,
+    public_power_baseline: {
+      source: powerSource,
+      prevalence: els.setupPowerPrevalence.value,
+      learning_difficulty: els.setupPowerLearningDifficulty.value,
+      limitation,
+    },
+  };
 }
 
 function initializationDraftPayload() {
   return {
-    version: 1,
-    stage: initConfigSnapshot ? "story_direction" : "config",
+    version: 3,
+    stage: initConfigSnapshot ? "campaign_setup" : "config",
     form: captureInitializationForm(),
     config: initConfigSnapshot,
-    story_direction: initConfigSnapshot ? {
-      content: els.storyDirectionContent.value,
-      currency_unit: els.storyDirectionCurrency.value || null,
-    } : null,
+    campaign_setup: initConfigSnapshot ? readCampaignSetup() : null,
   };
 }
 
 async function persistInitializationDraft() {
   if (!state.playerState?.needs_init) return;
+  if (state.playerState?.initialization?.phase !== "config") return;
   await request("/api/player/init/draft", {
     method: "POST",
     body: JSON.stringify(initializationDraftPayload()),
@@ -2875,6 +2871,20 @@ async function persistInitializationDraft() {
 }
 
 async function loadInitializationDraft() {
+  const committed = state.playerState?.initialization;
+  if (
+    committed?.phase
+    && committed.phase !== "config"
+    && committed.config
+    && committed.campaign_setup
+  ) {
+    restoreInitializationForm();
+    showCampaignSetupStage({
+      config: committed.config,
+      campaign_setup: committed.campaign_setup,
+    }, { committed: true });
+    return;
+  }
   const result = await request("/api/player/init/draft");
   const draft = result.draft;
   if (!draft) {
@@ -2884,13 +2894,14 @@ async function loadInitializationDraft() {
   }
   restoreInitializationForm(draft.form);
   if (
-    draft.stage === "story_direction"
+    draft.stage === "campaign_setup"
     && draft.config
-    && draft.story_direction?.content
+    && draft.campaign_setup?.currency_unit
+    && draft.campaign_setup?.public_power_baseline
   ) {
-    showStoryDirectionStage({
+    showCampaignSetupStage({
       config: draft.config,
-      story_direction: draft.story_direction,
+      campaign_setup: draft.campaign_setup,
     });
   } else {
     editInitConfig();
@@ -2908,63 +2919,67 @@ async function closeInitializationDialog() {
   }
 }
 
-function addExtraCoreMemoryRow(values = {}) {
-  const row = node("div", "extra-memory-row");
-  const id = node("input", "extra-memory-id");
-  id.placeholder = "唯一 ID"; id.value = values.id || "";
-  const category = node("input", "extra-memory-category");
-  category.placeholder = "分类"; category.value = values.category || "";
-  const priority = node("input", "extra-memory-priority");
-  priority.type = "number"; priority.min = "0"; priority.placeholder = "优先级 100"; priority.value = values.priority ?? "";
-  const content = node("textarea", "extra-memory-content");
-  content.placeholder = "额外长期设定内容"; content.value = values.content || "";
-  const remove = node("button", "text-button danger-button", "删除");
-  remove.type = "button"; remove.onclick = () => row.remove();
-  row.append(id, category, priority, content, remove);
-  els.extraCoreMemoryList.appendChild(row);
-}
-
-function toggleInitWorldFields() {
-  const fanfic = els.initFanfic.checked;
-  els.initOriginalFields.hidden = fanfic;
-  els.initFanficFields.hidden = !fanfic;
-  for (const control of els.initOriginalFields.querySelectorAll("input, textarea, select")) control.disabled = fanfic;
-  for (const control of els.initFanficFields.querySelectorAll("input, textarea, select")) control.disabled = !fanfic;
-  for (const name of ["world_name", "world_style"]) els.initForm.elements[name].required = !fanfic;
-  for (const name of ["work_name", "birth_location", "story_era"]) els.initForm.elements[name].required = fanfic;
-  toggleCustomAbilityField();
-}
-
 function toggleCustomAbilityField() {
-  const visible = !els.initFanfic.checked && els.initAbilitySystem.value === "自定义";
+  const visible = els.initAbilitySystem.value === "自定义";
   els.initCustomAbilityWrap.hidden = !visible;
   els.initForm.elements.custom_ability_system.disabled = !visible;
   els.initForm.elements.custom_ability_system.required = visible;
 }
 
-function showStoryDirectionStage(result) {
+function setCampaignSetupControlsDisabled(disabled) {
+  for (const control of els.campaignSetupStage.querySelectorAll(
+    "input, textarea, select",
+  )) {
+    control.disabled = disabled;
+  }
+  syncCustomSelects([
+    els.setupPowerPrevalence,
+    els.setupPowerLearningDifficulty,
+  ]);
+}
+
+function showCampaignSetupStage(result, { committed = false } = {}) {
   initConfigSnapshot = result.config;
-  els.storyDirectionContent.value = result.story_direction?.content || "";
-  els.storyDirectionCurrency.value = result.story_direction?.currency_unit || "";
+  campaignSetupCommitted = committed;
+  const proposal = result.campaign_setup || {};
+  const baseline = proposal.public_power_baseline || {};
+  els.setupCurrencyUnit.value = proposal.currency_unit || "";
+  els.setupPowerSource.value = baseline.source || "";
+  els.setupPowerPrevalence.value = baseline.prevalence || "少数人掌握";
+  els.setupPowerLearningDifficulty.value = baseline.learning_difficulty || "适中";
+  els.setupPowerLimitation.value = baseline.limitation || "";
   els.initConfigFields.disabled = true;
   els.initConfigActions.hidden = true;
-  els.storyDirectionStage.hidden = false;
-  els.storyDirectionActions.hidden = false;
-  els.initStageHint.textContent = "检查并修改故事方向；确认后才会生成开场并写入存档。";
-  els.storyDirectionContent.focus();
+  els.campaignSetupStage.hidden = false;
+  els.campaignSetupActions.hidden = false;
+  setCampaignSetupControlsDisabled(committed);
+  els.editInitConfigBtn.hidden = committed;
+  els.regenerateCampaignSetupBtn.hidden = committed;
+  els.initSubmitBtn.textContent = committed
+    ? "继续生成开场"
+    : "确认惯例并生成开场";
+  els.initStageHint.textContent = committed
+    ? "公开世界惯例和 CoreMemory 已确认。继续生成私有开局基础与开场正文。"
+    : "检查并修改公开世界惯例；提交后将正式建立 CoreMemory，不能返回修改。";
+  els.setupCurrencyUnit.focus();
 }
 
 function editInitConfig() {
   initConfigSnapshot = null;
+  campaignSetupCommitted = false;
   els.initConfigFields.disabled = false;
   els.initConfigActions.hidden = false;
-  els.storyDirectionStage.hidden = true;
-  els.storyDirectionActions.hidden = true;
-  els.initStageHint.textContent = "填写世界与主角设定，然后先生成一份可修改的长期故事方向。";
+  els.campaignSetupStage.hidden = true;
+  els.campaignSetupActions.hidden = true;
+  setCampaignSetupControlsDisabled(true);
+  els.editInitConfigBtn.hidden = false;
+  els.regenerateCampaignSetupBtn.hidden = false;
+  els.initSubmitBtn.textContent = "确认惯例并生成开场";
+  els.initStageHint.textContent = "填写世界、主角与长期体验要求，然后生成可确认的公开世界惯例。";
   els.initError.hidden = true;
 }
 
-async function requestStoryDirection({ regenerate = false } = {}) {
+async function requestCampaignSetup({ regenerate = false } = {}) {
   els.initError.hidden = true;
   let config;
   try {
@@ -2978,14 +2993,14 @@ async function requestStoryDirection({ regenerate = false } = {}) {
     els.initError.hidden = false;
     return;
   }
-  const button = regenerate ? els.regenerateStoryDirectionBtn : els.storyDirectionBtn;
+  const button = regenerate ? els.regenerateCampaignSetupBtn : els.campaignSetupBtn;
   button.disabled = true;
   const oldText = button.textContent;
   button.textContent = "正在生成……";
   els.initConfigFields.disabled = true;
   try {
-    await persistInitializationDraft();
-    const operationId = await stream("/api/player/init/story-direction", {
+    if (!regenerate) await persistInitializationDraft();
+    const operationId = await stream("/api/player/init/campaign-setup", {
       ...config,
       request_id: newRequestId(),
     }, handleInitializationEvent);
@@ -3002,22 +3017,25 @@ async function requestStoryDirection({ regenerate = false } = {}) {
 }
 
 async function initialize() {
-  const content = els.storyDirectionContent.value.trim();
-  if (!initConfigSnapshot || !content) {
-    els.initError.textContent = "请先生成并确认故事方向";
+  if (!initConfigSnapshot) {
+    els.initError.textContent = "请先生成并确认公开世界惯例";
     els.initError.hidden = false;
     return;
   }
-  const payload = {
-    config: initConfigSnapshot,
-    story_direction: {
-      content,
-      currency_unit: els.storyDirectionCurrency.value.trim() || null,
-    },
-  };
+  let campaignSetup;
+  try {
+    campaignSetup = campaignSetupCommitted
+      ? state.playerState.initialization.campaign_setup
+      : readCampaignSetup();
+  } catch (error) {
+    els.initError.textContent = error.message;
+    els.initError.hidden = false;
+    return;
+  }
+  const payload = { config: initConfigSnapshot, campaign_setup: campaignSetup };
   setMode("generating"); els.initSubmitBtn.disabled = true; els.initSubmitBtn.textContent = "正在生成开场……"; els.initError.hidden = true;
   try {
-    await persistInitializationDraft();
+    if (!campaignSetupCommitted) await persistInitializationDraft();
     const operationId = await stream("/api/player/init", {
       ...payload,
       request_id: newRequestId(),
@@ -3027,10 +3045,21 @@ async function initialize() {
     await loadAll({ scroll: "instant" });
   }
   catch (error) {
-    setMode("needs_init"); els.initError.textContent = error.message; els.initError.hidden = false;
     await acknowledgeFailedOperation(error);
+    try {
+      await loadAll({ scroll: null, resumeOperation: false });
+    } catch (reloadError) {
+      reportClientError(reloadError, "initialization_reload_failed");
+    }
+    setMode("needs_init"); els.initError.textContent = error.message; els.initError.hidden = false;
   }
-  finally { els.initSubmitBtn.disabled = false; els.initSubmitBtn.textContent = "生成开场"; renderControls(); }
+  finally {
+    els.initSubmitBtn.disabled = false;
+    if (!campaignSetupCommitted) {
+      els.initSubmitBtn.textContent = "确认惯例并生成开场";
+    }
+    renderControls();
+  }
 }
 
 function openLeftDrawer() {
@@ -3201,12 +3230,20 @@ els.themeSelect.onchange = readerPreferences.save;
 els.tokenUsageSelect.onchange = () => readerPreferences.save({ silent: true });
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.turnNavigatorLatest.onclick = jumpToLatestTurn;
-els.initFanfic.onchange = toggleInitWorldFields;
 els.initAbilitySystem.onchange = toggleCustomAbilityField;
-els.addCoreMemoryBtn.onclick = () => addExtraCoreMemoryRow();
-els.storyDirectionBtn.onclick = () => requestStoryDirection();
-els.regenerateStoryDirectionBtn.onclick = () => requestStoryDirection({ regenerate: true });
+els.campaignSetupBtn.onclick = () => requestCampaignSetup();
+els.regenerateCampaignSetupBtn.onclick = () => requestCampaignSetup({ regenerate: true });
 els.editInitConfigBtn.onclick = editInitConfig;
+for (const button of els.storyInspirationTags.querySelectorAll("button[data-value]")) {
+  button.onclick = () => {
+    const textarea = els.initForm.elements.story_expectation;
+    const value = button.dataset.value;
+    const existing = textarea.value.trim();
+    if (existing.includes(value)) return;
+    textarea.value = existing ? `${existing}、${value}` : value;
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+}
 els.initForm.addEventListener("submit", (event) => { event.preventDefault(); initialize(); });
 els.continueInitBtn.onclick = () => els.initDialog.showModal();
 els.closeInitDialogBtn.onclick = closeInitializationDialog;
@@ -3221,5 +3258,5 @@ window.addEventListener("resize", () => {
   refreshNavigationObserver({ force: true });
 }, { passive: true });
 
-toggleInitWorldFields();
+toggleCustomAbilityField();
 bootstrap().catch(showError);

@@ -47,7 +47,7 @@ from app.api import (
     start_opening_rewrite_operation,
     start_rephrase_operation,
     start_reroll_operation,
-    start_story_direction_operation,
+    start_campaign_setup_operation,
     switch_save,
     test_model_connection,
     undo_last_turn,
@@ -199,9 +199,9 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 player=True,
             )
             return
-        if path == "/api/player/init/story-direction":
+        if path == "/api/player/init/campaign-setup":
             self._handle_operation_start_stream(
-                self._start_story_direction_operation,
+                self._start_campaign_setup_operation,
                 player=True,
             )
             return
@@ -432,11 +432,13 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 "strategy": data.get("strategy"),
                 "reason_code": data.get("reason_code"),
             }
-        elif step == "story_direction_done":
+        elif step == "campaign_setup_done":
             public_data = {
                 "config": data.get("config"),
-                "story_direction": data.get("story_direction"),
+                "campaign_setup": data.get("campaign_setup"),
             }
+        elif step == "opening_foundation_ready":
+            public_data = {"reused": bool(data.get("reused"))}
         elif step == "initialization_pending":
             public_data = {
                 "turn_id": data.get("turn_id"),
@@ -771,10 +773,10 @@ class PlayerHandler(BaseHTTPRequestHandler):
             request_id=request_id,
         )
 
-    def _start_story_direction_operation(self) -> str:
+    def _start_campaign_setup_operation(self) -> str:
         payload = _read_json(self)
         request_id = str(payload.pop("request_id", "")).strip() or None
-        return start_story_direction_operation(payload, request_id=request_id)
+        return start_campaign_setup_operation(payload, request_id=request_id)
 
     def _start_initialization_operation(self) -> str:
         payload = _read_json(self)

@@ -1,3 +1,4 @@
+from .current_state_access import load_effective_current_state
 from .serialization import model_data
 from .session import get_campaign_runtime
 from .settings import load_settings
@@ -11,8 +12,8 @@ def load_debug_state() -> dict:
 
 def _load_debug_state(runtime) -> dict:
     stores = runtime.stores
-    with stores.current_state() as state_store:
-        current_state = state_store.load_or_default()
+    current_state = load_effective_current_state(runtime)
+    initialization = runtime.initialization.load()
 
     with stores.short_term() as short_store:
         short_term = short_store.get_recent()
@@ -91,7 +92,14 @@ def _load_debug_state(runtime) -> dict:
         "save_name": runtime.campaign_id,
         "save_path": str(runtime.paths.data_dir.resolve()),
         "turn_history": runtime.history.status(),
-        "needs_init": core_memory is None,
+        "needs_init": (
+            (
+                initialization is None
+                or initialization.phase != "completed"
+            )
+            and not runtime.pending_openings.values()
+        ),
+        "initialization": model_data(initialization),
         "current_state": model_data(current_state),
         "core_memory": model_data(core_memory) if core_memory is not None else None,
         "short_term_memory": model_data(short_term),

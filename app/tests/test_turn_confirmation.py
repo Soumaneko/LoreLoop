@@ -4,11 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.domain.core_memory import CoreMemory
+from app.domain.core_memory import CampaignSetupProposal, CoreMemory, InitConfig
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.entity.schemas import EntityExtractionResult
 from app.domain.director_event.workflows import DirectorEventWorkflowResult
 from app.domain.npc_profile.schemas import NPCExtractionResult
+from app.domain.opening_foundation import OpeningFoundation
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory import ShortTermMemory
 from app.runtime.session import (
@@ -16,6 +17,7 @@ from app.runtime.session import (
     PendingTurn,
     get_campaign_runtime,
 )
+from app.runtime.initialization import commit_campaign_setup
 from app.graph import confirmation_graph as turn_confirmation
 from app.graph import confirmation_helpers
 from app.graph import confirmation_nodes
@@ -52,6 +54,46 @@ def _state() -> CurrentState:
         ),
         player=PlayerState(name="主角"),
     )
+
+
+def _prepare_opening_initialization(*, director_enabled=True):
+    runtime = get_campaign_runtime()
+    config = InitConfig(
+        world_name="测试世界",
+        world_style="奇幻",
+        ability_system="魔法",
+        protagonist_name="主角",
+        story_expectation="探索并逐步成长。",
+        director_enabled=director_enabled,
+    )
+    proposal = CampaignSetupProposal(
+        currency_unit="金币",
+        public_power_baseline={
+            "source": "魔法",
+            "prevalence": "少数人掌握",
+            "learning_difficulty": "困难",
+            "limitation": "不能复活死者。",
+        },
+    )
+    record = commit_campaign_setup(config, proposal)
+    foundation = OpeningFoundation.model_validate({
+        "starting_location": {
+            "name": "测试地点",
+            "description": "用于测试的地点。",
+        },
+        "protagonist_opening_situation": "主角已抵达测试地点，需要决定今日去向。",
+        "initial_resources": {
+            "inventory": [],
+            "money": 5,
+            "fixed_assets": [],
+        },
+    })
+    record = record.model_copy(update={
+        "phase": "opening_pending",
+        "foundation": foundation,
+    })
+    runtime.initialization.save(record)
+    return config, record
 
 
 def test_turn_confirmation_skips_all_director_work_when_disabled(monkeypatch):
@@ -94,11 +136,13 @@ def test_turn_confirmation_skips_all_director_work_when_disabled(monkeypatch):
 def test_opening_confirmation_honors_initial_director_choice(monkeypatch):
     runtime = get_campaign_runtime()
     turn_id = "director-disabled-opening"
+    config, record = _prepare_opening_initialization(director_enabled=False)
     runtime.pending_openings.add(PendingOpening(
         turn_id=turn_id,
         group_id=turn_id,
         version_index=1,
-        config=SimpleNamespace(director_enabled=False),
+        initialization_fingerprint=record.fingerprint,
+        config=config,
         current_state=_state(),
         scene_result=SceneWriterResult(scene_text="开场正文"),
     ))
@@ -399,11 +443,13 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
 ):
     turn_id = "opening-director-npc"
     state = _state()
+    config, record = _prepare_opening_initialization()
     pending = PendingOpening(
         turn_id=turn_id,
         group_id=turn_id,
         version_index=1,
-        config=SimpleNamespace(),
+        initialization_fingerprint=record.fingerprint,
+        config=config,
         current_state=state,
         scene_result=SceneWriterResult(scene_text="开场正文"),
     )
@@ -413,7 +459,8 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
         turn_id="opening-director-npc-v2",
         group_id=turn_id,
         version_index=2,
-        config=SimpleNamespace(),
+        initialization_fingerprint=record.fingerprint,
+        config=config,
         current_state=state,
         scene_result=SceneWriterResult(scene_text="另一版开场正文"),
     ))
@@ -539,3 +586,4 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
     assert calls["restock"] == 1
     assert events[-1]["data"]["status"] == "committed"
     assert events[-1]["data"]["director_npc_restock_scheduled"] is True
+    assert get_campaign_runtime().initialization.load().phase == "completed"

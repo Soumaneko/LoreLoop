@@ -252,6 +252,51 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
     ]
 
 
+def test_initialization_phase_is_revalidated_before_confirmation_writes():
+    current_state = CurrentState(
+        scene=SceneState(scene_id="scene_001", location="测试地点"),
+        player=PlayerState(name="主角"),
+    )
+    commit_called = False
+
+    class _Committer:
+        def commit(self, _state):
+            nonlocal commit_called
+            commit_called = True
+            return object()
+
+    runtime = SimpleNamespace(
+        initialization=SimpleNamespace(load=lambda: SimpleNamespace(
+            fingerprint="fingerprint",
+            phase="foundation_ready",
+            foundation=object(),
+        )),
+    )
+    state = {
+        "write_db": True,
+        "pending": SimpleNamespace(
+            initialization_fingerprint="fingerprint",
+        ),
+        "pipeline_input": SimpleNamespace(
+            state_before=current_state,
+            complete_initialization=True,
+        ),
+    }
+
+    with pytest.raises(
+        RuntimeError,
+        match="lost its initialization record",
+    ):
+        ConfirmationFinalizer(
+            runtime,
+            _Committer(),
+            SimpleNamespace(),
+            SimpleNamespace(),
+        ).finalize(state)
+
+    assert commit_called is False
+
+
 def test_confirmation_second_wave_starts_after_helper_state_is_ready():
     graph = build_confirmation_second_wave_graph().get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}

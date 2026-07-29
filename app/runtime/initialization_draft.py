@@ -17,11 +17,11 @@ _DRAFT_LOCK = threading.RLock()
 class InitializationDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1] = 1
-    stage: Literal["config", "story_direction"] = "config"
+    version: Literal[3] = 3
+    stage: Literal["config", "campaign_setup"] = "config"
     form: dict[str, Any] = Field(default_factory=dict)
     config: dict[str, Any] | None = None
-    story_direction: dict[str, Any] | None = None
+    campaign_setup: dict[str, Any] | None = None
 
 
 def load_initialization_draft() -> dict[str, Any] | None:
@@ -48,8 +48,8 @@ def save_initialization_draft(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Initialization draft is too large")
 
     with runtime.operation_submission(), _DRAFT_LOCK:
-        if runtime.services.stores.core_memory().load() is not None:
-            raise RuntimeError("Initialization is already complete")
+        if runtime.initialization.load() is not None:
+            raise RuntimeError("Campaign setup is already committed")
         path = runtime.paths.initialization_draft_json
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.tmp")

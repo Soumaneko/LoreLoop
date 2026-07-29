@@ -67,15 +67,17 @@ def _make_context() -> NarrativeComposerContext:
             items=[
                 CoreMemoryItem(
                     id="core_player_identity",
-                    category="player",
+                    kind="protagonist_invariant",
+                    strength="hard_constraint",
+                    source="player",
                     content="主角是卢西安，人类法师。",
-                    priority=100,
                 ),
                 CoreMemoryItem(
                     id="core_tone",
-                    category="tone",
+                    kind="narrative_preference",
+                    strength="strong_preference",
+                    source="player",
                     content="剧情风格应保持文字冒险 DM 口吻。",
-                    priority=100,
                 ),
             ]
         ),

@@ -574,10 +574,28 @@ class ConfirmationFinalizer:
         self.event_builder = event_builder
 
     def finalize(self, state: ConfirmationState) -> ConfirmationState:
+        pipeline_input = state["pipeline_input"]
+        pending = state["pending"]
+        initialization_record = None
+        if (
+            state.get("write_db", True)
+            and getattr(pipeline_input, "complete_initialization", False)
+        ):
+            initialization_record = self.runtime.initialization.load()
+            if (
+                initialization_record is None
+                or initialization_record.fingerprint
+                != pending.initialization_fingerprint
+                or initialization_record.phase != "opening_pending"
+                or initialization_record.foundation is None
+            ):
+                raise RuntimeError(
+                    "Opening confirmation lost its initialization record"
+                )
+
         commit_result = self.committer.commit(state)
 
         if state.get("write_db", True):
-            pipeline_input = state["pipeline_input"]
             self.runtime.history.record_state_audit(
                 state["turn_id"],
                 state_changes=model_data(state["state_change_set"]),
@@ -585,7 +603,10 @@ class ConfirmationFinalizer:
                 state_before=model_data(pipeline_input.state_before),
                 state_after=model_data(state["updated_state"]),
             )
-            pending = state["pending"]
+            if initialization_record is not None:
+                self.runtime.initialization.save(
+                    initialization_record.model_copy(update={"phase": "completed"})
+                )
             if state.get("journaled"):
                 self.runtime.complete_confirmation(pending)
                 state["journal_completed"] = True

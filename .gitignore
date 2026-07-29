@@ -1,4 +1,6 @@
 .env
+AGENTS.md
+agent.md
 .venv/
 /.venv-build-windows/
 __pycache__/

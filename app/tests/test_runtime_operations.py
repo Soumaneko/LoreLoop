@@ -420,7 +420,7 @@ def test_terminal_operation_remains_recoverable_until_acknowledged():
 
     try:
         operation_id = manager.submit_stream(
-            "initialization_story_direction",
+            "initialization_campaign_setup",
             stream,
             requires_ack=True,
         )
@@ -505,7 +505,7 @@ def test_successful_operation_supersedes_older_recoverable_types():
 
     try:
         direction_id = manager.submit_stream(
-            "initialization_story_direction",
+            "initialization_campaign_setup",
             stream,
             requires_ack=True,
         )
@@ -514,7 +514,7 @@ def test_successful_operation_supersedes_older_recoverable_types():
             "initialization_opening",
             stream,
             requires_ack=True,
-            supersedes_recoverable_types=("initialization_story_direction",),
+            supersedes_recoverable_types=("initialization_campaign_setup",),
         )
         manager.wait(opening_id, timeout=2)
 
@@ -541,7 +541,7 @@ def test_failed_operation_does_not_supersede_recoverable_result():
 
     try:
         direction_id = manager.submit_stream(
-            "initialization_story_direction",
+            "initialization_campaign_setup",
             success_stream,
             requires_ack=True,
         )
@@ -550,7 +550,7 @@ def test_failed_operation_does_not_supersede_recoverable_result():
             "initialization_opening",
             failed_stream,
             requires_ack=True,
-            supersedes_recoverable_types=("initialization_story_direction",),
+            supersedes_recoverable_types=("initialization_campaign_setup",),
         )
         assert manager.wait(opening_id, timeout=2).status == "failed"
 
@@ -965,10 +965,10 @@ def test_public_api_starts_both_initialization_stages_as_operations(
 ):
     runtime = configured_runtime
 
-    def direction_stream(payload):
+    def setup_stream(payload):
         yield {
-            "step": "story_direction_done",
-            "data": {"config": payload, "story_direction": {"content": "向北"}},
+            "step": "campaign_setup_done",
+            "data": {"config": payload, "campaign_setup": {}},
         }
 
     def opening_stream(payload):
@@ -977,30 +977,30 @@ def test_public_api_starts_both_initialization_stages_as_operations(
             "data": {"turn_id": "opening:1", "status": "awaiting_confirm"},
         }
 
-    monkeypatch.setattr(api, "generate_story_direction_stream", direction_stream)
+    monkeypatch.setattr(api, "generate_campaign_setup_stream", setup_stream)
     monkeypatch.setattr(api, "initialization_stream", opening_stream)
 
-    direction_id = api.start_story_direction_operation(
+    direction_id = api.start_campaign_setup_operation(
         {"story_expectation": "探索"},
         request_id="request-direction-api",
     )
     direction = runtime.operations.wait(direction_id, timeout=2)
     opening_id = api.start_initialization_operation(
-        {"config": {}, "story_direction": {}},
+        {"config": {}, "campaign_setup": {}},
         request_id="request-opening-api",
     )
     opening = runtime.operations.wait(opening_id, timeout=2)
 
     assert direction.status == "succeeded"
-    assert direction.operation_type == "initialization_story_direction"
-    assert direction.metadata == {"stage": "story_direction"}
+    assert direction.operation_type == "initialization_campaign_setup"
+    assert direction.metadata == {"stage": "campaign_setup"}
     assert direction.requires_ack is True
     assert opening.status == "succeeded"
     assert opening.operation_type == "initialization_opening"
     assert opening.metadata == {"stage": "opening"}
     assert opening.requires_ack is True
     assert opening.supersedes_recoverable_types == (
-        "initialization_story_direction",
+        "initialization_campaign_setup",
     )
 
 

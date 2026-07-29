@@ -12,8 +12,8 @@ from app.graph.generation_graph import (
 from app.graph.initialization_graph import initialization_stream
 from app.graph.opening_rewrite import rewrite_opening_stream
 from app.graph.initialization_helpers import (
-    generate_story_direction_stream,
-    preview_core_memory,
+    generate_campaign_setup_stream,
+    preview_initialization_config,
 )
 from app.graph.maintenance_graph import batch_classify_stream, memory_maintain_stream
 from app.runtime.debug_state import load_debug_state
@@ -288,17 +288,17 @@ def start_memory_maintain_operation(*, request_id: str | None = None) -> str:
     )
 
 
-def start_story_direction_operation(
+def start_campaign_setup_operation(
     payload: dict,
     *,
     request_id: str | None = None,
 ) -> str:
     return _submit_managed_operation(
-        "initialization_story_direction",
-        generate_story_direction_stream,
+        "initialization_campaign_setup",
+        generate_campaign_setup_stream,
         payload,
         request_id=request_id,
-        metadata={"stage": "story_direction"},
+        metadata={"stage": "campaign_setup"},
     )
 
 
@@ -410,7 +410,7 @@ __all__ = [
     "list_operations",
     "list_saves",
     "rename_save",
-    "preview_core_memory",
+    "preview_initialization_config",
     "redo_last_turn",
     "save_dice_display",
     "save_canon_validation",
@@ -430,7 +430,7 @@ __all__ = [
     "start_memory_maintain_operation",
     "start_rephrase_operation",
     "start_reroll_operation",
-    "start_story_direction_operation",
+    "start_campaign_setup_operation",
     "switch_save",
     "test_model_connection",
     "undo_last_turn",

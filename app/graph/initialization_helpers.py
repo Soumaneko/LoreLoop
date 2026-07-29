@@ -7,18 +7,14 @@ from pydantic import ValidationError
 
 from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.core_memory import (
-    CoreMemory,
+    CampaignSetupAgent,
+    CampaignSetupProposal,
     InitConfig,
-    StoryDirectionAgent,
-    StoryDirectionResult,
-    build_core_memory,
-    build_initial_current_state,
+    build_identity_core_memory,
 )
-from app.domain.current_state import CurrentState
+from app.runtime.initialization import commit_campaign_setup
 from app.runtime.serialization import model_data
 from app.runtime.session import PendingOpening, get_campaign_runtime
-from app.runtime.settings import save_initialization_settings
-from app.runtime.initialization_draft import clear_initialization_draft
 
 from .initialization_state import InitializationState
 
@@ -27,140 +23,109 @@ def initialization_gateway(state: InitializationState):
     return state["runtime_services"].gateway(session_type="init")
 
 
-def build_core_memory_from_payload(payload: dict[str, Any]):
-    config = InitConfig.model_validate(payload)
-    core_memory = build_core_memory(config)
-    return config, core_memory
-
-
-def preview_core_memory(payload: dict[str, Any]) -> dict[str, Any]:
+def preview_initialization_config(payload: dict[str, Any]) -> dict[str, Any]:
     try:
-        config, core_memory = build_core_memory_from_payload(payload)
+        config = InitConfig.model_validate(payload)
+        identity_memory = build_identity_core_memory(config)
     except ValidationError as exc:
         return {
             "valid": False,
             "validation_errors": exc.errors(include_url=False),
             "config": payload,
-            "core_memory": None,
+            "identity_core_memory": None,
         }
     return {
         "valid": True,
         "validation_errors": [],
         "config": model_data(config),
-        "core_memory": model_data(core_memory),
+        "identity_core_memory": model_data(identity_memory),
     }
 
 
-def generate_story_direction_stream(payload: dict[str, Any]):
+def generate_campaign_setup_stream(payload: dict[str, Any]):
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
-        config, core_memory = build_core_memory_from_payload(payload)
+        if runtime.initialization.load() is not None:
+            raise RuntimeError("Campaign setup is already committed")
+        config = InitConfig.model_validate(payload)
         trace_id = str(uuid.uuid4())
         yield {
-            "step": "story_direction_started",
+            "step": "campaign_setup_started",
             "data": {"trace_id": trace_id},
         }
-        story_direction = StoryDirectionAgent(
+        proposal = CampaignSetupAgent(
             runtime.services.gateway(session_type="init")
         ).generate(
             config=config,
-            base_core_memory=core_memory,
             trace_id=trace_id,
         )
         result = {
             "config": model_data(config),
-            "core_memory": model_data(core_memory),
-            "story_direction": model_data(story_direction),
+            "campaign_setup": model_data(proposal),
             "trace_id": trace_id,
         }
-        yield {"step": "story_direction_done", "data": result}
+        yield {"step": "campaign_setup_done", "data": result}
         return result
 
 
 def prepare_initialization_state(payload: dict[str, Any]) -> InitializationState:
     runtime = get_campaign_runtime()
-    services = runtime.services
     config_payload = payload.get("config")
     if not isinstance(config_payload, dict):
         raise ValueError("config is required")
-    story_direction_payload = payload.get("story_direction")
-    if not isinstance(story_direction_payload, dict):
-        raise ValueError("story_direction is required")
+    proposal_payload = payload.get("campaign_setup")
+    if not isinstance(proposal_payload, dict):
+        raise ValueError("campaign_setup is required")
 
-    config, core_memory = build_core_memory_from_payload(config_payload)
-    story_direction = StoryDirectionResult.model_validate(story_direction_payload)
-    state: InitializationState = {
+    config = InitConfig.model_validate(config_payload)
+    proposal = CampaignSetupProposal.model_validate(proposal_payload)
+    record = commit_campaign_setup(config, proposal)
+    if record.phase == "completed":
+        raise RuntimeError("Initialization is already complete")
+    if runtime.pending_openings.values():
+        raise RuntimeError("An opening is already awaiting confirmation")
+
+    return {
         "events": [],
-        "runtime_services": services,
-        "trace_id": str(uuid.uuid4()),
+        "runtime_services": runtime.services,
         "config": config,
-        "core_memory": core_memory,
-        "current_state": build_initial_current_state(config),
-        "story_direction": story_direction,
+        "campaign_setup": proposal,
+        "core_memory": record.core_memory,
+        "initialization_record": record,
+        "foundation_trace_id": str(uuid.uuid4()),
+        "opening_trace_id": str(uuid.uuid4()),
     }
-    core_memory, current_state = apply_story_direction(state, story_direction)
-    state["core_memory"] = core_memory
-    state["current_state"] = current_state
-    return state
-
-
-def apply_story_direction(
-    state: InitializationState,
-    story_direction: StoryDirectionResult,
-) -> tuple[CoreMemory, CurrentState]:
-    core_memory = CoreMemory(
-        items=[
-            *state["core_memory"].items,
-            *story_direction.to_core_memory_items(),
-        ]
-    )
-    current_state = state["current_state"]
-    currency_unit = (story_direction.currency_unit or "").strip()
-    if currency_unit:
-        current_state = current_state.model_copy(
-            update={
-                "resources": current_state.resources.model_copy(
-                    update={"money_unit": currency_unit}
-                )
-            }
-        )
-    return core_memory, current_state
 
 
 def finalize_initialization_state(
     state: InitializationState,
 ) -> InitializationState:
-    stores = state["runtime_services"].stores
-    save_initialization_settings(
-        director_is_enabled=state["config"].director_enabled,
-    )
-    stores.core_memory().save(state["core_memory"])
-    with stores.current_state() as state_store:
-        state_store.save(state["current_state"])
-
+    runtime = get_campaign_runtime()
     turn_id = f"opening:{uuid.uuid4()}"
-    get_campaign_runtime().pending_openings.add(PendingOpening(
+    pending = PendingOpening(
         turn_id=turn_id,
         group_id=turn_id,
         version_index=1,
+        initialization_fingerprint=state["initialization_record"].fingerprint,
         config=state["config"],
         current_state=state["current_state"],
         scene_result=state["opening_scene"],
         token_usage={
-            "generation": get_trace_token_usage(state["trace_id"]),
+            "generation": get_trace_token_usage(state["opening_trace_id"]),
             "confirmation": None,
         },
-    ))
+    )
+    record = runtime.initialization.load()
+    if record is None or record.foundation is None:
+        raise RuntimeError("Opening Foundation was not persisted")
+    runtime.initialization.save(record.model_copy(update={"phase": "opening_pending"}))
     try:
-        clear_initialization_draft()
-    except OSError as exc:
-        state["runtime_services"].diagnostics.warning(
-            source="initialization",
-            code="initialization_draft_cleanup_failed",
-            message=str(exc),
-            trace_id=state["trace_id"],
-            operation_type="initialization_opening",
+        runtime.pending_openings.add(pending)
+    except BaseException:
+        runtime.initialization.save(
+            record.model_copy(update={"phase": "foundation_ready"})
         )
+        raise
     return {
         **state,
         "turn_id": turn_id,
@@ -179,9 +144,9 @@ def initialization_result(state: InitializationState) -> dict[str, Any]:
     return {
         "turn_id": state["turn_id"],
         "config": model_data(state["config"]),
+        "campaign_setup": model_data(state["campaign_setup"]),
         "core_memory": model_data(state["core_memory"]),
         "current_state": model_data(state["current_state"]),
-        "initial_world_settings": model_data(state["initial_world_settings"]),
         "opening_scene": model_data(state["opening_scene"]),
         "status": state["status"],
     }

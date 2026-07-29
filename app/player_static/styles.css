@@ -1667,6 +1667,26 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   justify-content: space-between;
   gap: 20px;
 }
+
+.inspiration-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inspiration-tags button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 11px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.inspiration-tags button:hover {
+  color: var(--ink);
+  border-color: var(--gold);
+}
 .init-modal-header h2 { margin-top: 0; }
 .welcome-card #continueInitBtn { margin-top: 18px; }
 .init-fieldset[disabled] {
@@ -1810,14 +1830,14 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   color: var(--negative-text);
 }
 
-.story-direction-stage {
+.campaign-setup-stage {
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid var(--line);
   display: grid;
   gap: 14px;
 }
-.story-direction-stage .section-heading {
+.campaign-setup-stage .section-heading {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1827,20 +1847,20 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.story-direction-stage p {
+.campaign-setup-stage p {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
 }
-.story-direction-stage label span {
+.campaign-setup-stage label span {
   display: block;
   margin-bottom: 6px;
   color: var(--gold-bright);
   font-size: 11.5px;
   font-weight: 500;
 }
-.story-direction-stage textarea {
+.campaign-setup-stage textarea {
   width: 100%;
   min-height: 130px;
   margin-top: 0;

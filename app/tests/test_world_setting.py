@@ -4,13 +4,11 @@ from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.core_memory.story_direction import StoryDirectionResult
 from app.domain.director_npc.creative_brief import (
     draw_director_npc_creative_brief,
 )
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
-from app.domain.world_setting.initial_creator import InitialWorldSettingCreator
 from app.domain.world_setting.sampler import reserve_setting_candidates
 from app.domain.world_setting.schemas import (
     SettingAnchorPacket,
@@ -72,71 +70,6 @@ def test_anchor_boundary_fields_store_fact_indexes():
     assert anchor.definition == "灰烬图书馆是一处与禁书有关的遗址。"
     assert anchor.player_known_facts == [0]
     assert anchor.director_private_facts == [1]
-
-
-def test_initial_creator_builds_private_usable_anchors_and_store_is_idempotent():
-    gateway = SpyGateway({
-        "settings": [
-            {
-                "setting_id": "setting_01",
-                "label": "雾港巡潮会",
-                "kind": "organization",
-                "definition": "雾港巡潮会负责记录危险潮汐并维护夜航信标。",
-                "setting_facts": [
-                    "巡潮会每夜派人校准外港的三座信标。",
-                    "只有登记船只可以取得完整潮汐表。",
-                ],
-                "relation_to_known_world": ["巡潮会服务于艾兰北岸的港口网络。"],
-                "world_effects": ["沿岸商船依赖巡潮会安排夜间进港顺序。"],
-                "scope_and_boundaries": ["巡潮会无权管理离岸后的远洋航线。"],
-            },
-            {
-                "setting_id": "setting_02",
-                "label": "盐印通行契",
-                "kind": "institution_or_custom",
-                "definition": "盐印通行契是北岸港口互认货物检验结果的契约制度。",
-                "setting_facts": [
-                    "盖有盐印的封箱在成员港口无需重复开箱。",
-                ],
-                "relation_to_known_world": ["通行契连接艾兰北岸的多个港口。"],
-                "world_effects": ["盐印真伪会直接影响货物流通速度。"],
-                "scope_and_boundaries": ["通行契只约束签约港口。"],
-            },
-        ]
-    })
-    result = InitialWorldSettingCreator(gateway).create(
-        core_memory=CoreMemory(items=[]),
-        story_direction=StoryDirectionResult(content="从北岸港口开始探索。"),
-        trace_id="initial-setting-test",
-    )
-    anchors = [setting.to_anchor() for setting in result.settings]
-
-    assert gateway.calls[0]["task"] == "init_world_setting_create"
-    assert set(gateway.calls[0]["input_data"]) == {
-        "core_memory_json",
-        "story_direction",
-        "output_schema_json",
-    }
-    assert anchors[0].player_known_facts == []
-    assert anchors[0].director_private_facts == [0, 1]
-    assert anchors[1].player_known_facts == []
-    assert anchors[1].director_private_facts == [0]
-
-    store = WorldSettingStore(":memory:")
-    saved = store.save_initial_anchors(anchors)
-    saved_again = store.save_initial_anchors(anchors)
-
-    assert saved_again == saved
-    assert store.load_initial_anchors() == anchors
-    settings = store.list_all()
-    assert len(settings) == 2
-    assert all(setting.maturity == "usable" for setting in settings)
-    assert all(setting.availability == "available" for setting in settings)
-    assert all(setting.visibility == "director_private" for setting in settings)
-    assert all(
-        setting.sources[0].source_type == "initial_world_setting"
-        for setting in settings
-    )
 
 
 def _add_setting(

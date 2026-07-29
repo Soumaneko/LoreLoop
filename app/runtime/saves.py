@@ -10,6 +10,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from .paths import ACTIVE_SAVE_FILE, SAVES_DIR, CampaignPaths, validate_save_name
+from .initialization import InitializationStore
 from .save_archive import (
     ArchiveInspection,
     create_consistent_snapshot,
@@ -286,11 +287,17 @@ class SaveManager:
     def _describe(self, path: Path) -> SaveInfo:
         manifest = SaveManifestRepository(path).load()
         metadata = load_save_metadata(path)
+        initialization = InitializationStore(
+            CampaignPaths.from_data_dir(path).initialization_json
+        ).load()
         return SaveInfo(
             save_id=manifest.save_id,
             name=manifest.display_name,
             active=manifest.save_id == self.runtime.campaign_id,
-            initialized=(path / "core_memory.json").is_file(),
+            initialized=(
+                initialization is not None
+                and initialization.phase == "completed"
+            ),
             last_played_at=manifest.last_played_at,
             turn_count=metadata.turn_count,
             protagonist_name=metadata.protagonist_name,

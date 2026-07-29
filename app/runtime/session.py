@@ -55,6 +55,7 @@ class PendingOpening:
     turn_id: str
     group_id: str
     version_index: int
+    initialization_fingerprint: str
     config: InitConfig
     current_state: CurrentState
     scene_result: SceneWriterResult
@@ -86,8 +87,14 @@ class PendingTurnRepository:
     def add(self, pending: PendingTurn) -> None:
         with self._lock:
             self._items[pending.turn_id] = pending
-        if self._on_add:
-            self._on_add(pending)
+        try:
+            if self._on_add:
+                self._on_add(pending)
+        except BaseException:
+            with self._lock:
+                if self._items.get(pending.turn_id) is pending:
+                    self._items.pop(pending.turn_id, None)
+            raise
 
     def variants(self, group_id: str) -> list[PendingTurn]:
         with self._lock:
@@ -161,8 +168,14 @@ class PendingOpeningRepository:
     def add(self, pending: PendingOpening) -> None:
         with self._lock:
             self._items[pending.turn_id] = pending
-        if self._on_add:
-            self._on_add(pending)
+        try:
+            if self._on_add:
+                self._on_add(pending)
+        except BaseException:
+            with self._lock:
+                if self._items.get(pending.turn_id) is pending:
+                    self._items.pop(pending.turn_id, None)
+            raise
 
     def variants(self, group_id: str) -> list[PendingOpening]:
         with self._lock:
@@ -256,6 +269,9 @@ class CampaignRuntime:
         self._lifecycle_lock = threading.RLock()
         self._save_task_active = False
         self._on_save_played = None
+        from app.runtime.initialization import InitializationStore
+
+        self.initialization = InitializationStore(self.paths.initialization_json)
         self.history = CampaignHistory(self.paths.data_dir)
         self.history.recover_interrupted()
         self._configure_pending_persistence()
@@ -466,6 +482,7 @@ class CampaignRuntime:
             "turn_id": pending.turn_id,
             "group_id": pending.group_id,
             "version_index": pending.version_index,
+            "initialization_fingerprint": pending.initialization_fingerprint,
             "config": model_data(pending.config),
             "current_state": model_data(pending.current_state),
             "scene_result": model_data(pending.scene_result),
@@ -508,6 +525,7 @@ class CampaignRuntime:
                     "turn_id",
                     "group_id",
                     "version_index",
+                    "initialization_fingerprint",
                     "config",
                     "current_state",
                     "scene_result",
@@ -555,6 +573,7 @@ class CampaignRuntime:
                     turn_id=data["turn_id"],
                     group_id=data["group_id"],
                     version_index=data["version_index"],
+                    initialization_fingerprint=data["initialization_fingerprint"],
                     config=InitConfig.model_validate(data["config"]),
                     current_state=CurrentState.model_validate(data["current_state"]),
                     scene_result=SceneWriterResult.model_validate(data["scene_result"]),
@@ -652,6 +671,9 @@ class CampaignRuntime:
             self.campaign_id = campaign_id
             self.paths = paths
             self.stores = StoreBundle(paths)
+            from app.runtime.initialization import InitializationStore
+
+            self.initialization = InitializationStore(paths.initialization_json)
             self.operations = OperationManager(
                 campaign_id,
                 max_workers=self._max_workers,
