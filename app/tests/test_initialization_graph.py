@@ -3,6 +3,10 @@ import pytest
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.graph import initialization_graph
 from app.graph.initialization_helpers import prepare_initialization_state
+from app.runtime.initialization_draft import (
+    load_initialization_draft,
+    save_initialization_draft,
+)
 
 
 def _payload(*, story_expectation="探索与成长"):
@@ -164,6 +168,13 @@ def test_initialization_stream_emits_progress_and_pending_boundary(monkeypatch):
         _initial_world_setting,
     )
     monkeypatch.setattr(initialization_graph, "opening_scene_node", _opening_scene)
+    save_initialization_draft({
+        "version": 1,
+        "stage": "story_direction",
+        "form": {"fields": {"world_name": "艾兰"}},
+        "config": _payload()["config"],
+        "story_direction": _payload()["story_direction"],
+    })
 
     events = list(initialization_graph.initialization_stream(_payload()))
 
@@ -174,6 +185,7 @@ def test_initialization_stream_emits_progress_and_pending_boundary(monkeypatch):
         "initialization_pending",
     ]
     assert events[-1]["data"]["status"] == "awaiting_confirm"
+    assert load_initialization_draft() is None
 
 
 def test_opening_retry_reuses_initial_settings_without_second_llm_call(

@@ -57,6 +57,15 @@ OPERATION_POLICIES = {
             supersedes=("generation", "rephrase", "reroll", "feedback_rewrite"),
         ),
         OperationPolicy(
+            "opening_rewrite",
+            "generation",
+            True,
+            player_visible=True,
+            cancellable=True,
+            recovery_kind="generation",
+            supersedes=("opening_rewrite",),
+        ),
+        OperationPolicy(
             "confirmation",
             "confirmation",
             True,
@@ -67,6 +76,7 @@ OPERATION_POLICIES = {
                 "rephrase",
                 "reroll",
                 "feedback_rewrite",
+                "opening_rewrite",
                 "initialization_opening",
             ),
         ),

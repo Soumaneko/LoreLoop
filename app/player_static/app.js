@@ -25,7 +25,7 @@ import { migrateStorageKey } from "./storage_migration.js";
 const $ = (id) => document.getElementById(id);
 const els = {
   worldTime: $("worldTime"), worldLocation: $("worldLocation"), statusPill: $("statusPill"),
-  story: $("story"), welcome: $("welcome"), history: $("history"),
+  story: $("story"), welcome: $("welcome"), continueInitBtn: $("continueInitBtn"), history: $("history"),
   activePlayerAction: $("activePlayerAction"),
   streamingCard: $("streamingCard"), streamingText: $("streamingText"), streamingLabel: $("streamingLabel"),
   stopGenerationBtn: $("stopGenerationBtn"),
@@ -51,7 +51,7 @@ const els = {
   importSaveBtn: $("importSaveBtn"), importSaveInput: $("importSaveInput"), importSaveForm: $("importSaveForm"),
   importSaveName: $("importSaveName"), importSaveFileName: $("importSaveFileName"), cancelImportSaveBtn: $("cancelImportSaveBtn"),
   saveManagerError: $("saveManagerError"),
-  initDialog: $("initDialog"), initForm: $("initForm"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
+  initDialog: $("initDialog"), initForm: $("initForm"), closeInitDialogBtn: $("closeInitDialogBtn"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
   initConfigFields: $("initConfigFields"), initOriginalFields: $("initOriginalFields"), initFanficFields: $("initFanficFields"),
   initFanfic: $("initFanfic"), initDirectorEnabled: $("initDirectorEnabled"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
   initConfigActions: $("initConfigActions"), storyDirectionActions: $("storyDirectionActions"), storyDirectionStage: $("storyDirectionStage"),
@@ -77,6 +77,7 @@ const progressLabels = {
   narrative_revised: "修订完成",
   feedback_rewrite_started: "正在理解修改意见",
   feedback_rewrite_strategy_selected: "修改方式已经确定",
+  opening_rewrite_started: "正在重新生成开场",
   feedback_source_rewrite_done: "局部修订完成",
   feedback_recompose_done: "重新构思完成",
   confirm_started: "正在读取最终正文",
@@ -229,7 +230,15 @@ function renderControls({ updateNavigation = true } = {}) {
   els.statusPill.dataset.mode = state.mode;
   els.statusPill.querySelector("span").textContent = modeLabels[state.mode] || "等待行动";
 
-  if (pending && !busy) {
+  if (pending?.kind === "opening" && !busy) {
+    if (els.composerModeBadge) els.composerModeBadge.hidden = true;
+    els.playerInput.disabled = true;
+    els.playerInput.placeholder = "请先确认或重新生成开场";
+    setInputHintText("等待确认开场");
+    els.generateBtn.disabled = true;
+    const btnSpan = els.generateBtn.querySelector("span");
+    if (btnSpan) btnSpan.textContent = "执行行动";
+  } else if (pending && !busy) {
     if (els.composerModeBadge) els.composerModeBadge.hidden = true;
     els.playerInput.disabled = false;
     els.playerInput.placeholder = "对这段正文有意见？在此输入修改要求（如“写到门前即可停下”）...";
@@ -260,6 +269,7 @@ function renderControls({ updateNavigation = true } = {}) {
   els.diceDisplaySelect.disabled = busy;
   els.canonValidationBtn.disabled = busy;
   els.initDirectorEnabled.disabled = !state.playerState?.needs_init;
+  els.continueInitBtn.disabled = state.mode === "switching";
   syncCustomSelects([
     els.saveSelect,
     els.difficultySelect,
@@ -540,6 +550,16 @@ function renderHistory() {
   els.history.replaceChildren();
   const history = state.playerState?.history || [];
   els.welcome.hidden = history.length > 0 || Boolean(activePending());
+  const needsInit = Boolean(state.playerState?.needs_init);
+  els.continueInitBtn.hidden = !needsInit;
+  const welcomeTitle = els.welcome.querySelector("h1");
+  const welcomeText = els.welcome.querySelector("h1 + p");
+  if (welcomeTitle) welcomeTitle.textContent = needsInit ? "故事尚未启程" : "故事等待你的选择";
+  if (welcomeText) {
+    welcomeText.textContent = needsInit
+      ? "初始化草稿会按当前存档保留，你可以随时返回继续。"
+      : "这里没有预设答案。描述你想做的事，世界会记住已经发生的一切。";
+  }
   const fragment = document.createDocumentFragment();
   history.forEach((turn, index) => fragment.appendChild(renderTurn(turn, {
     showClosing: index === history.length - 1 && !activePending(),
@@ -975,6 +995,7 @@ function renderPending() {
   const rephrase = node("button", "soft-button dropdown-item", "重新措辞");
   const feedbackRewrite = node("button", "soft-button dropdown-item", "根据意见修改");
   const reroll = node("button", "soft-button dropdown-item", "重新判定");
+  const rewriteOpening = node("button", "soft-button", "重新生成开场");
   const discard = node("button", "soft-button danger-button compact-discard", "删除");
 
   confirm.disabled = confirming;
@@ -999,6 +1020,10 @@ function renderPending() {
   reroll.title = "重新运行完整生成管线并重新投骰";
   reroll.onclick = () => retryTurn("reroll");
 
+  rewriteOpening.disabled = ["generating", "confirming"].includes(state.mode);
+  rewriteOpening.title = "使用相同初始化设定生成一个新版本，原版本会保留";
+  rewriteOpening.onclick = retryOpening;
+
   discard.disabled = confirming;
   discard.onclick = discardPending;
 
@@ -1006,7 +1031,9 @@ function renderPending() {
   actions.appendChild(edit);
   if (hasDraft(variant)) actions.appendChild(restoreOriginal);
 
-  if (pending.kind !== "opening") {
+  if (pending.kind === "opening") {
+    actions.appendChild(rewriteOpening);
+  } else {
     const dropdown = node("div", "rewrite-dropdown");
     const dropdownTrigger = node("button", "soft-button rewrite-dropdown-trigger", "重写选项 ▾");
     dropdownTrigger.disabled = rephrase.disabled;
@@ -2058,6 +2085,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
   }
   state.playerState = playerState;
+  if (playerState.needs_init) await loadInitializationDraft();
   state.suggestions = playerState.action_preview?.previews || [];
   state.selectedPendingIndex = Math.max(0, (activePending()?.variants?.length || 1) - 1);
   if (activeGenerationRun && activeGenerationRun.turnIndex === null) {
@@ -2126,11 +2154,17 @@ async function bootstrap() {
   await loadAll({ scroll: "instant", knownModelConfig: modelConfig });
 }
 
-function handleInitializationEvent(event) {
+async function handleInitializationEvent(event) {
   tokenUsage.handleEvent(event);
   setProgress(event.step);
   if (event.step === "story_direction_done") {
     showStoryDirectionStage(event.data || {});
+    try {
+      await persistInitializationDraft();
+    } catch (error) {
+      reportClientError(error, "initialization_draft_save_failed");
+      showToast("故事方向已生成，但初始化草稿暂未保存");
+    }
   }
 }
 
@@ -2343,7 +2377,7 @@ function handleGenerationEvent(event, { retryMode = null } = {}) {
 }
 
 async function resumeGenerationOperation(operation) {
-  const retryMode = ["rephrase", "reroll", "feedback_rewrite"].includes(operation.operation_type)
+  const retryMode = ["rephrase", "reroll", "feedback_rewrite", "opening_rewrite"].includes(operation.operation_type)
     ? operation.operation_type
     : null;
   const userInput = operation.metadata?.user_input || "";
@@ -2358,6 +2392,8 @@ async function resumeGenerationOperation(operation) {
         ? "正在恢复重新判定"
         : retryMode === "feedback_rewrite"
           ? "正在恢复意见重写"
+        : retryMode === "opening_rewrite"
+          ? "正在恢复开场重写"
         : "正在恢复生成进度",
   );
   let feedbackDecision = null;
@@ -2560,6 +2596,46 @@ async function retryTurn(retryMode) {
   }
 }
 
+async function retryOpening() {
+  const pending = activePending(); const variant = selectedVariant();
+  if (!pending || !variant || pending.kind !== "opening") return;
+  if (
+    pending.variants.length >= 5
+    && !await showConfirmModal({
+      title: "继续生成开场版本？",
+      message: "当前已经保留 5 个或更多开场版本。继续会产生一次新的模型调用。",
+      confirmText: "继续生成",
+    })
+  ) return;
+  prepareGenerationRun("opening_rewrite", "");
+  setMode("generating"); renderControls();
+  startStreaming("正在重新生成开场");
+  try {
+    const operationId = await stream("/api/player/opening/rewrite", {
+      turn_id: variant.turn_id,
+      request_id: newRequestId(),
+    }, (event) => handleGenerationEvent(event, { retryMode: "opening_rewrite" }));
+    await acknowledgeHandledOperation(operationId);
+    if (activeGenerationRun?.cancelled) {
+      settleCancelledGeneration({ retryMode: "opening_rewrite" });
+      return;
+    }
+    stopStreaming();
+    await loadAll({ scroll: "smooth" });
+    const pendingAfterRetry = activePending();
+    if (pendingAfterRetry) {
+      const latest = pendingAfterRetry.variants[pendingAfterRetry.variants.length - 1];
+      if (latest) tokenUsage.saveVariantGenerationUsage(latest.turn_id);
+    }
+    showToast("新开场已生成，原版本仍然保留");
+  } catch (error) {
+    stopStreaming(); setMode("pending"); renderAll(); showError(error);
+    await acknowledgeFailedOperation(error);
+  } finally {
+    finishGenerationRun();
+  }
+}
+
 function openFeedbackRewrite() {
   const pending = activePending(); const variant = selectedVariant();
   if (!pending || !variant || pending.kind === "opening") return;
@@ -2729,6 +2805,109 @@ function readInitConfig(form) {
   };
 }
 
+function captureInitializationForm() {
+  const fields = {};
+  for (const control of els.initForm.querySelectorAll("[name]")) {
+    if (["fanfic", "director_enabled"].includes(control.name)) continue;
+    fields[control.name] = control.value;
+  }
+  const abilityDescriptions = [
+    ...els.initForm.querySelectorAll(".ability-description"),
+  ];
+  return {
+    fanfic: els.initFanfic.checked,
+    director_enabled: els.initDirectorEnabled.checked,
+    fields,
+    protagonist_abilities: [...els.initForm.querySelectorAll(".ability-name")].map((input, index) => ({
+      name: input.value,
+      description: abilityDescriptions[index].value,
+    })),
+    extra_core_memory_items: [...els.extraCoreMemoryList.querySelectorAll(".extra-memory-row")].map((row) => ({
+      id: row.querySelector(".extra-memory-id").value,
+      category: row.querySelector(".extra-memory-category").value,
+      priority: row.querySelector(".extra-memory-priority").value,
+      content: row.querySelector(".extra-memory-content").value,
+    })),
+  };
+}
+
+function restoreInitializationForm(form = {}) {
+  els.initForm.reset();
+  els.initFanfic.checked = Boolean(form.fanfic);
+  els.initDirectorEnabled.checked = form.director_enabled !== false;
+  for (const [name, value] of Object.entries(form.fields || {})) {
+    const control = els.initForm.elements[name];
+    if (control) control.value = value ?? "";
+  }
+  const abilities = form.protagonist_abilities || [];
+  const abilityNames = els.initForm.querySelectorAll(".ability-name");
+  const abilityDescriptions = els.initForm.querySelectorAll(".ability-description");
+  abilityNames.forEach((input, index) => {
+    input.value = abilities[index]?.name || "";
+    abilityDescriptions[index].value = abilities[index]?.description || "";
+  });
+  els.extraCoreMemoryList.replaceChildren();
+  for (const item of form.extra_core_memory_items || []) {
+    addExtraCoreMemoryRow(item);
+  }
+  toggleInitWorldFields();
+}
+
+function initializationDraftPayload() {
+  return {
+    version: 1,
+    stage: initConfigSnapshot ? "story_direction" : "config",
+    form: captureInitializationForm(),
+    config: initConfigSnapshot,
+    story_direction: initConfigSnapshot ? {
+      content: els.storyDirectionContent.value,
+      currency_unit: els.storyDirectionCurrency.value || null,
+    } : null,
+  };
+}
+
+async function persistInitializationDraft() {
+  if (!state.playerState?.needs_init) return;
+  await request("/api/player/init/draft", {
+    method: "POST",
+    body: JSON.stringify(initializationDraftPayload()),
+  });
+}
+
+async function loadInitializationDraft() {
+  const result = await request("/api/player/init/draft");
+  const draft = result.draft;
+  if (!draft) {
+    restoreInitializationForm();
+    editInitConfig();
+    return;
+  }
+  restoreInitializationForm(draft.form);
+  if (
+    draft.stage === "story_direction"
+    && draft.config
+    && draft.story_direction?.content
+  ) {
+    showStoryDirectionStage({
+      config: draft.config,
+      story_direction: draft.story_direction,
+    });
+  } else {
+    editInitConfig();
+  }
+}
+
+async function closeInitializationDialog() {
+  try {
+    await persistInitializationDraft();
+  } catch (error) {
+    reportClientError(error, "initialization_draft_save_failed");
+    showToast("初始化草稿暂未保存");
+  } finally {
+    els.initDialog.close();
+  }
+}
+
 function addExtraCoreMemoryRow(values = {}) {
   const row = node("div", "extra-memory-row");
   const id = node("input", "extra-memory-id");
@@ -2803,7 +2982,9 @@ async function requestStoryDirection({ regenerate = false } = {}) {
   button.disabled = true;
   const oldText = button.textContent;
   button.textContent = "正在生成……";
+  els.initConfigFields.disabled = true;
   try {
+    await persistInitializationDraft();
     const operationId = await stream("/api/player/init/story-direction", {
       ...config,
       request_id: newRequestId(),
@@ -2816,6 +2997,7 @@ async function requestStoryDirection({ regenerate = false } = {}) {
   } finally {
     button.disabled = false;
     button.textContent = oldText;
+    if (!initConfigSnapshot) els.initConfigFields.disabled = false;
   }
 }
 
@@ -2835,6 +3017,7 @@ async function initialize() {
   };
   setMode("generating"); els.initSubmitBtn.disabled = true; els.initSubmitBtn.textContent = "正在生成开场……"; els.initError.hidden = true;
   try {
+    await persistInitializationDraft();
     const operationId = await stream("/api/player/init", {
       ...payload,
       request_id: newRequestId(),
@@ -3025,7 +3208,12 @@ els.storyDirectionBtn.onclick = () => requestStoryDirection();
 els.regenerateStoryDirectionBtn.onclick = () => requestStoryDirection({ regenerate: true });
 els.editInitConfigBtn.onclick = editInitConfig;
 els.initForm.addEventListener("submit", (event) => { event.preventDefault(); initialize(); });
-els.initDialog.addEventListener("cancel", (event) => event.preventDefault());
+els.continueInitBtn.onclick = () => els.initDialog.showModal();
+els.closeInitDialogBtn.onclick = closeInitializationDialog;
+els.initDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeInitializationDialog();
+});
 window.addEventListener("scroll", () => {
   if (window.scrollY <= 220) loadEarlierHistory();
 }, { passive: true });

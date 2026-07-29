@@ -844,6 +844,42 @@ def test_public_api_starts_feedback_rewrite_with_current_draft(
     )
 
 
+def test_public_api_starts_opening_rewrite_with_version_metadata(
+    monkeypatch,
+    configured_runtime,
+):
+    runtime = configured_runtime
+    runtime.pending_openings.add(SimpleNamespace(
+        turn_id="opening-v1",
+        group_id="opening-group",
+        version_index=1,
+    ))
+    captured = {}
+
+    def opening_rewrite_stream(turn_id):
+        captured["turn_id"] = turn_id
+        yield {"step": "opening_rewrite_started", "data": {}}
+
+    monkeypatch.setattr(api, "rewrite_opening_stream", opening_rewrite_stream)
+    operation_id = api.start_opening_rewrite_operation(
+        "opening-v1",
+        request_id="request-opening-rewrite",
+    )
+    snapshot = runtime.operations.wait(operation_id, timeout=2)
+
+    assert snapshot.status == "succeeded"
+    assert snapshot.operation_type == "opening_rewrite"
+    assert snapshot.metadata == {
+        "turn_id": "opening-v1",
+        "group_id": "opening-group",
+        "version_index": 2,
+        "opening": True,
+        "user_input": "",
+    }
+    assert snapshot.supersedes_recoverable_types == ("opening_rewrite",)
+    assert captured == {"turn_id": "opening-v1"}
+
+
 def test_public_api_starts_confirmation_with_pending_turn_metadata(
     monkeypatch,
     configured_runtime,
@@ -888,6 +924,7 @@ def test_public_api_starts_confirmation_with_pending_turn_metadata(
         "rephrase",
         "reroll",
         "feedback_rewrite",
+        "opening_rewrite",
         "initialization_opening",
     )
     assert captured == {

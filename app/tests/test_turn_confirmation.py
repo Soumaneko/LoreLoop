@@ -96,6 +96,8 @@ def test_opening_confirmation_honors_initial_director_choice(monkeypatch):
     turn_id = "director-disabled-opening"
     runtime.pending_openings.add(PendingOpening(
         turn_id=turn_id,
+        group_id=turn_id,
+        version_index=1,
         config=SimpleNamespace(director_enabled=False),
         current_state=_state(),
         scene_result=SceneWriterResult(scene_text="开场正文"),
@@ -399,12 +401,22 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
     state = _state()
     pending = PendingOpening(
         turn_id=turn_id,
+        group_id=turn_id,
+        version_index=1,
         config=SimpleNamespace(),
         current_state=state,
         scene_result=SceneWriterResult(scene_text="开场正文"),
     )
     pending_openings = get_campaign_runtime().pending_openings
     pending_openings.add(pending)
+    pending_openings.add(PendingOpening(
+        turn_id="opening-director-npc-v2",
+        group_id=turn_id,
+        version_index=2,
+        config=SimpleNamespace(),
+        current_state=state,
+        scene_result=SceneWriterResult(scene_text="另一版开场正文"),
+    ))
     calls = {"restock": 0}
 
     class _FakeGateway:
@@ -520,6 +532,7 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
                 write_db=True,
             )
         )
+        assert pending_openings.variants(turn_id) == []
     finally:
         pending_openings.remove(turn_id)
 

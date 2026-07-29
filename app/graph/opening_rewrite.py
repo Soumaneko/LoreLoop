@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+import uuid
+
+from app.core.cancellation import commit_if_not_cancelled
+from app.core.llm.token_usage import get_trace_token_usage
+from app.domain.scene_writer.opening import OpeningSceneAgent
+from app.runtime.serialization import model_data
+from app.runtime.session import PendingOpening, get_campaign_runtime
+
+
+def rewrite_opening_stream(turn_id: str):
+    runtime = get_campaign_runtime()
+    with runtime.confirmation_lock:
+        source = runtime.pending_openings.get(turn_id)
+        if source is None:
+            raise ValueError("Pending opening not found.")
+
+        variants = runtime.pending_openings.variants(source.group_id)
+        version_index = max(item.version_index for item in variants) + 1
+        trace_id = str(uuid.uuid4())
+        yield {
+            "step": "opening_rewrite_started",
+            "data": {
+                "turn_id": turn_id,
+                "group_id": source.group_id,
+                "version_index": version_index,
+                "trace_id": trace_id,
+            },
+        }
+
+        core_memory = runtime.services.stores.core_memory().load_required()
+        scene_result = OpeningSceneAgent(
+            runtime.services.gateway(session_type="init")
+        ).generate(
+            config=source.config,
+            current_state=source.current_state,
+            core_memory=core_memory,
+            trace_id=trace_id,
+        )
+
+        rewritten_turn_id = f"opening:{uuid.uuid4()}"
+        pending = PendingOpening(
+            turn_id=rewritten_turn_id,
+            group_id=source.group_id,
+            version_index=version_index,
+            config=source.config,
+            current_state=source.current_state,
+            scene_result=scene_result,
+            token_usage={
+                "generation": get_trace_token_usage(trace_id),
+                "confirmation": None,
+            },
+        )
+        commit_if_not_cancelled(lambda: runtime.pending_openings.add(pending))
+        yield {
+            "step": "scene_written",
+            "data": {
+                "turn_id": rewritten_turn_id,
+                "group_id": source.group_id,
+                "version_index": version_index,
+                "turn_index": 0,
+                "scene_result": model_data(scene_result),
+                "token_usage": pending.token_usage,
+            },
+        }

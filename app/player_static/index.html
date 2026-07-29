@@ -47,6 +47,7 @@
           <p class="eyebrow">AN UNTOLD PATH</p>
           <h1>故事等待你的选择</h1>
           <p>这里没有预设答案。描述你想做的事，世界会记住已经发生的一切。</p>
+          <button id="continueInitBtn" class="primary-action" type="button" hidden>继续初始化</button>
         </div>
         <div id="history" class="history"></div>
         <div id="activePlayerAction" class="player-action active-player-action" hidden></div>
@@ -305,8 +306,10 @@
 
   <dialog id="initDialog" class="modal init-modal">
     <form method="dialog" id="initForm">
-      <p class="eyebrow">BEGIN A NEW STORY</p>
-      <h2>塑造你的起点</h2>
+      <header class="init-modal-header">
+        <div><p class="eyebrow">BEGIN A NEW STORY</p><h2>塑造你的起点</h2></div>
+        <button id="closeInitDialogBtn" class="close-button" type="button" aria-label="返回故事界面">×</button>
+      </header>
       <p id="initStageHint">填写世界与主角设定，然后先生成一份可修改的长期故事方向。</p>
       <fieldset id="initConfigFields" class="init-fieldset">
         <div class="form-grid">

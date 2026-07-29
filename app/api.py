@@ -10,6 +10,7 @@ from app.graph.generation_graph import (
     reroll_turn_stream,
 )
 from app.graph.initialization_graph import initialization_stream
+from app.graph.opening_rewrite import rewrite_opening_stream
 from app.graph.initialization_helpers import (
     generate_story_direction_stream,
     preview_core_memory,
@@ -31,6 +32,10 @@ from app.runtime.model_config import (
     model_config_status,
     save_model_config,
     test_model_connection,
+)
+from app.runtime.initialization_draft import (
+    load_initialization_draft,
+    save_initialization_draft,
 )
 from app.runtime.saves import (
     copy_save,
@@ -171,6 +176,32 @@ def start_feedback_rewrite_operation(
             "turn_id": turn_id,
             "group_id": pending.group_id,
             "user_input": pending.user_input,
+        },
+    )
+
+
+def start_opening_rewrite_operation(
+    turn_id: str,
+    *,
+    request_id: str | None = None,
+) -> str:
+    runtime = get_campaign_runtime()
+    pending = runtime.pending_openings.get(turn_id)
+    if pending is None:
+        raise ValueError("Pending opening not found.")
+    variants = runtime.pending_openings.variants(pending.group_id)
+    version_index = max(item.version_index for item in variants) + 1
+    return _submit_managed_operation(
+        "opening_rewrite",
+        rewrite_opening_stream,
+        turn_id,
+        request_id=request_id,
+        metadata={
+            "turn_id": turn_id,
+            "group_id": pending.group_id,
+            "version_index": version_index,
+            "opening": True,
+            "user_input": "",
         },
     )
 
@@ -372,6 +403,7 @@ __all__ = [
     "load_debug_state",
     "load_player_history",
     "load_player_state",
+    "load_initialization_draft",
     "load_reader_preferences",
     "model_config_status",
     "list_maintenance_jobs",
@@ -383,6 +415,7 @@ __all__ = [
     "save_dice_display",
     "save_canon_validation",
     "save_difficulty",
+    "save_initialization_draft",
     "save_max_chars",
     "save_model_config",
     "save_pending_scene_edit",
@@ -393,6 +426,7 @@ __all__ = [
     "start_generation_operation",
     "start_feedback_rewrite_operation",
     "start_initialization_operation",
+    "start_opening_rewrite_operation",
     "start_memory_maintain_operation",
     "start_rephrase_operation",
     "start_reroll_operation",

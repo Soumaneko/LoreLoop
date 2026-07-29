@@ -592,7 +592,7 @@ class ConfirmationFinalizer:
             if isinstance(pending, PendingTurn):
                 self.runtime.pending_turns.discard_group(pending.group_id)
             else:
-                self.runtime.pending_openings.remove(state["turn_id"])
+                self.runtime.pending_openings.discard_group(pending.group_id)
 
         try:
             restock_scheduled = (

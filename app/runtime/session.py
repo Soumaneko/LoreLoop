@@ -53,6 +53,8 @@ class PendingTurn:
 @dataclass
 class PendingOpening:
     turn_id: str
+    group_id: str
+    version_index: int
     config: InitConfig
     current_state: CurrentState
     scene_result: SceneWriterResult
@@ -162,11 +164,34 @@ class PendingOpeningRepository:
         if self._on_add:
             self._on_add(pending)
 
+    def variants(self, group_id: str) -> list[PendingOpening]:
+        with self._lock:
+            return sorted(
+                (
+                    pending
+                    for pending in self._items.values()
+                    if pending.group_id == group_id
+                ),
+                key=lambda pending: pending.version_index,
+            )
+
     def remove(self, turn_id: str) -> None:
         with self._lock:
             self._items.pop(turn_id, None)
         if self._on_remove:
             self._on_remove([turn_id])
+
+    def discard_group(self, group_id: str) -> None:
+        with self._lock:
+            turn_ids = [
+                pending.turn_id
+                for pending in self._items.values()
+                if pending.group_id == group_id
+            ]
+            for turn_id in turn_ids:
+                self._items.pop(turn_id, None)
+        if self._on_remove:
+            self._on_remove(turn_ids)
 
     def restore(self, pending: PendingOpening) -> None:
         with self._lock:
@@ -439,6 +464,8 @@ class CampaignRuntime:
             return False
         payload = {
             "turn_id": pending.turn_id,
+            "group_id": pending.group_id,
+            "version_index": pending.version_index,
             "config": model_data(pending.config),
             "current_state": model_data(pending.current_state),
             "scene_result": model_data(pending.scene_result),
@@ -449,7 +476,7 @@ class CampaignRuntime:
         self.history.save_pending(
             turn_id=pending.turn_id,
             kind="opening",
-            group_id=None,
+            group_id=pending.group_id,
             turn_index=0,
             payload=payload,
         )
@@ -461,6 +488,39 @@ class CampaignRuntime:
             import json
 
             data = json.loads(payload)
+            required_fields = (
+                {
+                    "turn_id",
+                    "group_id",
+                    "version_index",
+                    "user_input",
+                    "difficulty",
+                    "max_chars",
+                    "state_before",
+                    "context",
+                    "outline",
+                    "scene_result",
+                    "turn_index",
+                    "original_scene_text",
+                }
+                if record["kind"] == "turn"
+                else {
+                    "turn_id",
+                    "group_id",
+                    "version_index",
+                    "config",
+                    "current_state",
+                    "scene_result",
+                    "original_scene_text",
+                }
+            )
+            missing_fields = sorted(required_fields.difference(data))
+            if missing_fields:
+                raise RuntimeError(
+                    f"Pending {record['kind']} journal {record['turn_id']} "
+                    "does not match the current storage contract; missing fields: "
+                    f"{', '.join(missing_fields)}"
+                )
             if record.get("scene_text"):
                 data["scene_result"]["scene_text"] = record["scene_text"]
             if record["kind"] == "turn":
@@ -493,6 +553,8 @@ class CampaignRuntime:
             else:
                 self.pending_openings.restore(PendingOpening(
                     turn_id=data["turn_id"],
+                    group_id=data["group_id"],
+                    version_index=data["version_index"],
                     config=InitConfig.model_validate(data["config"]),
                     current_state=CurrentState.model_validate(data["current_state"]),
                     scene_result=SceneWriterResult.model_validate(data["scene_result"]),
@@ -524,8 +586,7 @@ class CampaignRuntime:
         return True
 
     def complete_confirmation(self, pending: PendingTurn | PendingOpening) -> None:
-        group_id = pending.group_id if isinstance(pending, PendingTurn) else None
-        self.history.complete_confirmation(pending.turn_id, group_id)
+        self.history.complete_confirmation(pending.turn_id, pending.group_id)
         self._touch_save_played()
 
     def undo(self) -> dict[str, Any]:

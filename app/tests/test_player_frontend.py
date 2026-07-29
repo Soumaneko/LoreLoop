@@ -1,4 +1,5 @@
 import io
+import json
 import shutil
 import subprocess
 import threading
@@ -108,6 +109,37 @@ def test_player_frontend_javascript_is_syntactically_valid():
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_initialization_draft_route_dispatches_by_http_method(monkeypatch):
+    loaded = {"version": 1, "stage": "config", "form": {}}
+    saved = {"version": 1, "stage": "story_direction", "form": {}}
+    received = []
+    monkeypatch.setattr(player_server, "load_initialization_draft", lambda: loaded)
+    monkeypatch.setattr(
+        player_server,
+        "save_initialization_draft",
+        lambda payload: received.append(payload) or saved,
+    )
+
+    get_handler = object.__new__(player_server.PlayerHandler)
+    get_handler.path = "/api/player/init/draft"
+    get_results = []
+    get_handler._handle_player_json = lambda callback: get_results.append(callback())
+    get_handler.do_GET()
+
+    body = json.dumps(saved).encode("utf-8")
+    post_handler = object.__new__(player_server.PlayerHandler)
+    post_handler.path = "/api/player/init/draft"
+    post_handler.headers = {"Content-Length": str(len(body))}
+    post_handler.rfile = io.BytesIO(body)
+    post_results = []
+    post_handler._handle_player_json = lambda callback: post_results.append(callback())
+    post_handler.do_POST()
+
+    assert get_results == [{"draft": loaded}]
+    assert received == [saved]
+    assert post_results == [{"draft": saved}]
 
 
 def test_player_saved_edits_are_projected_without_browser_storage():
@@ -528,6 +560,12 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'await request("/api/player/state")' in source
     assert 'id="canonValidationBtn"' in html
     assert 'id="initDirectorEnabled"' in html
+    assert 'id="closeInitDialogBtn"' in html
+    assert 'id="continueInitBtn"' in html
+    assert 'request("/api/player/init/draft")' in source
+    assert 'stream("/api/player/opening/rewrite"' in source
+    assert '"重新生成开场"' in source
+    assert "pending.kind === \"opening\"" in source
     assert 'name="director_enabled" type="checkbox" checked' in html
     assert 'request("/api/player/canon-validation"' in source
     assert "director_enabled: els.initDirectorEnabled.checked" in source
@@ -720,6 +758,7 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
         "confirmation",
         "initialization_story_direction",
         "initialization_opening",
+        "opening_rewrite",
     ],
 )
 def test_pipeline_operation_continues_after_subscriber_disconnect(

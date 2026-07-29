@@ -1661,6 +1661,14 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   margin: 0;
   min-width: 0;
 }
+.init-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.init-modal-header h2 { margin-top: 0; }
+.welcome-card #continueInitBtn { margin-top: 18px; }
 .init-fieldset[disabled] {
   opacity: 0.5;
   pointer-events: none;

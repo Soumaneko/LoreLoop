@@ -1,6 +1,8 @@
 import json
 import sqlite3
 
+import pytest
+
 from app.domain.core_memory import InitConfig, build_initial_current_state
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.runtime.paths import CampaignPaths
@@ -31,6 +33,8 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
     )
     pending = PendingOpening(
         turn_id="opening-1",
+        group_id="opening-group-1",
+        version_index=1,
         config=config,
         current_state=build_initial_current_state(config),
         scene_result=SceneWriterResult(scene_text="莱尔在晨雾中醒来。"),
@@ -51,12 +55,38 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
     try:
         restored = second.pending_openings.get("opening-1")
         assert restored is not None
+        assert restored.group_id == "opening-group-1"
+        assert restored.version_index == 1
         assert restored.config.world_name == "泰瑞大陆"
         assert restored.current_state.player.name == "莱尔"
         assert restored.scene_result.scene_text == "莱尔在晨雾中醒来。"
         assert restored.token_usage == pending.token_usage
     finally:
         second.close()
+
+
+def test_pending_opening_requires_the_current_storage_contract(tmp_path):
+    paths = CampaignPaths.from_data_dir(tmp_path / "save")
+    history = CampaignHistory(paths.data_dir)
+    history.save_pending(
+        turn_id="opening-invalid",
+        kind="opening",
+        group_id=None,
+        turn_index=0,
+        payload={
+            "turn_id": "opening-invalid",
+            "config": {},
+            "current_state": {},
+            "scene_result": {},
+            "original_scene_text": None,
+        },
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"current storage contract; missing fields: group_id, version_index",
+    ):
+        CampaignRuntime("invalid-pending-opening", paths=paths)
 
 
 def test_interrupted_confirmation_restores_pre_turn_database(tmp_path):
@@ -220,6 +250,8 @@ def test_runtime_undo_restores_edited_opening_as_pending_and_redo_clears_it(tmp_
     )
     pending = PendingOpening(
         turn_id="opening-1",
+        group_id="opening-group-1",
+        version_index=1,
         config=config,
         current_state=build_initial_current_state(config),
         scene_result=SceneWriterResult(scene_text="最初生成的开场。"),

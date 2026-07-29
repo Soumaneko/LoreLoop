@@ -109,6 +109,10 @@ class CampaignPaths:
     def settings_json(self) -> Path:
         return self.data_dir / "settings.json"
 
+    @property
+    def initialization_draft_json(self) -> Path:
+        return self.data_dir / "initialization_draft.json"
+
 
 DEFAULT_CAMPAIGN_PATHS = CampaignPaths.from_data_dir(
     SAVES_DIR / configured_save_id()

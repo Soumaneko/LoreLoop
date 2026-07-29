@@ -18,6 +18,7 @@ from app.domain.current_state import CurrentState
 from app.runtime.serialization import model_data
 from app.runtime.session import PendingOpening, get_campaign_runtime
 from app.runtime.settings import save_initialization_settings
+from app.runtime.initialization_draft import clear_initialization_draft
 
 from .initialization_state import InitializationState
 
@@ -140,6 +141,8 @@ def finalize_initialization_state(
     turn_id = f"opening:{uuid.uuid4()}"
     get_campaign_runtime().pending_openings.add(PendingOpening(
         turn_id=turn_id,
+        group_id=turn_id,
+        version_index=1,
         config=state["config"],
         current_state=state["current_state"],
         scene_result=state["opening_scene"],
@@ -148,6 +151,16 @@ def finalize_initialization_state(
             "confirmation": None,
         },
     ))
+    try:
+        clear_initialization_draft()
+    except OSError as exc:
+        state["runtime_services"].diagnostics.warning(
+            source="initialization",
+            code="initialization_draft_cleanup_failed",
+            message=str(exc),
+            trace_id=state["trace_id"],
+            operation_type="initialization_opening",
+        )
     return {
         **state,
         "turn_id": turn_id,

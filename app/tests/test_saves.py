@@ -212,6 +212,8 @@ def test_create_and_activate_preserves_pending_opening_in_source_save(tmp_path):
         )
         runtime.pending_openings.add(PendingOpening(
             turn_id="opening-1",
+            group_id="opening-1",
+            version_index=1,
             config=config,
             current_state=build_initial_current_state(config),
             scene_result=SceneWriterResult(scene_text="待确认的开场。"),

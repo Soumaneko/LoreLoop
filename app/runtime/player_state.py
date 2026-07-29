@@ -210,22 +210,27 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
             ],
         })
 
-    pending_openings = [
-        {
+    opening_group_ids = list(dict.fromkeys(
+        opening.group_id for opening in runtime.pending_openings.values()
+    ))
+    pending_openings = []
+    for group_id in opening_group_ids:
+        variants = runtime.pending_openings.variants(group_id)
+        if not variants:
+            continue
+        pending_openings.append({
             "kind": "opening",
-            "group_id": None,
+            "group_id": group_id,
             "user_input": "",
             "variants": [{
                 "turn_id": opening.turn_id,
-                "version_index": 1,
+                "version_index": opening.version_index,
                 "turn_index": 0,
                 **_pending_scene_projection(opening),
                 "closing_prompt": opening.scene_result.closing_prompt,
                 "token_usage": getattr(opening, "token_usage", None),
-            }],
-        }
-        for opening in runtime.pending_openings.values()
-    ]
+            } for opening in variants],
+        })
     pending = [*pending_groups, *pending_openings]
     highlight_texts = [turn["scene_text"] for turn in history]
     highlight_texts.extend(

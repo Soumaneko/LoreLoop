@@ -27,6 +27,7 @@ from app.api import (
     list_saves,
     load_player_history,
     load_player_state,
+    load_initialization_draft,
     load_reader_preferences,
     model_config_status,
     rename_save,
@@ -34,6 +35,7 @@ from app.api import (
     save_dice_display,
     save_canon_validation,
     save_difficulty,
+    save_initialization_draft,
     save_model_config,
     save_pending_scene_edit,
     record_player_diagnostic,
@@ -42,6 +44,7 @@ from app.api import (
     start_generation_operation,
     start_feedback_rewrite_operation,
     start_initialization_operation,
+    start_opening_rewrite_operation,
     start_rephrase_operation,
     start_reroll_operation,
     start_story_direction_operation,
@@ -98,6 +101,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/reader-preferences":
             self._handle_player_json(load_reader_preferences)
+            return
+        if path == "/api/player/init/draft":
+            self._handle_player_json(
+                lambda: {"draft": load_initialization_draft()}
+            )
             return
         if path == "/api/player/history":
             query = parse_qs(parsed_url.query)
@@ -168,6 +176,12 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 player=True,
             )
             return
+        if path == "/api/player/opening/rewrite":
+            self._handle_operation_start_stream(
+                self._start_opening_rewrite_operation,
+                player=True,
+            )
+            return
         if path == "/api/player/pending/discard":
             self._handle_player_json(lambda: self._discard_pending_turn())
             return
@@ -189,6 +203,13 @@ class PlayerHandler(BaseHTTPRequestHandler):
             self._handle_operation_start_stream(
                 self._start_story_direction_operation,
                 player=True,
+            )
+            return
+        if path == "/api/player/init/draft":
+            self._handle_player_json(
+                lambda: {
+                    "draft": save_initialization_draft(_read_json(self))
+                }
             )
             return
         if path == "/api/player/difficulty":
@@ -399,7 +420,12 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 "total_tokens": data.get("total_tokens"),
                 "reported": bool(data.get("reported", False)),
             }
-        elif step in {"rephrase_started", "reroll_started", "feedback_rewrite_started"}:
+        elif step in {
+            "rephrase_started",
+            "reroll_started",
+            "feedback_rewrite_started",
+            "opening_rewrite_started",
+        }:
             public_data = {"version_index": data.get("version_index")}
         elif step == "feedback_rewrite_strategy_selected":
             public_data = {
@@ -770,6 +796,13 @@ class PlayerHandler(BaseHTTPRequestHandler):
     def _start_reroll_operation(self) -> str:
         turn_id, request_id = self._retry_request()
         return start_reroll_operation(turn_id, request_id=request_id)
+
+    def _start_opening_rewrite_operation(self) -> str:
+        turn_id, request_id = self._retry_request()
+        return start_opening_rewrite_operation(
+            turn_id,
+            request_id=request_id,
+        )
 
     def _start_feedback_rewrite_operation(self) -> str:
         payload = _read_json(self)

@@ -219,14 +219,14 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
             discard_group=lambda _group_id: calls.append("pending_removed")
         ),
         pending_openings=SimpleNamespace(
-            remove=lambda _turn_id: calls.append("pending_removed")
+            discard_group=lambda _group_id: calls.append("pending_removed")
         ),
     )
     state = {
         "write_db": True,
         "journaled": True,
         "turn_id": "turn-1",
-        "pending": SimpleNamespace(),
+        "pending": SimpleNamespace(group_id="opening-group"),
         "pipeline_input": SimpleNamespace(state_before=current_state),
         "state_change_set": {},
         "updated_state": current_state,
