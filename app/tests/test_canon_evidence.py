@@ -4,8 +4,11 @@ from app.domain.canon_evidence import (
     CanonEvidenceRetriever,
     project_canon_evidence_for_check,
 )
-from app.domain.canon_evidence.retriever import _best_trigram_match, _trigrams
-from app.domain.confirmed_history import ConfirmedHistoryStore
+from app.domain.confirmed_history import (
+    ConfirmedHistoryStore,
+    best_trigram_match,
+    trigrams,
+)
 from app.domain.narrative_canon_query.schemas import (
     CanonEntityReference,
     NarrativeCanonQuery,
@@ -123,11 +126,10 @@ def test_retriever_finds_prior_entity_cooccurrence_and_returns_raw_context():
 
 
 def test_each_lookup_query_is_scored_independently_and_best_match_wins():
-    unrelated = _trigrams("王都商人与旧马车的长篇无关交易记录")
-    direct_match = _trigrams("第一次得知灰烬图书馆")
+    direct_match = trigrams("第一次得知灰烬图书馆")
 
-    score, matched = _best_trigram_match(
-        [unrelated, direct_match],
+    score, matched = best_trigram_match(
+        ["王都商人与旧马车的长篇无关交易记录", "第一次得知灰烬图书馆"],
         "希尔达让埃利奥第一次得知灰烬图书馆。",
     )
 

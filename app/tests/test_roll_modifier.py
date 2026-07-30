@@ -33,7 +33,6 @@ def _make_parse_result() -> ActionParseResult:
             _make_action("a2", False),
         ],
         anchors=[],
-        ambiguities=[],
     )
 
 
@@ -99,7 +98,6 @@ class TestRollModifierEvaluator:
         parse_result = ActionParseResult(
             atomic_actions=[_make_action("a1", False)],
             anchors=[],
-            ambiguities=[],
         )
 
         class _UnexpectedEvaluator:

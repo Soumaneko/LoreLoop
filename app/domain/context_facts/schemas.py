@@ -1,10 +1,13 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.domain.action.schemas import Anchor
+from app.domain.confirmed_history.schemas import HistorySource
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
-from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.scene_summary.schemas import SceneSummary
 
 
@@ -13,6 +16,7 @@ class ContextFact(BaseModel):
 
     fact_id: str = Field(min_length=1)
     fact: str = Field(min_length=1)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=4)
 
 
 class ContextFactDraft(BaseModel):
@@ -21,6 +25,7 @@ class ContextFactDraft(BaseModel):
     holder: str = Field(min_length=1)
     source: str = Field(min_length=1)
     fact: str = Field(min_length=1)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=4)
 
     def render_fact(self) -> str:
         return f"{self.holder.strip()}已知({self.source.strip()}): {self.fact.strip()}"
@@ -45,15 +50,32 @@ class ContextFactSet(BaseModel):
         *,
         turn_focus: str,
         facts: list[ContextFactDraft],
+        known_evidence_ids: set[str] | None = None,
     ) -> "ContextFactSet":
+        drafts = [
+            ContextFactDraft.model_validate(fact)
+            for fact in facts
+        ]
+        if known_evidence_ids is not None:
+            unknown = sorted({
+                evidence_id
+                for fact in drafts
+                for evidence_id in fact.evidence_ids
+                if evidence_id not in known_evidence_ids
+            })
+            if unknown:
+                raise ValueError(
+                    f"unknown context history evidence IDs: {', '.join(unknown)}"
+                )
         return cls(
             turn_focus=turn_focus,
             facts=[
                 ContextFact(
                     fact_id=f"f{index}",
-                    fact=ContextFactDraft.model_validate(fact).render_fact(),
+                    fact=fact.render_fact(),
+                    evidence_ids=list(fact.evidence_ids),
                 )
-                for index, fact in enumerate(facts, start=1)
+                for index, fact in enumerate(drafts, start=1)
             ],
         )
 
@@ -65,13 +87,88 @@ class ContextFactDraftSet(BaseModel):
     facts: list[ContextFactDraft] = Field(default_factory=list, max_length=12)
 
 
-class ContextExtractInput(BaseModel):
+class ContextSearchEntity(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    aliases: list[str] = Field(default_factory=list, max_length=8)
+
+
+class ContextSearchIntent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    intent_id: str = Field(min_length=1)
+    focus: Literal["entity", "relationship", "location", "topic"]
+    entities: list[ContextSearchEntity] = Field(default_factory=list, max_length=5)
+    topics: list[str] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode="after")
+    def _validate_search_material(self):
+        if not self.entities and not self.topics:
+            raise ValueError("context search intent requires entities or topics")
+        return self
+
+
+class ContextSearchPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    intents: list[ContextSearchIntent] = Field(default_factory=list)
+
+
+class ContextHistoryHit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str = Field(min_length=1)
+    source_type: HistorySource
+    turn_index: int = Field(ge=0)
+    scene_id: str = Field(min_length=1)
+    paragraph_index: int | None = Field(default=None, ge=1)
+    text: str = Field(min_length=1)
+    context_before: str | None = None
+    context_after: str | None = None
+    matched_intent_ids: list[str] = Field(min_length=1)
+    matched_entities: list[str] = Field(default_factory=list)
+    matched_topics: list[str] = Field(default_factory=list)
+    score: float = Field(ge=0)
+
+
+class ContextHistoryEvidenceSet(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    hits: list[ContextHistoryHit] = Field(default_factory=list)
+    indexed_documents: int = Field(default=0, ge=0)
+    indexed_turns: int = Field(default=0, ge=0)
+
+
+class ContextExtractorInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_input: str = Field(min_length=1)
     core_memory: CoreMemory
     current_state: CurrentState
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
-    retrieved_memories: CandidateRetrievalResult
+    search_plan: ContextSearchPlan
+    history_evidence: ContextHistoryEvidenceSet
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
+
+
+class ContextFactsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_input: str = Field(min_length=1)
+    core_memory: CoreMemory
+    current_state: CurrentState
+    scene_summaries: list[SceneSummary] = Field(default_factory=list)
+    matched_anchors: list[Anchor] = Field(default_factory=list)
+    entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
+    npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
+    current_turn_index: int = Field(ge=0)
+
+
+class ContextFactsResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    search_plan: ContextSearchPlan
+    history_evidence: ContextHistoryEvidenceSet
+    context_facts: ContextFactSet

@@ -4,11 +4,21 @@ from pathlib import Path
 import pytest
 
 from app.domain.action.schemas import Anchor
-from app.domain.context_facts.extractor import ContextExtractor
-from app.domain.context_facts.schemas import (
-    ContextExtractInput,
-    ContextFactSet,
+from app.domain.confirmed_history import ConfirmedHistoryStore
+from app.domain.context_facts import (
+    ContextExtractor,
+    ContextExtractorInput,
+    ContextFactsInput,
+    ContextFactsService,
+    ContextHistoryEvidenceSet,
+    ContextHistoryHit,
+    ContextHistoryRetriever,
+    ContextSearchEntity,
+    ContextSearchIntent,
+    ContextSearchPlan,
+    build_context_search_plan,
 )
+from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.context_facts.views import project_context_facts
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
@@ -22,11 +32,8 @@ from app.domain.entity.schemas import EntityProfile
 from app.domain.entity.store import EntityStore
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
-from app.domain.recall_memory.schemas import Memory
-from app.domain.recall_memory.store import MemoryStore
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.scene_summary.schemas import SceneSummary
-from app.graph.generation_context_helpers import retrieve_context_fact_memories
+from app.domain.short_term_memory import ShortTermScene
 from app.graph.generation_profile_helpers import select_context_profiles
 
 
@@ -54,7 +61,25 @@ def _core_memory() -> CoreMemory:
     ])
 
 
-def test_context_fact_set_assigns_fact_ids_from_drafts():
+def _npc_view():
+    return NPCProfile(
+        name="顾晚棠",
+        aliases=["顾阁主"],
+        role="万象阁阁主",
+        attitude_to_player="部分信任但仍戒备",
+    ).director_view()
+
+
+def _entity_view():
+    return EntityProfile(
+        entity_type="organization",
+        name="盐帮",
+        aliases=["盐运帮"],
+        summary="正在追捕顾晚棠的组织。",
+    ).semantic_view()
+
+
+def test_context_fact_set_assigns_fact_ids_and_keeps_internal_evidence():
     result = ContextFactSet.from_drafts(
         turn_focus="萧云痕询问顾晚棠如何应对盐帮。",
         facts=[
@@ -62,23 +87,27 @@ def test_context_fact_set_assigns_fact_ids_from_drafts():
                 "holder": "萧云痕",
                 "source": "顾晚棠告知",
                 "fact": "顾晚棠因账册摹本被盐帮追杀。",
+                "evidence_ids": ["turn_2_p003"],
             },
             {
                 "holder": "萧云痕、顾晚棠",
                 "source": "共同经历",
                 "fact": "萧云痕已承诺庇护顾晚棠三日。",
+                "evidence_ids": [],
             },
         ],
+        known_evidence_ids={"turn_2_p003"},
     )
 
     assert [fact.fact_id for fact in result.facts] == ["f1", "f2"]
+    assert result.facts[0].evidence_ids == ["turn_2_p003"]
     assert [fact.fact for fact in result.facts] == [
         "萧云痕已知(顾晚棠告知): 顾晚棠因账册摹本被盐帮追杀。",
         "萧云痕、顾晚棠已知(共同经历): 萧云痕已承诺庇护顾晚棠三日。",
     ]
 
 
-def test_context_fact_set_rejects_duplicate_fact_ids():
+def test_context_fact_set_rejects_duplicate_ids_and_unknown_evidence():
     with pytest.raises(ValueError, match="fact_id"):
         ContextFactSet(
             turn_focus="测试",
@@ -88,8 +117,156 @@ def test_context_fact_set_rejects_duplicate_fact_ids():
             ],
         )
 
+    with pytest.raises(ValueError, match="unknown context history evidence"):
+        ContextFactSet.from_drafts(
+            turn_focus="测试",
+            facts=[{
+                "holder": "创作者",
+                "source": "既有剧情",
+                "fact": "一项事实。",
+                "evidence_ids": ["invented"],
+            }],
+            known_evidence_ids=set(),
+        )
 
-def test_context_extractor_projects_required_inputs_and_hides_fact_id_schema():
+
+def test_deterministic_intents_use_location_participants_aliases_and_topics():
+    plan = build_context_search_plan(
+        user_input="我告诉顾阁主盐运帮的动向，再问她解决方法。",
+        current_state=_state(),
+        matched_anchors=[],
+        entity_profiles=[_entity_view()],
+        npc_profiles=[_npc_view()],
+    )
+
+    assert any(
+        intent.focus == "location"
+        and intent.entities[0].name == "客栈上房"
+        for intent in plan.intents
+    )
+    assert any(
+        intent.focus == "entity"
+        and intent.entities[0].name == "顾晚棠"
+        and "顾阁主" in intent.entities[0].aliases
+        for intent in plan.intents
+    )
+    assert any(
+        intent.focus == "entity"
+        and intent.entities[0].name == "盐帮"
+        and "盐运帮" in intent.entities[0].aliases
+        for intent in plan.intents
+    )
+    relationship = next(
+        intent for intent in plan.intents if intent.focus == "relationship"
+    )
+    assert {entity.name for entity in relationship.entities} >= {
+        "萧云痕",
+        "顾晚棠",
+        "盐帮",
+    }
+    topic = next(intent for intent in plan.intents if intent.focus == "topic")
+    assert "解决方法" in topic.topics
+
+
+def test_deterministic_intents_keep_all_matched_anchors():
+    anchors = [
+        Anchor(
+            text=f"目标{i}",
+            normalized=f"目标{i}",
+            kind="concept",
+            source="explicit",
+            confidence=0.9,
+        )
+        for i in range(18)
+    ]
+
+    plan = build_context_search_plan(
+        user_input="我继续等待。",
+        current_state=_state(),
+        matched_anchors=anchors,
+        entity_profiles=[],
+        npc_profiles=[],
+    )
+
+    entity_names = {
+        intent.entities[0].name
+        for intent in plan.intents
+        if intent.focus == "entity"
+    }
+    assert {f"目标{i}" for i in range(18)} <= entity_names
+    assert len(plan.intents) > 16
+
+
+def test_history_retriever_allows_single_alias_and_diversifies_turns():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[
+                ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])
+            ],
+        ),
+        ContextSearchIntent(
+            intent_id="i2",
+            focus="topic",
+            topics=["账册摹本"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        store.rebuild([
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                user_input="询问账册摹本。",
+                scene_text=(
+                    "顾阁主承认账册摹本并不在她身上。\n\n"
+                    "她拒绝透露具体藏匿地点。"
+                ),
+            ),
+            ShortTermScene(
+                scene_id="scene_004",
+                turn_index=4,
+                scene_text="顾晚棠提醒萧云痕，盐帮正在客栈外搜查。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=5,
+        )
+
+    assert result.hits
+    assert {hit.turn_index for hit in result.hits} >= {1, 4}
+    assert any("顾晚棠" in hit.matched_entities for hit in result.hits)
+    assert any("账册摹本" in hit.matched_topics for hit in result.hits)
+    assert all(hit.matched_intent_ids for hit in result.hits)
+
+
+def test_history_retriever_does_not_cap_evidence_at_fact_limit():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="顾晚棠")],
+        )
+    ])
+    with ConfirmedHistoryStore() as store:
+        store.rebuild([
+            ShortTermScene(
+                scene_id=f"scene_{turn_index:03d}",
+                turn_index=turn_index,
+                scene_text=f"顾晚棠在第{turn_index}回合留下了一条线索。",
+            )
+            for turn_index in range(1, 16)
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=16,
+        )
+
+    assert len(result.hits) == 15
+
+
+def test_context_extractor_receives_raw_history_and_cites_it():
     class SpyGateway:
         def __init__(self):
             self.input_data = None
@@ -98,19 +275,38 @@ def test_context_extractor_projects_required_inputs_and_hides_fact_id_schema():
             self.input_data = kwargs["input_data"]
             return kwargs["output_schema"].model_validate({
                 "turn_focus": "萧云痕询问顾晚棠如何应对盐帮。",
-                "facts": [
-                    {
-                        "holder": "萧云痕",
-                        "source": "顾晚棠告知",
-                        "fact": "顾晚棠曾透露账册摹本不在身上，只有她知道存放处。",
-                    }
-                ],
+                "facts": [{
+                    "holder": "萧云痕",
+                    "source": "顾晚棠告知",
+                    "fact": "顾晚棠曾透露账册摹本不在身上。",
+                    "evidence_ids": ["turn_2_p003"],
+                }],
             })
 
+    search_plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="顾晚棠")],
+        )
+    ])
+    history = ContextHistoryEvidenceSet(hits=[
+        ContextHistoryHit(
+            evidence_id="turn_2_p003",
+            source_type="scene_paragraph",
+            turn_index=2,
+            scene_id="scene_002",
+            paragraph_index=3,
+            text="顾晚棠说明账册摹本不在她身上。",
+            matched_intent_ids=["i1"],
+            matched_entities=["顾晚棠"],
+            score=0.9,
+        )
+    ], indexed_documents=3, indexed_turns=1)
     gateway = SpyGateway()
     result = ContextExtractor(gateway).extract(
-        ContextExtractInput(
-            user_input="我告诉顾晚棠盐帮动向，问她有没有解决方法。",
+        ContextExtractorInput(
+            user_input="我问顾晚棠有没有解决方法。",
             core_memory=_core_memory(),
             current_state=_state(),
             scene_summaries=[
@@ -121,121 +317,94 @@ def test_context_extractor_projects_required_inputs_and_hides_fact_id_schema():
                     turn_end=2,
                 )
             ],
-            retrieved_memories=CandidateRetrievalResult(
-                candidates=[
-                    MemoryCandidate(
-                        memory_id="m1",
-                        memory_kind="resource_access",
-                        evidence_mode="reported",
-                        subject="走私账册摹本",
-                        content="顾晚棠持有账册摹本，且不在她身上。",
-                        entities=["顾晚棠", "账册摹本"],
-                        salience=0.9,
-                        score=1.0,
-                    )
-                ],
-                total_scanned=1,
-                total_returned=1,
-            ),
-            entity_profiles=[
-                EntityProfile(
-                    entity_type="item",
-                    name="麂皮褡裢",
-                    summary="萧云痕随身携带的褡裢。",
-                ).semantic_view()
-            ],
-            npc_profiles=[
-                NPCProfile(
-                    name="顾晚棠",
-                    role="万象阁阁主",
-                    attitude_to_player="部分信任但仍戒备",
-                ).director_view()
-            ],
+            search_plan=search_plan,
+            history_evidence=history,
+            entity_profiles=[_entity_view()],
+            npc_profiles=[_npc_view()],
         )
     )
 
-    assert result.facts[0].fact_id == "f1"
-    assert result.facts[0].fact == (
-        "萧云痕已知(顾晚棠告知): "
-        "顾晚棠曾透露账册摹本不在身上，只有她知道存放处。"
-    )
-    assert "core_world" in gateway.input_data["core_memory_json"]
+    assert result.facts[0].evidence_ids == ["turn_2_p003"]
+    assert "turn_2_p003" in gateway.input_data["confirmed_history_json"]
+    assert '"intent_id":"i1"' in gateway.input_data[
+        "context_search_plan_json"
+    ].replace(" ", "").replace("\n", "")
     assert "scene_001" in gateway.input_data["current_state_json"]
-    assert "账册摹本" in gateway.input_data["retrieved_memories_json"]
-    assert "顾晚棠曾透露账册摹本" in gateway.input_data["scene_summaries_json"]
-    assert "麂皮褡裢" in gateway.input_data["entity_profiles_json"]
-    assert "顾晚棠" in gateway.input_data["npc_profiles_json"]
     assert "director_event_json" not in gateway.input_data
     schema = json.loads(gateway.input_data["output_schema_json"])
-    draft_def_name = next(
-        name
-        for name in schema["$defs"]
+    draft = next(
+        definition
+        for name, definition in schema["$defs"].items()
         if name.endswith("ContextFactDraft")
     )
-    assert "fact_id" not in schema["$defs"][draft_def_name]["properties"]
-    assert set(schema["$defs"][draft_def_name]["properties"]) == {
+    assert set(draft["properties"]) == {
         "holder",
         "source",
         "fact",
+        "evidence_ids",
     }
     rendered_prompt = Path(
         "app/prompts/generation/context_extract_v1.md"
     ).read_text(encoding="utf-8").format(**gateway.input_data)
-    assert "{holder}已知({source}): {fact}" in rendered_prompt
+    assert "Confirmed History" in rendered_prompt
+    assert "Retrieved Memories" not in rendered_prompt
 
 
-def test_context_fact_memory_retrieval_uses_context_anchors():
-    anchors = [
-        Anchor(
-            text="盐帮",
-            normalized="盐帮",
-            kind="organization",
-            source="explicit",
-            confidence=1.0,
+def test_context_facts_service_syncs_retrieves_and_calls_one_llm():
+    class SpyGateway:
+        def __init__(self):
+            self.calls = []
+
+        def run(self, **kwargs):
+            self.calls.append(kwargs)
+            return kwargs["output_schema"].model_validate({
+                "turn_focus": "追问盐帮动向。",
+                "facts": [],
+            })
+
+    gateway = SpyGateway()
+    with ConfirmedHistoryStore() as store:
+        result = ContextFactsService(gateway, store).build(
+            ContextFactsInput(
+                user_input="我问顾阁主盐帮的最新动向。",
+                core_memory=_core_memory(),
+                current_state=_state(),
+                scene_summaries=[],
+                matched_anchors=[],
+                entity_profiles=[_entity_view()],
+                npc_profiles=[_npc_view()],
+                current_turn_index=4,
+            ),
+            confirmed_scenes=[
+                ShortTermScene(
+                    scene_id="scene_003",
+                    turn_index=3,
+                    scene_text="顾阁主说盐帮正在客栈外搜查。",
+                )
+            ],
         )
-    ]
-    with MemoryStore(":memory:") as store:
-        store.save_one_returning_id(
-            Memory(
-                memory_kind="open_thread",
-                evidence_mode="observed",
-                subject="盐帮追兵",
-                content="盐帮追兵仍在客栈外搜寻顾晚棠。",
-                entities=["盐帮", "顾晚棠"],
-                tags=["追兵"],
-                salience=0.9,
-            )
-        )
 
-        result = retrieve_context_fact_memories(
-            anchors=anchors,
-            memory_store=store,
-        )
-
-    assert result.total_returned == 1
-    assert result.candidates[0].subject == "盐帮追兵"
-    assert "盐帮" in result.candidates[0].matched_anchors
+        assert store.turn_count() == 1
+    assert len(gateway.calls) == 1
+    assert gateway.calls[0]["task"] == "context_extract"
+    assert result.search_plan.intents
+    assert result.history_evidence.hits
 
 
-def test_context_facts_projection_outputs_simple_fact_list():
+def test_context_facts_projection_hides_internal_evidence_ids():
     facts = ContextFactSet(
         turn_focus="判断盐帮威胁。",
-        facts=[
-            {
-                "fact_id": "f1",
-                "fact": "盐帮追兵仍在客栈外搜寻顾晚棠。",
-            }
-        ],
-    )
-
-    projected = json.loads(project_context_facts(facts))
-
-    assert projected == [
-        {
+        facts=[{
             "fact_id": "f1",
             "fact": "盐帮追兵仍在客栈外搜寻顾晚棠。",
-        }
-    ]
+            "evidence_ids": ["turn_4_p001"],
+        }],
+    )
+
+    assert json.loads(project_context_facts(facts)) == [{
+        "fact_id": "f1",
+        "fact": "盐帮追兵仍在客栈外搜寻顾晚棠。",
+    }]
 
 
 def test_select_context_profiles_matches_state_and_user_input(tmp_path):
@@ -275,9 +444,16 @@ def test_select_context_profiles_matches_state_and_user_input(tmp_path):
         entity_store.close()
         npc_store.close()
 
-    assert {profile.name for profile in result.entity_profiles} >= {"麂皮褡裢", "盐帮"}
+    assert {profile.name for profile in result.entity_profiles} >= {
+        "麂皮褡裢",
+        "盐帮",
+    }
     assert [profile.name for profile in result.npc_profiles] == ["顾晚棠"]
-    assert {anchor.text for anchor in result.anchors} >= {"顾晚棠", "麂皮褡裢", "盐帮"}
+    assert {anchor.text for anchor in result.anchors} >= {
+        "顾晚棠",
+        "麂皮褡裢",
+        "盐帮",
+    }
 
 
 def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
@@ -311,7 +487,7 @@ def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
         )
 
         result = select_context_profiles(
-            user_input="我继续追问她。",
+            user_input="我留意四周。",
             current_state=state,
             entity_store=entity_store,
             npc_store=npc_store,

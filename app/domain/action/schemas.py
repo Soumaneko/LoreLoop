@@ -61,13 +61,7 @@ class ActionExtractionResult(BaseModel):
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
 
 
-class AnchorExtractionResult(BaseModel):
-    anchors: list[Anchor] = Field(default_factory=list)
-    ambiguities: list[str] = Field(default_factory=list)
-
-
 class ActionParseResult(BaseModel):
     analysis: str = ""
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
     anchors: list[Anchor] = Field(default_factory=list)
-    ambiguities: list[str] = Field(default_factory=list)

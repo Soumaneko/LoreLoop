@@ -23,10 +23,16 @@
 {scene_summaries_json}
 ```
 
-## Retrieved Memories
+## Context Search Plan
 
 ```json
-{retrieved_memories_json}
+{context_search_plan_json}
+```
+
+## Confirmed History
+
+```json
+{confirmed_history_json}
 ```
 
 ## Entity Profiles
@@ -66,6 +72,7 @@
   - holder：该 fact 的认知持有人，使用角色标准名称；多人以完全相同的来源知道同一事实时，可以填写共同持有人，如“莱尔、希尔达”。仅供创作者使用、没有任何角色已知的客观事实填写“创作者”。
   - source：该持有人获得信息的简短来源，如“亲眼观察”“NPC告知”“公开传闻”“本人经历”“世界设定”。上下文没有说明具体获知过程时填写“既有认知”，不得臆造来源。
   - fact：只写一个事实簇，必须是上下文已经支持的过去或当前事实；不要在 fact 中重复“某人已知”“某人相信”等持有人前缀。
+  - evidence_ids：该事实使用 Confirmed History 时，填写直接支持它的 evidence_id；只来自 CoreMemory、CurrentState、SceneSummaries 或 Profiles 时填空列表。
   - 不要输出 fact_id；fact_id 由程序自动填写。
 
 程序会将每条草稿统一转换为：`{{holder}}已知({{source}}): {{fact}}`，再以 `fact_id + fact` 的既有格式提供给下游模块。
@@ -74,7 +81,7 @@
 # 核心规则
 
 1. 提取“本回合生成可能需要知道的既有事实”，包括：已发生事件、当前已知威胁、旧承诺、关系状态、物品/资源状态、角色已知信息边界、未解决线程、已透露动机或冲突根源。
-2. Retrieved Memories 和 SceneSummaries 是过往剧情事实的主要来源；CurrentState 是当前即时状态；CoreMemory 是长期设定边界；Entity/NPC Profiles 是实体与角色背景边界。
+2. Confirmed History 是原始已确认剧情证据，SceneSummaries 是跨回合压缩上下文；CurrentState 是当前即时状态；CoreMemory 是长期设定边界；Entity/NPC Profiles 是实体与角色背景边界。
 3. 事实必须与 User Input 的行动、询问对象、涉及人物、地点、物品、组织或威胁有关。
 4. holder/source 表达角色知识边界：角色只因上下文明确支持的观察、经历、告知或既有认知而成为 holder；不得因为角色在场、出现在档案中或可能知道，就擅自扩大持有人范围。
 5. 可以提取“尚未透露具体方式/尚未确认结果”这类信息边界，但必须写成已支持的事实，不要推导成否定事实。
@@ -88,8 +95,9 @@
 2. 不要给出解决方案、行动建议、剧情规划或写作安排。
 3. 不要判定玩家行动成功或失败。
 4. 不要把缺失信息写成“事实不存在”；只能写“上下文未显示/尚未透露”，且必须与本回合明显相关。
-5. 不要臆造 Retrieved Memories、SceneSummaries、CurrentState、CoreMemory、Entity Profiles 或 NPC Profiles 中没有的信息。
-6. 不要输出任何 schema 外字段。
+5. 不要臆造 Confirmed History、SceneSummaries、CurrentState、CoreMemory、Entity Profiles 或 NPC Profiles 中没有的信息。
+6. evidence_ids 只能引用 Confirmed History 中实际提供的 evidence_id，不得引用 Search Intent ID、场景 ID 或自行编造编号。
+7. 不要输出任何 schema 外字段。
 
 
 # 示例
@@ -103,27 +111,32 @@
     {{
       "holder": "萧云痕",
       "source": "顾晚棠告知",
-      "fact": "顾晚棠因持有漕运盐帮走私账册摹本而被盐帮追杀。"
+      "fact": "顾晚棠因持有漕运盐帮走私账册摹本而被盐帮追杀。",
+      "evidence_ids": ["turn_2_p003"]
     }},
     {{
       "holder": "萧云痕",
       "source": "顾晚棠告知",
-      "fact": "账册摹本不在顾晚棠身上，只有顾晚棠自己知道存放处。"
+      "fact": "账册摹本不在顾晚棠身上，只有顾晚棠自己知道存放处。",
+      "evidence_ids": ["turn_2_p003"]
     }},
     {{
       "holder": "萧云痕、顾晚棠",
       "source": "共同经历",
-      "fact": "萧云痕已承诺让顾晚棠在客栈上房养伤三天，并负责饮食伤药。"
+      "fact": "萧云痕已承诺让顾晚棠在客栈上房养伤三天，并负责饮食伤药。",
+      "evidence_ids": ["turn_3_p002"]
     }},
     {{
       "holder": "萧云痕、顾晚棠",
       "source": "亲眼观察",
-      "fact": "盐帮仍在平康城搜捕穿紫衣受伤女子，客栈周边有暗哨盯防。"
+      "fact": "盐帮仍在平康城搜捕穿紫衣受伤女子，客栈周边有暗哨盯防。",
+      "evidence_ids": ["turn_4_p001"]
     }},
     {{
       "holder": "创作者",
       "source": "既有剧情",
-      "fact": "顾晚棠尚未向萧云痕透露完整脱身计划。"
+      "fact": "顾晚棠尚未向萧云痕透露完整脱身计划。",
+      "evidence_ids": []
     }}
   ]
 }}

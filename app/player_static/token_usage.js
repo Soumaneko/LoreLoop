@@ -1,6 +1,5 @@
 const TASK_LABELS = {
   action_extract: "行动解析",
-  anchor_extract: "行动锚点提取",
   context_extract: "上下文提取",
   roll_modifier: "判定修正",
   turn_resolution: "行动结算",

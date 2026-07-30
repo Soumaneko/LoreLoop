@@ -1212,13 +1212,18 @@ function renderGeneration() {
 
 function renderContextFacts(g) {
   const facts = g.context_facts?.facts || [];
+  const intents = g.context_search_plan?.intents || [];
+  const evidence = g.context_history_evidence || {};
   return card("Context Facts Branch", `
     ${metrics([
       metric("事实", facts.length, "ok"),
-      metric("事实检索", g.context_fact_memories?.total_returned || 0, "info"),
+      metric("检索意图", intents.length, "info"),
+      metric("正文证据", evidence.hits?.length || 0, "info"),
+      metric("索引回合", evidence.indexed_turns || 0, "info"),
     ])}
     ${details("Facts", facts.length ? facts.map(contextFactCard).join("") : `<div class="empty">无事实</div>`, true)}
-    ${details("Context Retrieval", renderRetrieval(g.context_fact_memories))}
+    ${details("Search Intents", jsonBlock(g.context_search_plan || { intents: [] }))}
+    ${details("Confirmed History", jsonBlock(evidence))}
   `);
 }
 

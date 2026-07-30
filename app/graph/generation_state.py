@@ -5,7 +5,11 @@ from typing import Annotated, Any, TypedDict
 
 from app.domain.action.schemas import ActionExtractionResult, ActionParseResult, Anchor
 from app.domain.action.self_check import SelfCheckResult
-from app.domain.context_facts.schemas import ContextFactSet
+from app.domain.context_facts.schemas import (
+    ContextFactSet,
+    ContextHistoryEvidenceSet,
+    ContextSearchPlan,
+)
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent, DirectorEventConsumption
@@ -72,7 +76,8 @@ class GenerationState(TypedDict, total=False):
     action_npc_director_views: list[NPCProfileDirectorView]
 
     context_facts: ContextFactSet
-    context_fact_memories: CandidateRetrievalResult | None
+    context_search_plan: ContextSearchPlan | None
+    context_history_evidence: ContextHistoryEvidenceSet | None
     context_extract_error: str | None
 
     action_extraction_result: ActionExtractionResult

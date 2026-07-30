@@ -2,11 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
-from app.domain.action.schemas import (
-    ActionExtractionResult,
-    ActionParseResult,
-    AnchorExtractionResult,
-)
+from app.domain.action.schemas import ActionExtractionResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
@@ -21,9 +17,8 @@ from app.domain.views import (
 
 
 class ActionParser:
-    def __init__(self, action_llm: LLMGateway, anchor_llm: LLMGateway | None = None):
-        self.action_llm = action_llm
-        self.anchor_llm = anchor_llm or action_llm
+    def __init__(self, llm: LLMGateway):
+        self.llm = llm
 
     def parse(
         self,
@@ -35,73 +30,10 @@ class ActionParser:
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
-    ) -> ActionParseResult:
-        anchor_result = self.extract_anchors(
-            user_input=user_input,
-            current_state=current_state,
-            core_memory=core_memory,
-            trace_id=trace_id,
-        )
-        action_result = self.extract_actions(
-            user_input=user_input,
-            current_state=current_state,
-            core_memory=core_memory,
-            recent_summaries=recent_summaries or [],
-            entity_profiles=entity_profiles or [],
-            npc_profiles=npc_profiles or [],
-            trace_id=trace_id,
-        )
-
-        return ActionParseResult(
-            analysis=action_result.analysis,
-            atomic_actions=action_result.atomic_actions,
-            anchors=anchor_result.anchors,
-            ambiguities=[
-                *anchor_result.ambiguities,
-            ],
-        )
-
-    def extract_anchors(
-        self,
-        *,
-        user_input: str,
-        current_state: CurrentState,
-        core_memory: CoreMemory,
-        trace_id: str | None = None,
-    ) -> AnchorExtractionResult:
-        return cast(
-            AnchorExtractionResult,
-            self.anchor_llm.run(
-                task="anchor_extract",
-                input_data={
-                    "user_input": user_input,
-                    "current_state_json": project_current_state(current_state),
-                    "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "output_schema_json": json.dumps(
-                        AnchorExtractionResult.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                },
-                output_schema=AnchorExtractionResult,
-                trace_id=trace_id,
-            ),
-        )
-
-    def extract_actions(
-        self,
-        *,
-        user_input: str,
-        current_state: CurrentState,
-        core_memory: CoreMemory,
-        recent_summaries: list[SceneSummary] | None = None,
-        entity_profiles: list[EntityProfileUpdateInput] | None = None,
-        npc_profiles: list[NPCProfileDirectorView] | None = None,
-        trace_id: str | None = None,
     ) -> ActionExtractionResult:
         return cast(
             ActionExtractionResult,
-            self.action_llm.run(
+            self.llm.run(
                 task="action_extract",
                 input_data={
                     "user_input": user_input,

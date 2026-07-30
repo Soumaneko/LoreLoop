@@ -58,6 +58,10 @@ def test_debug_frontend_exposes_runtime_content():
         'item.required_revision',
         'Composer Revision Instruction',
         'narrative_revised: ["narrative_compose"]',
+        'g.context_search_plan?.intents || []',
+        'g.context_history_evidence || {}',
+        'details("Search Intents"',
+        'details("Confirmed History"',
         'details("完整 JSON"',
         '/api/init/campaign-setup',
         '"initialization_campaign_setup"',
@@ -68,6 +72,7 @@ def test_debug_frontend_exposes_runtime_content():
         'initCampaignSetup',
     ):
         assert marker in source
+    assert "context_fact_memories" not in source
 
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     assert "<title>LoreLoop（续章）Debugger</title>" in html

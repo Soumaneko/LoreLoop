@@ -32,7 +32,6 @@ class TestDefaultRoll:
                 _make_action("a1", 1, True),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig())
@@ -51,7 +50,6 @@ class TestDefaultRoll:
                 _make_action("a2", 2, True),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(dice_sides=6))
@@ -72,7 +70,6 @@ class TestDefaultRoll:
                 _make_action("a2", 2, False),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(roll_only_when_needed=True))
@@ -89,7 +86,6 @@ class TestDefaultRoll:
                 _make_action("a2", 2, False),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(roll_only_when_needed=False))
@@ -106,7 +102,6 @@ class TestDefaultRoll:
                 _make_action("a2", 2, True),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver_1 = RollResolver(RollConfig(seed=123))
@@ -123,7 +118,6 @@ class TestDefaultRoll:
         parse_result = ActionParseResult(
             atomic_actions=[],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig())
@@ -180,7 +174,6 @@ class TestResultFields:
                 ),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(seed=42))
@@ -210,7 +203,6 @@ class TestResultFields:
                 _make_action("a3", 3, True),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(dice_sides=100))
@@ -227,7 +219,6 @@ class TestResultFields:
                 _make_action("a2", 2, False),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(dice_sides=6))
@@ -242,7 +233,6 @@ class TestRollModifiers:
         parse_result = ActionParseResult(
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
-            ambiguities=[],
         )
         modifier_batch = RollModifierBatch(
             modifiers=[
@@ -266,7 +256,6 @@ class TestRollModifiers:
         parse_result = ActionParseResult(
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
-            ambiguities=[],
         )
         modifier_batch = RollModifierBatch(
             modifiers=[
@@ -296,7 +285,6 @@ class TestRollModifiers:
         parse_result = ActionParseResult(
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
-            ambiguities=[],
         )
         modifier_batch = RollModifierBatch(
             modifiers=[
@@ -319,7 +307,6 @@ class TestRollModifiers:
         parse_result = ActionParseResult(
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(seed=1))
@@ -337,7 +324,6 @@ class TestRollModifiers:
                 _make_action("a3", 3, False),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(seed=42))
@@ -371,7 +357,6 @@ class TestRollSelection:
                 _make_action("a2", 2, False),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver()
@@ -387,7 +372,6 @@ class TestRollSelection:
                 _make_action("a2", 2, False),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver()
@@ -406,7 +390,6 @@ class TestRollSelection:
                 _make_action("a4", 4, False),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig())
@@ -421,7 +404,6 @@ class TestDifficulty:
         return ActionParseResult(
             atomic_actions=[_make_action("a1", 1, True)],
             anchors=[],
-            ambiguities=[],
         )
 
     def _multi_parse(self):
@@ -431,7 +413,6 @@ class TestDifficulty:
                 _make_action("a2", 2, True),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
     def test_default_difficulty_is_hard(self):
@@ -530,7 +511,6 @@ class TestDifficulty:
         parse = ActionParseResult(
             atomic_actions=[],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(difficulty="普通"))
@@ -579,7 +559,6 @@ class TestNeverRolls:
                 self._action("w1", 1, "wait", likely_needs_roll=True),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(seed=1))
@@ -594,7 +573,6 @@ class TestNeverRolls:
                 self._action("w1", 2, "wait", likely_needs_roll=False),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(seed=1))
@@ -609,7 +587,6 @@ class TestNeverRolls:
                 self._action("m1", 1, "move", likely_needs_roll=True, risk_level="low"),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(seed=1))
@@ -623,7 +600,6 @@ class TestNeverRolls:
                 self._action("m1", 1, "move", likely_needs_roll=True, risk_level="high"),
             ],
             anchors=[],
-            ambiguities=[],
         )
 
         resolver = RollResolver(RollConfig(seed=1))

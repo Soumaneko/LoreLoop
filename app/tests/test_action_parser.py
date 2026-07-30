@@ -57,31 +57,13 @@ def _core_memory() -> CoreMemory:
 
 def _make_parser(responses: list[str]) -> ActionParser:
     mock = MockLLM()
-    split_responses: list[str] = []
-    for response in responses:
-        data = json.loads(response)
-        split_responses.append(json.dumps({
-            "anchors": data.get("anchors", []),
-            "ambiguities": data.get("ambiguities", []),
-        }, ensure_ascii=False))
-        split_responses.append(json.dumps({
-            "analysis": data.get("analysis", ""),
-            "atomic_actions": data.get("atomic_actions", []),
-        }, ensure_ascii=False))
-    mock.set_responses(split_responses)
+    mock.set_responses(responses)
     return ActionParser(mock.build_gateway())
 
 
-def _build_response(
-    actions: list[dict],
-    anchors: list[dict],
-    *,
-    ambiguities: list[str] | None = None,
-) -> str:
+def _build_response(actions: list[dict]) -> str:
     return json.dumps({
         "atomic_actions": actions,
-        "anchors": anchors,
-        "ambiguities": ambiguities or [],
     }, ensure_ascii=False)
 
 
@@ -107,26 +89,18 @@ class TestSimpleSingleAction:
                         "likely_needs_roll": True,
                         "risk_level": "medium",
                     }
-                ],
-                anchors=[
-                    {"text": "仓库门口", "normalized": "仓库门口", "kind": "location", "source": "explicit", "confidence": 1.0},
-                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
-                ],
+                ]
             )
         ])
 
         result = parser.parse("我仔细观察仓库门口有没有守卫。", _make_current_state(), core_memory=_core_memory())
-        assert isinstance(result, ActionParseResult)
+        assert isinstance(result, ActionExtractionResult)
         assert len(result.atomic_actions) == 1
         a = result.atomic_actions[0]
         assert a.action_type == "observe"
         assert a.likely_needs_roll is True
         assert a.risk_level == "medium"
         assert a.target == "仓库门口"
-        assert len(result.anchors) >= 2
-        anchor_texts = {anchor.text for anchor in result.anchors}
-        assert "仓库门口" in anchor_texts
-        assert "守卫" in anchor_texts
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -162,11 +136,7 @@ class TestMultiAction:
                         "condition": None,
                         "likely_needs_roll": True,
                     },
-                ],
-                anchors=[
-                    {"text": "仓库侧面", "normalized": "仓库侧面", "kind": "location", "source": "explicit", "confidence": 1.0},
-                    {"text": "窗户", "normalized": "窗户", "kind": "item", "source": "explicit", "confidence": 1.0},
-                ],
+                ]
             )
         ])
 
@@ -183,7 +153,7 @@ class TestMultiAction:
 # ══════════════════════════════════════════════════════════════════
 
 class TestPastReference:
-    def test_past_reference_anchors(self):
+    def test_past_reference_action(self):
         parser = _make_parser([
             _build_response(
                 actions=[
@@ -199,13 +169,7 @@ class TestPastReference:
                         "condition": None,
                         "likely_needs_roll": False,
                     }
-                ],
-                anchors=[
-                    {"text": "之前", "normalized": "past_reference", "kind": "concept", "source": "explicit", "confidence": 1.0},
-                    {"text": "伊莱娜", "normalized": "伊莱娜", "kind": "character", "source": "explicit", "confidence": 1.0},
-                    {"text": "暗号", "normalized": "暗号", "kind": "concept", "source": "explicit", "confidence": 1.0},
-                    {"text": "别说话", "normalized": "保持沉默", "kind": "action_keyword", "source": "explicit", "confidence": 0.95},
-                ],
+                ]
             )
         ])
 
@@ -213,14 +177,7 @@ class TestPastReference:
         assert len(result.atomic_actions) == 1
         assert result.atomic_actions[0].action_type == "signal_ally"
 
-        kinds = {a.kind for a in result.anchors}
-        assert "concept" in kinds
-        assert "character" in kinds
-        assert "concept" in kinds
-
-        normalized_vals = {a.normalized for a in result.anchors}
-        assert "伊莱娜" in normalized_vals
-        assert "暗号" in normalized_vals
+        assert result.atomic_actions[0].method == "使用之前约好的暗号"
 
     def test_no_memory_need_in_output(self):
         parser = _make_parser([
@@ -238,10 +195,7 @@ class TestPastReference:
                         "condition": None,
                         "likely_needs_roll": False,
                     }
-                ],
-                anchors=[
-                    {"text": "之前", "normalized": "past_reference", "kind": "concept", "source": "explicit", "confidence": 1.0},
-                ],
+                ]
             )
         ])
 
@@ -283,11 +237,7 @@ class TestConditionalAction:
                         "condition": "没人注意",
                         "likely_needs_roll": True,
                     },
-                ],
-                anchors=[
-                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
-                    {"text": "仓库门口", "normalized": "仓库门口", "kind": "location", "source": "explicit", "confidence": 1.0},
-                ],
+                ]
             )
         ])
 
@@ -296,9 +246,6 @@ class TestConditionalAction:
         assert result.atomic_actions[0].condition == "守卫靠近"
         assert result.atomic_actions[1].condition == "没人注意"
 
-        anchor_texts = {a.text for a in result.anchors}
-        assert "守卫" in anchor_texts
-        assert "仓库门口" in anchor_texts
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -322,13 +269,7 @@ class TestInstructAlly:
                         "condition": None,
                         "likely_needs_roll": False,
                     }
-                ],
-                anchors=[
-                    {"text": "马洛", "normalized": "马洛", "kind": "character", "source": "explicit", "confidence": 1.0},
-                    {"text": "巷口", "normalized": "巷口", "kind": "location", "source": "explicit", "confidence": 1.0},
-                    {"text": "黑帆帮", "normalized": "黑帆帮", "kind": "organization", "source": "explicit", "confidence": 1.0},
-                    {"text": "吹哨", "normalized": "吹哨", "kind": "action_keyword", "source": "explicit", "confidence": 1.0},
-                ],
+                ]
             )
         ])
 
@@ -338,11 +279,6 @@ class TestInstructAlly:
         assert a.action_type == "instruct_ally"
         assert a.target == "马洛"
 
-        anchor_texts = {a.text for a in result.anchors}
-        assert "马洛" in anchor_texts
-        assert "巷口" in anchor_texts
-        assert "黑帆帮" in anchor_texts
-        assert "吹哨" in anchor_texts
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -390,17 +326,7 @@ class TestComplexAction:
                         "condition": None,
                         "likely_needs_roll": True,
                     },
-                ],
-                anchors=[
-                    {"text": "守卫", "normalized": "守卫", "kind": "character", "source": "explicit", "confidence": 1.0},
-                    {"text": "斗篷", "normalized": "斗篷", "kind": "item", "source": "explicit", "confidence": 1.0},
-                    {"text": "码头", "normalized": "码头", "kind": "location", "source": "explicit", "confidence": 1.0},
-                    {"text": "仓库", "normalized": "仓库", "kind": "location", "source": "explicit", "confidence": 1.0},
-                    {"text": "黑帆帮", "normalized": "黑帆帮", "kind": "organization", "source": "explicit", "confidence": 1.0},
-                    {"text": "门锁", "normalized": "门锁", "kind": "item", "source": "explicit", "confidence": 1.0},
-                    {"text": "旧城区", "normalized": "旧城区", "kind": "location", "source": "explicit", "confidence": 1.0},
-                    {"text": "见过的那种", "normalized": "past_seen_similar_object", "kind": "concept", "source": "explicit", "confidence": 0.95},
-                ],
+                ]
             )
         ])
 
@@ -412,14 +338,6 @@ class TestComplexAction:
         assert "observe" in subtypes
         assert "inspect_object" in subtypes
 
-        anchor_texts = {a.text for a in result.anchors}
-        assert "守卫" in anchor_texts
-        assert "斗篷" in anchor_texts
-        assert "码头" in anchor_texts
-        assert "黑帆帮" in anchor_texts
-        assert "门锁" in anchor_texts
-        assert "旧城区" in anchor_texts
-        assert "见过的那种" in anchor_texts
 
 
 # ══════════════════════════════════════════════════════════════════

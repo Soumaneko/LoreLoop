@@ -5,10 +5,9 @@ import re
 import sqlite3
 from collections.abc import Iterable
 
-from app.domain.short_term_memory.schemas import ShortTermScene
 from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
 
-from .schemas import HistoryDocument
+from .schemas import ConfirmedScene, HistoryDocument
 
 
 class ConfirmedHistoryStore:
@@ -109,7 +108,7 @@ class ConfirmedHistoryStore:
                 )
         return True
 
-    def sync(self, scenes: Iterable[ShortTermScene]) -> int:
+    def sync(self, scenes: Iterable[ConfirmedScene]) -> int:
         """Make the derived index match authoritative confirmed history."""
         expected = {scene.turn_index: scene for scene in scenes}
         stored_turns = {
@@ -136,7 +135,7 @@ class ConfirmedHistoryStore:
                 changed += 1
         return changed
 
-    def rebuild(self, scenes: Iterable[ShortTermScene]) -> None:
+    def rebuild(self, scenes: Iterable[ConfirmedScene]) -> None:
         with transaction(self._conn):
             self._conn.execute("DELETE FROM history_documents_fts")
             self._conn.execute("DELETE FROM history_documents")

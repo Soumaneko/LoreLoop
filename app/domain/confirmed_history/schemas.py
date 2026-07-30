@@ -1,9 +1,16 @@
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 HistorySource = Literal["scene_paragraph", "player_input"]
+
+
+class ConfirmedScene(Protocol):
+    scene_id: str
+    turn_index: int
+    user_input: str
+    scene_text: str
 
 
 class HistoryDocument(BaseModel):

@@ -86,10 +86,7 @@ def project_action_parse(result: ActionParseResult) -> str:
         if d.get("condition") is None:
             d.pop("condition", None)
         actions.append(d)
-    data = {
-        "atomic_actions": actions,
-        "ambiguities": result.ambiguities,
-    }
+    data = {"atomic_actions": actions}
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 

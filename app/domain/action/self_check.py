@@ -53,7 +53,6 @@ class ActionSelfCheck:
         return ActionParseResult(
             atomic_actions=actions,
             anchors=anchors,
-            ambiguities=result.ambiguities,
             analysis=result.analysis,
         )
 

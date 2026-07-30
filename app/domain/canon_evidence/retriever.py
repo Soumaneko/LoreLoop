@@ -6,6 +6,7 @@ from collections import defaultdict
 from app.domain.confirmed_history import (
     ConfirmedHistoryStore,
     adjacent_context,
+    best_trigram_match,
     document_window,
 )
 from app.domain.narrative_canon_query.schemas import (
@@ -104,12 +105,6 @@ class CanonEvidenceRetriever:
             _remove_entity_surfaces(text, requested_entities, self._surfaces)
             for text in search_texts
         ]
-        query_trigram_sets = [
-            trigrams
-            for text in semantic_texts
-            if (trigrams := _trigrams(text))
-        ]
-
         fts_hits: dict[str, float] = {}
         search_terms = _fts_terms(search_texts, requested_entities, self._surfaces)
         for term in search_terms:
@@ -131,8 +126,8 @@ class CanonEvidenceRetriever:
                 admission_text,
                 self._surfaces,
             )
-            lexical_score, matched_trigrams = _best_trigram_match(
-                query_trigram_sets,
+            lexical_score, matched_trigrams = best_trigram_match(
+                semantic_texts,
                 admission_text,
             )
             matched_relation_cues = _matched_relation_cues(
@@ -333,33 +328,6 @@ def _fts_terms(
         seen.add(key)
         clean_terms.append(clean)
     return clean_terms[:36]
-
-
-def _trigrams(text: str) -> set[str]:
-    normalized = re.sub(r"\s+", "", text.casefold())
-    normalized = re.sub(r"[^\w\u4e00-\u9fff]", "", normalized)
-    if len(normalized) < 3:
-        return {normalized} if normalized else set()
-    return {normalized[index:index + 3] for index in range(len(normalized) - 2)}
-
-
-def _best_trigram_match(
-    query_trigram_sets: list[set[str]],
-    document_text: str,
-) -> tuple[float, set[str]]:
-    document_trigrams = _trigrams(document_text)
-    best_score = 0.0
-    best_matches: set[str] = set()
-    for query_trigrams in query_trigram_sets:
-        matched = query_trigrams & document_trigrams
-        score = len(matched) / max(
-            1,
-            min(len(query_trigrams), len(document_trigrams)),
-        )
-        if score > best_score:
-            best_score = score
-            best_matches = matched
-    return best_score, best_matches
 
 
 def _matched_relation_cues(claim_type: str, text: str) -> list[str]:

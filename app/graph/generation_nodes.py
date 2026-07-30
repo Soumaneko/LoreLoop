@@ -8,8 +8,7 @@ from app.core.diagnostics import NullDiagnosticLogger
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
-from app.domain.context_facts.extractor import ContextExtractor
-from app.domain.context_facts.schemas import ContextExtractInput
+from app.domain.context_facts import ContextFactsInput, ContextFactsService
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.director_event.consumer import DirectorEventConsumer
 from app.domain.narrative_composer import (
@@ -43,7 +42,6 @@ from app.domain.retrieval.service import retrieve_candidates
 from app.domain.entity.workflows import gather_entity_profiles_from_state_and_anchors
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
-from .generation_context_helpers import retrieve_context_fact_memories
 from .generation_helpers import assemble_narrative_context, gateway_for
 from .generation_state import GenerationState
 
@@ -107,32 +105,40 @@ def _composition_output_state(
 
 def extract_context_facts_node(state: GenerationState) -> GenerationState:
     try:
-        with _store_factory(state, "memory")() as mem_store:
-            context_fact_memories = retrieve_context_fact_memories(
-                memory_store=mem_store,
-                anchors=state.get("matched_anchors", []),
-            )
-            context_facts = ContextExtractor(gateway_for(state)).extract(
-                ContextExtractInput(
+        with (
+            _store_factory(state, "short_term")() as short_store,
+            _store_factory(state, "confirmed_history")() as history_store,
+        ):
+            result = ContextFactsService(
+                gateway_for(state),
+                history_store,
+            ).build(
+                ContextFactsInput(
                     user_input=state["user_input"],
                     core_memory=state["core_memory"],
                     current_state=state["current_state"],
                     scene_summaries=state["scene_summaries"],
-                    retrieved_memories=context_fact_memories,
+                    matched_anchors=state.get("matched_anchors", []),
                     entity_profiles=state.get("action_entity_profile_views", []),
                     npc_profiles=state.get("action_npc_director_views", []),
+                    current_turn_index=state["next_turn_index"],
                 ),
+                confirmed_scenes=short_store.list_all(),
                 trace_id=state["trace_id"],
             )
         return {
-            "context_facts": context_facts,
-            "context_fact_memories": context_fact_memories,
+            "context_facts": result.context_facts,
+            "context_search_plan": result.search_plan,
+            "context_history_evidence": result.history_evidence,
             "context_extract_error": None,
             "events": [{
                 "step": "context_facts_done",
                 "data": {
-                    "context_facts": model_data(context_facts),
-                    "context_fact_memories": model_data(context_fact_memories),
+                    "context_facts": model_data(result.context_facts),
+                    "context_search_plan": model_data(result.search_plan),
+                    "context_history_evidence": model_data(
+                        result.history_evidence
+                    ),
                 },
             }],
         }
@@ -153,7 +159,8 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                 turn_focus="Context extract failed",
                 facts=[],
             ),
-            "context_fact_memories": None,
+            "context_search_plan": None,
+            "context_history_evidence": None,
             "context_extract_error": error,
             "events": [{
                 "step": "context_extract_failed",
@@ -167,7 +174,7 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
 
 def parse_action_node(state: GenerationState) -> GenerationState:
     parser = ActionParser(gateway_for(state))
-    action_result = parser.extract_actions(
+    action_result = parser.parse(
         user_input=state["user_input"],
         current_state=state["current_state"],
         core_memory=state["core_memory"],
@@ -180,7 +187,6 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         analysis=action_result.analysis,
         atomic_actions=action_result.atomic_actions,
         anchors=state.get("matched_anchors", []),
-        ambiguities=[],
     )
     self_check = ActionSelfCheck()
     action_parse_result = self_check.check(
