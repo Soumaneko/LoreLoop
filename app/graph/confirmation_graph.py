@@ -345,6 +345,7 @@ def _confirm_opening_stream_locked(
             handle_director_npc=director_is_enabled,
             director_npc_restock_sync=director_is_enabled,
             clear_short_term_before_save=True,
+            clear_confirmed_history_before_save=True,
             dry_run_memory_reason=(
                 "DB writes are disabled; opening scene was not saved."
             ),

@@ -9,7 +9,7 @@ from typing import Iterator
 
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 SUPPORTED_SCHEMA_VERSIONS = {
-    "canon_evidence": 1,
+    "confirmed_history": 1,
     "current_state": 4,
     "director_event": 5,
     "director_npc": 1,

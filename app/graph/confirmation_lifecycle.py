@@ -166,6 +166,7 @@ class ConfirmationPreparer:
 class ConfirmationCommitServices:
     current_state_store: Callable
     short_term_memory_store: Callable
+    confirmed_history_store: Callable
     pending_memory_store: Callable
     memory_store: Callable
     scene_summary_store: Callable
@@ -246,6 +247,18 @@ class ConfirmationCommitter:
                 )
                 cache["short_term_saved"] = True
             short_term_after = short_store.get_recent()
+
+        if not cache.get("confirmed_history_saved"):
+            with services.confirmed_history_store() as history_store:
+                if pipeline_input.clear_confirmed_history_before_save:
+                    history_store.clear()
+                history_store.upsert_turn(
+                    scene_id=updated_state.scene.scene_id,
+                    turn_index=pipeline_input.turn_index,
+                    user_input=pipeline_input.user_input,
+                    scene_text=state["effective_scene_text"],
+                )
+            cache["confirmed_history_saved"] = True
 
         with services.pending_memory_store() as pending_store:
             saved_pending_ids = []

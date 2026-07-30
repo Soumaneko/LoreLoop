@@ -314,6 +314,7 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
         ConfirmationCommitServices(
             current_state_store=stores.current_state,
             short_term_memory_store=stores.short_term,
+            confirmed_history_store=stores.confirmed_history,
             pending_memory_store=stores.pending_memory,
             memory_store=stores.memory,
             scene_summary_store=stores.scene_summary,

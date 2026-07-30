@@ -26,7 +26,7 @@ ARCHIVE_SAVE_ROOT = "save"
 _ALLOWED_SUFFIXES = {".db", ".json"}
 _ALLOWED_SUBTREES = {".runtime", ".snapshots"}
 _ROOT_FILES = {
-    "canon_evidence.db",
+    "confirmed_history.db",
     "core_memory.json",
     "current_state.db",
     "director_events.db",

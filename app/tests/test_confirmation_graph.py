@@ -408,6 +408,7 @@ def test_rollback_cache_keeps_pure_results_and_discards_write_markers():
         "director_npc_profile_id": "npc_2",
         "state_saved": True,
         "short_term_saved": True,
+        "confirmed_history_saved": True,
         "scene_summary_scheduled": True,
     })
 

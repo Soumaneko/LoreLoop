@@ -25,7 +25,7 @@ def configure_runtime_services(monkeypatch):
                 "memory",
                 "pending_memory",
                 "short_term",
-                "canon_evidence",
+                "confirmed_history",
                 "scene_summary",
                 "entity",
                 "npc_profile",

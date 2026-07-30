@@ -71,6 +71,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     source.mkdir()
     SaveManifestRepository(source).create("Alpha")
     _make_database(source / "memories.db")
+    _make_database(source / "confirmed_history.db", "indexed")
     _make_database(source / ".snapshots" / "undo-one" / "memories.db", "old")
     (source / ".snapshots" / "undo-one" / "manifest.json").write_text(
         '{"files": ["memories.db"]}', encoding="utf-8"
@@ -84,6 +85,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     with zipfile.ZipFile(archive) as bundle:
         assert "manifest.json" in bundle.namelist()
         assert "save/memories.db" in bundle.namelist()
+        assert "save/confirmed_history.db" in bundle.namelist()
         assert "save/ignored.txt" not in bundle.namelist()
 
     inspected = inspect_archive(archive)

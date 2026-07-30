@@ -78,8 +78,8 @@ class CampaignPaths:
         return self.data_dir / "scene_summaries.db"
 
     @property
-    def canon_evidence_db(self) -> Path:
-        return self.data_dir / "canon_evidence.db"
+    def confirmed_history_db(self) -> Path:
+        return self.data_dir / "confirmed_history.db"
 
     @property
     def entity_db(self) -> Path:

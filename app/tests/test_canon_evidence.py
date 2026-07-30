@@ -2,10 +2,10 @@ import json
 
 from app.domain.canon_evidence import (
     CanonEvidenceRetriever,
-    CanonEvidenceStore,
     project_canon_evidence_for_check,
 )
 from app.domain.canon_evidence.retriever import _best_trigram_match, _trigrams
+from app.domain.confirmed_history import ConfirmedHistoryStore
 from app.domain.narrative_canon_query.schemas import (
     CanonEntityReference,
     NarrativeCanonQuery,
@@ -59,9 +59,9 @@ def test_rebuild_indexes_only_raw_confirmed_inputs_and_paragraphs():
             "埃利奥把这个名字低声念了一遍。"
         ),
     )]
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
-        store.rebuild(scenes, _catalog())
+        store.rebuild(scenes)
         documents = store.list_documents()
     finally:
         store.close()
@@ -99,9 +99,9 @@ def test_retriever_finds_prior_entity_cooccurrence_and_returns_raw_context():
             scene_text="埃利奥同意支付预付款，并借出马车。",
         ),
     ]
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
-        store.rebuild(scenes, _catalog())
+        store.rebuild(scenes)
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
     finally:
         store.close()
@@ -136,7 +136,7 @@ def test_each_lookup_query_is_scored_independently_and_best_match_wins():
 
 
 def test_retriever_admits_entities_and_relation_cues_across_three_paragraphs():
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
         store.rebuild([
             ShortTermScene(
@@ -148,7 +148,7 @@ def test_retriever_admits_entities_and_relation_cues_across_three_paragraphs():
                     "他把这个陌生地名低声重复了一遍。"
                 ),
             )
-        ], _catalog())
+        ])
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
     finally:
         store.close()
@@ -171,7 +171,7 @@ def test_retriever_admits_entities_and_relation_cues_across_three_paragraphs():
 
 
 def test_strong_candidate_suppresses_entity_only_fallback():
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
         store.rebuild([
             ShortTermScene(
@@ -184,7 +184,7 @@ def test_strong_candidate_suppresses_entity_only_fallback():
                 turn_index=2,
                 scene_text="希尔达第一次告诉埃利奥灰烬图书馆的名字。",
             ),
-        ], _catalog())
+        ])
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
     finally:
         store.close()
@@ -199,7 +199,7 @@ def test_strong_candidate_suppresses_entity_only_fallback():
 
 
 def test_entity_only_fallback_returns_at_most_one_when_no_strong_candidate():
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
         store.rebuild([
             ShortTermScene(
@@ -212,7 +212,7 @@ def test_entity_only_fallback_returns_at_most_one_when_no_strong_candidate():
                 turn_index=2,
                 scene_text="埃利奥和灰烬图书馆被画在两枚并排的徽章上。",
             ),
-        ], _catalog())
+        ])
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(
             _query_set(),
             evidence_per_query=5,
@@ -232,9 +232,9 @@ def test_retriever_keeps_player_input_as_lower_weight_intent_evidence():
         user_input="告诉埃利奥灰烬图书馆的位置。",
         scene_text="莱尔没有找到合适的开口时机。",
     )]
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
-        store.rebuild(scenes, _catalog())
+        store.rebuild(scenes)
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
     finally:
         store.close()
@@ -246,7 +246,7 @@ def test_retriever_keeps_player_input_as_lower_weight_intent_evidence():
 
 
 def test_store_uses_fts5_trigram_for_chinese_substrings():
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
         store.rebuild([
             ShortTermScene(
@@ -254,7 +254,7 @@ def test_store_uses_fts5_trigram_for_chinese_substrings():
                 turn_index=6,
                 scene_text="禁书封存在灰烬图书馆地下的铅衬石匣里。",
             )
-        ], _catalog())
+        ])
         hits = store.fts_search("灰烬图书馆")
     finally:
         store.close()
@@ -263,7 +263,7 @@ def test_store_uses_fts5_trigram_for_chinese_substrings():
 
 
 def test_single_entity_does_not_admit_unrelated_mentions():
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     query_set = NarrativeCanonQuerySet(
         thought_process="P008 建立了埃利奥过去的旅行经历。",
         queries=[NarrativeCanonQuery(
@@ -283,7 +283,7 @@ def test_single_entity_does_not_admit_unrelated_mentions():
                 turn_index=7,
                 scene_text="埃利奥问门外的脚印是靴子印还是赤脚。",
             )
-        ], _catalog())
+        ])
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(query_set)
     finally:
         store.close()
@@ -292,7 +292,7 @@ def test_single_entity_does_not_admit_unrelated_mentions():
 
 
 def test_semantic_threshold_can_admit_without_known_entities():
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     query_set = NarrativeCanonQuerySet(
         thought_process="P008 建立了霜痕城旧神殿的既有状态。",
         queries=[NarrativeCanonQuery(
@@ -312,7 +312,7 @@ def test_semantic_threshold_can_admit_without_known_entities():
                 turn_index=8,
                 scene_text="当地人说霜痕城旧神殿的地下室终年结冰。",
             )
-        ], _catalog())
+        ])
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(query_set)
     finally:
         store.close()
@@ -323,7 +323,7 @@ def test_semantic_threshold_can_admit_without_known_entities():
 
 
 def test_multiple_entities_must_share_one_evidence_window():
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     distant_paragraphs = ["没有相关内容。"] * 5
     scene_text = "\n\n".join([
         "埃利奥正在整理木偶。",
@@ -337,7 +337,7 @@ def test_multiple_entities_must_share_one_evidence_window():
                 turn_index=9,
                 scene_text=scene_text,
             )
-        ], _catalog())
+        ])
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
     finally:
         store.close()
@@ -360,7 +360,7 @@ def test_check_projection_omits_queries_without_evidence():
             ),
         ],
     )
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
         evidence_set = CanonEvidenceRetriever(store, _catalog()).retrieve(query_set)
     finally:
@@ -371,7 +371,7 @@ def test_check_projection_omits_queries_without_evidence():
 
 def test_check_projection_orders_each_record_as_before_text_after():
     query_set = _query_set()
-    store = CanonEvidenceStore()
+    store = ConfirmedHistoryStore()
     try:
         store.rebuild([
             ShortTermScene(
@@ -383,7 +383,7 @@ def test_check_projection_orders_each_record_as_before_text_after():
                     "埃利奥重复这个陌生名字。"
                 ),
             )
-        ], _catalog())
+        ])
         evidence_set = CanonEvidenceRetriever(store, _catalog()).retrieve(query_set)
     finally:
         store.close()

@@ -1,27 +1,13 @@
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
-
-CanonEvidenceSource = Literal["scene_paragraph", "player_input"]
-
-
-class CanonEvidenceDocument(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    document_id: str = Field(min_length=1)
-    source_type: CanonEvidenceSource
-    turn_index: int = Field(ge=0)
-    scene_id: str = Field(min_length=1)
-    paragraph_index: int | None = Field(default=None, ge=1)
-    text: str = Field(min_length=1)
+from app.domain.confirmed_history.schemas import HistorySource
 
 
 class CanonEvidenceHit(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     evidence_id: str = Field(min_length=1)
-    source_type: CanonEvidenceSource
+    source_type: HistorySource
     turn_index: int = Field(ge=0)
     scene_id: str = Field(min_length=1)
     paragraph_index: int | None = Field(default=None, ge=1)

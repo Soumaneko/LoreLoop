@@ -3,6 +3,11 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
+from app.domain.confirmed_history import (
+    ConfirmedHistoryStore,
+    adjacent_context,
+    document_window,
+)
 from app.domain.narrative_canon_query.schemas import (
     CanonEntityReference,
     NarrativeCanonQuery,
@@ -14,7 +19,6 @@ from .schemas import (
     CanonEvidenceSet,
     CanonQueryEvidence,
 )
-from .store import CanonEvidenceStore
 
 
 SEMANTIC_ADMISSION_THRESHOLD = 0.12
@@ -52,7 +56,7 @@ CLAIM_TYPE_RELATION_CUES = {
 class CanonEvidenceRetriever:
     def __init__(
         self,
-        store: CanonEvidenceStore,
+        store: ConfirmedHistoryStore,
         entity_catalog: list[CanonEntityReference],
     ):
         self.store = store
@@ -68,9 +72,6 @@ class CanonEvidenceRetriever:
         if evidence_per_query < 1:
             raise ValueError("evidence_per_query must be >= 1")
         documents = self.store.list_documents()
-        doc_mentions = self.store.mentions_for_documents(
-            [document.document_id for document in documents]
-        )
         by_turn: dict[int, list] = defaultdict(list)
         for document in documents:
             by_turn[document.turn_index].append(document)
@@ -79,7 +80,6 @@ class CanonEvidenceRetriever:
                 query,
                 documents=documents,
                 by_turn=by_turn,
-                doc_mentions=doc_mentions,
                 limit=evidence_per_query,
             )
             for query in query_set.queries
@@ -96,7 +96,6 @@ class CanonEvidenceRetriever:
         *,
         documents,
         by_turn,
-        doc_mentions,
         limit: int,
     ) -> CanonQueryEvidence:
         requested_entities = _canonicalize_entities(query.entities, self._surfaces)
@@ -120,19 +119,17 @@ class CanonEvidenceRetriever:
         strong_scored = []
         weak_scored = []
         for document in documents:
-            admission_documents = _three_paragraph_window(
+            admission_documents = document_window(
                 document,
                 by_turn[document.turn_index],
             )
             admission_text = "\n\n".join(
                 item.text for item in admission_documents
             )
-            document_mentions = set().union(*(
-                doc_mentions.get(item.document_id, set())
-                for item in admission_documents
-            ))
-            matched_entities = sorted(
-                set(requested_entities) & document_mentions
+            matched_entities = _matched_entities(
+                requested_entities,
+                admission_text,
+                self._surfaces,
             )
             lexical_score, matched_trigrams = _best_trigram_match(
                 query_trigram_sets,
@@ -224,7 +221,10 @@ class CanonEvidenceRetriever:
                 )
             ):
                 continue
-            before, after = _adjacent_context(document, by_turn[document.turn_index])
+            before, after = adjacent_context(
+                document,
+                by_turn[document.turn_index],
+            )
             hits.append(CanonEvidenceHit(
                 evidence_id=document.document_id,
                 source_type=document.source_type,
@@ -292,6 +292,25 @@ def _remove_entity_surfaces(
     return result
 
 
+def _matched_entities(
+    entities: list[str],
+    text: str,
+    surfaces: dict[str, tuple[str, list[str]]],
+) -> list[str]:
+    folded_text = text.casefold()
+    matched = []
+    for entity in entities:
+        match = surfaces.get(entity.casefold())
+        candidates = match[1] if match else [entity]
+        if any(
+            candidate.strip()
+            and candidate.strip().casefold() in folded_text
+            for candidate in candidates
+        ):
+            matched.append(entity)
+    return sorted(matched)
+
+
 def _fts_terms(
     texts: list[str],
     entities: list[str],
@@ -343,21 +362,6 @@ def _best_trigram_match(
     return best_score, best_matches
 
 
-def _three_paragraph_window(document, turn_documents) -> list:
-    if document.source_type != "scene_paragraph" or document.paragraph_index is None:
-        return [document]
-    paragraphs = {
-        item.paragraph_index: item
-        for item in turn_documents
-        if item.source_type == "scene_paragraph" and item.paragraph_index is not None
-    }
-    return [
-        paragraphs[index]
-        for index in range(document.paragraph_index - 1, document.paragraph_index + 2)
-        if index in paragraphs
-    ]
-
-
 def _matched_relation_cues(claim_type: str, text: str) -> list[str]:
     cues = COMMON_HISTORY_RELATION_CUES | CLAIM_TYPE_RELATION_CUES.get(
         claim_type,
@@ -372,24 +376,3 @@ def _matched_relation_cues(claim_type: str, text: str) -> list[str]:
 def _matched_terms(terms: list[str], text: str) -> list[str]:
     folded = text.casefold()
     return [term for term in terms if term.casefold() in folded][:8]
-
-
-def _adjacent_context(document, turn_documents) -> tuple[str | None, str | None]:
-    if document.source_type != "scene_paragraph" or document.paragraph_index is None:
-        return None, None
-    paragraphs = {
-        item.paragraph_index: item.text
-        for item in turn_documents
-        if item.source_type == "scene_paragraph" and item.paragraph_index is not None
-    }
-    before = [
-        paragraphs[index]
-        for index in range(document.paragraph_index - 2, document.paragraph_index)
-        if index in paragraphs
-    ]
-    after = [
-        paragraphs[index]
-        for index in range(document.paragraph_index + 1, document.paragraph_index + 3)
-        if index in paragraphs
-    ]
-    return "\n\n".join(before) or None, "\n\n".join(after) or None

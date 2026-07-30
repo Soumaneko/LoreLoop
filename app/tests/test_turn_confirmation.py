@@ -170,6 +170,8 @@ def test_opening_confirmation_honors_initial_director_choice(monkeypatch):
 
     assert captured["input"].handle_director_npc is False
     assert captured["input"].director_npc_restock_sync is False
+    assert captured["input"].clear_short_term_before_save is True
+    assert captured["input"].clear_confirmed_history_before_save is True
 
 
 def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
@@ -431,6 +433,8 @@ def test_confirmation_queues_memory_draft_before_batch_without_summary_wait(
             turn_id not in pending_turns
             and sibling_turn_id not in pending_turns
         )
+        with runtime.services.stores.confirmed_history() as history_store:
+            confirmed_documents = history_store.list_documents()
     finally:
         pending_turns.remove(turn_id)
         pending_turns.remove(sibling_turn_id)
@@ -441,6 +445,10 @@ def test_confirmation_queues_memory_draft_before_batch_without_summary_wait(
     assert isinstance(captured["args"][2], str)
     assert "wait_for_summary" not in captured["kwargs"]
     assert group_removed is True
+    assert [document.text for document in confirmed_documents] == [
+        "继续观察",
+        "场景正文",
+    ]
 
 
 def test_opening_confirmation_restocks_director_npc_synchronously(
@@ -535,6 +543,13 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
         npc_profile=lambda: _ContextStore(list_all=lambda: []),
         director_npc=lambda: _ContextStore(list_standby=lambda: []),
     )
+    with get_campaign_runtime().services.stores.confirmed_history() as history_store:
+        history_store.upsert_turn(
+            scene_id="obsolete_scene",
+            turn_index=99,
+            user_input="旧玩家输入",
+            scene_text="不应保留的旧正文。",
+        )
     monkeypatch.setattr(confirmation_nodes, "StateUpdater", _StateUpdater)
     monkeypatch.setattr(confirmation_nodes, "EntityExtractor", _EntityExtractor)
     monkeypatch.setattr(confirmation_nodes, "NPCProfileExtractor", _NPCExtractor)
@@ -585,6 +600,11 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
                 write_db=True,
             )
         )
+        with (
+            get_campaign_runtime().services.stores.confirmed_history()
+            as history_store
+        ):
+            confirmed_documents = history_store.list_documents()
         assert pending_openings.variants(turn_id) == []
     finally:
         pending_openings.remove(turn_id)
@@ -593,3 +613,7 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
     assert events[-1]["data"]["status"] == "committed"
     assert events[-1]["data"]["director_npc_restock_scheduled"] is True
     assert get_campaign_runtime().initialization.load().phase == "completed"
+    assert [
+        (document.source_type, document.turn_index, document.text)
+        for document in confirmed_documents
+    ] == [("scene_paragraph", 0, "开场正文")]

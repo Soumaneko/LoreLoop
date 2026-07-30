@@ -26,7 +26,7 @@ from app.domain.narrative_canon_query import (
     NarrativeCanonQueryAgent,
     build_entity_catalog,
 )
-from app.domain.canon_evidence import rebuild_and_retrieve_canon_evidence
+from app.domain.canon_evidence import CanonEvidenceRetriever
 from app.domain.narrative_consistency import (
     NarrativeConsistencyAgent,
     render_revision_instruction,
@@ -543,13 +543,14 @@ def generate_canon_queries_node(state: GenerationState) -> GenerationState:
 def retrieve_canon_evidence_node(state: GenerationState) -> GenerationState:
     with (
         _store_factory(state, "short_term")() as short_term_store,
-        _store_factory(state, "canon_evidence")() as evidence_store,
+        _store_factory(state, "confirmed_history")() as history_store,
     ):
-        evidence_set = rebuild_and_retrieve_canon_evidence(
-            query_set=state["canon_query_set"],
-            short_term_store=short_term_store,
-            evidence_store=evidence_store,
-            entity_catalog=state["canon_entity_catalog"],
+        history_store.sync(short_term_store.list_all())
+        evidence_set = CanonEvidenceRetriever(
+            history_store,
+            state["canon_entity_catalog"],
+        ).retrieve(
+            state["canon_query_set"],
         )
     evidence_query_count = sum(
         1 for result in evidence_set.results if result.evidence

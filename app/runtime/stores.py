@@ -10,7 +10,7 @@ from app.domain.recall_memory.pending_store import PendingMemoryStore
 from app.domain.recall_memory.store import MemoryStore
 from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.short_term_memory import ShortTermMemoryStore
-from app.domain.canon_evidence import CanonEvidenceStore
+from app.domain.confirmed_history import ConfirmedHistoryStore
 from app.domain.world_setting import WorldSettingStore
 
 from .paths import CampaignPaths
@@ -45,9 +45,9 @@ class StoreBundle:
         self._ensure_data_dir()
         return SceneSummaryStore(str(self.paths.scene_summary_db))
 
-    def canon_evidence(self) -> CanonEvidenceStore:
+    def confirmed_history(self) -> ConfirmedHistoryStore:
         self._ensure_data_dir()
-        return CanonEvidenceStore(str(self.paths.canon_evidence_db))
+        return ConfirmedHistoryStore(str(self.paths.confirmed_history_db))
 
     def entity(self) -> EntityStore:
         self._ensure_data_dir()

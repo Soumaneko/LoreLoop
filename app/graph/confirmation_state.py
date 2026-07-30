@@ -44,6 +44,7 @@ class ConfirmationPipelineInput:
     handle_director_npc: bool = True
     director_npc_restock_sync: bool = False
     clear_short_term_before_save: bool = False
+    clear_confirmed_history_before_save: bool = False
     dry_run_memory_reason: str = (
         "DB writes are disabled; pending memory candidates were extracted but not saved."
     )
@@ -82,6 +83,7 @@ class ConfirmationCache(TypedDict, total=False):
     turn_summary_id: str
     state_saved: bool
     short_term_saved: bool
+    confirmed_history_saved: bool
     scene_summary_future: Future[Any]
     scene_summary_job_id: str | None
     scene_summary_operation_id: str | None
