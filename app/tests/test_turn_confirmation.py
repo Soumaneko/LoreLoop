@@ -74,6 +74,10 @@ def _prepare_opening_initialization(*, director_enabled=True):
             "learning_difficulty": "困难",
             "limitation": "不能复活死者。",
         },
+        peoples_and_beings=["人类", "精灵"],
+        major_world_conflicts=["帝国扩张持续挤压边境诸国。"],
+        dominant_powers=["北方帝国", "圣辉教会"],
+        civilization_baseline="以马车、冷兵器和手工业为主。",
     )
     record = commit_campaign_setup(config, proposal)
     foundation = OpeningFoundation.model_validate({
@@ -93,6 +97,8 @@ def _prepare_opening_initialization(*, director_enabled=True):
         "foundation": foundation,
     })
     runtime.initialization.save(record)
+    with runtime.stores.current_state() as state_store:
+        state_store.save(_state())
     return config, record
 
 

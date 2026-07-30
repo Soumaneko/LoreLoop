@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+)
 
 from app.core.llm import LLMGateway
 
@@ -15,6 +21,33 @@ if TYPE_CHECKING:
 
 PowerPrevalence = Literal["罕见", "少数人掌握", "较为常见", "社会基础"]
 PowerLearningDifficulty = Literal["困难", "适中", "轻松"]
+WorldSubject = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=10,
+        pattern=r"^[^\r\n]+$",
+    ),
+]
+WorldConflict = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=50,
+        pattern=r"^[^\r\n]+$",
+    ),
+]
+DominantPower = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=10,
+        pattern=r"^[^\r\n]+$",
+    ),
+]
 
 
 class PublicPowerBaseline(BaseModel):
@@ -49,9 +82,22 @@ class PublicPowerBaseline(BaseModel):
 class CampaignSetupProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1] = 1
+    version: Literal[2] = 2
     currency_unit: str = Field(min_length=1, max_length=40)
     public_power_baseline: PublicPowerBaseline
+    peoples_and_beings: list[WorldSubject] = Field(
+        min_length=1,
+        max_length=6,
+    )
+    major_world_conflicts: list[WorldConflict] = Field(
+        min_length=1,
+        max_length=2,
+    )
+    dominant_powers: list[DominantPower] = Field(
+        min_length=1,
+        max_length=3,
+    )
+    civilization_baseline: str = Field(min_length=1, max_length=200)
 
     @field_validator("currency_unit")
     @classmethod
@@ -59,6 +105,14 @@ class CampaignSetupProposal(BaseModel):
         clean = value.strip()
         if not clean:
             raise ValueError("must not be blank")
+        return clean
+
+    @field_validator("civilization_baseline")
+    @classmethod
+    def normalize_civilization_baseline(cls, value: str) -> str:
+        clean = value.strip()
+        if "\n" in clean or "\r" in clean:
+            raise ValueError("must be one line")
         return clean
 
     def to_core_memory_items(self) -> list[CoreMemoryItem]:
@@ -82,6 +136,36 @@ class CampaignSetupProposal(BaseModel):
                     f"学习难度：{baseline.learning_difficulty}\n"
                     f"公开限制：{baseline.limitation}"
                 ),
+            ),
+            CoreMemoryItem(
+                id="core_peoples_and_beings",
+                kind="world_invariant",
+                strength="hard_constraint",
+                source="campaign_setup",
+                content="世界中的主要存在主体：" + "、".join(self.peoples_and_beings),
+            ),
+            CoreMemoryItem(
+                id="core_major_world_conflicts",
+                kind="world_invariant",
+                strength="hard_constraint",
+                source="campaign_setup",
+                content="长期塑造世界的主要冲突：\n- "
+                + "\n- ".join(self.major_world_conflicts),
+            ),
+            CoreMemoryItem(
+                id="core_dominant_powers",
+                kind="world_invariant",
+                strength="hard_constraint",
+                source="campaign_setup",
+                content="能够影响普通人命运的主导势力："
+                + "、".join(self.dominant_powers),
+            ),
+            CoreMemoryItem(
+                id="core_civilization_baseline",
+                kind="world_invariant",
+                strength="hard_constraint",
+                source="campaign_setup",
+                content=f"文明与技术基准：{self.civilization_baseline}",
             ),
         ]
 

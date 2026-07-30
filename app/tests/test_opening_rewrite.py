@@ -28,6 +28,10 @@ def _proposal():
             "learning_difficulty": "困难",
             "limitation": "不能复活死者。",
         },
+        peoples_and_beings=["人类", "精灵"],
+        major_world_conflicts=["帝国扩张持续挤压边境诸国。"],
+        dominant_powers=["北方帝国", "圣辉教会"],
+        civilization_baseline="以马车、冷兵器和手工业为主。",
     )
 
 

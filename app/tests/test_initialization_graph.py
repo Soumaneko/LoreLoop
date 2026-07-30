@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.graph import initialization_graph
@@ -21,7 +23,7 @@ def _payload():
             "failure_severity": "适中",
         },
         "campaign_setup": {
-            "version": 1,
+            "version": 2,
             "currency_unit": "金币",
             "public_power_baseline": {
                 "source": "魔法",
@@ -29,6 +31,10 @@ def _payload():
                 "learning_difficulty": "困难",
                 "limitation": "不能复活死者。",
             },
+            "peoples_and_beings": ["人类", "精灵"],
+            "major_world_conflicts": ["帝国扩张持续挤压边境诸国。"],
+            "dominant_powers": ["北方帝国", "圣辉教会"],
+            "civilization_baseline": "以马车、冷兵器和手工业为主。",
         },
     }
 
@@ -84,7 +90,7 @@ def test_initialization_graph_has_only_foundation_then_opening():
     }
 
 
-def test_setup_is_persisted_before_private_foundation_call(
+def test_setup_and_initial_state_are_persisted_before_their_consumers(
     configure_runtime_services,
 ):
     runtime = get_campaign_runtime()
@@ -97,6 +103,28 @@ def test_setup_is_persisted_before_private_foundation_call(
                 assert record.phase == "core_memory_committed"
                 assert runtime.stores.core_memory().load() == record.core_memory
                 assert runtime.stores.current_state().load() is None
+            if task == "opening_scene":
+                persisted = runtime.stores.current_state().load()
+                assert persisted is not None
+                assert persisted.scene.location == "白塔港"
+                assert persisted.player.name == "卢西安"
+                assert persisted.resources.money == 8
+                assert persisted.resources.money_unit == "金币"
+                assert [item.name for item in persisted.resources.inventory] == [
+                    "旅行包"
+                ]
+                projected = json.loads(input_data["current_state_json"])
+                assert projected["scene"]["location"] == "白塔港"
+                assert projected["scene"]["participants"] == [{"name": "卢西安"}]
+                assert projected["player"] == {
+                    "name": "卢西安",
+                    "visible_status": "男性",
+                }
+                assert projected["resources"] == {
+                    "inventory": [{"name": "旅行包", "quantity": 1}],
+                    "money": 8,
+                    "money_unit": "金币",
+                }
             return super().run(task, input_data, output_schema, **kwargs)
 
     gateway = AssertingGateway()
@@ -117,7 +145,13 @@ def test_setup_is_persisted_before_private_foundation_call(
     ]
     assert record is not None and record.phase == "opening_pending"
     assert record.foundation is not None
-    assert runtime.stores.current_state().load() is None
+    persisted = runtime.stores.current_state().load()
+    assert persisted is not None
+    assert persisted.scene.location == "白塔港"
+    assert persisted.player.name == "卢西安"
+    assert persisted.resources.money == 8
+    assert persisted.resources.money_unit == "金币"
+    assert [item.name for item in persisted.resources.inventory] == ["旅行包"]
     assert len(runtime.pending_openings.values()) == 1
 
 
@@ -129,6 +163,11 @@ def test_opening_retry_reuses_same_persisted_foundation(
 
     with pytest.raises(RuntimeError, match="opening failed"):
         list(initialization_graph.initialization_stream(_payload()))
+    state_after_failure = get_campaign_runtime().stores.current_state().load()
+    assert state_after_failure is not None
+    assert state_after_failure.scene.location == "白塔港"
+    assert state_after_failure.resources.money == 8
+
     events = list(initialization_graph.initialization_stream(_payload()))
 
     assert [task for task, _ in gateway.calls] == [
@@ -141,6 +180,7 @@ def test_opening_retry_reuses_same_persisted_foundation(
         if event["step"] == "opening_foundation_ready"
     )
     assert ready["data"]["reused"] is True
+    assert get_campaign_runtime().stores.current_state().load() == state_after_failure
 
 
 def test_submitting_setup_clears_public_draft(
@@ -182,3 +222,7 @@ def test_pending_persistence_failure_keeps_foundation_retryable_without_ghost(
     assert record is not None
     assert record.phase == "foundation_ready"
     assert record.foundation is not None
+    persisted = runtime.stores.current_state().load()
+    assert persisted is not None
+    assert persisted.scene.location == "白塔港"
+    assert persisted.resources.money == 8

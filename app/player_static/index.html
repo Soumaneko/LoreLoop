@@ -84,7 +84,7 @@
           <span class="badge-dot">✦</span>
           <span>正文修改意见模式</span>
         </div>
-        <textarea id="playerInput" rows="1" maxlength="4000" placeholder="你打算怎么做？"></textarea>
+        <textarea id="playerInput" rows="1" maxlength="4000" placeholder="你打算怎么做？" autocomplete="off"></textarea>
         <div class="composer-footer">
           <span id="inputHint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> 执行行动</span>
           <button id="generateBtn" class="primary-action" type="button">
@@ -218,9 +218,8 @@
         <div><p class="eyebrow">LOCAL JOURNEYS</p><h2>管理存档</h2></div>
         <button id="closeSaveManagerBtn" class="close-button" type="button" aria-label="关闭">×</button>
       </header>
-      <p class="save-manager-intro">存档保存在本机。复制与导入不会自动切换当前旅程。</p>
       <div class="save-manager-toolbar">
-        <button id="importSaveBtn" class="soft-button" type="button">从 ZIP 导入</button>
+        <button id="importSaveBtn" class="primary-action" type="button">从 ZIP 导入</button>
         <input id="importSaveInput" type="file" accept=".zip,application/zip" hidden />
       </div>
       <form id="importSaveForm" class="save-import-panel" hidden>
@@ -305,7 +304,7 @@
   </dialog>
 
   <dialog id="initDialog" class="modal init-modal">
-    <form method="dialog" id="initForm">
+    <form method="dialog" id="initForm" autocomplete="off">
       <header class="init-modal-header">
         <div><p class="eyebrow">BEGIN A NEW STORY</p><h2>塑造你的起点</h2></div>
         <button id="closeInitDialogBtn" class="close-button" type="button" aria-label="返回故事界面">×</button>
@@ -316,10 +315,11 @@
           <label class="wide toggle-label"><input id="initDirectorEnabled" name="director_enabled" type="checkbox" checked /><span>启用导演系统（完成初始化后不可修改）</span></label>
 
           <div id="initOriginalFields" class="form-subgrid wide">
-            <label><span>世界名称</span><input name="world_name" required placeholder="泰瑞大陆" /></label>
+            <label class="wide"><span>世界名称</span><input name="world_name" required placeholder="泰瑞大陆" /></label>
             <label><span>能力体系</span><select id="initAbilitySystem" name="ability_system" required><option>无超自然</option><option>低超自然</option><option selected>魔法</option><option>灵能</option><option>科技奇迹</option><option>自定义</option></select></label>
-            <label class="wide"><span>世界风格</span><textarea name="world_style" required placeholder="古典奇幻，衰落的王国与仍在苏醒的旧魔法"></textarea></label>
-            <label id="initCustomAbilityWrap" class="wide" hidden><span>自定义能力体系</span><textarea name="custom_ability_system" placeholder="说明这个世界的能力来源、边界与常见形式"></textarea></label>
+            <label><span>世界风格</span><select id="initWorldStyle" name="world_style" required><option>古典奇幻</option><option>现代都市</option><option>科幻未来</option><option>武侠</option><option>仙侠</option><option>末日废土</option><option>自定义</option></select></label>
+            <label id="initCustomAbilityWrap" hidden><span>自定义能力体系</span><textarea name="custom_ability_system" placeholder="说明这个世界的能力来源、边界与常见形式"></textarea></label>
+            <label id="initCustomWorldStyleWrap" hidden><span>自定义世界风格</span><textarea name="custom_world_style" placeholder="描述这个世界的美学、氛围与时代特征"></textarea></label>
           </div>
 
           <label><span>主角姓名</span><input name="protagonist_name" required placeholder="莱尔" /></label>
@@ -328,41 +328,37 @@
           <label class="wide"><span>人物介绍</span><textarea name="protagonist_introduction" placeholder="一名带着未解谜团踏上旅途的年轻法师"></textarea></label>
 
           <section class="wide init-collection">
-            <div class="collection-heading"><span>主角能力（最多 3 项）</span><small>每项能力都需要名称和解释</small></div>
-            <div class="ability-grid">
-              <input class="ability-name" placeholder="能力 1 名称" />
-              <input class="ability-description" placeholder="能力 1 的效果、边界或代价" />
-              <input class="ability-name" placeholder="能力 2 名称" />
-              <input class="ability-description" placeholder="能力 2 的效果、边界或代价" />
-              <input class="ability-name" placeholder="能力 3 名称" />
-              <input class="ability-description" placeholder="能力 3 的效果、边界或代价" />
-            </div>
+            <div class="collection-heading"><span>主角能力（最多 3 项）</span><button id="addAbilityBtn" class="text-button" type="button">＋ 添加能力</button></div>
+            <div id="abilityRows" class="ability-list"></div>
           </section>
 
-          <label class="wide"><span>你希望这个故事长期带给你怎样的体验？</span><textarea name="story_expectation" required maxlength="1200" placeholder="探索未知，认识可信赖的同伴，并逐渐揭开世界的秘密"></textarea></label>
+          <label><span>失败惩罚</span><select name="failure_severity" required><option>宽容</option><option selected>适中</option><option>真实残酷</option></select></label>
+
+          <label class="wide"><span>长期故事体验</span><textarea name="story_expectation" required maxlength="1200" placeholder="探索未知，认识可信赖的同伴，并逐渐揭开世界的秘密"></textarea></label>
           <div id="storyInspirationTags" class="wide inspiration-tags" aria-label="体验启发标签">
-            <button type="button" data-value="逐渐成长">逐渐成长</button>
-            <button type="button" data-value="建立真实关系">建立真实关系</button>
-            <button type="button" data-value="探索陌生世界">探索陌生世界</button>
+            <button type="button" data-value="实力养成">实力养成</button>
+            <button type="button" data-value="建立关系">建立关系</button>
+            <button type="button" data-value="探索世界">探索世界</button>
             <button type="button" data-value="调查秘密">调查秘密</button>
             <button type="button" data-value="建立势力">建立势力</button>
-            <button type="button" data-value="高风险生存">高风险生存</button>
-            <button type="button" data-value="日常与冒险并重">日常与冒险并重</button>
+            <button type="button" data-value="困难生存">困难生存</button>
           </div>
-
-          <label><span>失败后果</span><select name="failure_severity" required><option>幻想世界</option><option selected>适中</option><option>真实世界</option></select></label>
         </div>
       </fieldset>
 
       <section id="campaignSetupStage" class="campaign-setup-stage" hidden>
         <div class="section-heading"><span>公开世界惯例</span><i></i></div>
-        <p>以下内容由系统补全，将成为整个故事公开且长期稳定的世界常识。确认前可以直接编辑。</p>
+        <p>以下内容将成为长期稳定的世界常识。确认前可以直接编辑。</p>
         <div class="form-grid">
-          <label><span>默认货币单位</span><input id="setupCurrencyUnit" maxlength="40" required disabled placeholder="例如：金币" /></label>
+          <label><span>货币单位</span><input id="setupCurrencyUnit" maxlength="40" required disabled placeholder="例如：金币" /></label>
           <label><span>力量来源</span><input id="setupPowerSource" maxlength="120" required disabled placeholder="例如：魔法" /></label>
           <label><span>力量普及率</span><select id="setupPowerPrevalence" required disabled><option>罕见</option><option>少数人掌握</option><option>较为常见</option><option>社会基础</option></select></label>
-          <label><span>学习难度</span><select id="setupPowerLearningDifficulty" required disabled><option>困难</option><option>适中</option><option>轻松</option></select></label>
+          <label><span>力量习得难度</span><select id="setupPowerLearningDifficulty" required disabled><option>困难</option><option>适中</option><option>轻松</option></select></label>
           <label class="wide"><span>力量限制</span><input id="setupPowerLimitation" maxlength="80" required disabled placeholder="用一句话概括这套力量不能突破的边界" /></label>
+          <label class="wide"><span>主要存在主体</span><textarea id="setupPeoplesAndBeings" rows="3" required disabled placeholder="每行一项，每项不超过 10 个字"></textarea></label>
+          <label class="wide"><span>世界主要冲突</span><textarea id="setupMajorWorldConflicts" rows="3" required disabled placeholder="每行一项，填写 1 至 2 项，每项不超过 50 个字"></textarea></label>
+          <label class="wide"><span>主导势力</span><textarea id="setupDominantPowers" rows="3" required disabled placeholder="每行一项，填写 1 至 3 项，每项不超过 10 个字"></textarea></label>
+          <label class="wide"><span>文明与技术基准</span><input id="setupCivilizationBaseline" maxlength="200" required disabled placeholder="用一句话概括普通人日常可用的技术与生产水平" /></label>
         </div>
       </section>
       <div id="initError" class="form-error" hidden></div>

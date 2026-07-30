@@ -22,6 +22,7 @@ def _draft():
         },
         "config": {"version": 3, "world_name": "艾兰"},
         "campaign_setup": {
+            "version": 2,
             "currency_unit": "银币",
             "public_power_baseline": {
                 "source": "魔法",
@@ -29,6 +30,10 @@ def _draft():
                 "learning_difficulty": "困难",
                 "limitation": "不能复活死者。",
             },
+            "peoples_and_beings": ["人类", "精灵"],
+            "major_world_conflicts": ["帝国扩张持续挤压边境诸国。"],
+            "dominant_powers": ["北方帝国", "圣辉教会"],
+            "civilization_baseline": "以马车、冷兵器和手工业为主。",
         },
     }
 
@@ -56,7 +61,7 @@ def test_corrupted_initialization_json_is_not_treated_as_missing(tmp_path):
 
 def test_initialization_draft_rejects_unknown_contract_fields():
     with pytest.raises(ValueError):
-        save_initialization_draft({**_draft(), "legacy_stage": "old"})
+        save_initialization_draft({**_draft(), "unexpected_stage": "old"})
 
 
 def test_initialization_draft_cannot_be_written_after_initialization():
@@ -77,6 +82,10 @@ def test_initialization_draft_cannot_be_written_after_initialization():
                 "learning_difficulty": "困难",
                 "limitation": "不能复活死者。",
             },
+            peoples_and_beings=["人类", "精灵"],
+            major_world_conflicts=["帝国扩张持续挤压边境诸国。"],
+            dominant_powers=["北方帝国", "圣辉教会"],
+            civilization_baseline="以马车、冷兵器和手工业为主。",
         ),
     )
 
@@ -101,6 +110,10 @@ def test_committed_core_memory_must_match_config_and_proposal_projection():
             "learning_difficulty": "困难",
             "limitation": "不能复活死者。",
         },
+        peoples_and_beings=["人类", "精灵"],
+        major_world_conflicts=["帝国扩张持续挤压边境诸国。"],
+        dominant_powers=["北方帝国", "圣辉教会"],
+        civilization_baseline="以马车、冷兵器和手工业为主。",
     )
     record = commit_campaign_setup(config, proposal)
     corrupted_item = record.core_memory.items[0].model_copy(

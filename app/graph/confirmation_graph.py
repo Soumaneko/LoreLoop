@@ -280,17 +280,6 @@ def _confirm_pipeline_locked(
         scene_text=scene_text,
     )
     try:
-        if (
-            journaled
-            and write_db
-            and getattr(
-                pipeline_input,
-                "bootstrap_state_before_confirmation",
-                False,
-            )
-        ):
-            with runtime.stores.current_state() as state_store:
-                state_store.save(pipeline_input.state_before)
         yield from stream_confirmation_pipeline(
             pipeline_input,
             write_db=write_db,
@@ -361,7 +350,6 @@ def _confirm_opening_stream_locked(
             ),
             confirm_started_extra={"opening": True},
             finish_extra={"opening": True},
-            bootstrap_state_before_confirmation=True,
             complete_initialization=True,
         ),
         write_db=write_db,

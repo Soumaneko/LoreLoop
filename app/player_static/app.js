@@ -54,11 +54,15 @@ const els = {
   initDialog: $("initDialog"), initForm: $("initForm"), closeInitDialogBtn: $("closeInitDialogBtn"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
   initConfigFields: $("initConfigFields"), initOriginalFields: $("initOriginalFields"),
   initDirectorEnabled: $("initDirectorEnabled"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
+  initWorldStyle: $("initWorldStyle"), initCustomWorldStyleWrap: $("initCustomWorldStyleWrap"),
   initConfigActions: $("initConfigActions"), campaignSetupActions: $("campaignSetupActions"), campaignSetupStage: $("campaignSetupStage"),
   campaignSetupBtn: $("campaignSetupBtn"), regenerateCampaignSetupBtn: $("regenerateCampaignSetupBtn"), editInitConfigBtn: $("editInitConfigBtn"),
   setupCurrencyUnit: $("setupCurrencyUnit"), setupPowerSource: $("setupPowerSource"),
   setupPowerPrevalence: $("setupPowerPrevalence"), setupPowerLearningDifficulty: $("setupPowerLearningDifficulty"),
   setupPowerLimitation: $("setupPowerLimitation"),
+  setupPeoplesAndBeings: $("setupPeoplesAndBeings"), setupMajorWorldConflicts: $("setupMajorWorldConflicts"),
+  setupDominantPowers: $("setupDominantPowers"), setupCivilizationBaseline: $("setupCivilizationBaseline"),
+  abilityRows: $("abilityRows"), addAbilityBtn: $("addAbilityBtn"),
   storyInspirationTags: $("storyInspirationTags"), initStageHint: $("initStageHint"),
   toast: $("toast"),
 };
@@ -1525,6 +1529,12 @@ function renderDrawer() {
   enhanceCustomSelect(els.fontSizeSelect);
   enhanceCustomSelect(els.fontFamilySelect);
   enhanceCustomSelect(els.themeSelect);
+  enhanceCustomSelect(els.initWorldStyle);
+  enhanceCustomSelect(els.initAbilitySystem);
+  enhanceCustomSelect(els.initForm.elements.protagonist_gender);
+  enhanceCustomSelect(els.initForm.elements.failure_severity);
+  enhanceCustomSelect(els.setupPowerPrevalence);
+  enhanceCustomSelect(els.setupPowerLearningDifficulty);
 }
 
 function renderSaves() {
@@ -1621,50 +1631,6 @@ function showRenamePanel(card, save) {
   input.focus();
 }
 
-function showDeletePanel(card, save) {
-  card.querySelector(".save-card-confirm")?.remove();
-  const panel = node("form", "save-card-confirm save-card-delete-confirm");
-  const warning = node("p", "", `请输入“${save.name}”确认永久删除。`);
-  const input = node("input");
-  input.placeholder = save.name;
-  input.autocomplete = "off";
-  panel.append(warning, input);
-  const replacements = state.saves.filter((item) => item.save_id !== save.save_id);
-  let replacement = null;
-  if (save.active && replacements.length) {
-    const label = node("label", "", "删除后切换到");
-    replacement = node("select");
-    replacements.forEach((item) => {
-      const option = node("option", "", item.name);
-      option.value = item.save_id;
-      replacement.appendChild(option);
-    });
-    label.appendChild(replacement);
-    panel.appendChild(label);
-  }
-  const actions = node("div", "save-card-confirm-actions");
-  const cancel = saveActionButton("取消", "soft-button", () => panel.remove());
-  const confirm = saveActionButton("永久删除", "danger-action", () => {});
-  confirm.type = "submit";
-  confirm.onclick = null;
-  confirm.disabled = true;
-  input.oninput = () => { confirm.disabled = saveManagerBusy || input.value !== save.name; };
-  actions.append(cancel, confirm);
-  panel.appendChild(actions);
-  panel.onsubmit = (event) => {
-    event.preventDefault();
-    if (input.value !== save.name) return;
-    const body = { save_id: save.save_id, confirmation_name: input.value };
-    if (replacement?.value) body.replacement_save_id = replacement.value;
-    runSaveManagerAction(
-      () => request("/api/player/saves/delete", { method: "POST", body: JSON.stringify(body) }),
-      "存档已删除",
-    );
-  };
-  card.appendChild(panel);
-  input.focus();
-}
-
 function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -1690,7 +1656,23 @@ function renderSaveManager() {
     const metadata = node("p", "save-card-meta", saveMeta(save));
     const played = node("p", "save-card-played", `最后游玩：${formatLastPlayed(save.last_played_at)}`);
     const actions = node("div", "save-card-actions");
-    const deleteButton = saveActionButton("删除", "danger-button", () => showDeletePanel(card, save));
+    const deleteButton = saveActionButton("删除", "danger-button", async () => {
+      const confirmed = await showConfirmModal({
+        title: "确认删除存档",
+        message: `确定要永久删除“${save.name}”吗？此操作不可撤销。`,
+        confirmText: "永久删除",
+        isDanger: true,
+      });
+      if (!confirmed) return;
+      const replacements = state.saves.filter((item) => item.save_id !== save.save_id);
+      const replacementId = replacements[0]?.save_id || null;
+      const body = { save_id: save.save_id, confirmation_name: save.name };
+      if (replacementId) body.replacement_save_id = replacementId;
+      runSaveManagerAction(
+        () => request("/api/player/saves/delete", { method: "POST", body: JSON.stringify(body) }),
+        "存档已删除",
+      );
+    });
     if (state.saves.length <= 1) {
       deleteButton.disabled = true;
       deleteButton.title = "至少需要保留一个存档";
@@ -2767,11 +2749,10 @@ function formValue(form, name) {
 }
 
 function readInitConfig(form) {
-  const abilityNames = [...form.querySelectorAll(".ability-name")];
-  const abilityDescriptions = [...form.querySelectorAll(".ability-description")];
-  const protagonistAbilities = abilityNames.map((input, index) => {
-    const name = input.value.trim();
-    const description = abilityDescriptions[index].value.trim();
+  const rows = [...els.abilityRows.querySelectorAll(".ability-row")];
+  const protagonistAbilities = rows.map((row, index) => {
+    const name = row.querySelector(".ability-name").value.trim();
+    const description = row.querySelector(".ability-description").value.trim();
     if (Boolean(name) !== Boolean(description)) {
       throw new Error(`能力 ${index + 1} 的名称和解释需要同时填写`);
     }
@@ -2779,11 +2760,19 @@ function readInitConfig(form) {
   }).filter(Boolean);
   const age = formValue(form, "protagonist_age");
   const abilitySystem = formValue(form, "ability_system") || null;
+  const worldStyleValue = formValue(form, "world_style");
+  const customWorldStyle = formValue(form, "custom_world_style");
+  if (worldStyleValue === "自定义" && !customWorldStyle) {
+    throw new Error("自定义世界风格不能为空");
+  }
+  const world_style = worldStyleValue === "自定义"
+    ? customWorldStyle
+    : worldStyleValue;
   return {
     version: 3,
     director_enabled: els.initDirectorEnabled.checked,
     world_name: formValue(form, "world_name") || null,
-    world_style: formValue(form, "world_style") || null,
+    world_style,
     ability_system: abilitySystem,
     custom_ability_system: abilitySystem === "自定义" ? formValue(form, "custom_ability_system") || null : null,
     protagonist_gender: formValue(form, "protagonist_gender") || "男",
@@ -2802,16 +2791,14 @@ function captureInitializationForm() {
     if (control.name === "director_enabled") continue;
     fields[control.name] = control.value;
   }
-  const abilityDescriptions = [
-    ...els.initForm.querySelectorAll(".ability-description"),
-  ];
+  const rows = [...els.abilityRows.querySelectorAll(".ability-row")];
   return {
     director_enabled: els.initDirectorEnabled.checked,
     fields,
-    protagonist_abilities: [...els.initForm.querySelectorAll(".ability-name")].map((input, index) => ({
-      name: input.value,
-      description: abilityDescriptions[index].value,
-    })),
+    protagonist_abilities: rows.map((row) => ({
+      name: row.querySelector(".ability-name").value,
+      description: row.querySelector(".ability-description").value,
+    })).filter((a) => a.name.trim()),
   };
 }
 
@@ -2822,25 +2809,50 @@ function restoreInitializationForm(form = {}) {
     const control = els.initForm.elements[name];
     if (control) control.value = value ?? "";
   }
-  const abilities = form.protagonist_abilities || [];
-  const abilityNames = els.initForm.querySelectorAll(".ability-name");
-  const abilityDescriptions = els.initForm.querySelectorAll(".ability-description");
-  abilityNames.forEach((input, index) => {
-    input.value = abilities[index]?.name || "";
-    abilityDescriptions[index].value = abilities[index]?.description || "";
-  });
+  const savedWorldStyle = (form.fields && form.fields.world_style) || "";
+  const worldStyleOptions = [...els.initWorldStyle.options].map((o) => o.value);
+  if (savedWorldStyle && !worldStyleOptions.includes(savedWorldStyle)) {
+    els.initWorldStyle.value = "自定义";
+    const customTextarea = els.initForm.elements.custom_world_style;
+    if (customTextarea) customTextarea.value = savedWorldStyle;
+  }
+  const abilities = (form.protagonist_abilities || []).filter(
+    (a) => a && a.name && a.name.trim(),
+  );
+  els.abilityRows.replaceChildren();
+  for (const ability of abilities) {
+    addAbilityRow(ability.name, ability.description);
+  }
   toggleCustomAbilityField();
+  toggleCustomWorldStyleField();
 }
 
 function readCampaignSetup() {
   const currencyUnit = els.setupCurrencyUnit.value.trim();
   const powerSource = els.setupPowerSource.value.trim();
   const limitation = els.setupPowerLimitation.value.trim();
+  const peoplesAndBeings = readCampaignSetupLines(
+    els.setupPeoplesAndBeings,
+    "主要存在主体",
+    { minItems: 1, maxItems: 6, maxChars: 10 },
+  );
+  const majorWorldConflicts = readCampaignSetupLines(
+    els.setupMajorWorldConflicts,
+    "世界主要冲突",
+    { minItems: 1, maxItems: 2, maxChars: 50 },
+  );
+  const dominantPowers = readCampaignSetupLines(
+    els.setupDominantPowers,
+    "主导势力",
+    { minItems: 1, maxItems: 3, maxChars: 10 },
+  );
+  const civilizationBaseline = els.setupCivilizationBaseline.value.trim();
   if (!currencyUnit) throw new Error("默认货币单位不能为空");
   if (!powerSource) throw new Error("力量来源不能为空");
   if (!limitation) throw new Error("力量限制不能为空");
+  if (!civilizationBaseline) throw new Error("文明与技术基准不能为空");
   return {
-    version: 1,
+    version: 2,
     currency_unit: currencyUnit,
     public_power_baseline: {
       source: powerSource,
@@ -2848,7 +2860,28 @@ function readCampaignSetup() {
       learning_difficulty: els.setupPowerLearningDifficulty.value,
       limitation,
     },
+    peoples_and_beings: peoplesAndBeings,
+    major_world_conflicts: majorWorldConflicts,
+    dominant_powers: dominantPowers,
+    civilization_baseline: civilizationBaseline,
   };
+}
+
+function readCampaignSetupLines(control, label, {
+  minItems,
+  maxItems,
+  maxChars,
+}) {
+  const items = control.value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (items.length < minItems || items.length > maxItems) {
+    throw new Error(`${label}需要填写 ${minItems} 至 ${maxItems} 项`);
+  }
+  const tooLong = items.find((item) => [...item].length > maxChars);
+  if (tooLong) throw new Error(`${label}每项不能超过 ${maxChars} 个字`);
+  return items;
 }
 
 function initializationDraftPayload() {
@@ -2896,8 +2929,13 @@ async function loadInitializationDraft() {
   if (
     draft.stage === "campaign_setup"
     && draft.config
+    && draft.campaign_setup?.version === 2
     && draft.campaign_setup?.currency_unit
     && draft.campaign_setup?.public_power_baseline
+    && draft.campaign_setup?.peoples_and_beings?.length
+    && draft.campaign_setup?.major_world_conflicts?.length
+    && draft.campaign_setup?.dominant_powers?.length
+    && draft.campaign_setup?.civilization_baseline
   ) {
     showCampaignSetupStage({
       config: draft.config,
@@ -2926,6 +2964,36 @@ function toggleCustomAbilityField() {
   els.initForm.elements.custom_ability_system.required = visible;
 }
 
+function toggleCustomWorldStyleField() {
+  const visible = els.initWorldStyle.value === "自定义";
+  els.initCustomWorldStyleWrap.hidden = !visible;
+  els.initForm.elements.custom_world_style.disabled = !visible;
+  els.initForm.elements.custom_world_style.required = visible;
+}
+
+function addAbilityRow(name = "", description = "") {
+  const count = els.abilityRows.children.length;
+  if (count >= 3) return;
+  const index = count + 1;
+  const row = node("div", "ability-row");
+  const nameInput = node("input", "ability-name");
+  nameInput.placeholder = `能力 ${index} 名称`;
+  nameInput.value = name;
+  const descInput = node("input", "ability-description");
+  descInput.placeholder = `能力 ${index} 的效果、边界或代价`;
+  descInput.value = description;
+  const removeBtn = node("button", "ability-remove-btn", "×");
+  removeBtn.type = "button";
+  removeBtn.onclick = () => { row.remove(); updateAddAbilityButton(); };
+  row.append(nameInput, descInput, removeBtn);
+  els.abilityRows.appendChild(row);
+  updateAddAbilityButton();
+}
+
+function updateAddAbilityButton() {
+  els.addAbilityBtn.hidden = els.abilityRows.children.length >= 3;
+}
+
 function setCampaignSetupControlsDisabled(disabled) {
   for (const control of els.campaignSetupStage.querySelectorAll(
     "input, textarea, select",
@@ -2948,6 +3016,10 @@ function showCampaignSetupStage(result, { committed = false } = {}) {
   els.setupPowerPrevalence.value = baseline.prevalence || "少数人掌握";
   els.setupPowerLearningDifficulty.value = baseline.learning_difficulty || "适中";
   els.setupPowerLimitation.value = baseline.limitation || "";
+  els.setupPeoplesAndBeings.value = (proposal.peoples_and_beings || []).join("\n");
+  els.setupMajorWorldConflicts.value = (proposal.major_world_conflicts || []).join("\n");
+  els.setupDominantPowers.value = (proposal.dominant_powers || []).join("\n");
+  els.setupCivilizationBaseline.value = proposal.civilization_baseline || "";
   els.initConfigFields.disabled = true;
   els.initConfigActions.hidden = true;
   els.campaignSetupStage.hidden = false;
@@ -3231,6 +3303,8 @@ els.tokenUsageSelect.onchange = () => readerPreferences.save({ silent: true });
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.turnNavigatorLatest.onclick = jumpToLatestTurn;
 els.initAbilitySystem.onchange = toggleCustomAbilityField;
+els.initWorldStyle.onchange = toggleCustomWorldStyleField;
+els.addAbilityBtn.onclick = () => addAbilityRow();
 els.campaignSetupBtn.onclick = () => requestCampaignSetup();
 els.regenerateCampaignSetupBtn.onclick = () => requestCampaignSetup({ regenerate: true });
 els.editInitConfigBtn.onclick = editInitConfig;
@@ -3259,4 +3333,5 @@ window.addEventListener("resize", () => {
 }, { passive: true });
 
 toggleCustomAbilityField();
+toggleCustomWorldStyleField();
 bootstrap().catch(showError);

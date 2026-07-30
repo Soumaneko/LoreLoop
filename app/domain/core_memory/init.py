@@ -15,7 +15,7 @@ from app.domain.current_state.schemas import (
 from .campaign_setup import CampaignSetupProposal
 
 
-FailureSeverity = Literal["幻想世界", "适中", "真实世界"]
+FailureSeverity = Literal["宽容", "适中", "真实残酷"]
 AbilitySystemPreset = Literal[
     "无超自然",
     "低超自然",

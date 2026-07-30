@@ -721,11 +721,15 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
         'name="protagonist_introduction"',
         'name="story_expectation"',
         'name="failure_severity"',
-        "ability-name",
-        "ability-description",
+        "abilityRows",
+        "addAbilityBtn",
         "setupCurrencyUnit",
         "setupPowerSource",
         "setupPowerPrevalence",
+        "setupPeoplesAndBeings",
+        "setupMajorWorldConflicts",
+        "setupDominantPowers",
+        "setupCivilizationBaseline",
         "setupPowerLearningDifficulty",
         "setupPowerLimitation",
     ):
@@ -738,6 +742,9 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "function setCampaignSetupControlsDisabled(disabled)" in source
     assert '"input, textarea, select"' in source
     assert "if (!regenerate) await persistInitializationDraft();" in source
+    assert 'throw new Error("自定义世界风格不能为空")' in source
+    assert "draft.campaign_setup?.version === 2" in source
+    assert ".save-manager-intro" not in styles
     assert 'id="manageSavesBtn"' in html
     assert 'id="modelSettingsBtn"' in html
     assert 'id="modelConfigDialog"' in html
@@ -888,6 +895,10 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
                 "learning_difficulty": "困难",
                 "limitation": "不能复活死者。",
             },
+            peoples_and_beings=["人类", "精灵"],
+            major_world_conflicts=["帝国扩张持续挤压边境诸国。"],
+            dominant_powers=["北方帝国", "圣辉教会"],
+            civilization_baseline="以马车、冷兵器和手工业为主。",
         ),
         core_memory=core_memory,
     ))
@@ -1165,6 +1176,7 @@ def test_player_campaign_setup_event_exposes_only_editable_result():
         "data": {
             "config": {"protagonist_name": "莱尔"},
             "campaign_setup": {
+                "version": 2,
                 "currency_unit": "银币",
                 "public_power_baseline": {
                     "source": "魔法",
@@ -1172,6 +1184,10 @@ def test_player_campaign_setup_event_exposes_only_editable_result():
                     "learning_difficulty": "困难",
                     "limitation": "不能复活死者。",
                 },
+                "peoples_and_beings": ["人类", "精灵"],
+                "major_world_conflicts": ["帝国扩张持续挤压边境诸国。"],
+                "dominant_powers": ["北方帝国", "圣辉教会"],
+                "civilization_baseline": "以马车、冷兵器和手工业为主。",
             },
             "core_memory": {"items": [{"content": "internal"}]},
             "trace_id": "private-trace",
@@ -1183,6 +1199,7 @@ def test_player_campaign_setup_event_exposes_only_editable_result():
         "data": {
             "config": {"protagonist_name": "莱尔"},
             "campaign_setup": {
+                "version": 2,
                 "currency_unit": "银币",
                 "public_power_baseline": {
                     "source": "魔法",
@@ -1190,6 +1207,10 @@ def test_player_campaign_setup_event_exposes_only_editable_result():
                     "learning_difficulty": "困难",
                     "limitation": "不能复活死者。",
                 },
+                "peoples_and_beings": ["人类", "精灵"],
+                "major_world_conflicts": ["帝国扩张持续挤压边境诸国。"],
+                "dominant_powers": ["北方帝国", "圣辉教会"],
+                "civilization_baseline": "以马车、冷兵器和手工业为主。",
             },
         },
     }

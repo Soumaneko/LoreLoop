@@ -29,6 +29,7 @@ from app.player_server import PlayerHandler, _json_response, _read_json
 from app.runtime.app_paths import APP_PATHS, validate_debug_resource_paths
 from app.runtime.session import get_campaign_runtime
 
+# python -m app.debug_server
 
 DEBUG_STATIC_DIR = APP_PATHS.debug_static_dir
 validate_debug_resource_paths(APP_PATHS)

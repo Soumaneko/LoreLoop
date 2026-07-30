@@ -48,6 +48,8 @@ def opening_foundation_node(
         money=foundation.initial_resources.money,
         fixed_assets=foundation.initial_resources.fixed_assets,
     )
+    with state["runtime_services"].stores.current_state() as state_store:
+        state_store.save(current_state)
     return {
         "initialization_record": record,
         "opening_foundation": foundation,
