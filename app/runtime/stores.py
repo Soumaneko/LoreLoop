@@ -1,13 +1,12 @@
 from dataclasses import dataclass
 
 from app.domain.core_memory import CoreMemoryStore
+from app.domain.continuity import ContinuityStore
 from app.domain.current_state import CurrentStateStore
 from app.domain.director_event.store import DirectorEventStore
 from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.entity.store import EntityStore
 from app.domain.npc_profile.store import NPCProfileStore
-from app.domain.recall_memory.pending_store import PendingMemoryStore
-from app.domain.recall_memory.store import MemoryStore
 from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.short_term_memory import ShortTermMemoryStore
 from app.domain.confirmed_history import ConfirmedHistoryStore
@@ -29,13 +28,9 @@ class StoreBundle:
         self._ensure_data_dir()
         return CurrentStateStore(str(self.paths.state_db))
 
-    def memory(self) -> MemoryStore:
+    def continuity(self) -> ContinuityStore:
         self._ensure_data_dir()
-        return MemoryStore(str(self.paths.memory_db))
-
-    def pending_memory(self) -> PendingMemoryStore:
-        self._ensure_data_dir()
-        return PendingMemoryStore(str(self.paths.pending_memory_db))
+        return ContinuityStore(str(self.paths.continuity_db))
 
     def short_term(self) -> ShortTermMemoryStore:
         self._ensure_data_dir()

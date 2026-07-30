@@ -22,8 +22,7 @@ def configure_runtime_services(monkeypatch):
             name: store_factories.get(name, getattr(base_stores, name))
             for name in (
                 "current_state",
-                "memory",
-                "pending_memory",
+                "continuity",
                 "short_term",
                 "confirmed_history",
                 "scene_summary",

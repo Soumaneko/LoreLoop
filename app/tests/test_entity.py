@@ -1,10 +1,8 @@
 import json
-from types import SimpleNamespace
-
+import sqlite3
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
-from app.domain.entity.linker import EntityMemoryLinker
 from app.domain.entity.extractor import EntityExtractor, _profile_for_extraction
 from app.domain.entity.schemas import (
     EntityExtractionResult,
@@ -33,23 +31,83 @@ def _make_state() -> CurrentState:
     )
 
 
-def _record(
-    memory_id: str = "mem_1",
-    entities: list[str] | None = None,
-    subject: str = "旧地图",
-):
-    return SimpleNamespace(
-        id=memory_id,
-        memory_kind="open_thread", evidence_mode="observed",
-        subject=subject,
-        content="旧地图标注了仓库区的路线。",
-        entities=entities or ["旧地图"],
-        confidence=1.0,
-        salience=0.7,
-    )
-
-
 class TestEntityStore:
+    def test_schema_upgrade_removes_retired_memory_storage(self, tmp_path):
+        path = tmp_path / "entities.db"
+        with sqlite3.connect(path) as connection:
+            connection.executescript(
+                """
+                CREATE TABLE entity_profiles (
+                    id TEXT PRIMARY KEY,
+                    entity_type TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    aliases_json TEXT NOT NULL DEFAULT '[]',
+                    profile_json TEXT NOT NULL,
+                    source_scene_ids_json TEXT NOT NULL DEFAULT '[]',
+                    source_memory_ids_json TEXT NOT NULL DEFAULT '[]',
+                    confidence REAL NOT NULL DEFAULT 0.5,
+                    updated_at TEXT NOT NULL DEFAULT '',
+                    active INTEGER NOT NULL DEFAULT 1,
+                    name_hit_count INTEGER NOT NULL DEFAULT 1,
+                    alias_hit_counts_json TEXT NOT NULL DEFAULT '{}'
+                );
+                CREATE TABLE entity_memory_links (
+                    entity_id TEXT NOT NULL,
+                    memory_id TEXT NOT NULL,
+                    PRIMARY KEY (entity_id, memory_id)
+                );
+                """
+            )
+            profile = EntityProfile(
+                entity_id="entity-map",
+                entity_type="item",
+                name="旧地图",
+            )
+            connection.execute(
+                """
+                INSERT INTO entity_profiles(
+                    id, entity_type, name, aliases_json, profile_json,
+                    source_scene_ids_json, source_memory_ids_json,
+                    confidence, updated_at, active, name_hit_count,
+                    alias_hit_counts_json
+                ) VALUES (?, ?, ?, '[]', ?, '[]', '[\"memory-1\"]',
+                          0.5, '', 1, 1, '{}')
+                """,
+                (
+                    profile.entity_id,
+                    profile.entity_type,
+                    profile.name,
+                    profile.semantic_view().model_dump_json(),
+                ),
+            )
+
+        with EntityStore(str(path)) as store:
+            assert store.get_by_id("entity-map").name == "旧地图"
+
+        with sqlite3.connect(path) as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            columns = {
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA table_info(entity_profiles)"
+                )
+            }
+            version = connection.execute(
+                """
+                SELECT version FROM schema_versions
+                WHERE component = 'entity_profile'
+                """
+            ).fetchone()[0]
+
+        assert "entity_memory_links" not in tables
+        assert "source_memory_ids_json" not in columns
+        assert version == 3
+
     def test_upsert_and_get_by_name_alias(self):
         store = EntityStore(":memory:")
         profile = EntityProfile(
@@ -80,19 +138,6 @@ class TestEntityStore:
 
         assert len(matches) == 1
         assert matches[0].name == "银月商会"
-
-    def test_link_memory_idempotent_and_append_source(self):
-        store = EntityStore(":memory:")
-        profile = EntityProfile(entity_type="item", name="旧地图")
-        entity_id = store.upsert(profile)
-
-        assert store.link_memory(entity_id, "mem_1") is True
-        assert store.link_memory(entity_id, "mem_1") is False
-        store.append_source_memory(entity_id, "mem_1")
-        store.append_source_memory(entity_id, "mem_1")
-
-        assert store.get_linked_memory_ids(entity_id) == ["mem_1"]
-        assert store.get_by_id(entity_id).source_memory_ids == ["mem_1"]
 
     def test_append_alias_is_idempotent(self):
         store = EntityStore(":memory:")
@@ -205,39 +250,6 @@ class TestEntityExtractor:
         assert result.alias_matches[0].new_alias == "破旧羊皮纸"
         assert result.retrieved_entities[0].source == "alias_match"
         assert result.retrieved_entities[1].source == "new"
-
-
-class TestEntityMemoryLinker:
-    def test_exact_name_match_creates_link(self):
-        store = EntityStore(":memory:")
-        entity_id = store.upsert(EntityProfile(entity_type="item", name="旧地图"))
-
-        links = EntityMemoryLinker(store).link_records([_record()])
-
-        assert links == [(entity_id, "mem_1")]
-        assert store.get_linked_memory_ids(entity_id) == ["mem_1"]
-
-    def test_alias_match_creates_link(self):
-        store = EntityStore(":memory:")
-        entity_id = store.upsert(
-            EntityProfile(entity_type="item", name="旧地图", aliases=["破旧地图"])
-        )
-
-        links = EntityMemoryLinker(store).link_records([
-            _record(entities=["破旧地图"])
-        ])
-
-        assert links == [(entity_id, "mem_1")]
-
-    def test_generic_terms_are_skipped(self):
-        store = EntityStore(":memory:")
-        store.upsert(EntityProfile(entity_type="item", name="旧地图"))
-
-        links = EntityMemoryLinker(store).link_records([
-            _record(entities=["玩家"], subject="玩家")
-        ])
-
-        assert links == []
 
 
 class TestEntityProfileGathering:

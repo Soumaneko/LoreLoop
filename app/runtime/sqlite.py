@@ -10,14 +10,12 @@ from typing import Iterator
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 SUPPORTED_SCHEMA_VERSIONS = {
     "confirmed_history": 1,
+    "continuity": 1,
     "current_state": 4,
     "director_event": 5,
     "director_npc": 1,
-    "entity_profile": 2,
+    "entity_profile": 3,
     "npc_profile": 2,
-    "pending_memory": 1,
-    "recall_memory": 1,
-    "retrieval_alias": 1,
     "scene_summary": 1,
     "short_term_memory": 5,
     "world_setting": 5,

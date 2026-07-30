@@ -7,6 +7,7 @@ from typing import Annotated, Any, TypedDict
 
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
+from app.domain.continuity import ContinuityProjection
 from app.domain.current_state.schemas import CurrentState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
 from app.domain.director_event.workflows import DirectorEventWorkflowBatchResult
@@ -45,9 +46,7 @@ class ConfirmationPipelineInput:
     director_npc_restock_sync: bool = False
     clear_short_term_before_save: bool = False
     clear_confirmed_history_before_save: bool = False
-    dry_run_memory_reason: str = (
-        "DB writes are disabled; pending memory candidates were extracted but not saved."
-    )
+    clear_continuity_before_save: bool = False
     confirm_started_extra: dict[str, Any] = field(default_factory=dict)
     finish_extra: dict[str, Any] = field(default_factory=dict)
     complete_initialization: bool = False
@@ -88,9 +87,6 @@ class ConfirmationCache(TypedDict, total=False):
     scene_summary_job_id: str | None
     scene_summary_operation_id: str | None
     scene_summary_scheduled: bool
-    memory_batch_scheduled: bool
-    memory_batch_job_id: str | None
-    memory_batch_operation_id: str | None
 
 
 class ConfirmationState(TypedDict, total=False):
@@ -128,6 +124,7 @@ class ConfirmationState(TypedDict, total=False):
     npc_extraction: NPCExtractionResult | None
     npc_director_events: list[DirectorEvent]
     action_preview: ActionPreviewResult
+    continuity_projection: ContinuityProjection
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
     director_event_result: DirectorEventWorkflowBatchResult | None

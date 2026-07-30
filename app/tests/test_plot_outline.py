@@ -23,10 +23,8 @@ from app.domain.narrative_rewrite import (
     SourceRewriteRequest,
 )
 from app.domain.plot_outline.schemas import PlannedEvent
-from app.domain.plot_outline.views import project_retrieved_memories
 from app.domain.director_npc.schemas import DirectorNPCPlotInjection
 from app.domain.director_event.schemas import DirectorEventConsumption
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
 from app.domain.short_term_memory import ShortTermScene
 from app.graph.generation_helpers import assemble_narrative_context
@@ -406,33 +404,6 @@ class TestNarrativeComposerAgent:
         )
 
         assert "行动" in event.event_fact
-
-    def test_retrieved_memory_projection_adds_indices(self):
-        projected = project_retrieved_memories(
-            CandidateRetrievalResult(
-                candidates=[
-                    MemoryCandidate(
-                        memory_id="mem_001",
-                        memory_kind="open_thread", evidence_mode="observed",
-                        subject="正式记忆",
-                        content="北郡修道院最近来了一些陌生人。",
-                        entities=["北郡修道院"],
-                        tags=["情报"],
-                        salience=0.8,
-                        confidence=0.7,
-                        score=0.12,
-                    ),
-                ],
-                total_scanned=1,
-                total_returned=1,
-            )
-        )
-
-        data = json.loads(projected)
-
-        assert list(data.keys()) == ["memories", "total_scanned", "total_returned"]
-        assert data["memories"][0]["memory_index"] == 0
-        assert data["memories"][0]["source"] == "classified"
 
     def test_outline_has_fact_boundaries(self):
         context = _make_context()

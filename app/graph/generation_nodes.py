@@ -38,7 +38,6 @@ from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.domain.turn_resolution.views import project_turn_resolution
 from app.runtime.serialization import model_data
 from app.domain.director_npc.workflows import maybe_director_npc_workflow
-from app.domain.retrieval.service import retrieve_candidates
 from app.domain.entity.workflows import gather_entity_profiles_from_state_and_anchors
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
@@ -106,12 +105,13 @@ def _composition_output_state(
 def extract_context_facts_node(state: GenerationState) -> GenerationState:
     try:
         with (
-            _store_factory(state, "short_term")() as short_store,
             _store_factory(state, "confirmed_history")() as history_store,
+            _store_factory(state, "continuity")() as continuity_store,
         ):
             result = ContextFactsService(
                 gateway_for(state),
                 history_store,
+                continuity_store,
             ).build(
                 ContextFactsInput(
                     user_input=state["user_input"],
@@ -123,13 +123,13 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                     npc_profiles=state.get("action_npc_director_views", []),
                     current_turn_index=state["next_turn_index"],
                 ),
-                confirmed_scenes=short_store.list_all(),
                 trace_id=state["trace_id"],
             )
         return {
             "context_facts": result.context_facts,
             "context_search_plan": result.search_plan,
             "context_history_evidence": result.history_evidence,
+            "continuity_selection": result.continuity,
             "context_extract_error": None,
             "events": [{
                 "step": "context_facts_done",
@@ -138,6 +138,9 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                     "context_search_plan": model_data(result.search_plan),
                     "context_history_evidence": model_data(
                         result.history_evidence
+                    ),
+                    "continuity_selection": model_data(
+                        result.continuity
                     ),
                 },
             }],
@@ -156,11 +159,12 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
         )
         return {
             "context_facts": ContextFactSet(
-                turn_focus="Context extract failed",
+                turn_focus="上下文事实提取失败",
                 facts=[],
             ),
             "context_search_plan": None,
             "context_history_evidence": None,
+            "continuity_selection": None,
             "context_extract_error": error,
             "events": [{
                 "step": "context_extract_failed",
@@ -195,18 +199,11 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         state["current_state"],
     )
 
-    with _store_factory(state, "memory")() as mem_store:
-        retrieved_memories = retrieve_candidates(
-            action_parse_result,
-            mem_store,
-        )
-
     return {
         "action_extraction_result": action_result,
         "raw_action_parse_result": raw_action_parse_result,
         "action_self_check_result": self_check.last_result,
         "action_parse_result": action_parse_result,
-        "retrieved_memories": retrieved_memories,
         "events": [
             {
                 "step": "action_parsed",
@@ -214,12 +211,6 @@ def parse_action_node(state: GenerationState) -> GenerationState:
                     "raw_action_parse_result": model_data(raw_action_parse_result),
                     "action_self_check_result": model_data(self_check.last_result),
                     "action_parse_result": model_data(action_parse_result),
-                },
-            },
-            {
-                "step": "retrieval_done",
-                "data": {
-                    "retrieved_memories": model_data(retrieved_memories),
                 },
             },
         ],
@@ -547,11 +538,7 @@ def generate_canon_queries_node(state: GenerationState) -> GenerationState:
 
 
 def retrieve_canon_evidence_node(state: GenerationState) -> GenerationState:
-    with (
-        _store_factory(state, "short_term")() as short_term_store,
-        _store_factory(state, "confirmed_history")() as history_store,
-    ):
-        history_store.sync(short_term_store.list_all())
+    with _store_factory(state, "confirmed_history")() as history_store:
         evidence_set = CanonEvidenceRetriever(
             history_store,
             state["canon_entity_catalog"],

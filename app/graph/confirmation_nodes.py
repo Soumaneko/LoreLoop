@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from app.core.diagnostics import NullDiagnosticLogger
 from app.domain.action_preview.agent import ActionPreviewAgent
+from app.domain.confirmed_history import build_turn_documents
+from app.domain.continuity import ContinuityProjector
 from app.domain.current_state import StateChangeSet, StateUpdater
 from app.domain.director_event.reviewer import DirectorEventReviewer
 from app.domain.director_event.intervention_planner import (
@@ -73,6 +75,38 @@ def _npc_extraction_mentions(extraction: NPCExtractionResult | None) -> list[str
     if extraction is None:
         return []
     return list(dict.fromkeys(mention.name for mention in extraction.mentions))
+
+
+def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
+    pipeline_input = state["pipeline_input"]
+    documents = build_turn_documents(
+        scene_id=state["updated_state"].scene.scene_id,
+        turn_index=pipeline_input.turn_index,
+        user_input=pipeline_input.user_input,
+        scene_text=state["effective_scene_text"],
+    )
+    with _store_factory(state, "continuity")() as continuity_store:
+        active_items = (
+            []
+            if pipeline_input.clear_continuity_before_save
+            else continuity_store.list_active()
+        )
+        projection = ContinuityProjector(_gateway_for(state)).project(
+            current_documents=documents,
+            active_items=active_items,
+            trace_id=state["trace_id"],
+        )
+        active_count = len(active_items)
+    return {
+        "continuity_projection": projection,
+        "events": [{
+            "step": "continuity_projected",
+            "data": {
+                "active_count": active_count,
+                "continuity_projection": model_data(projection),
+            },
+        }],
+    }
 
 
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:

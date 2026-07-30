@@ -8,7 +8,12 @@ from app.domain.entity.schemas import (
     profile_from_semantic,
     utc_now,
 )
-from app.runtime.sqlite import connect_sqlite, ensure_column, ensure_schema_version
+from app.runtime.sqlite import (
+    connect_sqlite,
+    ensure_column,
+    ensure_schema_version,
+    transaction,
+)
 
 
 class EntityStore:
@@ -27,7 +32,6 @@ class EntityStore:
                 aliases_json TEXT NOT NULL DEFAULT '[]',
                 profile_json TEXT NOT NULL,
                 source_scene_ids_json TEXT NOT NULL DEFAULT '[]',
-                source_memory_ids_json TEXT NOT NULL DEFAULT '[]',
                 confidence REAL NOT NULL DEFAULT 0.5,
                 updated_at TEXT NOT NULL DEFAULT '',
                 active INTEGER NOT NULL DEFAULT 1,
@@ -56,23 +60,48 @@ class EntityStore:
         )
         self._db.execute(
             """
-            CREATE TABLE IF NOT EXISTS entity_memory_links (
-                entity_id TEXT NOT NULL,
-                memory_id TEXT NOT NULL,
-                PRIMARY KEY (entity_id, memory_id)
-            )
-            """
-        )
-        self._db.execute(
-            """
             CREATE TABLE IF NOT EXISTS entity_meta (
                 key TEXT PRIMARY KEY,
                 value TEXT
             )
             """
         )
-        ensure_schema_version(self._db, "entity_profile", 2)
+        if self._schema_version() < 3:
+            self._remove_retired_memory_storage()
+        ensure_schema_version(self._db, "entity_profile", 3)
         self._db.commit()
+
+    def _schema_version(self) -> int:
+        table = self._db.execute(
+            """
+            SELECT 1 FROM sqlite_master
+            WHERE type = 'table' AND name = 'schema_versions'
+            """
+        ).fetchone()
+        if table is None:
+            return 0
+        row = self._db.execute(
+            """
+            SELECT version FROM schema_versions
+            WHERE component = 'entity_profile'
+            """
+        ).fetchone()
+        return int(row["version"]) if row is not None else 0
+
+    def _remove_retired_memory_storage(self) -> None:
+        with transaction(self._db):
+            self._db.execute("DROP TABLE IF EXISTS entity_memory_links")
+            columns = {
+                row["name"]
+                for row in self._db.execute(
+                    "PRAGMA table_info(entity_profiles)"
+                ).fetchall()
+            }
+            if "source_memory_ids_json" in columns:
+                self._db.execute(
+                    "ALTER TABLE entity_profiles "
+                    "DROP COLUMN source_memory_ids_json"
+                )
 
     def _row_to_profile(self, row: sqlite3.Row) -> EntityProfile:
         semantic = EntityProfileUpdateInput.model_validate(json.loads(row["profile_json"]))
@@ -80,7 +109,6 @@ class EntityStore:
             semantic,
             entity_id=row["id"],
             source_scene_ids=json.loads(row["source_scene_ids_json"]),
-            source_memory_ids=json.loads(row["source_memory_ids_json"]),
             confidence=row["confidence"],
             updated_at=row["updated_at"],
             active=bool(row["active"]),
@@ -96,16 +124,15 @@ class EntityStore:
             """
             INSERT INTO entity_profiles (
                 id, entity_type, name, aliases_json, profile_json,
-                source_scene_ids_json, source_memory_ids_json,
+                source_scene_ids_json,
                 confidence, updated_at, active, name_hit_count, alias_hit_counts_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 entity_type = excluded.entity_type,
                 name = excluded.name,
                 aliases_json = excluded.aliases_json,
                 profile_json = excluded.profile_json,
                 source_scene_ids_json = excluded.source_scene_ids_json,
-                source_memory_ids_json = excluded.source_memory_ids_json,
                 confidence = excluded.confidence,
                 updated_at = excluded.updated_at,
                 active = excluded.active,
@@ -119,7 +146,6 @@ class EntityStore:
                 json.dumps(profile.aliases, ensure_ascii=False),
                 semantic.model_dump_json(),
                 json.dumps(profile.source_scene_ids, ensure_ascii=False),
-                json.dumps(profile.source_memory_ids, ensure_ascii=False),
                 profile.confidence,
                 now,
                 int(profile.active),
@@ -181,37 +207,6 @@ class EntityStore:
     def count(self) -> int:
         row = self._db.execute("SELECT COUNT(*) FROM entity_profiles").fetchone()
         return int(row[0])
-
-    def link_memory(self, entity_id: str, memory_id: str) -> bool:
-        cursor = self._db.execute(
-            """
-            INSERT OR IGNORE INTO entity_memory_links(entity_id, memory_id)
-            VALUES (?, ?)
-            """,
-            (entity_id, memory_id),
-        )
-        self._db.commit()
-        return cursor.rowcount > 0
-
-    def get_linked_memory_ids(self, entity_id: str) -> list[str]:
-        rows = self._db.execute(
-            """
-            SELECT memory_id FROM entity_memory_links
-            WHERE entity_id = ?
-            ORDER BY memory_id ASC
-            """,
-            (entity_id,),
-        ).fetchall()
-        return [str(row["memory_id"]) for row in rows]
-
-    def append_source_memory(self, entity_id: str, memory_id: str) -> None:
-        profile = self.get_by_id(entity_id)
-        if profile is None:
-            return
-        if memory_id not in profile.source_memory_ids:
-            profile.source_memory_ids.append(memory_id)
-        profile.updated_at = utc_now()
-        self.upsert(profile)
 
     def append_alias(
         self,
@@ -331,8 +326,8 @@ def _merge_unique(values: list[str]) -> list[str]:
     return merged
 
 
-def _match_score(memory_entity: str, profile_name: str, aliases: list[str]) -> float:
-    me = memory_entity.strip()
+def _match_score(query: str, profile_name: str, aliases: list[str]) -> float:
+    me = query.strip()
     pn = profile_name.strip()
     if not me or not pn:
         return 0.0

@@ -5,7 +5,6 @@ from app.domain.action.schemas import ActionParseResult
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView, NPCProfilePublicView
-from app.domain.retrieval.schemas import CandidateRetrievalResult, MemoryCandidate
 from app.domain.scene_summary.schemas import SceneSummary
 
 
@@ -19,12 +18,6 @@ def strip_empty(obj: Any) -> Any:
     if isinstance(obj, list):
         return [strip_empty(item) for item in obj]
     return obj
-
-
-MEMORY_CANDIDATE_EXCLUDE: set[str] = {
-    "entities", "tags", "source_scene_id", "source_pending_ids",
-    "score", "score_breakdown", "matched_anchors", "matched_actions",
-}
 
 
 def project_current_state(state: CurrentState) -> str:
@@ -49,14 +42,6 @@ def project_npc_profiles(
 ) -> str:
     return json.dumps(
         [strip_empty(p.model_dump(mode="json")) for p in profiles],
-        ensure_ascii=False,
-        indent=2,
-    )
-
-
-def project_memory_candidates(candidates: list[MemoryCandidate]) -> str:
-    return json.dumps(
-        [c.model_dump(mode="json", exclude=MEMORY_CANDIDATE_EXCLUDE) for c in candidates],
         ensure_ascii=False,
         indent=2,
     )
@@ -87,21 +72,4 @@ def project_action_parse(result: ActionParseResult) -> str:
             d.pop("condition", None)
         actions.append(d)
     data = {"atomic_actions": actions}
-    return json.dumps(data, ensure_ascii=False, indent=2)
-
-
-def project_retrieved_memories(result: CandidateRetrievalResult) -> str:
-    memories = []
-
-    for index, candidate in enumerate(result.candidates):
-        data = candidate.model_dump(mode="json", exclude=MEMORY_CANDIDATE_EXCLUDE)
-        data["memory_index"] = index
-        data["source"] = "classified"
-        memories.append(strip_empty(data))
-
-    data = {
-        "memories": memories,
-        "total_scanned": result.total_scanned,
-        "total_returned": len(memories),
-    }
     return json.dumps(data, ensure_ascii=False, indent=2)

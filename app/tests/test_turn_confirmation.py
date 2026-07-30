@@ -104,6 +104,7 @@ def _prepare_opening_initialization(*, director_enabled=True):
 
 def test_turn_confirmation_skips_all_director_work_when_disabled(monkeypatch):
     runtime = get_campaign_runtime()
+    captured = {}
     turn_id = "director-disabled-turn"
     state = _state()
     runtime.pending_turns.add(PendingTurn(
@@ -118,8 +119,6 @@ def test_turn_confirmation_skips_all_director_work_when_disabled(monkeypatch):
         outline=SimpleNamespace(),
         scene_result=SceneWriterResult(scene_text="场景正文"),
     ))
-    captured = {}
-
     def _capture(pipeline_input, **_kwargs):
         captured["input"] = pipeline_input
         return iter(())
@@ -242,7 +241,7 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
             get_recent=lambda _limit=5: [],
         ),
         short_term=lambda: _ContextStore(get_recent=lambda: ShortTermMemory()),
-        memory=lambda: _ContextStore(count=lambda: 0),
+        continuity=lambda: _ContextStore(count=lambda: 0, list_active=lambda: []),
     )
     monkeypatch.setattr(confirmation_nodes, "StateUpdater", _StateUpdater)
     monkeypatch.setattr(
@@ -274,7 +273,7 @@ def test_failed_preview_retries_only_preview_and_dry_run_keeps_pending(
         pending_turns.remove(turn_id)
 
 
-def test_confirmation_queues_memory_draft_before_batch_without_summary_wait(
+def test_confirmation_projects_continuity_without_waiting_for_summary(
     monkeypatch,
     configure_runtime_services,
 ):
@@ -365,12 +364,6 @@ def test_confirmation_queues_memory_draft_before_batch_without_summary_wait(
             add_turn=lambda **_kwargs: None,
             get_recent=lambda: ShortTermMemory(),
         ),
-        pending_memory=lambda: _ContextStore(
-            save_many=lambda _items: [],
-            count=lambda: 5,
-            should_trigger_batch=lambda turn_threshold=5: True,
-        ),
-        memory=lambda: _ContextStore(count=lambda: 0, list_all=lambda: []),
         entity=lambda: _ContextStore(list_all=lambda: []),
         npc_profile=lambda: _ContextStore(list_all=lambda: []),
         director_event=lambda: _ContextStore(list_active=lambda: []),
@@ -411,16 +404,6 @@ def test_confirmation_queues_memory_draft_before_batch_without_summary_wait(
         lambda **_kwargs: [],
     )
 
-    def _memory_maintenance(*args, **kwargs):
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-
-    monkeypatch.setattr(
-        confirmation_helpers,
-        "run_memory_batch_maintenance",
-        _memory_maintenance,
-    )
-
     try:
         events = list(
             turn_confirmation._confirm_turn_stream_locked(
@@ -440,11 +423,9 @@ def test_confirmation_queues_memory_draft_before_batch_without_summary_wait(
         pending_turns.remove(sibling_turn_id)
 
     assert events[-1]["data"]["status"] == "committed"
-    assert captured["args"][0] == state
-    assert captured["args"][1] == state
-    assert isinstance(captured["args"][2], str)
-    assert "wait_for_summary" not in captured["kwargs"]
+    assert any(event["step"] == "continuity_projected" for event in events)
     assert group_removed is True
+    assert confirmed_documents
     assert [document.text for document in confirmed_documents] == [
         "继续观察",
         "场景正文",
@@ -533,12 +514,6 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
             add_turn=lambda **_kwargs: None,
             get_recent=lambda: ShortTermMemory(),
         ),
-        pending_memory=lambda: _ContextStore(
-            save_many=lambda _items: [],
-            count=lambda: 0,
-            should_trigger_batch=lambda turn_threshold=5: False,
-        ),
-        memory=lambda: _ContextStore(count=lambda: 0, list_all=lambda: []),
         entity=lambda: _ContextStore(list_all=lambda: []),
         npc_profile=lambda: _ContextStore(list_all=lambda: []),
         director_npc=lambda: _ContextStore(list_standby=lambda: []),
@@ -578,12 +553,6 @@ def test_opening_confirmation_restocks_director_npc_synchronously(
         "run_scene_summary_maintenance",
         lambda *_args, **_kwargs: None,
     )
-    monkeypatch.setattr(
-        confirmation_helpers,
-        "run_memory_batch_maintenance",
-        lambda *_args, **_kwargs: None,
-    )
-
     def _restock(*_args, **_kwargs):
         calls["restock"] += 1
 

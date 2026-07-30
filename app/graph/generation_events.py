@@ -6,7 +6,6 @@ from .generation_state import GenerationEvent
 
 
 _ACTION_PROGRESS_STEPS = {
-    "retrieval_done",
     "modifiers_done",
     "rolls_done",
 }

@@ -3,11 +3,9 @@ from __future__ import annotations
 import hashlib
 import re
 import sqlite3
-from collections.abc import Iterable
-
 from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
 
-from .schemas import ConfirmedScene, HistoryDocument
+from .schemas import HistoryDocument
 
 
 class ConfirmedHistoryStore:
@@ -67,7 +65,7 @@ class ConfirmedHistoryStore:
         if existing is not None and existing["content_hash"] == content_hash:
             return False
 
-        documents = _documents_for_turn(
+        documents = build_turn_documents(
             scene_id=scene_id,
             turn_index=turn_index,
             user_input=user_input,
@@ -107,40 +105,6 @@ class ConfirmedHistoryStore:
                     (document.document_id, document.text),
                 )
         return True
-
-    def sync(self, scenes: Iterable[ConfirmedScene]) -> int:
-        """Make the derived index match authoritative confirmed history."""
-        expected = {scene.turn_index: scene for scene in scenes}
-        stored_turns = {
-            int(row["turn_index"])
-            for row in self._conn.execute(
-                "SELECT turn_index FROM history_turns"
-            ).fetchall()
-        }
-        changed = 0
-        extra_turns = stored_turns - set(expected)
-        if extra_turns:
-            with transaction(self._conn):
-                for turn_index in sorted(extra_turns):
-                    self._delete_turn(turn_index)
-                    changed += 1
-        for turn_index in sorted(expected):
-            scene = expected[turn_index]
-            if self.upsert_turn(
-                scene_id=scene.scene_id,
-                turn_index=scene.turn_index,
-                user_input=scene.user_input,
-                scene_text=scene.scene_text,
-            ):
-                changed += 1
-        return changed
-
-    def rebuild(self, scenes: Iterable[ConfirmedScene]) -> None:
-        with transaction(self._conn):
-            self._conn.execute("DELETE FROM history_documents_fts")
-            self._conn.execute("DELETE FROM history_documents")
-            self._conn.execute("DELETE FROM history_turns")
-        self.sync(scenes)
 
     def clear(self) -> None:
         with transaction(self._conn):
@@ -243,7 +207,7 @@ class ConfirmedHistoryStore:
         self.close()
 
 
-def _documents_for_turn(
+def build_turn_documents(
     *,
     scene_id: str,
     turn_index: int,

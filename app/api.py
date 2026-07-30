@@ -15,7 +15,6 @@ from app.graph.initialization_helpers import (
     generate_campaign_setup_stream,
     preview_initialization_config,
 )
-from app.graph.maintenance_graph import batch_classify_stream, memory_maintain_stream
 from app.runtime.debug_state import load_debug_state
 from app.runtime.player_state import load_player_history, load_player_state
 from app.runtime.settings import (
@@ -270,24 +269,6 @@ def record_player_diagnostic(payload: dict[str, Any]) -> dict[str, bool]:
     return {"recorded": True}
 
 
-def start_batch_classify_operation(*, request_id: str | None = None) -> str:
-    return _submit_managed_operation(
-        "maintenance_batch_classify_manual",
-        batch_classify_stream,
-        request_id=request_id,
-        metadata={"manual": True},
-    )
-
-
-def start_memory_maintain_operation(*, request_id: str | None = None) -> str:
-    return _submit_managed_operation(
-        "maintenance_memory_maintain_manual",
-        memory_maintain_stream,
-        request_id=request_id,
-        metadata={"manual": True},
-    )
-
-
 def start_campaign_setup_operation(
     payload: dict,
     *,
@@ -421,13 +402,11 @@ __all__ = [
     "save_pending_scene_edit",
     "record_player_diagnostic",
     "save_reader_preferences",
-    "start_batch_classify_operation",
     "start_confirmation_operation",
     "start_generation_operation",
     "start_feedback_rewrite_operation",
     "start_initialization_operation",
     "start_opening_rewrite_operation",
-    "start_memory_maintain_operation",
     "start_rephrase_operation",
     "start_reroll_operation",
     "start_campaign_setup_operation",

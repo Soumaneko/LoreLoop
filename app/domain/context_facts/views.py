@@ -1,5 +1,6 @@
 import json
 
+from app.domain.continuity import ContinuitySelection
 from app.domain.context_facts.schemas import (
     ContextFactSet,
     ContextHistoryEvidenceSet,
@@ -40,3 +41,22 @@ def project_context_history(
         for hit in evidence.hits
     ]
     return json.dumps(records, ensure_ascii=False, indent=2)
+
+
+def project_continuity(selection: ContinuitySelection) -> str:
+    return json.dumps(
+        [
+            {
+                "id": match.item.id,
+                "kind": match.item.kind,
+                "subject": match.item.subject,
+                "statement": match.item.statement,
+                "entities": match.item.entities,
+                "location": match.item.location,
+                "deadline": match.item.deadline,
+            }
+            for match in selection.items
+        ],
+        ensure_ascii=False,
+        indent=2,
+    )

@@ -82,7 +82,6 @@ class EntityProfile(BaseModel):
     description: str | None = None
 
     source_scene_ids: list[str] = Field(default_factory=list)
-    source_memory_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0, le=1)
     updated_at: str = ""
     active: bool = True
@@ -109,7 +108,6 @@ def profile_from_semantic(
     *,
     entity_id: str | None = None,
     source_scene_ids: list[str] | None = None,
-    source_memory_ids: list[str] | None = None,
     confidence: float = 0.5,
     updated_at: str | None = None,
     active: bool = True,
@@ -129,7 +127,6 @@ def profile_from_semantic(
         parent_location=profile.parent_location,
         description=profile.description,
         source_scene_ids=source_scene_ids or [],
-        source_memory_ids=source_memory_ids or [],
         confidence=confidence,
         updated_at=updated_at or utc_now(),
         active=active,

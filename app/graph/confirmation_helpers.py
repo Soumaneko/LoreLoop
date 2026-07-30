@@ -13,7 +13,6 @@ from app.runtime.session import (
 )
 from app.graph.maintenance_graph import (
     run_director_npc_maintenance,
-    run_memory_batch_maintenance,
     run_scene_summary_maintenance,
     run_setting_seed_maintenance,
 )
@@ -38,6 +37,7 @@ _ALWAYS_CACHED_NODE_RESULTS = {
     "state_update_warnings",
     "turn_summary",
     "action_preview",
+    "continuity_projection",
 }
 _WRITE_CACHED_NODE_RESULTS = {
     "entity_extraction",
@@ -55,6 +55,7 @@ _ROLLBACK_SAFE_CACHE_KEYS = {
     "state_update_warnings",
     "turn_summary",
     "action_preview",
+    "continuity_projection",
 }
 
 @dataclass
@@ -315,8 +316,7 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
             current_state_store=stores.current_state,
             short_term_memory_store=stores.short_term,
             confirmed_history_store=stores.confirmed_history,
-            pending_memory_store=stores.pending_memory,
-            memory_store=stores.memory,
+            continuity_store=stores.continuity,
             scene_summary_store=stores.scene_summary,
         )
     )
@@ -327,7 +327,6 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
             run_director_npc_maintenance=run_director_npc_maintenance,
             run_setting_seed_maintenance=run_setting_seed_maintenance,
             run_scene_summary_maintenance=run_scene_summary_maintenance,
-            run_memory_batch_maintenance=run_memory_batch_maintenance,
         ),
     )
     return ConfirmationFinalizer(

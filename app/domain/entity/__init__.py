@@ -11,7 +11,6 @@ from .schemas import (
 from .store import EntityStore
 
 __all__ = [
-    "EntityMemoryLinker",
     "EntityAliasMatch",
     "EntityExtractionResult",
     "EntityExtractor",
@@ -27,10 +26,6 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    if name == "EntityMemoryLinker":
-        from .linker import EntityMemoryLinker
-
-        return EntityMemoryLinker
     if name == "EntityProfileUpdater":
         from .updater import EntityProfileUpdater
 

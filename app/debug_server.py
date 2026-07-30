@@ -18,9 +18,7 @@ from app.api import (
     redo_last_turn,
     save_difficulty,
     save_max_chars,
-    start_batch_classify_operation,
     start_confirmation_operation,
-    start_memory_maintain_operation,
     switch_save,
     undo_last_turn,
 )
@@ -95,16 +93,6 @@ class DebugHandler(PlayerHandler):
             return
         if path == "/api/pending/discard":
             self._handle_json(self._discard_pending_turn)
-            return
-        if path == "/api/batch-classify":
-            self._handle_operation_start_stream(
-                self._start_batch_classify_operation,
-            )
-            return
-        if path == "/api/memory-maintain":
-            self._handle_operation_start_stream(
-                self._start_memory_maintain_operation,
-            )
             return
         if path == "/api/init/preview":
             self._handle_json(
@@ -229,17 +217,6 @@ class DebugHandler(PlayerHandler):
             scene_text=scene_text,
             request_id=request_id,
         )
-
-    def _start_batch_classify_operation(self) -> str:
-        payload = _read_json(self)
-        request_id = str(payload.get("request_id", "")).strip() or None
-        return start_batch_classify_operation(request_id=request_id)
-
-    def _start_memory_maintain_operation(self) -> str:
-        payload = _read_json(self)
-        request_id = str(payload.get("request_id", "")).strip() or None
-        return start_memory_maintain_operation(request_id=request_id)
-
 
 def main() -> None:
     import argparse

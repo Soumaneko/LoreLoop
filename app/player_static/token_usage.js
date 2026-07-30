@@ -17,7 +17,7 @@ const TASK_LABELS = {
   opening_scene: "开场生成",
   scene_fact_extract: "场景事实提取",
   state_update: "世界状态更新",
-  memory_draft_extract: "本轮记忆提取",
+  continuity_project: "连续性账本",
   entity_extract: "实体提取",
   entity_profile_update: "实体资料更新",
   npc_profile_extract: "人物资料提取",

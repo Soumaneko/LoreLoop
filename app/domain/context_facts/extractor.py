@@ -14,7 +14,11 @@ from app.domain.views import (
     project_scene_summaries,
 )
 
-from .views import project_context_history, project_context_search_plan
+from .views import (
+    project_context_history,
+    project_context_search_plan,
+    project_continuity,
+)
 
 
 class ContextExtractor:
@@ -42,6 +46,9 @@ class ContextExtractor:
                     ),
                     "confirmed_history_json": project_context_history(
                         input_data.history_evidence
+                    ),
+                    "continuity_json": project_continuity(
+                        input_data.continuity
                     ),
                     "entity_profiles_json": project_entity_profiles(input_data.entity_profiles),
                     "npc_profiles_json": project_npc_profiles(input_data.npc_profiles),

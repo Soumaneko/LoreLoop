@@ -27,15 +27,14 @@ _ALLOWED_SUFFIXES = {".db", ".json"}
 _ALLOWED_SUBTREES = {".runtime", ".snapshots"}
 _ROOT_FILES = {
     "confirmed_history.db",
+    "continuity.db",
     "core_memory.json",
     "current_state.db",
     "director_events.db",
     "director_npcs.db",
     "entities.db",
     "initialization.json",
-    "memories.db",
     "npc_profiles.db",
-    "pending_memories.db",
     "save_manifest.json",
     "scene_summaries.db",
     "settings.json",

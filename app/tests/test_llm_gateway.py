@@ -772,8 +772,7 @@ class TestPromptLoader:
         loader = PromptLoader()
         tasks = loader.list_tasks()
         assert "echo_structured_test" in tasks
-        assert "memory_draft_extract" in tasks
-        assert "memory_batch_classify" in tasks
+        assert "continuity_project" in tasks
 
     def test_expands_root_relative_prompt_include(self, tmp_path):
         shared = tmp_path / "_shared"

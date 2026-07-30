@@ -5,6 +5,7 @@ import pytest
 
 from app.domain.action.schemas import Anchor
 from app.domain.confirmed_history import ConfirmedHistoryStore
+from app.domain.continuity import ContinuitySelection, ContinuityStore
 from app.domain.context_facts import (
     ContextExtractor,
     ContextExtractorInput,
@@ -77,6 +78,19 @@ def _entity_view():
         aliases=["盐运帮"],
         summary="正在追捕顾晚棠的组织。",
     ).semantic_view()
+
+
+def _upsert_scenes(
+    store: ConfirmedHistoryStore,
+    scenes: list[ShortTermScene],
+) -> None:
+    for scene in scenes:
+        store.upsert_turn(
+            scene_id=scene.scene_id,
+            turn_index=scene.turn_index,
+            user_input=scene.user_input,
+            scene_text=scene.scene_text,
+        )
 
 
 def test_context_fact_set_assigns_fact_ids_and_keeps_internal_evidence():
@@ -213,7 +227,7 @@ def test_history_retriever_allows_single_alias_and_diversifies_turns():
         ),
     ])
     with ConfirmedHistoryStore() as store:
-        store.rebuild([
+        _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_001",
                 turn_index=1,
@@ -250,7 +264,7 @@ def test_history_retriever_does_not_cap_evidence_at_fact_limit():
         )
     ])
     with ConfirmedHistoryStore() as store:
-        store.rebuild([
+        _upsert_scenes(store, [
             ShortTermScene(
                 scene_id=f"scene_{turn_index:03d}",
                 turn_index=turn_index,
@@ -317,9 +331,10 @@ def test_context_extractor_receives_raw_history_and_cites_it():
                     turn_end=2,
                 )
             ],
-            search_plan=search_plan,
-            history_evidence=history,
-            entity_profiles=[_entity_view()],
+                search_plan=search_plan,
+                history_evidence=history,
+                continuity=ContinuitySelection(),
+                entity_profiles=[_entity_view()],
             npc_profiles=[_npc_view()],
         )
     )
@@ -346,11 +361,12 @@ def test_context_extractor_receives_raw_history_and_cites_it():
     rendered_prompt = Path(
         "app/prompts/generation/context_extract_v1.md"
     ).read_text(encoding="utf-8").format(**gateway.input_data)
-    assert "Confirmed History" in rendered_prompt
+    assert "已确认历史正文" in rendered_prompt
+    assert "活跃连续性事项" in rendered_prompt
     assert "Retrieved Memories" not in rendered_prompt
 
 
-def test_context_facts_service_syncs_retrieves_and_calls_one_llm():
+def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
     class SpyGateway:
         def __init__(self):
             self.calls = []
@@ -363,8 +379,14 @@ def test_context_facts_service_syncs_retrieves_and_calls_one_llm():
             })
 
     gateway = SpyGateway()
-    with ConfirmedHistoryStore() as store:
-        result = ContextFactsService(gateway, store).build(
+    with ConfirmedHistoryStore() as store, ContinuityStore() as continuity_store:
+        store.upsert_turn(
+            scene_id="scene_003",
+            turn_index=3,
+            user_input="",
+            scene_text="顾阁主说盐帮正在客栈外搜查。",
+        )
+        result = ContextFactsService(gateway, store, continuity_store).build(
             ContextFactsInput(
                 user_input="我问顾阁主盐帮的最新动向。",
                 core_memory=_core_memory(),
@@ -374,15 +396,8 @@ def test_context_facts_service_syncs_retrieves_and_calls_one_llm():
                 entity_profiles=[_entity_view()],
                 npc_profiles=[_npc_view()],
                 current_turn_index=4,
-            ),
-            confirmed_scenes=[
-                ShortTermScene(
-                    scene_id="scene_003",
-                    turn_index=3,
-                    scene_text="顾阁主说盐帮正在客栈外搜查。",
-                )
-            ],
         )
+            )
 
         assert store.turn_count() == 1
     assert len(gateway.calls) == 1

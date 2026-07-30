@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from app.core.llm.token_usage import get_trace_token_usage
+from app.domain.continuity import ContinuityApplyResult, ContinuityService
 from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, PendingTurn
@@ -167,19 +168,15 @@ class ConfirmationCommitServices:
     current_state_store: Callable
     short_term_memory_store: Callable
     confirmed_history_store: Callable
-    pending_memory_store: Callable
-    memory_store: Callable
+    continuity_store: Callable
     scene_summary_store: Callable
 
 
 @dataclass
 class ConfirmationCommitResult:
     short_term_after: Any
-    saved_pending_ids: list[str]
-    pending_count_after: int
-    store_count_before: int
-    store_count_after: int
-    store_total: int
+    continuity_result: ContinuityApplyResult
+    continuity_total: int
 
 
 class ConfirmationCommitter:
@@ -198,15 +195,12 @@ class ConfirmationCommitter:
         if not write_db:
             with services.short_term_memory_store() as short_store:
                 short_term_after = short_store.get_recent()
-            with services.memory_store() as mem_store:
-                store_total = mem_store.count()
+            with services.continuity_store() as continuity_store:
+                continuity_total = continuity_store.count()
             return ConfirmationCommitResult(
                 short_term_after=short_term_after,
-                saved_pending_ids=[],
-                pending_count_after=0,
-                store_count_before=0,
-                store_count_after=0,
-                store_total=store_total,
+                continuity_result=ContinuityApplyResult(),
+                continuity_total=continuity_total,
             )
 
         if not cache.get("state_saved"):
@@ -260,22 +254,33 @@ class ConfirmationCommitter:
                 )
             cache["confirmed_history_saved"] = True
 
-        with services.pending_memory_store() as pending_store:
-            saved_pending_ids = []
-            pending_count_after = pending_store.count()
-
-        with services.memory_store() as mem_store:
-            store_count_before = mem_store.count()
-            store_count_after = store_count_before
-            store_total = len(mem_store.list_all())
+        with (
+            services.confirmed_history_store() as history_store,
+            services.continuity_store() as continuity_store,
+        ):
+            if pipeline_input.clear_continuity_before_save:
+                continuity_store.clear()
+            documents = history_store.documents_for_turn(
+                pipeline_input.turn_index
+            )
+            continuity_result = ContinuityService(
+                None,
+                continuity_store,
+            ).apply(
+                state["continuity_projection"],
+                turn_index=pipeline_input.turn_index,
+                available_evidence_ids={
+                    document.document_id
+                    for document in documents
+                    if document.source_type == "scene_paragraph"
+                },
+            )
+            continuity_total = continuity_store.count()
 
         return ConfirmationCommitResult(
             short_term_after=short_term_after,
-            saved_pending_ids=saved_pending_ids,
-            pending_count_after=pending_count_after,
-            store_count_before=store_count_before,
-            store_count_after=store_count_after,
-            store_total=store_total,
+            continuity_result=continuity_result,
+            continuity_total=continuity_total,
         )
 
 
@@ -285,13 +290,11 @@ class ConfirmationMaintenanceServices:
     run_director_npc_maintenance: Callable
     run_setting_seed_maintenance: Callable
     run_scene_summary_maintenance: Callable
-    run_memory_batch_maintenance: Callable
 
 
 @dataclass
 class ConfirmationScheduleResult:
     director_npc_restock_scheduled: bool
-    batch_queued: bool
 
 
 class ConfirmationMaintenanceScheduler:
@@ -405,7 +408,6 @@ class ConfirmationMaintenanceScheduler:
         if not state.get("write_db", True):
             return ConfirmationScheduleResult(
                 director_npc_restock_scheduled=director_npc_restock_scheduled,
-                batch_queued=bool(cache.get("memory_batch_scheduled")),
             )
 
         pipeline_input = state["pipeline_input"]
@@ -438,40 +440,8 @@ class ConfirmationMaintenanceScheduler:
             )
             cache["scene_summary_scheduled"] = True
 
-        batch_queued = bool(cache.get("memory_batch_scheduled"))
-        if not batch_queued:
-            memory_future = self.runtime.jobs.submit_job(
-                "memory_batch",
-                self.services.run_memory_batch_maintenance,
-                updated_state,
-                state["state_before_update"],
-                state["scene_facts_json"],
-                state["trace_id"],
-                pipeline_input.turn_index,
-                trace_id=state["trace_id"],
-                turn_index=pipeline_input.turn_index,
-                metadata={
-                    "campaign_id": self.runtime.campaign_id,
-                    "scene_id": updated_state.scene.scene_id,
-                },
-                core_memory=state["core_memory"],
-            )
-            cache["memory_batch_job_id"] = getattr(
-                memory_future,
-                "job_id",
-                None,
-            )
-            cache["memory_batch_operation_id"] = getattr(
-                memory_future,
-                "operation_id",
-                None,
-            )
-            batch_queued = True
-            cache["memory_batch_scheduled"] = True
-
         return ConfirmationScheduleResult(
             director_npc_restock_scheduled=director_npc_restock_scheduled,
-            batch_queued=batch_queued,
         )
 
 
@@ -510,21 +480,6 @@ class ConfirmationEventBuilder:
                 "director_event_result": model_data(director_event_result),
             })
 
-        memory_data: dict = {
-            "pending_items": [],
-            "saved_pending_ids": commit_result.saved_pending_ids,
-            "pending_count_after": commit_result.pending_count_after,
-            "batch_queued": schedule_result.batch_queued,
-            "final_memories": [],
-            "saved_ids": [],
-            "store_count_before": commit_result.store_count_before,
-            "store_count_after": commit_result.store_count_after,
-            "store_total": commit_result.store_total,
-        }
-        if not write_db:
-            memory_data["dry_run"] = True
-            memory_data["reason"] = pipeline_input.dry_run_memory_reason
-
         scene_result_data = model_data(pipeline_input.scene_result)
         if state.get("scene_text") is not None:
             scene_result_data["scene_text"] = state["scene_text"]
@@ -543,7 +498,13 @@ class ConfirmationEventBuilder:
             "scene_result": scene_result_data,
             "action_preview": model_data(action_preview),
             "short_term_memory_after": model_data(commit_result.short_term_after),
-            "memory_extraction": memory_data,
+            "continuity_projection": model_data(
+                state["continuity_projection"]
+            ),
+            "continuity_apply_result": model_data(
+                commit_result.continuity_result
+            ),
+            "continuity_total": commit_result.continuity_total,
             "updated_entity_ids": updated_entity_ids,
             "updated_npc_profile_ids": updated_npc_profile_ids,
             "npc_extraction": (
@@ -663,7 +624,6 @@ class ConfirmationFinalizer:
             traceback.print_exc()
             schedule_result = ConfirmationScheduleResult(
                 director_npc_restock_scheduled=restock_scheduled,
-                batch_queued=bool(state["cache"].get("memory_batch_scheduled")),
             )
 
         state["events"] = [

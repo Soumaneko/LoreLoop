@@ -42,37 +42,44 @@ def test_persistent_store_incrementally_indexes_confirmed_turns(tmp_path):
         assert "turn_1_input" in reopened.fts_search("灰烬图书馆")
 
 
-def test_sync_repairs_changed_and_removed_turns_without_full_rebuild(tmp_path):
+def test_upsert_repairs_changed_turn_without_touching_other_history(tmp_path):
     path = tmp_path / "confirmed_history.db"
     with ConfirmedHistoryStore(path) as store:
-        store.rebuild([
-            _scene(1, "旧正文。"),
-            _scene(2, "稍后应被移除。"),
-        ])
+        for scene in [_scene(1, "旧正文。"), _scene(2, "应继续保留。")]:
+            store.upsert_turn(
+                scene_id=scene.scene_id,
+                turn_index=scene.turn_index,
+                user_input=scene.user_input,
+                scene_text=scene.scene_text,
+            )
 
-        changed = store.sync([
-            _scene(1, "替换后的确认正文。"),
-            _scene(3, "新增正文。", user_input="继续调查。"),
-        ])
-
-        assert changed == 3
+        assert store.upsert_turn(
+            scene_id="scene_001",
+            turn_index=1,
+            user_input="",
+            scene_text="替换后的确认正文。",
+        )
         assert store.turn_count() == 2
         assert [document.turn_index for document in store.list_documents()] == [
             1,
-            3,
-            3,
+            2,
         ]
         serialized = "\n".join(
             document.text for document in store.list_documents()
         )
         assert "旧正文" not in serialized
-        assert "稍后应被移除" not in serialized
+        assert "应继续保留" in serialized
         assert "替换后的确认正文" in serialized
 
 
 def test_clear_removes_documents_and_fts_rows():
     with ConfirmedHistoryStore() as store:
-        store.rebuild([_scene(1, "灰烬图书馆仍然存在。")])
+        store.upsert_turn(
+            scene_id="scene_001",
+            turn_index=1,
+            user_input="",
+            scene_text="灰烬图书馆仍然存在。",
+        )
         store.clear()
 
         assert store.turn_count() == 0
@@ -82,7 +89,12 @@ def test_clear_removes_documents_and_fts_rows():
 
 def test_paragraph_windows_are_available_to_all_history_consumers():
     with ConfirmedHistoryStore() as store:
-        store.rebuild([_scene(1, "第一段。\n\n第二段。\n\n第三段。\n\n第四段。")])
+        store.upsert_turn(
+            scene_id="scene_001",
+            turn_index=1,
+            user_input="",
+            scene_text="第一段。\n\n第二段。\n\n第三段。\n\n第四段。",
+        )
         documents = store.documents_for_turn(1)
         anchor = documents[1]
 

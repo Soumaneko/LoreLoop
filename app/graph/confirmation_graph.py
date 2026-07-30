@@ -20,6 +20,7 @@ from .confirmation_helpers import (
 )
 from .confirmation_nodes import (
     action_preview_node,
+    continuity_project_node,
     director_event_update_node,
     entity_extract_node,
     entity_profile_update_node,
@@ -104,6 +105,7 @@ def _compile_confirmation_first_wave_graph():
 def build_confirmation_second_wave_graph():
     dependencies = (
         action_preview_node,
+        continuity_project_node,
         director_event_update_node,
         entity_profile_update_node,
         npc_profile_update_node,
@@ -120,6 +122,13 @@ def _compile_confirmation_second_wave_graph():
     graph.add_node(
         "action_preview",
         capture_confirmation_node_errors("action_preview", action_preview_node),
+    )
+    graph.add_node(
+        "continuity_project",
+        capture_confirmation_node_errors(
+            "continuity_project",
+            continuity_project_node,
+        ),
     )
     graph.add_node(
         "director_event_update",
@@ -144,10 +153,12 @@ def _compile_confirmation_second_wave_graph():
     )
 
     graph.add_edge(START, "action_preview")
+    graph.add_edge(START, "continuity_project")
     graph.add_edge(START, "director_event_update")
     graph.add_edge(START, "entity_profile_update")
     graph.add_edge(START, "npc_profile_update")
     graph.add_edge("action_preview", END)
+    graph.add_edge("continuity_project", END)
     graph.add_edge("director_event_update", END)
     graph.add_edge("entity_profile_update", END)
     graph.add_edge("npc_profile_update", END)
@@ -346,9 +357,7 @@ def _confirm_opening_stream_locked(
             director_npc_restock_sync=director_is_enabled,
             clear_short_term_before_save=True,
             clear_confirmed_history_before_save=True,
-            dry_run_memory_reason=(
-                "DB writes are disabled; opening scene was not saved."
-            ),
+            clear_continuity_before_save=True,
             confirm_started_extra={"opening": True},
             finish_extra={"opening": True},
             complete_initialization=True,

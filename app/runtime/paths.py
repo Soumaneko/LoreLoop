@@ -62,12 +62,8 @@ class CampaignPaths:
         return self.data_dir / "current_state.db"
 
     @property
-    def memory_db(self) -> Path:
-        return self.data_dir / "memories.db"
-
-    @property
-    def pending_memory_db(self) -> Path:
-        return self.data_dir / "pending_memories.db"
+    def continuity_db(self) -> Path:
+        return self.data_dir / "continuity.db"
 
     @property
     def short_term_db(self) -> Path:

@@ -291,10 +291,6 @@ def _upsert_with_exact_duplicate_guard(
         *existing.source_scene_ids,
         *profile.source_scene_ids,
     ])
-    merged.source_memory_ids = _merge_unique([
-        *existing.source_memory_ids,
-        *profile.source_memory_ids,
-    ])
     merged.confidence = max(existing.confidence, profile.confidence)
     return entity_store.upsert(merged)
 

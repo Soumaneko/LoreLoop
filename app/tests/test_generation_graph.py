@@ -381,7 +381,6 @@ def test_generation_buffers_context_events_until_action_parsed(monkeypatch):
                     "action_parse_result": object(),
                     "events": [
                         {"step": "action_parsed", "data": {}},
-                        {"step": "retrieval_done", "data": {}},
                     ],
                 }
             }
@@ -416,7 +415,6 @@ def test_generation_buffers_context_events_until_action_parsed(monkeypatch):
         "prepared",
         "action_parsed",
         "context_facts_done",
-        "retrieval_done",
         "finalized",
     ]
 
@@ -432,9 +430,8 @@ def test_generation_event_presenter_flushes_context_before_later_nodes():
         "parse_action",
         [
             {"step": "action_parsed", "data": {}},
-            {"step": "retrieval_done", "data": {}},
         ],
-    )] == ["action_parsed", "context_facts_done", "retrieval_done"]
+    )] == ["action_parsed", "context_facts_done"]
     assert presenter.finish() == []
 
 

@@ -1,15 +1,15 @@
-from .schemas import ConfirmedScene, HistoryDocument, HistorySource
-from .store import ConfirmedHistoryStore
+from .schemas import HistoryDocument, HistorySource
+from .store import ConfirmedHistoryStore, build_turn_documents
 from .text import best_trigram_match, trigrams
 from .windows import adjacent_context, document_window
 
 __all__ = [
     "ConfirmedHistoryStore",
-    "ConfirmedScene",
     "HistoryDocument",
     "HistorySource",
     "adjacent_context",
     "best_trigram_match",
+    "build_turn_documents",
     "document_window",
     "trigrams",
 ]

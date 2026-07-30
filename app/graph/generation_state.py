@@ -11,6 +11,7 @@ from app.domain.context_facts.schemas import (
     ContextSearchPlan,
 )
 from app.domain.core_memory.schemas import CoreMemory
+from app.domain.continuity import ContinuitySelection
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent, DirectorEventConsumption
 from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
@@ -31,7 +32,6 @@ from app.domain.narrative_consistency.schemas import (
 )
 from app.domain.narrative_rewrite.schemas import RewriteStrategyDecision
 from app.domain.plot_outline.schemas import PlotOutlineResult
-from app.domain.retrieval.schemas import CandidateRetrievalResult
 from app.domain.roll.schemas import Difficulty, RollConfig, RollResultBatch
 from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.scene_summary.schemas import SceneSummary
@@ -78,6 +78,7 @@ class GenerationState(TypedDict, total=False):
     context_facts: ContextFactSet
     context_search_plan: ContextSearchPlan | None
     context_history_evidence: ContextHistoryEvidenceSet | None
+    continuity_selection: ContinuitySelection | None
     context_extract_error: str | None
 
     action_extraction_result: ActionExtractionResult
@@ -85,7 +86,6 @@ class GenerationState(TypedDict, total=False):
     action_self_check_result: SelfCheckResult | None
     action_parse_result: ActionParseResult
 
-    retrieved_memories: CandidateRetrievalResult
     roll_config: RollConfig
     roll_actions: Any
     modifier_batch: RollModifierBatch

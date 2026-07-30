@@ -19,17 +19,9 @@ def _load_debug_state(runtime) -> dict:
         short_term = short_store.get_recent()
         chat_history = short_store.list_all()
 
-    with stores.memory() as mem_store:
-        memory_count = mem_store.count()
-        memories = mem_store.list_all()
-        active_memory_count = len(mem_store.list_active())
-        inactive_memory_count = memory_count - active_memory_count
-
-    with stores.pending_memory() as pending_store:
-        pending_count = pending_store.count()
-        pending_unclassified_count = pending_store.count_unclassified()
-        pending_unclassified = pending_store.list_recent_unclassified(limit=20)
-        pending_unclassified_turn_count = pending_store.unclassified_turn_count()
+    with stores.continuity() as continuity_store:
+        continuity_items = continuity_store.list_all()
+        active_continuity_items = continuity_store.list_active()
 
     with stores.scene_summary() as summary_store:
         scene_summaries = summary_store.list_active()
@@ -103,14 +95,9 @@ def _load_debug_state(runtime) -> dict:
         "current_state": model_data(current_state),
         "core_memory": model_data(core_memory) if core_memory is not None else None,
         "short_term_memory": model_data(short_term),
-        "memory_count": memory_count,
-        "active_memory_count": active_memory_count,
-        "inactive_memory_count": inactive_memory_count,
-        "memories": model_data(memories),
-        "pending_memory_count": pending_count,
-        "pending_unclassified_count": pending_unclassified_count,
-        "pending_unclassified_turn_count": pending_unclassified_turn_count,
-        "pending_memory_items": model_data(pending_unclassified),
+        "continuity_items": model_data(continuity_items),
+        "continuity_count": len(continuity_items),
+        "active_continuity_count": len(active_continuity_items),
         "scene_summaries": model_data(scene_summaries),
         "recent_summaries": model_data(recent_summaries),
         "entity_profiles": model_data(entity_profiles),

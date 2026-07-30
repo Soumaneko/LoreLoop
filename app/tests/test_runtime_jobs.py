@@ -86,42 +86,6 @@ def test_job_coordinator_delegates_execution_to_operation_manager():
         operations.shutdown()
 
 
-def test_memory_batch_single_flight_tracks_superseded_rerun():
-    coordinator = MaintenanceJobCoordinator(max_workers=1)
-    started = threading.Event()
-    release = threading.Event()
-    rerun_finished = threading.Event()
-    calls = []
-
-    def work(label):
-        calls.append(label)
-        if label == "first":
-            started.set()
-            assert release.wait(timeout=2)
-        else:
-            rerun_finished.set()
-
-    try:
-        coordinator.submit_memory_batch_once(work, "first")
-        assert started.wait(timeout=2)
-        coordinator.submit_memory_batch_once(work, "second")
-        coordinator.submit_memory_batch_once(work, "third")
-
-        queued = coordinator.list(status="queued", job_type="memory_batch")
-        superseded = coordinator.list(status="superseded", job_type="memory_batch")
-        assert len(queued) == 1
-        assert len(superseded) == 1
-        assert queued[0].rerun_of is not None
-
-        release.set()
-        assert rerun_finished.wait(timeout=2)
-    finally:
-        coordinator.shutdown()
-
-    assert calls == ["first", "third"]
-    assert coordinator.status_counts() == {"succeeded": 2, "superseded": 1}
-
-
 def test_compiled_generation_graph_is_cached_and_dependency_aware(monkeypatch):
     clear_compiled_graph_cache("generation")
     first = generation_graph.build_generation_graph(

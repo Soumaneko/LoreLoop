@@ -17,6 +17,19 @@ from app.domain.narrative_canon_query.schemas import (
 from app.domain.short_term_memory.schemas import ShortTermScene
 
 
+def _seed(
+    store: ConfirmedHistoryStore,
+    scenes: list[ShortTermScene],
+) -> None:
+    for scene in scenes:
+        store.upsert_turn(
+            scene_id=scene.scene_id,
+            turn_index=scene.turn_index,
+            user_input=scene.user_input,
+            scene_text=scene.scene_text,
+        )
+
+
 def _catalog():
     return [
         CanonEntityReference(name="莱尔", kind="player"),
@@ -52,7 +65,7 @@ def _query_set():
     )
 
 
-def test_rebuild_indexes_only_raw_confirmed_inputs_and_paragraphs():
+def test_store_indexes_only_raw_confirmed_inputs_and_paragraphs():
     scenes = [ShortTermScene(
         scene_id="scene_003",
         turn_index=3,
@@ -64,7 +77,7 @@ def test_rebuild_indexes_only_raw_confirmed_inputs_and_paragraphs():
     )]
     store = ConfirmedHistoryStore()
     try:
-        store.rebuild(scenes)
+        _seed(store, scenes)
         documents = store.list_documents()
     finally:
         store.close()
@@ -104,7 +117,7 @@ def test_retriever_finds_prior_entity_cooccurrence_and_returns_raw_context():
     ]
     store = ConfirmedHistoryStore()
     try:
-        store.rebuild(scenes)
+        _seed(store, scenes)
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
     finally:
         store.close()
@@ -140,7 +153,7 @@ def test_each_lookup_query_is_scored_independently_and_best_match_wins():
 def test_retriever_admits_entities_and_relation_cues_across_three_paragraphs():
     store = ConfirmedHistoryStore()
     try:
-        store.rebuild([
+        _seed(store, [
             ShortTermScene(
                 scene_id="scene_003",
                 turn_index=3,
@@ -175,7 +188,7 @@ def test_retriever_admits_entities_and_relation_cues_across_three_paragraphs():
 def test_strong_candidate_suppresses_entity_only_fallback():
     store = ConfirmedHistoryStore()
     try:
-        store.rebuild([
+        _seed(store, [
             ShortTermScene(
                 scene_id="scene_001",
                 turn_index=1,
@@ -203,7 +216,7 @@ def test_strong_candidate_suppresses_entity_only_fallback():
 def test_entity_only_fallback_returns_at_most_one_when_no_strong_candidate():
     store = ConfirmedHistoryStore()
     try:
-        store.rebuild([
+        _seed(store, [
             ShortTermScene(
                 scene_id="scene_001",
                 turn_index=1,
@@ -236,7 +249,7 @@ def test_retriever_keeps_player_input_as_lower_weight_intent_evidence():
     )]
     store = ConfirmedHistoryStore()
     try:
-        store.rebuild(scenes)
+        _seed(store, scenes)
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
     finally:
         store.close()
@@ -250,7 +263,7 @@ def test_retriever_keeps_player_input_as_lower_weight_intent_evidence():
 def test_store_uses_fts5_trigram_for_chinese_substrings():
     store = ConfirmedHistoryStore()
     try:
-        store.rebuild([
+        _seed(store, [
             ShortTermScene(
                 scene_id="scene_006",
                 turn_index=6,
@@ -279,7 +292,7 @@ def test_single_entity_does_not_admit_unrelated_mentions():
         )],
     )
     try:
-        store.rebuild([
+        _seed(store, [
             ShortTermScene(
                 scene_id="scene_007",
                 turn_index=7,
@@ -308,7 +321,7 @@ def test_semantic_threshold_can_admit_without_known_entities():
         )],
     )
     try:
-        store.rebuild([
+        _seed(store, [
             ShortTermScene(
                 scene_id="scene_008",
                 turn_index=8,
@@ -333,7 +346,7 @@ def test_multiple_entities_must_share_one_evidence_window():
         "灰烬图书馆位于旧商道尽头。",
     ])
     try:
-        store.rebuild([
+        _seed(store, [
             ShortTermScene(
                 scene_id="scene_009",
                 turn_index=9,
@@ -375,7 +388,7 @@ def test_check_projection_orders_each_record_as_before_text_after():
     query_set = _query_set()
     store = ConfirmedHistoryStore()
     try:
-        store.rebuild([
+        _seed(store, [
             ShortTermScene(
                 scene_id="scene_003",
                 turn_index=3,

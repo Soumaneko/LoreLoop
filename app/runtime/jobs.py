@@ -97,9 +97,6 @@ class MaintenanceJobCoordinator:
         self._max_history = max_history
         self._guard = threading.RLock()
         self._records: OrderedDict[str, _MaintenanceJobRecord] = OrderedDict()
-        self._memory_batch_future: concurrent.futures.Future | None = None
-        self._memory_batch_job_id: str | None = None
-        self._memory_batch_rerun: tuple[str, Callable, tuple, dict] | None = None
         self._active_futures: set[concurrent.futures.Future] = set()
 
     def submit(self, fn, /, *args, **kwargs) -> concurrent.futures.Future:
@@ -126,37 +123,6 @@ class MaintenanceJobCoordinator:
             metadata=metadata,
         )
         return self._submit_record(job_id, fn, args, kwargs)
-
-    def submit_memory_batch_once(self, fn, /, *args, **kwargs) -> bool:
-        trace_id = str(args[1]) if len(args) > 1 and args[1] is not None else None
-        turn_index = args[2] if len(args) > 2 and isinstance(args[2], int) else None
-        with self._guard:
-            rerun_of = self._memory_batch_job_id
-            job_id = self._create_record(
-                "memory_batch",
-                trace_id=trace_id,
-                turn_index=turn_index,
-                rerun_of=rerun_of,
-            )
-            if (
-                self._memory_batch_future is not None
-                and not self._memory_batch_future.done()
-            ):
-                if self._memory_batch_rerun is not None:
-                    self._finish_record(
-                        self._memory_batch_rerun[0],
-                        status="superseded",
-                    )
-                self._memory_batch_rerun = (job_id, fn, args, kwargs)
-                return True
-            self._memory_batch_job_id = job_id
-            self._memory_batch_future = self._submit_memory_batch(
-                job_id,
-                fn,
-                args,
-                kwargs,
-            )
-            return True
 
     def get(self, job_id: str) -> MaintenanceJobSnapshot | None:
         with self._guard:
@@ -306,30 +272,6 @@ class MaintenanceJobCoordinator:
 
     def _mark_cancelled(self, job_id: str) -> None:
         self._finish_record(job_id, status="cancelled")
-
-    def _submit_memory_batch(self, job_id, fn, args, kwargs):
-        future = self._submit_record(job_id, fn, args, kwargs)
-        future.add_done_callback(self._memory_batch_finished)
-        return future
-
-    def _memory_batch_finished(self, completed_future) -> None:
-        with self._guard:
-            if completed_future is not self._memory_batch_future:
-                return
-            rerun = self._memory_batch_rerun
-            self._memory_batch_rerun = None
-            if rerun is None:
-                self._memory_batch_future = None
-                self._memory_batch_job_id = None
-                return
-            job_id, fn, args, kwargs = rerun
-            self._memory_batch_job_id = job_id
-            self._memory_batch_future = self._submit_memory_batch(
-                job_id,
-                fn,
-                args,
-                kwargs,
-            )
 
     def _trim_history(self) -> None:
         while len(self._records) > self._max_history:

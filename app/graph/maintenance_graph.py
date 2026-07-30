@@ -5,28 +5,18 @@ import traceback
 from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
 
-from app.runtime.serialization import model_data
 from app.runtime.session import get_campaign_runtime
 
 from .maintenance_helpers import (
-    memory_batch_route,
-    prepare_manual_batch_state,
-    prepare_manual_memory_maintenance_state,
-    prepare_memory_batch_state,
-    prepare_turn_memory_maintenance_state,
     prepare_scene_summary_state,
 )
 from .maintenance_nodes import (
     director_npc_restock_node,
-    memory_batch_classify_node,
-    memory_draft_extract_node,
-    memory_maintain_node,
     scene_summary_condense_node,
     setting_seed_extract_node,
 )
 from .maintenance_state import (
     DirectorNPCMaintenanceState,
-    MemoryMaintenanceState,
     SceneSummaryMaintenanceState,
 )
 
@@ -48,86 +38,6 @@ def _compile_scene_summary_maintenance_graph():
 
     graph.add_edge(START, "scene_summary_condense")
     graph.add_edge("scene_summary_condense", END)
-    return graph.compile()
-
-
-def build_memory_batch_maintenance_graph():
-    dependencies = (
-        memory_batch_classify_node,
-        memory_maintain_node,
-        memory_batch_route,
-    )
-    return get_cached_graph(
-        "maintenance_memory_batch",
-        dependencies,
-        _compile_memory_batch_maintenance_graph,
-    )
-
-
-def _compile_memory_batch_maintenance_graph():
-    graph = StateGraph(MemoryMaintenanceState)
-    graph.add_node("memory_batch_classify", memory_batch_classify_node)
-    graph.add_node("memory_maintain", memory_maintain_node)
-
-    graph.add_edge(START, "memory_batch_classify")
-    graph.add_conditional_edges(
-        "memory_batch_classify",
-        memory_batch_route,
-        {
-            "memory_maintain": "memory_maintain",
-            "done": END,
-        },
-    )
-    graph.add_edge("memory_maintain", END)
-    return graph.compile()
-
-
-def build_turn_memory_maintenance_graph():
-    dependencies = (
-        memory_draft_extract_node,
-        memory_batch_classify_node,
-        memory_maintain_node,
-        memory_batch_route,
-    )
-    return get_cached_graph(
-        "maintenance_turn_memory",
-        dependencies,
-        _compile_turn_memory_maintenance_graph,
-    )
-
-
-def _compile_turn_memory_maintenance_graph():
-    graph = StateGraph(MemoryMaintenanceState)
-    graph.add_node("memory_draft_extract", memory_draft_extract_node)
-    graph.add_node("memory_batch_classify", memory_batch_classify_node)
-    graph.add_node("memory_maintain", memory_maintain_node)
-    graph.add_edge(START, "memory_draft_extract")
-    graph.add_edge("memory_draft_extract", "memory_batch_classify")
-    graph.add_conditional_edges(
-        "memory_batch_classify",
-        memory_batch_route,
-        {
-            "memory_maintain": "memory_maintain",
-            "done": END,
-        },
-    )
-    graph.add_edge("memory_maintain", END)
-    return graph.compile()
-
-
-def build_memory_maintenance_graph():
-    return get_cached_graph(
-        "maintenance_memory",
-        (memory_maintain_node,),
-        _compile_memory_maintenance_graph,
-    )
-
-
-def _compile_memory_maintenance_graph():
-    graph = StateGraph(MemoryMaintenanceState)
-    graph.add_node("memory_maintain", memory_maintain_node)
-    graph.add_edge(START, "memory_maintain")
-    graph.add_edge("memory_maintain", END)
     return graph.compile()
 
 
@@ -253,126 +163,3 @@ def run_scene_summary_maintenance(
     except Exception:
         traceback.print_exc()
         raise
-
-
-def run_memory_batch_maintenance(
-    current_state,
-    state_before_update,
-    scene_facts_json,
-    trace_id,
-    turn_index,
-    *,
-    core_memory,
-) -> None:
-    try:
-        state = prepare_turn_memory_maintenance_state(
-            current_state,
-            state_before_update,
-            scene_facts_json,
-            trace_id,
-            turn_index,
-            core_memory=core_memory,
-            turn_threshold=5,
-        )
-        graph_state = build_turn_memory_maintenance_graph().invoke(state)
-        result = graph_state["batch_result"]
-        maintenance_result = graph_state.get("maintenance_result")
-        print(
-            "[debug-server] memory batch maintenance "
-            f"triggered={result.triggered} pending={result.pending_count} "
-            f"saved={len(result.saved_ids)} classified={len(result.classified_pending_ids)}"
-        )
-        if maintenance_result is not None:
-            print(
-                "[debug-server] memory maintenance "
-                f"summaries={maintenance_result.summary_count} "
-                f"changed={maintenance_result.changed_count} "
-                f"cursor={maintenance_result.cursor_after}"
-            )
-    except Exception:
-        traceback.print_exc()
-        raise
-
-
-def batch_classify_stream():
-    with get_campaign_runtime().confirmation_lock:
-        yield from _batch_classify_stream()
-
-
-def _batch_classify_stream():
-    state = prepare_manual_batch_state()
-    pending_items = state.get("pending_items", [])
-    yield {
-        "step": "batch_classify_started",
-        "data": {
-            "trace_id": state["trace_id"],
-            "pending_count": len(pending_items),
-            "unclassified_turn_count": state.get("unclassified_turn_count", 0),
-            "pending_total": state.get("pending_total", 0),
-        },
-    }
-    if not pending_items:
-        yield {
-            "step": "batch_classify_done",
-            "data": {"reason": "No pending memories need classification."},
-        }
-        return
-
-    yield {"step": "batch_classifying", "data": {}}
-    graph_state = build_memory_batch_maintenance_graph().invoke(state)
-    result = graph_state["batch_result"]
-    maintenance_result = graph_state.get("maintenance_result")
-    yield {
-        "step": "batch_classified",
-        "data": {
-            "triggered": result.triggered,
-            "raw_candidates": model_data(result.raw_candidates),
-            "final_memories": model_data(result.final_memories),
-            "discarded_count": result.discarded_count,
-            "self_check_result": model_data(result.self_check_result),
-            "should_maintain": result.should_maintain,
-            "entity_links_created": result.entity_links_created,
-            "maintenance": model_data(maintenance_result),
-        },
-    }
-    yield {
-        "step": "batch_classify_done",
-        "data": {
-            "saved_ids": result.saved_ids,
-            "classified_pending_ids": result.classified_pending_ids,
-            "pending_count": result.pending_count,
-            "entity_links_created": result.entity_links_created,
-            "maintenance": model_data(maintenance_result),
-        },
-    }
-
-
-def memory_maintain_stream():
-    with get_campaign_runtime().confirmation_lock:
-        yield from _memory_maintain_stream()
-
-
-def _memory_maintain_stream():
-    state, active_count, total_count = prepare_manual_memory_maintenance_state()
-    yield {
-        "step": "memory_maintain_started",
-        "data": {
-            "trace_id": state["trace_id"],
-            "active_count": active_count,
-            "total_count": total_count,
-            "inactive_count": total_count - active_count,
-        },
-    }
-    graph_state = build_memory_maintenance_graph().invoke(state)
-    result = graph_state["maintenance_result"]
-    yield {
-        "step": "memory_maintain_done",
-        "data": {
-            "active_before": active_count,
-            "summaries": result.summary_count,
-            "changed": result.changed_count,
-            "cursor_before": result.cursor_before,
-            "cursor_after": result.cursor_after,
-            "proposals": model_data(result.proposals),
-        },
-    }

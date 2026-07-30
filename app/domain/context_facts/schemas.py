@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.action.schemas import Anchor
 from app.domain.confirmed_history.schemas import HistorySource
+from app.domain.continuity import ContinuitySelection
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.entity.schemas import EntityProfileUpdateInput
@@ -149,6 +150,7 @@ class ContextExtractorInput(BaseModel):
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
     search_plan: ContextSearchPlan
     history_evidence: ContextHistoryEvidenceSet
+    continuity: ContinuitySelection
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
 
@@ -171,4 +173,5 @@ class ContextFactsResult(BaseModel):
 
     search_plan: ContextSearchPlan
     history_evidence: ContextHistoryEvidenceSet
+    continuity: ContinuitySelection
     context_facts: ContextFactSet

@@ -95,16 +95,6 @@ OPERATION_POLICIES = {
             recovery_kind="initialization",
             supersedes=("initialization_campaign_setup",),
         ),
-        OperationPolicy(
-            "maintenance_batch_classify_manual",
-            "manual_maintenance",
-            True,
-        ),
-        OperationPolicy(
-            "maintenance_memory_maintain_manual",
-            "manual_maintenance",
-            True,
-        ),
     )
 }
 

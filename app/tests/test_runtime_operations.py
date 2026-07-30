@@ -98,7 +98,7 @@ def test_operation_manager_records_player_llm_usage_but_not_maintenance():
         )
         publish_token_usage(
             call_id="maintenance-call",
-            task="memory_maintain",
+            task="scene_summary_condense",
             attempt=1,
             token_usage={"prompt_tokens": 999, "completion_tokens": 999},
             session_type="maintenance",
@@ -932,31 +932,6 @@ def test_public_api_starts_confirmation_with_pending_turn_metadata(
         "write_db": True,
         "scene_text": "修改后的正文",
     }
-
-
-def test_public_api_starts_manual_maintenance_as_operation(
-    monkeypatch,
-    configured_runtime,
-):
-    runtime = configured_runtime
-
-    def maintenance_stream():
-        yield {"step": "memory_draft_started", "data": {}}
-        yield {"step": "finish", "data": {"processed": 2}}
-
-    monkeypatch.setattr(api, "batch_classify_stream", maintenance_stream)
-
-    operation_id = api.start_batch_classify_operation(
-        request_id="request-maintenance-api",
-    )
-    snapshot = runtime.operations.wait(operation_id, timeout=2)
-
-    assert snapshot.status == "succeeded"
-    assert snapshot.operation_type == "maintenance_batch_classify_manual"
-    assert snapshot.metadata == {"manual": True}
-    assert [
-        event.step for event in runtime.operations.read_events(operation_id).events
-    ] == ["memory_draft_started", "finish"]
 
 
 def test_public_api_starts_both_initialization_stages_as_operations(

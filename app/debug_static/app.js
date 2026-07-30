@@ -27,7 +27,7 @@ const tabs = [
   ["diff", "状态变化"],
   ["generation", "生成"],
   ["confirmation", "确认"],
-  ["memory", "记忆"],
+  ["continuity", "Continuity"],
   ["entity", "实体"],
   ["npc", "NPC档案"],
   ["director", "导演"],
@@ -35,19 +35,9 @@ const tabs = [
   ["raw", "Raw"],
 ];
 
-const memoryKindLabels = {
+const continuityKindLabels = {
   commitment: "承诺",
-  open_thread: "未决线索",
-  action_constraint: "行动约束",
-  resource_access: "资源/权限",
-  relationship_state: "关系状态",
-};
-
-const evidenceLabels = {
-  observed: "亲见",
-  reported: "转述",
-  believed: "信念",
-  inferred: "推断",
+  open_thread: "未决事项",
 };
 
 const state = {
@@ -77,8 +67,6 @@ const RESUMABLE_OPERATION_TYPES = new Set([
   "confirmation",
   "initialization_campaign_setup",
   "initialization_opening",
-  "maintenance_batch_classify_manual",
-  "maintenance_memory_maintain_manual",
 ]);
 
 function emptyRun() {
@@ -818,12 +806,10 @@ function renderStatePanel() {
   const activeAmbientEvent = activeDirectorEvents.find((event) => event.role === "ambient");
   const standbyDirectorNpcs = data.standby_director_npcs || [];
   const dispatchedDirectorNpcs = data.dispatched_director_npcs || [];
-  const memories = data.memories || [];
-  const activeMemories = memories.filter((m) => (m.status || "active") === "active").slice(0, 12);
+  const continuityItems = data.continuity_items || [];
+  const activeContinuity = continuityItems.filter((item) => item.status === "active");
   const summaries = data.scene_summaries || [];
   const recentSummaries = data.recent_summaries || [];
-  const pendingVisible = filterVisiblePending(data.pending_memory_items || []);
-  const pendingStats = pendingMemoryStats(data);
   const coreItems = data.core_memory?.items || [];
   const jobs = data.maintenance_jobs || [];
   const jobCounts = data.maintenance_job_status_counts || {};
@@ -867,19 +853,7 @@ function renderStatePanel() {
       ${(recentSummaries.length ? recentSummaries : summaries.slice(0, 8)).map(sceneSummaryCard).join("") || `<div class="empty">暂无场景摘要</div>`}
     `)}
     ${details(`实体档案 (${(data.entity_profiles || []).length})`, renderEntityGroups(data.entity_profiles || []))}
-    ${details(`长期记忆 (${data.active_memory_count || 0}/${data.memory_count || 0})`, activeMemories.length ? activeMemories.map(memoryRecordCard).join("") : `<div class="empty">暂无活跃记忆</div>`)}
-    ${details(`待定记忆 (${pendingStats.unclassified}/${pendingStats.total})`, `
-      ${metrics([
-        metric("未分类", pendingStats.unclassified, pendingStats.unclassified ? "warn" : "ok"),
-        metric("总数", pendingStats.total),
-        metric("回合", data.pending_unclassified_turn_count || 0, "info"),
-      ])}
-      <div class="button-row" style="margin-bottom:10px">
-        <button id="batchBtn">触发批分类</button>
-        <button id="maintainBtn">触发记忆维护</button>
-      </div>
-      ${pendingVisible.map(pendingMemoryCard).join("") || `<div class="empty">暂无未分类待定记忆</div>`}
-    `)}
+    ${details(`Continuity (${activeContinuity.length}/${continuityItems.length})`, activeContinuity.map(continuityItemCard).join("") || `<div class="empty">暂无活跃事项</div>`)}
     ${details(`后台任务 (${jobs.length})`, `
       ${metrics([
         metric("排队", jobCounts.queued || 0, jobCounts.queued ? "info" : ""),
@@ -889,8 +863,6 @@ function renderStatePanel() {
       ${jobs.slice(0, 5).map(maintenanceJobCard).join("") || `<div class="empty">暂无后台任务</div>`}
     `, (jobCounts.queued || 0) + (jobCounts.running || 0) + (jobCounts.failed || 0) > 0)}
   `;
-  $("batchBtn")?.addEventListener("click", triggerBatchClassify);
-  $("maintainBtn")?.addEventListener("click", triggerMemoryMaintain);
 }
 
 function coreMemoryItemCard(item) {
@@ -931,7 +903,7 @@ function renderDebug() {
     diff: renderStateDiff,
     generation: renderGeneration,
     confirmation: renderConfirmation,
-    memory: renderMemory,
+    continuity: renderContinuity,
     entity: renderEntityDebug,
     npc: renderNpcDebug,
     director: renderDirectorDebug,
@@ -1103,17 +1075,14 @@ function stepTasks(scope, stepName) {
   const confirmation = {
     scene_facts_done: ["scene_fact_extract"],
     state_update_done: ["state_update"],
+    continuity_projected: ["continuity_project"],
     entity_extract_done: ["entity_extract"],
     npc_extract_done: ["npc_profile_extract"],
     action_preview_done: ["action_preview"],
     entity_profiles_updated: ["entity_profile_update", "npc_profile_update", "director_event_review", "director_event_select_arc", "director_event_select_ambient"],
     finish: ["*"],
   };
-  const maintenance = {
-    memory_draft_extract_done: ["memory_draft_extract"],
-    batch_classified: ["memory_batch_classify", "memory_maintain"],
-    memory_maintain_done: ["memory_maintain"],
-  };
+  const maintenance = {};
   return ({ generation, confirmation, maintenance }[scope] || {})[stepName] || [];
 }
 
@@ -1147,7 +1116,6 @@ function stepSummary(name, data) {
   if (name === "context_facts_done") return `${data.context_facts?.facts?.length || 0} facts`;
   if (name === "context_extract_failed") return "context extract failed";
   if (name === "director_events_consumed") return `${data.director_event_consumptions?.length || 0} events`;
-  if (name === "retrieval_done") return `${data.retrieved_memories?.total_returned || 0} memories`;
   if (name === "rolls_done") return `${data.roll_results?.total_rolls || 0} rolls`;
   if (name === "director_npc_done") return directorNpcStepSummary(data.director_npc_result);
   if (name === "canon_query_started") return "query planning";
@@ -1167,11 +1135,9 @@ function stepSummary(name, data) {
   if (name === "scene_written") return `turn ${data.turn_index || "?"}`;
   if (name === "state_update_done") return "state updated";
   if (name === "scene_facts_done") return `${data.scene_facts?.facts?.length || 0} facts`;
-  if (name === "memory_draft_extract_done") return `${data.pending_items_count || 0} pending`;
+  if (name === "continuity_projected") return `${data.continuity_projection?.operations?.length || 0} operations`;
   if (name === "entity_extract_done") return `${data.entity_extraction?.retrieved_entities?.length || 0} entities`;
   if (name === "npc_extract_done") return `${data.npc_extraction?.mentions?.length || 0} npcs`;
-  if (name === "batch_classified") return `${data.final_memories?.length || 0} final`;
-  if (name === "memory_maintain_done") return `${data.changed || 0} changed`;
   if (name === "finish") return data.status || "done";
   return Object.keys(data || {}).join(", ") || "event";
 }
@@ -1184,7 +1150,6 @@ function renderGeneration() {
     ${card("Director Event Consumer", g.director_event_consumptions?.length ? g.director_event_consumptions.map((item) => details(item.use_event ? "使用" : "不使用", jsonBlock(item), item.use_event)).join("") : `<div class="empty">没有 active 导演事件</div>`)}
     ${card("Action / Roll Branch", `
       ${details("Action Parse", renderAction(g.action_parse_result, g.raw_action_parse_result, g.action_self_check_result), true)}
-      ${details("Action Retrieval", renderRetrieval(g.retrieved_memories))}
       ${details("Roll", renderRoll(g.roll_results))}
     `)}
     ${card("Turn Resolution", renderResolution(g.turn_resolution))}
@@ -1214,16 +1179,19 @@ function renderContextFacts(g) {
   const facts = g.context_facts?.facts || [];
   const intents = g.context_search_plan?.intents || [];
   const evidence = g.context_history_evidence || {};
+  const continuity = g.continuity_selection || {};
   return card("Context Facts Branch", `
     ${metrics([
       metric("事实", facts.length, "ok"),
       metric("检索意图", intents.length, "info"),
       metric("正文证据", evidence.hits?.length || 0, "info"),
+      metric("连续性事项", continuity.items?.length || 0, "info"),
       metric("索引回合", evidence.indexed_turns || 0, "info"),
     ])}
     ${details("Facts", facts.length ? facts.map(contextFactCard).join("") : `<div class="empty">无事实</div>`, true)}
     ${details("Search Intents", jsonBlock(g.context_search_plan || { intents: [] }))}
     ${details("Confirmed History", jsonBlock(evidence))}
+    ${details("Active Continuity", jsonBlock(continuity))}
   `);
 }
 
@@ -1245,39 +1213,27 @@ function renderConfirmation() {
     ${timeline("confirmation", "确认事件")}
     ${card("Scene Facts", facts.length ? facts.map(contextFactCard).join("") : `<div class="empty">暂无事实</div>`)}
     ${renderStateDiff()}
-    ${card("Pending Memories", filterVisiblePending(c.memory_extraction?.pending_items || c.pending_items || []).map(pendingMemoryCard).join("") || `<div class="empty">暂无未分类候选</div>`)}
+    ${card("Continuity Operations", renderContinuityProjection(c.continuity_projection || step("confirmation", "continuity_projected")?.continuity_projection))}
     ${card("Entity Updates", renderEntityExtraction(c.entity_extraction || step("confirmation", "entity_extract_done")?.entity_extraction, c.updated_entity_ids))}
     ${card("NPC Profile Updates", renderNpcExtraction(npcExtraction, updatedNpcIds))}
   `;
 }
 
-function renderMemory() {
-  const batch = step("maintenance", "batch_classified");
-  const batchDone = step("maintenance", "batch_classify_done") || {};
-  const maintain = step("maintenance", "memory_maintain_done") || batch?.maintenance;
-  const confirm = step("confirmation", "finish")?.memory_extraction;
+function renderContinuity() {
+  const confirm = step("confirmation", "finish") || {};
   const server = state.serverState || {};
-  const stored = server.memories || [];
-  const active = stored.filter((memory) => (memory.status || "active") === "active");
-  const inactive = stored.filter((memory) => memory.status && memory.status !== "active");
-  const pending = filterVisiblePending(server.pending_memory_items || []);
+  const stored = server.continuity_items || [];
+  const active = stored.filter((item) => item.status === "active");
+  const closed = stored.filter((item) => item.status !== "active");
   return `
-    ${timeline("maintenance", "维护事件")}
-    ${confirm ? card("本轮待定记忆", `
-      ${metrics([metric("候选", confirm.pending_items?.length || 0), metric("保存", confirm.saved_pending_ids?.length || 0), metric("库内", confirm.store_total || 0)])}
-      ${filterVisiblePending(confirm.pending_items || []).map(pendingMemoryCard).join("") || `<div class="empty">无未分类候选</div>`}
-    `) : ""}
-    ${batch ? renderBatch({...batch, ...batchDone}) : card("MemoryBatchClassifier", `<div class="empty">尚未触发批分类。</div>`)}
-    ${maintain ? renderMaintainer(maintain) : card("MemoryMaintainer", `<div class="empty">尚未触发生命周期维护。</div>`)}
-    ${card("持久化记忆快照", `
+    ${confirm.continuity_projection ? card("本轮生命周期投影", renderContinuityProjection(confirm.continuity_projection)) : ""}
+    ${card("Continuity Ledger", `
       ${metrics([
         metric("Active", active.length, "ok"),
-        metric("Inactive", inactive.length, inactive.length ? "warn" : ""),
-        metric("Pending", pending.length, pending.length ? "info" : ""),
+        metric("Closed", closed.length, closed.length ? "info" : ""),
       ])}
-      ${details(`Active (${active.length})`, active.map(memoryRecordCard).join("") || `<div class="empty">暂无活跃记忆</div>`, true)}
-      ${details(`Inactive (${inactive.length})`, inactive.map(memoryRecordCard).join("") || `<div class="empty">暂无失效记忆</div>`)}
-      ${details(`Pending (${pending.length})`, pending.map(pendingMemoryCard).join("") || `<div class="empty">暂无待分类记忆</div>`)}
+      ${details(`Active (${active.length})`, active.map(continuityItemCard).join("") || `<div class="empty">暂无活跃事项</div>`, true)}
+      ${details(`Closed (${closed.length})`, closed.map(continuityItemCard).join("") || `<div class="empty">暂无已关闭事项</div>`)}
     `)}
   `;
 }
@@ -1389,14 +1345,6 @@ function renderAction(result, raw, selfCheck) {
       ["类型", esc(a.kind)],
       ["来源", esc(a.source)],
     ])}</div>`).join("") || `<div class="empty">无锚点</div>`)}
-  `;
-}
-
-function renderRetrieval(result) {
-  if (!result) return `<div class="empty">暂无检索。</div>`;
-  return `
-    ${metrics([metric("扫描", result.total_scanned || 0), metric("返回", result.total_returned || 0, "info")])}
-    ${(result.candidates || []).map((c) => memoryCandidateCard(c)).join("") || `<div class="empty">无候选</div>`}
   `;
 }
 
@@ -1630,49 +1578,6 @@ function stateSummary(s) {
   ]);
 }
 
-function renderBatch(data) {
-  const raw = data.raw_candidates || [];
-  const finalMemories = data.final_memories || [];
-  return `
-    ${card("MemoryBatchClassifier", `
-      ${metrics([metric("候选", raw.length, "info"), metric("最终", finalMemories.length, "ok"), metric("丢弃", data.discarded_count || 0, "warn"), metric("实体链接", data.entity_links_created || 0)])}
-      ${kv([["保存ID", chips(data.saved_ids)], ["标记Pending", chips(data.classified_pending_ids)]])}
-    `)}
-    ${data.self_check_result ? details("Self Check", checkSummary(data.self_check_result), true) : ""}
-    ${details("最终记忆", finalMemories.map(memoryRecordCard).join("") || `<div class="empty">暂无最终记忆</div>`, true)}
-    ${details("分类候选", raw.map(candidateCard).join("") || `<div class="empty">暂无候选</div>`)}
-  `;
-}
-
-function renderMaintainer(data) {
-  const proposals = data.proposals || [];
-  return `
-    ${card("MemoryMaintainer", metrics([
-      metric("摘要", data.summaries ?? data.summary_count ?? 0),
-      metric("变更", data.changed ?? data.changed_count ?? 0, data.changed || data.changed_count ? "warn" : "ok"),
-      metric("游标", `${text(data.cursor_before)} → ${text(data.cursor_after)}`),
-    ]))}
-    ${proposals.length ? proposals.map(proposalCard).join("") : `<div class="empty">没有生命周期 proposal。</div>`}
-    ${details("完整输出", jsonBlock(data))}
-  `;
-}
-
-function checkSummary(check) {
-  if (!check) return `<div class="empty">无检查结果</div>`;
-  return `
-    ${metrics([
-      check.original_count !== undefined ? metric("原始", check.original_count) : "",
-      check.final_count !== undefined ? metric("最终", check.final_count, "ok") : "",
-      check.warnings ? metric("警告", check.warnings.length, "warn") : "",
-      check.fixes ? metric("修复", check.fixes.length, "info") : "",
-      check.changes ? metric("变更", check.changes.length, "warn") : "",
-    ])}
-    ${details("警告", list(check.warnings))}
-    ${details("修复", list(check.fixes))}
-    ${details("变更", list((check.changes || []).map((c) => `${c.memory_index ?? "-"} · ${c.field}: ${c.reason || ""}`)))}
-  `;
-}
-
 function renderEntityExtraction(data, updatedIds = []) {
   if (!data) return `<div class="empty">暂无实体提取。</div>`;
   const aliasMatches = data.alias_matches || [];
@@ -1828,7 +1733,6 @@ function entityCard(profile) {
       ["别名", chips(profile.aliases)],
       ["别名命中", chips(aliasHits)],
       ["来源场景", chips(profile.source_scene_ids)],
-      ["来源记忆", chips(profile.source_memory_ids)],
       ["更新", esc(text(profile.updated_at))],
     ])}
   </div>`;
@@ -1920,101 +1824,36 @@ function sceneSummaryCard(summary) {
   </div>`;
 }
 
-function memoryCandidateCard(c, selected = false) {
+function continuityItemCard(item) {
   return `<div class="section-card">
-    <div class="card-title"><span>${esc(c.subject || c.memory_id)}</span>${metric(selected ? "已引用" : "score", selected ? "" : fmt(c.score), selected ? "ok" : "")}</div>
-    <div style="margin-bottom:8px">${esc(text(c.content || c.raw_text))}</div>
+    <div class="card-title"><span>${esc(item.subject || item.id || "未命名")}</span>${metric(continuityKindLabels[item.kind] || item.kind || "kind", item.status || "")}</div>
+    <div style="margin-bottom:8px">${esc(text(item.statement))}</div>
     ${kv([
-      ["ID", esc(text(c.memory_id || c.pending_id))],
-      ["类型", esc(`${text(c.memory_kind)} · ${text(c.evidence_mode)}`)],
-      ["实体", chips(c.entities)],
-      ["锚点", chips(c.matched_anchors)],
-      ["行动", chips(c.matched_actions)],
-    ])}
-  </div>`;
-}
-
-function memoryRecordCard(mem) {
-  return `<div class="section-card">
-    <div class="card-title"><span>${esc(mem.subject || mem.id || "未命名")}</span>${metric(memoryKindLabels[mem.memory_kind] || mem.memory_kind || "kind", evidenceLabels[mem.evidence_mode] || mem.evidence_mode || "")}</div>
-    <div style="margin-bottom:8px">${esc(text(mem.content))}</div>
-    ${kv([
-      ["ID", esc(text(mem.id))],
-      ["实体", chips(mem.entities)],
-      ["可见", chips(mem.visibility)],
-      ["标签", chips(mem.tags)],
-      ["地点", esc(text(mem.location))],
-      ["时间", esc(text(mem.time_label))],
-      ["状态", esc(text(mem.status, "active"))],
-      ["状态原因", esc(text(mem.status_reason))],
-      ["替代者", esc(text(mem.superseded_by))],
-      ["Owner", esc(text(mem.owner))],
-      ["置信/显著", esc(`${fmt(mem.confidence)} / ${fmt(mem.salience)}`)],
-      ["来源场景", esc(text(mem.source_scene_id))],
-      ["来源Pending", chips(mem.source_pending_ids)],
-      ["证据", list(mem.source_text_span)],
-      ["创建/更新", esc(`${text(mem.created_at)} / ${text(mem.updated_at)}`)],
-    ])}
-  </div>`;
-}
-
-function pendingMemoryCard(item) {
-  return `<div class="section-card">
-    <div class="card-title"><span>${esc(item.raw_text || item.subject || item.id || "候选")}</span>${metric(item.memory_kind || "kind", item.importance_hint || "")}</div>
-    ${kv([
-      ["ID", esc(text(item.id || item.pending_id))],
-      ["场景", esc(`${text(item.scene_id)} / Turn ${text(item.turn_index)}`)],
-      ["主体", esc(text(item.subject))],
+      ["ID", esc(text(item.id))],
       ["实体", chips(item.entities)],
       ["地点", esc(text(item.location))],
-      ["时间", esc(text(item.time_label))],
-      ["Owner", esc(text(item.owner))],
-      ["状态", esc(item.discarded ? "discarded" : item.classified ? "classified" : "pending")],
-      ["舍弃原因", esc(text(item.discard_reason))],
-      ["创建", esc(text(item.created_at))],
-      ["证据", list(item.source_text_span)],
+      ["期限", esc(text(item.deadline))],
+      ["状态", esc(text(item.status))],
+      ["创建/更新", esc(`${text(item.created_turn)} / ${text(item.updated_turn)}`)],
+      ["关闭回合", esc(text(item.closed_turn))],
     ])}
   </div>`;
 }
 
-function filterVisiblePending(items) {
-  return (items || []).filter((item) => !item.classified && !item.discarded);
-}
-
-function pendingMemoryStats(data) {
-  const items = data?.pending_memory_items || [];
-  const visible = filterVisiblePending(items);
-  const total = data?.pending_memory_count ?? items.length;
-  const unclassified = data?.pending_unclassified_count ?? visible.length;
-  return { total, unclassified };
-}
-
-function candidateCard(mem) {
-  const keep = mem.keep !== false;
-  return `<div class="section-card" style="${keep ? "" : "opacity:.7"}">
-    <div class="card-title"><span>${esc(mem.subject || mem.content || "候选")}</span>${metric(keep ? "keep" : "discard", mem.memory_kind || "", keep ? "ok" : "bad")}</div>
-    <div style="margin-bottom:8px">${esc(text(mem.content || mem.discard_reason))}</div>
+function renderContinuityProjection(projection) {
+  const operations = projection?.operations || [];
+  return operations.map((operation) => `<div class="section-card">
+    <div class="card-title"><span>${esc(operation.item?.subject || operation.item_id || "operation")}</span>${metric(operation.operation || "op", operation.item?.kind || "")}</div>
+    <div style="margin-bottom:8px">${esc(text(operation.item?.statement || operation.reason))}</div>
     ${kv([
-      ["类型", esc(`${text(mem.memory_kind)} · ${text(mem.evidence_mode)}`)],
-      ["实体", chips(mem.entities)],
-      ["可见", chips(mem.visibility)],
-      ["Pending", chips(mem.source_pending_ids)],
-      ["证据", list(mem.source_text_span)],
-      ["舍弃原因", esc(text(mem.discard_reason))],
+      ["Item ID", esc(text(operation.item_id))],
+      ["实体", chips(operation.item?.entities)],
+      ["地点", esc(text(operation.item?.location))],
+      ["期限", esc(text(operation.item?.deadline))],
+      ["证据", chips(operation.evidence_ids)],
+      ["理由", esc(text(operation.reason))],
     ])}
-  </div>`;
-}
-
-function proposalCard(p) {
-  return `<div class="section-card">
-    <div class="card-title"><span>${esc(p.action || "proposal")}</span>${metric("mem", (p.source_memory_ids || []).length)}</div>
-    <div style="margin-bottom:8px">${esc(text(p.reason))}</div>
-    ${kv([
-      ["来源记忆", chips(p.source_memory_ids)],
-      ["证据摘要", chips(p.evidence_summary_ids)],
-      ["替代", p.replacement ? esc(text(p.replacement.content || p.replacement.subject)) : `<span class="empty">无</span>`],
-    ])}
-  </div>`;
+  </div>`).join("") || `<div class="empty">本轮无 Continuity 变化</div>`;
 }
 
 function fmt(value) {
@@ -2113,9 +1952,9 @@ function handleConfirmationPipelineEvent(event) {
       state.pendingVariantIndex = -1;
       state.pendingSceneText = null;
       els.input.value = "";
-      addMessage("assistant", "已确认采用，并写入状态、短期记忆和记忆流程。", "系统");
-      setStatus(data.memory_extraction?.batch_queued ? "确认完成 · 后台维护中" : "确认完成");
-      els.turnInfo.textContent = data.memory_extraction?.batch_queued ? "后台维护中" : "等待玩家行动";
+      addMessage("assistant", "已确认采用，并写入状态、历史与 Continuity。", "系统");
+      setStatus("确认完成");
+      els.turnInfo.textContent = "等待玩家行动";
     } else {
       addMessage("assistant", "Dry Run 完成，候选版本仍可切换和确认。", "系统");
       setStatus("Dry Run 完成 - 仍待确认");
@@ -2124,12 +1963,6 @@ function handleConfirmationPipelineEvent(event) {
     setDebugStatus(data.status || "committed");
     state.activeTab = "diff";
   }
-}
-
-function handleManualMaintenanceEvent(event) {
-  if (event.step === "batch_classified") setDebugStatus("批分类完成");
-  if (event.step === "batch_classify_done") setStatus("批分类完成");
-  if (event.step === "memory_maintain_done") setStatus("记忆维护完成");
 }
 
 async function replayOperation(operation, scope, onEvent) {
@@ -2201,22 +2034,6 @@ async function resumeConfirmationOperation(operation) {
   }
 }
 
-async function resumeMaintenanceOperation(operation) {
-  state.activeOperationId = operation.operation_id;
-  resetRun("maintenance");
-  setStatus("正在恢复维护...", true);
-  setDebugStatus("维护中");
-  state.activeTab = "memory";
-  renderDebug();
-  try {
-    await replayOperation(operation, "maintenance", handleManualMaintenanceEvent);
-    await refreshState({ preserveStatus: true });
-    await acknowledgeOperation(operation.operation_id);
-  } catch (err) {
-    await failResumedOperation(err, "维护失败", operation.operation_id);
-  }
-}
-
 async function resumeGenerationOperation(operation) {
   const retry = operation.operation_type === "retry";
   state.activeOperationId = operation.operation_id;
@@ -2251,8 +2068,6 @@ async function resumeActivePipelineOperation() {
     await resumeInitializationOperation(operation);
   } else if (operation.operation_type === "confirmation") {
     await resumeConfirmationOperation(operation);
-  } else if (operation.operation_type.startsWith("maintenance_")) {
-    await resumeMaintenanceOperation(operation);
   } else {
     await resumeGenerationOperation(operation);
   }
@@ -2408,44 +2223,6 @@ async function confirmTurn() {
     state.run.errors.push(err);
     setStatus("确认失败");
     setDebugStatus("确认失败");
-    renderError(err);
-    await acknowledgeOperation(err?.operationId);
-  }
-}
-
-async function triggerBatchClassify() {
-  resetRun("maintenance");
-  setStatus("批分类中...", true);
-  setDebugStatus("MemoryBatchClassifier");
-  state.activeTab = "memory";
-  renderDebug();
-  try {
-    const response = await fetch("/api/batch-classify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: newRequestId() }) });
-    const operationId = await readEventStream(response, "maintenance", handleManualMaintenanceEvent);
-    await refreshState({ preserveStatus: true });
-    await acknowledgeOperation(operationId);
-  } catch (err) {
-    state.run.errors.push(err);
-    setStatus("批分类失败");
-    renderError(err);
-    await acknowledgeOperation(err?.operationId);
-  }
-}
-
-async function triggerMemoryMaintain() {
-  resetRun("maintenance");
-  setStatus("记忆维护中...", true);
-  setDebugStatus("MemoryMaintainer");
-  state.activeTab = "memory";
-  renderDebug();
-  try {
-    const response = await fetch("/api/memory-maintain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_id: newRequestId() }) });
-    const operationId = await readEventStream(response, "maintenance", handleManualMaintenanceEvent);
-    await refreshState({ preserveStatus: true });
-    await acknowledgeOperation(operationId);
-  } catch (err) {
-    state.run.errors.push(err);
-    setStatus("记忆维护失败");
     renderError(err);
     await acknowledgeOperation(err?.operationId);
   }

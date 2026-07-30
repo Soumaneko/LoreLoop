@@ -45,7 +45,7 @@ def _manifest_for(path: str, content: bytes) -> dict:
 def test_snapshot_uses_sqlite_backup_and_excludes_wal_and_shm(tmp_path):
     source = tmp_path / "source"
     source.mkdir()
-    database = source / "memories.db"
+    database = source / "continuity.db"
     connection = sqlite3.connect(database)
     try:
         connection.execute("PRAGMA journal_mode=WAL")
@@ -57,10 +57,10 @@ def test_snapshot_uses_sqlite_backup_and_excludes_wal_and_shm(tmp_path):
 
         destination = tmp_path / "snapshot"
         files = create_consistent_snapshot(source, destination)
-        assert files == ["memories.db"]
+        assert files == ["continuity.db"]
         assert not list(destination.glob("*-wal"))
         assert not list(destination.glob("*-shm"))
-        with sqlite3.connect(destination / "memories.db") as copied:
+        with sqlite3.connect(destination / "continuity.db") as copied:
             assert copied.execute("SELECT value FROM values_for_test").fetchone()[0] == "from-wal"
     finally:
         connection.close()
@@ -70,11 +70,11 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     source = tmp_path / "source"
     source.mkdir()
     SaveManifestRepository(source).create("Alpha")
-    _make_database(source / "memories.db")
+    _make_database(source / "continuity.db")
     _make_database(source / "confirmed_history.db", "indexed")
-    _make_database(source / ".snapshots" / "undo-one" / "memories.db", "old")
+    _make_database(source / ".snapshots" / "undo-one" / "continuity.db", "old")
     (source / ".snapshots" / "undo-one" / "manifest.json").write_text(
-        '{"files": ["memories.db"]}', encoding="utf-8"
+        '{"files": ["continuity.db"]}', encoding="utf-8"
     )
     (source / "ignored.txt").write_text("not portable", encoding="utf-8")
 
@@ -84,7 +84,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     assert "ignored.txt" not in exported.files
     with zipfile.ZipFile(archive) as bundle:
         assert "manifest.json" in bundle.namelist()
-        assert "save/memories.db" in bundle.namelist()
+        assert "save/continuity.db" in bundle.namelist()
         assert "save/confirmed_history.db" in bundle.namelist()
         assert "save/ignored.txt" not in bundle.namelist()
 
@@ -93,7 +93,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     extracted = extract_archive(archive, destination)
     assert extracted == inspected
     assert SaveManifestRepository(destination).load().display_name == "Alpha"
-    with sqlite3.connect(destination / ".snapshots" / "undo-one" / "memories.db") as db:
+    with sqlite3.connect(destination / ".snapshots" / "undo-one" / "continuity.db") as db:
         assert db.execute("SELECT value FROM values_for_test").fetchone()[0] == "old"
 
 
@@ -243,10 +243,10 @@ def test_inspection_enforces_compression_ratio_limit(tmp_path):
 def test_extract_rejects_invalid_sqlite_and_cleans_staging(tmp_path):
     archive = tmp_path / "bad-db.zip"
     content = b"not sqlite"
-    manifest = _manifest_for("memories.db", content)
+    manifest = _manifest_for("continuity.db", content)
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.writestr("manifest.json", json.dumps(manifest))
-        bundle.writestr("save/memories.db", content)
+        bundle.writestr("save/continuity.db", content)
     destination = tmp_path / "staging"
     with pytest.raises(SaveArchiveError, match="Invalid SQLite"):
         extract_archive(archive, destination)
