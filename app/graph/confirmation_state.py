@@ -10,8 +10,7 @@ from app.domain.core_memory.schemas import CoreMemory
 from app.domain.continuity import ContinuityProjection
 from app.domain.current_state.schemas import CurrentState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
-from app.domain.director_event.workflows import DirectorEventWorkflowBatchResult
-from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director import DirectorDecisionBatch, DirectorSkillExecutionBatch
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.entity.schemas import EntityExtractionResult, EntityProfile
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
@@ -41,9 +40,7 @@ class ConfirmationPipelineInput:
     user_input: str
     turn_index: int
     stale_message: str
-    update_director_event: bool = True
-    handle_director_npc: bool = True
-    director_npc_restock_sync: bool = False
+    run_director_agent: bool = True
     clear_short_term_before_save: bool = False
     clear_confirmed_history_before_save: bool = False
     clear_continuity_before_save: bool = False
@@ -61,23 +58,18 @@ class ConfirmationCache(TypedDict, total=False):
     turn_summary: SceneSummary
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
-    npc_director_events: list[DirectorEvent]
     action_preview: ActionPreviewResult
-    director_event_result: DirectorEventWorkflowBatchResult | None
-    director_event_promoted_npc_profile_ids: list[str]
+    director_decision: DirectorDecisionBatch
+    director_executions: DirectorSkillExecutionBatch
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
     existing_entity_profiles: list[EntityProfile]
     existing_npc_profiles: list[NPCProfile]
     director_npc_profile_id: str | None
     confirmed_director_npc_draft: DirectorNPCDraft | None
-    director_npc_restock_scheduled: bool
-    director_npc_restock_job_id: str | None
-    director_npc_restock_operation_id: str | None
     setting_seed_maintenance_scheduled: bool
     setting_seed_maintenance_job_id: str | None
     setting_seed_maintenance_operation_id: str | None
-    director_npc_last_dispatch_turn_set: bool
     turn_summary_saved: bool
     turn_summary_id: str
     state_saved: bool
@@ -105,7 +97,6 @@ class ConfirmationState(TypedDict, total=False):
     cache: ConfirmationCache
     director_npc_profile_id: str | None
     confirmed_director_npc_draft: DirectorNPCDraft | None
-    director_npc_restock_scheduled: bool
     state_before_update: CurrentState
     confirmation_scene_text: str
     existing_entity_profiles: list[EntityProfile]
@@ -122,10 +113,9 @@ class ConfirmationState(TypedDict, total=False):
     state_update_warnings: list[StateChangeWarning]
     entity_extraction: EntityExtractionResult | None
     npc_extraction: NPCExtractionResult | None
-    npc_director_events: list[DirectorEvent]
     action_preview: ActionPreviewResult
     continuity_projection: ContinuityProjection
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
-    director_event_result: DirectorEventWorkflowBatchResult | None
-    director_event_promoted_npc_profile_ids: list[str]
+    director_decision: DirectorDecisionBatch
+    director_executions: DirectorSkillExecutionBatch

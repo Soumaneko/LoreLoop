@@ -197,16 +197,15 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
             return object()
 
     class _Scheduler:
-        def schedule_director_npc_maintenance(self, _state):
-            calls.append("restock")
+        def schedule_setting_seed_maintenance(self, _state):
+            calls.append("setting")
             return True
 
-        def schedule_followups(self, _state, _result, **_kwargs):
+        def schedule_scene_summary(self, _state):
             calls.append("followups")
-            return object()
 
     class _EventBuilder:
-        def build(self, _state, _commit_result, _schedule_result):
+        def build(self, _state, _commit_result):
             calls.append("events")
             return []
 
@@ -246,7 +245,7 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
         "audit",
         "journal_completed",
         "pending_removed",
-        "restock",
+        "setting",
         "followups",
         "events",
     ]
@@ -302,9 +301,14 @@ def test_confirmation_second_wave_starts_after_helper_state_is_ready():
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
     assert ("__start__", "action_preview") in edges
-    assert ("__start__", "director_event_update") in edges
+    assert ("__start__", "continuity_project") in edges
     assert ("__start__", "entity_profile_update") in edges
     assert ("__start__", "npc_profile_update") in edges
+
+    director_graph = confirmation_graph.build_confirmation_director_graph().get_graph()
+    director_edges = {(edge.source, edge.target) for edge in director_graph.edges}
+    assert ("__start__", "director_agent_confirm") in director_edges
+    assert ("director_agent_confirm", "__end__") in director_edges
 
 
 def test_confirmation_events_reducer_appends_node_events():
@@ -402,7 +406,8 @@ def test_rollback_cache_keeps_pure_results_and_discards_write_markers():
         "action_preview": marker,
         "entity_extraction": marker,
         "npc_extraction": marker,
-        "director_event_result": marker,
+        "director_decision": marker,
+        "director_executions": marker,
         "updated_entity_ids": ["entity_1"],
         "updated_npc_profile_ids": ["npc_1"],
         "director_npc_profile_id": "npc_2",

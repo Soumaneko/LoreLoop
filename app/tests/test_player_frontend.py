@@ -1095,7 +1095,12 @@ def test_player_event_projection_removes_internal_generation_data():
             "version_index": 2,
             "turn_index": 7,
             "trace_id": "private-trace",
-            "context": {"director_event_consumptions": ["secret"]},
+            "context": {
+                "director_stage": {
+                    "reasoning": "secret",
+                    "materials": [],
+                }
+            },
             "scene_result": {
                 "scene_text": "公开正文",
                 "closing_prompt": "接下来怎么办？",

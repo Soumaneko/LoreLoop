@@ -8,8 +8,7 @@ from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEventConsumption
-from app.domain.director_npc.schemas import DirectorNPCPlotInjection
+from app.domain.director.schemas import DirectorStageResult
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
@@ -33,8 +32,7 @@ def assemble_narrative_context(
     context_facts: ContextFactSet | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
-    director_event_consumptions: list[DirectorEventConsumption] | None = None,
-    director_npc_injection: DirectorNPCPlotInjection | None = None,
+    director_stage: DirectorStageResult | None = None,
 ) -> NarrativeComposerContext:
     return NarrativeComposerContext(
         user_input=user_input,
@@ -45,8 +43,7 @@ def assemble_narrative_context(
         or ContextFactSet(turn_focus="No Context Facts", facts=[]),
         entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
-        director_event_consumptions=director_event_consumptions or [],
-        director_npc_injection=director_npc_injection,
+        director_stage=director_stage,
     )
 
 
@@ -87,9 +84,6 @@ def prepare_generation_state(
         scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)
 
-    with stores.director_event() as director_store:
-        active_director_events = director_store.list_active()
-
     state: GenerationState = {
         "events": [],
         "runtime_services": services,
@@ -105,7 +99,6 @@ def prepare_generation_state(
         "next_turn_index": turn_index,
         "scene_summaries": scene_summaries,
         "recent_summaries": recent_summaries,
-        "active_director_events": active_director_events,
     }
 
     with stores.entity() as ent_store, stores.npc_profile() as npc_store:
@@ -165,7 +158,7 @@ def finalize_pending_turn(
         context=state["context"],
         outline=state["outline"],
         scene_result=state["scene_result"],
-        director_npc_result=state.get("director_npc_result"),
+        director_stage=state.get("director_stage"),
         player_resolution=player_resolution,
         turn_index=state["next_turn_index"],
         short_term_memory=state["short_term_memory"],
@@ -200,7 +193,6 @@ def state_loaded_event(state: dict[str, Any]) -> GenerationEvent:
             "short_term_memory": model_data(state["short_term_memory"]),
             "scene_summaries": model_data(state["scene_summaries"]),
             "recent_summaries": model_data(state["recent_summaries"]),
-            "active_director_events": model_data(state["active_director_events"]),
         },
     }
 

@@ -14,6 +14,8 @@ def utc_now() -> str:
 
 
 class NPCProfilePublicView(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     aliases: list[str] = Field(default_factory=list)
     public_summary: str | None = None
@@ -37,10 +39,12 @@ class NPCProfileDirectorView(NPCProfilePublicView):
     director_notes: str | None = None
     source_director_npc_id: str | None = None
     created_turn: int | None = None
-    dispatched_turn: int | None = None
+    introduced_turn: int | None = None
 
 
 class NPCProfileUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     aliases: list[str] = Field(default_factory=list)
     public_summary: str | None = None
@@ -86,6 +90,8 @@ class NPCProfileUpdateBatch(BaseModel):
 
 
 class NPCProfileBackfillOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1)
     core_motivation: str = Field(min_length=1)
     hidden_secret: str = Field(min_length=1)
@@ -99,15 +105,21 @@ class NPCProfileBackfillOutput(BaseModel):
 
 
 class NPCMention(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     context_span: str
 
 
 class NPCExtractionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     mentions: list[NPCMention] = Field(default_factory=list)
 
 
 class NPCProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     npc_id: str = Field(default_factory=_new_id)
     name: str
     aliases: list[str] = Field(default_factory=list)
@@ -133,7 +145,7 @@ class NPCProfile(BaseModel):
     director_notes: str | None = None
     source_director_npc_id: str | None = None
     created_turn: int | None = None
-    dispatched_turn: int | None = None
+    introduced_turn: int | None = None
 
     source_scene_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0, le=1)
@@ -174,7 +186,7 @@ class NPCProfile(BaseModel):
             director_notes=self.director_notes,
             source_director_npc_id=self.source_director_npc_id,
             created_turn=self.created_turn,
-            dispatched_turn=self.dispatched_turn,
+            introduced_turn=self.introduced_turn,
         )
 
 

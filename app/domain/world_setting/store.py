@@ -4,7 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterable
 
-from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
+from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version, transaction
 
 from .schemas import (
     SettingAnchorPacket,
@@ -15,8 +15,6 @@ from .schemas import (
     WorldSettingSource,
     utc_now,
 )
-
-_INITIAL_WORLD_SETTINGS_META_KEY = "initial_world_setting_ids"
 
 
 class WorldSettingStore:
@@ -35,10 +33,8 @@ class WorldSettingStore:
                 basic_concept TEXT NOT NULL,
                 visibility TEXT NOT NULL,
                 maturity TEXT NOT NULL,
-                availability TEXT NOT NULL,
+                status TEXT NOT NULL,
                 prepared_anchor_json TEXT,
-                reserved_by TEXT,
-                consumed_by_director_npc_id TEXT,
                 rejection_reason TEXT,
                 related_setting_ids_json TEXT NOT NULL,
                 created_turn INTEGER NOT NULL,
@@ -48,10 +44,38 @@ class WorldSettingStore:
             )
             """
         )
+        expected_columns = {
+            "setting_id",
+            "normalized_label",
+            "label",
+            "kind",
+            "basic_concept",
+            "visibility",
+            "maturity",
+            "status",
+            "prepared_anchor_json",
+            "rejection_reason",
+            "related_setting_ids_json",
+            "created_turn",
+            "last_seen_turn",
+            "created_at",
+            "updated_at",
+        }
+        actual_columns = {
+            row["name"]
+            for row in self._conn.execute(
+                "PRAGMA table_info(world_settings)"
+            ).fetchall()
+        }
+        if actual_columns != expected_columns:
+            raise RuntimeError(
+                "world_settings.db does not match the current independent "
+                "World Setting contract"
+            )
         self._conn.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_world_settings_available
-            ON world_settings(availability, created_turn, setting_id)
+            CREATE INDEX IF NOT EXISTS idx_world_settings_active
+            ON world_settings(status, created_turn, setting_id)
             """
         )
         self._conn.execute(
@@ -79,75 +103,8 @@ class WorldSettingStore:
             )
             """
         )
-        self._migrate_anchor_packets()
-        ensure_schema_version(self._conn, "world_setting", 5)
+        ensure_exact_schema_version(self._conn, "world_setting", 6)
         self._conn.commit()
-
-    def _migrate_anchor_packets(self) -> None:
-        rows = self._conn.execute(
-            """
-            SELECT setting_id, prepared_anchor_json
-            FROM world_settings
-            WHERE prepared_anchor_json IS NOT NULL
-              AND prepared_anchor_json != ''
-            """
-        ).fetchall()
-        for row in rows:
-            try:
-                payload = json.loads(row["prepared_anchor_json"])
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(payload, dict):
-                continue
-            changed = False
-            for removed in ("authored_constraints", "open_questions"):
-                if removed in payload:
-                    payload.pop(removed, None)
-                    changed = True
-            if "everyday_effects" in payload and "world_effects" not in payload:
-                payload["world_effects"] = payload.pop("everyday_effects")
-                changed = True
-            elif "everyday_effects" in payload:
-                payload.pop("everyday_effects", None)
-                changed = True
-            setting_facts = [
-                str(fact).strip()
-                for fact in payload.get("setting_facts", [])
-                if str(fact).strip()
-            ]
-            player_known_indexes, player_known_added = _fact_indexes(
-                payload.get("player_known_facts", []),
-                setting_facts,
-            )
-            director_private_indexes, director_private_added = _fact_indexes(
-                payload.get("director_private_facts", []),
-                setting_facts,
-            )
-            if setting_facts != payload.get("setting_facts", []):
-                payload["setting_facts"] = setting_facts
-                changed = True
-            if player_known_added or payload.get("player_known_facts") != player_known_indexes:
-                payload["player_known_facts"] = player_known_indexes
-                changed = True
-            if (
-                director_private_added
-                or payload.get("director_private_facts") != director_private_indexes
-            ):
-                payload["director_private_facts"] = director_private_indexes
-                changed = True
-            if changed:
-                self._conn.execute(
-                    """
-                    UPDATE world_settings
-                    SET prepared_anchor_json = ?, updated_at = ?
-                    WHERE setting_id = ?
-                    """,
-                    (
-                        json.dumps(payload, ensure_ascii=False),
-                        utc_now(),
-                        row["setting_id"],
-                    ),
-                )
 
     def list_all(self) -> list[WorldSetting]:
         rows = self._conn.execute(
@@ -155,11 +112,11 @@ class WorldSettingStore:
         ).fetchall()
         return [self._setting_from_row(row) for row in rows]
 
-    def list_available(self) -> list[WorldSetting]:
+    def list_active(self) -> list[WorldSetting]:
         rows = self._conn.execute(
             """
             SELECT * FROM world_settings
-            WHERE availability = 'available'
+            WHERE status = 'active'
             ORDER BY created_turn, created_at
             """
         ).fetchall()
@@ -169,7 +126,7 @@ class WorldSettingStore:
         rows = self._conn.execute(
             """
             SELECT * FROM world_settings
-            WHERE maturity = 'seed' AND availability = 'available'
+            WHERE maturity = 'seed' AND status = 'active'
             ORDER BY created_turn, created_at
             """
         ).fetchall()
@@ -179,21 +136,9 @@ class WorldSettingStore:
         rows = self._conn.execute(
             """
             SELECT * FROM world_settings
-            WHERE maturity = 'usable'
-              AND availability IN ('available', 'reserved', 'consumed')
+            WHERE maturity = 'usable' AND status = 'active'
             ORDER BY created_turn, created_at
             """
-        ).fetchall()
-        return [self._setting_from_row(row) for row in rows]
-
-    def list_reserved_by(self, owner: str) -> list[WorldSetting]:
-        rows = self._conn.execute(
-            """
-            SELECT * FROM world_settings
-            WHERE availability = 'reserved' AND reserved_by = ?
-            ORDER BY created_turn, created_at
-            """,
-            (owner,),
         ).fetchall()
         return [self._setting_from_row(row) for row in rows]
 
@@ -210,94 +155,6 @@ class WorldSettingStore:
         ).fetchone()
         return int(row["count"])
 
-    def load_initial_anchors(self) -> list[SettingAnchorPacket]:
-        row = self._conn.execute(
-            "SELECT value FROM world_setting_meta WHERE key = ?",
-            (_INITIAL_WORLD_SETTINGS_META_KEY,),
-        ).fetchone()
-        if row is None:
-            return []
-        try:
-            setting_ids = json.loads(row["value"])
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("Initial world-setting metadata is corrupt") from exc
-        if (
-            not isinstance(setting_ids, list)
-            or len(setting_ids) != 2
-            or any(not isinstance(setting_id, str) for setting_id in setting_ids)
-        ):
-            raise RuntimeError("Initial world-setting metadata is invalid")
-        anchors: list[SettingAnchorPacket] = []
-        for setting_id in setting_ids:
-            setting = self.get_by_id(setting_id)
-            if (
-                setting is None
-                or setting.maturity != "usable"
-                or setting.prepared_anchor is None
-            ):
-                raise RuntimeError(
-                    "Initial world-setting metadata references an unusable setting"
-                )
-            anchors.append(setting.prepared_anchor)
-        return anchors
-
-    def save_initial_anchors(
-        self,
-        anchors: list[SettingAnchorPacket],
-    ) -> list[SettingAnchorPacket]:
-        existing = self.load_initial_anchors()
-        if existing:
-            return existing
-        if len(anchors) != 2:
-            raise ValueError("Initialization must save exactly two world settings")
-        if len({anchor.setting_id for anchor in anchors}) != 2:
-            raise ValueError("Initial world-setting IDs must be unique")
-
-        with transaction(self._conn):
-            for anchor in anchors:
-                if self.get_by_id(anchor.setting_id) is not None:
-                    raise ValueError(
-                        f"Initial world-setting ID already exists: {anchor.setting_id}"
-                    )
-                setting = WorldSetting(
-                    setting_id=anchor.setting_id,
-                    label=anchor.label,
-                    kind=anchor.kind,
-                    basic_concept=anchor.definition,
-                    visibility="director_private",
-                    maturity="usable",
-                    availability="available",
-                    prepared_anchor=anchor,
-                    created_turn=0,
-                    last_seen_turn=0,
-                )
-                self._insert_setting(setting)
-                self._insert_source(
-                    anchor.setting_id,
-                    document=SettingSourceDocument(
-                        source_key=f"initial-setting:{anchor.setting_id}",
-                        source_type="initial_world_setting",
-                        source_ref="initialization",
-                        visibility="director_private",
-                        content=anchor.model_dump_json(),
-                    ),
-                    source_span=anchor.definition,
-                    turn_index=0,
-                )
-            self._conn.execute(
-                """
-                INSERT INTO world_setting_meta(key, value)
-                VALUES (?, ?)
-                """,
-                (
-                    _INITIAL_WORLD_SETTINGS_META_KEY,
-                    json.dumps(
-                        [anchor.setting_id for anchor in anchors],
-                        ensure_ascii=False,
-                    ),
-                ),
-            )
-        return list(anchors)
 
     def apply_extraction(
         self,
@@ -329,40 +186,6 @@ class WorldSettingStore:
                 )
                 saved_ids.append(setting.setting_id)
         return list(dict.fromkeys(saved_ids))
-
-    def reserve(self, setting_ids: list[str], *, owner: str) -> list[WorldSetting]:
-        if not setting_ids:
-            return []
-        reserved: list[WorldSetting] = []
-        with transaction(self._conn):
-            for setting_id in setting_ids:
-                row = self._conn.execute(
-                    """
-                    SELECT availability, reserved_by
-                    FROM world_settings
-                    WHERE setting_id = ?
-                    """,
-                    (setting_id,),
-                ).fetchone()
-                if row is None:
-                    continue
-                if row["availability"] == "reserved" and row["reserved_by"] == owner:
-                    pass
-                elif row["availability"] == "available":
-                    self._conn.execute(
-                        """
-                        UPDATE world_settings
-                        SET availability = 'reserved', reserved_by = ?, updated_at = ?
-                        WHERE setting_id = ?
-                        """,
-                        (owner, utc_now(), setting_id),
-                    )
-                else:
-                    continue
-                setting = self.get_by_id(setting_id)
-                if setting is not None:
-                    reserved.append(setting)
-        return reserved
 
     def save_preparation(
         self,
@@ -403,8 +226,7 @@ class WorldSettingStore:
                         self._conn.execute(
                             """
                             UPDATE world_settings
-                            SET availability = 'rejected',
-                                reserved_by = NULL,
+                            SET status = 'rejected',
                                 rejection_reason = ?,
                                 updated_at = ?
                             WHERE setting_id = ?
@@ -477,26 +299,11 @@ class WorldSettingStore:
             )
         return list(dict.fromkeys(retained_ids))
 
-    def mark_consumed(self, setting_id: str, *, director_npc_id: str) -> None:
-        self._conn.execute(
-            """
-            UPDATE world_settings
-            SET availability = 'consumed',
-                reserved_by = NULL,
-                consumed_by_director_npc_id = ?,
-                updated_at = ?
-            WHERE setting_id = ?
-            """,
-            (director_npc_id, utc_now(), setting_id),
-        )
-        self._conn.commit()
-
     def mark_rejected(self, setting_id: str, *, reason: str) -> None:
         self._conn.execute(
             """
             UPDATE world_settings
-            SET availability = 'rejected',
-                reserved_by = NULL,
+            SET status = 'rejected',
                 rejection_reason = ?,
                 updated_at = ?
             WHERE setting_id = ?
@@ -504,36 +311,6 @@ class WorldSettingStore:
             (reason, utc_now(), setting_id),
         )
         self._conn.commit()
-
-    def release_reservations(
-        self,
-        owner: str,
-        *,
-        except_setting_ids: set[str] | None = None,
-    ) -> None:
-        exceptions = except_setting_ids or set()
-        rows = self._conn.execute(
-            """
-            SELECT setting_id FROM world_settings
-            WHERE availability = 'reserved' AND reserved_by = ?
-            """,
-            (owner,),
-        ).fetchall()
-        with transaction(self._conn):
-            for row in rows:
-                setting_id = str(row["setting_id"])
-                if setting_id in exceptions:
-                    continue
-                self._conn.execute(
-                    """
-                    UPDATE world_settings
-                    SET availability = 'available',
-                        reserved_by = NULL,
-                        updated_at = ?
-                    WHERE setting_id = ?
-                    """,
-                    (utc_now(), setting_id),
-                )
 
     def close(self) -> None:
         self._conn.close()
@@ -549,12 +326,12 @@ class WorldSettingStore:
             """
             INSERT INTO world_settings (
                 setting_id, normalized_label, label, kind, basic_concept,
-                visibility, maturity, availability, prepared_anchor_json,
-                reserved_by, consumed_by_director_npc_id, rejection_reason,
+                visibility, maturity, status, prepared_anchor_json,
+                rejection_reason,
                 related_setting_ids_json, created_turn, last_seen_turn,
                 created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 setting.setting_id,
@@ -564,14 +341,12 @@ class WorldSettingStore:
                 setting.basic_concept,
                 setting.visibility,
                 setting.maturity,
-                setting.availability,
+                setting.status,
                 (
                     setting.prepared_anchor.model_dump_json()
                     if setting.prepared_anchor is not None
                     else None
                 ),
-                setting.reserved_by,
-                setting.consumed_by_director_npc_id,
                 setting.rejection_reason,
                 json.dumps(setting.related_setting_ids, ensure_ascii=False),
                 setting.created_turn,
@@ -849,10 +624,8 @@ class WorldSettingStore:
             basic_concept=row["basic_concept"],
             visibility=row["visibility"],
             maturity=row["maturity"],
-            availability=row["availability"],
+            status=row["status"],
             prepared_anchor=prepared,
-            reserved_by=row["reserved_by"],
-            consumed_by_director_npc_id=row["consumed_by_director_npc_id"],
             rejection_reason=row["rejection_reason"],
             related_setting_ids=json.loads(
                 row["related_setting_ids_json"] or "[]"
@@ -867,32 +640,6 @@ class WorldSettingStore:
 
 def _normalize(value: str) -> str:
     return "".join(str(value).strip().casefold().split())
-
-
-def _fact_indexes(values, setting_facts: list[str]) -> tuple[list[int], bool]:
-    indexes: list[int] = []
-    added = False
-    normalized_to_index = {
-        _normalize(fact): index
-        for index, fact in enumerate(setting_facts)
-        if _normalize(fact)
-    }
-    for value in values or []:
-        if isinstance(value, int):
-            indexes.append(value)
-            continue
-        fact = str(value).strip()
-        key = _normalize(fact)
-        if not key:
-            continue
-        index = normalized_to_index.get(key)
-        if index is None:
-            index = len(setting_facts)
-            setting_facts.append(fact)
-            normalized_to_index[key] = index
-            added = True
-        indexes.append(index)
-    return list(dict.fromkeys(indexes)), added
 
 
 def _merge_visibility(left: str, right: str) -> str:

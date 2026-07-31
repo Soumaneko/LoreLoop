@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field
 
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.director_event.reviewer import DirectorEventReviewer
@@ -17,59 +16,45 @@ from app.domain.director_event.schemas import (
     DirectorEventInterventionPlan,
     DirectorEventInterventionReviewResult,
     DirectorEventReviewResult,
-    DirectorEventRole,
-    DirectorEventSelectionResult,
 )
-from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.store import DirectorEventStore
 from app.domain.scene_summary.schemas import SceneSummary
 
 
-DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS = 3
-
-
 class DirectorEventWorkflowResult(BaseModel):
-    role: DirectorEventRole
-    mode: str
-    active_before: DirectorEvent | None = None
+    event_id: str
+    active_before: DirectorEvent
     active_after: DirectorEvent | None = None
     review_result: DirectorEventReviewResult | None = None
     intervention_review_result: DirectorEventInterventionReviewResult | None = None
     intervention_plan_result: DirectorEventInterventionPlan | None = None
-    selection_result: DirectorEventSelectionResult | None = None
-    changed_event_id: str | None = None
     notes: list[str] = Field(default_factory=list)
 
 
-class DirectorEventWorkflowBatchResult(BaseModel):
-    arc: DirectorEventWorkflowResult
-    ambient: DirectorEventWorkflowResult
-
-
-def update_director_event_workflow(
+def review_director_event_workflow(
     *,
-    role: DirectorEventRole,
+    active_event: DirectorEvent,
     user_input: str,
     scene_facts: str,
     current_state: CurrentState,
     core_memory: CoreMemory,
     scene_summaries: list[SceneSummary],
     recent_summaries: list[SceneSummary] | None = None,
-    selection_summaries: list[SceneSummary] | None = None,
     entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
     entity_mentions: list[str] | None = None,
     npc_mentions: list[str] | None = None,
-    standby_director_npcs: list[DirectorNPCDraft] | None = None,
     turn_index: int,
     store: DirectorEventStore,
     reviewer: DirectorEventReviewer,
-    selector: DirectorEventSelector,
     intervention_reviewer: DirectorEventInterventionReviewer | None = None,
     intervention_planner: DirectorEventInterventionPlanner | None = None,
     trace_id: str | None = None,
 ) -> DirectorEventWorkflowResult:
-    active = store.get_active(role)
+    active = store.get_by_id(active_event.event_id)
+    if active is None or active.status != "active":
+        raise ValueError("review workflow requires an active DirectorEvent")
+    role = active.role
     if active is not None:
         review_kwargs = dict(
             active_event=active,
@@ -101,7 +86,6 @@ def update_director_event_workflow(
             review = reviewer.review(**review_kwargs)
             exposure = review.exposure
             new_player_contact = review.new_player_contact
-        changed_event_id = active.event_id
         intervention_plan_result = None
         auto_progress_result = None
         auto_failed_intervention = False
@@ -222,89 +206,11 @@ def update_director_event_workflow(
         if auto_failed_intervention:
             notes.append("auto_failed_intervention")
         return DirectorEventWorkflowResult(
-            role=role,
-            mode="review_active",
+            event_id=active.event_id,
             active_before=active,
             active_after=active_after,
             review_result=review,
             intervention_review_result=intervention_review,
             intervention_plan_result=intervention_plan_result,
-            changed_event_id=changed_event_id,
             notes=notes,
         )
-
-    latest_resolved = store.get_latest_resolved(role)
-    if latest_resolved is not None:
-        resolved_turn = (
-            latest_resolved.resolved_turn
-            or latest_resolved.updated_turn
-            or latest_resolved.created_turn
-        )
-        if turn_index <= resolved_turn + DIRECTOR_EVENT_IDLE_COOLDOWN_TURNS:
-            return DirectorEventWorkflowResult(
-                role=role,
-                mode="cooldown",
-                active_before=None,
-                active_after=None,
-                changed_event_id=latest_resolved.event_id,
-                notes=["director_event_resolved_cooldown"],
-            )
-
-    events = store.list_all()
-    standby_director_npcs = standby_director_npcs or []
-    selection = selector.select_or_create(
-        role=role,
-        events=events,
-        standby_director_npcs=standby_director_npcs,
-        current_state=current_state,
-        core_memory=core_memory,
-        recent_summaries=(
-            selection_summaries
-            if selection_summaries is not None
-            else recent_summaries or scene_summaries[-5:]
-        ),
-        entity_profiles=entity_profiles or [],
-        npc_profiles=npc_profiles or [],
-        trace_id=trace_id,
-    )
-
-    if selection.director_npc_id is not None:
-        if role != "ambient":
-            raise ValueError("Arc DirectorEvent cannot use a standby DirectorNPC")
-        selected_director_npc = next(
-            (
-                npc
-                for npc in standby_director_npcs
-                if npc.draft_id == selection.director_npc_id
-            ),
-            None,
-        )
-        if selected_director_npc is None:
-            raise ValueError("DirectorEventSelector selected an unknown DirectorNPC")
-        if not any(
-            selected_director_npc.name in actor for actor in selection.actors
-        ):
-            raise ValueError(
-                "DirectorEventSelector must include the selected DirectorNPC in actors"
-            )
-
-    if not selection.bridge_anchors:
-        raise ValueError("DirectorEventSelector created a new event without bridge_anchors")
-    if len(selection.milestones) != 3:
-        raise ValueError("DirectorEventSelector created a new event without exactly three milestones")
-    event = selection.to_event(
-        role=role,
-        turn_index=turn_index,
-        current_clock=current_state.world_clock,
-    )
-    changed_event_id = store.save(event)
-
-    return DirectorEventWorkflowResult(
-        role=role,
-        mode="select_or_create",
-        active_before=None,
-        active_after=store.get_active(role),
-        selection_result=selection,
-        changed_event_id=changed_event_id,
-        notes=["selected_or_created_active_event"],
-    )

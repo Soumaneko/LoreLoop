@@ -7,8 +7,8 @@ from app.domain.director_npc.schemas import (
     DirectorNPCCreateOutput,
     DirectorNPCCreativeBrief,
     DirectorNPCDraft,
+    NPCCreationContext,
 )
-from app.domain.world_setting.schemas import SettingAnchorPacket
 
 
 class DirectorNPCCreator:
@@ -21,7 +21,7 @@ class DirectorNPCCreator:
         core_memory: CoreMemory,
         existing_npcs: list,
         reserved_npcs: list[dict[str, str | None]] | None = None,
-        setting_anchor: SettingAnchorPacket,
+        creation_context: NPCCreationContext,
         creative_brief: DirectorNPCCreativeBrief,
         protagonist_name: str,
         turn_index: int,
@@ -54,10 +54,8 @@ class DirectorNPCCreator:
                     ),
                     "protagonist_name": protagonist_name,
                     "turn_index": turn_index,
-                    "setting_anchor_json": json.dumps(
-                        _setting_anchor_view(setting_anchor),
-                        ensure_ascii=False,
-                        indent=2,
+                    "creation_context_json": creation_context.model_dump_json(
+                        indent=2
                     ),
                     "creative_brief_json": creative_brief.model_dump_json(indent=2),
                     "output_schema_json": json.dumps(
@@ -69,19 +67,14 @@ class DirectorNPCCreator:
                 output_schema=DirectorNPCCreateOutput,
                 temperature=0.9,
                 trace_id=trace_id,
-                output_validator=lambda output: _validate_label_used_in_business_fields(
-                    cast(DirectorNPCCreateOutput, output),
-                    setting_anchor.label,
-                ),
             ),
         )
         return DirectorNPCDraft(
-            **result.model_dump(exclude={"setting_expansion_note"}),
-            source_setting_id=setting_anchor.setting_id,
-            creative_brief=creative_brief,
+            **result.model_dump(exclude={"creation_reason"}),
+            creation_anchors=list(creation_context.anchors),
             created_turn=turn_index,
-            status="standby",
-            dispatched_turn=None,
+            status="prepared",
+            introduced_turn=None,
         )
 
 
@@ -99,33 +92,3 @@ def _existing_npc_view(npc) -> dict[str, str | None]:
         "core_motivation": getattr(npc, "core_motivation", None),
         "hidden_secret": getattr(npc, "hidden_secret", None),
     }
-
-
-def _setting_anchor_view(anchor: SettingAnchorPacket) -> dict:
-    return {
-        "label": anchor.label,
-        "kind": anchor.kind,
-        "definition": anchor.definition,
-        "setting_facts": list(anchor.setting_facts),
-        "world_effects": list(anchor.world_effects),
-    }
-
-
-def _validate_label_used_in_business_fields(
-    output: DirectorNPCCreateOutput,
-    label: str,
-) -> None:
-    clean_label = str(label).strip()
-    if not clean_label:
-        return
-    business_payload = output.model_dump(exclude={"setting_expansion_note"})
-    if clean_label in json.dumps(business_payload, ensure_ascii=False):
-        return
-    raise ValueError(
-        "DirectorNPC label anchoring failed: persisted business fields did not "
-        f"include the exact setting label {clean_label!r}. This is lazy "
-        "anchor substitution: adjacent concepts, broader categories, partial "
-        "terms, related organizations, places, pressures, or risks cannot "
-        "replace the exact label. Retry by rewriting persisted NPC fields so "
-        "the complete label appears naturally at least once."
-    )

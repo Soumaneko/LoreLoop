@@ -21,10 +21,9 @@ from .generation_events import GenerationEventPresenter
 from .generation_nodes import (
     check_narrative_consistency_node,
     compose_narrative_node,
-    consume_director_events_node,
+    director_agent_stage_node,
     evaluate_roll_modifiers_node,
     extract_context_facts_node,
-    maybe_director_npc_node,
     parse_action_node,
     rephrase_narrative_node,
     recompose_from_feedback_node,
@@ -44,11 +43,10 @@ def build_generation_graph(
 ):
     dependencies = (
         extract_context_facts_node,
-        consume_director_events_node,
+        director_agent_stage_node,
         parse_action_node,
         evaluate_roll_modifiers_node,
         resolve_turn_node,
-        maybe_director_npc_node,
         compose_narrative_node,
         generate_canon_queries_node,
         retrieve_canon_evidence_node,
@@ -87,14 +85,9 @@ def _compile_generation_graph(
     graph.add_edge("parse_action", "evaluate_roll_modifiers")
     graph.add_edge(["extract_context_facts", "evaluate_roll_modifiers"], "resolve_turn")
     if director_is_enabled:
-        graph.add_node("consume_director_events", consume_director_events_node)
-        graph.add_node("maybe_director_npc", maybe_director_npc_node)
-        graph.add_edge("resolve_turn", "consume_director_events")
-        graph.add_edge("resolve_turn", "maybe_director_npc")
-        graph.add_edge(
-            ["maybe_director_npc", "consume_director_events"],
-            "compose_narrative",
-        )
+        graph.add_node("director_agent_stage", director_agent_stage_node)
+        graph.add_edge("resolve_turn", "director_agent_stage")
+        graph.add_edge("director_agent_stage", "compose_narrative")
     else:
         graph.add_edge("resolve_turn", "compose_narrative")
 
@@ -371,7 +364,7 @@ def _pending_context_state(
         "context": pending.context,
         "turn_resolution": pending.context.turn_resolution,
         "player_resolution": pending.player_resolution,
-        "director_npc_result": pending.director_npc_result,
+        "director_stage": pending.director_stage,
         "recent_scene": recent_scene,
     }
 

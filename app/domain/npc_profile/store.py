@@ -3,11 +3,9 @@ import sqlite3
 
 from app.domain.npc_profile.schemas import (
     NPCProfile,
-    NPCProfileUpdateInput,
-    profile_from_update,
     utc_now,
 )
-from app.runtime.sqlite import connect_sqlite, ensure_column, ensure_schema_version
+from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version
 
 
 class NPCProfileStore:
@@ -33,54 +31,48 @@ class NPCProfileStore:
             )
             """
         )
-        ensure_column(
-            self._db,
-            "npc_profiles",
+        expected_columns = {
+            "id",
+            "name",
+            "aliases_json",
+            "profile_json",
+            "source_scene_ids_json",
+            "confidence",
+            "updated_at",
+            "active",
             "name_hit_count",
-            "INTEGER NOT NULL DEFAULT 1",
-        )
-        ensure_column(
-            self._db,
-            "npc_profiles",
             "alias_hit_counts_json",
-            "TEXT NOT NULL DEFAULT '{}'",
-        )
+        }
+        actual_columns = {
+            row["name"]
+            for row in self._db.execute(
+                "PRAGMA table_info(npc_profiles)"
+            ).fetchall()
+        }
+        if actual_columns != expected_columns:
+            raise RuntimeError(
+                "npc_profiles.db does not match the current NPCProfile contract"
+            )
         self._db.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_npc_profiles_name
             ON npc_profiles(active, name)
             """
         )
-        ensure_schema_version(self._db, "npc_profile", 2)
+        ensure_exact_schema_version(self._db, "npc_profile", 3)
         self._db.commit()
 
     def _row_to_profile(self, row: sqlite3.Row) -> NPCProfile:
-        data = json.loads(row["profile_json"])
-        update = NPCProfileUpdateInput.model_validate(data)
-        profile = profile_from_update(
-            update,
-            npc_id=row["id"],
-            source_scene_ids=json.loads(row["source_scene_ids_json"]),
-            confidence=float(row["confidence"]),
-            updated_at=row["updated_at"],
-            active=bool(row["active"]),
-            name_hit_count=int(row["name_hit_count"]),
-            alias_hit_counts=json.loads(row["alias_hit_counts_json"] or "{}"),
+        profile = NPCProfile.model_validate(json.loads(row["profile_json"]))
+        profile.npc_id = row["id"]
+        profile.source_scene_ids = json.loads(row["source_scene_ids_json"])
+        profile.confidence = float(row["confidence"])
+        profile.updated_at = row["updated_at"]
+        profile.active = bool(row["active"])
+        profile.name_hit_count = int(row["name_hit_count"])
+        profile.alias_hit_counts = json.loads(
+            row["alias_hit_counts_json"] or "{}"
         )
-        for field in (
-            "absent_turns",
-            "core_motivation",
-            "hidden_secret",
-            "conflict_style",
-            "social_style",
-            "encounter_potentials",
-            "director_notes",
-            "source_director_npc_id",
-            "created_turn",
-            "dispatched_turn",
-        ):
-            if field in data:
-                setattr(profile, field, data[field])
         return profile
 
     def upsert(self, profile: NPCProfile) -> str:

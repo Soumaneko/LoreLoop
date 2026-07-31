@@ -1,8 +1,9 @@
 import json
 import sqlite3
-from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
+from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version, transaction
 
 from app.domain.current_state.schemas import WorldClock
+from app.domain.director.schemas import DirectorResourceRef
 
 from .schemas import (
     DirectorEvent,
@@ -42,21 +43,7 @@ class DirectorEventStore:
             )
             """
         )
-        versions_table_exists = self._conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-            ("schema_versions",),
-        ).fetchone()
-        if versions_table_exists is not None:
-            version_row = self._conn.execute(
-                "SELECT version FROM schema_versions WHERE component = ?",
-                ("director_event",),
-            ).fetchone()
-            if version_row is not None and int(version_row["version"]) != 5:
-                raise RuntimeError(
-                    "Unsupported DirectorEvent database schema: "
-                    f"expected 5, got {version_row['version']}"
-                )
-        ensure_schema_version(self._conn, "director_event", 5)
+        ensure_exact_schema_version(self._conn, "director_event", 6)
         self._conn.commit()
 
     def save(self, event: DirectorEvent) -> str:
@@ -367,6 +354,38 @@ class DirectorEventStore:
             (event_id,),
         ).fetchone()
         return self._event_from_row(row) if row else None
+
+    def bind_actor(
+        self,
+        event_id: str,
+        *,
+        actor_name: str,
+        actor_ref: DirectorResourceRef,
+        turn_index: int,
+    ) -> DirectorEvent:
+        event = self.get_by_id(event_id)
+        if event is None or event.status != "active":
+            raise ValueError("actor can only be bound to an active DirectorEvent")
+        actor_refs = list(event.actor_refs)
+        if actor_ref not in actor_refs:
+            actor_refs.append(actor_ref)
+        actors = list(event.actors)
+        clean_name = actor_name.strip()
+        if clean_name and clean_name not in actors:
+            actors.append(clean_name)
+        updated = event.model_copy(
+            update={
+                "actors": actors,
+                "actor_refs": actor_refs,
+                "updated_turn": turn_index,
+                "updated_at": utc_now(),
+            }
+        )
+        self.save(updated)
+        persisted = self.get_by_id(event_id)
+        if persisted is None:
+            raise RuntimeError("bound DirectorEvent disappeared after save")
+        return persisted
 
     def count(self) -> int:
         row = self._conn.execute("SELECT COUNT(*) FROM director_events").fetchone()

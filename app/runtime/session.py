@@ -9,7 +9,7 @@ from app.domain.roll.schemas import Difficulty
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
-from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
+from app.domain.director.schemas import DirectorStageResult
 from app.domain.short_term_memory import ShortTermMemory
 from app.domain.turn_resolution.schemas import PlayerTurnResolution
 from app.runtime.paths import (
@@ -39,7 +39,7 @@ class PendingTurn:
     context: NarrativeComposerContext
     outline: PlotOutlineResult
     scene_result: SceneWriterResult
-    director_npc_result: DirectorNPCWorkflowResult | None = None
+    director_stage: DirectorStageResult | None = None
     player_resolution: PlayerTurnResolution = field(
         default_factory=PlayerTurnResolution
     )
@@ -451,7 +451,7 @@ class CampaignRuntime:
             "context": model_data(pending.context),
             "outline": model_data(pending.outline),
             "scene_result": model_data(pending.scene_result),
-            "director_npc_result": model_data(pending.director_npc_result),
+            "director_stage": model_data(pending.director_stage),
             "player_resolution": model_data(pending.player_resolution),
             "turn_index": pending.turn_index,
             "short_term_memory": model_data(pending.short_term_memory),
@@ -553,9 +553,9 @@ class CampaignRuntime:
                     context=NarrativeComposerContext.model_validate(data["context"]),
                     outline=PlotOutlineResult.model_validate(data["outline"]),
                     scene_result=SceneWriterResult.model_validate(data["scene_result"]),
-                    director_npc_result=(
-                        DirectorNPCWorkflowResult.model_validate(data["director_npc_result"])
-                        if data.get("director_npc_result") else None
+                    director_stage=(
+                        DirectorStageResult.model_validate(data["director_stage"])
+                        if data.get("director_stage") else None
                     ),
                     player_resolution=PlayerTurnResolution.model_validate(
                         data.get("player_resolution") or {}

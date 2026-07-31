@@ -1,6 +1,6 @@
 import json
 
-from .schemas import DirectorEvent, DirectorEventConsumption
+from .schemas import DirectorEvent
 
 
 def project_director_event(
@@ -44,23 +44,6 @@ def project_director_event(
 def project_director_events(events: list[DirectorEvent]) -> str:
     return json.dumps(
         [json.loads(project_director_event(event)) for event in events],
-        ensure_ascii=False,
-        indent=2,
-    )
-
-
-def project_director_event_consumptions(
-    consumptions: list[DirectorEventConsumption],
-) -> str:
-    return json.dumps(
-        [
-            {
-                "allowed_facts": consumption.allowed_facts,
-                "immutable_constraints": consumption.immutable_constraints,
-            }
-            for consumption in consumptions
-            if consumption.use_event
-        ],
         ensure_ascii=False,
         indent=2,
     )

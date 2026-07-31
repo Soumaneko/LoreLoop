@@ -40,15 +40,6 @@
 {existing_npc_options_json}
 ```
 
-## Active DirectorEvent Identity Contexts
-
-这里只提供 active 导演事件的 `role`、premise 和 milestones，用于判断候选是否对应已有事件角色。它不是玩家已知信息，不得写入公开档案。
-
-```json
-{director_events_identity_json}
-```
-
-
 # 输入
 
 ## Scene Facts
@@ -91,7 +82,6 @@
 2. alias_match 必须有正面身份依据，例如 Scene Facts 明确说明化名/外号关系，或上下文提供无法由两名不同人物解释的连续身份事实。没有这种依据就选择 new 或 ignore。
 3. 不要因为 Existing NPC Options 中存在一个“看起来最接近”的角色就强行匹配。允许没有匹配对象。
 4. `persist_alias` 比本回合共指更严格。“那名青衣男子”本回合可能指向某个已有 NPC，但通常不是可永久保存的 alias。
-5. DirectorEvent 可以辅助确认明确的事件角色身份，但不能凭空把相似人物合并。
 
 
 # 新 NPC 准入规则
@@ -107,7 +97,7 @@ ignore 是默认行为，拒绝是默认行为，创建是例外。路边摊贩�
 
 # 档案更新规则
 
-1. 公开档案只能记录 Scene Facts 明示的信息，禁止把 DirectorEvent 幕后信息写入公开档案。
+1. 公开档案只能记录 Scene Facts 明示的信息，禁止把任何导演幕后信息写入公开档案。
 2. `profile_patch.public_summary` 是完整、紧凑的最新摘要，不是对旧摘要不断追加本轮事件。只有稳定公开身份、关系、长期处境、持续目标、归属或长期认知发生变化时才填写。
 3. 本回合动作、短暂情绪、单次对话、一次性物品信号等即时信息写入 `turn_observation`，不要放进 `profile_patch.public_summary`。
 4. `current_location` 只写本回合结束时仍然成立的最新位置；角色已经离开某处时，不要继续把该处作为当前位置。

@@ -1,13 +1,10 @@
 from .creator import DirectorNPCCreator
-from .dispatcher import DirectorNPCDispatcher
+from .creative_brief import draw_director_npc_creative_brief
 from .schemas import (
     DirectorNPCCreativeBrief,
     DirectorNPCCreateOutput,
-    DirectorNPCDispatchDecision,
     DirectorNPCDraft,
-    DirectorNPCPlotInjection,
-    DirectorNPCWorkflowResult,
-    ExistingNPCCandidate,
+    NPCCreationContext,
 )
 from .store import DirectorNPCStore
 
@@ -15,11 +12,8 @@ __all__ = [
     "DirectorNPCCreator",
     "DirectorNPCCreativeBrief",
     "DirectorNPCCreateOutput",
-    "DirectorNPCDispatcher",
-    "DirectorNPCDispatchDecision",
     "DirectorNPCDraft",
-    "DirectorNPCPlotInjection",
     "DirectorNPCStore",
-    "DirectorNPCWorkflowResult",
-    "ExistingNPCCandidate",
+    "NPCCreationContext",
+    "draw_director_npc_creative_brief",
 ]

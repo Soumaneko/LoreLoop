@@ -119,16 +119,15 @@ def test_rewrite_stream_callbacks_share_mode_aware_event_projection(monkeypatch)
     ]
 
 
-def test_consumer_composer_and_consistency_checker_run_in_order():
+def test_director_agent_composer_and_consistency_checker_run_in_order():
     graph = generation_graph.build_generation_graph(
         director_is_enabled=True,
         canon_validation_is_enabled=True,
     ).get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
-    assert ("resolve_turn", "consume_director_events") in edges
-    assert ("consume_director_events", "compose_narrative") in edges
-    assert ("maybe_director_npc", "compose_narrative") in edges
+    assert ("resolve_turn", "director_agent_stage") in edges
+    assert ("director_agent_stage", "compose_narrative") in edges
     assert ("compose_narrative", "generate_canon_queries") in edges
     assert ("generate_canon_queries", "retrieve_canon_evidence") in edges
     assert ("retrieve_canon_evidence", "check_narrative_consistency") in edges
@@ -137,7 +136,7 @@ def test_consumer_composer_and_consistency_checker_run_in_order():
     assert ("revise_narrative", "__end__") in edges
     assert ("compose_narrative", "check_narrative_consistency") not in edges
     assert ("compose_narrative", "__end__") not in edges
-    assert ("extract_context_facts", "consume_director_events") not in edges
+    assert ("extract_context_facts", "director_agent_stage") not in edges
 
 
 def test_compact_generation_graph_skips_director_and_canon_nodes():
@@ -514,7 +513,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     group_id = "group_1"
     state_before = object()
     context = SimpleNamespace(turn_resolution=object())
-    director_npc_result = object()
+    director_stage = object()
     short_term = ShortTermMemory()
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
@@ -528,7 +527,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
         context=context,
         outline=SimpleNamespace(),
         scene_result=SceneWriterResult(scene_text="版本一"),
-        director_npc_result=director_npc_result,
+        director_stage=director_stage,
         turn_index=3,
         short_term_memory=short_term,
     ))
@@ -579,7 +578,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     assert state["player_resolution"] is player_resolution
     assert state["current_state"] is state_before
     assert state["short_term_memory"] is short_term
-    assert state["director_npc_result"] is director_npc_result
+    assert state["director_stage"] is director_stage
     assert events[-1]["data"]["turn_id"] == "turn_v2"
 
 

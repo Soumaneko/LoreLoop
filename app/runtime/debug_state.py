@@ -42,9 +42,12 @@ def _load_debug_state(runtime) -> dict:
 
     with stores.director_npc() as npc_store:
         director_npcs = npc_store.list_all()
-        standby_director_npcs = [npc for npc in director_npcs if npc.status == "standby"]
-        dispatched_director_npcs = [npc for npc in director_npcs if npc.status == "dispatched"]
-        last_director_npc_dispatch_turn = npc_store.get_meta_int("last_dispatch_turn", 0)
+        prepared_director_npcs = [
+            npc for npc in director_npcs if npc.status == "prepared"
+        ]
+        introduced_director_npcs = [
+            npc for npc in director_npcs if npc.status == "introduced"
+        ]
 
     settings = load_settings()
     core_memory = stores.core_memory().load()
@@ -108,9 +111,8 @@ def _load_debug_state(runtime) -> dict:
         "resolved_director_events": model_data(resolved_director_events),
         "resolved_director_event_count": len(resolved_director_events),
         "director_npcs": model_data(director_npcs),
-        "standby_director_npcs": model_data(standby_director_npcs),
-        "dispatched_director_npcs": model_data(dispatched_director_npcs),
-        "last_director_npc_dispatch_turn": last_director_npc_dispatch_turn,
+        "prepared_director_npcs": model_data(prepared_director_npcs),
+        "introduced_director_npcs": model_data(introduced_director_npcs),
         "chat_history": model_data(chat_history),
         "difficulty": settings.get("difficulty", "困难"),
         "max_chars": int(settings.get("max_chars", 1500)),

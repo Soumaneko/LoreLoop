@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
 from app.domain.context_facts.views import project_context_facts
-from app.domain.director_event.views import project_director_event_consumptions
 from app.domain.plot_outline.views import project_turn_resolution
 from app.domain.scene_writer.schemas import NextActionDirection
 from app.domain.short_term_memory.schemas import ShortTermScene
@@ -43,8 +42,7 @@ def run_narrative_composition(
     ]
 
     class RuntimeNarrativeComposerResult(BaseModel):
-        director_event_reason: str | None = None
-        director_npc_reason: str | None = None
+        director_reason: str | None = None
         planning_reasoning: str = Field(min_length=1)
         must_establish_facts: list[str] = Field(default_factory=list)
         must_not_establish_facts: list[str] = Field(default_factory=list)
@@ -146,13 +144,10 @@ def _base_input(
         "context_facts_json": project_context_facts(context.context_facts),
         "entity_profiles_json": project_entity_profiles(context.entity_profiles),
         "npc_profiles_json": project_npc_profiles(context.npc_profiles),
-        "director_event_consumptions_json": project_director_event_consumptions(
-            context.director_event_consumptions
-        ),
-        "director_npc_injection_json": json.dumps(
+        "director_stage_json": json.dumps(
             (
-                context.director_npc_injection.model_dump(mode="json")
-                if context.director_npc_injection is not None
+                context.director_stage.model_dump(mode="json")
+                if context.director_stage is not None
                 else None
             ),
             ensure_ascii=False,

@@ -12,11 +12,9 @@ from app.runtime.session import (
     get_campaign_runtime,
 )
 from app.graph.maintenance_graph import (
-    run_director_npc_maintenance,
     run_scene_summary_maintenance,
     run_setting_seed_maintenance,
 )
-from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
 from .confirmation_lifecycle import (
     ConfirmationCommitServices,
     ConfirmationCommitter,
@@ -42,8 +40,8 @@ _ALWAYS_CACHED_NODE_RESULTS = {
 _WRITE_CACHED_NODE_RESULTS = {
     "entity_extraction",
     "npc_extraction",
-    "director_event_result",
-    "director_event_promoted_npc_profile_ids",
+    "director_decision",
+    "director_executions",
     "updated_entity_ids",
     "updated_npc_profile_ids",
 }
@@ -64,21 +62,26 @@ class DirectorNPCConfirmation:
     draft: DirectorNPCDraft
 
 
-def promote_dispatched_director_npc_profile(
+def promote_staged_director_npc_profile(
     pending,
     *,
     turn_index: int,
     stores,
 ) -> DirectorNPCConfirmation | None:
-    result = getattr(pending, "director_npc_result", None)
-    if (
-        result is None
-        or result.dispatch is None
-        or result.dispatch.action != "dispatch_standby"
-    ):
+    stage = getattr(pending, "director_stage", None)
+    material = next(
+        (
+            item
+            for item in (stage.materials if stage is not None else [])
+            if item.kind == "npc"
+            and item.payload.get("source") == "director_npc"
+        ),
+        None,
+    )
+    if material is None:
         return None
     return ensure_director_npc_profile(
-        result.dispatch.selected_id,
+        material.resource_id,
         turn_index=turn_index,
         stores=stores,
     )
@@ -92,10 +95,13 @@ def ensure_director_npc_profile(
 ) -> DirectorNPCConfirmation | None:
     with stores.director_npc() as director_store, stores.npc_profile() as npc_store:
         draft = director_store.get_by_id(draft_id)
-        if draft is None or draft.status == "discarded":
+        if draft is None or draft.status == "retired":
             return None
-        if draft.status == "standby":
-            draft = director_store.mark_dispatched(draft_id, turn_index=turn_index)
+        if draft.status == "prepared":
+            draft = director_store.mark_introduced(
+                draft_id,
+                turn_index=turn_index,
+            )
             if draft is None:
                 return None
         npc_profile = npc_profile_from_director_draft(draft)
@@ -122,7 +128,7 @@ def npc_profile_from_director_draft(draft: DirectorNPCDraft) -> NPCProfile:
         encounter_potentials=list(draft.encounter_potentials),
         source_director_npc_id=draft.draft_id,
         created_turn=draft.created_turn,
-        dispatched_turn=draft.dispatched_turn,
+        introduced_turn=draft.introduced_turn,
         confidence=0.7,
         name_hit_count=1,
     )
@@ -152,7 +158,7 @@ def merge_director_draft_into_npc_profile(profile: NPCProfile, draft: DirectorNP
     merged.encounter_potentials = list(draft.encounter_potentials)
     merged.source_director_npc_id = merged.source_director_npc_id or draft.draft_id
     merged.created_turn = merged.created_turn or draft.created_turn
-    merged.dispatched_turn = draft.dispatched_turn
+    merged.introduced_turn = draft.introduced_turn
     merged.confidence = max(merged.confidence, 0.7)
     merged.name_hit_count = max(merged.name_hit_count, 1)
     return merged
@@ -169,7 +175,7 @@ def merge_unique_ids(values: list[str]) -> list[str]:
     return merged
 
 
-def state_with_confirmed_director_npc(
+def state_with_staged_director_npc(
     state: CurrentState,
     draft: DirectorNPCDraft | None,
 ) -> CurrentState:
@@ -193,29 +199,43 @@ def state_with_confirmed_director_npc(
     )
 
 
-def project_scene_text_for_confirmation(
+def project_scene_text_with_staged_director_npc(
     scene_text: str,
     *,
     pending,
     confirmed_director_npc_draft: DirectorNPCDraft | None,
 ) -> str:
-    result = getattr(pending, "director_npc_result", None)
-    dispatch = getattr(result, "dispatch", None)
-    if dispatch is None or dispatch.action != "dispatch_standby" or not dispatch.selected_name:
+    stage = getattr(pending, "director_stage", None)
+    material = next(
+        (
+            item
+            for item in (stage.materials if stage is not None else [])
+            if item.kind == "npc"
+            and item.payload.get("source") == "director_npc"
+        ),
+        None,
+    )
+    if material is None:
         return scene_text
 
-    name = confirmed_director_npc_draft.name if confirmed_director_npc_draft is not None else dispatch.selected_name
+    name = (
+        confirmed_director_npc_draft.name
+        if confirmed_director_npc_draft is not None
+        else str(material.payload.get("name") or "")
+    )
+    if not name:
+        return scene_text
     role = confirmed_director_npc_draft.role if confirmed_director_npc_draft is not None else None
     role_note = f"（{role}）" if role else ""
     selected_id = (
         confirmed_director_npc_draft.draft_id
         if confirmed_director_npc_draft is not None
-        else dispatch.selected_id
+        else material.resource_id
     )
 
     return (
         "【确认用系统注记】\n"
-        f"本回合 DirectorNPCDispatcher 引入了导演 NPC：{name}{role_note}。"
+        f"本回合 Director Agent 引入了导演 NPC：{name}{role_note}。"
         f"系统 ID：{selected_id}。\n"
         "如果正文中出现未透露姓名、临时称呼、只以外貌/位置描述出现的新增角色，"
         f"且其出场与本回合导演 NPC 调度相符，确认流程应在内部状态、NPC档案和摘要中将其视为{name}。\n"
@@ -238,19 +258,20 @@ def prepare_confirmation_state(
     stores = runtime_services.stores
     services = ConfirmationPreparationServices(
         current_state_store=stores.current_state,
-        director_npc_store=stores.director_npc,
         entity_store=stores.entity,
         npc_profile_store=stores.npc_profile,
         core_memory_store=stores.core_memory,
-        promote_dispatched_director_npc_profile=lambda pending, *, turn_index: (
-            promote_dispatched_director_npc_profile(
+        promote_staged_director_npc_profile=lambda pending, *, turn_index: (
+            promote_staged_director_npc_profile(
                 pending,
                 turn_index=turn_index,
                 stores=stores,
             )
         ),
-        state_with_confirmed_director_npc=state_with_confirmed_director_npc,
-        project_scene_text_for_confirmation=project_scene_text_for_confirmation,
+        state_with_staged_director_npc=state_with_staged_director_npc,
+        project_scene_text_with_staged_director_npc=(
+            project_scene_text_with_staged_director_npc
+        ),
         runtime_services=runtime_services,
     )
     return ConfirmationPreparer(services).prepare(
@@ -323,8 +344,6 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
     scheduler = ConfirmationMaintenanceScheduler(
         runtime,
         ConfirmationMaintenanceServices(
-            director_npc_store=stores.director_npc,
-            run_director_npc_maintenance=run_director_npc_maintenance,
             run_setting_seed_maintenance=run_setting_seed_maintenance,
             run_scene_summary_maintenance=run_scene_summary_maintenance,
         ),

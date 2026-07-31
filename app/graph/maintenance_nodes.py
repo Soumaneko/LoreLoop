@@ -3,12 +3,11 @@ from __future__ import annotations
 from app.domain.scene_summary.maintenance import _CONDENSE_LOCK
 from app.domain.scene_summary.summarizer import SceneSummarizer
 from app.runtime.serialization import model_data
-from app.domain.director_npc.workflows import restock_director_npc_standby
 from app.domain.world_setting.workflows import extract_setting_seeds
 
 from .maintenance_helpers import maintenance_gateway
 from .maintenance_state import (
-    DirectorNPCMaintenanceState,
+    SettingSeedMaintenanceState,
     SceneSummaryMaintenanceState,
 )
 
@@ -68,8 +67,8 @@ def scene_summary_condense_node(
 
 
 def setting_seed_extract_node(
-    state: DirectorNPCMaintenanceState,
-) -> DirectorNPCMaintenanceState:
+    state: SettingSeedMaintenanceState,
+) -> SettingSeedMaintenanceState:
     gateway = maintenance_gateway(
         turn_index=state["turn_index"], services=_services(state)
     )
@@ -97,44 +96,6 @@ def setting_seed_extract_node(
                     "saved_setting_ids": result.saved_setting_ids,
                     "candidate_count": len(result.extraction.candidates),
                     "ignored_candidate_count": result.ignored_candidate_count,
-                },
-            }
-        ],
-    }
-
-
-def director_npc_restock_node(
-    state: DirectorNPCMaintenanceState,
-) -> DirectorNPCMaintenanceState:
-    gateway = maintenance_gateway(
-        turn_index=state["turn_index"], services=_services(state)
-    )
-    with (
-        _store_factory(state, "director_npc")() as npc_store,
-        _store_factory(state, "npc_profile")() as profile_store,
-        _store_factory(state, "world_setting")() as setting_store,
-    ):
-        created_drafts = restock_director_npc_standby(
-            core_memory=state["core_memory"],
-            protagonist_name=state["protagonist_name"],
-            turn_index=state["turn_index"],
-            director_npc_store=npc_store,
-            world_setting_store=setting_store,
-            npc_profile_store=profile_store,
-            creator_gateway=gateway,
-            setting_maintainer_gateway=gateway,
-            setting_preparer_gateway=gateway,
-            reservation_owner=f"{state['trace_id']}:{state['turn_index']}",
-            trace_id=state["trace_id"],
-        )
-    return {
-        "created_drafts": created_drafts,
-        "events": [
-            {
-                "step": "director_npc_restocked",
-                "data": {
-                    "created_count": len(created_drafts),
-                    "created_names": [draft.name for draft in created_drafts],
                 },
             }
         ],

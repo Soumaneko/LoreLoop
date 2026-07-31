@@ -3,8 +3,7 @@ const TASK_LABELS = {
   context_extract: "上下文提取",
   roll_modifier: "判定修正",
   turn_resolution: "行动结算",
-  director_event_consume: "导演事件消费",
-  director_npc_dispatch: "导演角色调度",
+  director_agent_decide: "导演 Agent 决策",
   director_npc_create: "导演角色创建",
   narrative_compose: "正文生成",
   narrative_recompose: "正文重构",
@@ -29,6 +28,7 @@ const TASK_LABELS = {
   director_event_select_ambient: "环境事件选择",
   director_event_intervention_plan: "事件介入规划",
   director_event_intervention_review: "事件介入检查",
+  setting_anchor_prepare: "世界设定补全",
 };
 
 const PIPELINE_LABELS = {

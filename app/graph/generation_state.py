@@ -13,8 +13,7 @@ from app.domain.context_facts.schemas import (
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.continuity import ContinuitySelection
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEvent, DirectorEventConsumption
-from app.domain.director_npc.schemas import DirectorNPCWorkflowResult
+from app.domain.director.schemas import DirectorDecisionBatch, DirectorStageResult
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView, NPCProfilePublicView
 from app.domain.narrative_composer.schemas import (
@@ -68,9 +67,6 @@ class GenerationState(TypedDict, total=False):
 
     scene_summaries: list[SceneSummary]
     recent_summaries: list[SceneSummary]
-    active_director_events: list[DirectorEvent]
-    director_event_consumptions: list[DirectorEventConsumption]
-
     matched_anchors: list[Anchor]
     action_entity_profile_views: list[EntityProfileUpdateInput]
     action_npc_director_views: list[NPCProfileDirectorView]
@@ -93,7 +89,8 @@ class GenerationState(TypedDict, total=False):
     turn_resolution: TurnResolutionResult
     player_resolution: PlayerTurnResolution
 
-    director_npc_result: DirectorNPCWorkflowResult | None
+    director_decision: DirectorDecisionBatch
+    director_stage: DirectorStageResult | None
     context: NarrativeComposerContext
     narrative_composition: NarrativeComposerResult
     canon_entity_catalog: list[CanonEntityReference]

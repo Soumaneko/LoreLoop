@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.current_state.schemas import WorldClock
+from app.domain.director.schemas import DirectorResourceRef
 
 
 DirectorEventStatus = Literal["active", "resolved"]
@@ -108,8 +109,8 @@ class DirectorEvent(BaseModel):
     premise: str = Field(
         min_length=1,
     )
-    director_npc_id: str | None = None
     actors: list[str] = Field(default_factory=list)
+    actor_refs: list[DirectorResourceRef] = Field(default_factory=list)
     objective: str = Field(min_length=1)
     bridge_anchors: list[str] = Field(
         min_length=1,
@@ -169,8 +170,11 @@ class DirectorEvent(BaseModel):
             "role": self.role,
             "title": self.title,
             "premise": self.premise,
-            "director_npc_id": self.director_npc_id,
             "actors": self.actors,
+            "actor_refs": [
+                actor_ref.model_dump(mode="json")
+                for actor_ref in self.actor_refs
+            ],
             "objective": self.objective,
             "bridge_anchors": self.bridge_anchors,
             "milestones": self.milestones,
@@ -209,13 +213,6 @@ class DirectorEventSelectionResult(BaseModel):
     current_story_direction: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     title: str = Field(min_length=1)
-    director_npc_id: str | None = Field(
-        default=None,
-        description=(
-            "Exact draft_id when an ambient event uses one supplied standby "
-            "DirectorNPC; otherwise null."
-        ),
-    )
     actors: list[str] = Field(min_length=1)
     objective: str = Field(min_length=1)
     bridge_anchors: list[str] = Field(min_length=1)
@@ -260,8 +257,8 @@ class DirectorEventSelectionResult(BaseModel):
             title=self.title,
             status=status,
             premise=self.premise,
-            director_npc_id=self.director_npc_id,
             actors=self.actors,
+            actor_refs=[],
             objective=self.objective,
             bridge_anchors=self.bridge_anchors,
             milestones=self.milestones,
@@ -314,22 +311,4 @@ class DirectorEventInterventionReviewResult(BaseModel):
     def _validate_evidence(self):
         if self.status in {"success", "failure"} and not self.evidence:
             raise ValueError("resolved intervention review requires evidence")
-        return self
-
-
-class DirectorEventConsumption(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    event_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-    use_event: bool
-    allowed_facts: list[str] = Field(default_factory=list)
-    immutable_constraints: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _validate_use_decision(self):
-        if self.use_event and not self.allowed_facts:
-            raise ValueError("use_event=true requires at least one allowed_fact")
-        if not self.use_event and self.allowed_facts:
-            raise ValueError("use_event=false requires allowed_facts to be empty")
         return self

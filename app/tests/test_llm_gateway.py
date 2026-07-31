@@ -827,7 +827,7 @@ class TestPromptLoader:
             "# 输出规范",
             "# 共同创作契约",
             "严禁替玩家作出输入之外的新决定",
-            "CoreMemory、CurrentState、TurnResolutionResult、DirectorEvent",
+            "CoreMemory、CurrentState、TurnResolutionResult、Director Agent",
         ]
         for prompt in (compose, source, recompose):
             assert "[[include:" not in prompt

@@ -84,10 +84,6 @@ class DirectorEventInterventionPlanner:
             profile
             for profile in npc_profiles or []
             if _profile_matches_anchors(profile, npc_anchors)
-            or (
-                active_event.director_npc_id is not None
-                and profile.source_director_npc_id == active_event.director_npc_id
-            )
         ]
         return cast(
             DirectorEventInterventionPlan,

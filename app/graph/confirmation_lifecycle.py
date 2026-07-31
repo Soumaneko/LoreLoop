@@ -7,7 +7,6 @@ from typing import Any, Callable
 
 from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.continuity import ContinuityApplyResult, ContinuityService
-from app.domain.director_npc.workflows import DIRECTOR_NPC_STANDBY_TARGET
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, PendingTurn
 from app.runtime.services import RuntimeServices
@@ -27,13 +26,12 @@ def _diagnostic_turn_index(state: ConfirmationState) -> int | None:
 @dataclass(frozen=True)
 class ConfirmationPreparationServices:
     current_state_store: Callable
-    director_npc_store: Callable
     entity_store: Callable
     npc_profile_store: Callable
     core_memory_store: Callable
-    promote_dispatched_director_npc_profile: Callable
-    state_with_confirmed_director_npc: Callable
-    project_scene_text_for_confirmation: Callable
+    promote_staged_director_npc_profile: Callable
+    state_with_staged_director_npc: Callable
+    project_scene_text_with_staged_director_npc: Callable
     runtime_services: RuntimeServices | None = None
 
 
@@ -73,17 +71,14 @@ class ConfirmationPreparer:
 
         director_npc_profile_id = cache.get("director_npc_profile_id")
         confirmed_director_npc_draft = cache.get("confirmed_director_npc_draft")
-        director_npc_restock_scheduled = bool(
-            cache.get("director_npc_restock_scheduled")
-        )
         if (
-            pipeline_input.handle_director_npc
+            pipeline_input.run_director_agent
             and write_db
             and director_npc_profile_id is None
             and "director_npc_profile_id" not in cache
         ):
             director_npc_confirmation = (
-                services.promote_dispatched_director_npc_profile(
+                services.promote_staged_director_npc_profile(
                     pending,
                     turn_index=pipeline_input.turn_index,
                 )
@@ -94,30 +89,16 @@ class ConfirmationPreparer:
             cache["director_npc_profile_id"] = director_npc_profile_id
             cache["confirmed_director_npc_draft"] = confirmed_director_npc_draft
 
-        director_npc_result = getattr(pending, "director_npc_result", None)
-        if (
-            pipeline_input.handle_director_npc
-            and write_db
-            and director_npc_result is not None
-            and director_npc_result.dispatch is not None
-            and director_npc_result.dispatch.action != "none"
-            and not cache.get("director_npc_last_dispatch_turn_set")
-        ):
-            with services.director_npc_store() as npc_store:
-                npc_store.set_meta_int(
-                    "last_dispatch_turn",
-                    pipeline_input.turn_index,
-                )
-            cache["director_npc_last_dispatch_turn_set"] = True
-
-        state_before_update = services.state_with_confirmed_director_npc(
+        state_before_update = services.state_with_staged_director_npc(
             pipeline_input.state_before,
             confirmed_director_npc_draft,
         )
-        confirmation_scene_text = services.project_scene_text_for_confirmation(
+        confirmation_scene_text = (
+            services.project_scene_text_with_staged_director_npc(
             effective_scene_text,
             pending=pending,
             confirmed_director_npc_draft=confirmed_director_npc_draft,
+            )
         )
 
         existing_entity_profiles = cache.get("existing_entity_profiles", [])
@@ -154,7 +135,6 @@ class ConfirmationPreparer:
             "cache": cache,
             "director_npc_profile_id": director_npc_profile_id,
             "confirmed_director_npc_draft": confirmed_director_npc_draft,
-            "director_npc_restock_scheduled": director_npc_restock_scheduled,
             "state_before_update": state_before_update,
             "confirmation_scene_text": confirmation_scene_text,
             "existing_entity_profiles": existing_entity_profiles,
@@ -286,15 +266,8 @@ class ConfirmationCommitter:
 
 @dataclass(frozen=True)
 class ConfirmationMaintenanceServices:
-    director_npc_store: Callable
-    run_director_npc_maintenance: Callable
     run_setting_seed_maintenance: Callable
     run_scene_summary_maintenance: Callable
-
-
-@dataclass
-class ConfirmationScheduleResult:
-    director_npc_restock_scheduled: bool
 
 
 class ConfirmationMaintenanceScheduler:
@@ -308,23 +281,14 @@ class ConfirmationMaintenanceScheduler:
         self.runtime = runtime
         self.services = services
 
-    def schedule_director_npc_maintenance(self, state: ConfirmationState) -> bool:
+    def schedule_setting_seed_maintenance(self, state: ConfirmationState) -> None:
         if not state.get("write_db", True):
-            return bool(state.get("director_npc_restock_scheduled"))
+            return
 
         pipeline_input = state["pipeline_input"]
         cache = state["cache"]
-        scheduled = bool(state.get("director_npc_restock_scheduled"))
-        if (
-            not pipeline_input.handle_director_npc
-            or cache.get("setting_seed_maintenance_scheduled")
-        ):
-            return scheduled
-
-        with self.services.director_npc_store() as npc_store:
-            should_restock = (
-                len(npc_store.list_standby()) < DIRECTOR_NPC_STANDBY_TARGET
-            )
+        if cache.get("setting_seed_maintenance_scheduled"):
+            return
         args = (
             state["trace_id"],
             pipeline_input.turn_index,
@@ -336,7 +300,6 @@ class ConfirmationMaintenanceScheduler:
             npc_id
             for npc_id in [
                 *state.get("updated_npc_profile_ids", []),
-                *state.get("director_event_promoted_npc_profile_ids", []),
             ]
             if npc_id not in existing_ids
         ]
@@ -352,63 +315,31 @@ class ConfirmationMaintenanceScheduler:
             "scene_facts_json": state["scene_facts_json"],
             "new_npc_profile_ids": new_npc_profile_ids,
         }
-        job_type = "setting_seed_extract"
-        runner = self.services.run_setting_seed_maintenance
-        if should_restock:
-            job_type = "director_npc_restock"
-            runner = self.services.run_director_npc_maintenance
-            kwargs["protagonist_name"] = state["updated_state"].player.name
-        if pipeline_input.director_npc_restock_sync:
-            runner(*args, **kwargs)
-        else:
-            future = self.runtime.jobs.submit_job(
-                job_type,
-                runner,
-                *args,
-                trace_id=state["trace_id"],
-                turn_index=pipeline_input.turn_index,
-                metadata={"campaign_id": self.runtime.campaign_id},
-                **kwargs,
-            )
-            cache["setting_seed_maintenance_job_id"] = getattr(
-                future,
-                "job_id",
-                None,
-            )
-            cache["setting_seed_maintenance_operation_id"] = getattr(
-                future,
-                "operation_id",
-                None,
-            )
-            if should_restock:
-                cache["director_npc_restock_job_id"] = getattr(
-                    future,
-                    "job_id",
-                    None,
-                )
-                cache["director_npc_restock_operation_id"] = getattr(
-                    future,
-                    "operation_id",
-                    None,
-                )
+        future = self.runtime.jobs.submit_job(
+            "setting_seed_extract",
+            self.services.run_setting_seed_maintenance,
+            *args,
+            trace_id=state["trace_id"],
+            turn_index=pipeline_input.turn_index,
+            metadata={"campaign_id": self.runtime.campaign_id},
+            **kwargs,
+        )
+        cache["setting_seed_maintenance_job_id"] = getattr(
+            future,
+            "job_id",
+            None,
+        )
+        cache["setting_seed_maintenance_operation_id"] = getattr(
+            future,
+            "operation_id",
+            None,
+        )
         cache["setting_seed_maintenance_scheduled"] = True
-        if should_restock:
-            cache["director_npc_restock_scheduled"] = True
-            state["director_npc_restock_scheduled"] = True
-        return should_restock or scheduled
 
-    def schedule_followups(
-        self,
-        state: ConfirmationState,
-        commit_result: ConfirmationCommitResult,
-        *,
-        director_npc_restock_scheduled: bool,
-    ) -> ConfirmationScheduleResult:
+    def schedule_scene_summary(self, state: ConfirmationState) -> None:
         cache = state["cache"]
         if not state.get("write_db", True):
-            return ConfirmationScheduleResult(
-                director_npc_restock_scheduled=director_npc_restock_scheduled,
-            )
+            return
 
         pipeline_input = state["pipeline_input"]
         updated_state = state["updated_state"]
@@ -440,10 +371,6 @@ class ConfirmationMaintenanceScheduler:
             )
             cache["scene_summary_scheduled"] = True
 
-        return ConfirmationScheduleResult(
-            director_npc_restock_scheduled=director_npc_restock_scheduled,
-        )
-
 
 class ConfirmationEventBuilder:
     """Build final user-facing confirmation events without performing I/O."""
@@ -452,13 +379,12 @@ class ConfirmationEventBuilder:
         self,
         state: ConfirmationState,
         commit_result: ConfirmationCommitResult,
-        schedule_result: ConfirmationScheduleResult,
     ) -> list[dict]:
         pipeline_input = state["pipeline_input"]
-        pending = state["pending"]
         write_db = state.get("write_db", True)
         action_preview = state.get("action_preview")
-        director_event_result = state.get("director_event_result")
+        director_decision = state.get("director_decision")
+        director_executions = state.get("director_executions")
         director_npc_profile_id = state.get("director_npc_profile_id")
         updated_entity_ids = state.get("updated_entity_ids", [])
         updated_npc_profile_ids = state.get("updated_npc_profile_ids", [])
@@ -468,16 +394,11 @@ class ConfirmationEventBuilder:
             "updated_entity_ids": updated_entity_ids,
             "updated_npc_profile_ids": updated_npc_profile_ids,
         }
-        if pipeline_input.handle_director_npc or pipeline_input.update_director_event:
+        if pipeline_input.run_director_agent:
             entity_update_data.update({
                 "director_npc_profile_id": director_npc_profile_id,
-                "director_npc_restock_scheduled": (
-                    schedule_result.director_npc_restock_scheduled
-                ),
-                "director_npc_result": model_data(
-                    getattr(pending, "director_npc_result", None)
-                ),
-                "director_event_result": model_data(director_event_result),
+                "director_decision": model_data(director_decision),
+                "director_executions": model_data(director_executions),
             })
 
         scene_result_data = model_data(pipeline_input.scene_result)
@@ -514,16 +435,11 @@ class ConfirmationEventBuilder:
             ),
             "status": "committed" if write_db else "dry_run",
         }
-        if pipeline_input.handle_director_npc or pipeline_input.update_director_event:
+        if pipeline_input.run_director_agent:
             finish_data.update({
                 "director_npc_profile_id": director_npc_profile_id,
-                "director_npc_restock_scheduled": (
-                    schedule_result.director_npc_restock_scheduled
-                ),
-                "director_npc_result": model_data(
-                    getattr(pending, "director_npc_result", None)
-                ),
-                "director_event_result": model_data(director_event_result),
+                "director_decision": model_data(director_decision),
+                "director_executions": model_data(director_executions),
             })
 
         return [
@@ -590,28 +506,19 @@ class ConfirmationFinalizer:
                 self.runtime.pending_openings.discard_group(pending.group_id)
 
         try:
-            restock_scheduled = (
-                self.scheduler.schedule_director_npc_maintenance(state)
-            )
+            self.scheduler.schedule_setting_seed_maintenance(state)
         except Exception as exc:
             self.runtime.services.diagnostics.warning(
                 source="confirmation",
-                code="director_npc_maintenance_schedule_failed",
+                code="setting_seed_maintenance_schedule_failed",
                 message=str(exc),
                 trace_id=state["trace_id"],
                 operation_type="confirmation",
                 turn_index=_diagnostic_turn_index(state),
             )
             traceback.print_exc()
-            restock_scheduled = bool(
-                state.get("director_npc_restock_scheduled")
-            )
         try:
-            schedule_result = self.scheduler.schedule_followups(
-                state,
-                commit_result,
-                director_npc_restock_scheduled=restock_scheduled,
-            )
+            self.scheduler.schedule_scene_summary(state)
         except Exception as exc:
             self.runtime.services.diagnostics.warning(
                 source="confirmation",
@@ -622,12 +529,8 @@ class ConfirmationFinalizer:
                 turn_index=_diagnostic_turn_index(state),
             )
             traceback.print_exc()
-            schedule_result = ConfirmationScheduleResult(
-                director_npc_restock_scheduled=restock_scheduled,
-            )
-
         state["events"] = [
             *state.get("events", []),
-            *self.event_builder.build(state, commit_result, schedule_result),
+            *self.event_builder.build(state, commit_result),
         ]
         return state

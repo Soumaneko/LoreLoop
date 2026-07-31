@@ -67,7 +67,7 @@ FLAWED_SCENE_TEXT = """莱尔摊开手掌。埃利奥反而取出两枚金币塞
 
 埃利奥说，他多年前曾在灰烬图书馆住过半年，还亲自探索过地下书库，因此才来到老橡树镇招募莱尔。
 
-导演事件要求此处暂时隐藏真相，TurnResolutionResult 已经完成，所以下游模块应当结束本场景。"""
+导演素材要求此处暂时隐藏真相，TurnResolutionResult 已经完成，所以下游模块应当结束本场景。"""
 
 
 def _current_state() -> CurrentState:
@@ -202,8 +202,7 @@ def _composer_context() -> NarrativeComposerContext:
         context_facts=_context_facts(),
         entity_profiles=[],
         npc_profiles=[],
-        director_event_consumptions=[],
-        director_npc_injection=None,
+        director_stage=None,
     )
 
 

@@ -18,7 +18,7 @@ SettingKind = Literal[
 ]
 SettingVisibility = Literal["player_known", "director_private", "mixed"]
 SettingMaturity = Literal["seed", "usable"]
-SettingAvailability = Literal["available", "reserved", "consumed", "rejected"]
+SettingStatus = Literal["active", "rejected"]
 SettingPreparationDecision = Literal["use_as_is", "develop", "reject"]
 SettingMaintenanceResolution = Literal[
     "independent",
@@ -45,7 +45,6 @@ class SettingSourceDocument(BaseModel):
         "scene_text",
         "npc_profile_public",
         "npc_profile_private",
-        "initial_world_setting",
     ]
     source_ref: str = Field(min_length=1)
     visibility: Literal["player_known", "director_private"]
@@ -99,49 +98,6 @@ class SettingAnchorPacket(BaseModel):
     scope_and_boundaries: list[str] = Field(default_factory=list, max_length=5)
     player_known_facts: list[int] = Field(default_factory=list, max_length=16)
     director_private_facts: list[int] = Field(default_factory=list, max_length=16)
-
-
-class InitialWorldSettingDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    setting_id: str = Field(min_length=1)
-    label: str = Field(min_length=1)
-    kind: SettingKind
-    definition: str = Field(min_length=1)
-    setting_facts: list[str] = Field(min_length=1, max_length=16)
-    relation_to_known_world: list[str] = Field(default_factory=list, max_length=5)
-    world_effects: list[str] = Field(default_factory=list, max_length=5)
-    scope_and_boundaries: list[str] = Field(default_factory=list, max_length=5)
-
-    def to_anchor(self) -> SettingAnchorPacket:
-        return SettingAnchorPacket(
-            setting_id=self.setting_id,
-            label=self.label,
-            kind=self.kind,
-            definition=self.definition,
-            setting_facts=list(self.setting_facts),
-            relation_to_known_world=list(self.relation_to_known_world),
-            world_effects=list(self.world_effects),
-            scope_and_boundaries=list(self.scope_and_boundaries),
-            player_known_facts=[],
-            director_private_facts=list(range(len(self.setting_facts))),
-        )
-
-
-class InitialWorldSettingCreationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    settings: list[InitialWorldSettingDraft] = Field(min_length=2, max_length=2)
-
-    @model_validator(mode="after")
-    def _validate_distinct_settings(self):
-        if len({setting.setting_id for setting in self.settings}) != 2:
-            raise ValueError("initial setting_id values must be unique")
-        if len({_normalize_label(setting.label) for setting in self.settings}) != 2:
-            raise ValueError("initial setting labels must be unique")
-        if len({setting.kind for setting in self.settings}) != 2:
-            raise ValueError("initial setting kinds must be different")
-        return self
 
 
 class SettingAnchorPreparation(BaseModel):
@@ -306,10 +262,8 @@ class WorldSetting(BaseModel):
     basic_concept: str = Field(min_length=1)
     visibility: SettingVisibility
     maturity: SettingMaturity = "seed"
-    availability: SettingAvailability = "available"
+    status: SettingStatus = "active"
     prepared_anchor: SettingAnchorPacket | None = None
-    reserved_by: str | None = None
-    consumed_by_director_npc_id: str | None = None
     rejection_reason: str | None = None
     related_setting_ids: list[str] = Field(default_factory=list)
     sources: list[WorldSettingSource] = Field(default_factory=list)

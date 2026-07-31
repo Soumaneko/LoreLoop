@@ -23,8 +23,7 @@ from app.domain.narrative_rewrite import (
     SourceRewriteRequest,
 )
 from app.domain.plot_outline.schemas import PlannedEvent
-from app.domain.director_npc.schemas import DirectorNPCPlotInjection
-from app.domain.director_event.schemas import DirectorEventConsumption
+from app.domain.director import DirectorStageMaterial, DirectorStageResult
 from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
 from app.domain.short_term_memory import ShortTermScene
 from app.graph.generation_helpers import assemble_narrative_context
@@ -91,8 +90,7 @@ def _build_outline_response(
 ) -> str:
     import json
     return json.dumps({
-        "director_event_reason": "本回合没有自然交点，未使用。",
-        "director_npc_reason": "本回合没有自然交点，未使用。",
+        "director_reason": "本回合没有自然交点，未使用。",
         "planning_reasoning": planning_reasoning,
         "must_establish_facts": must_establish_facts or ["主角发现酒馆客人中的可疑行为。"],
         "must_not_establish_facts": must_not_establish_facts or ["不得透露可疑行为背后的完整真相。"],
@@ -129,11 +127,7 @@ class TestNarrativeComposerAgent:
         NarrativeComposerAgent(gateway).compose(_make_context())
 
         properties = json.loads(gateway.calls[0]["input_data"]["output_schema_json"])["properties"]
-        assert list(properties)[:3] == [
-            "director_event_reason",
-            "director_npc_reason",
-            "planning_reasoning",
-        ]
+        assert list(properties)[:2] == ["director_reason", "planning_reasoning"]
         ordered_fields = list(properties)
         assert ordered_fields.index("planning_reasoning") < ordered_fields.index(
             "must_establish_facts"
@@ -272,56 +266,29 @@ class TestNarrativeComposerAgent:
         assert "state_implications" not in schema_json
         assert "tone_notes" not in schema_json
 
-    def test_director_event_input_contains_only_consumption_fields(self):
+    def test_director_stage_is_forwarded_as_one_generic_material_contract(self):
         context = _make_context()
-        context.director_event_consumptions = [
-            DirectorEventConsumption(
-                event_id="unused_event_id",
-                reason="本回合没有自然接触面。",
-                use_event=False,
-                immutable_constraints=["不会传给 Composer 的内部约束。"],
-            ),
-            DirectorEventConsumption(
-                event_id="private_event_id",
-                reason="private reasoning",
-                use_event=True,
-                allowed_facts=["旅店留言板上有一张木偶师便条。"],
-                immutable_constraints=["便条位于旅店留言板。"],
-            )
-        ]
-        gateway = _SpyGateway(json.loads(_build_outline_response()))
-
-        NarrativeComposerAgent(gateway).compose(context)
-
-        payload = json.loads(
-            gateway.calls[0]["input_data"]["director_event_consumptions_json"]
-        )
-        assert payload == [{
-            "allowed_facts": ["旅店留言板上有一张木偶师便条。"],
-            "immutable_constraints": ["便条位于旅店留言板。"],
-        }]
-
-    def test_director_npc_candidate_input_omits_dispatch_reason(self):
-        context = _make_context()
-        context.director_npc_injection = DirectorNPCPlotInjection(
-            action="dispatch_standby",
-            selected_id="director_npc_x",
-            selected_name="艾琳娜",
-            selected_npc={
-                "name": "艾琳娜",
-                "role": "流浪药剂师",
-                "hidden_secret": "只用于导演判断",
-            },
+        context.director_stage = DirectorStageResult(
+            reasoning="已有事件与玩家所在地点直接相交。",
+            materials=[
+                DirectorStageMaterial(
+                    kind="event",
+                    resource_id="event_1",
+                    reason="旧码头是事件的可见接触点。",
+                    payload={
+                        "title": "无灯船",
+                        "premise": "没有灯火的货船在夜间靠岸。",
+                    },
+                )
+            ],
         )
         gateway = _SpyGateway(json.loads(_build_outline_response()))
 
         NarrativeComposerAgent(gateway).compose(context)
 
-        injection_json = gateway.calls[0]["input_data"]["director_npc_injection_json"]
-        assert "艾琳娜" in injection_json
-        assert "reason" not in injection_json
-        assert "immediate_intent" not in injection_json
-        assert "first_pressure" not in injection_json
+        payload = json.loads(gateway.calls[0]["input_data"]["director_stage_json"])
+        assert payload["materials"][0]["kind"] == "event"
+        assert payload["materials"][0]["resource_id"] == "event_1"
 
     def test_generates_outline(self):
         context = _make_context()
@@ -345,13 +312,13 @@ class TestNarrativeComposerAgent:
         assert "Player Input 管行动语义，TR 管结果方向" in prompt
         assert "规划字段是你对正文的绝对事实承诺" in prompt
         assert "must_establish_facts" in prompt
-        assert "DirectorEvent Consumptions" in prompt
+        assert "Director Agent 舞台材料" in prompt
         assert "arc 负责" not in prompt
         assert "ambient 负责" not in prompt
         assert "不得以“TR 没写”为由输出空泛内容" in prompt
         assert "canonical_premise" not in prompt
         assert "allowed_effect" not in prompt
-        assert "只包含 `allowed_facts` 与 `immutable_constraints`" in prompt
+        assert "director_stage_json" in prompt
         assert "mode=foreshadow" not in prompt
         assert "mode=intersect" not in prompt
         assert "narrative_goal" not in prompt

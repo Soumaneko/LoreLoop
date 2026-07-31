@@ -56,16 +56,10 @@
 {npc_profiles_json}
 ```
 
-## DirectorEvent Consumptions
+## Director Agent 舞台材料
 
 ```json
-{director_event_consumptions_json}
-```
-
-## Director NPC Candidate
-
-```json
-{director_npc_injection_json}
+{director_stage_json}
 ```
 
 ## Previous Confirmed Scene

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
@@ -18,11 +18,7 @@ from app.domain.npc_profile.schemas import (
     profile_from_update,
     utc_now,
 )
-from app.domain.npc_profile.views import project_director_event_identities
 from app.domain.scene_summary.schemas import SceneSummary
-
-if TYPE_CHECKING:
-    from app.domain.director_event.schemas import DirectorEvent
 
 
 @dataclass
@@ -55,7 +51,6 @@ class NPCProfileUpdater:
         extraction: NPCExtractionResult,
         *,
         core_memory: CoreMemory,
-        director_events: list[DirectorEvent] | None = None,
         recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
     ) -> NPCProfileUpdateResult:
@@ -79,9 +74,6 @@ class NPCProfileUpdater:
                 input_data={
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_facts_json": scene_facts,
-                    "director_events_identity_json": project_director_event_identities(
-                        director_events or []
-                    ),
                     "current_state_summary_json": project_current_state(current_state),
                     "recent_summaries_json": project_scene_summaries(recent_summaries or []),
                     "npc_candidates_json": json.dumps(

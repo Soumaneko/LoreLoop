@@ -32,7 +32,7 @@ def test_schema_version_rejects_newer_database():
     connection.close()
 
 
-def test_npc_profile_store_migrates_pre_versioned_columns(tmp_path):
+def test_npc_profile_store_rejects_pre_versioned_columns(tmp_path):
     db_path = tmp_path / "pre_versioned.db"
     connection = sqlite3.connect(db_path)
     connection.execute(
@@ -52,17 +52,11 @@ def test_npc_profile_store_migrates_pre_versioned_columns(tmp_path):
     connection.commit()
     connection.close()
 
-    with NPCProfileStore(str(db_path)) as store:
-        columns = {
-            row["name"]
-            for row in store._db.execute("PRAGMA table_info(npc_profiles)")
-        }
-        version = store._db.execute(
-            "SELECT version FROM schema_versions WHERE component = 'npc_profile'"
-        ).fetchone()[0]
-
-    assert {"name_hit_count", "alias_hit_counts_json"} <= columns
-    assert version == 2
+    with pytest.raises(
+        RuntimeError,
+        match="current NPCProfile contract",
+    ):
+        NPCProfileStore(str(db_path))
 
 
 def test_runtime_services_creates_trace_isolated_gateways():

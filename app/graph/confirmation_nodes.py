@@ -5,14 +5,6 @@ from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.continuity import ContinuityProjector
 from app.domain.current_state import StateChangeSet, StateUpdater
-from app.domain.director_event.reviewer import DirectorEventReviewer
-from app.domain.director_event.intervention_planner import (
-    DirectorEventInterventionPlanner,
-)
-from app.domain.director_event.intervention_reviewer import (
-    DirectorEventInterventionReviewer,
-)
-from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.entity.extractor import EntityExtractor
 from app.domain.entity.schemas import EntityExtractionResult
 from app.domain.npc_profile.extractor import NPCProfileExtractor
@@ -25,14 +17,11 @@ from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
 from app.domain.scene_summary.summarizer import SceneSummarizer
 from app.domain.views import project_scene_facts
 from app.runtime.serialization import model_data
-from app.domain.director_event.workflows import (
-    DirectorEventWorkflowBatchResult,
-    update_director_event_workflow,
-)
 from app.domain.entity.workflows import update_entity_profiles_from_extraction
 
-from .confirmation_helpers import ensure_director_npc_profile, merge_unique_ids
+from .confirmation_helpers import merge_unique_ids
 from .confirmation_state import ConfirmationState
+from .director_agent import run_confirmation_director_agent
 
 
 def _gateway_for(state: ConfirmationState):
@@ -261,8 +250,6 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
     trace_id = state["trace_id"]
     cache = state["cache"]
     npc_extraction = cache.get("npc_extraction")
-    with _store_factory(state, "director_event")() as event_store:
-        active_events = event_store.list_active()
     if npc_extraction is None:
         gateway = _gateway_for(state)
         extractor = NPCProfileExtractor(gateway)
@@ -272,7 +259,6 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
         )
     return {
         "npc_extraction": npc_extraction,
-        "npc_director_events": active_events,
         "events": [{
             "step": "npc_extract_done",
             "data": {
@@ -316,30 +302,25 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
     }
 
 
-def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
+def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     if (
         not state.get("write_db", True)
-        or not pipeline_input.update_director_event
-        or pipeline_input.turn_index < 1
+        or not pipeline_input.run_director_agent
     ):
-        return {"director_event_result": state["cache"].get("director_event_result")}
+        return {
+            "director_decision": state["cache"].get("director_decision"),
+            "director_executions": state["cache"].get("director_executions"),
+        }
 
-    trace_id = state["trace_id"]
     cache = state["cache"]
-    director_event_result = cache.get("director_event_result")
-    promoted_npc_profile_ids = cache.get(
-        "director_event_promoted_npc_profile_ids",
-        [],
-    )
-    if director_event_result is None and "director_event_result" not in cache:
+    decision = cache.get("director_decision")
+    executions = cache.get("director_executions")
+    if decision is None or executions is None:
         with (
-            _store_factory(state, "director_event")() as director_store,
-            _store_factory(state, "director_npc")() as director_npc_repo,
             _store_factory(state, "entity")() as director_entity_repo,
             _store_factory(state, "npc_profile")() as director_npc_profile_repo,
         ):
-            standby_director_npcs = director_npc_repo.list_standby()
             director_entity_profiles = [
                 profile.semantic_view()
                 for profile in director_entity_repo.list_all()
@@ -352,60 +333,32 @@ def director_event_update_node(state: ConfirmationState) -> ConfirmationState:
                 state.get("entity_extraction")
             )
             npc_mentions = _npc_extraction_mentions(state.get("npc_extraction"))
-            results = {}
-            promoted_npc_profile_ids = []
-            for role in ("arc", "ambient"):
-                reviewer_gateway = _gateway_for(state)
-                intervention_review_gateway = _gateway_for(state)
-                intervention_plan_gateway = _gateway_for(state)
-                selector_gateway = _gateway_for(state)
-                results[role] = update_director_event_workflow(
-                    role=role,
-                    user_input=pipeline_input.user_input,
-                    scene_facts=state["scene_facts_json"],
-                    current_state=state["updated_state"],
-                    core_memory=state["core_memory"],
-                    scene_summaries=state.get("scene_summaries", []),
-                    recent_summaries=state.get("recent_summaries", []),
-                    selection_summaries=state.get("selection_summaries", []),
-                    entity_profiles=director_entity_profiles,
-                    npc_profiles=director_npc_profiles,
-                    entity_mentions=entity_mentions,
-                    npc_mentions=npc_mentions,
-                    turn_index=pipeline_input.turn_index,
-                    store=director_store,
-                    reviewer=DirectorEventReviewer(reviewer_gateway),
-                    intervention_reviewer=DirectorEventInterventionReviewer(
-                        intervention_review_gateway
-                    ),
-                    intervention_planner=DirectorEventInterventionPlanner(
-                        intervention_plan_gateway
-                    ),
-                    selector=DirectorEventSelector(selector_gateway),
-                    standby_director_npcs=standby_director_npcs,
-                    trace_id=trace_id,
-                )
-                # Scene Facts above are confined to reviewing/intervening on an
-                # existing event. DirectorEventSelector's contract receives the
-                # recent summaries, never this turn's Scene Facts.
-                active_after = results[role].active_after
-                if active_after is not None and active_after.director_npc_id:
-                    promoted = ensure_director_npc_profile(
-                        active_after.director_npc_id,
-                        turn_index=pipeline_input.turn_index,
-                        stores=state["runtime_services"].stores,
-                    )
-                    if promoted is None:
-                        raise ValueError(
-                            "DirectorEvent references an unavailable DirectorNPC"
-                        )
-                    promoted_npc_profile_ids.append(promoted.npc_id)
-            director_event_result = DirectorEventWorkflowBatchResult(**results)
+            decision, executions = run_confirmation_director_agent(
+                gateway=_gateway_for(state),
+                stores=state["runtime_services"].stores,
+                core_memory=state["core_memory"],
+                current_state=state["updated_state"],
+                user_input=pipeline_input.user_input,
+                scene_facts=state["scene_facts"].model_dump(mode="json"),
+                recent_summaries=state.get("recent_summaries", []),
+                selection_summaries=state.get("selection_summaries", []),
+                entity_profiles=director_entity_profiles,
+                npc_profiles=director_npc_profiles,
+                entity_mentions=entity_mentions,
+                npc_mentions=npc_mentions,
+                turn_index=pipeline_input.turn_index,
+                trace_id=state["trace_id"],
+            )
     return {
-        "director_event_result": director_event_result,
-        "director_event_promoted_npc_profile_ids": list(
-            dict.fromkeys(promoted_npc_profile_ids)
-        ),
+        "director_decision": decision,
+        "director_executions": executions,
+        "events": [{
+            "step": "director_agent_confirmed",
+            "data": {
+                "director_decision": model_data(decision),
+                "director_executions": model_data(executions),
+            },
+        }],
     }
 
 
@@ -452,7 +405,6 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 npc_store=npc_store,
                 existing_profiles=state["existing_npc_profiles"],
                 extraction=state["npc_extraction"],
-                director_events=state.get("npc_director_events", []),
                 recent_summaries=state.get("recent_summaries", []),
                 trace_id=trace_id,
             )

@@ -12,13 +12,13 @@ SUPPORTED_SCHEMA_VERSIONS = {
     "confirmed_history": 1,
     "continuity": 1,
     "current_state": 4,
-    "director_event": 5,
-    "director_npc": 1,
+    "director_event": 6,
+    "director_npc": 2,
     "entity_profile": 3,
-    "npc_profile": 2,
+    "npc_profile": 3,
     "scene_summary": 1,
     "short_term_memory": 5,
-    "world_setting": 5,
+    "world_setting": 6,
 }
 _savepoint_counter = 0
 _savepoint_lock = threading.Lock()
@@ -113,6 +113,29 @@ def ensure_schema_version(
         """,
         (component, version),
     )
+
+
+def ensure_exact_schema_version(
+    connection: sqlite3.Connection,
+    component: str,
+    version: int,
+) -> None:
+    """Initialize a fresh store or reject any different persisted contract."""
+    versions_table_exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        ("schema_versions",),
+    ).fetchone()
+    if versions_table_exists is not None:
+        current = connection.execute(
+            "SELECT version FROM schema_versions WHERE component = ?",
+            (component,),
+        ).fetchone()
+        if current is not None and int(current["version"]) != version:
+            raise RuntimeError(
+                f"Unsupported {component} database schema: "
+                f"expected {version}, got {current['version']}"
+            )
+    ensure_schema_version(connection, component, version)
 
 
 def ensure_column(

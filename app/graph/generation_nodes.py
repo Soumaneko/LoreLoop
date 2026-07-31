@@ -10,7 +10,6 @@ from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
 from app.domain.context_facts import ContextFactsInput, ContextFactsService
 from app.domain.context_facts.schemas import ContextFactSet
-from app.domain.director_event.consumer import DirectorEventConsumer
 from app.domain.narrative_composer import (
     NarrativeComposerAgent,
     build_entity_retrieval_anchors,
@@ -37,12 +36,12 @@ from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.domain.turn_resolution.views import project_turn_resolution
 from app.runtime.serialization import model_data
-from app.domain.director_npc.workflows import maybe_director_npc_workflow
 from app.domain.entity.workflows import gather_entity_profiles_from_state_and_anchors
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
 from .generation_helpers import assemble_narrative_context, gateway_for
 from .generation_state import GenerationState
+from .director_agent import run_generation_director_agent
 
 
 def _store_factory(state: GenerationState, name: str):
@@ -217,29 +216,6 @@ def parse_action_node(state: GenerationState) -> GenerationState:
     }
 
 
-def consume_director_events_node(state: GenerationState) -> GenerationState:
-    consumptions = DirectorEventConsumer(gateway_for(state)).consume(
-        events=state.get("active_director_events", []),
-        user_input=state["user_input"],
-        current_state=state["current_state"],
-        core_memory=state["core_memory"],
-        context_facts=state["context_facts"],
-        turn_resolution=state["turn_resolution"],
-        entity_profiles=state.get("action_entity_profile_views", []),
-        npc_profiles=state.get("action_npc_director_views", []),
-        trace_id=state["trace_id"],
-    )
-    return {
-        "director_event_consumptions": consumptions,
-        "events": [{
-            "step": "director_events_consumed",
-            "data": {
-                "director_event_consumptions": model_data(consumptions),
-            },
-        }],
-    }
-
-
 def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
     roll_config = RollConfig(seed=None, difficulty=state.get("difficulty", "困难"))
     roll_resolver = RollResolver(roll_config)
@@ -336,30 +312,28 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
     }
 
 
-def maybe_director_npc_node(state: GenerationState) -> GenerationState:
-    active_events = state.get("active_director_events", [])
-    with (
-        _store_factory(state, "director_npc")() as npc_store,
-        _store_factory(state, "npc_profile")() as profile_store,
-    ):
-        director_npc_result = maybe_director_npc_workflow(
-            core_memory=state["core_memory"],
-            current_state=state["current_state"],
-            recent_summaries=state.get("recent_summaries", []),
-            director_events=active_events,
-            user_input=state["user_input"],
-            turn_index=state["turn_index"],
-            director_npc_store=npc_store,
-            npc_profile_store=profile_store,
-            dispatcher_gateway=gateway_for(state),
-            trace_id=state["trace_id"],
-        )
+def director_agent_stage_node(state: GenerationState) -> GenerationState:
+    stage, decision = run_generation_director_agent(
+        gateway=gateway_for(state),
+        stores=state["runtime_services"].stores,
+        core_memory=state["core_memory"],
+        current_state=state["current_state"],
+        user_input=state["user_input"],
+        context_facts=[
+            fact.fact for fact in state["context_facts"].facts
+        ],
+        recent_summaries=state.get("recent_summaries", []),
+        turn_index=state["turn_index"],
+        trace_id=state["trace_id"],
+    )
     return {
-        "director_npc_result": director_npc_result,
+        "director_decision": decision,
+        "director_stage": stage,
         "events": [{
-            "step": "director_npc_done",
+            "step": "director_agent_staged",
             "data": {
-                "director_npc_result": model_data(director_npc_result),
+                "director_decision": model_data(decision),
+                "director_stage": model_data(stage),
             },
         }],
     }
@@ -417,7 +391,6 @@ def _compose_with_context(
 
 
 def compose_narrative_node(state: GenerationState) -> GenerationState:
-    director_npc_result = state.get("director_npc_result")
     context = assemble_narrative_context(
         user_input=state["user_input"],
         current_state=state["current_state"],
@@ -426,12 +399,7 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
         context_facts=state["context_facts"],
         entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
-        director_event_consumptions=state.get("director_event_consumptions", []),
-        director_npc_injection=(
-            director_npc_result.plot_injection
-            if director_npc_result is not None
-            else None
-        ),
+        director_stage=state.get("director_stage"),
     )
     return _compose_with_context(
         state,

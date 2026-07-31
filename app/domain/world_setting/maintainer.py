@@ -83,7 +83,7 @@ def _mature_view(setting: WorldSetting) -> dict:
         "basic_concept": setting.basic_concept,
         "visibility": setting.visibility,
         "maturity": setting.maturity,
-        "availability": setting.availability,
+        "status": setting.status,
         "prepared_anchor": (
             setting.prepared_anchor.model_dump(mode="json")
             if setting.prepared_anchor is not None
@@ -136,8 +136,8 @@ def _validate_maintenance_result(
                 for seed_id in group.seed_ids
             ):
                 raise ValueError(
-                    "An independent seed group exactly matches a usable or "
-                    "consumed setting label; it must be contained or supplement"
+                    "An independent seed group exactly matches an active usable "
+                    "setting label; it must be contained or supplement"
                 )
             if normalized_label in independent_labels:
                 raise ValueError(
@@ -151,16 +151,11 @@ def _validate_maintenance_result(
         if target is None:
             raise ValueError(
                 "Setting maintenance supplement/contained target must be an "
-                "input usable or consumed setting"
+                "input active usable setting"
             )
-        if target.maturity != "usable" or target.availability not in {
-            "available",
-            "reserved",
-            "consumed",
-        }:
+        if target.maturity != "usable" or target.status != "active":
             raise ValueError(
-                "Setting maintenance target must be usable and available, "
-                "reserved, or consumed"
+                "Setting maintenance target must be active and usable"
             )
         if group.resolution != "supplement":
             continue

@@ -3,7 +3,6 @@ from .intervention_planner import DirectorEventInterventionPlanner
 from .intervention_reviewer import DirectorEventInterventionReviewer
 from .schemas import (
     DirectorEvent,
-    DirectorEventConsumption,
     DirectorEventEntryPoint,
     DirectorEventExposure,
     DirectorEventInterventionPlan,
@@ -19,7 +18,6 @@ from .store import DirectorEventStore
 
 __all__ = [
     "DirectorEvent",
-    "DirectorEventConsumption",
     "DirectorEventEntryPoint",
     "DirectorEventExposure",
     "DirectorEventInterventionPlan",

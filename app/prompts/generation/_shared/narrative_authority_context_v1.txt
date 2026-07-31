@@ -30,18 +30,12 @@
 {npc_profiles_json}
 ```
 
-## DirectorEvent Consumptions
+## Director Agent 舞台材料
 
-每个数组元素都是一个彼此独立的导演事件授权，只包含 `allowed_facts` 与 `immutable_constraints`。没有输入时为 `[]`。
-
-```json
-{director_event_consumptions_json}
-```
-
-## Director NPC Candidate
+`materials` 中每项都是 Director Agent 本轮允许考虑的既有事件、NPC 或 Setting 投影。`reason` 说明入选原因；`payload` 是可用事实与幕后边界。没有材料时为 `null`。
 
 ```json
-{director_npc_injection_json}
+{director_stage_json}
 ```
 
 ## Previous Confirmed Scene

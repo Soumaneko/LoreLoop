@@ -3,7 +3,6 @@ from pathlib import Path
 
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
-from app.domain.director_event.schemas import DirectorEvent
 from app.domain.npc_profile.extractor import NPCProfileExtractor
 from app.domain.npc_profile.updater import NPCProfileUpdater
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCMention, NPCProfile
@@ -34,29 +33,7 @@ def _state() -> CurrentState:
     )
 
 
-def _director_event() -> DirectorEvent:
-    return DirectorEvent(
-        role="arc",
-        title="失窃旧书",
-        premise="希尔达寻找自己失窃的旧书。",
-        objective="找回旧书。",
-        bridge_anchors=["旧书"],
-        milestones=[
-            "希尔达留下寻物便条。",
-            "希尔达追查旧书去向。",
-            "旧书事件形成结果。",
-        ],
-        milestone_interval_steps=[2, 2],
-        created_turn=1,
-    )
-
-
-def test_npc_agents_receive_all_director_event_identity_contexts():
-    arc = _director_event()
-    ambient = _director_event().model_copy(
-        update={"role": "ambient", "title": "城外商队"}
-    )
-    events = [arc, ambient]
+def test_npc_agents_use_scene_facts_without_director_resource_dependencies():
     extractor_gateway = _Gateway([{"mentions": []}])
     NPCProfileExtractor(extractor_gateway).extract(
         scene_facts="寻物便条张贴者是一名女性。",
@@ -71,17 +48,10 @@ def test_npc_agents_receive_all_director_event_identity_contexts():
             NPCMention(name="寻物便条张贴者", context_span="寻物便条张贴者是一名女性。")
         ]),
         core_memory=CoreMemory(items=[]),
-        director_events=events,
     )
 
-    expected = [
-        {"role": event.role, "premise": event.premise, "milestones": event.milestones}
-        for event in events
-    ]
     assert "director_events_identity_json" not in extractor_gateway.calls[0]["input_data"]
-    assert json.loads(
-        updater_gateway.calls[0]["input_data"]["director_events_identity_json"]
-    ) == expected
+    assert "director_events_identity_json" not in updater_gateway.calls[0]["input_data"]
 
 
 def test_npc_updater_prompt_treats_new_hints_as_optional_candidates():

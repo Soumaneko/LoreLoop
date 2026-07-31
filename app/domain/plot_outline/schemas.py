@@ -9,8 +9,7 @@ class PlannedEvent(BaseModel):
 
 
 class PlotOutlineResult(BaseModel):
-    director_event_reason: str | None = None
-    director_npc_reason: str | None = None
+    director_reason: str | None = None
     planning_reasoning: str = Field(min_length=1)
     must_establish_facts: list[str] = Field(default_factory=list)
     must_not_establish_facts: list[str] = Field(default_factory=list)

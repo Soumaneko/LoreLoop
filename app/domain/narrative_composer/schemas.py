@@ -3,8 +3,7 @@ from pydantic import BaseModel, Field
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.director_event.schemas import DirectorEventConsumption
-from app.domain.director_npc.schemas import DirectorNPCPlotInjection
+from app.domain.director.schemas import DirectorStageResult
 from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
@@ -25,13 +24,11 @@ class NarrativeComposerContext(BaseModel):
     )
     entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
-    director_event_consumptions: list[DirectorEventConsumption] = Field(default_factory=list)
-    director_npc_injection: DirectorNPCPlotInjection | None = None
+    director_stage: DirectorStageResult | None = None
 
 
 class NarrativeComposerResult(BaseModel):
-    director_event_reason: str | None = None
-    director_npc_reason: str | None = None
+    director_reason: str | None = None
     planning_reasoning: str = Field(min_length=1)
     must_establish_facts: list[str] = Field(default_factory=list)
     must_not_establish_facts: list[str] = Field(default_factory=list)
@@ -51,8 +48,7 @@ class NarrativeComposerResult(BaseModel):
         return PlotOutlineResult.model_validate(
             self.model_dump(
                 include={
-                    "director_event_reason",
-                    "director_npc_reason",
+                    "director_reason",
                     "planning_reasoning",
                     "must_establish_facts",
                     "must_not_establish_facts",

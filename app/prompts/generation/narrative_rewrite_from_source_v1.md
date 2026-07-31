@@ -23,6 +23,6 @@
 3. Rewrite Requirements 可以约束篇幅、停止位置、信息表达和必须删除的演出，但不能改写权威输入。删除 Composer 擅自添加的玩家决定不属于改变 Player Input。
 4. 重新输出完整规划和正文。规划必须准确描述修订后的正文，不能机械复制与修订结果不一致的旧规划。
 5. planned_events 可以修改必要的过程、对白与反应，但不得扩大修订范围或遗留被要求删除的旧稿因果。
-6. director_event_reason 与 director_npc_reason 必须从修订后的版本重新判断，不得为了保留旧稿而强行使用可选材料。
+6. director_reason 必须从修订后的版本重新判断，不得为了保留旧稿而强行使用可选材料。
 
 [[include: generation/_shared/narrative_output_contract_v1.txt]]

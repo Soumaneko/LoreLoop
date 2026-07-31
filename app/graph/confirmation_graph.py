@@ -21,7 +21,7 @@ from .confirmation_helpers import (
 from .confirmation_nodes import (
     action_preview_node,
     continuity_project_node,
-    director_event_update_node,
+    director_agent_confirm_node,
     entity_extract_node,
     entity_profile_update_node,
     npc_profile_extract_node,
@@ -106,7 +106,6 @@ def build_confirmation_second_wave_graph():
     dependencies = (
         action_preview_node,
         continuity_project_node,
-        director_event_update_node,
         entity_profile_update_node,
         npc_profile_update_node,
     )
@@ -131,13 +130,6 @@ def _compile_confirmation_second_wave_graph():
         ),
     )
     graph.add_node(
-        "director_event_update",
-        capture_confirmation_node_errors(
-            "director_event_update",
-            director_event_update_node,
-        ),
-    )
-    graph.add_node(
         "entity_profile_update",
         capture_confirmation_node_errors(
             "entity_profile_update",
@@ -154,15 +146,35 @@ def _compile_confirmation_second_wave_graph():
 
     graph.add_edge(START, "action_preview")
     graph.add_edge(START, "continuity_project")
-    graph.add_edge(START, "director_event_update")
     graph.add_edge(START, "entity_profile_update")
     graph.add_edge(START, "npc_profile_update")
     graph.add_edge("action_preview", END)
     graph.add_edge("continuity_project", END)
-    graph.add_edge("director_event_update", END)
     graph.add_edge("entity_profile_update", END)
     graph.add_edge("npc_profile_update", END)
 
+    return graph.compile()
+
+
+def build_confirmation_director_graph():
+    return get_cached_graph(
+        "confirmation_director_agent",
+        (director_agent_confirm_node,),
+        _compile_confirmation_director_graph,
+    )
+
+
+def _compile_confirmation_director_graph():
+    graph = StateGraph(ConfirmationState)
+    graph.add_node(
+        "director_agent_confirm",
+        capture_confirmation_node_errors(
+            "director_agent_confirm",
+            director_agent_confirm_node,
+        ),
+    )
+    graph.add_edge(START, "director_agent_confirm")
+    graph.add_edge("director_agent_confirm", END)
     return graph.compile()
 
 
@@ -205,6 +217,11 @@ def stream_confirmation_pipeline(
         yield event
 
     for event in stream_confirmation_graph(second_wave_graph, state):
+        event_count += 1
+        yield event
+
+    director_graph = build_confirmation_director_graph()
+    for event in stream_confirmation_graph(director_graph, state):
         event_count += 1
         yield event
 
@@ -271,8 +288,7 @@ def _confirm_turn_stream_locked(
                 "Pending turn is stale because CurrentState changed after generation. "
                 "Generate the turn again before confirming."
             ),
-            update_director_event=director_is_enabled,
-            handle_director_npc=director_is_enabled,
+            run_director_agent=director_is_enabled,
         ),
         write_db=write_db,
         scene_text=scene_text,
@@ -352,9 +368,7 @@ def _confirm_opening_stream_locked(
                 "Pending opening is stale because initialization state changed. "
                 "Initialize again before confirming."
             ),
-            update_director_event=False,
-            handle_director_npc=director_is_enabled,
-            director_npc_restock_sync=director_is_enabled,
+            run_director_agent=director_is_enabled,
             clear_short_term_before_save=True,
             clear_confirmed_history_before_save=True,
             clear_continuity_before_save=True,

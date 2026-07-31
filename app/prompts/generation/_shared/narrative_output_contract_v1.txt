@@ -10,8 +10,7 @@
 
 ## 字段职责
 
-- director_event_reason：先决定是否使用 DirectorEvent Consumptions；没有可用材料时明确不使用。
-- director_npc_reason：先决定是否使用 Director NPC Candidate；没有候选时明确不使用。
+- director_reason：说明采用或不采用 Director Agent 舞台材料的理由。材料只是许可，不是必须写入正文。
 - planning_reasoning：3-6 句自然语言逻辑审计，只进行语义理解。解释 Player Input、TurnResolutionResult、既有事实与当前模式合法要求共同确定了什么，锁定行动发起者、承受者、方向、完成程度、资源关系和认知边界。不得在此设计对白、事件过程、人物反应、解决方案或新增剧情事实，也不得用常见套路补全输入没有提供的关系。
 - must_establish_facts：本回合的语义骨架。逐条写出最终正文必须明确成立的原子事实；只能来自权威输入已经确定的含义，不得混入为了演出而创造的实现细节。
 - must_not_establish_facts：从同一语义骨架推导出的禁止结论，以及当前模式合法要求明确禁止的正文语义。不得与 Player Input、TurnResolutionResult 或 must_establish_facts 矛盾，不得借此撤销成功判定。
@@ -44,10 +43,10 @@
 
 ## Director、角色认知与连续性
 
-1. 每条 DirectorEvent Consumption 彼此独立，不得把不同事件自动串联。
-2. `allowed_facts` 是对应事件本回合唯一可以进入前台的材料，可以不用；使用时必须保持人物、地点、持有人、载体、时间状态和可见方式。
-3. `immutable_constraints` 是不能违背的后台现实，不是必须揭露的事实，也不能被改写成阻止剧情自然发展的全局禁令。
-4. Director NPC Candidate 是可选角色调度，不得为了使用候选而打断当前行动。
+1. 每条 Director Agent 舞台材料彼此独立，不得把不同资源自动串联。
+2. 每项 `payload` 是该资源本轮可考虑的材料，可以不用；使用时必须保持人物、地点、持有人、载体、时间状态和可见方式。
+3. 舞台材料中的幕后信息是不应违背的现实，不是必须揭露的事实，也不能被改写成阻止剧情自然发展的全局禁令。
+4. NPC 材料是可选角色调度，不得为了使用候选而打断当前行动。
 5. NPC Profiles 中的 core_motivation、hidden_secret 等可用于决定角色行为，但不自动成为任何角色已经知道的前台信息。
 6. 已经在 Previous Confirmed Scene 或 Context Facts 中明确揭露的信息不得重新当作秘密，也不得让角色无故遗忘。
 7. 未揭露的后台信息只能通过本回合被授权的行动结果、角色主动行为或可观察信号进入前台。
@@ -65,4 +64,4 @@
 6. 不写无功能的慢镜头和长铺陈，不用角色重复总结刚发生的事情。
 7. scene_text 必须在 scene_stopping_point 描述的状态戛然而止。closing_prompt 必须与 scene_text 最后一句形成直接逻辑继承；如果正文结尾提出问题 A，closing_prompt 不得询问问题 B。
 8. next_action_directions 只能从最终正文已经形成的局面提取，不得偷偷续写下一回合事实。
-9. CoreMemory、CurrentState、TurnResolutionResult、DirectorEvent 等系统字段名称及其中文翻译绝对不能出现在正文或对话中。必须把系统指令无痕转化为游戏世界内的自然现象、行动和人物动机。
+9. CoreMemory、CurrentState、TurnResolutionResult、Director Agent 等系统字段名称及其中文翻译绝对不能出现在正文或对话中。必须把系统指令无痕转化为游戏世界内的自然现象、行动和人物动机。
