@@ -274,7 +274,7 @@ class TestNarrativeComposerAgent:
                 DirectorStageMaterial(
                     kind="event",
                     resource_id="event_1",
-                    reason="旧码头是事件的可见接触点。",
+                    guidance="通过旧码头的可见异动表现事件影响。",
                     payload={
                         "title": "无灯船",
                         "premise": "没有灯火的货船在夜间靠岸。",

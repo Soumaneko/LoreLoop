@@ -51,7 +51,7 @@ class TestNarrativeComposerStreaming:
 
 class TestOpeningSceneAgent:
     def test_opening_prompt_uses_private_foundation_without_leaking_it(self):
-        prompt = Path("app/prompts/confirmation/opening_scene_v1.md").read_text(
+        prompt = Path("app/prompts/initialization/opening_scene_v1.md").read_text(
             encoding="utf-8"
         )
 

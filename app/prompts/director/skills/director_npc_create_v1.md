@@ -27,6 +27,7 @@
 - `world_connection`：人物与世界日常运作的连接方式。
 - `life_phase`：人物当前人生阶段。
 - `desire_pattern`：长期欲望、恐惧或秘密的方向。
+- `baseline_temperament`：人物不设防状态下的基准性情底色，是言行举止的自然基调。
 
 # 主角姓名
 
