@@ -186,6 +186,52 @@ if (module.hasDraft(variant) || module.readDraft(variant) !== "原始正文") {{
     assert result.returncode == 0, result.stderr
 
 
+def test_pending_footer_mode_keeps_version_control_when_token_usage_is_missing():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "token_usage.js").resolve().as_uri()
+    script = f"""
+const {{ pendingFooterMode }} = await import("{module_url}");
+
+function mode(overrides) {{
+  return pendingFooterMode({{
+    showToken: true,
+    showVersions: true,
+    usageData: {{ generation: null, confirmation: null }},
+    ...overrides,
+  }});
+}}
+
+// Opening variant 1/x: token usage never recorded but multiple versions exist.
+if (mode({{}}) !== "versions") throw new Error("1/x must keep version control");
+// Opening variant 2/x: real generation usage present.
+if (mode({{ usageData: {{ generation: {{ input_tokens: 1 }}, confirmation: null }} }}) !== "token") {{
+  throw new Error("2/x must render token footer");
+}}
+// Single variant without usage and token hidden: no footer at all.
+if (pendingFooterMode({{ showToken: false, showVersions: false, usageData: null }}) !== "none") {{
+  throw new Error("nothing to show must be none");
+}}
+// Token visible but no usage and single variant: nothing to render.
+if (pendingFooterMode({{ showToken: true, showVersions: false, usageData: null }}) !== "none") {{
+  throw new Error("no usage and single variant must be none");
+}}
+// Token hidden but multiple versions: version control only.
+if (pendingFooterMode({{ showToken: false, showVersions: true, usageData: null }}) !== "versions") {{
+  throw new Error("version control must render without token footer");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_client_diagnostics_uses_desktop_session_token():
     source = (STATIC_DIR / "client_diagnostics.js").read_text(encoding="utf-8")
     assert 'import { desktopHeaders } from "./api.js"' in source

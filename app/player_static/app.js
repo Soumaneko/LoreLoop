@@ -1,4 +1,4 @@
-import { acknowledgeOperation, cancelOperation, downloadSave, importSaveArchive, request, stream, subscribe } from "./api.js";
+import { acknowledgeOperation, cancelOperation, downloadSave, importSaveArchive, loadRecords, request, stream, subscribe, updateRecord } from "./api.js";
 import {
   enhanceCustomSelect,
   syncCustomSelect,
@@ -9,7 +9,7 @@ import {
   installClientDiagnostics,
   reportClientError,
 } from "./client_diagnostics.js";
-import { createTokenUsageController, renderCardTokenFooter } from "./token_usage.js";
+import { createTokenUsageController, pendingFooterMode, renderCardTokenFooter } from "./token_usage.js";
 import {
   activePending,
   applySavedDraft,
@@ -36,6 +36,9 @@ const els = {
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
   composerModeBadge: $("composerModeBadge"),
   drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"), openLeftDrawerBtn: $("openLeftDrawerBtn"), closeLeftDrawerBtn: $("closeLeftDrawerBtn"),
+  recordsDrawer: $("recordsDrawer"), openRecordsDrawerBtn: $("openRecordsDrawerBtn"), closeRecordsDrawerBtn: $("closeRecordsDrawerBtn"),
+  refreshRecordsBtn: $("refreshRecordsBtn"), recordsRefreshState: $("recordsRefreshState"),
+  recordsContinuityList: $("recordsContinuityList"), recordsNpcList: $("recordsNpcList"), recordsEntityList: $("recordsEntityList"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), sceneSummary: $("sceneSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
   closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelApiKey: $("modelApiKey"),
@@ -954,10 +957,14 @@ function _buildVersionControl(pending) {
 
 function _buildPendingFooter(pending, variant) {
   const usageData = variant.token_usage || tokenUsage.getVariantUsage(variant.turn_id) || tokenUsage.getCurrentPendingUsage();
-  const showToken = tokenUsage.isVisible();
   const showVersions = pending.variants.length > 1;
-  if (!showToken && !showVersions) return null;
-  if (showToken) {
+  const mode = pendingFooterMode({
+    showToken: tokenUsage.isVisible(),
+    showVersions,
+    usageData,
+  });
+  if (mode === "none") return null;
+  if (mode === "token") {
     return renderCardTokenFooter(usageData, {
       visible: true,
       detailButtons: true,
@@ -2446,6 +2453,7 @@ async function resumeConfirmationOperation(operation) {
     await acknowledgeHandledOperation(operation.operation_id);
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
     showToast("这一回合已经写入旅程");
+    refreshRecordsIfOpen();
     return true;
   } catch (error) {
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
@@ -2668,6 +2676,7 @@ async function confirmTurn() {
     await loadAll({ scroll: "smooth" });
     tokenUsage.clearPendingUsage();
     showToast("这一回合已经写入旅程");
+    refreshRecordsIfOpen();
   } catch (error) {
     setMode("pending"); renderAll(); showError(error);
     await acknowledgeFailedOperation(error);
@@ -3149,6 +3158,328 @@ function closeLeftDrawer() {
     }
   }
 }
+
+/* ===== World Archive (records) drawer ===== */
+
+const RECORDS_POLL_INTERVAL = 2000;
+let recordsPollTimer = null;
+
+const CONTINUITY_EDITABLE_FIELDS = [
+  ["subject", "主题", false],
+  ["statement", "陈述", false, "textarea"],
+  ["entities", "关联实体", true],
+  ["location", "地点", false],
+  ["deadline", "截止", false],
+];
+
+const NPC_PUBLIC_FIELDS = [
+  ["name", "姓名", false],
+  ["aliases", "别名", true],
+  ["role", "身份", false],
+  ["public_summary", "公开摘要", false, "textarea"],
+  ["appearance", "外貌", false],
+  ["personality_traits", "性格特质", true],
+  ["known_abilities", "已知能力", true],
+  ["faction", "阵营", false],
+  ["description", "描述", false, "textarea"],
+  ["current_location", "当前地点", false],
+  ["attitude_to_player", "对玩家态度", false],
+  ["current_intent", "当前意图", false],
+];
+
+const NPC_DIRECTOR_FIELDS = [
+  ["core_motivation", "核心动机", false],
+  ["hidden_secret", "隐藏秘密", false],
+  ["conflict_style", "冲突风格", false],
+  ["social_style", "社交风格", false],
+  ["encounter_potentials", "相遇潜能", true],
+  ["director_notes", "导演备注", false],
+  ["source_director_npc_id", "来源导演NPC", false],
+  ["created_turn", "创建回合", false],
+  ["introduced_turn", "登场回合", false],
+];
+
+const ENTITY_FIELDS = [
+  ["entity_type", "类型", false],
+  ["name", "名称", false],
+  ["aliases", "别名", true],
+  ["summary", "摘要", false, "textarea"],
+  ["item_type", "物品类型", false],
+  ["item_source", "物品来源", false],
+  ["location_type", "地点类型", false],
+  ["features", "特征", true],
+  ["parent_location", "上级地点", false],
+  ["description", "描述", false, "textarea"],
+];
+
+function setRecordsRefreshState(text) {
+  els.recordsRefreshState.textContent = text || "";
+  els.recordsRefreshState.hidden = !text;
+}
+
+function openRecordsDrawer() {
+  if (!els.recordsDrawer) return;
+  els.recordsDrawer.classList.add("open");
+  els.recordsDrawer.setAttribute("aria-hidden", "false");
+  els.drawerBackdrop.hidden = false;
+  recordsDirty = false;
+  refreshRecords({ force: true });
+}
+function closeRecordsDrawer() {
+  if (!els.recordsDrawer) return;
+  els.recordsDrawer.classList.remove("open");
+  els.recordsDrawer.setAttribute("aria-hidden", "true");
+  stopRecordsPoll();
+  recordsDirty = false;
+  if (!els.drawer?.classList.contains("open") && !els.leftDrawer?.classList.contains("open")) {
+    els.drawerBackdrop.hidden = true;
+  }
+}
+function stopRecordsPoll() {
+  window.clearInterval(recordsPollTimer);
+  recordsPollTimer = null;
+}
+function startRecordsPoll() {
+  stopRecordsPoll();
+  recordsPollTimer = window.setInterval(() => { refreshRecords(); }, RECORDS_POLL_INTERVAL);
+}
+
+let recordsRefreshInFlight = false;
+let recordsDirty = false;
+function recomputeRecordsDirty() {
+  for (const list of [els.recordsContinuityList, els.recordsNpcList, els.recordsEntityList]) {
+    if (!list) continue;
+    for (const control of list.querySelectorAll("input, textarea")) {
+      if (control.disabled) continue;
+      const original = control.dataset.originalValue ?? "";
+      const current = control.value;
+      if (control.dataset.isList === "1") {
+        if (JSON.stringify(_splitListValue(current)) !== JSON.stringify(_splitListValue(original))) {
+          return true;
+        }
+      } else if (current !== original) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+async function refreshRecords({ force = false } = {}) {
+  if (!els.recordsDrawer?.classList.contains("open")) return;
+  if (recordsRefreshInFlight) return;
+  recordsRefreshInFlight = true;
+  try {
+    const records = await loadRecords();
+    state.records = records;
+    if (force || !recordsDirty) {
+      renderRecords(records);
+      recordsDirty = false;
+    }
+    setRecordsRefreshState(records.maintenance_running ? "后台维护进行中 · 自动刷新" : "");
+    if (records.maintenance_running) {
+      startRecordsPoll();
+    } else {
+      stopRecordsPoll();
+    }
+  } catch (error) {
+    setRecordsRefreshState("读取失败");
+    reportClientError(error, "records_load_failed");
+  } finally {
+    recordsRefreshInFlight = false;
+  }
+}
+
+function refreshRecordsIfOpen() {
+  if (els.recordsDrawer?.classList.contains("open")) {
+    refreshRecords();
+  }
+}
+
+function _formatListValue(value) {
+  return Array.isArray(value) ? value.join(", ") : "";
+}
+function _splitListValue(value) {
+  return String(value || "")
+    .split(/[,，\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildRecordCard({ title, statusText = "", statusActive = false, editableFields = [], readonlyFields = [], onSave }) {
+  const card = node("div", "record-card");
+  const head = node("div", "record-card-head");
+  head.appendChild(node("div", "record-card-title", title));
+  if (statusText) {
+    head.appendChild(node("span", `record-status-tag${statusActive ? " is-active" : ""}`, statusText));
+  }
+  card.appendChild(head);
+
+  const controls = {};
+  const valueSource = {};
+
+  const appendEditable = ([key, label, isList, kind]) => {
+    const row = node("div", "record-field");
+    row.appendChild(node("span", "record-field-label", label));
+    const control = kind === "textarea"
+      ? document.createElement("textarea")
+      : document.createElement("input");
+    if (control.tagName === "INPUT") control.type = "text";
+    control.value = isList ? _formatListValue(valueSource[key]) : (valueSource[key] ?? "");
+    control.dataset.originalValue = control.value;
+    if (isList) control.dataset.isList = "1";
+    control.addEventListener("input", () => { recordsDirty = recomputeRecordsDirty(); });
+    row.appendChild(control);
+    card.appendChild(row);
+    controls[key] = control;
+  };
+  const appendReadonly = ([key, label, isList]) => {
+    const row = node("div", "record-field");
+    row.appendChild(node("span", "record-field-label", label));
+    const text = isList ? _formatListValue(valueSource[key]) : (valueSource[key] ?? "");
+    row.appendChild(node("p", "record-field-value is-readonly", text || "—"));
+    card.appendChild(row);
+  };
+
+  const populate = (data) => {
+    editableFields.forEach(([key]) => { valueSource[key] = data[key]; });
+    readonlyFields.forEach(([key]) => { valueSource[key] = data[key]; });
+  };
+
+  return { card, head, controls, valueSource, populate, appendEditable, appendReadonly, onSave, editableFields, readonlyFields };
+}
+
+function renderRecords(records) {
+  renderContinuityRecords(records.continuity || []);
+  renderNpcRecords(records.npc_profiles || []);
+  renderEntityRecords(records.entity_profiles || []);
+}
+
+function emptyState(message) {
+  return node("div", "records-empty", message);
+}
+
+function renderContinuityRecords(items) {
+  els.recordsContinuityList.replaceChildren();
+  if (!items.length) {
+    els.recordsContinuityList.appendChild(emptyState("暂无连续性记录。"));
+    return;
+  }
+  for (const item of items) {
+    const builder = buildRecordCard({
+      title: item.subject || "（无主题）",
+      statusText: item.status,
+      statusActive: item.status === "active",
+      editableFields: CONTINUITY_EDITABLE_FIELDS,
+      onSave: item.status === "active" ? async (values) => {
+        await updateRecord("continuity", item.id, values);
+        showToast("连续性已更新");
+      } : null,
+    });
+    builder.populate(item);
+    builder.editableFields.forEach(builder.appendEditable.bind(builder));
+    if (item.status !== "active") {
+      builder.card.querySelectorAll("input, textarea").forEach((input) => { input.disabled = true; });
+    }
+    appendSaveActions(builder);
+    els.recordsContinuityList.appendChild(builder.card);
+  }
+}
+
+function renderNpcRecords(profiles) {
+  els.recordsNpcList.replaceChildren();
+  if (!profiles.length) {
+    els.recordsNpcList.appendChild(emptyState("暂无人物档案。"));
+    return;
+  }
+  for (const profile of profiles) {
+    const builder = buildRecordCard({
+      title: profile.public?.name || "（未命名）",
+      statusText: "人物",
+      editableFields: NPC_PUBLIC_FIELDS,
+      readonlyFields: NPC_DIRECTOR_FIELDS,
+      onSave: async (values) => {
+        await updateRecord("npc", profile.id, values);
+        showToast("人物档案已更新");
+      },
+    });
+    builder.populate({ ...profile.public, ...profile.director_only });
+    builder.editableFields.forEach(builder.appendEditable.bind(builder));
+    builder.readonlyFields.forEach(builder.appendReadonly.bind(builder));
+    appendSaveActions(builder);
+    els.recordsNpcList.appendChild(builder.card);
+  }
+}
+
+function renderEntityRecords(profiles) {
+  els.recordsEntityList.replaceChildren();
+  if (!profiles.length) {
+    els.recordsEntityList.appendChild(emptyState("暂无实体档案。"));
+    return;
+  }
+  for (const profile of profiles) {
+    const builder = buildRecordCard({
+      title: profile.fields?.name || "（未命名）",
+      statusText: profile.entity_type || "实体",
+      editableFields: ENTITY_FIELDS,
+      onSave: async (values) => {
+        await updateRecord("entity", profile.id, values);
+        showToast("实体档案已更新");
+      },
+    });
+    builder.populate(profile.fields || {});
+    builder.editableFields.forEach(builder.appendEditable.bind(builder));
+    appendSaveActions(builder);
+    els.recordsEntityList.appendChild(builder.card);
+  }
+}
+
+function appendSaveActions(builder) {
+  if (!builder.onSave) return;
+  const actions = node("div", "record-edit-actions");
+  const saveBtn = node("button", "soft-button is-primary", "保存");
+  const message = node("span", "record-edit-message");
+  saveBtn.onclick = async () => {
+    saveBtn.disabled = true;
+    message.textContent = "保存中…";
+    message.className = "record-edit-message";
+    try {
+      const values = {};
+      for (const [key, _label, isList] of builder.editableFields) {
+        const control = builder.controls[key];
+        const original = builder.valueSource[key];
+        if (isList) {
+          const current = _splitListValue(control.value);
+          const originalList = Array.isArray(original) ? original : [];
+          if (JSON.stringify(current) !== JSON.stringify(originalList)) {
+            values[key] = current;
+          }
+        } else if (control.value !== (original ?? "")) {
+          values[key] = control.value;
+        }
+      }
+      if (!Object.keys(values).length) {
+        recordsDirty = recomputeRecordsDirty();
+        message.textContent = "没有需要保存的改动";
+        message.className = "record-edit-message";
+        saveBtn.disabled = false;
+        return;
+      }
+      await builder.onSave(values);
+      message.textContent = "已保存";
+      message.className = "record-edit-message";
+      recordsDirty = false;
+      refreshRecords({ force: true });
+    } catch (error) {
+      message.textContent = error?.message || "保存失败";
+      message.className = "record-edit-message is-error";
+    } finally {
+      saveBtn.disabled = false;
+    }
+  };
+  actions.append(saveBtn, message);
+  builder.card.appendChild(actions);
+}
+
 function openDrawer() { els.drawer.classList.add("open"); els.drawer.setAttribute("aria-hidden", "false"); els.drawerBackdrop.hidden = false; }
 function closeDrawer() {
   els.drawer.classList.remove("open");
@@ -3191,7 +3522,10 @@ els.dismissErrorBtn.onclick = clearError;
 els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer;
 if (els.openLeftDrawerBtn) els.openLeftDrawerBtn.onclick = openLeftDrawer;
 if (els.closeLeftDrawerBtn) els.closeLeftDrawerBtn.onclick = closeLeftDrawer;
-els.drawerBackdrop.onclick = () => { closeDrawer(); closeLeftDrawer(); };
+if (els.openRecordsDrawerBtn) els.openRecordsDrawerBtn.onclick = openRecordsDrawer;
+if (els.closeRecordsDrawerBtn) els.closeRecordsDrawerBtn.onclick = closeRecordsDrawer;
+if (els.refreshRecordsBtn) els.refreshRecordsBtn.onclick = () => refreshRecords({ force: true });
+els.drawerBackdrop.onclick = () => { closeDrawer(); closeLeftDrawer(); closeRecordsDrawer(); };
 els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
 els.newSaveBtn.onclick = () => { els.saveNameInput.value = ""; els.saveDialog.showModal(); window.setTimeout(() => els.saveNameInput.focus(), 0); };
 els.saveCancelBtn.onclick = () => els.saveDialog.close();

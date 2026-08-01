@@ -45,6 +45,7 @@ def initialization_stream(payload: dict[str, Any]):
             "step": "initialization_started",
             "data": {
                 "fingerprint": state["initialization_record"].fingerprint,
+                "trace_id": state["opening_trace_id"],
             },
         }
         event_count = len(state.get("events", []))

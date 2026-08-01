@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from app.core.llm.token_usage import publish_token_usage
 from app.graph import initialization_graph
 from app.runtime.initialization_draft import (
     load_initialization_draft,
@@ -226,3 +227,41 @@ def test_pending_persistence_failure_keeps_foundation_retryable_without_ghost(
     assert persisted is not None
     assert persisted.scene.location == "白塔港"
     assert persisted.resources.money == 8
+
+
+def test_initialization_binds_opening_trace_so_generation_usage_is_recorded(
+    configure_runtime_services,
+):
+    runtime = get_campaign_runtime()
+
+    class UsagePublishingGateway(RecordingGateway):
+        def run(self, task, input_data, output_schema, **kwargs):
+            if task == "opening_scene":
+                publish_token_usage(
+                    trace_id=kwargs.get("trace_id"),
+                    call_id="opening-call",
+                    task="opening_scene",
+                    attempt=1,
+                    token_usage={"input_tokens": 120, "output_tokens": 40},
+                    session_type="init",
+                )
+            return super().run(task, input_data, output_schema, **kwargs)
+
+    gateway = UsagePublishingGateway()
+    configure_runtime_services(gateway_factory=lambda **_kwargs: gateway)
+
+    operation_id = runtime.operations.submit_stream(
+        "initialization_opening",
+        initialization_graph.initialization_stream,
+        _payload(),
+    )
+    snapshot = runtime.operations.wait(operation_id, timeout=2)
+    assert snapshot.status == "succeeded"
+
+    openings = list(runtime.pending_openings.values())
+    assert len(openings) == 1
+    token_usage = openings[0].token_usage
+    assert token_usage is not None
+    assert token_usage["generation"] is not None
+    assert token_usage["generation"]["input_tokens"] == 120
+    assert token_usage["generation"]["output_tokens"] == 40

@@ -36,6 +36,15 @@ const PIPELINE_LABELS = {
   confirmation: "确认管线",
 };
 
+export function pendingFooterMode({ showToken, showVersions, usageData }) {
+  if (!showToken && !showVersions) return "none";
+  if (showToken) {
+    if (usageData?.generation || usageData?.confirmation) return "token";
+    if (!showVersions) return "none";
+  }
+  return "versions";
+}
+
 function tokenCount(value) {
   return Number.isInteger(value) && value >= 0 ? value : null;
 }
