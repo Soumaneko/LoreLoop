@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import (
     BaseModel,
@@ -33,25 +34,47 @@ from app.domain.director_event.schemas import DirectorEventRole
 # ---------------------------------------------------------------------------
 
 
+NPCExposureField = Literal[
+    "name",
+    "aliases",
+    "public_summary",
+    "role",
+    "appearance",
+    "personality_traits",
+    "known_abilities",
+    "faction",
+    "description",
+    "current_location",
+    "attitude_to_player",
+    "current_intent",
+    "core_motivation",
+    "hidden_secret",
+    "conflict_style",
+    "social_style",
+    "encounter_potentials",
+]
+
+
 class PresentEventArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=300)
 
 
 class IntroduceNPCArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     npc_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=300)
+    expose_fields: list[NPCExposureField] = Field(
+        min_length=1,
+        max_length=18,
+    )
 
 
 class ForeshadowSettingArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     setting_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=300)
 
 
 class ReviewEventArguments(BaseModel):
@@ -134,6 +157,7 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
             "1.玩家行动直接干预了该事件，或事件后果在此刻爆发。"
             "2.主角通过传闻、异象、信件、远程通讯或现场遗留痕迹，间接接触到了与该事件相关的信息。"
             "通过引入事件，确保正文生成引擎能够准确描写出符合该事件发展进度的台词或环境暗示。"
+            "必须在请求级 guidance 中说明具体表现方式。"
         ),
         phases=_GENERATION,
         mutates=False,
@@ -146,6 +170,7 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
             "1.你规划NPC在本场景中出现。"
             "2.你规划文中需要描述该角色，需要参考其详细设定。"
             "注意：只要本轮叙事需要用到该角色的身份信息，就必须将其引入。"
+            "必须用 expose_fields 精确选择本轮下发字段，并在请求级 guidance 中说明使用方式。"
         ),
         phases=_GENERATION,
         mutates=False,
@@ -156,6 +181,7 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         description=(
             "将一个已存在的设定资产（如特殊地点、派系、传闻、功法等）注入本轮上下文供正文生成引擎提供细节支撑。"
             "要求底层引擎在正文中通过隐晦的可见影响、气氛渲染或主角的心理活动来暗示其存在。"
+            "必须在请求级 guidance 中说明具体表现方式。"
         ),
         phases=_GENERATION,
         mutates=False,

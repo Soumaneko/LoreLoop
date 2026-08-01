@@ -4,6 +4,7 @@ import json
 
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.creative_brief import draw_creative_brief
 from app.domain.director import (
     DirectorAgent,
     DirectorObservation,
@@ -25,9 +26,6 @@ from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.views import project_director_event
 from app.domain.director_event.workflows import review_director_event_workflow
 from app.domain.director_npc.creator import DirectorNPCCreator
-from app.domain.director_npc.creative_brief import (
-    draw_director_npc_creative_brief,
-)
 from app.domain.director_npc.schemas import NPCCreationContext
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.workflows import (
@@ -112,6 +110,7 @@ def run_generation_director_agent(
             handler=lambda args, guidance=None: _present_event(
                 event_store,
                 args,
+                guidance=guidance,
             ),
             arguments_validator=lambda args: _require_active_event(
                 event_store,
@@ -125,11 +124,12 @@ def run_generation_director_agent(
                 director_npc_store,
                 npc_profile_store,
                 args,
+                guidance=guidance,
             ),
-            arguments_validator=lambda args: _require_npc(
+            arguments_validator=lambda args: _require_introduce_npc(
                 director_npc_store,
                 npc_profile_store,
-                args.npc_id,
+                args,
             ),
         )
         _register_skill(
@@ -138,6 +138,7 @@ def run_generation_director_agent(
             handler=lambda args, guidance=None: _foreshadow_setting(
                 setting_store,
                 args,
+                guidance=guidance,
             ),
             arguments_validator=lambda args: _require_active_setting(
                 setting_store,
@@ -187,7 +188,7 @@ def run_generation_director_agent(
                 ],
             },
         )
-        decision = DirectorAgent(gateway, service).decide(
+        decision = DirectorAgent(gateway, service).decide_generation(
             observation,
             trace_id=trace_id,
         )
@@ -306,7 +307,7 @@ def run_confirmation_director_agent(
                 creation_context=NPCCreationContext(
                     anchors=args.anchors,
                 ),
-                creative_brief=draw_director_npc_creative_brief(),
+                creative_brief=draw_creative_brief(),
                 protagonist_name=current_state.player.name,
                 turn_index=turn_index,
                 trace_id=trace_id,
@@ -374,7 +375,7 @@ def run_confirmation_director_agent(
                         for staged in drafts
                     ],
                     creation_context=NPCCreationContext(anchors=[]),
-                    creative_brief=draw_director_npc_creative_brief(),
+                    creative_brief=draw_creative_brief(),
                     protagonist_name=current_state.player.name,
                     turn_index=turn_index,
                     trace_id=trace_id,
@@ -637,7 +638,7 @@ def run_confirmation_director_agent(
                 ],
             },
         )
-        decision = DirectorAgent(gateway, service).decide(
+        decision = DirectorAgent(gateway, service).decide_confirmation(
             observation,
             trace_id=trace_id,
         )
@@ -648,14 +649,19 @@ def run_confirmation_director_agent(
     return decision, executions
 
 
-def _present_event(store, args: PresentEventArguments) -> DirectorStageMaterial:
+def _present_event(
+    store,
+    args: PresentEventArguments,
+    *,
+    guidance: str | None,
+) -> DirectorStageMaterial:
     event = store.get_by_id(args.event_id)
     if event is None or event.status != "active":
         raise ValueError("present_event requires an active event")
     return DirectorStageMaterial(
         kind="event",
         resource_id=event.event_id,
-        reason=args.reason,
+        guidance=_require_generation_guidance(guidance),
         payload=json.loads(project_director_event(event)),
     )
 
@@ -664,6 +670,8 @@ def _introduce_npc(
     director_npc_store,
     npc_profile_store,
     args: IntroduceNPCArguments,
+    *,
+    guidance: str | None,
 ) -> DirectorStageMaterial:
     draft = director_npc_store.get_by_id(args.npc_id)
     if draft is not None and draft.status != "retired":
@@ -680,10 +688,16 @@ def _introduce_npc(
             "npc_id": profile.npc_id,
             **profile.director_view().model_dump(mode="json"),
         }
+    exposed = set(args.expose_fields)
+    payload = {
+        key: value
+        for key, value in payload.items()
+        if key in exposed or key in {"source", "npc_id", "draft_id"}
+    }
     return DirectorStageMaterial(
         kind="npc",
         resource_id=args.npc_id,
-        reason=args.reason,
+        guidance=_require_generation_guidance(guidance),
         payload=payload,
     )
 
@@ -691,6 +705,8 @@ def _introduce_npc(
 def _foreshadow_setting(
     store,
     args: ForeshadowSettingArguments,
+    *,
+    guidance: str | None,
 ) -> DirectorStageMaterial:
     setting = store.get_by_id(args.setting_id)
     if setting is None or setting.status != "active":
@@ -698,9 +714,16 @@ def _foreshadow_setting(
     return DirectorStageMaterial(
         kind="setting",
         resource_id=setting.setting_id,
-        reason=args.reason,
+        guidance=_require_generation_guidance(guidance),
         payload=_setting_resource(setting),
     )
+
+
+def _require_generation_guidance(guidance: str | None) -> str:
+    clean = str(guidance or "").strip()
+    if not clean:
+        raise ValueError("generation director skills require guidance")
+    return clean
 
 
 def _setting_resource(setting) -> dict:
@@ -730,6 +753,32 @@ def _require_npc(director_npc_store, npc_profile_store, npc_id: str) -> None:
         return
     if npc_profile_store.get_by_id(npc_id) is None:
         raise ValueError("director skill references an unknown npc_id")
+
+
+def _require_introduce_npc(
+    director_npc_store,
+    npc_profile_store,
+    args,
+) -> None:
+    draft = director_npc_store.get_by_id(args.npc_id)
+    if draft is not None and draft.status != "retired":
+        available = set(draft.private_view().model_dump(mode="json").keys())
+    else:
+        profile = npc_profile_store.get_by_id(args.npc_id)
+        if profile is None:
+            raise ValueError("introduce_npc references an unknown NPC")
+        available = set(profile.director_view().model_dump(mode="json").keys())
+    always_kept = {"source", "npc_id", "draft_id"}
+    invalid = [
+        field
+        for field in args.expose_fields
+        if field not in available and field not in always_kept
+    ]
+    if invalid:
+        raise ValueError(
+            "introduce_npc expose_fields not available for this NPC: "
+            + ", ".join(sorted(invalid))
+        )
 
 
 def _require_active_setting(store, setting_id: str) -> None:

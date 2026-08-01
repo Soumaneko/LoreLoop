@@ -20,10 +20,35 @@ class DirectorAgent:
         self._llm = llm
         self._skills = skills
 
-    def decide(
+    def decide_generation(
         self,
         observation: DirectorObservation,
         *,
+        trace_id: str | None = None,
+    ) -> DirectorDecisionBatch:
+        return self._decide(
+            observation,
+            task="director_agent_decide_generation",
+            trace_id=trace_id,
+        )
+
+    def decide_confirmation(
+        self,
+        observation: DirectorObservation,
+        *,
+        trace_id: str | None = None,
+    ) -> DirectorDecisionBatch:
+        return self._decide(
+            observation,
+            task="director_agent_decide_confirmation",
+            trace_id=trace_id,
+        )
+
+    def _decide(
+        self,
+        observation: DirectorObservation,
+        *,
+        task: str,
         trace_id: str | None = None,
     ) -> DirectorDecisionBatch:
         available_skills = self._skills.specs_for_phase(observation.phase)
@@ -35,7 +60,7 @@ class DirectorAgent:
         result = cast(
             DirectorDecisionBatch,
             self._llm.run(
-                task="director_agent_decide",
+                task=task,
                 input_data={
                     "director_phase": observation.phase,
                     "director_observation_json": observation.model_dump_json(

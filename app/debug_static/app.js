@@ -1059,7 +1059,7 @@ function stepTasks(scope, stepName) {
     action_parsed: ["action_extract"],
     modifiers_done: ["roll_modifier"],
     turn_resolution_done: ["turn_resolution"],
-    director_agent_staged: ["director_agent_decide"],
+    director_agent_staged: ["director_agent_decide_generation"],
     outline_done: ["narrative_compose"],
     canon_query_started: ["narrative_canon_query"],
     canon_queries_generated: ["narrative_canon_query"],
@@ -1079,7 +1079,7 @@ function stepTasks(scope, stepName) {
     action_preview_done: ["action_preview"],
     entity_profiles_updated: ["entity_profile_update", "npc_profile_update"],
     director_agent_confirmed: [
-      "director_agent_decide",
+      "director_agent_decide_confirmation",
       "director_event_review",
       "director_event_select_arc",
       "director_event_select_ambient",

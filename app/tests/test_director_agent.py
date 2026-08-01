@@ -95,6 +95,52 @@ def test_skill_service_rejects_mutating_generation_skill():
         )
 
 
+def test_generation_skill_requires_request_guidance():
+    service = DirectorSkillService()
+    service.register(
+        name="present_event",
+        description="让已有事件进入本轮舞台。",
+        phases={"generation"},
+        mutates=False,
+        arguments_model=_PresentEventArguments,
+        handler=lambda arguments, guidance=None: None,
+    )
+    batch = DirectorDecisionBatch(
+        reasoning="需要呈现事件。",
+        requests=[
+            DirectorSkillRequest(
+                request_id="request_1",
+                skill="present_event",
+                arguments={"event_id": "event_1"},
+                guidance="   ",
+            )
+        ],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="generation director skills require guidance",
+    ):
+        service.validate_batch(batch, phase="generation")
+
+
+def test_introduce_npc_expose_fields_are_required_and_whitelisted():
+    from app.graph.director_skill_specs import IntroduceNPCArguments
+
+    with pytest.raises(ValidationError):
+        IntroduceNPCArguments(npc_id="npc_1", expose_fields=[])
+    with pytest.raises(ValidationError):
+        IntroduceNPCArguments(
+            npc_id="npc_1",
+            expose_fields=["database_path"],
+        )
+    validated = IntroduceNPCArguments(
+        npc_id="npc_1",
+        expose_fields=["name", "hidden_secret"],
+    )
+    assert validated.expose_fields == ["name", "hidden_secret"]
+
+
 def test_skill_service_validates_arguments_and_executes_in_request_order():
     service = DirectorSkillService()
     called: list[str] = []
@@ -118,11 +164,13 @@ def test_skill_service_validates_arguments_and_executes_in_request_order():
                 request_id="request_1",
                 skill="present_event",
                 arguments={"event_id": "event_a"},
+                guidance="让事件通过码头异动进入场景。",
             ),
             DirectorSkillRequest(
                 request_id="request_2",
                 skill="present_event",
                 arguments={"event_id": "event_b"},
+                guidance="让事件通过远处传闻进入场景。",
             ),
         ],
     )
@@ -138,11 +186,12 @@ def test_skill_service_validates_arguments_and_executes_in_request_order():
     invalid_batch = DirectorDecisionBatch(
         reasoning="参数错误。",
         requests=[
-            DirectorSkillRequest(
-                request_id="request_3",
-                skill="present_event",
-                arguments={},
-            )
+                DirectorSkillRequest(
+                    request_id="request_3",
+                    skill="present_event",
+                    arguments={},
+                    guidance="呈现事件影响。",
+                )
         ],
     )
     with pytest.raises(ValidationError):
@@ -172,11 +221,13 @@ def test_skill_service_rejects_duplicate_requests_and_invalid_resources():
                 request_id="one",
                 skill="present_event",
                 arguments={"event_id": "event_1"},
+                guidance="呈现事件影响。",
             ),
             DirectorSkillRequest(
                 request_id="two",
                 skill="present_event",
                 arguments={"event_id": "event_1"},
+                guidance="呈现事件影响。",
             ),
         ],
     )
@@ -191,6 +242,7 @@ def test_skill_service_rejects_duplicate_requests_and_invalid_resources():
                 request_id="three",
                 skill="present_event",
                 arguments={"event_id": "event_missing"},
+                guidance="呈现事件影响。",
             ),
         ],
     )
@@ -259,7 +311,7 @@ def test_director_agent_returns_empty_batch_without_available_skills():
     mock = MockLLM()
     agent = DirectorAgent(mock.build_gateway(), DirectorSkillService())
 
-    result = agent.decide(_observation())
+    result = agent.decide_generation(_observation())
 
     assert result.requests == []
 
@@ -283,14 +335,15 @@ def test_director_agent_uses_registered_skill_and_validates_selection():
             {
               "request_id": "request_1",
               "skill": "present_event",
-              "arguments": {"event_id": "event_1"}
+              "arguments": {"event_id": "event_1"},
+              "guidance": "通过码头异动侧面呈现事件。"
             }
           ]
         }
         """
     ])
 
-    result = DirectorAgent(mock.build_gateway(), service).decide(
+    result = DirectorAgent(mock.build_gateway(), service).decide_generation(
         _observation(),
         trace_id="director-agent-test",
     )
@@ -317,7 +370,8 @@ def test_director_agent_rejects_unregistered_skill_selected_by_llm():
             {
               "request_id": "request_1",
               "skill": "create_event",
-              "arguments": {"title": "错误事件"}
+              "arguments": {"title": "错误事件"},
+              "guidance": "错误地创建事件。"
             }
           ]
         }
@@ -328,22 +382,39 @@ def test_director_agent_rejects_unregistered_skill_selected_by_llm():
         LLMOutputValidationError,
         match="unknown director skill: create_event",
     ):
-        DirectorAgent(mock.build_gateway(), service).decide(_observation())
+        DirectorAgent(mock.build_gateway(), service).decide_generation(_observation())
 
 
 def test_director_agent_prompt_is_chinese():
-    prompt, _ = PromptLoader().load("director_agent_decide")
+    generation_prompt, _ = PromptLoader().load("director_agent_decide_generation")
+    confirmation_prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
-    assert "导演协调 Agent" in prompt
-    assert "只输出符合 Schema 的 JSON" in prompt
+    for prompt in (generation_prompt, confirmation_prompt):
+        assert "导演协调 Agent" in prompt
+        assert "只输出符合 Schema 的 JSON" in prompt
 
 
 def test_director_decide_prompt_describes_guidance():
-    prompt, _ = PromptLoader().load("director_agent_decide")
+    generation_prompt, _ = PromptLoader().load("director_agent_decide_generation")
+    confirmation_prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
-    assert "`guidance`" in prompt
-    assert "方向性指导意见" in prompt
-    assert "不得在 `guidance` 中撰写具体正文" in prompt
+    for prompt in (generation_prompt, confirmation_prompt):
+        assert "`guidance`" in prompt
+        assert "方向性指导意见" in prompt
+        assert "不得在 `guidance` 中撰写具体正文" in prompt
+
+
+def test_director_decide_prompts_are_phase_separated():
+    generation_prompt, _ = PromptLoader().load("director_agent_decide_generation")
+    confirmation_prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
+
+    assert "生成阶段只能提出非持久化的舞台调度" in generation_prompt
+    assert "`expose_fields`" in generation_prompt
+    assert "create_coupled_scene" not in generation_prompt
+
+    assert "主动造物的导演特权" in confirmation_prompt
+    assert "`create_coupled_scene`" in confirmation_prompt
+    assert "`expose_fields`" not in confirmation_prompt
 
 
 class _PhaseGateway:
@@ -366,7 +437,10 @@ class _PhaseGateway:
         task = kwargs["task"]
         self.tasks.append(task)
         self.input_data.append(kwargs.get("input_data") or {})
-        if task == "director_agent_decide":
+        if task in {
+            "director_agent_decide_generation",
+            "director_agent_decide_confirmation",
+        }:
             payload = self.decision
         elif task.startswith("director_event_select_") and (
             self.event_selection_output is not None
@@ -426,8 +500,14 @@ def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
                     "skill": "introduce_npc",
                     "arguments": {
                         "npc_id": draft.draft_id,
-                        "reason": "玩家正在社区诊所附近行动。",
+                        "expose_fields": [
+                            "name",
+                            "role",
+                            "social_style",
+                            "hidden_secret"
+                        ],
                     },
+                    "guidance": "通过第三方转述体现她克制的说话方式。",
                 }
             ],
         }
@@ -447,9 +527,103 @@ def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
 
     assert decision.requests[0].skill == "introduce_npc"
     assert stage.materials[0].resource_id == draft.draft_id
+    assert stage.materials[0].guidance == "通过第三方转述体现她克制的说话方式。"
     assert stage.materials[0].payload["source"] == "director_npc"
+    assert set(stage.materials[0].payload) == {
+        "source",
+        "draft_id",
+        "name",
+        "role",
+        "social_style",
+        "hidden_secret",
+    }
+    assert "appearance" not in stage.materials[0].payload
     with stores.director_npc() as store:
         assert store.get_by_id(draft.draft_id).status == "prepared"
+
+
+def test_generation_agent_rejects_profile_only_expose_fields_for_director_npc(
+    tmp_path,
+):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    draft = _director_npc()
+    with stores.director_npc() as store:
+        store.save(draft)
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "错误地请求了导演 NPC 不存在的字段。",
+            "requests": [
+                {
+                    "request_id": "npc_1",
+                    "skill": "introduce_npc",
+                    "arguments": {
+                        "npc_id": draft.draft_id,
+                        "expose_fields": ["name", "aliases"],
+                    },
+                    "guidance": "通过转述体现人物。",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="expose_fields not available"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="去诊所询问昨夜发生的事。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+        )
+
+
+def test_generation_agent_allows_profile_only_expose_fields_for_npc_profile(
+    tmp_path,
+):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile() as store:
+        profile_id = store.upsert(
+            NPCProfile(name="林澈", role="社区医生", aliases=["林医生"])
+        )
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "按档案字段呈现人物。",
+            "requests": [
+                {
+                    "request_id": "npc_1",
+                    "skill": "introduce_npc",
+                    "arguments": {
+                        "npc_id": profile_id,
+                        "expose_fields": ["name", "aliases"],
+                    },
+                    "guidance": "通过转述体现人物。",
+                }
+            ],
+        }
+    )
+
+    stage, _ = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="去诊所询问昨夜发生的事。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+    )
+
+    assert stage.materials[0].payload["source"] == "npc_profile"
+    assert set(stage.materials[0].payload) == {
+        "source",
+        "npc_id",
+        "name",
+        "aliases",
+    }
 
 
 def test_generation_agent_receives_projected_turn_resolution(tmp_path):
@@ -511,6 +685,7 @@ def test_confirmation_agent_can_create_npc_without_setting(tmp_path):
                     "arguments": {
                         "anchors": ["河岸社区"],
                     },
+                    "guidance": "准备一个长期社区人物。",
                 }
             ],
         },
@@ -549,7 +724,7 @@ def test_confirmation_agent_can_create_npc_without_setting(tmp_path):
 
     assert decision.requests[0].skill == "create_npc"
     assert executions.executions[0].output["name"] == "林澈"
-    assert gateway.tasks == ["director_agent_decide", "director_npc_create"]
+    assert gateway.tasks == ["director_agent_decide_confirmation", "director_npc_create"]
     with stores.director_npc() as store:
         [saved] = store.list_prepared()
     assert saved.creation_anchors == ["河岸社区"]
@@ -610,6 +785,8 @@ def test_director_skill_specs_cover_every_registered_skill():
 
 
 def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
+    import json
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     new_profile = NPCProfile(
         name="二楼女子",
@@ -626,6 +803,7 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
                     "request_id": "enrich_1",
                     "skill": "enrich_npc",
                     "arguments": {"npc_id": new_id},
+                    "guidance": "补全谈判方的完整人设。",
                 }
             ],
         },
@@ -663,7 +841,16 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
 
     assert decision.requests[0].skill == "enrich_npc"
     assert executions.executions[0].output["name"] == "苏锦屏"
-    assert gateway.tasks == ["director_agent_decide", "npc_profile_backfill"]
+    assert gateway.tasks == ["director_agent_decide_confirmation", "npc_profile_backfill"]
+    creative_brief = json.loads(
+        gateway.input_data[1]["creative_brief_json"]
+    )
+    assert set(creative_brief) == {
+        "world_connection",
+        "life_phase",
+        "desire_pattern",
+        "baseline_temperament",
+    }
     with stores.npc_profile() as npc_store:
         saved = npc_store.get_by_id(new_id)
     assert saved.name == "苏锦屏"
@@ -688,6 +875,7 @@ def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
                     "request_id": "enrich_1",
                     "skill": "enrich_npc",
                     "arguments": {"npc_id": existing_id},
+                    "guidance": "错误地补全既有 NPC。",
                 }
             ],
         },
@@ -754,16 +942,20 @@ def test_skill_guidance_flows_through_to_execution_handler():
                 request_id="request_2",
                 skill="present_event",
                 arguments={"event_id": "event_b"},
+                guidance="以疏离感呈现该事件。",
             ),
         ],
     )
 
     result = service.execute_batch(batch, phase="generation")
 
-    assert seen_guidance == ["以压迫感为导向呈现该事件。", None]
+    assert seen_guidance == [
+        "以压迫感为导向呈现该事件。",
+        "以疏离感呈现该事件。",
+    ]
     assert [execution.guidance for execution in result.executions] == [
         "以压迫感为导向呈现该事件。",
-        None,
+        "以疏离感呈现该事件。",
     ]
     assert result.executions[0].guidance == "以压迫感为导向呈现该事件。"
 
@@ -914,7 +1106,7 @@ def test_confirmation_agent_can_create_coupled_scene_via_skill(tmp_path):
     assert len(output["npc_ids"]) == 2
     assert len(output["npc_names"]) == 2
     assert gateway.tasks == [
-        "director_agent_decide",
+        "director_agent_decide_confirmation",
         "director_event_select_arc",
         "director_npc_create",
         "director_npc_create",
@@ -978,6 +1170,7 @@ def test_coupled_scene_defers_persistence_when_npc_creation_fails(
                             "账房先生，暗中替世家管账。",
                         ],
                     },
+                    "guidance": "以码头货运世家为核心演员班底。",
                 }
             ],
         },
@@ -1127,7 +1320,7 @@ def test_director_event_semantic_view_hides_entry_points(tmp_path):
 
 
 def test_director_decide_prompt_defines_coupled_scene_boundary():
-    prompt, _ = PromptLoader().load("director_agent_decide")
+    prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
     assert "create_coupled_scene" in prompt
     assert "只用于" in prompt
@@ -1139,7 +1332,7 @@ def test_director_decide_prompt_defines_coupled_scene_boundary():
 
 
 def test_director_decide_prompt_forbids_quest_wrapping():
-    prompt, _ = PromptLoader().load("director_agent_decide")
+    prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
     assert "主角视线之外的平行运转" in prompt
     assert "绝不可强迫主角参与" in prompt

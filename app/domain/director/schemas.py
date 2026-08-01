@@ -33,7 +33,7 @@ class DirectorSkillRequest(BaseModel):
     request_id: str = Field(min_length=1, max_length=80)
     skill: str = Field(min_length=1, max_length=80)
     arguments: dict[str, Any] = Field(default_factory=dict)
-    guidance: str | None = Field(default=None, max_length=500)
+    guidance: str = Field(min_length=1, max_length=500)
 
 
 class DirectorDecisionBatch(BaseModel):
@@ -85,7 +85,7 @@ class DirectorStageMaterial(BaseModel):
 
     kind: DirectorResourceKind
     resource_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=300)
+    guidance: str = Field(min_length=1, max_length=500)
     payload: dict[str, Any]
 
 

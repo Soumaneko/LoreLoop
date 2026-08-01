@@ -101,6 +101,12 @@ class DirectorSkillService:
                 raise ValueError(
                     f"director skill {request.skill} is unavailable in {phase}"
                 )
+            if phase == "generation" and not str(
+                request.guidance or ""
+            ).strip():
+                raise ValueError(
+                    "generation director skills require guidance"
+                )
             arguments = registered.arguments_model.model_validate(
                 request.arguments
             )
