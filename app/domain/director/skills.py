@@ -15,7 +15,7 @@ from .schemas import (
 )
 
 
-DirectorSkillHandler = Callable[[BaseModel], BaseModel | dict | None]
+DirectorSkillHandler = Callable[[BaseModel, str | None], BaseModel | dict | None]
 DirectorArgumentsValidator = Callable[[BaseModel], None]
 
 
@@ -87,6 +87,7 @@ class DirectorSkillService:
                     ensure_ascii=False,
                     sort_keys=True,
                 ),
+                request.guidance or "",
             )
             for request in batch.requests
         ]
@@ -119,7 +120,10 @@ class DirectorSkillService:
             arguments = registered.arguments_model.model_validate(
                 request.arguments
             )
-            raw_output = registered.handler(arguments)
+            raw_output = registered.handler(
+                arguments,
+                request.guidance,
+            )
             if raw_output is None:
                 output = {}
             elif isinstance(raw_output, BaseModel):
@@ -135,6 +139,7 @@ class DirectorSkillService:
                     request_id=request.request_id,
                     skill=request.skill,
                     output=output,
+                    guidance=request.guidance,
                 )
             )
         return DirectorSkillExecutionBatch(executions=executions)

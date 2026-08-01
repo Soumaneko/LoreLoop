@@ -52,6 +52,7 @@ class DirectorEventInterventionPlanner:
         entity_mentions: list[str] | None = None,
         npc_mentions: list[str] | None = None,
         trace_id: str | None = None,
+        guidance: str | None = None,
     ) -> DirectorEventInterventionPlan:
         if active_event.route_mode != "default":
             raise ValueError("InterventionPlanner requires the default route")
@@ -111,6 +112,7 @@ class DirectorEventInterventionPlanner:
                         relevant_entities
                     ),
                     "npc_profiles_json": project_npc_profiles(relevant_npcs),
+                    "director_guidance": guidance or "",
                     "output_schema_json": json.dumps(
                         DirectorEventInterventionPlan.model_json_schema(),
                         ensure_ascii=False,

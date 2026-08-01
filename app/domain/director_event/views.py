@@ -36,8 +36,6 @@ def project_director_event(
         ),
     ]
     data["currently_happening"] = current_milestone
-    if event.exposure != "hidden":
-        data.pop("entry_points", None)
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 

@@ -123,6 +123,7 @@ class NPCProfile(BaseModel):
     npc_id: str = Field(default_factory=_new_id)
     name: str
     aliases: list[str] = Field(default_factory=list)
+    transient_aliases: dict[str, int] = Field(default_factory=dict)
 
     public_summary: str | None = None
     role: str | None = None

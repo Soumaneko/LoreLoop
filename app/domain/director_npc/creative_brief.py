@@ -63,11 +63,17 @@ def draw_director_npc_creative_brief(
     *,
     rng: random.Random | None = None,
 ) -> DirectorNPCCreativeBrief:
+    """随机抽取人物灵魂底色与内驱力维度。
+
+    只抽取纯内在属性（世界羁绊、人生阶段、欲望模式）；带强社会阶层属性的
+    ``social_position`` 与 ``optional_dimension`` 不再进入 NPC 创建调用，
+    以免与导演协调层 ``guidance`` 指定的身份冲突。字段保留以便未来按需复用。
+    """
     random_source = rng or random.SystemRandom()
     return DirectorNPCCreativeBrief(
         world_connection=random_source.choice(_WORLD_CONNECTIONS),
-        social_position=random_source.choice(_SOCIAL_POSITIONS),
+        social_position=None,
         life_phase=random_source.choice(_LIFE_PHASES),
         desire_pattern=random_source.choice(_DESIRE_PATTERNS),
-        optional_dimension=random_source.choice(_OPTIONAL_DIMENSIONS),
+        optional_dimension=None,
     )

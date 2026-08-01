@@ -63,6 +63,7 @@ class ConfirmationCache(TypedDict, total=False):
     director_executions: DirectorSkillExecutionBatch
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
+    new_npc_profiles: list[NPCProfile]
     existing_entity_profiles: list[EntityProfile]
     existing_npc_profiles: list[NPCProfile]
     director_npc_profile_id: str | None
@@ -117,5 +118,6 @@ class ConfirmationState(TypedDict, total=False):
     continuity_projection: ContinuityProjection
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
+    new_npc_profiles: list[NPCProfile]
     director_decision: DirectorDecisionBatch
     director_executions: DirectorSkillExecutionBatch

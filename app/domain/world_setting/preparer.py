@@ -19,6 +19,7 @@ class SettingAnchorPreparer:
         core_memory: CoreMemory,
         settings: list[WorldSetting],
         trace_id: str | None = None,
+        guidance: str | None = None,
     ) -> SettingAnchorPreparationBatch:
         if not settings:
             return SettingAnchorPreparationBatch()
@@ -33,6 +34,7 @@ class SettingAnchorPreparer:
                         ensure_ascii=False,
                         indent=2,
                     ),
+                    "director_guidance": guidance or "",
                     "output_schema_json": json.dumps(
                         SettingAnchorPreparationBatch.model_json_schema(),
                         ensure_ascii=False,

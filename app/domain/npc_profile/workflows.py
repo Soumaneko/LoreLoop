@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.core.llm import LLMGateway
 from app.domain.action.schemas import Anchor
@@ -13,16 +13,63 @@ from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.updater import NPCProfileUpdater
 from app.domain.scene_summary.schemas import SceneSummary
 
+TRANSIENT_ALIAS_TURNS = 3
+
+
 @dataclass
 class UpdateNPCProfilesResult:
     extraction: NPCExtractionResult
     saved_ids: list[str]
+    new_profiles: list[NPCProfile] = field(default_factory=list)
+
+
+def attach_transient_alias_for_rename(
+    profile: NPCProfile,
+    *,
+    old_name: str,
+    turn_index: int,
+    expiry_turns: int = TRANSIENT_ALIAS_TURNS,
+) -> None:
+    """把改名前的代称挂为临时别名，避免出现“查无此人”的认知断层。
+
+    临时别名会在 ``turn_index + expiry_turns`` 之后由回合推进机制清理，
+    不参与永久别名的命中计数与晋升。
+    """
+    clean = str(old_name).strip()
+    if not clean:
+        return
+    key = _norm(clean)
+    known = {
+        _norm(profile.name),
+        *(_norm(alias) for alias in profile.aliases),
+        *(_norm(alias) for alias in profile.transient_aliases),
+    }
+    if key in known:
+        return
+    profile.transient_aliases[clean] = turn_index + expiry_turns
+
+
+def prune_expired_transient_aliases(
+    profile: NPCProfile,
+    *,
+    turn_index: int,
+) -> bool:
+    """删除已过期的临时别名，返回是否发生变化。"""
+    expired = [
+        alias
+        for alias, expiry in profile.transient_aliases.items()
+        if expiry < turn_index
+    ]
+    for alias in expired:
+        profile.transient_aliases.pop(alias, None)
+    return bool(expired)
 
 
 def sync_npc_profile_absence_from_current_state(
     *,
     npc_store: NPCProfileStore,
     current_state: CurrentState,
+    turn_index: int | None = None,
 ) -> list[str]:
     matched_names = _gather_current_state_npc_names(current_state)
     saved_ids: list[str] = []
@@ -32,7 +79,15 @@ def sync_npc_profile_absence_from_current_state(
             profile.absent_turns = 0
         else:
             profile.absent_turns += 1
-        if profile.absent_turns != previous_absent_turns:
+        aliases_pruned = (
+            prune_expired_transient_aliases(
+                profile,
+                turn_index=turn_index,
+            )
+            if turn_index is not None
+            else False
+        )
+        if profile.absent_turns != previous_absent_turns or aliases_pruned:
             saved_ids.append(npc_store.upsert(profile))
     return saved_ids
 
@@ -69,6 +124,8 @@ def update_npc_profiles_from_extraction(
     extraction: NPCExtractionResult,
     recent_summaries: list[SceneSummary] | None = None,
     trace_id: str | None = None,
+    auto_backfill: bool = True,
+    turn_index: int | None = None,
 ) -> UpdateNPCProfilesResult:
     updater = NPCProfileUpdater(gateway)
     update_result = updater.update(
@@ -82,14 +139,17 @@ def update_npc_profiles_from_extraction(
     )
 
     saved_ids: list[str] = []
+    new_profiles: list[NPCProfile] = []
     existing_ids = {profile.npc_id for profile in existing_profiles}
-    backfiller = NPCProfileBackfiller(gateway)
     for profile in update_result.profiles:
+        if profile.npc_id not in existing_ids and not auto_backfill:
+            new_profiles.append(profile)
+            continue
         saved_id = npc_store.upsert(profile)
         saved_ids.append(saved_id)
-        if _should_backfill_new_npc(profile, existing_ids):
+        if auto_backfill and _should_backfill_new_npc(profile, existing_ids):
             refreshed = npc_store.get_by_id(saved_id) or profile
-            backfilled = backfiller.backfill(
+            backfilled = backfill_new_npc_profile(
                 profile=refreshed,
                 existing_profiles=[
                     npc
@@ -100,14 +160,52 @@ def update_npc_profiles_from_extraction(
                 current_state=current_state,
                 core_memory=core_memory,
                 recent_summaries=recent_summaries,
+                gateway=gateway,
+                npc_store=npc_store,
                 trace_id=trace_id,
             )
+            if turn_index is not None and backfilled.name != profile.name:
+                attach_transient_alias_for_rename(
+                    backfilled,
+                    old_name=profile.name,
+                    turn_index=turn_index,
+                )
             npc_store.upsert(backfilled)
     for npc_id, surface in update_result.exact_mentions:
         npc_store.record_mention(npc_id, surface)
     for npc_id, alias in update_result.aliases_to_add:
         npc_store.append_alias(npc_id, alias, initial_hit_count=1)
-    return UpdateNPCProfilesResult(extraction=extraction, saved_ids=saved_ids)
+    return UpdateNPCProfilesResult(
+        extraction=extraction,
+        saved_ids=saved_ids,
+        new_profiles=new_profiles,
+    )
+
+
+def backfill_new_npc_profile(
+    *,
+    profile: NPCProfile,
+    existing_profiles: list[NPCProfile],
+    scene_facts: str,
+    current_state: CurrentState,
+    core_memory: CoreMemory,
+    gateway: LLMGateway,
+    npc_store: NPCProfileStore,
+    recent_summaries: list[SceneSummary] | None = None,
+    trace_id: str | None = None,
+    guidance: str | None = None,
+) -> NPCProfile:
+    backfiller = NPCProfileBackfiller(gateway)
+    return backfiller.backfill(
+        profile=profile,
+        existing_profiles=existing_profiles,
+        scene_facts=scene_facts,
+        current_state=current_state,
+        core_memory=core_memory,
+        recent_summaries=recent_summaries,
+        trace_id=trace_id,
+        guidance=guidance,
+    )
 
 
 def _should_backfill_new_npc(profile: NPCProfile, existing_ids: set[str]) -> bool:
@@ -158,11 +256,19 @@ def _matches_profile_name_or_alias(value: str | None, profile: NPCProfile) -> bo
     key = _norm(value)
     if not key:
         return False
-    return key == _norm(profile.name) or key in {_norm(alias) for alias in profile.aliases}
+    return (
+        key == _norm(profile.name)
+        or key in {_norm(alias) for alias in profile.aliases}
+        or key in {_norm(alias) for alias in profile.transient_aliases}
+    )
 
 
 def _profile_matches_any_name(profile: NPCProfile, names: set[str]) -> bool:
-    variants = {_norm(profile.name), *[_norm(alias) for alias in profile.aliases]}
+    variants = {
+        _norm(profile.name),
+        *(_norm(alias) for alias in profile.aliases),
+        *(_norm(alias) for alias in profile.transient_aliases),
+    }
     variants.discard("")
     return bool(variants & names)
 

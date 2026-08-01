@@ -73,7 +73,6 @@ def test_creator_uses_general_context_without_setting_prerequisite():
         core_memory=_core_memory(),
         existing_npcs=[],
         creation_context=NPCCreationContext(
-            purpose="补充社区层面的长期人物。",
             anchors=["河岸社区"],
         ),
         creative_brief=draw_director_npc_creative_brief(),
@@ -142,3 +141,78 @@ def test_npc_domain_does_not_import_world_setting_or_define_dispatch():
     )
     assert "world_setting" not in source
     assert "dispatch" not in source.casefold()
+
+
+def test_creator_includes_recent_creations_in_prompt():
+    import json
+
+    gateway = _CreatorGateway(
+        {
+            "creation_reason": "与同批事件耦合而准备。",
+            "core_motivation": "查明沉船真相。",
+            "hidden_secret": "见过账本。",
+            "conflict_style": "先观察再出手。",
+            "social_style": "寡言。",
+            "role": "码头把头",
+            "faction": None,
+            "personality_traits": ["沉稳", "果决"],
+            "known_abilities": ["盘货"],
+            "appearance": "左臂旧疤。",
+            "name": "沈二爷",
+            "encounter_potentials": ["码头冲突", "账本线索", "旧案求助"],
+        }
+    )
+    recent_creations = [
+        {"kind": "event", "title": "沉船账本", "role": "arc"},
+        {"kind": "npc", "name": "阿贵", "role": "账房先生"},
+    ]
+
+    DirectorNPCCreator(gateway).create(
+        core_memory=_core_memory(),
+        existing_npcs=[],
+        creation_context=NPCCreationContext(anchors=[]),
+        creative_brief=draw_director_npc_creative_brief(),
+        protagonist_name="周明",
+        turn_index=3,
+        recent_creations=recent_creations,
+    )
+
+    payload = json.loads(gateway.calls[0]["input_data"]["batch_recent_creations_json"])
+    assert payload == recent_creations
+
+
+def test_creator_brief_hides_social_dimensions_from_prompt():
+    import json
+
+    gateway = _CreatorGateway(
+        {
+            "creation_reason": "隐藏社会维度后创建。",
+            "core_motivation": "守住货路。",
+            "hidden_secret": "旧账未清。",
+            "conflict_style": "先硬扛再周旋。",
+            "social_style": "话少利落。",
+            "role": "码头把头",
+            "faction": "码头会",
+            "personality_traits": ["沉稳", "护短"],
+            "known_abilities": ["盘货"],
+            "appearance": "左臂旧疤。",
+            "name": "沈二爷",
+            "encounter_potentials": ["码头冲突", "账本线索", "旧案求助"],
+        }
+    )
+
+    DirectorNPCCreator(gateway).create(
+        core_memory=_core_memory(),
+        existing_npcs=[],
+        creation_context=NPCCreationContext(anchors=[]),
+        creative_brief=draw_director_npc_creative_brief(),
+        protagonist_name="周明",
+        turn_index=3,
+    )
+
+    brief = json.loads(gateway.calls[0]["input_data"]["creative_brief_json"])
+    assert "social_position" not in brief
+    assert "optional_dimension" not in brief
+    assert "world_connection" in brief
+    assert "life_phase" in brief
+    assert "desire_pattern" in brief

@@ -28,7 +28,6 @@ def _event_list_view(event: DirectorEvent) -> dict:
         "bridge_anchors": event.bridge_anchors,
         "milestones": event.milestones,
         "exposure": event.exposure,
-        "entry_points": [entry.model_dump(mode="json") for entry in event.entry_points],
     }
 
 
@@ -47,6 +46,7 @@ class DirectorEventSelector:
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
+        guidance: str | None = None,
     ) -> DirectorEventSelectionResult:
         input_data = {
             "events_json": json.dumps(
@@ -59,6 +59,7 @@ class DirectorEventSelector:
             "recent_summaries_json": project_scene_summaries(recent_summaries or []),
             "entity_profiles_json": project_entity_profiles(entity_profiles or []),
             "npc_profiles_json": project_npc_profiles(npc_profiles or []),
+            "director_guidance": guidance or "",
             "output_schema_json": json.dumps(
                 DirectorEventSelectionResult.model_json_schema(),
                 ensure_ascii=False,

@@ -22,6 +22,7 @@ class DirectorEventInterventionReviewer:
         current_state: CurrentState,
         core_memory: CoreMemory,
         trace_id: str | None = None,
+        guidance: str | None = None,
     ) -> DirectorEventInterventionReviewResult:
         if (
             active_event.route_mode != "intervention"
@@ -29,7 +30,7 @@ class DirectorEventInterventionReviewer:
         ):
             raise ValueError("InterventionReviewer requires an intervention route")
         event_view = active_event.semantic_view()
-        for excluded_field in ("player_contacts", "entry_points"):
+        for excluded_field in ("player_contacts",):
             event_view.pop(excluded_field, None)
         return cast(
             DirectorEventInterventionReviewResult,
@@ -45,6 +46,7 @@ class DirectorEventInterventionReviewer:
                     "scene_facts_json": scene_facts,
                     "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
+                    "director_guidance": guidance or "",
                     "output_schema_json": json.dumps(
                         DirectorEventInterventionReviewResult.model_json_schema(),
                         ensure_ascii=False,

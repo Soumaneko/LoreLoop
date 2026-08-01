@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director import (
@@ -22,7 +20,7 @@ from app.domain.director_event.intervention_reviewer import (
     DirectorEventInterventionReviewer,
 )
 from app.domain.director_event.reviewer import DirectorEventReviewer
-from app.domain.director_event.schemas import DirectorEventRole
+from app.domain.director_event.schemas import utc_now
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.views import project_director_event
 from app.domain.director_event.workflows import review_director_event_workflow
@@ -31,61 +29,52 @@ from app.domain.director_npc.creative_brief import (
     draw_director_npc_creative_brief,
 )
 from app.domain.director_npc.schemas import NPCCreationContext
+from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.npc_profile.workflows import (
+    attach_transient_alias_for_rename,
+    backfill_new_npc_profile,
+)
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.world_setting.preparer import SettingAnchorPreparer
 
-
-class _PresentEventArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    event_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=300)
-
-
-class _IntroduceNPCArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    npc_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=300)
-
-
-class _ForeshadowSettingArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    setting_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=300)
+from .director_skill_specs import (
+    BindEventActorArguments,
+    CreateCoupledSceneArguments,
+    CreateEventArguments,
+    CreateNPCArguments,
+    EnrichNPCArguments,
+    EnrichSettingArguments,
+    ForeshadowSettingArguments,
+    IntroduceNPCArguments,
+    PresentEventArguments,
+    ReviewEventArguments,
+    get_director_skill_specs,
+)
 
 
-class _ReviewEventArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    event_id: str = Field(min_length=1)
-
-
-class _CreateEventArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    role: DirectorEventRole
-
-
-class _CreateNPCArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    purpose: str = Field(min_length=1, max_length=300)
-    anchors: list[str] = Field(default_factory=list, max_length=8)
-
-
-class _EnrichSettingArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    setting_id: str = Field(min_length=1)
-
-
-class _BindEventActorArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    event_id: str = Field(min_length=1)
-    npc_id: str = Field(min_length=1)
+def _register_skill(
+    service,
+    name: str,
+    *,
+    handler,
+    arguments_validator=None,
+) -> None:
+    """Register a skill using its semantic spec declared in director_skill_specs."""
+    spec = next(
+        (item for item in get_director_skill_specs() if item.name == name),
+        None,
+    )
+    if spec is None:
+        raise ValueError(f"unknown director skill spec: {name}")
+    service.register(
+        name=spec.name,
+        description=spec.description,
+        phases=set(spec.phases),
+        mutates=spec.mutates,
+        arguments_model=spec.arguments_model,
+        handler=handler,
+        arguments_validator=arguments_validator,
+    )
 
 
 def run_generation_director_agent(
@@ -99,6 +88,7 @@ def run_generation_director_agent(
     recent_summaries: list[SceneSummary],
     turn_index: int,
     trace_id: str,
+    turn_resolution_json: str = "",
 ) -> tuple[DirectorStageResult, object]:
     service = DirectorSkillService()
     with (
@@ -116,31 +106,22 @@ def run_generation_director_agent(
         npc_profiles = npc_profile_store.list_all()
         settings = setting_store.list_active()
 
-        service.register(
-            name="present_event",
-            description=(
-                "允许一个已有活跃导演事件作为本轮舞台材料；只在其当前状态"
-                "与玩家行动或世界反应确实相关时使用。"
+        _register_skill(
+            service,
+            "present_event",
+            handler=lambda args, guidance=None: _present_event(
+                event_store,
+                args,
             ),
-            phases={"generation"},
-            mutates=False,
-            arguments_model=_PresentEventArgs,
-            handler=lambda args: _present_event(event_store, args),
             arguments_validator=lambda args: _require_active_event(
                 event_store,
                 args.event_id,
             ),
         )
-        service.register(
-            name="introduce_npc",
-            description=(
-                "允许一个已准备的 Director NPC 或已有 NPCProfile 进入本轮；"
-                "不得创建人物，每轮至多选择一个。"
-            ),
-            phases={"generation"},
-            mutates=False,
-            arguments_model=_IntroduceNPCArgs,
-            handler=lambda args: _introduce_npc(
+        _register_skill(
+            service,
+            "introduce_npc",
+            handler=lambda args, guidance=None: _introduce_npc(
                 director_npc_store,
                 npc_profile_store,
                 args,
@@ -151,15 +132,13 @@ def run_generation_director_agent(
                 args.npc_id,
             ),
         )
-        service.register(
-            name="foreshadow_setting",
-            description=(
-                "允许一个已有世界设定通过可见影响进入本轮，不得新增或改写设定。"
+        _register_skill(
+            service,
+            "foreshadow_setting",
+            handler=lambda args, guidance=None: _foreshadow_setting(
+                setting_store,
+                args,
             ),
-            phases={"generation"},
-            mutates=False,
-            arguments_model=_ForeshadowSettingArgs,
-            handler=lambda args: _foreshadow_setting(setting_store, args),
             arguments_validator=lambda args: _require_active_setting(
                 setting_store,
                 args.setting_id,
@@ -176,6 +155,11 @@ def run_generation_director_agent(
                 summary.model_dump(mode="json")
                 for summary in recent_summaries
             ],
+            turn_resolution=(
+                json.loads(turn_resolution_json)
+                if turn_resolution_json
+                else None
+            ),
             resources={
                 "events": [
                     event.semantic_view()
@@ -240,6 +224,7 @@ def run_confirmation_director_agent(
     npc_mentions: list[str],
     turn_index: int,
     trace_id: str,
+    new_npc_profiles: list[NPCProfile] | None = None,
 ) -> tuple[object, DirectorSkillExecutionBatch]:
     service = DirectorSkillService()
     with (
@@ -248,7 +233,7 @@ def run_confirmation_director_agent(
         stores.npc_profile() as npc_profile_store,
         stores.world_setting() as setting_store,
     ):
-        def review_event(args: _ReviewEventArgs):
+        def review_event(args: ReviewEventArguments, guidance: str | None = None):
             event = event_store.get_by_id(args.event_id)
             if event is None or event.status != "active":
                 raise ValueError("review_event requires an active event")
@@ -276,10 +261,11 @@ def run_confirmation_director_agent(
                 ),
                 intervention_planner=DirectorEventInterventionPlanner(gateway),
                 trace_id=trace_id,
+                guidance=guidance,
             )
             return result.model_dump(mode="json")
 
-        def create_event(args: _CreateEventArgs):
+        def create_event(args: CreateEventArguments, guidance: str | None = None):
             if event_store.get_active(args.role) is not None:
                 raise ValueError(
                     f"create_event cannot replace active {args.role} event"
@@ -293,6 +279,7 @@ def run_confirmation_director_agent(
                 entity_profiles=entity_profiles,
                 npc_profiles=npc_profiles,
                 trace_id=trace_id,
+                guidance=guidance,
             )
             event = selection.to_event(
                 role=args.role,
@@ -302,7 +289,7 @@ def run_confirmation_director_agent(
             event_store.save(event)
             return {"event_id": event.event_id, "role": event.role}
 
-        def create_npc(args: _CreateNPCArgs):
+        def create_npc(args: CreateNPCArguments, guidance: str | None = None):
             draft = DirectorNPCCreator(gateway).create(
                 core_memory=core_memory,
                 existing_npcs=npc_profile_store.list_all(),
@@ -317,18 +304,126 @@ def run_confirmation_director_agent(
                     if npc.status != "retired"
                 ],
                 creation_context=NPCCreationContext(
-                    purpose=args.purpose,
                     anchors=args.anchors,
                 ),
                 creative_brief=draw_director_npc_creative_brief(),
                 protagonist_name=current_state.player.name,
                 turn_index=turn_index,
                 trace_id=trace_id,
+                guidance=guidance,
             )
             director_npc_store.save(draft)
             return {"npc_id": draft.draft_id, "name": draft.name}
 
-        def enrich_setting(args: _EnrichSettingArgs):
+        def create_coupled_scene(
+            args: CreateCoupledSceneArguments,
+            guidance: str | None = None,
+        ):
+            if event_store.get_active(args.role) is not None:
+                raise ValueError(
+                    "create_coupled_scene cannot replace "
+                    f"active {args.role} event"
+                )
+            event_guidance = args.event_guidance.strip() or (guidance or "")
+            npc_guidance_for = lambda index: (
+                args.npc_guidances[index].strip()
+                if index < len(args.npc_guidances)
+                and args.npc_guidances[index].strip()
+                else (guidance or "")
+            )
+            selection = DirectorEventSelector(gateway).select_or_create(
+                role=args.role,
+                events=event_store.list_all(),
+                current_state=current_state,
+                core_memory=core_memory,
+                recent_summaries=selection_summaries,
+                entity_profiles=entity_profiles,
+                npc_profiles=npc_profiles,
+                trace_id=trace_id,
+                guidance=event_guidance,
+            )
+            event = selection.to_event(
+                role=args.role,
+                turn_index=turn_index,
+                current_clock=current_state.world_clock,
+            )
+            drafts: list = []
+            npc_ids: list[str] = []
+            npc_names: list[str] = []
+            recent_creations: list[dict] = [event.semantic_view()]
+            for index in range(args.npc_count):
+                draft = DirectorNPCCreator(gateway).create(
+                    core_memory=core_memory,
+                    existing_npcs=npc_profile_store.list_all(),
+                    reserved_npcs=[
+                        {
+                            "name": npc.name,
+                            "role": npc.role,
+                            "core_motivation": npc.core_motivation,
+                            "hidden_secret": npc.hidden_secret,
+                        }
+                        for npc in director_npc_store.list_all()
+                        if npc.status != "retired"
+                    ] + [
+                        {
+                            "name": staged.name,
+                            "role": staged.role,
+                            "core_motivation": staged.core_motivation,
+                            "hidden_secret": staged.hidden_secret,
+                        }
+                        for staged in drafts
+                    ],
+                    creation_context=NPCCreationContext(anchors=[]),
+                    creative_brief=draw_director_npc_creative_brief(),
+                    protagonist_name=current_state.player.name,
+                    turn_index=turn_index,
+                    trace_id=trace_id,
+                    guidance=npc_guidance_for(index),
+                    recent_creations=recent_creations,
+                )
+                drafts.append(draft)
+                actor_ref = DirectorResourceRef(
+                    kind="npc",
+                    resource_id=draft.draft_id,
+                )
+                actor_refs = list(event.actor_refs)
+                if actor_ref not in actor_refs:
+                    actor_refs.append(actor_ref)
+                actors = list(event.actors)
+                clean_name = draft.name.strip()
+                if clean_name and clean_name not in actors:
+                    actors.append(clean_name)
+                event = event.model_copy(
+                    update={
+                        "actors": actors,
+                        "actor_refs": actor_refs,
+                        "updated_turn": turn_index,
+                        "updated_at": utc_now(),
+                    }
+                )
+                recent_creations[0] = event.semantic_view()
+                recent_creations.append(
+                    {
+                        "kind": "npc",
+                        "npc_id": draft.draft_id,
+                        "name": draft.name,
+                        "role": draft.role,
+                        "core_motivation": draft.core_motivation,
+                    }
+                )
+                npc_ids.append(draft.draft_id)
+                npc_names.append(draft.name)
+            for draft in drafts:
+                director_npc_store.save(draft)
+            event_store.save(event)
+            return {
+                "event_id": event.event_id,
+                "role": event.role,
+                "npc_ids": npc_ids,
+                "npc_names": npc_names,
+            }
+
+        def enrich_setting(args: EnrichSettingArguments, guidance: str | None = None):
             setting = setting_store.get_by_id(args.setting_id)
             if (
                 setting is None
@@ -342,6 +437,7 @@ def run_confirmation_director_agent(
                 core_memory=core_memory,
                 settings=[setting],
                 trace_id=trace_id,
+                guidance=guidance,
             )
             preparation = next(
                 (
@@ -373,7 +469,7 @@ def run_confirmation_director_agent(
                 "status": "usable",
             }
 
-        def bind_actor(args: _BindEventActorArgs):
+        def bind_actor(args: BindEventActorArguments, guidance: str | None = None):
             draft = director_npc_store.get_by_id(args.npc_id)
             profile = npc_profile_store.get_by_id(args.npc_id)
             if draft is not None and draft.status != "retired":
@@ -393,61 +489,87 @@ def run_confirmation_director_agent(
             )
             return {"event_id": event.event_id, "npc_id": args.npc_id}
 
-        service.register(
-            name="review_event",
-            description=(
-                "依据本轮已确认 Scene Facts 审查一个活跃事件并应用其生命周期；"
-                "每个活跃事件通常每轮审查一次。"
-            ),
-            phases={"confirmation"},
-            mutates=True,
-            arguments_model=_ReviewEventArgs,
+        def enrich_npc(args: EnrichNPCArguments, guidance: str | None = None):
+            original = next(
+                (
+                    profile
+                    for profile in (new_npc_profiles or [])
+                    if profile.npc_id == args.npc_id
+                ),
+                None,
+            )
+            if original is None:
+                original = npc_profile_store.get_by_id(args.npc_id)
+            if original is None:
+                raise ValueError("enrich_npc references an unknown npc_id")
+            backfilled = backfill_new_npc_profile(
+                profile=original,
+                existing_profiles=[
+                    npc
+                    for npc in npc_profile_store.list_all()
+                    if npc.npc_id != args.npc_id
+                ],
+                scene_facts=json.dumps(
+                    scene_facts,
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                current_state=current_state,
+                core_memory=core_memory,
+                gateway=gateway,
+                npc_store=npc_profile_store,
+                recent_summaries=recent_summaries,
+                trace_id=trace_id,
+                guidance=guidance,
+            )
+            if backfilled.name != original.name:
+                attach_transient_alias_for_rename(
+                    backfilled,
+                    old_name=original.name,
+                    turn_index=turn_index,
+                )
+            saved_id = npc_profile_store.upsert(backfilled)
+            return {
+                "npc_id": saved_id,
+                "name": backfilled.name,
+            }
+
+        _register_skill(
+            service,
+            "review_event",
             handler=review_event,
             arguments_validator=lambda args: _require_active_event(
                 event_store,
                 args.event_id,
             ),
         )
-        service.register(
-            name="create_event",
-            description=(
-                "为当前没有活跃事件的 arc 或 ambient 角色创建一个独立事件。"
-            ),
-            phases={"confirmation"},
-            mutates=True,
-            arguments_model=_CreateEventArgs,
+        _register_skill(
+            service,
+            "create_event",
             handler=create_event,
         )
-        service.register(
-            name="create_npc",
-            description=(
-                "按明确的未来导演需要准备一个独立 NPC；Setting 不是必填前置。"
-            ),
-            phases={"confirmation"},
-            mutates=True,
-            arguments_model=_CreateNPCArgs,
+        _register_skill(
+            service,
+            "create_npc",
             handler=create_npc,
         )
-        service.register(
-            name="enrich_setting",
-            description="补全一个已有的具体 Setting seed，使其成为可用世界资产。",
-            phases={"confirmation"},
-            mutates=True,
-            arguments_model=_EnrichSettingArgs,
+        _register_skill(
+            service,
+            "create_coupled_scene",
+            handler=create_coupled_scene,
+        )
+        _register_skill(
+            service,
+            "enrich_setting",
             handler=enrich_setting,
             arguments_validator=lambda args: _require_setting_seed(
                 setting_store,
                 args.setting_id,
             ),
         )
-        service.register(
-            name="bind_event_actor",
-            description=(
-                "把已有 NPC 绑定到已有活跃事件；Event 和 NPC 的创建本身互不依赖。"
-            ),
-            phases={"confirmation"},
-            mutates=True,
-            arguments_model=_BindEventActorArgs,
+        _register_skill(
+            service,
+            "bind_event_actor",
             handler=bind_actor,
             arguments_validator=lambda args: _require_event_actor_binding(
                 event_store,
@@ -457,6 +579,17 @@ def run_confirmation_director_agent(
                 npc_id=args.npc_id,
             ),
         )
+        if new_npc_profiles:
+            _register_skill(
+                service,
+                "enrich_npc",
+                handler=enrich_npc,
+                arguments_validator=lambda args: _require_new_npc(
+                    npc_profile_store,
+                    new_npc_profiles,
+                    args.npc_id,
+                ),
+            )
 
         observation = DirectorObservation(
             phase="confirmation",
@@ -495,6 +628,13 @@ def run_confirmation_director_agent(
                     _setting_resource(setting)
                     for setting in setting_store.list_active()
                 ],
+                "new_npcs": [
+                    {
+                        "npc_id": profile.npc_id,
+                        **profile.director_view().model_dump(mode="json"),
+                    }
+                    for profile in (new_npc_profiles or [])
+                ],
             },
         )
         decision = DirectorAgent(gateway, service).decide(
@@ -508,7 +648,7 @@ def run_confirmation_director_agent(
     return decision, executions
 
 
-def _present_event(store, args: _PresentEventArgs) -> DirectorStageMaterial:
+def _present_event(store, args: PresentEventArguments) -> DirectorStageMaterial:
     event = store.get_by_id(args.event_id)
     if event is None or event.status != "active":
         raise ValueError("present_event requires an active event")
@@ -523,7 +663,7 @@ def _present_event(store, args: _PresentEventArgs) -> DirectorStageMaterial:
 def _introduce_npc(
     director_npc_store,
     npc_profile_store,
-    args: _IntroduceNPCArgs,
+    args: IntroduceNPCArguments,
 ) -> DirectorStageMaterial:
     draft = director_npc_store.get_by_id(args.npc_id)
     if draft is not None and draft.status != "retired":
@@ -550,7 +690,7 @@ def _introduce_npc(
 
 def _foreshadow_setting(
     store,
-    args: _ForeshadowSettingArgs,
+    args: ForeshadowSettingArguments,
 ) -> DirectorStageMaterial:
     setting = store.get_by_id(args.setting_id)
     if setting is None or setting.status != "active":
@@ -596,6 +736,18 @@ def _require_active_setting(store, setting_id: str) -> None:
     setting = store.get_by_id(setting_id)
     if setting is None or setting.status != "active":
         raise ValueError("director skill requires an active setting_id")
+
+
+def _require_new_npc(npc_profile_store, new_npc_profiles, npc_id: str) -> None:
+    candidates = [profile for profile in (new_npc_profiles or [])]
+    if npc_id not in {profile.npc_id for profile in candidates}:
+        raise ValueError("enrich_npc requires a newly created npc_id")
+    profile = next(
+        (item for item in candidates if item.npc_id == npc_id),
+        npc_profile_store.get_by_id(npc_id),
+    )
+    if profile is None or profile.source_director_npc_id:
+        raise ValueError("enrich_npc references an invalid npc_id")
 
 
 def _require_setting_seed(store, setting_id: str) -> None:

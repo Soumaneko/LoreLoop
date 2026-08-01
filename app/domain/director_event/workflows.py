@@ -50,6 +50,7 @@ def review_director_event_workflow(
     intervention_reviewer: DirectorEventInterventionReviewer | None = None,
     intervention_planner: DirectorEventInterventionPlanner | None = None,
     trace_id: str | None = None,
+    guidance: str | None = None,
 ) -> DirectorEventWorkflowResult:
     active = store.get_by_id(active_event.event_id)
     if active is None or active.status != "active":
@@ -64,6 +65,7 @@ def review_director_event_workflow(
             core_memory=core_memory,
             scene_summaries=scene_summaries,
             trace_id=trace_id,
+            guidance=guidance,
         )
         review: DirectorEventReviewResult | None = None
         intervention_review: DirectorEventInterventionReviewResult | None = None
@@ -79,6 +81,7 @@ def review_director_event_workflow(
                 current_state=current_state,
                 core_memory=core_memory,
                 trace_id=trace_id,
+                guidance=guidance,
             )
             exposure = active.exposure
             new_player_contact = intervention_review.new_player_contact
@@ -106,6 +109,7 @@ def review_director_event_workflow(
                 entity_mentions=entity_mentions or [],
                 npc_mentions=npc_mentions or [],
                 trace_id=trace_id,
+                guidance=guidance,
             )
 
         store.append_player_contact(

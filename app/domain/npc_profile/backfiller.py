@@ -26,6 +26,7 @@ class NPCProfileBackfiller:
         core_memory: CoreMemory,
         recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
+        guidance: str | None = None,
     ) -> NPCProfile:
         result = cast(
             NPCProfileBackfillOutput,
@@ -42,6 +43,7 @@ class NPCProfileBackfiller:
                         ensure_ascii=False,
                         indent=2,
                     ),
+                    "director_guidance": guidance or "",
                     "output_schema_json": json.dumps(
                         NPCProfileBackfillOutput.model_json_schema(),
                         ensure_ascii=False,
@@ -67,16 +69,8 @@ def _existing_npc_view(npc: NPCProfile) -> dict:
 
 
 def _apply_backfill(profile: NPCProfile, backfill: NPCProfileBackfillOutput) -> None:
-    original_name = profile.name
-    if backfill.name.strip() and backfill.name.strip() != original_name:
+    if backfill.name.strip() and backfill.name.strip() != profile.name:
         profile.name = backfill.name.strip()
-        alias_keys = {alias.casefold() for alias in profile.aliases}
-        if original_name.strip() and original_name.casefold() not in alias_keys:
-            profile.aliases.append(original_name)
-            profile.alias_hit_counts[original_name] = max(
-                profile.alias_hit_counts.get(original_name, 0),
-                1,
-            )
     profile.role = profile.role or backfill.role
     profile.appearance = profile.appearance or backfill.appearance
     if not profile.personality_traits:

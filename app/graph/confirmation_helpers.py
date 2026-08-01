@@ -44,6 +44,7 @@ _WRITE_CACHED_NODE_RESULTS = {
     "director_executions",
     "updated_entity_ids",
     "updated_npc_profile_ids",
+    "new_npc_profiles",
 }
 _ROLLBACK_SAFE_CACHE_KEYS = {
     "key",

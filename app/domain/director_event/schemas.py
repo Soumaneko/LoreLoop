@@ -189,7 +189,6 @@ class DirectorEvent(BaseModel):
             "player_contacts": [
                 contact.model_dump(mode="json") for contact in self.player_contacts
             ],
-            "entry_points": [entry.model_dump(mode="json") for entry in self.entry_points],
             "last_presented_turn": self.last_presented_turn,
             "route_mode": self.route_mode,
             "intervention_route": (

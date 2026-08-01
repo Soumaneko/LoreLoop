@@ -92,3 +92,18 @@ def test_event_domain_does_not_import_director_npc():
         for path in Path("app/domain/director_event").glob("*.py")
     )
     assert "director_npc" not in source
+
+
+def test_entry_points_are_stored_but_hidden_from_consumer_projections():
+    from app.domain.director_event.selector import _event_list_view
+    from app.domain.director_event.views import project_director_event
+
+    event = _event()
+    assert event.entry_points
+
+    stored = event.model_dump()
+    assert stored["entry_points"]
+
+    assert "entry_points" not in event.semantic_view()
+    assert "entry_points" not in project_director_event(event)
+    assert "entry_points" not in _event_list_view(event)

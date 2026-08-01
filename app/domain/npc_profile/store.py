@@ -77,7 +77,6 @@ class NPCProfileStore:
 
     def upsert(self, profile: NPCProfile) -> str:
         self._ensure_given_name_alias(profile)
-        self._maybe_promote_alias(profile)
         now = profile.updated_at or utc_now()
         profile.updated_at = now
         self._db.execute(
@@ -194,27 +193,15 @@ class NPCProfileStore:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
 
-    def _maybe_promote_alias(self, profile: NPCProfile) -> None:
-        for alias in list(profile.aliases):
-            if profile.alias_hit_counts.get(alias, 0) <= profile.name_hit_count:
-                continue
-            if self._name_conflicts(profile, alias):
-                continue
-            old_name = profile.name
-            profile.name = alias
-            profile.aliases = _merge_unique([old_name, *[a for a in profile.aliases if a != alias]])
-            profile.name_hit_count, profile.alias_hit_counts[old_name] = (
-                profile.alias_hit_counts.get(alias, 0),
-                profile.name_hit_count,
-            )
-            profile.alias_hit_counts.pop(alias, None)
-            break
-
     def _ensure_given_name_alias(self, profile: NPCProfile) -> None:
         given_name = profile.name.split("·", 1)[0].strip()
         if given_name == profile.name or not given_name:
             return
-        known_names = {_norm(profile.name), *[_norm(alias) for alias in profile.aliases]}
+        known_names = {
+            _norm(profile.name),
+            *(_norm(alias) for alias in profile.aliases),
+            *(_norm(alias) for alias in profile.transient_aliases),
+        }
         if _norm(given_name) in known_names or self._name_conflicts(profile, given_name):
             return
         profile.aliases.append(given_name)
@@ -230,7 +217,11 @@ class NPCProfileStore:
 
 
 def _name_matches(term: str, profile: NPCProfile) -> bool:
-    return term == _norm(profile.name) or term in {_norm(alias) for alias in profile.aliases}
+    return (
+        term == _norm(profile.name)
+        or term in {_norm(alias) for alias in profile.aliases}
+        or term in {_norm(alias) for alias in profile.transient_aliases}
+    )
 
 
 def _find_alias(profile: NPCProfile, surface: str) -> str | None:
@@ -239,18 +230,6 @@ def _find_alias(profile: NPCProfile, surface: str) -> str | None:
         if alias.casefold() == key:
             return alias
     return None
-
-
-def _merge_unique(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    merged: list[str] = []
-    for value in values:
-        clean = str(value).strip()
-        key = clean.casefold()
-        if clean and key not in seen:
-            seen.add(key)
-            merged.append(clean)
-    return merged
 
 
 def _norm(value: str) -> str:

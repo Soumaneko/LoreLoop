@@ -24,11 +24,12 @@ class DirectorEventReviewer:
         core_memory: CoreMemory,
         scene_summaries: list[SceneSummary],
         trace_id: str | None = None,
+        guidance: str | None = None,
     ) -> DirectorEventReviewResult:
         if active_event.route_mode != "default":
             raise ValueError("DirectorEventReviewer requires the default route")
         event_view = active_event.semantic_view()
-        for excluded_field in ("player_contacts", "entry_points"):
+        for excluded_field in ("player_contacts",):
             event_view.pop(excluded_field, None)
         current_offset = active_event.progress_index - 1
         next_offset = current_offset + 1
@@ -64,6 +65,7 @@ class DirectorEventReviewer:
                     "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "scene_summaries_json": project_scene_summaries(scene_summaries),
+                    "director_guidance": guidance or "",
                     "output_schema_json": json.dumps(
                         DirectorEventReviewResult.model_json_schema(),
                         ensure_ascii=False,

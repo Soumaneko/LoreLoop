@@ -10,16 +10,15 @@ class DirectorNPCCreativeBrief(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     world_connection: str = Field(min_length=1)
-    social_position: str = Field(min_length=1)
+    social_position: str | None = Field(default=None, min_length=1)
     life_phase: str = Field(min_length=1)
     desire_pattern: str = Field(min_length=1)
-    optional_dimension: str = Field(min_length=1)
+    optional_dimension: str | None = Field(default=None, min_length=1)
 
 
 class NPCCreationContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    purpose: str = Field(min_length=1, max_length=300)
     anchors: list[str] = Field(default_factory=list, max_length=8)
 
 

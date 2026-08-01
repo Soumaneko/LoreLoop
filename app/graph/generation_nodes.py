@@ -325,6 +325,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         recent_summaries=state.get("recent_summaries", []),
         turn_index=state["turn_index"],
         trace_id=state["trace_id"],
+        turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
     )
     return {
         "director_decision": decision,

@@ -8,6 +8,8 @@ from app.domain.npc_profile.updater import NPCProfileUpdater
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCMention, NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.workflows import (
+    attach_transient_alias_for_rename,
+    prune_expired_transient_aliases,
     sync_npc_profile_absence_from_current_state,
     update_npc_profiles_from_extraction,
 )
@@ -67,6 +69,21 @@ def test_npc_updater_prompt_treats_new_hints_as_optional_candidates():
     assert "每一个 `candidate_index`" in prompt
     assert "turn_observation 不会" not in prompt
     assert "turn_observation` 不会" not in prompt
+
+
+def test_backfill_prompt_requires_proper_name_for_descriptor_npcs():
+    prompt = Path("app/prompts/confirmation/npc_profile_backfill_v1.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "必须是一个专有姓名" in prompt
+    assert "必须为 TA 创造一个符合世界观的专有姓名" in prompt
+    assert "来历不明者" in prompt
+    assert "筑基初期女修" in prompt
+    assert "练气巅峰采药女" in prompt
+    assert "不得沿用代称作为姓名" in prompt
+    assert "原代称会由系统自动保留为临时别名" in prompt
+    assert "不要改名" not in prompt
 
 
 def test_store_adds_unambiguous_given_name_alias():
@@ -213,6 +230,64 @@ def test_new_non_director_npc_triggers_profile_backfill():
     assert saved.encounter_potentials == []
 
 
+def test_new_npc_skips_auto_backfill_when_disabled():
+    store = NPCProfileStore(":memory:")
+    gateway = _Gateway(
+        [
+            {
+                "results": [
+                    {
+                        "candidate_index": 0,
+                        "resolution": "new",
+                        "matched_npc_index": None,
+                        "persist_alias": False,
+                        "turn_observation": "二楼女子正在参与一笔生意谈判。",
+                        "profile_patch": None,
+                        "new_profile": {
+                            "name": "二楼女子",
+                            "aliases": [],
+                            "public_summary": "醉花楼二楼雅间中参与大额生意谈判的女子。",
+                            "role": "生意谈判方",
+                            "appearance": "声音温婉中带媚。",
+                            "personality_traits": ["从容", "精明"],
+                            "known_abilities": ["商业谈判"],
+                            "faction": None,
+                            "description": None,
+                            "current_location": "醉花楼二楼雅间",
+                            "attitude_to_player": None,
+                            "current_intent": "与李掌柜谈判一笔大生意",
+                        },
+                    }
+                ]
+            },
+        ]
+    )
+
+    result = update_npc_profiles_from_extraction(
+        scene_facts="二楼女子正在与李掌柜谈一笔大生意。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[],
+        extraction=NPCExtractionResult(
+            mentions=[
+                NPCMention(
+                    name="二楼女子",
+                    context_span="二楼女子正在与李掌柜谈一笔大生意。",
+                )
+            ]
+        ),
+        auto_backfill=False,
+    )
+
+    assert [call["task"] for call in gateway.calls] == ["npc_profile_update"]
+    assert result.saved_ids == []
+    assert len(result.new_profiles) == 1
+    assert result.new_profiles[0].name == "二楼女子"
+    assert store.list_all() == []
+
+
 def test_backfill_can_promote_placeholder_name_and_preserve_alias():
     store = NPCProfileStore(":memory:")
     gateway = _Gateway(
@@ -273,12 +348,13 @@ def test_backfill_can_promote_placeholder_name_and_preserve_alias():
                 )
             ]
         ),
+        turn_index=3,
     )
 
     saved = store.get_by_id(result.saved_ids[0])
     assert saved.name == "苏锦屏"
-    assert "二楼女子" in saved.aliases
-    assert saved.alias_hit_counts["二楼女子"] == 1
+    assert "二楼女子" not in saved.aliases
+    assert saved.transient_aliases["二楼女子"] == 6
 
 
 def test_existing_npc_update_does_not_trigger_profile_backfill():
@@ -528,3 +604,61 @@ def test_existing_no_op_patch_keeps_observation_without_profile_update():
         ("苏云袖", "萧云痕本回合提到了苏云袖。")
     ]
     assert result.exact_mentions == [(existing.npc_id, "苏云袖")]
+
+
+def test_transient_alias_attach_and_store_lookup():
+    store = NPCProfileStore(":memory:")
+    profile = NPCProfile(name="沈青萝")
+    attach_transient_alias_for_rename(
+        profile,
+        old_name="筑基初期女修",
+        turn_index=5,
+    )
+    assert profile.transient_aliases == {"筑基初期女修": 8}
+    attach_transient_alias_for_rename(
+        profile,
+        old_name="筑基初期女修",
+        turn_index=9,
+    )
+    assert profile.transient_aliases == {"筑基初期女修": 8}
+
+    npc_id = store.upsert(profile)
+    assert store.get_by_name("筑基初期女修").npc_id == npc_id
+
+
+def test_transient_alias_does_not_duplicate_permanent_alias():
+    profile = NPCProfile(name="沈青萝", aliases=["筑基初期女修"])
+    attach_transient_alias_for_rename(
+        profile,
+        old_name="筑基初期女修",
+        turn_index=5,
+    )
+    assert "筑基初期女修" not in profile.transient_aliases
+
+
+def test_prune_expired_transient_aliases_on_turn_advance():
+    store = NPCProfileStore(":memory:")
+    npc_id = store.upsert(
+        NPCProfile(
+            name="沈青萝",
+            transient_aliases={"筑基初期女修": 6},
+        )
+    )
+    assert store.get_by_name("筑基初期女修") is not None
+
+    saved_ids = sync_npc_profile_absence_from_current_state(
+        npc_store=store,
+        current_state=_state(),
+        turn_index=7,
+    )
+
+    assert npc_id in saved_ids
+    saved = store.get_by_id(npc_id)
+    assert saved.transient_aliases == {}
+    assert store.get_by_name("筑基初期女修") is None
+
+
+def test_transient_alias_still_matches_before_expiry():
+    profile = NPCProfile(name="沈青萝", transient_aliases={"筑基初期女修": 6})
+    assert prune_expired_transient_aliases(profile, turn_index=6) is False
+    assert "筑基初期女修" in profile.transient_aliases

@@ -42,6 +42,14 @@
 {scene_facts_json}
 ```
 
+## 导演协调层指导意见
+
+```text
+{director_guidance}
+```
+
+若 `director_guidance` 非空，它是导演协调层给出的方向性意图（如倾向于 hold/advance/redirect/resolve 或本轮接触走向）。你必须在遵循事件事实的前提下遵守它，不得与之冲突；不得把指导意见本身当作已确认事实或剧情正文。
+
 # 输出规范
 
 只返回符合以下 schema 的有效 JSON，不含任何前缀、后缀或解释：

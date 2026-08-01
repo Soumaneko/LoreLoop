@@ -138,9 +138,13 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
         gateway = _gateway_for(state)
         updater = StateUpdater(gateway)
         npc_aliases = {
-            profile.name: list(profile.aliases)
+            profile.name: [
+                *profile.aliases,
+                *list(profile.transient_aliases.keys()),
+            ]
             for profile in state["existing_npc_profiles"]
-            if profile.name and profile.aliases
+            if profile.name
+            and (profile.aliases or profile.transient_aliases)
         }
         updated_state = updater.update(
             state["state_before_update"],
@@ -325,10 +329,12 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
                 profile.semantic_view()
                 for profile in director_entity_repo.list_all()
             ]
+            all_director_npc_profiles = director_npc_profile_repo.list_all()
             director_npc_profiles = [
                 profile.director_view()
-                for profile in director_npc_profile_repo.list_all()
+                for profile in all_director_npc_profiles
             ]
+            new_npc_profiles = state.get("new_npc_profiles", [])
             entity_mentions = _entity_extraction_mentions(
                 state.get("entity_extraction")
             )
@@ -348,6 +354,7 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
                 npc_mentions=npc_mentions,
                 turn_index=pipeline_input.turn_index,
                 trace_id=state["trace_id"],
+                new_npc_profiles=new_npc_profiles,
             )
     return {
         "director_decision": decision,
@@ -389,11 +396,15 @@ def entity_profile_update_node(state: ConfirmationState) -> ConfirmationState:
 
 def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     if not state.get("write_db", True) or state.get("npc_extraction") is None:
-        return {"updated_npc_profile_ids": state["cache"].get("updated_npc_profile_ids", [])}
+        return {
+            "updated_npc_profile_ids": state["cache"].get("updated_npc_profile_ids", []),
+            "new_npc_profiles": state["cache"].get("new_npc_profiles", []),
+        }
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
     cache = state["cache"]
     updated_npc_profile_ids = cache.get("updated_npc_profile_ids", [])
+    new_npc_profiles = cache.get("new_npc_profiles", [])
     if "updated_npc_profile_ids" not in cache:
         with _store_factory(state, "npc_profile")() as npc_store:
             gateway = _gateway_for(state)
@@ -407,10 +418,18 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 extraction=state["npc_extraction"],
                 recent_summaries=state.get("recent_summaries", []),
                 trace_id=trace_id,
+                auto_backfill=not pipeline_input.run_director_agent,
+                turn_index=pipeline_input.turn_index,
             )
             absence_synced_ids = sync_npc_profile_absence_from_current_state(
                 npc_store=npc_store,
                 current_state=state["updated_state"],
+                turn_index=pipeline_input.turn_index,
             )
             updated_npc_profile_ids = merge_unique_ids([*npc_result.saved_ids, *absence_synced_ids])
-    return {"updated_npc_profile_ids": updated_npc_profile_ids}
+            new_npc_profiles = npc_result.new_profiles
+            cache["new_npc_profiles"] = new_npc_profiles
+    return {
+        "updated_npc_profile_ids": updated_npc_profile_ids,
+        "new_npc_profiles": new_npc_profiles,
+    }

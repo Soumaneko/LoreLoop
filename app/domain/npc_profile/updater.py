@@ -210,7 +210,10 @@ def _existing_option_for_prompt(index: int, profile: NPCProfile) -> dict:
     return {
         "npc_index": index,
         "name": profile.name,
-        "aliases": profile.aliases,
+        "aliases": [
+            *profile.aliases,
+            *list(profile.transient_aliases.keys()),
+        ],
         "role": profile.role,
         "public_summary": profile.public_summary,
         "appearance": profile.appearance,
@@ -324,7 +327,11 @@ def _merge_results(
 def _exact_profile_index(name: str, existing_profiles: list[NPCProfile]) -> int | None:
     key = _norm(name)
     for index, profile in enumerate(existing_profiles):
-        if key == _norm(profile.name) or key in {_norm(alias) for alias in profile.aliases}:
+        if (
+            key == _norm(profile.name)
+            or key in {_norm(alias) for alias in profile.aliases}
+            or key in {_norm(alias) for alias in profile.transient_aliases}
+        ):
             return index
     return None
 

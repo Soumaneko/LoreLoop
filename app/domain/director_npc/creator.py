@@ -26,6 +26,8 @@ class DirectorNPCCreator:
         protagonist_name: str,
         turn_index: int,
         trace_id: str | None = None,
+        guidance: str | None = None,
+        recent_creations: list[dict] | None = None,
     ) -> DirectorNPCDraft:
         existing_npc_views = []
         seen_names = set()
@@ -57,7 +59,16 @@ class DirectorNPCCreator:
                     "creation_context_json": creation_context.model_dump_json(
                         indent=2
                     ),
-                    "creative_brief_json": creative_brief.model_dump_json(indent=2),
+                    "creative_brief_json": creative_brief.model_dump_json(
+                        exclude_none=True,
+                        indent=2,
+                    ),
+                    "director_guidance": guidance or "",
+                    "batch_recent_creations_json": json.dumps(
+                        recent_creations or [],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "output_schema_json": json.dumps(
                         DirectorNPCCreateOutput.model_json_schema(),
                         ensure_ascii=False,

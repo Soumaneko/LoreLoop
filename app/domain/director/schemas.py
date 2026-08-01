@@ -23,6 +23,7 @@ class DirectorObservation(BaseModel):
     scene_facts: dict[str, Any] | None = None
     context_facts: list[str] = Field(default_factory=list)
     recent_summaries: list[dict[str, Any]] = Field(default_factory=list)
+    turn_resolution: dict[str, Any] | None = None
     resources: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
 
 
@@ -32,6 +33,7 @@ class DirectorSkillRequest(BaseModel):
     request_id: str = Field(min_length=1, max_length=80)
     skill: str = Field(min_length=1, max_length=80)
     arguments: dict[str, Any] = Field(default_factory=dict)
+    guidance: str | None = Field(default=None, max_length=500)
 
 
 class DirectorDecisionBatch(BaseModel):
@@ -67,6 +69,7 @@ class DirectorSkillExecution(BaseModel):
     request_id: str
     skill: str
     output: dict[str, Any] = Field(default_factory=dict)
+    guidance: str | None = None
 
 
 class DirectorSkillExecutionBatch(BaseModel):
