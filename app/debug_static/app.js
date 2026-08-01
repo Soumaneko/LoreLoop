@@ -1083,8 +1083,6 @@ function stepTasks(scope, stepName) {
       "director_event_review",
       "director_event_select_arc",
       "director_event_select_ambient",
-      "director_event_intervention_plan",
-      "director_event_intervention_review",
       "director_npc_create",
       "setting_anchor_prepare",
     ],
@@ -1711,49 +1709,38 @@ function entityCard(profile) {
 
 function directorCard(event) {
   if (!event) return `<div class="empty">无</div>`;
-  const entryPoints = event.entry_points || [];
-  const intervention = event.intervention_route || null;
-  const entryPointCards = entryPoints.map((entry, index) => `
+  const hooks = event.hook_pool || [];
+  const hookCards = hooks.map((hook, index) => `
     <div class="entry-point">
-      <div class="muted">入口 ${index + 1}</div>
+      <div class="muted">Hook ${index + 1} · ${esc(text(hook.kind))}${hook.consumed ? " · 已消耗" : ""}</div>
       ${kv([
-        ["触发锚点", chips(entry.trigger_anchors)],
-        ["可见征兆", esc(text(entry.visible_sign))],
-        ["即时影响", esc(text(entry.immediate_effect))],
+        ["内容", esc(text(hook.content))],
+        ["触发锚点", chips(hook.trigger_anchors)],
       ])}
     </div>
   `).join("");
+  const worldImpact = event.world_impact || null;
   return `<div class="section-card">
-    <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.role || "role?", event.status || "active", event.status === "active" ? "ok" : "info")}</div>
-    ${event.premise ? `<div style="margin-bottom:8px">${esc(event.premise)}</div>` : ""}
+    <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.role || "role?", event.stage || "active", event.stage === "resolved" ? "info" : "ok")}</div>
+    ${event.macro_intent ? `<div style="margin-bottom:8px">${esc(event.macro_intent)}</div>` : ""}
     ${kv([
       ["ID", esc(text(event.event_id))],
+      ["行动方", esc(text(event.subject))],
+      ["意图", esc(text(event.intent))],
+      ["手段", esc(text(event.method))],
       ["演员引用", chips((event.actor_refs || []).map((ref) => `${text(ref.kind)}:${text(ref.resource_id)}`))],
+      ["冷藏实体", chips((event.dormant_entity_refs || []).map((ref) => `${text(ref.kind)}:${text(ref.resource_id)}`))],
       ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
       ["解决原因", esc(text(event.resolved_reason))],
-      ["结算类型", esc(text(event.resolution_kind))],
-      ["结算状态", esc(text(event.resolved_state))],
-      ["暴露状态", esc(text(event.exposure))],
       ["接触记录", list((event.player_contacts || []).map((item) =>
         `T${text(item.turn_index)} · ${text(item.contact)}`
       ))],
       ["最近呈现", event.last_presented_turn === null || event.last_presented_turn === undefined ? `<span class="empty">无</span>` : esc(`T${event.last_presented_turn}`)],
-      ["进度", esc(`${text(event.progress_index)} / 3`)],
-      ["路线模式", esc(text(event.route_mode || "default"))],
-      ["Redirect 原因", esc(text(intervention && intervention.redirect_reason))],
-      ["介入目标", esc(text(intervention && intervention.goal))],
-      ["成功状态", esc(text(intervention && intervention.success_state))],
-      ["失败状态", esc(text(intervention && intervention.failure_state))],
-      ["介入期限", intervention ? esc(`${intervention.duration_phases} 时段 / 第${intervention.deadline_clock.day}日 ${intervention.deadline_clock.phase}`) : `<span class="empty">无</span>`],
-      ["下次推进", event.next_progress_clock ? esc(`第${event.next_progress_clock.day}日 ${event.next_progress_clock.phase}`) : `<span class="empty">无</span>`],
-      ["阶段间隔", chips(event.milestone_interval_steps)],
-      ["目标", esc(text(event.objective))],
       ["参与者", chips(event.actors)],
-      ["桥梁锚点", chips(event.bridge_anchors)],
-      ["阶段", list(event.milestones)],
+      ["world_impact", worldImpact ? esc(text(worldImpact.description)) : `<span class="empty">无</span>`],
     ])}
-    ${entryPointCards || `<div class="empty">无入口</div>`}
+    ${hookCards || `<div class="empty">无 Hook</div>`}
   </div>`;
 }
 

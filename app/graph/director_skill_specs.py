@@ -59,6 +59,15 @@ class PresentEventArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(min_length=1)
+    hook_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=80,
+        description=(
+            "潜伏期(hidden)事件必须指定要呈现给 Composer 的 hook_id；"
+            "不指定时不呈现任何内容。engaged 事件忽略该字段。"
+        ),
+    )
 
 
 class IntroduceNPCArguments(BaseModel):
@@ -84,6 +93,14 @@ class ReviewEventArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(min_length=1)
+    consume_hooks: list[str] = Field(
+        default_factory=list,
+        max_length=16,
+        description=(
+            "本轮确认后应标记为已消费的 hook_id 列表（仅消费该事件尚未消费的 hook）。"
+            "hook 属于消耗型引子，被采用/呈现后必须在此声明，防止后续回合复读。"
+        ),
+    )
 
 
 class CreateEventArguments(BaseModel):
@@ -160,7 +177,8 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
             "1.玩家行动直接干预了该事件，或事件后果在此刻爆发。"
             "2.主角通过传闻、异象、信件、远程通讯或现场遗留痕迹，间接接触到了与该事件相关的信息。"
             "通过引入事件，确保正文生成引擎能够准确描写出符合该事件发展进度的台词或环境暗示。"
-            "必须在请求级 guidance 中说明具体表现方式。"
+            "对潜伏期(hidden)事件，必须用 arguments.hook_id 选择本轮要呈现的 Hook；"
+            "不指定 hook_id 时不呈现任何内容。必须在请求级 guidance 中说明具体表现方式。"
         ),
         phases=_GENERATION,
         mutates=False,
@@ -195,7 +213,11 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="review_event",
         description=(
-            "根据本轮已确认的场景事实，推进或变更活跃事件的走向。你可以决定让事件保持蛰伏(hold)、取得进展(advance)、改变方向(redirect)或走向终结(resolve)。"
+            "根据本轮已确认的场景事实审查一个活跃导演事件，并掌握该事件的所有写库判定："
+            "1. 阶段判定：事件核心冲突仍在持续时保持追踪(hold，hidden 转入 engaged)，"
+            "已形成稳定结果时走向终结(resolve)。"
+            "2. Hook 消费：本回合采用或呈现了该事件的哪个 hook，就在 consume_hooks 中声明，"
+            "程序会将其标记为已消费防止复读。只有确认端的事件审查才能消费 hook 或推进阶段。"
         ),
         phases=_CONFIRMATION,
         mutates=True,
@@ -203,7 +225,7 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     ),
     DirectorSkillSpec(
         name="create_event",
-        description="当世界缺乏明确的危机或长期目标时，策划并创建一个新的长线叙事弧线 (arc) 或环境事件 (ambient)，为未来的剧情线埋下伏笔。只用于世界在主角视线之外的平行动态，不得用于推动、包装或代劳主角当前正在执行的主线行动。",
+        description="当世界缺乏明确的危机或长期目标时，策划并创建一个新的长线叙事弧线 (arc) 或环境事件 (ambient)，为未来的剧情线埋下伏笔。只用于世界在主角视线之外的平行动态，不得用于推动、包装或代劳主角当前正在执行的主线行动。事件创建后会按 selection 的 dormant_npc_count 自动预生成对应的冷藏 NPC，无需额外指定。",
         phases=_CONFIRMATION,
         mutates=True,
         arguments_model=CreateEventArguments,

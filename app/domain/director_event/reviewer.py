@@ -26,29 +26,13 @@ class DirectorEventReviewer:
         trace_id: str | None = None,
         guidance: str | None = None,
     ) -> DirectorEventReviewResult:
-        if active_event.route_mode != "default":
-            raise ValueError("DirectorEventReviewer requires the default route")
         event_view = active_event.semantic_view()
-        for excluded_field in ("player_contacts",):
-            event_view.pop(excluded_field, None)
-        current_offset = active_event.progress_index - 1
-        next_offset = current_offset + 1
+        event_view.pop("player_contacts", None)
         event_view.update(
-            status=active_event.status,
-            created_turn=active_event.created_turn,
-            updated_turn=active_event.updated_turn,
-            current_milestone_number=active_event.progress_index,
-            current_milestone=active_event.milestones[current_offset],
-            next_milestone_number=(
-                active_event.progress_index + 1
-                if next_offset < len(active_event.milestones)
-                else None
-            ),
-            next_milestone=(
-                active_event.milestones[next_offset]
-                if next_offset < len(active_event.milestones)
-                else None
-            ),
+            subject=active_event.subject,
+            intent=active_event.intent,
+            method=active_event.method,
+            macro_intent=active_event.macro_intent,
         )
         return cast(
             DirectorEventReviewResult,

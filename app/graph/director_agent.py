@@ -14,14 +14,8 @@ from app.domain.director import (
     DirectorStageMaterial,
     DirectorStageResult,
 )
-from app.domain.director_event.intervention_planner import (
-    DirectorEventInterventionPlanner,
-)
-from app.domain.director_event.intervention_reviewer import (
-    DirectorEventInterventionReviewer,
-)
 from app.domain.director_event.reviewer import DirectorEventReviewer
-from app.domain.director_event.schemas import utc_now
+from app.domain.director_event.schemas import utc_now, DirectorEventSelectionResult
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.views import project_director_event
 from app.domain.director_event.workflows import review_director_event_workflow
@@ -89,8 +83,10 @@ def run_generation_director_agent(
     turn_index: int,
     trace_id: str,
     turn_resolution_json: str = "",
+    pending_engagements: list[str] | None = None,
 ) -> tuple[DirectorStageResult, object]:
     service = DirectorSkillService()
+    pending_engagements = pending_engagements or []
     with (
         stores.director_event() as event_store,
         stores.director_npc() as director_npc_store,
@@ -98,6 +94,18 @@ def run_generation_director_agent(
         stores.world_setting() as setting_store,
     ):
         active_events = event_store.list_active()
+        engaged_event_ids = set(pending_engagements)
+        engaged_events = [
+            event
+            for event in active_events
+            if event.event_id in engaged_event_ids or event.stage == "engaged"
+        ]
+        hidden_events = [
+            event
+            for event in active_events
+            if event.event_id not in engaged_event_ids
+            and event.stage != "engaged"
+        ]
         director_npcs = [
             npc
             for npc in director_npc_store.list_all()
@@ -106,6 +114,17 @@ def run_generation_director_agent(
         npc_profiles = npc_profile_store.list_all()
         settings = setting_store.list_active()
 
+        engaged_dormant_drafts = [
+            draft
+            for draft in director_npcs
+            if any(
+                ref.kind == "npc" and ref.resource_id == draft.draft_id
+                for event in engaged_events
+                for ref in event.dormant_entity_refs
+            )
+        ]
+        engaged_dormant_ids = {draft.draft_id for draft in engaged_dormant_drafts}
+
         _register_skill(
             service,
             "present_event",
@@ -113,6 +132,7 @@ def run_generation_director_agent(
                 event_store,
                 args,
                 guidance=guidance,
+                engaged_event_ids=engaged_event_ids,
             ),
             arguments_validator=lambda args: _require_active_event(
                 event_store,
@@ -165,13 +185,32 @@ def run_generation_director_agent(
             ),
             resources={
                 "events": [
-                    event.semantic_view()
-                    for event in active_events
+                    {
+                        **event.semantic_view(),
+                        "hook_pool": [
+                            {
+                                "hook_id": hook.hook_id,
+                                "kind": hook.kind,
+                                "content": hook.content,
+                            }
+                            for hook in event.hook_pool
+                            if not hook.consumed
+                        ],
+                    }
+                    for event in hidden_events
+                ]
+                + [
+                    {
+                        **event.semantic_view(),
+                        "stage": "engaged",
+                    }
+                    for event in engaged_events
                 ],
                 "npcs": [
                     {
                         "npc_id": npc.draft_id,
                         "source": "director_npc",
+                        "activated": npc.draft_id in engaged_dormant_ids,
                         **npc.private_view().model_dump(mode="json"),
                     }
                     for npc in director_npcs
@@ -238,7 +277,7 @@ def run_confirmation_director_agent(
     ):
         def review_event(args: ReviewEventArguments, guidance: str | None = None):
             event = event_store.get_by_id(args.event_id)
-            if event is None or event.status != "active":
+            if event is None or event.stage == "resolved":
                 raise ValueError("review_event requires an active event")
             result = review_director_event_workflow(
                 active_event=event,
@@ -251,28 +290,16 @@ def run_confirmation_director_agent(
                 current_state=current_state,
                 core_memory=core_memory,
                 scene_summaries=recent_summaries,
-                recent_summaries=recent_summaries,
-                entity_profiles=entity_profiles,
-                npc_profiles=npc_profiles,
-                entity_mentions=entity_mentions,
-                npc_mentions=npc_mentions,
                 turn_index=turn_index,
                 store=event_store,
                 reviewer=DirectorEventReviewer(gateway),
-                intervention_reviewer=DirectorEventInterventionReviewer(
-                    gateway
-                ),
-                intervention_planner=DirectorEventInterventionPlanner(gateway),
                 trace_id=trace_id,
                 guidance=guidance,
+                consume_hooks=args.consume_hooks,
             )
             return result.model_dump(mode="json")
 
         def create_event(args: CreateEventArguments, guidance: str | None = None):
-            if event_store.get_active(args.role) is not None:
-                raise ValueError(
-                    f"create_event cannot replace active {args.role} event"
-                )
             selection = DirectorEventSelector(gateway).select_or_create(
                 role=args.role,
                 events=event_store.list_all(),
@@ -284,13 +311,29 @@ def run_confirmation_director_agent(
                 trace_id=trace_id,
                 guidance=guidance,
             )
+            drafts, dormant_refs = _pre_generate_dormant_npcs(
+                selection=selection,
+                gateway=gateway,
+                core_memory=core_memory,
+                current_state=current_state,
+                director_npc_store=director_npc_store,
+                npc_profile_store=npc_profile_store,
+                turn_index=turn_index,
+                trace_id=trace_id,
+                guidance=guidance,
+            )
             event = selection.to_event(
                 role=args.role,
                 turn_index=turn_index,
-                current_clock=current_state.world_clock,
+                dormant_entity_refs=dormant_refs,
             )
             event_store.save(event)
-            return {"event_id": event.event_id, "role": event.role}
+            return {
+                "event_id": event.event_id,
+                "role": event.role,
+                "npc_ids": [draft.draft_id for draft in drafts],
+                "npc_names": [draft.name for draft in drafts],
+            }
 
         def create_npc(args: CreateNPCArguments, guidance: str | None = None):
             draft = DirectorNPCCreator(gateway).create(
@@ -322,11 +365,6 @@ def run_confirmation_director_agent(
             args: CreateCoupledSceneArguments,
             guidance: str | None = None,
         ):
-            if event_store.get_active(args.role) is not None:
-                raise ValueError(
-                    "create_coupled_scene cannot replace "
-                    f"active {args.role} event"
-                )
             event_guidance = args.event_guidance.strip() or (guidance or "")
             npc_guidance_for = lambda index: (
                 args.npc_guidances[index].strip()
@@ -348,12 +386,12 @@ def run_confirmation_director_agent(
             event = selection.to_event(
                 role=args.role,
                 turn_index=turn_index,
-                current_clock=current_state.world_clock,
             )
             drafts: list = []
             npc_ids: list[str] = []
             npc_names: list[str] = []
             recent_creations: list[dict] = [event.semantic_view()]
+            dormant_refs = list(event.dormant_entity_refs)
             for index in range(args.npc_count):
                 draft = DirectorNPCCreator(gateway).create(
                     core_memory=core_memory,
@@ -396,10 +434,12 @@ def run_confirmation_director_agent(
                 clean_name = draft.name.strip()
                 if clean_name and clean_name not in actors:
                     actors.append(clean_name)
+                dormant_refs.append(actor_ref)
                 event = event.model_copy(
                     update={
                         "actors": actors,
                         "actor_refs": actor_refs,
+                        "dormant_entity_refs": dormant_refs,
                         "updated_turn": turn_index,
                         "updated_at": utc_now(),
                     }
@@ -541,9 +581,9 @@ def run_confirmation_director_agent(
             service,
             "review_event",
             handler=review_event,
-            arguments_validator=lambda args: _require_active_event(
+            arguments_validator=lambda args: _require_review_event(
                 event_store,
-                args.event_id,
+                args,
             ),
         )
         _register_skill(
@@ -607,8 +647,20 @@ def run_confirmation_director_agent(
             ],
             resources={
                 "events": [
-                    event.semantic_view()
+                    {
+                        **event.semantic_view(),
+                        "hook_pool": [
+                            {
+                                "hook_id": hook.hook_id,
+                                "kind": hook.kind,
+                                "content": hook.content,
+                            }
+                            for hook in event.hook_pool
+                            if not hook.consumed
+                        ],
+                    }
                     for event in event_store.list_all()
+                    if event.stage != "resolved"
                 ],
                 "npcs": [
                     {
@@ -656,15 +708,49 @@ def _present_event(
     args: PresentEventArguments,
     *,
     guidance: str | None,
+    engaged_event_ids: set[str] | None = None,
 ) -> DirectorStageMaterial:
     event = store.get_by_id(args.event_id)
-    if event is None or event.status != "active":
+    if event is None or event.stage == "resolved":
         raise ValueError("present_event requires an active event")
+    engaged_event_ids = engaged_event_ids or set()
+    is_engaged = event.stage == "engaged" or event.event_id in engaged_event_ids
+    if not is_engaged and args.hook_id:
+        hook = next(
+            (hook for hook in event.hook_pool if hook.hook_id == args.hook_id),
+            None,
+        )
+        if hook is None:
+            raise ValueError("present_event references an unknown hook_id")
+        if hook.consumed:
+            raise ValueError("present_event references a consumed hook_id")
+        payload = {
+            "event_id": event.event_id,
+            "title": event.title,
+            "stage": "hidden",
+            "hook": {
+                "hook_id": hook.hook_id,
+                "kind": hook.kind,
+                "content": hook.content,
+            },
+        }
+    elif is_engaged:
+        payload = json.loads(
+            project_director_event(
+                event,
+                effective_stage="engaged",
+            )
+        )
+    else:
+        payload = {
+            "event_id": event.event_id,
+            "stage": "hidden",
+        }
     return DirectorStageMaterial(
         kind="event",
         resource_id=event.event_id,
         guidance=_require_generation_guidance(guidance),
-        payload=json.loads(project_director_event(event)),
+        payload=payload,
     )
 
 
@@ -750,10 +836,103 @@ def _setting_resource(setting) -> dict:
     }
 
 
+def _pre_generate_dormant_npcs(
+    *,
+    selection: DirectorEventSelectionResult,
+    gateway,
+    core_memory: CoreMemory,
+    current_state: CurrentState,
+    director_npc_store,
+    npc_profile_store,
+    turn_index: int,
+    trace_id: str,
+    guidance: str | None,
+) -> tuple[list, list[DirectorResourceRef]]:
+    drafts: list = []
+    refs: list[DirectorResourceRef] = []
+    recent_creations: list[dict] = [
+        {"subject": selection.subject, "title": selection.title}
+    ]
+    for _ in range(selection.dormant_npc_count):
+        draft = DirectorNPCCreator(gateway).create(
+            core_memory=core_memory,
+            existing_npcs=npc_profile_store.list_all(),
+            reserved_npcs=[
+                {
+                    "name": npc.name,
+                    "role": npc.role,
+                    "core_motivation": npc.core_motivation,
+                    "hidden_secret": npc.hidden_secret,
+                }
+                for npc in director_npc_store.list_all()
+                if npc.status != "retired"
+            ]
+            + [
+                {
+                    "name": staged.name,
+                    "role": staged.role,
+                    "core_motivation": staged.core_motivation,
+                    "hidden_secret": staged.hidden_secret,
+                }
+                for staged in drafts
+            ],
+            creation_context=NPCCreationContext(anchors=[]),
+            creative_brief=draw_creative_brief(),
+            protagonist_name=current_state.player.name,
+            turn_index=turn_index,
+            trace_id=trace_id,
+            guidance=guidance,
+            recent_creations=recent_creations,
+        )
+        drafts.append(draft)
+        refs.append(
+            DirectorResourceRef(kind="npc", resource_id=draft.draft_id)
+        )
+        recent_creations.append(
+            {
+                "kind": "npc",
+                "npc_id": draft.draft_id,
+                "name": draft.name,
+                "role": draft.role,
+                "core_motivation": draft.core_motivation,
+            }
+        )
+    for draft in drafts:
+        director_npc_store.save(draft)
+    return drafts, refs
+
+
 def _require_active_event(store, event_id: str) -> None:
     event = store.get_by_id(event_id)
-    if event is None or event.status != "active":
+    if event is None or event.stage == "resolved":
         raise ValueError("director skill requires an active event_id")
+
+
+def _require_review_event(store, args) -> None:
+    event = store.get_by_id(args.event_id)
+    if event is None or event.stage == "resolved":
+        raise ValueError("review_event requires an active event_id")
+    if not args.consume_hooks:
+        return
+    known = {hook.hook_id for hook in event.hook_pool}
+    invalid = [
+        hook_id for hook_id in args.consume_hooks if hook_id not in known
+    ]
+    if invalid:
+        raise ValueError(
+            "review_event consume_hooks not part of this event: "
+            + ", ".join(sorted(invalid))
+        )
+    consumed = [
+        hook.hook_id
+        for hook in event.hook_pool
+        if hook.hook_id in args.consume_hooks and hook.consumed
+    ]
+    if consumed:
+        raise ValueError(
+            "review_event consume_hooks already consumed: "
+            + ", ".join(sorted(consumed))
+        )
 
 
 def _require_npc(director_npc_store, npc_profile_store, npc_id: str) -> None:

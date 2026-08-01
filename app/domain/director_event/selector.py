@@ -20,14 +20,12 @@ from .schemas import DirectorEvent, DirectorEventRole, DirectorEventSelectionRes
 def _event_list_view(event: DirectorEvent) -> dict:
     return {
         "role": event.role,
-        "status": event.status,
+        "stage": event.stage,
         "title": event.title,
-        "premise": event.premise,
+        "subject": event.subject,
+        "intent": event.intent,
+        "method": event.method,
         "actors": event.actors,
-        "objective": event.objective,
-        "bridge_anchors": event.bridge_anchors,
-        "milestones": event.milestones,
-        "exposure": event.exposure,
     }
 
 

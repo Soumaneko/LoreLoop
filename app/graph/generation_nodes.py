@@ -177,6 +177,8 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
 
 def parse_action_node(state: GenerationState) -> GenerationState:
     parser = ActionParser(gateway_for(state))
+    with _store_factory(state, "director_event")() as event_store:
+        hidden_events = event_store.list_hidden()
     action_result = parser.parse(
         user_input=state["user_input"],
         current_state=state["current_state"],
@@ -184,12 +186,14 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         recent_summaries=state.get("recent_summaries", []),
         entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
+        events=hidden_events,
         trace_id=state["trace_id"],
     )
     raw_action_parse_result = ActionParseResult(
         analysis=action_result.analysis,
         atomic_actions=action_result.atomic_actions,
         anchors=state.get("matched_anchors", []),
+        engaged_event_ids=list(action_result.engaged_event_ids),
     )
     self_check = ActionSelfCheck()
     action_parse_result = self_check.check(
@@ -203,6 +207,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         "raw_action_parse_result": raw_action_parse_result,
         "action_self_check_result": self_check.last_result,
         "action_parse_result": action_parse_result,
+        "pending_engagements": list(action_parse_result.engaged_event_ids),
         "events": [
             {
                 "step": "action_parsed",
@@ -210,6 +215,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
                     "raw_action_parse_result": model_data(raw_action_parse_result),
                     "action_self_check_result": model_data(self_check.last_result),
                     "action_parse_result": model_data(action_parse_result),
+                    "engaged_event_ids": list(action_parse_result.engaged_event_ids),
                 },
             },
         ],
@@ -326,6 +332,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         turn_index=state["turn_index"],
         trace_id=state["trace_id"],
         turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
+        pending_engagements=state.get("pending_engagements", []),
     )
     return {
         "director_decision": decision,

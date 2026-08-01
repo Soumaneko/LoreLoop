@@ -54,6 +54,7 @@ class ActionSelfCheck:
             atomic_actions=actions,
             anchors=anchors,
             analysis=result.analysis,
+            engaged_event_ids=list(result.engaged_event_ids),
         )
 
     def _check_actions(

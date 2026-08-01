@@ -27,8 +27,6 @@ const TASK_LABELS = {
   director_event_review: "导演事件检查",
   director_event_select_arc: "主线事件选择",
   director_event_select_ambient: "环境事件选择",
-  director_event_intervention_plan: "事件介入规划",
-  director_event_intervention_review: "事件介入检查",
   setting_anchor_prepare: "世界设定补全",
 };
 
