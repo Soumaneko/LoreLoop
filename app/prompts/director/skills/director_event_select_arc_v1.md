@@ -74,7 +74,6 @@ Arc 导演事件通过地点、人物、物品、组织、历史或设定上的�
   - content：可观测到的具体征兆内容，纯客观描述，不替玩家做心理预设。
   - trigger_anchors：该 hook 可被玩家行动接触到的地点/人物/物件锚点，至少 1 个，优先使用 current_story_direction 的核心内容。
   - consumed：固定为 false。
-- dormant_npc_count：0-3 的整数，表示需要为该事件预生成的冷藏 NPC 数量。仅当事件需要新的专属行动方时才设为大于 0；能复用既有 NPC 或组织作为行动方时保持 0。
 - world_impact：如果玩家彻底无视该事件，结算时将对世界观造成的永久性改变。包含：
   - description：永久改变的客观描述。
   - setting_hint：可选，为后续 Setting 沉淀提供的提示词。

@@ -12,7 +12,7 @@ SUPPORTED_SCHEMA_VERSIONS = {
     "confirmed_history": 1,
     "continuity": 1,
     "current_state": 4,
-    "director_event": 7,
+    "director_event": 8,
     "director_npc": 2,
     "entity_profile": 3,
     "npc_profile": 3,

@@ -103,12 +103,6 @@ class ReviewEventArguments(BaseModel):
     )
 
 
-class CreateEventArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    role: DirectorEventRole
-
-
 class CreateNPCArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -224,11 +218,19 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         arguments_model=ReviewEventArguments,
     ),
     DirectorSkillSpec(
-        name="create_event",
-        description="当世界缺乏明确的危机或长期目标时，策划并创建一个新的长线叙事弧线 (arc) 或环境事件 (ambient)，为未来的剧情线埋下伏笔。只用于世界在主角视线之外的平行动态，不得用于推动、包装或代劳主角当前正在执行的主线行动。事件创建后会按 selection 的 dormant_npc_count 自动预生成对应的冷藏 NPC，无需额外指定。",
+        name="create_coupled_scene",
+        description=(
+            "创建一个长线事件（arc）或环境事件（ambient），并同时孕育若干个与该事件"
+            "互相耦合的新 NPC，将其全部绑定为该事件的演员。这是创建事件的唯一技能，"
+            "事件总是伴随至少一个新 NPC。"
+            "只用于世界在主角视线之外的平行动态，"
+            "不得用于推动、包装或代劳主角当前正在执行的主线行动。"
+            "方向请通过 arguments 中的 event_guidance 与 npc_guidances 分别给出"
+            "（npc_guidances 数量不得超过 npc_count，缺省时用请求级 guidance 兜底）。"
+        ),
         phases=_CONFIRMATION,
         mutates=True,
-        arguments_model=CreateEventArguments,
+        arguments_model=CreateCoupledSceneArguments,
     ),
     DirectorSkillSpec(
         name="create_npc",
@@ -236,21 +238,6 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         phases=_CONFIRMATION,
         mutates=True,
         arguments_model=CreateNPCArguments,
-    ),
-    DirectorSkillSpec(
-        name="create_coupled_scene",
-        description=(
-            "仅在“事件与 NPC 必须互相耦合、属于同一个叙事种子”时使用：同时孕育一个"
-            "长线事件（arc）或环境事件（ambient）与若干个互相耦合的新 NPC，并将其全部"
-            "绑定为该事件的演员。事件与 NPC 彼此独立、没有耦合需求时，必须分别使用 "
-            "create_event 与 create_npc。只用于世界在主角视线之外的平行动态，"
-            "不得用于推动、包装或代劳主角当前正在执行的主线行动。"
-            "方向请通过 arguments 中的 event_guidance 与 npc_guidances 分别给出"
-            "（npc_guidances 数量与 npc_count 一致），请求级 guidance 作为整体兜底。"
-        ),
-        phases=_CONFIRMATION,
-        mutates=True,
-        arguments_model=CreateCoupledSceneArguments,
     ),
     DirectorSkillSpec(
         name="enrich_setting",

@@ -8,7 +8,6 @@ from app.domain.director import (
     DirectorAgent,
     DirectorDecisionBatch,
     DirectorObservation,
-    DirectorResourceRef,
     DirectorSkillRequest,
     DirectorSkillService,
 )
@@ -42,6 +41,12 @@ class _CreateEventArguments(BaseModel):
     title: str = Field(min_length=1)
 
 
+class _CreateNPCArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+
+
 def _observation(phase: str = "generation") -> DirectorObservation:
     return DirectorObservation(
         phase=phase,
@@ -63,7 +68,7 @@ def test_skill_service_exposes_only_skills_available_in_phase():
         handler=lambda arguments, guidance=None: {"event_id": arguments.event_id},
     )
     service.register(
-        name="create_event",
+        name="create_coupled_scene",
         description="创建新的导演事件。",
         phases={"confirmation"},
         mutates=True,
@@ -76,7 +81,7 @@ def test_skill_service_exposes_only_skills_available_in_phase():
     ] == ["present_event"]
     assert [
         spec.name for spec in service.specs_for_phase("confirmation")
-    ] == ["present_event", "create_event"]
+    ] == ["present_event", "create_coupled_scene"]
 
 
 def test_skill_service_rejects_mutating_generation_skill():
@@ -251,7 +256,7 @@ def test_skill_service_rejects_duplicate_requests_and_invalid_resources():
 def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
     service = DirectorSkillService()
     service.register(
-        name="create_event",
+        name="create_coupled_scene",
         description="创建新的导演事件。",
         phases={"confirmation"},
         mutates=True,
@@ -263,13 +268,13 @@ def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
         requests=[
             DirectorSkillRequest(
                 request_id="one",
-                skill="create_event",
+                skill="create_coupled_scene",
                 arguments={"title": "码头暗涌"},
                 guidance="码头势力正在暗中重整旗鼓。",
             ),
             DirectorSkillRequest(
                 request_id="two",
-                skill="create_event",
+                skill="create_coupled_scene",
                 arguments={"title": "码头暗涌"},
                 guidance="城中旧案出现新的线索。",
             ),
@@ -289,13 +294,13 @@ def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
         requests=[
             DirectorSkillRequest(
                 request_id="one",
-                skill="create_event",
+                skill="create_coupled_scene",
                 arguments={"title": "码头暗涌"},
                 guidance="码头势力正在暗中重整旗鼓。",
             ),
             DirectorSkillRequest(
                 request_id="two",
-                skill="create_event",
+                skill="create_coupled_scene",
                 arguments={"title": "码头暗涌"},
                 guidance="码头势力正在暗中重整旗鼓。",
             ),
@@ -791,7 +796,6 @@ def test_director_skill_specs_cover_every_registered_skill():
         "introduce_npc",
         "foreshadow_setting",
         "review_event",
-        "create_event",
         "create_npc",
         "create_coupled_scene",
         "enrich_setting",
@@ -818,7 +822,6 @@ def test_director_skill_specs_cover_every_registered_skill():
     }
     assert {spec.name for spec in service.specs_for_phase("confirmation")} == {
         "review_event",
-        "create_event",
         "create_npc",
         "create_coupled_scene",
         "enrich_setting",
@@ -1371,9 +1374,8 @@ def test_director_decide_prompt_defines_coupled_scene_boundary():
     prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
     assert "create_coupled_scene" in prompt
-    assert "只用于" in prompt
-    assert "必须分别调用 `create_event` 与 `create_npc`" in prompt
-    assert "不得因为事件和 NPC 都缺席就一律使用 `create_coupled_scene`" in prompt
+    assert "唯一技能" in prompt
+    assert "`create_npc`" in prompt
     assert "绝不可强迫主角参与" in prompt
     assert "`event_guidance`" in prompt
     assert "`npc_guidances`" in prompt
@@ -1394,7 +1396,7 @@ def test_event_skill_descriptions_forbid_quest_wrapping():
     specs = {
         spec.name: spec
         for spec in get_director_skill_specs()
-        if spec.name in {"create_event", "create_coupled_scene"}
+        if spec.name in {"create_coupled_scene"}
     }
     for spec in specs.values():
         assert "主角视线之外" in spec.description
@@ -1561,9 +1563,6 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
     ).to_event(
         role="ambient",
         turn_index=1,
-        dormant_entity_refs=[
-            DirectorResourceRef(kind="npc", resource_id=draft.draft_id)
-        ],
     )
     with stores.director_event() as store:
         event_id = store.save(selection)
@@ -1612,9 +1611,6 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    draft = _director_npc()
-    with stores.director_npc() as store:
-        store.save(draft)
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -1636,9 +1632,6 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
     ).to_event(
         role="ambient",
         turn_index=1,
-        dormant_entity_refs=[
-            DirectorResourceRef(kind="npc", resource_id=draft.draft_id)
-        ],
     )
     with stores.director_event() as store:
         event_id = store.save(selection)
@@ -1846,13 +1839,10 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
         }
 
 
-def test_generation_keeps_persisted_engaged_npc_activated(tmp_path):
+def test_generation_presents_persisted_engaged_event(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    draft = _director_npc()
-    with stores.director_npc() as store:
-        store.save(draft)
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -1874,9 +1864,6 @@ def test_generation_keeps_persisted_engaged_npc_activated(tmp_path):
     ).to_event(
         role="ambient",
         turn_index=1,
-        dormant_entity_refs=[
-            DirectorResourceRef(kind="npc", resource_id=draft.draft_id)
-        ],
     )
     with stores.director_event() as store:
         event_id = store.save(selection)

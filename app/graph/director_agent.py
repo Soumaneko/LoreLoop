@@ -15,7 +15,7 @@ from app.domain.director import (
     DirectorStageResult,
 )
 from app.domain.director_event.reviewer import DirectorEventReviewer
-from app.domain.director_event.schemas import utc_now, DirectorEventSelectionResult
+from app.domain.director_event.schemas import utc_now
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.views import project_director_event
 from app.domain.director_event.workflows import review_director_event_workflow
@@ -32,7 +32,6 @@ from app.domain.world_setting.preparer import SettingAnchorPreparer
 from .director_skill_specs import (
     BindEventActorArguments,
     CreateCoupledSceneArguments,
-    CreateEventArguments,
     CreateNPCArguments,
     EnrichNPCArguments,
     EnrichSettingArguments,
@@ -113,17 +112,6 @@ def run_generation_director_agent(
         ]
         npc_profiles = npc_profile_store.list_all()
         settings = setting_store.list_active()
-
-        engaged_dormant_drafts = [
-            draft
-            for draft in director_npcs
-            if any(
-                ref.kind == "npc" and ref.resource_id == draft.draft_id
-                for event in engaged_events
-                for ref in event.dormant_entity_refs
-            )
-        ]
-        engaged_dormant_ids = {draft.draft_id for draft in engaged_dormant_drafts}
 
         _register_skill(
             service,
@@ -210,7 +198,6 @@ def run_generation_director_agent(
                     {
                         "npc_id": npc.draft_id,
                         "source": "director_npc",
-                        "activated": npc.draft_id in engaged_dormant_ids,
                         **npc.private_view().model_dump(mode="json"),
                     }
                     for npc in director_npcs
@@ -299,42 +286,6 @@ def run_confirmation_director_agent(
             )
             return result.model_dump(mode="json")
 
-        def create_event(args: CreateEventArguments, guidance: str | None = None):
-            selection = DirectorEventSelector(gateway).select_or_create(
-                role=args.role,
-                events=event_store.list_all(),
-                current_state=current_state,
-                core_memory=core_memory,
-                recent_summaries=selection_summaries,
-                entity_profiles=entity_profiles,
-                npc_profiles=npc_profiles,
-                trace_id=trace_id,
-                guidance=guidance,
-            )
-            drafts, dormant_refs = _pre_generate_dormant_npcs(
-                selection=selection,
-                gateway=gateway,
-                core_memory=core_memory,
-                current_state=current_state,
-                director_npc_store=director_npc_store,
-                npc_profile_store=npc_profile_store,
-                turn_index=turn_index,
-                trace_id=trace_id,
-                guidance=guidance,
-            )
-            event = selection.to_event(
-                role=args.role,
-                turn_index=turn_index,
-                dormant_entity_refs=dormant_refs,
-            )
-            event_store.save(event)
-            return {
-                "event_id": event.event_id,
-                "role": event.role,
-                "npc_ids": [draft.draft_id for draft in drafts],
-                "npc_names": [draft.name for draft in drafts],
-            }
-
         def create_npc(args: CreateNPCArguments, guidance: str | None = None):
             draft = DirectorNPCCreator(gateway).create(
                 core_memory=core_memory,
@@ -391,7 +342,6 @@ def run_confirmation_director_agent(
             npc_ids: list[str] = []
             npc_names: list[str] = []
             recent_creations: list[dict] = [event.semantic_view()]
-            dormant_refs = list(event.dormant_entity_refs)
             for index in range(args.npc_count):
                 draft = DirectorNPCCreator(gateway).create(
                     core_memory=core_memory,
@@ -434,12 +384,10 @@ def run_confirmation_director_agent(
                 clean_name = draft.name.strip()
                 if clean_name and clean_name not in actors:
                     actors.append(clean_name)
-                dormant_refs.append(actor_ref)
                 event = event.model_copy(
                     update={
                         "actors": actors,
                         "actor_refs": actor_refs,
-                        "dormant_entity_refs": dormant_refs,
                         "updated_turn": turn_index,
                         "updated_at": utc_now(),
                     }
@@ -585,11 +533,6 @@ def run_confirmation_director_agent(
                 event_store,
                 args,
             ),
-        )
-        _register_skill(
-            service,
-            "create_event",
-            handler=create_event,
         )
         _register_skill(
             service,
@@ -834,72 +777,6 @@ def _setting_resource(setting) -> dict:
             else None
         ),
     }
-
-
-def _pre_generate_dormant_npcs(
-    *,
-    selection: DirectorEventSelectionResult,
-    gateway,
-    core_memory: CoreMemory,
-    current_state: CurrentState,
-    director_npc_store,
-    npc_profile_store,
-    turn_index: int,
-    trace_id: str,
-    guidance: str | None,
-) -> tuple[list, list[DirectorResourceRef]]:
-    drafts: list = []
-    refs: list[DirectorResourceRef] = []
-    recent_creations: list[dict] = [
-        {"subject": selection.subject, "title": selection.title}
-    ]
-    for _ in range(selection.dormant_npc_count):
-        draft = DirectorNPCCreator(gateway).create(
-            core_memory=core_memory,
-            existing_npcs=npc_profile_store.list_all(),
-            reserved_npcs=[
-                {
-                    "name": npc.name,
-                    "role": npc.role,
-                    "core_motivation": npc.core_motivation,
-                    "hidden_secret": npc.hidden_secret,
-                }
-                for npc in director_npc_store.list_all()
-                if npc.status != "retired"
-            ]
-            + [
-                {
-                    "name": staged.name,
-                    "role": staged.role,
-                    "core_motivation": staged.core_motivation,
-                    "hidden_secret": staged.hidden_secret,
-                }
-                for staged in drafts
-            ],
-            creation_context=NPCCreationContext(anchors=[]),
-            creative_brief=draw_creative_brief(),
-            protagonist_name=current_state.player.name,
-            turn_index=turn_index,
-            trace_id=trace_id,
-            guidance=guidance,
-            recent_creations=recent_creations,
-        )
-        drafts.append(draft)
-        refs.append(
-            DirectorResourceRef(kind="npc", resource_id=draft.draft_id)
-        )
-        recent_creations.append(
-            {
-                "kind": "npc",
-                "npc_id": draft.draft_id,
-                "name": draft.name,
-                "role": draft.role,
-                "core_motivation": draft.core_motivation,
-            }
-        )
-    for draft in drafts:
-        director_npc_store.save(draft)
-    return drafts, refs
 
 
 def _require_active_event(store, event_id: str) -> None:

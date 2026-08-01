@@ -1729,7 +1729,6 @@ function directorCard(event) {
       ["意图", esc(text(event.intent))],
       ["手段", esc(text(event.method))],
       ["演员引用", chips((event.actor_refs || []).map((ref) => `${text(ref.kind)}:${text(ref.resource_id)}`))],
-      ["冷藏实体", chips((event.dormant_entity_refs || []).map((ref) => `${text(ref.kind)}:${text(ref.resource_id)}`))],
       ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
       ["解决原因", esc(text(event.resolved_reason))],

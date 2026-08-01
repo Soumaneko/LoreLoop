@@ -1,6 +1,5 @@
 import sqlite3
 
-from app.domain.current_state import WorldClock
 from app.domain.director import DirectorResourceRef
 from app.domain.director_event import (
     DirectorEventSelectionResult,
@@ -48,7 +47,6 @@ def test_event_contract_has_generic_actor_refs_without_npc_dependency():
     event = _event()
 
     assert event.actor_refs == []
-    assert event.dormant_entity_refs == []
     assert "director_npc_id" not in event.model_dump()
     assert "director_npc_id" not in DirectorEventSelectionResult.model_json_schema()[
         "properties"
@@ -85,7 +83,7 @@ def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
         "CREATE TABLE schema_versions(component TEXT PRIMARY KEY, version INTEGER)"
     )
     conn.execute(
-        "INSERT INTO schema_versions(component, version) VALUES ('director_event', 6)"
+        "INSERT INTO schema_versions(component, version) VALUES ('director_event', 7)"
     )
     conn.commit()
     conn.close()
@@ -93,7 +91,7 @@ def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
     try:
         DirectorEventStore(str(db_path))
     except RuntimeError as exc:
-        assert "expected 7" in str(exc)
+        assert "expected 8" in str(exc)
     else:
         raise AssertionError("previous DirectorEvent schema must be rejected")
 

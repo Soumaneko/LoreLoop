@@ -32,7 +32,7 @@ class DirectorEventStore:
             )
             """
         )
-        ensure_exact_schema_version(self._conn, "director_event", 7)
+        ensure_exact_schema_version(self._conn, "director_event", 8)
         self._conn.commit()
 
     def save(self, event: DirectorEvent) -> str:

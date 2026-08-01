@@ -61,7 +61,6 @@ class DirectorEvent(BaseModel):
     macro_intent: str = Field(min_length=1)
 
     hook_pool: list[EventHook] = Field(default_factory=list)
-    dormant_entity_refs: list[DirectorResourceRef] = Field(default_factory=list)
 
     actors: list[str] = Field(default_factory=list)
     actor_refs: list[DirectorResourceRef] = Field(default_factory=list)
@@ -115,10 +114,6 @@ class DirectorEvent(BaseModel):
                 actor_ref.model_dump(mode="json")
                 for actor_ref in self.actor_refs
             ],
-            "dormant_entity_refs": [
-                ref.model_dump(mode="json")
-                for ref in self.dormant_entity_refs
-            ],
             "player_contacts": [
                 contact.model_dump(mode="json")
                 for contact in self.player_contacts
@@ -139,7 +134,6 @@ class DirectorEventSelectionResult(BaseModel):
     method: str = Field(min_length=1)
     macro_intent: str = Field(min_length=1)
     hook_pool: list[EventHook] = Field(min_length=1)
-    dormant_npc_count: int = Field(default=0, ge=0, le=3)
     world_impact: WorldImpact
 
     def to_event(
@@ -147,7 +141,6 @@ class DirectorEventSelectionResult(BaseModel):
         *,
         role: DirectorEventRole,
         turn_index: int,
-        dormant_entity_refs: list[DirectorResourceRef] | None = None,
     ) -> DirectorEvent:
         now = utc_now()
         return DirectorEvent(
@@ -159,7 +152,6 @@ class DirectorEventSelectionResult(BaseModel):
             method=self.method,
             macro_intent=self.macro_intent,
             hook_pool=list(self.hook_pool),
-            dormant_entity_refs=list(dormant_entity_refs or []),
             actors=list(self.actors),
             actor_refs=[],
             world_impact=self.world_impact,
