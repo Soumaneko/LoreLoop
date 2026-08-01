@@ -16,6 +16,10 @@ from app.graph.initialization_helpers import (
     preview_initialization_config,
 )
 from app.runtime.debug_state import load_debug_state
+from app.runtime.player_records import (
+    load_player_records as _load_player_records,
+    update_player_record as _update_player_record,
+)
 from app.runtime.player_state import load_player_history, load_player_state
 from app.runtime.settings import (
     save_canon_validation,
@@ -242,6 +246,20 @@ def save_pending_scene_edit(
     return get_campaign_runtime().save_pending_scene_edit(turn_id, scene_text)
 
 
+def load_player_records() -> dict:
+    """Return the player-visible archive projection for the records drawer."""
+    return _load_player_records()
+
+
+def update_player_record(
+    kind: str,
+    record_id: str,
+    payload: dict | None,
+) -> dict:
+    """Update one existing continuity/NPC/entity record from the player UI."""
+    return _update_player_record(kind, record_id, payload)
+
+
 def record_player_diagnostic(payload: dict[str, Any]) -> dict[str, bool]:
     severity = str(payload.get("severity", "error")).strip().lower()
     if severity not in {"warning", "error"}:
@@ -383,6 +401,7 @@ __all__ = [
     "import_save_archive",
     "load_debug_state",
     "load_player_history",
+    "load_player_records",
     "load_player_state",
     "load_initialization_draft",
     "load_reader_preferences",
@@ -413,4 +432,5 @@ __all__ = [
     "switch_save",
     "test_model_connection",
     "undo_last_turn",
+    "update_player_record",
 ]

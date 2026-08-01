@@ -2037,3 +2037,131 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   box-shadow: var(--shadow);
   pointer-events: none;
 }
+
+/* World Archive Records Drawer (left) */
+.drawer-left {
+  left: 0;
+  right: auto;
+  border-left: 0;
+  border-right: 1px solid var(--line);
+  transform: translateX(-105%);
+}
+.records-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.records-toolbar .soft-button {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+.records-refresh-state {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: .04em;
+}
+.records-list {
+  display: grid;
+  gap: 10px;
+}
+.records-empty {
+  padding: 12px 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.record-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+.record-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.record-card-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  color: var(--gold-bright);
+  font-size: 14px;
+  letter-spacing: .02em;
+  overflow-wrap: anywhere;
+}
+.record-status-tag {
+  flex: none;
+  font-size: 10px;
+  letter-spacing: .08em;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.record-status-tag.is-active { color: var(--gold-bright); border-color: var(--gold); }
+.record-field {
+  display: grid;
+  gap: 3px;
+}
+.record-field-label {
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: .85;
+}
+.record-field-value {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.record-field-value.is-readonly {
+  color: var(--muted);
+  font-style: italic;
+}
+.record-card input,
+.record-card textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-family: inherit;
+}
+.record-card input:focus,
+.record-card textarea:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(232, 208, 149, 0.16);
+}
+.record-card textarea { resize: vertical; min-height: 44px; }
+.record-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.record-edit-actions .soft-button {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.record-edit-actions .soft-button.is-primary {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+.record-edit-message {
+  font-size: 11px;
+  color: var(--muted);
+}
+.record-edit-message.is-error { color: var(--danger); }

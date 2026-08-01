@@ -241,6 +241,17 @@ export async function acknowledgeOperation(operationId) {
   );
 }
 
+export async function loadRecords() {
+  return request("/api/player/records", { timeoutMs: 30_000 });
+}
+
+export async function updateRecord(kind, recordId, payload) {
+  return request("/api/player/records/update", {
+    method: "POST",
+    body: JSON.stringify({ kind, record_id: recordId, payload: payload || {} }),
+  });
+}
+
 export async function cancelOperation(operationId) {
   return request(
     `/api/player/operations/${encodeURIComponent(operationId)}/cancel`,

@@ -9,6 +9,8 @@ export const state = {
   lastError: null,
   historyLoading: false,
   historyPagingEnabled: false,
+  records: null,
+  recordsDrawerOpen: false,
   readerPreferences: {
     font_size: "16.5",
     font_family: "serif",

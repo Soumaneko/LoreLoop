@@ -26,6 +26,7 @@ from app.api import (
     list_operations,
     list_saves,
     load_player_history,
+    load_player_records,
     load_player_state,
     load_initialization_draft,
     load_reader_preferences,
@@ -51,6 +52,7 @@ from app.api import (
     switch_save,
     test_model_connection,
     undo_last_turn,
+    update_player_record,
 )
 from app.runtime.session import get_campaign_runtime
 from app.runtime.player_state import player_saves_payload
@@ -120,6 +122,9 @@ class PlayerHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/saves":
             self._handle_player_json(lambda: player_saves_payload(list_saves()))
+            return
+        if path == "/api/player/records":
+            self._handle_player_json(load_player_records)
             return
         if path == "/api/player/saves/export":
             query = parse_qs(parsed_url.query)
@@ -191,6 +196,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
         if path == "/api/player/diagnostics":
             self._handle_player_json(
                 lambda: record_player_diagnostic(_read_json(self))
+            )
+            return
+        if path == "/api/player/records/update":
+            self._handle_player_json(
+                lambda: self._update_player_record()
             )
             return
         if path == "/api/player/init":
@@ -841,6 +851,16 @@ class PlayerHandler(BaseHTTPRequestHandler):
         if scene_text is not None and not isinstance(scene_text, str):
             raise ValueError("scene_text must be a string or null")
         return save_pending_scene_edit(turn_id, scene_text)
+
+    def _update_player_record(self):
+        payload = _read_json(self)
+        kind = str(payload.get("kind", "")).strip()
+        record_id = str(payload.get("record_id", "")).strip()
+        return update_player_record(
+            kind,
+            record_id,
+            payload.get("payload"),
+        )
 
 
 TOKEN_META = '<meta name="loreloop-session-token" content="" />'
