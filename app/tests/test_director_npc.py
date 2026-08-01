@@ -1,12 +1,12 @@
 import sqlite3
 
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
+from app.domain.creative_brief import draw_creative_brief
 from app.domain.director_npc import (
     DirectorNPCCreator,
     DirectorNPCDraft,
     DirectorNPCStore,
     NPCCreationContext,
-    draw_director_npc_creative_brief,
 )
 
 
@@ -75,7 +75,7 @@ def test_creator_uses_general_context_without_setting_prerequisite():
         creation_context=NPCCreationContext(
             anchors=["河岸社区"],
         ),
-        creative_brief=draw_director_npc_creative_brief(),
+        creative_brief=draw_creative_brief(),
         protagonist_name="周明",
         turn_index=3,
     )
@@ -171,7 +171,7 @@ def test_creator_includes_recent_creations_in_prompt():
         core_memory=_core_memory(),
         existing_npcs=[],
         creation_context=NPCCreationContext(anchors=[]),
-        creative_brief=draw_director_npc_creative_brief(),
+        creative_brief=draw_creative_brief(),
         protagonist_name="周明",
         turn_index=3,
         recent_creations=recent_creations,
@@ -205,7 +205,7 @@ def test_creator_brief_hides_social_dimensions_from_prompt():
         core_memory=_core_memory(),
         existing_npcs=[],
         creation_context=NPCCreationContext(anchors=[]),
-        creative_brief=draw_director_npc_creative_brief(),
+        creative_brief=draw_creative_brief(),
         protagonist_name="周明",
         turn_index=3,
     )
@@ -216,3 +216,14 @@ def test_creator_brief_hides_social_dimensions_from_prompt():
     assert "world_connection" in brief
     assert "life_phase" in brief
     assert "desire_pattern" in brief
+    assert brief["baseline_temperament"] in {
+        "热情豪爽",
+        "古灵精怪",
+        "暴躁强势",
+        "温婉平和",
+        "极度务实",
+        "高傲毒舌",
+        "娇憨随和",
+        "慵懒散漫",
+        "冷漠孤僻",
+    }

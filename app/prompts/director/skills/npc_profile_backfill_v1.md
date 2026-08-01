@@ -39,6 +39,21 @@
 {existing_npcs_json}
 ```
 
+## 程序随机抽取的人物维度
+
+```json
+{creative_brief_json}
+```
+
+这些维度用于避免人物同质化，只提供角色的灵魂底色、基准性情与内驱力，不构成身份、职业或社会阶层的硬性约束：
+
+- `world_connection`：人物与世界日常运作的连接方式。
+- `life_phase`：人物当前人生阶段。
+- `desire_pattern`：长期欲望、恐惧或秘密的方向。
+- `baseline_temperament`：人物不设防状态下的基准性情底色，是言行举止的自然基调。
+
+主副轴次序：公开档案、Scene Facts 与 `director_guidance` 规定的身份和已知事实是核心；`creative_brief` 只作为丰富其内心深度的材料，若与公开事实或 guidance 冲突，请将其内在化处理，不得改写已确认的表层身份。
+
 ## 导演协调层指导意见
 
 ```text

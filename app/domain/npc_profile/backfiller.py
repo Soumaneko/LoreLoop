@@ -4,6 +4,7 @@ from typing import cast
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.creative_brief import CreativeBrief
 from app.domain.npc_profile.schemas import (
     NPCProfile,
     NPCProfileBackfillOutput,
@@ -27,6 +28,7 @@ class NPCProfileBackfiller:
         recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
         guidance: str | None = None,
+        creative_brief: CreativeBrief | None = None,
     ) -> NPCProfile:
         result = cast(
             NPCProfileBackfillOutput,
@@ -42,6 +44,14 @@ class NPCProfileBackfiller:
                         [_existing_npc_view(npc) for npc in existing_profiles],
                         ensure_ascii=False,
                         indent=2,
+                    ),
+                    "creative_brief_json": (
+                        creative_brief.model_dump_json(
+                            exclude_none=True,
+                            indent=2,
+                        )
+                        if creative_brief is not None
+                        else "{}"
                     ),
                     "director_guidance": guidance or "",
                     "output_schema_json": json.dumps(

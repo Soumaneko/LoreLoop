@@ -3,17 +3,8 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
 DirectorNPCStatus = Literal["prepared", "introduced", "retired"]
-
-
-class DirectorNPCCreativeBrief(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    world_connection: str = Field(min_length=1)
-    social_position: str | None = Field(default=None, min_length=1)
-    life_phase: str = Field(min_length=1)
-    desire_pattern: str = Field(min_length=1)
-    optional_dimension: str | None = Field(default=None, min_length=1)
 
 
 class NPCCreationContext(BaseModel):

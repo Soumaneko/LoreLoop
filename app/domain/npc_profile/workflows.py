@@ -6,6 +6,7 @@ from app.core.llm import LLMGateway
 from app.domain.action.schemas import Anchor
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.creative_brief import CreativeBrief, draw_creative_brief
 from app.domain.npc_profile.backfiller import NPCProfileBackfiller
 from app.domain.npc_profile.extractor import NPCProfileExtractor
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
@@ -194,6 +195,7 @@ def backfill_new_npc_profile(
     recent_summaries: list[SceneSummary] | None = None,
     trace_id: str | None = None,
     guidance: str | None = None,
+    creative_brief: CreativeBrief | None = None,
 ) -> NPCProfile:
     backfiller = NPCProfileBackfiller(gateway)
     return backfiller.backfill(
@@ -205,6 +207,7 @@ def backfill_new_npc_profile(
         recent_summaries=recent_summaries,
         trace_id=trace_id,
         guidance=guidance,
+        creative_brief=creative_brief or draw_creative_brief(),
     )
 
 

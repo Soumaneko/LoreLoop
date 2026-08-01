@@ -3,9 +3,9 @@ from typing import cast
 
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
+from app.domain.creative_brief import CreativeBrief
 from app.domain.director_npc.schemas import (
     DirectorNPCCreateOutput,
-    DirectorNPCCreativeBrief,
     DirectorNPCDraft,
     NPCCreationContext,
 )
@@ -22,7 +22,7 @@ class DirectorNPCCreator:
         existing_npcs: list,
         reserved_npcs: list[dict[str, str | None]] | None = None,
         creation_context: NPCCreationContext,
-        creative_brief: DirectorNPCCreativeBrief,
+        creative_brief: CreativeBrief,
         protagonist_name: str,
         turn_index: int,
         trace_id: str | None = None,

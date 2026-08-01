@@ -72,10 +72,12 @@ def test_npc_updater_prompt_treats_new_hints_as_optional_candidates():
 
 
 def test_backfill_prompt_requires_proper_name_for_descriptor_npcs():
-    prompt = Path("app/prompts/confirmation/npc_profile_backfill_v1.md").read_text(
+    prompt = Path("app/prompts/director/skills/npc_profile_backfill_v1.md").read_text(
         encoding="utf-8"
     )
 
+    assert "{creative_brief_json}" in prompt
+    assert "baseline_temperament" in prompt
     assert "必须是一个专有姓名" in prompt
     assert "必须为 TA 创造一个符合世界观的专有姓名" in prompt
     assert "来历不明者" in prompt
