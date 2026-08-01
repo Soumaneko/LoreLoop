@@ -124,21 +124,18 @@ def test_generation_skill_requires_request_guidance():
         service.validate_batch(batch, phase="generation")
 
 
-def test_introduce_npc_expose_fields_are_required_and_whitelisted():
+def test_introduce_npc_requires_valid_view_mode():
     from app.graph.director_skill_specs import IntroduceNPCArguments
 
     with pytest.raises(ValidationError):
-        IntroduceNPCArguments(npc_id="npc_1", expose_fields=[])
+        IntroduceNPCArguments(npc_id="npc_1")
     with pytest.raises(ValidationError):
-        IntroduceNPCArguments(
-            npc_id="npc_1",
-            expose_fields=["database_path"],
-        )
+        IntroduceNPCArguments(npc_id="npc_1", view_mode="scry_all")
     validated = IntroduceNPCArguments(
         npc_id="npc_1",
-        expose_fields=["name", "hidden_secret"],
+        view_mode="face_to_face",
     )
-    assert validated.expose_fields == ["name", "hidden_secret"]
+    assert validated.view_mode == "face_to_face"
 
 
 def test_skill_service_validates_arguments_and_executes_in_request_order():
@@ -409,12 +406,12 @@ def test_director_decide_prompts_are_phase_separated():
     confirmation_prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
     assert "生成阶段只能提出非持久化的舞台调度" in generation_prompt
-    assert "`expose_fields`" in generation_prompt
+    assert "`view_mode`" in generation_prompt
     assert "create_coupled_scene" not in generation_prompt
 
     assert "主动造物的导演特权" in confirmation_prompt
     assert "`create_coupled_scene`" in confirmation_prompt
-    assert "`expose_fields`" not in confirmation_prompt
+    assert "`view_mode`" not in confirmation_prompt
 
 
 class _PhaseGateway:
@@ -500,12 +497,7 @@ def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
                     "skill": "introduce_npc",
                     "arguments": {
                         "npc_id": draft.draft_id,
-                        "expose_fields": [
-                            "name",
-                            "role",
-                            "social_style",
-                            "hidden_secret"
-                        ],
+                        "view_mode": "remote",
                     },
                     "guidance": "通过第三方转述体现她克制的说话方式。",
                 }
@@ -529,20 +521,17 @@ def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
     assert stage.materials[0].resource_id == draft.draft_id
     assert stage.materials[0].guidance == "通过第三方转述体现她克制的说话方式。"
     assert stage.materials[0].payload["source"] == "director_npc"
-    assert set(stage.materials[0].payload) == {
-        "source",
-        "draft_id",
-        "name",
-        "role",
-        "social_style",
-        "hidden_secret",
-    }
+    assert stage.materials[0].payload["name"] == "林澈"
+    assert stage.materials[0].payload["social_style"] == "克制而友善。"
+    assert "hidden_secret" not in stage.materials[0].payload
+    assert "core_motivation" not in stage.materials[0].payload
     assert "appearance" not in stage.materials[0].payload
+    assert "draft_id" in stage.materials[0].payload
     with stores.director_npc() as store:
         assert store.get_by_id(draft.draft_id).status == "prepared"
 
 
-def test_generation_agent_rejects_profile_only_expose_fields_for_director_npc(
+def test_generation_agent_remote_view_filters_nonexistent_fields_for_director_npc(
     tmp_path,
 ):
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
@@ -551,14 +540,14 @@ def test_generation_agent_rejects_profile_only_expose_fields_for_director_npc(
         store.save(draft)
     gateway = _PhaseGateway(
         decision={
-            "reasoning": "错误地请求了导演 NPC 不存在的字段。",
+            "reasoning": "通过转述体现人物。",
             "requests": [
                 {
                     "request_id": "npc_1",
                     "skill": "introduce_npc",
                     "arguments": {
                         "npc_id": draft.draft_id,
-                        "expose_fields": ["name", "aliases"],
+                        "view_mode": "remote",
                     },
                     "guidance": "通过转述体现人物。",
                 }
@@ -566,27 +555,78 @@ def test_generation_agent_rejects_profile_only_expose_fields_for_director_npc(
         }
     )
 
-    with pytest.raises(ValueError, match="expose_fields not available"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=_current_state(),
-            user_input="去诊所询问昨夜发生的事。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-        )
+    stage, _ = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="去诊所询问昨夜发生的事。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+    )
+
+    assert stage.materials[0].payload["source"] == "director_npc"
+    assert "aliases" not in stage.materials[0].payload
+    assert "public_summary" not in stage.materials[0].payload
+    assert "attitude_to_player" not in stage.materials[0].payload
+    assert stage.materials[0].payload["role"] == "社区医生"
+    assert stage.materials[0].payload["social_style"] == "克制而友善。"
 
 
-def test_generation_agent_allows_profile_only_expose_fields_for_npc_profile(
+def test_generation_agent_intimate_view_reveals_director_npc_secrets(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    draft = _director_npc()
+    with stores.director_npc() as store:
+        store.save(draft)
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "深度交心场景。",
+            "requests": [
+                {
+                    "request_id": "npc_1",
+                    "skill": "introduce_npc",
+                    "arguments": {
+                        "npc_id": draft.draft_id,
+                        "view_mode": "intimate",
+                    },
+                    "guidance": "通过搜魂场景揭示其隐藏秘密。",
+                }
+            ],
+        }
+    )
+
+    stage, _ = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="对林澈施展搜魂术。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+    )
+
+    assert stage.materials[0].payload["source"] == "director_npc"
+    assert stage.materials[0].payload["core_motivation"] == "保护社区居民。"
+    assert stage.materials[0].payload["hidden_secret"] == "曾目击一宗未结案件。"
+    assert stage.materials[0].payload["appearance"] == "常穿深色风衣。"
+
+
+def test_generation_agent_remote_view_keeps_profile_identity_and_drops_nulls(
     tmp_path,
 ):
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     with stores.npc_profile() as store:
         profile_id = store.upsert(
-            NPCProfile(name="林澈", role="社区医生", aliases=["林医生"])
+            NPCProfile(
+                name="林澈",
+                role="社区医生",
+                aliases=["林医生"],
+                social_style="克制而友善。",
+            )
         )
     gateway = _PhaseGateway(
         decision={
@@ -597,7 +637,7 @@ def test_generation_agent_allows_profile_only_expose_fields_for_npc_profile(
                     "skill": "introduce_npc",
                     "arguments": {
                         "npc_id": profile_id,
-                        "expose_fields": ["name", "aliases"],
+                        "view_mode": "remote",
                     },
                     "guidance": "通过转述体现人物。",
                 }
@@ -618,12 +658,13 @@ def test_generation_agent_allows_profile_only_expose_fields_for_npc_profile(
     )
 
     assert stage.materials[0].payload["source"] == "npc_profile"
-    assert set(stage.materials[0].payload) == {
-        "source",
-        "npc_id",
-        "name",
-        "aliases",
-    }
+    assert stage.materials[0].payload["name"] == "林澈"
+    assert stage.materials[0].payload["role"] == "社区医生"
+    assert stage.materials[0].payload["aliases"] == ["林医生"]
+    assert stage.materials[0].payload["social_style"] == "克制而友善。"
+    assert "public_summary" not in stage.materials[0].payload
+    assert "attitude_to_player" not in stage.materials[0].payload
+    assert "hidden_secret" not in stage.materials[0].payload
 
 
 def test_generation_agent_receives_projected_turn_resolution(tmp_path):

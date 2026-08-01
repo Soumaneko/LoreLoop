@@ -44,6 +44,8 @@ from .director_skill_specs import (
     EnrichSettingArguments,
     ForeshadowSettingArguments,
     IntroduceNPCArguments,
+    NPC_VIEW_ALWAYS_KEPT,
+    NPC_VIEW_MODE_FIELDS,
     PresentEventArguments,
     ReviewEventArguments,
     get_director_skill_specs,
@@ -126,10 +128,10 @@ def run_generation_director_agent(
                 args,
                 guidance=guidance,
             ),
-            arguments_validator=lambda args: _require_introduce_npc(
+            arguments_validator=lambda args: _require_npc(
                 director_npc_store,
                 npc_profile_store,
-                args,
+                args.npc_id,
             ),
         )
         _register_skill(
@@ -677,7 +679,10 @@ def _introduce_npc(
     if draft is not None and draft.status != "retired":
         payload = {
             "source": "director_npc",
-            **draft.private_view().model_dump(mode="json"),
+            **draft.private_view().model_dump(
+                mode="json",
+                exclude_none=True,
+            ),
         }
     else:
         profile = npc_profile_store.get_by_id(args.npc_id)
@@ -686,14 +691,18 @@ def _introduce_npc(
         payload = {
             "source": "npc_profile",
             "npc_id": profile.npc_id,
-            **profile.director_view().model_dump(mode="json"),
+            **profile.director_view().model_dump(
+                mode="json",
+                exclude_none=True,
+            ),
         }
-    exposed = set(args.expose_fields)
-    payload = {
-        key: value
-        for key, value in payload.items()
-        if key in exposed or key in {"source", "npc_id", "draft_id"}
-    }
+    allowed = NPC_VIEW_MODE_FIELDS[args.view_mode]
+    if allowed is not None:
+        payload = {
+            key: value
+            for key, value in payload.items()
+            if key in allowed or key in NPC_VIEW_ALWAYS_KEPT
+        }
     return DirectorStageMaterial(
         kind="npc",
         resource_id=args.npc_id,
@@ -753,32 +762,6 @@ def _require_npc(director_npc_store, npc_profile_store, npc_id: str) -> None:
         return
     if npc_profile_store.get_by_id(npc_id) is None:
         raise ValueError("director skill references an unknown npc_id")
-
-
-def _require_introduce_npc(
-    director_npc_store,
-    npc_profile_store,
-    args,
-) -> None:
-    draft = director_npc_store.get_by_id(args.npc_id)
-    if draft is not None and draft.status != "retired":
-        available = set(draft.private_view().model_dump(mode="json").keys())
-    else:
-        profile = npc_profile_store.get_by_id(args.npc_id)
-        if profile is None:
-            raise ValueError("introduce_npc references an unknown NPC")
-        available = set(profile.director_view().model_dump(mode="json").keys())
-    always_kept = {"source", "npc_id", "draft_id"}
-    invalid = [
-        field
-        for field in args.expose_fields
-        if field not in available and field not in always_kept
-    ]
-    if invalid:
-        raise ValueError(
-            "introduce_npc expose_fields not available for this NPC: "
-            + ", ".join(sorted(invalid))
-        )
 
 
 def _require_active_setting(store, setting_id: str) -> None:

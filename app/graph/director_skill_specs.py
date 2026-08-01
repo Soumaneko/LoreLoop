@@ -34,25 +34,25 @@ from app.domain.director_event.schemas import DirectorEventRole
 # ---------------------------------------------------------------------------
 
 
-NPCExposureField = Literal[
-    "name",
-    "aliases",
-    "public_summary",
-    "role",
-    "appearance",
-    "personality_traits",
-    "known_abilities",
-    "faction",
-    "description",
-    "current_location",
-    "attitude_to_player",
-    "current_intent",
-    "core_motivation",
-    "hidden_secret",
-    "conflict_style",
-    "social_style",
-    "encounter_potentials",
-]
+NPCViewMode = Literal["remote", "face_to_face", "intimate"]
+
+_VIEW_IDENTITY_FIELDS = frozenset({"name", "role", "aliases", "faction"})
+_VIEW_REMOTE_FIELDS = _VIEW_IDENTITY_FIELDS | frozenset(
+    {"public_summary", "social_style", "attitude_to_player"}
+)
+_VIEW_FACE_TO_FACE_FIELDS = _VIEW_REMOTE_FIELDS | frozenset(
+    {"appearance", "personality_traits", "conflict_style", "known_abilities"}
+)
+
+#: view_mode -> 允许下发的字段白名单；None 表示全量下发（intimate）。
+NPC_VIEW_MODE_FIELDS: dict[NPCViewMode, frozenset[str] | None] = {
+    "remote": _VIEW_REMOTE_FIELDS,
+    "face_to_face": _VIEW_FACE_TO_FACE_FIELDS,
+    "intimate": None,
+}
+
+#: 无论何种 view_mode 都必须保留的身份/来源键。
+NPC_VIEW_ALWAYS_KEPT = frozenset({"source", "npc_id", "draft_id", "name"})
 
 
 class PresentEventArguments(BaseModel):
@@ -65,9 +65,12 @@ class IntroduceNPCArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     npc_id: str = Field(min_length=1)
-    expose_fields: list[NPCExposureField] = Field(
-        min_length=1,
-        max_length=18,
+    view_mode: NPCViewMode = Field(
+        description=(
+            "选择引入NPC的视图模式。远程/间接接触选 remote（仅下发身份与传闻信息，"
+            "不含外貌）；初次见面/当面战斗选 face_to_face（额外下发外貌与性格，"
+            "但不含秘密）；深度交心或搜魂选 intimate（全量下发，含核心动机与隐藏秘密）。"
+        )
     )
 
 
@@ -170,7 +173,9 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
             "1.你规划NPC在本场景中出现。"
             "2.你规划文中需要描述该角色，需要参考其详细设定。"
             "注意：只要本轮叙事需要用到该角色的身份信息，就必须将其引入。"
-            "必须用 expose_fields 精确选择本轮下发字段，并在请求级 guidance 中说明使用方式。"
+            "必须根据本轮交互情境选择 view_mode（remote 远程/间接接触、face_to_face 初次见面/"
+            "当面战斗、intimate 深度交心/搜魂），并在请求级 guidance 中说明使用方式；"
+            "后端将按 view_mode 白名单物理隔离敏感字段。"
         ),
         phases=_GENERATION,
         mutates=False,
