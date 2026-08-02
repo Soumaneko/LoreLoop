@@ -9,7 +9,6 @@ from app.domain.context_facts.schemas import (
 )
 from app.domain.views import (
     project_current_state,
-    project_entity_profiles,
     project_npc_profiles,
     project_scene_summaries,
 )
@@ -50,7 +49,6 @@ class ContextExtractor:
                     "continuity_json": project_continuity(
                         input_data.continuity
                     ),
-                    "entity_profiles_json": project_entity_profiles(input_data.entity_profiles),
                     "npc_profiles_json": project_npc_profiles(input_data.npc_profiles),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
                 },

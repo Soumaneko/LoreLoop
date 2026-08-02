@@ -3,7 +3,6 @@ import re
 from typing import cast
 
 from app.core.llm import LLMGateway
-from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 
 from .schemas import (
@@ -24,7 +23,6 @@ class NarrativeCanonQueryAgent:
         *,
         scene_text: str,
         player_name: str,
-        entity_profiles: list[EntityProfileUpdateInput],
         npc_profiles: list[NPCProfileDirectorView],
         trace_id: str | None = None,
     ) -> NarrativeCanonQuerySet:
@@ -34,7 +32,6 @@ class NarrativeCanonQueryAgent:
 
         catalog = build_entity_catalog(
             player_name=player_name,
-            entity_profiles=entity_profiles,
             npc_profiles=npc_profiles,
         )
         schema = NarrativeCanonQueryDraftSet.model_json_schema()
@@ -69,21 +66,11 @@ class NarrativeCanonQueryAgent:
 def build_entity_catalog(
     *,
     player_name: str,
-    entity_profiles: list[EntityProfileUpdateInput],
     npc_profiles: list[NPCProfileDirectorView],
 ) -> list[CanonEntityReference]:
     references = [
         CanonEntityReference(name=player_name.strip(), kind="player")
     ]
-    references.extend(
-        CanonEntityReference(
-            name=profile.name.strip(),
-            aliases=_clean_aliases(profile.aliases, profile.name),
-            kind=profile.entity_type,
-        )
-        for profile in entity_profiles
-        if profile.name.strip()
-    )
     references.extend(
         CanonEntityReference(
             name=profile.name.strip(),

@@ -200,7 +200,6 @@ def _composer_context() -> NarrativeComposerContext:
             content="这是重视行动后果、角色认知来源和连续性的文字冒险。",
         )]),
         context_facts=_context_facts(),
-        entity_profiles=[],
         npc_profiles=[],
         director_stage=None,
     )

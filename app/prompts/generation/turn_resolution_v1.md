@@ -23,12 +23,6 @@
 {context_facts_json}
 ```
 
-## EntityProfiles
-
-```json
-{entity_profiles_json}
-```
-
 ## NPCProfiles
 
 ```json
@@ -71,7 +65,7 @@
 
 # 任务逻辑
 
-1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Context Facts 是上游基于记忆、摘要和当前上下文提取出的相关既有事实列表；Entity Profiles 是实体介绍和解释；NPC Profiles 是NPC介绍。
+1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Context Facts 是上游基于历史、摘要和当前上下文提取出的相关既有事实列表；NPC Profiles 是人物背景边界。
 2. 第二步，确定信息边界，主角知道什么不知道什么？NPC知道什么不知道什么？
 3. 第三步，你需要在不违背第一第二步的前提下，根据 ActionJudgments 确定每个行动的直接事实结果。
 

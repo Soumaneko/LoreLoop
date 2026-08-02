@@ -50,7 +50,7 @@ class NPCProfileUpdateInput(BaseModel):
     public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
-    personality_traits: list[str] = Field(default_factory=list, max_length=5)
+    personality_traits: list[str] = Field(default_factory=list, max_length=3)
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     description: str | None = None
@@ -99,7 +99,7 @@ class NPCProfileBackfillOutput(BaseModel):
     social_style: str = Field(min_length=1)
     role: str = Field(min_length=1)
     faction: str | None = None
-    personality_traits: list[str] = Field(min_length=2, max_length=5)
+    personality_traits: list[str] = Field(min_length=2, max_length=3)
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     appearance: str = Field(min_length=1)
 

@@ -32,7 +32,6 @@ _ROOT_FILES = {
     "current_state.db",
     "director_events.db",
     "director_npcs.db",
-    "entities.db",
     "initialization.json",
     "npc_profiles.db",
     "save_manifest.json",

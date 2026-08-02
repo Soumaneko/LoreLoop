@@ -26,7 +26,6 @@ def _diagnostic_turn_index(state: ConfirmationState) -> int | None:
 @dataclass(frozen=True)
 class ConfirmationPreparationServices:
     current_state_store: Callable
-    entity_store: Callable
     npc_profile_store: Callable
     core_memory_store: Callable
     promote_staged_director_npc_profile: Callable
@@ -101,16 +100,10 @@ class ConfirmationPreparer:
             )
         )
 
-        existing_entity_profiles = cache.get("existing_entity_profiles", [])
         existing_npc_profiles = cache.get("existing_npc_profiles", [])
-        if write_db and "existing_entity_profiles" not in cache:
-            with (
-                services.entity_store() as ent_store,
-                services.npc_profile_store() as npc_store,
-            ):
-                existing_entity_profiles = ent_store.list_all()
+        if write_db and "existing_npc_profiles" not in cache:
+            with services.npc_profile_store() as npc_store:
                 existing_npc_profiles = npc_store.list_all()
-            cache["existing_entity_profiles"] = existing_entity_profiles
             cache["existing_npc_profiles"] = existing_npc_profiles
 
         core_memory = services.core_memory_store().load_required()
@@ -137,7 +130,6 @@ class ConfirmationPreparer:
             "confirmed_director_npc_draft": confirmed_director_npc_draft,
             "state_before_update": state_before_update,
             "confirmation_scene_text": confirmation_scene_text,
-            "existing_entity_profiles": existing_entity_profiles,
             "existing_npc_profiles": existing_npc_profiles,
             "core_memory": core_memory,
         }
@@ -266,7 +258,6 @@ class ConfirmationCommitter:
 
 @dataclass(frozen=True)
 class ConfirmationMaintenanceServices:
-    run_setting_seed_maintenance: Callable
     run_scene_summary_maintenance: Callable
 
 
@@ -280,61 +271,6 @@ class ConfirmationMaintenanceScheduler:
     ) -> None:
         self.runtime = runtime
         self.services = services
-
-    def schedule_setting_seed_maintenance(self, state: ConfirmationState) -> None:
-        if not state.get("write_db", True):
-            return
-
-        pipeline_input = state["pipeline_input"]
-        cache = state["cache"]
-        if cache.get("setting_seed_maintenance_scheduled"):
-            return
-        args = (
-            state["trace_id"],
-            pipeline_input.turn_index,
-        )
-        existing_ids = {
-            profile.npc_id for profile in state.get("existing_npc_profiles", [])
-        }
-        new_npc_profile_ids = [
-            npc_id
-            for npc_id in [
-                *state.get("updated_npc_profile_ids", []),
-            ]
-            if npc_id not in existing_ids
-        ]
-        if (
-            state.get("confirmed_director_npc_draft") is not None
-            and state.get("director_npc_profile_id")
-        ):
-            new_npc_profile_ids.append(state["director_npc_profile_id"])
-        new_npc_profile_ids = list(dict.fromkeys(new_npc_profile_ids))
-        kwargs = {
-            "core_memory": state["core_memory"],
-            "scene_text": state["effective_scene_text"],
-            "scene_facts_json": state["scene_facts_json"],
-            "new_npc_profile_ids": new_npc_profile_ids,
-        }
-        future = self.runtime.jobs.submit_job(
-            "setting_seed_extract",
-            self.services.run_setting_seed_maintenance,
-            *args,
-            trace_id=state["trace_id"],
-            turn_index=pipeline_input.turn_index,
-            metadata={"campaign_id": self.runtime.campaign_id},
-            **kwargs,
-        )
-        cache["setting_seed_maintenance_job_id"] = getattr(
-            future,
-            "job_id",
-            None,
-        )
-        cache["setting_seed_maintenance_operation_id"] = getattr(
-            future,
-            "operation_id",
-            None,
-        )
-        cache["setting_seed_maintenance_scheduled"] = True
 
     def schedule_scene_summary(self, state: ConfirmationState) -> None:
         cache = state["cache"]
@@ -386,16 +322,14 @@ class ConfirmationEventBuilder:
         director_decision = state.get("director_decision")
         director_executions = state.get("director_executions")
         director_npc_profile_id = state.get("director_npc_profile_id")
-        updated_entity_ids = state.get("updated_entity_ids", [])
         updated_npc_profile_ids = state.get("updated_npc_profile_ids", [])
         npc_extraction = state.get("npc_extraction")
 
-        entity_update_data = {
-            "updated_entity_ids": updated_entity_ids,
+        profile_update_data = {
             "updated_npc_profile_ids": updated_npc_profile_ids,
         }
         if pipeline_input.run_director_agent:
-            entity_update_data.update({
+            profile_update_data.update({
                 "director_npc_profile_id": director_npc_profile_id,
                 "director_decision": model_data(director_decision),
                 "director_executions": model_data(director_executions),
@@ -426,7 +360,6 @@ class ConfirmationEventBuilder:
                 commit_result.continuity_result
             ),
             "continuity_total": commit_result.continuity_total,
-            "updated_entity_ids": updated_entity_ids,
             "updated_npc_profile_ids": updated_npc_profile_ids,
             "npc_extraction": (
                 model_data(npc_extraction)
@@ -443,7 +376,7 @@ class ConfirmationEventBuilder:
             })
 
         return [
-            {"step": "entity_profiles_updated", "data": entity_update_data},
+            {"step": "npc_profiles_updated", "data": profile_update_data},
             {"step": "finish", "data": finish_data},
         ]
 
@@ -505,18 +438,6 @@ class ConfirmationFinalizer:
             else:
                 self.runtime.pending_openings.discard_group(pending.group_id)
 
-        try:
-            self.scheduler.schedule_setting_seed_maintenance(state)
-        except Exception as exc:
-            self.runtime.services.diagnostics.warning(
-                source="confirmation",
-                code="setting_seed_maintenance_schedule_failed",
-                message=str(exc),
-                trace_id=state["trace_id"],
-                operation_type="confirmation",
-                turn_index=_diagnostic_turn_index(state),
-            )
-            traceback.print_exc()
         try:
             self.scheduler.schedule_scene_summary(state)
         except Exception as exc:

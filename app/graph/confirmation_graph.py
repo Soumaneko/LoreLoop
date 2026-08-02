@@ -23,8 +23,6 @@ from .confirmation_nodes import (
     continuity_project_node,
     director_agent_confirm_node,
     director_event_review_node,
-    entity_extract_node,
-    entity_profile_update_node,
     npc_profile_extract_node,
     npc_profile_update_node,
     scene_fact_extract_node,
@@ -58,7 +56,6 @@ def build_confirmation_first_wave_graph():
         scene_fact_extract_node,
         state_update_node,
         scene_summarize_node,
-        entity_extract_node,
         npc_profile_extract_node,
     )
     return get_cached_graph(
@@ -83,21 +80,15 @@ def _compile_confirmation_first_wave_graph():
         capture_confirmation_node_errors("scene_summarize", scene_summarize_node),
     )
     graph.add_node(
-        "entity_extract",
-        capture_confirmation_node_errors("entity_extract", entity_extract_node),
-    )
-    graph.add_node(
         "npc_profile_extract",
         capture_confirmation_node_errors("npc_profile_extract", npc_profile_extract_node),
     )
 
     graph.add_edge(START, "scene_fact_extract")
     graph.add_edge("scene_fact_extract", "state_update")
-    graph.add_edge("scene_fact_extract", "entity_extract")
     graph.add_edge("scene_fact_extract", "npc_profile_extract")
     graph.add_edge("state_update", "scene_summarize")
     graph.add_edge("scene_summarize", END)
-    graph.add_edge("entity_extract", END)
     graph.add_edge("npc_profile_extract", END)
 
     return graph.compile()
@@ -107,7 +98,6 @@ def build_confirmation_second_wave_graph():
     dependencies = (
         action_preview_node,
         continuity_project_node,
-        entity_profile_update_node,
         npc_profile_update_node,
     )
     return get_cached_graph(
@@ -131,13 +121,6 @@ def _compile_confirmation_second_wave_graph():
         ),
     )
     graph.add_node(
-        "entity_profile_update",
-        capture_confirmation_node_errors(
-            "entity_profile_update",
-            entity_profile_update_node,
-        ),
-    )
-    graph.add_node(
         "npc_profile_update",
         capture_confirmation_node_errors(
             "npc_profile_update",
@@ -147,11 +130,9 @@ def _compile_confirmation_second_wave_graph():
 
     graph.add_edge(START, "action_preview")
     graph.add_edge(START, "continuity_project")
-    graph.add_edge(START, "entity_profile_update")
     graph.add_edge(START, "npc_profile_update")
     graph.add_edge("action_preview", END)
     graph.add_edge("continuity_project", END)
-    graph.add_edge("entity_profile_update", END)
     graph.add_edge("npc_profile_update", END)
 
     return graph.compile()

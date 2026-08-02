@@ -204,10 +204,8 @@ def test_canon_query_node_uses_one_full_catalog_for_llm_and_retrieval(monkeypatc
         def list_all(self):
             return self.profiles
 
-    entity_profile = SimpleNamespace(semantic_view=lambda: "all-entity-view")
     npc_profile = SimpleNamespace(director_view=lambda: "all-npc-view")
     stores = {
-        "entity": _Store([entity_profile]),
         "npc_profile": _Store([npc_profile]),
     }
 
@@ -240,14 +238,11 @@ def test_canon_query_node_uses_one_full_catalog_for_llm_and_retrieval(monkeypatc
         "current_state": SimpleNamespace(player=SimpleNamespace(name="莱尔")),
         "narrative_composition": SimpleNamespace(scene_text="风吹过窗沿。"),
         "trace_id": "trace-canon",
-        "composer_entity_profile_views": ["selected-only-entity"],
         "action_npc_director_views": ["selected-only-npc"],
     })
 
     assert streamed[0]["step"] == "canon_query_started"
-    assert captured["catalog_kwargs"]["entity_profiles"] == ["all-entity-view"]
     assert captured["catalog_kwargs"]["npc_profiles"] == ["all-npc-view"]
-    assert captured["agent_kwargs"]["entity_profiles"] == ["all-entity-view"]
     assert captured["agent_kwargs"]["npc_profiles"] == ["all-npc-view"]
     assert result["events"][0]["step"] == "canon_queries_generated"
 

@@ -13,7 +13,6 @@ from app.runtime.session import (
 )
 from app.graph.maintenance_graph import (
     run_scene_summary_maintenance,
-    run_setting_seed_maintenance,
 )
 from .confirmation_lifecycle import (
     ConfirmationCommitServices,
@@ -38,12 +37,10 @@ _ALWAYS_CACHED_NODE_RESULTS = {
     "continuity_projection",
 }
 _WRITE_CACHED_NODE_RESULTS = {
-    "entity_extraction",
     "npc_extraction",
     "director_decision",
     "director_executions",
     "director_event_reviews",
-    "updated_entity_ids",
     "updated_npc_profile_ids",
     "new_npc_profiles",
 }
@@ -260,7 +257,6 @@ def prepare_confirmation_state(
     stores = runtime_services.stores
     services = ConfirmationPreparationServices(
         current_state_store=stores.current_state,
-        entity_store=stores.entity,
         npc_profile_store=stores.npc_profile,
         core_memory_store=stores.core_memory,
         promote_staged_director_npc_profile=lambda pending, *, turn_index: (
@@ -346,7 +342,6 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
     scheduler = ConfirmationMaintenanceScheduler(
         runtime,
         ConfirmationMaintenanceServices(
-            run_setting_seed_maintenance=run_setting_seed_maintenance,
             run_scene_summary_maintenance=run_scene_summary_maintenance,
         ),
     )

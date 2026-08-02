@@ -25,14 +25,14 @@ from app.domain.npc_profile.workflows import (
     backfill_new_npc_profile,
 )
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.world_setting.preparer import SettingAnchorPreparer
+from app.domain.world_setting.creator import WorldSettingCreator
 
 from .director_skill_specs import (
     BindEventActorArguments,
     CreateEventArguments,
     CreateNPCArguments,
+    CreateSettingArguments,
     EnrichNPCArguments,
-    EnrichSettingArguments,
     ForeshadowSettingArguments,
     IntroduceNPCArguments,
     NPC_VIEW_ALWAYS_KEPT,
@@ -108,7 +108,7 @@ def run_generation_director_agent(
             if npc.status != "retired"
         ]
         npc_profiles = npc_profile_store.list_all()
-        settings = setting_store.list_active()
+        settings = setting_store.list_all()
 
         _register_skill(
             service,
@@ -147,7 +147,7 @@ def run_generation_director_agent(
                 args,
                 guidance=guidance,
             ),
-            arguments_validator=lambda args: _require_active_setting(
+            arguments_validator=lambda args: _require_setting(
                 setting_store,
                 args.setting_id,
             ),
@@ -208,7 +208,7 @@ def run_generation_director_agent(
                     for profile in npc_profiles
                 ],
                 "settings": [
-                    _setting_resource(setting)
+                    setting.reference_view()
                     for setting in settings
                 ],
             },
@@ -244,10 +244,7 @@ def run_confirmation_director_agent(
     scene_facts: dict,
     recent_summaries: list[SceneSummary],
     selection_summaries: list[SceneSummary],
-    entity_profiles: list,
     npc_profiles: list,
-    entity_mentions: list[str],
-    npc_mentions: list[str],
     turn_index: int,
     trace_id: str,
     new_npc_profiles: list[NPCProfile] | None = None,
@@ -259,7 +256,26 @@ def run_confirmation_director_agent(
         stores.npc_profile() as npc_profile_store,
         stores.world_setting() as setting_store,
     ):
+        available_settings = setting_store.list_all()
+        available_setting_ids = {
+            setting.setting_id for setting in available_settings
+        }
+
+        def referenced_settings(setting_ids: list[str]):
+            _require_setting_ids(
+                setting_ids,
+                allowed_ids=available_setting_ids,
+            )
+            resolved = []
+            for setting_id in setting_ids:
+                setting = setting_store.get_by_id(setting_id)
+                if setting is None:
+                    raise ValueError(f"unknown setting ID: {setting_id}")
+                resolved.append(setting)
+            return resolved
+
         def create_npc(args: CreateNPCArguments, guidance: str | None = None):
+            settings = referenced_settings(args.setting_ids)
             draft = DirectorNPCCreator(gateway).create(
                 core_memory=core_memory,
                 existing_npcs=npc_profile_store.list_all(),
@@ -274,8 +290,9 @@ def run_confirmation_director_agent(
                     if npc.status != "retired"
                 ],
                 creation_context=NPCCreationContext(
-                    anchors=args.anchors,
+                    setting_ids=args.setting_ids,
                 ),
+                settings=settings,
                 creative_brief=draw_creative_brief(),
                 protagonist_name=current_state.player.name,
                 turn_index=turn_index,
@@ -289,6 +306,7 @@ def run_confirmation_director_agent(
             args: CreateEventArguments,
             guidance: str | None = None,
         ):
+            settings = referenced_settings(args.setting_ids)
             event_guidance = args.event_guidance.strip() or (guidance or "")
             required_actors: list[dict] = []
             bound_actors: list[DirectorActorRef] = []
@@ -343,8 +361,8 @@ def run_confirmation_director_agent(
                 current_state=current_state,
                 core_memory=core_memory,
                 recent_summaries=selection_summaries,
-                entity_profiles=entity_profiles,
                 npc_profiles=npc_profiles,
+                settings=settings,
                 required_actors=required_actors,
                 trace_id=trace_id,
                 guidance=event_guidance,
@@ -354,6 +372,7 @@ def run_confirmation_director_agent(
                 turn_index=turn_index,
                 actors=bound_actors,
                 current_clock=current_state.world_clock,
+                source_setting_ids=args.setting_ids,
             )
             drafts: list = []
             new_npc_ids: list[str] = []
@@ -398,7 +417,10 @@ def run_confirmation_director_agent(
                         }
                         for staged in drafts
                     ],
-                    creation_context=NPCCreationContext(anchors=[]),
+                    creation_context=NPCCreationContext(
+                        setting_ids=args.setting_ids
+                    ),
+                    settings=settings,
                     creative_brief=draw_creative_brief(),
                     protagonist_name=current_state.player.name,
                     turn_index=turn_index,
@@ -467,50 +489,23 @@ def run_confirmation_director_agent(
                 "actor_names": actor_names,
             }
 
-        def enrich_setting(args: EnrichSettingArguments, guidance: str | None = None):
-            setting = setting_store.get_by_id(args.setting_id)
-            if (
-                setting is None
-                or setting.status != "active"
-                or setting.maturity != "seed"
-            ):
-                raise ValueError(
-                    "enrich_setting requires an active setting seed"
-                )
-            batch = SettingAnchorPreparer(gateway).prepare(
+        def create_setting(
+            args: CreateSettingArguments,
+            guidance: str | None = None,
+        ):
+            setting = WorldSettingCreator(gateway).create(
+                kind=args.kind,
+                purpose=args.purpose,
                 core_memory=core_memory,
-                settings=[setting],
+                existing_settings=available_settings,
+                turn_index=turn_index,
                 trace_id=trace_id,
-                guidance=guidance,
             )
-            preparation = next(
-                (
-                    item
-                    for item in batch.preparations
-                    if item.setting_id == setting.setting_id
-                ),
-                None,
-            )
-            if preparation is None:
-                raise ValueError("setting preparation returned no matching result")
-            if preparation.decision == "reject":
-                setting_store.mark_rejected(
-                    setting.setting_id,
-                    reason=preparation.reason,
-                )
-                return {
-                    "setting_id": setting.setting_id,
-                    "status": "rejected",
-                }
-            if preparation.anchor is None:
-                raise ValueError("usable setting preparation requires an anchor")
-            setting_store.save_preparation(
-                setting.setting_id,
-                preparation.anchor,
-            )
+            setting_store.save(setting)
             return {
                 "setting_id": setting.setting_id,
-                "status": "usable",
+                "name": setting.name,
+                "kind": setting.kind,
             }
 
         def bind_actor(args: BindEventActorArguments, guidance: str | None = None):
@@ -590,12 +585,8 @@ def run_confirmation_director_agent(
         )
         _register_skill(
             service,
-            "enrich_setting",
-            handler=enrich_setting,
-            arguments_validator=lambda args: _require_setting_seed(
-                setting_store,
-                args.setting_id,
-            ),
+            "create_setting",
+            handler=create_setting,
         )
         _register_skill(
             service,
@@ -667,8 +658,8 @@ def run_confirmation_director_agent(
                     for profile in npc_profile_store.list_all()
                 ],
                 "settings": [
-                    _setting_resource(setting)
-                    for setting in setting_store.list_active()
+                    setting.reference_view()
+                    for setting in setting_store.list_all()
                 ],
                 "new_npcs": [
                     {
@@ -791,13 +782,13 @@ def _foreshadow_setting(
     guidance: str | None,
 ) -> DirectorStageMaterial:
     setting = store.get_by_id(args.setting_id)
-    if setting is None or setting.status != "active":
-        raise ValueError("foreshadow_setting requires an active setting")
+    if setting is None:
+        raise ValueError("foreshadow_setting references an unknown setting")
     return DirectorStageMaterial(
         kind="setting",
         resource_id=setting.setting_id,
         guidance=_require_generation_guidance(guidance),
-        payload=_setting_resource(setting),
+        payload=setting.director_view(),
     )
 
 
@@ -806,21 +797,6 @@ def _require_generation_guidance(guidance: str | None) -> str:
     if not clean:
         raise ValueError("generation director skills require guidance")
     return clean
-
-
-def _setting_resource(setting) -> dict:
-    return {
-        "setting_id": setting.setting_id,
-        "label": setting.label,
-        "kind": setting.kind,
-        "basic_concept": setting.basic_concept,
-        "maturity": setting.maturity,
-        "prepared_anchor": (
-            setting.prepared_anchor.model_dump(mode="json")
-            if setting.prepared_anchor is not None
-            else None
-        ),
-    }
 
 
 def _require_active_event(store, event_id: str) -> None:
@@ -837,10 +813,10 @@ def _require_npc(director_npc_store, npc_profile_store, npc_id: str) -> None:
         raise ValueError("director skill references an unknown npc_id")
 
 
-def _require_active_setting(store, setting_id: str) -> None:
+def _require_setting(store, setting_id: str) -> None:
     setting = store.get_by_id(setting_id)
-    if setting is None or setting.status != "active":
-        raise ValueError("director skill requires an active setting_id")
+    if setting is None:
+        raise ValueError("director skill references an unknown setting_id")
 
 
 def _require_new_npc(npc_profile_store, new_npc_profiles, npc_id: str) -> None:
@@ -855,16 +831,15 @@ def _require_new_npc(npc_profile_store, new_npc_profiles, npc_id: str) -> None:
         raise ValueError("enrich_npc references an invalid npc_id")
 
 
-def _require_setting_seed(store, setting_id: str) -> None:
-    setting = store.get_by_id(setting_id)
-    if (
-        setting is None
-        or setting.status != "active"
-        or setting.maturity != "seed"
-    ):
-        raise ValueError("enrich_setting requires a setting seed")
-
-
+def _require_setting_ids(setting_ids: list[str], *, allowed_ids: set[str]) -> None:
+    if len(setting_ids) != len(set(setting_ids)):
+        raise ValueError("setting_ids must be unique")
+    unavailable = sorted(set(setting_ids) - allowed_ids)
+    if unavailable:
+        raise ValueError(
+            "setting IDs must exist before this Director turn: "
+            + ", ".join(unavailable)
+        )
 def _require_event_actor_binding(
     event_store,
     director_npc_store,

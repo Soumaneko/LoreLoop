@@ -44,12 +44,6 @@
 {context_facts_json}
 ```
 
-## Entity Profiles
-
-```json
-{entity_profiles_json}
-```
-
 ## NPC Profiles
 
 ```json

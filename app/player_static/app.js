@@ -38,7 +38,7 @@ const els = {
   drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"), openLeftDrawerBtn: $("openLeftDrawerBtn"), closeLeftDrawerBtn: $("closeLeftDrawerBtn"),
   recordsDrawer: $("recordsDrawer"), openRecordsDrawerBtn: $("openRecordsDrawerBtn"), closeRecordsDrawerBtn: $("closeRecordsDrawerBtn"),
   refreshRecordsBtn: $("refreshRecordsBtn"), recordsRefreshState: $("recordsRefreshState"),
-  recordsContinuityList: $("recordsContinuityList"), recordsNpcList: $("recordsNpcList"), recordsEntityList: $("recordsEntityList"),
+  recordsContinuityList: $("recordsContinuityList"), recordsNpcList: $("recordsNpcList"), recordsSettingList: $("recordsSettingList"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), sceneSummary: $("sceneSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
   closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelApiKey: $("modelApiKey"),
@@ -72,7 +72,7 @@ const els = {
 
 const progressLabels = {
   state_loaded: "正在唤醒世界",
-  entity_profiles_loaded: "正在理解场景",
+  npc_profiles_loaded: "正在理解场景",
   action_parsed: "正在理解你的行动",
   rolls_done: "命运已经掷下",
   turn_resolution_done: "正在推演结果",
@@ -93,10 +93,9 @@ const progressLabels = {
   scene_facts_done: "正在提取场景事实",
   state_update_done: "正在更新世界状态",
   continuity_projected: "正在整理未决事项",
-  entity_extract_done: "正在识别重要实体",
   npc_extract_done: "正在整理人物信息",
   action_preview_done: "下一步方向已经生成",
-  entity_profiles_updated: "正在写入旅程",
+  npc_profiles_updated: "正在写入旅程",
   campaign_setup_started: "正在生成公开世界惯例",
   initialization_started: "正在准备开场",
   opening_foundation_ready: "私有开局基础已经准备完成",
@@ -344,7 +343,7 @@ function appendHighlightedText(element, text) {
     if (start > cursor) element.appendChild(document.createTextNode(text.slice(cursor, start)));
     const value = match[0];
     const highlight = lookup.get(value.toLocaleLowerCase());
-    const mark = node("mark", `story-highlight story-highlight-${highlight?.kind || "entity"}`, value);
+    const mark = node("mark", `story-highlight story-highlight-${highlight?.kind || "npc"}`, value);
     if (highlight?.profile) {
       mark.classList.add("story-highlight-clickable");
       mark.tabIndex = 0;
@@ -1332,32 +1331,10 @@ function openCodexProfile(profile, triggerElement) {
   els.codexTitle.textContent = profile.name || "典籍条目";
   els.codexContent.replaceChildren();
 
-  const isNPC = profile.kind === "npc" || profile.entity_type === "npc" || profile.type === "npc";
-  const isItem = profile.kind === "item" || profile.entity_type === "item" || profile.type === "item";
-
-  const typeLabels = {
-    npc: "人物档案",
-    item: "物品图鉴",
-    location: "地理风物",
-    organization: "势力名录",
-  };
-  const entityType = isNPC ? "npc" : (isItem ? "item" : (profile.entity_type || profile.kind || "location"));
-  const typeBadge = node("span", "codex-kind-tag", typeLabels[entityType] || "典籍");
-
-  let subText = "";
-  if (isNPC) {
-    const roleText = profile.role || "未知身份";
-    const factionText = profile.faction || "无归属";
-    subText = `${roleText} ｜ ${factionText}`;
-  } else if (isItem) {
-    const typeText = profile.item_type || "无";
-    const sourceText = profile.item_source || "无";
-    subText = `${typeText} ｜ ${sourceText}`;
-  } else {
-    const typeText = profile.location_type || "无";
-    const parentText = profile.parent_location ? `上级地点：${profile.parent_location}` : "上级地点：无";
-    subText = `${typeText} ｜ ${parentText}`;
-  }
+  const typeBadge = node("span", "codex-kind-tag", "人物档案");
+  const roleText = profile.role || "未知身份";
+  const factionText = profile.faction || "无归属";
+  let subText = `${roleText} ｜ ${factionText}`;
 
   if (subText.length > 28) subText = subText.slice(0, 28) + "…";
 
@@ -1367,9 +1344,7 @@ function openCodexProfile(profile, triggerElement) {
   els.codexContent.appendChild(subHeader);
 
   // 2. 顶部引文区：展示外貌描写 (appearance) 或 summary
-  const quoteText = isNPC
-    ? (profile.appearance || profile.public_summary || "")
-    : (profile.summary || profile.public_summary || profile.description || "");
+  const quoteText = profile.appearance || profile.public_summary || "";
 
   if (quoteText) {
     const quoteBox = node("div", "codex-quote-box", `“${quoteText}”`);
@@ -1383,9 +1358,6 @@ function openCodexProfile(profile, triggerElement) {
   }
   if (profile.known_abilities?.length) {
     profile.known_abilities.forEach((a) => pillsContainer.appendChild(node("span", "codex-pill pill-ability", a)));
-  }
-  if (profile.features?.length) {
-    profile.features.forEach((f) => pillsContainer.appendChild(node("span", "codex-pill pill-feature", f)));
   }
   if (profile.aliases?.length) {
     profile.aliases.forEach((al) => pillsContainer.appendChild(node("span", "codex-pill pill-alias", al)));
@@ -1405,32 +1377,10 @@ function openCodexProfile(profile, triggerElement) {
     detailsPanel.appendChild(row);
   };
 
-  if (isNPC) {
-    if (profile.public_summary && profile.public_summary !== quoteText) {
-      appendDetailText("详细信息", profile.public_summary);
-    }
-    if (profile.current_location) appendDetailText("最后活动地点", profile.current_location);
-  } else if (isItem) {
-    if (profile.description && profile.description !== quoteText) {
-      appendDetailText("详细信息", profile.description);
-    }
-    if (profile.item_source && profile.item_source !== "无") {
-      appendDetailText("物品来源", profile.item_source);
-    }
-    if (profile.parent_location) {
-      appendDetailText("所属地点", profile.parent_location);
-    }
-    if (profile.public_summary && profile.public_summary !== quoteText && profile.public_summary !== profile.description) {
-      appendDetailText("详细信息", profile.public_summary);
-    }
-  } else {
-    if (profile.description && profile.description !== quoteText) {
-      appendDetailText("详细信息", profile.description);
-    }
-    if (profile.public_summary && profile.public_summary !== quoteText && profile.public_summary !== profile.description) {
-      appendDetailText("详细信息", profile.public_summary);
-    }
+  if (profile.public_summary && profile.public_summary !== quoteText) {
+    appendDetailText("详细信息", profile.public_summary);
   }
+  if (profile.current_location) appendDetailText("最后活动地点", profile.current_location);
 
   if (detailsPanel.childNodes.length > 0) {
     els.codexContent.appendChild(detailsPanel);
@@ -3199,17 +3149,13 @@ const NPC_DIRECTOR_FIELDS = [
   ["introduced_turn", "登场回合", false],
 ];
 
-const ENTITY_FIELDS = [
-  ["entity_type", "类型", false],
+const SETTING_FIELDS = [
+  ["kind", "类型", false],
   ["name", "名称", false],
-  ["aliases", "别名", true],
   ["summary", "摘要", false, "textarea"],
-  ["item_type", "物品类型", false],
-  ["item_source", "物品来源", false],
-  ["location_type", "地点类型", false],
-  ["features", "特征", true],
-  ["parent_location", "上级地点", false],
-  ["description", "描述", false, "textarea"],
+  ["public_facts", "公开事实", true, "textarea"],
+  ["hidden_facts", "导演事实", true, "textarea"],
+  ["related_setting_ids", "关联 Setting ID", true],
 ];
 
 function setRecordsRefreshState(text) {
@@ -3247,7 +3193,7 @@ function startRecordsPoll() {
 let recordsRefreshInFlight = false;
 let recordsDirty = false;
 function recomputeRecordsDirty() {
-  for (const list of [els.recordsContinuityList, els.recordsNpcList, els.recordsEntityList]) {
+  for (const list of [els.recordsContinuityList, els.recordsNpcList, els.recordsSettingList]) {
     if (!list) continue;
     for (const control of list.querySelectorAll("input, textarea")) {
       if (control.disabled) continue;
@@ -3351,7 +3297,7 @@ function buildRecordCard({ title, statusText = "", statusActive = false, editabl
 function renderRecords(records) {
   renderContinuityRecords(records.continuity || []);
   renderNpcRecords(records.npc_profiles || []);
-  renderEntityRecords(records.entity_profiles || []);
+  renderSettingRecords(records.world_settings || []);
 }
 
 function emptyState(message) {
@@ -3410,26 +3356,26 @@ function renderNpcRecords(profiles) {
   }
 }
 
-function renderEntityRecords(profiles) {
-  els.recordsEntityList.replaceChildren();
-  if (!profiles.length) {
-    els.recordsEntityList.appendChild(emptyState("暂无实体档案。"));
+function renderSettingRecords(settings) {
+  els.recordsSettingList.replaceChildren();
+  if (!settings.length) {
+    els.recordsSettingList.appendChild(emptyState("暂无世界设定。"));
     return;
   }
-  for (const profile of profiles) {
+  for (const setting of settings) {
     const builder = buildRecordCard({
-      title: profile.fields?.name || "（未命名）",
-      statusText: profile.entity_type || "实体",
-      editableFields: ENTITY_FIELDS,
+      title: setting.fields?.name || "（未命名）",
+      statusText: setting.fields?.kind || "Setting",
+      editableFields: SETTING_FIELDS,
       onSave: async (values) => {
-        await updateRecord("entity", profile.id, values);
-        showToast("实体档案已更新");
+        await updateRecord("setting", setting.id, values);
+        showToast("世界设定已更新");
       },
     });
-    builder.populate(profile.fields || {});
+    builder.populate(setting.fields || {});
     builder.editableFields.forEach(builder.appendEditable.bind(builder));
     appendSaveActions(builder);
-    els.recordsEntityList.appendChild(builder.card);
+    els.recordsSettingList.appendChild(builder.card);
   }
 }
 

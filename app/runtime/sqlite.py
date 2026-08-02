@@ -12,13 +12,12 @@ SUPPORTED_SCHEMA_VERSIONS = {
     "confirmed_history": 1,
     "continuity": 1,
     "current_state": 4,
-    "director_event": 10,
-    "director_npc": 2,
-    "entity_profile": 3,
+    "director_event": 11,
+    "director_npc": 3,
     "npc_profile": 3,
     "scene_summary": 1,
     "short_term_memory": 5,
-    "world_setting": 6,
+    "world_setting": 8,
 }
 _savepoint_counter = 0
 _savepoint_lock = threading.Lock()

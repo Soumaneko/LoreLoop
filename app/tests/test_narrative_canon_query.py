@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.narrative_canon_query import NarrativeCanonQueryAgent
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 
@@ -30,19 +29,11 @@ class _SpyGateway:
         })
 
 
-def test_agent_projects_only_numbered_prose_and_compact_entity_catalog():
+def test_agent_projects_only_numbered_prose_and_compact_character_catalog():
     gateway = _SpyGateway()
     result = NarrativeCanonQueryAgent(gateway).generate(
         scene_text="莱尔放下茶杯。\n\n埃利奥说自己去过灰烬图书馆。\n\n他在那里被落石挡住。",
         player_name="莱尔",
-        entity_profiles=[
-            EntityProfileUpdateInput(
-                entity_type="location",
-                name="灰烬图书馆",
-                aliases=["灰烬馆", "灰烬馆"],
-                summary="这段历史摘要绝不能进入查询模块。",
-            )
-        ],
         npc_profiles=[
             NPCProfileDirectorView(
                 name="埃利奥",
@@ -73,10 +64,8 @@ def test_agent_projects_only_numbered_prose_and_compact_entity_catalog():
     catalog = json.loads(input_data["known_entity_catalog_json"])
     assert catalog == [
         {"name": "莱尔", "aliases": [], "kind": "player"},
-        {"name": "灰烬图书馆", "aliases": ["灰烬馆"], "kind": "location"},
         {"name": "埃利奥", "aliases": ["木偶师"], "kind": "npc"},
     ]
-    assert "历史摘要" not in input_data["known_entity_catalog_json"]
     assert "秘密" not in input_data["known_entity_catalog_json"]
     schema = json.loads(input_data["output_schema_json"])
     assert "query_id" not in json.dumps(schema, ensure_ascii=False)
@@ -96,7 +85,6 @@ def test_agent_allows_no_queries_and_rejects_empty_scene():
     result = NarrativeCanonQueryAgent(gateway).generate(
         scene_text="风吹过窗沿。",
         player_name="莱尔",
-        entity_profiles=[],
         npc_profiles=[],
     )
     assert "不需要查询" in result.thought_process
@@ -106,7 +94,6 @@ def test_agent_allows_no_queries_and_rejects_empty_scene():
         NarrativeCanonQueryAgent(gateway).generate(
             scene_text=" \n ",
             player_name="莱尔",
-            entity_profiles=[],
             npc_profiles=[],
         )
     except ValueError as exc:

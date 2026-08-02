@@ -49,12 +49,6 @@
   --highlight-npc-text: #b1e4dc;
   --highlight-npc-bg: rgba(85, 148, 137, 0.18);
   --highlight-npc-border: rgba(132, 191, 181, 0.35);
-  --highlight-entity-text: #d1e5a5;
-  --highlight-entity-bg: rgba(118, 143, 73, 0.18);
-  --highlight-entity-border: rgba(167, 188, 115, 0.35);
-  --feature-text: #84bfb5;
-  --feature-bg: rgba(85, 148, 137, 0.16);
-  --feature-border: rgba(132, 191, 181, 0.32);
   --ability-text: #a9c986;
   --ability-bg: rgba(118, 143, 73, 0.16);
   --ability-border: rgba(167, 188, 115, 0.32);
@@ -128,12 +122,6 @@ html[data-theme="sepia"] {
   --highlight-npc-text: #384a1e;
   --highlight-npc-bg: rgba(105, 128, 65, 0.16);
   --highlight-npc-border: rgba(105, 128, 65, 0.35);
-  --highlight-entity-text: #22423c;
-  --highlight-entity-bg: rgba(75, 120, 110, 0.16);
-  --highlight-entity-border: rgba(75, 120, 110, 0.35);
-  --feature-text: #356a68;
-  --feature-bg: rgba(53, 106, 104, 0.1);
-  --feature-border: rgba(53, 106, 104, 0.3);
   --ability-text: #4f6b3c;
   --ability-bg: rgba(79, 107, 60, 0.1);
   --ability-border: rgba(79, 107, 60, 0.3);
@@ -202,12 +190,6 @@ html[data-theme="light"] {
   --highlight-npc-text: #1e4620;
   --highlight-npc-bg: rgba(74, 117, 76, 0.14);
   --highlight-npc-border: rgba(74, 117, 76, 0.28);
-  --highlight-entity-text: #184247;
-  --highlight-entity-bg: rgba(56, 115, 122, 0.14);
-  --highlight-entity-border: rgba(56, 115, 122, 0.28);
-  --feature-text: #2d5a5e;
-  --feature-bg: rgba(56, 115, 122, 0.1);
-  --feature-border: rgba(56, 115, 122, 0.26);
   --ability-text: #375323;
   --ability-bg: rgba(74, 117, 76, 0.1);
   --ability-border: rgba(74, 117, 76, 0.26);
@@ -383,7 +365,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .quill { color: var(--gold-bright); font-size: 12px; }
 .scene-text { color: var(--ink); font-family: var(--serif); font-size: var(--narrative-font-size, 16.5px); line-height: calc(var(--narrative-font-size, 16.5px) * 1.95); white-space: pre-wrap; }
 
-/* Enhanced Entity & NPC Highlight Badges */
+/* NPC highlight badges */
 .story-highlight {
   display: inline-block;
   margin: 0 4px;
@@ -404,11 +386,6 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   color: var(--highlight-npc-text);
   background: var(--highlight-npc-bg);
   border: 1px solid var(--highlight-npc-border);
-}
-.story-highlight-entity {
-  color: var(--highlight-entity-text);
-  background: var(--highlight-entity-bg);
-  border: 1px solid var(--highlight-entity-border);
 }
 .story-highlight:hover { filter: brightness(1.15); }
 .story-highlight-clickable { cursor: pointer; }
@@ -1529,7 +1506,6 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 }
 .codex-pill.pill-trait { background: var(--gold-soft); color: var(--gold-bright); border: 1px solid var(--line); }
 .codex-pill.pill-ability { background: var(--ability-bg); color: var(--ability-text); border: 1px solid var(--ability-border); }
-.codex-pill.pill-feature { background: var(--feature-bg); color: var(--feature-text); border: 1px solid var(--feature-border); }
 .codex-pill.pill-alias { background: var(--surface-soft); color: var(--muted); border: 1px solid var(--line); }
 
 .codex-details-panel { display: grid; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }

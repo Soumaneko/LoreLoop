@@ -10,7 +10,7 @@ DirectorNPCStatus = Literal["prepared", "introduced", "retired"]
 class NPCCreationContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    anchors: list[str] = Field(default_factory=list, max_length=8)
+    setting_ids: list[str] = Field(default_factory=list, max_length=4)
 
 
 def _new_id() -> str:
@@ -31,12 +31,12 @@ class DirectorNPCDraft(BaseModel):
     social_style: str = Field(min_length=1)
     role: str = Field(min_length=1)
     faction: str | None = None
-    personality_traits: list[str] = Field(min_length=2, max_length=5)
+    personality_traits: list[str] = Field(min_length=2, max_length=3)
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     appearance: str = Field(min_length=1)
     name: str = Field(min_length=1)
     encounter_potentials: list[str] = Field(min_length=3, max_length=5)
-    creation_anchors: list[str] = Field(default_factory=list, max_length=8)
+    source_setting_ids: list[str] = Field(default_factory=list, max_length=4)
     status: DirectorNPCStatus = "prepared"
     created_turn: int = Field(ge=0)
     introduced_turn: int | None = Field(default=None, ge=0)
@@ -57,6 +57,7 @@ class DirectorNPCDraft(BaseModel):
             conflict_style=self.conflict_style,
             social_style=self.social_style,
             encounter_potentials=list(self.encounter_potentials),
+            source_setting_ids=list(self.source_setting_ids),
             created_turn=self.created_turn,
             introduced_turn=self.introduced_turn,
         )
@@ -72,7 +73,7 @@ class DirectorNPCCreateOutput(BaseModel):
     social_style: str = Field(min_length=1)
     role: str = Field(min_length=1)
     faction: str | None = None
-    personality_traits: list[str] = Field(min_length=2, max_length=5)
+    personality_traits: list[str] = Field(min_length=2, max_length=3)
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     appearance: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -94,5 +95,6 @@ class DirectorNPCPrivateProfile(BaseModel):
     appearance: str
     name: str
     encounter_potentials: list[str] = Field(default_factory=list)
+    source_setting_ids: list[str] = Field(default_factory=list)
     created_turn: int
     introduced_turn: int | None = None

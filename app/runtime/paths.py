@@ -78,10 +78,6 @@ class CampaignPaths:
         return self.data_dir / "confirmed_history.db"
 
     @property
-    def entity_db(self) -> Path:
-        return self.data_dir / "entities.db"
-
-    @property
     def npc_profile_db(self) -> Path:
         return self.data_dir / "npc_profiles.db"
 

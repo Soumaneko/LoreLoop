@@ -4,7 +4,6 @@ from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director.schemas import DirectorStageResult
-from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
@@ -22,7 +21,6 @@ class NarrativeComposerContext(BaseModel):
             facts=[],
         )
     )
-    entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
     director_stage: DirectorStageResult | None = None
 

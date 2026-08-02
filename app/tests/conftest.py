@@ -26,7 +26,6 @@ def configure_runtime_services(monkeypatch):
                 "short_term",
                 "confirmed_history",
                 "scene_summary",
-                "entity",
                 "npc_profile",
                 "core_memory",
                 "director_event",

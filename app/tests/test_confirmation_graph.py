@@ -29,7 +29,7 @@ def test_confirmation_first_wave_preserves_parallel_extract_dependencies():
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
     assert ("scene_fact_extract", "state_update") in edges
-    assert ("scene_fact_extract", "entity_extract") in edges
+    assert ("scene_fact_extract", "npc_profile_extract") in edges
     assert ("scene_fact_extract", "npc_profile_extract") in edges
     assert ("state_update", "scene_summarize") in edges
     assert ("scene_summarize", "__end__") in edges
@@ -197,10 +197,6 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
             return object()
 
     class _Scheduler:
-        def schedule_setting_seed_maintenance(self, _state):
-            calls.append("setting")
-            return True
-
         def schedule_scene_summary(self, _state):
             calls.append("followups")
 
@@ -245,7 +241,6 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
         "audit",
         "journal_completed",
         "pending_removed",
-        "setting",
         "followups",
         "events",
     ]
@@ -302,7 +297,7 @@ def test_confirmation_second_wave_starts_after_helper_state_is_ready():
 
     assert ("__start__", "action_preview") in edges
     assert ("__start__", "continuity_project") in edges
-    assert ("__start__", "entity_profile_update") in edges
+    assert ("__start__", "npc_profile_update") in edges
     assert ("__start__", "npc_profile_update") in edges
 
     director_graph = confirmation_graph.build_confirmation_director_graph().get_graph()
@@ -343,13 +338,13 @@ def test_node_updates_are_persisted_to_retry_cache_at_merge_boundary():
         state,
         {
             "scene_facts": marker,
-            "entity_extraction": marker,
+            "npc_extraction": marker,
             "events": [{"step": "done", "data": {}}],
         },
     )
 
     assert state["cache"]["scene_facts"] is marker
-    assert state["cache"]["entity_extraction"] is marker
+    assert state["cache"]["npc_extraction"] is marker
     assert state["events"] == [{"step": "done", "data": {}}]
 
 
@@ -360,13 +355,13 @@ def test_dry_run_merge_does_not_cache_write_only_results():
     merge_confirmation_node_update(
         state,
         {
-            "entity_extraction": marker,
-            "updated_entity_ids": ["entity_1"],
+            "npc_extraction": marker,
+            "updated_npc_profile_ids": ["npc_1"],
         },
     )
 
-    assert "entity_extraction" not in state["cache"]
-    assert "updated_entity_ids" not in state["cache"]
+    assert "npc_extraction" not in state["cache"]
+    assert "updated_npc_profile_ids" not in state["cache"]
 
 
 def test_parallel_success_is_cacheable_when_sibling_node_fails():
@@ -405,11 +400,9 @@ def test_rollback_cache_keeps_pure_results_and_discards_write_markers():
         "state_change_set": marker,
         "turn_summary": marker,
         "action_preview": marker,
-        "entity_extraction": marker,
         "npc_extraction": marker,
         "director_decision": marker,
         "director_executions": marker,
-        "updated_entity_ids": ["entity_1"],
         "updated_npc_profile_ids": ["npc_1"],
         "director_npc_profile_id": "npc_2",
         "state_saved": True,

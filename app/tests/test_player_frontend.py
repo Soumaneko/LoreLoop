@@ -27,7 +27,6 @@ from app.domain.current_state import (
     SceneState,
     WorldClock,
 )
-from app.domain.entity.schemas import EntityProfile
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.turn_resolution import PlayerTurnResolution
 from app.runtime.player_state import (
@@ -580,10 +579,9 @@ def test_player_themes_use_semantic_tokens_without_component_overrides():
         "--positive-text:",
         "--warning-text:",
         "--negative-text:",
-        "--highlight-player-text:",
-        "--highlight-npc-text:",
-        "--highlight-entity-text:",
-        "--backdrop:",
+            "--highlight-player-text:",
+            "--highlight-npc-text:",
+            "--backdrop:",
     ):
         assert styles.count(token) == 3
 
@@ -987,13 +985,6 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
                 },
             },
         )
-    with runtime.stores.entity() as store:
-        store.upsert(EntityProfile(
-            entity_type="location",
-            name="灰烬图书馆",
-            aliases=["图书馆"],
-            summary="藏有大量旧书的公开地点。",
-        ))
     with runtime.stores.npc_profile() as store:
         store.upsert(NPCProfile(
             name="埃利奥",
@@ -1038,15 +1029,12 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     assert "attitude_to_player" not in str(payload)
     assert "暗中恐惧" not in str(payload)
     assert "不可泄露" not in str(payload)
-    assert "藏有大量旧书的公开地点。" in str(payload)
     assert "流浪木偶师" in str(payload)
     assert "不应投影的 NPC 秘密" not in str(payload)
     assert {item["surface"] for item in payload["highlights"]} == {
-        "图书馆", "木偶师", "埃利奥",
+        "木偶师", "埃利奥",
     }
-    assert {item["kind"] for item in payload["highlights"]} == {
-        "npc", "entity",
-    }
+    assert {item["kind"] for item in payload["highlights"]} == {"npc"}
     assert not any(
         item["surface"] == "莱尔"
         for item in payload["highlights"]

@@ -15,10 +15,7 @@ from app.domain.director_event.workflows import (
     review_engaged_events_workflow,
     review_hidden_events_workflow,
 )
-from app.domain.entity.extractor import EntityExtractor
-from app.domain.entity.schemas import EntityExtractionResult
 from app.domain.npc_profile.extractor import NPCProfileExtractor
-from app.domain.npc_profile.schemas import NPCExtractionResult
 from app.domain.npc_profile.workflows import (
     sync_npc_profile_absence_from_current_state,
     update_npc_profiles_from_extraction,
@@ -27,7 +24,6 @@ from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
 from app.domain.scene_summary.summarizer import SceneSummarizer
 from app.domain.views import project_scene_facts
 from app.runtime.serialization import model_data
-from app.domain.entity.workflows import update_entity_profiles_from_extraction
 
 from .confirmation_helpers import merge_unique_ids
 from .confirmation_state import ConfirmationState
@@ -44,36 +40,6 @@ def _gateway_for(state: ConfirmationState):
 
 def _store_factory(state: ConfirmationState, name: str):
     return getattr(state["runtime_services"].stores, name)
-
-
-def _entity_extraction_mentions(
-    extraction: EntityExtractionResult | None,
-) -> list[str]:
-    if extraction is None:
-        return []
-    values = [
-        value
-        for match in extraction.alias_matches
-        for value in (
-            match.extracted_text,
-            match.matched_entity_name,
-            match.new_alias,
-        )
-        if value
-    ]
-    values.extend(
-        value
-        for entity in extraction.retrieved_entities
-        for value in (entity.name, entity.matched_entity_name)
-        if value
-    )
-    return list(dict.fromkeys(values))
-
-
-def _npc_extraction_mentions(extraction: NPCExtractionResult | None) -> list[str]:
-    if extraction is None:
-        return []
-    return list(dict.fromkeys(mention.name for mention in extraction.mentions))
 
 
 def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
@@ -230,33 +196,6 @@ def scene_summarize_node(state: ConfirmationState) -> ConfirmationState:
     }
 
 
-def entity_extract_node(state: ConfirmationState) -> ConfirmationState:
-    if not state.get("write_db", True):
-        return {"entity_extraction": None}
-    pipeline_input = state["pipeline_input"]
-    trace_id = state["trace_id"]
-    cache = state["cache"]
-    entity_extraction = cache.get("entity_extraction")
-    if entity_extraction is None:
-        gateway = _gateway_for(state)
-        extractor = EntityExtractor(gateway)
-        entity_extraction = extractor.extract(
-            core_memory=state["core_memory"],
-            scene_facts=state["scene_facts_json"],
-            existing_profiles=state["existing_entity_profiles"],
-            trace_id=trace_id,
-        )
-    return {
-        "entity_extraction": entity_extraction,
-        "events": [{
-            "step": "entity_extract_done",
-            "data": {
-                "entity_extraction": model_data(entity_extraction),
-            },
-        }],
-    }
-
-
 def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
     if not state.get("write_db", True):
         return {"npc_extraction": None}
@@ -331,24 +270,13 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
     decision = cache.get("director_decision")
     executions = cache.get("director_executions")
     if decision is None or executions is None:
-        with (
-            _store_factory(state, "entity")() as director_entity_repo,
-            _store_factory(state, "npc_profile")() as director_npc_profile_repo,
-        ):
-            director_entity_profiles = [
-                profile.semantic_view()
-                for profile in director_entity_repo.list_all()
-            ]
+        with _store_factory(state, "npc_profile")() as director_npc_profile_repo:
             all_director_npc_profiles = director_npc_profile_repo.list_all()
             director_npc_profiles = [
                 profile.director_view()
                 for profile in all_director_npc_profiles
             ]
             new_npc_profiles = state.get("new_npc_profiles", [])
-            entity_mentions = _entity_extraction_mentions(
-                state.get("entity_extraction")
-            )
-            npc_mentions = _npc_extraction_mentions(state.get("npc_extraction"))
             decision, executions = run_confirmation_director_agent(
                 gateway=_gateway_for(state),
                 stores=state["runtime_services"].stores,
@@ -358,10 +286,7 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
                 scene_facts=state["scene_facts"].model_dump(mode="json"),
                 recent_summaries=state.get("recent_summaries", []),
                 selection_summaries=state.get("selection_summaries", []),
-                entity_profiles=director_entity_profiles,
                 npc_profiles=director_npc_profiles,
-                entity_mentions=entity_mentions,
-                npc_mentions=npc_mentions,
                 turn_index=pipeline_input.turn_index,
                 trace_id=state["trace_id"],
                 new_npc_profiles=new_npc_profiles,
@@ -377,31 +302,6 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
             },
         }],
     }
-
-
-def entity_profile_update_node(state: ConfirmationState) -> ConfirmationState:
-    if not state.get("write_db", True) or state.get("entity_extraction") is None:
-        return {"updated_entity_ids": state["cache"].get("updated_entity_ids", [])}
-    pipeline_input = state["pipeline_input"]
-    trace_id = state["trace_id"]
-    cache = state["cache"]
-    updated_entity_ids = cache.get("updated_entity_ids", [])
-    if "updated_entity_ids" not in cache:
-        with _store_factory(state, "entity")() as ent_store:
-            gateway = _gateway_for(state)
-            entity_result = update_entity_profiles_from_extraction(
-                scene_facts=state["scene_facts_json"],
-                current_state=state["updated_state"],
-                core_memory=state["core_memory"],
-                gateway=gateway,
-                entity_store=ent_store,
-                existing_profiles=state["existing_entity_profiles"],
-                extraction=state["entity_extraction"],
-                recent_summaries=state.get("recent_summaries", []),
-                trace_id=trace_id,
-            )
-            updated_entity_ids = entity_result.saved_ids
-    return {"updated_entity_ids": updated_entity_ids}
 
 
 def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:

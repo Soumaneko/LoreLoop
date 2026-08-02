@@ -9,13 +9,11 @@ from app.domain.core_memory.schemas import CoreMemory
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.context_facts.views import project_context_facts
 from app.domain.current_state.schemas import CurrentState
-from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.roll.resolver import action_never_rolls
 from app.domain.roll.schemas import RollResultBatch
 from app.domain.views import (
     project_current_state,
-    project_entity_profiles,
     project_npc_profiles,
 )
 
@@ -177,7 +175,6 @@ class TurnResolutionAgent:
         roll_results: RollResultBatch,
         core_memory: CoreMemory,
         context_facts: ContextFactSet | None = None,
-        entity_profiles: list[EntityProfileUpdateInput] | None = None,
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
     ) -> TurnResolutionResult:
@@ -207,7 +204,6 @@ class TurnResolutionAgent:
                     "context_facts_json": project_context_facts(
                         context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[])
                     ),
-                    "entity_profiles_json": project_entity_profiles(entity_profiles or []),
                     "npc_profiles_json": project_npc_profiles(npc_profiles or []),
                     "output_schema_json": json.dumps(
                         schema,

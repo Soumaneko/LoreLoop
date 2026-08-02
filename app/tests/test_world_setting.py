@@ -1,103 +1,156 @@
 import sqlite3
 
+import pytest
+from pydantic import ValidationError
+
+from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.world_setting import (
-    SettingAnchorPacket,
-    SettingSeedCandidate,
-    SettingSourceDocument,
+    SettingCreateOutput,
+    WorldSetting,
+    WorldSettingCreator,
     WorldSettingStore,
 )
 
 
-def _save_seed(store: WorldSettingStore) -> str:
-    document = SettingSourceDocument(
-        source_key="scene:4",
-        source_type="scene_text",
-        source_ref="scene_4",
-        visibility="player_known",
-        content="河岸区每晚十点后关闭闸门。",
-    )
-    [setting_id] = store.apply_extraction(
-        [
-            SettingSeedCandidate(
-                label="河岸区夜禁",
-                kind="institution_or_custom",
-                basic_concept="河岸区存在固定夜禁。",
-                source_key=document.source_key,
-                source_span="每晚十点后关闭闸门",
-            )
-        ],
-        source_documents={document.source_key: document},
-        turn_index=4,
-    )
-    return setting_id
+def _setting(**updates) -> WorldSetting:
+    data = {
+        "kind": "faction",
+        "name": "听潮院",
+        "summary": "沿海城镇间共享航路情报的松散组织。",
+        "public_facts": ["成员多为船主与领航员。"],
+        "hidden_facts": ["核心议事人刻意隐瞒一条废弃航道。"],
+        "created_turn": 3,
+    }
+    data.update(updates)
+    return WorldSetting(**data)
 
 
-def test_setting_store_has_independent_active_rejected_lifecycle():
+class _Gateway:
+    def __init__(self, response: dict):
+        self.response = response
+        self.calls = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        return kwargs["output_schema"].model_validate(self.response)
+
+
+def test_setting_kind_is_restricted_to_four_general_categories():
+    assert set(WorldSetting.model_json_schema()["properties"]["kind"]["enum"]) == {
+        "faction",
+        "location",
+        "item",
+        "lore",
+    }
+    with pytest.raises(ValidationError):
+        _setting(kind="organization")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", "设" * 11),
+        ("summary", "设" * 51),
+        ("public_facts", ["设" * 51]),
+        ("hidden_facts", ["设" * 51]),
+    ],
+)
+def test_setting_text_fields_enforce_compact_limits(field, value):
+    with pytest.raises(ValidationError):
+        _setting(**{field: value})
+
+
+def test_setting_reference_view_omits_facts():
+    setting = _setting()
+    assert setting.reference_view() == {
+        "setting_id": setting.setting_id,
+        "kind": setting.kind,
+        "name": setting.name,
+        "summary": setting.summary,
+        "related_setting_ids": [],
+    }
+
+
+def test_static_setting_store_round_trip_and_rejects_duplicate_name():
     store = WorldSettingStore()
-    setting_id = _save_seed(store)
+    setting = _setting()
+    store.save(setting)
 
-    assert store.get_by_id(setting_id).status == "active"
-    store.mark_rejected(setting_id, reason="正文证据不足。")
-
-    rejected = store.get_by_id(setting_id)
-    assert rejected.status == "rejected"
-    assert rejected.rejection_reason == "正文证据不足。"
-    assert store.list_active() == []
+    assert store.get_by_id(setting.setting_id) == setting
+    with pytest.raises(ValueError, match="already exists"):
+        store.save(_setting(name=" 听 潮院 "))
     store.close()
 
 
-def test_setting_preparation_does_not_create_or_consume_npc():
+def test_setting_store_requires_existing_explicit_relations():
     store = WorldSettingStore()
-    setting_id = _save_seed(store)
-    anchor = SettingAnchorPacket(
-        setting_id=setting_id,
-        label="河岸区夜禁",
-        kind="institution_or_custom",
-        definition="河岸区每晚十点关闭闸门。",
-        setting_facts=["夜禁由区政府执行。"],
-        player_known_facts=[0],
-    )
-
-    store.save_preparation(setting_id, anchor)
-
-    setting = store.get_by_id(setting_id)
-    assert setting.maturity == "usable"
-    assert setting.status == "active"
-    assert setting.prepared_anchor == anchor
-    assert "consumed_by_director_npc_id" not in setting.model_dump()
+    with pytest.raises(ValueError, match="unknown related"):
+        store.save(_setting(related_setting_ids=["setting_missing"]))
     store.close()
 
 
-def test_store_rejects_reservation_schema_instead_of_migrating_it(tmp_path):
+def test_creator_freely_builds_complete_setting_from_limited_purpose():
+    gateway = _Gateway({
+        "name": "听潮院",
+        "summary": "沿海城镇间共享航路情报的松散组织。",
+        "public_facts": ["成员多为船主与领航员。"],
+        "hidden_facts": ["核心议事人刻意隐瞒一条废弃航道。"],
+    })
+    core_memory = CoreMemory(items=[CoreMemoryItem(
+        id="world",
+        kind="world_invariant",
+        strength="hard_constraint",
+        source="player",
+        content="这是一个以航海贸易为主的人类世界。",
+    )])
+
+    setting = WorldSettingCreator(gateway).create(
+        kind="faction",
+        purpose="创建一个调查异常航迹的组织",
+        core_memory=core_memory,
+        existing_settings=[_setting(name="潮讯社"), _setting(name="远帆会")],
+        turn_index=3,
+    )
+
+    assert setting.name == "听潮院"
+    assert setting.kind == "faction"
+    assert gateway.calls[0]["temperature"] == 0.9
+    assert "purpose" in gateway.calls[0]["input_data"]
+    existing_json = gateway.calls[0]["input_data"]["existing_settings_json"]
+    assert "潮讯社" in existing_json
+    assert "远帆会" in existing_json
+    assert "public_facts" not in existing_json
+    assert "hidden_facts" not in existing_json
+    assert "related_settings_json" not in gateway.calls[0]["input_data"]
+
+
+def test_setting_requires_concrete_non_overlapping_facts():
+    with pytest.raises(ValidationError):
+        SettingCreateOutput(name="空壳", summary="没有事实。")
+    with pytest.raises(ValidationError):
+        SettingCreateOutput(
+            name="冲突",
+            summary="事实冲突。",
+            public_facts=["同一事实"],
+            hidden_facts=["同一事实"],
+        )
+
+
+def test_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
     db_path = tmp_path / "world_settings.db"
     conn = sqlite3.connect(db_path)
     conn.execute(
-        """
-        CREATE TABLE world_settings (
-            setting_id TEXT PRIMARY KEY,
-            availability TEXT NOT NULL,
-            reserved_by TEXT
-        )
-        """
+        "CREATE TABLE world_settings (setting_id TEXT PRIMARY KEY, label TEXT)"
     )
     conn.commit()
     conn.close()
 
-    try:
+    with pytest.raises(RuntimeError, match="static Setting contract"):
         WorldSettingStore(str(db_path))
-    except RuntimeError as exc:
-        assert "independent World Setting contract" in str(exc)
-    else:
-        raise AssertionError("reservation-era Setting schema must be rejected")
 
 
-def test_setting_domain_does_not_import_director_npc_or_define_reservations():
+def test_setting_domain_has_no_extraction_or_maintenance_layer():
     from pathlib import Path
 
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in Path("app/domain/world_setting").glob("*.py")
-    )
-    assert "director_npc" not in source
-    assert "reserved_by" not in source
-    assert "availability" not in source
+    names = {path.name for path in Path("app/domain/world_setting").glob("*.py")}
+    assert names == {"__init__.py", "creator.py", "schemas.py", "store.py"}

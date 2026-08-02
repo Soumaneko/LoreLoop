@@ -22,6 +22,7 @@ class DirectorNPCCreator:
         existing_npcs: list,
         reserved_npcs: list[dict[str, str | None]] | None = None,
         creation_context: NPCCreationContext,
+        settings: list,
         creative_brief: CreativeBrief,
         protagonist_name: str,
         turn_index: int,
@@ -59,6 +60,11 @@ class DirectorNPCCreator:
                     "creation_context_json": creation_context.model_dump_json(
                         indent=2
                     ),
+                    "settings_json": json.dumps(
+                        [setting.director_view() for setting in settings],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "creative_brief_json": creative_brief.model_dump_json(
                         exclude_none=True,
                         indent=2,
@@ -82,7 +88,7 @@ class DirectorNPCCreator:
         )
         return DirectorNPCDraft(
             **result.model_dump(exclude={"creation_reason"}),
-            creation_anchors=list(creation_context.anchors),
+            source_setting_ids=list(creation_context.setting_ids),
             created_turn=turn_index,
             status="prepared",
             introduced_turn=None,

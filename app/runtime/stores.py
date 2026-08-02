@@ -5,7 +5,6 @@ from app.domain.continuity import ContinuityStore
 from app.domain.current_state import CurrentStateStore
 from app.domain.director_event.store import DirectorEventStore
 from app.domain.director_npc.store import DirectorNPCStore
-from app.domain.entity.store import EntityStore
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.short_term_memory import ShortTermMemoryStore
@@ -43,10 +42,6 @@ class StoreBundle:
     def confirmed_history(self) -> ConfirmedHistoryStore:
         self._ensure_data_dir()
         return ConfirmedHistoryStore(str(self.paths.confirmed_history_db))
-
-    def entity(self) -> EntityStore:
-        self._ensure_data_dir()
-        return EntityStore(str(self.paths.entity_db))
 
     def npc_profile(self) -> NPCProfileStore:
         self._ensure_data_dir()

@@ -3,7 +3,6 @@ from typing import Any
 
 from app.domain.action.schemas import ActionParseResult
 from app.domain.current_state.schemas import CurrentState
-from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView, NPCProfilePublicView
 from app.domain.scene_summary.schemas import SceneSummary
 
@@ -24,14 +23,6 @@ def project_current_state(state: CurrentState) -> str:
     data = state.model_dump(mode="json")
     return json.dumps(
         strip_empty(data),
-        ensure_ascii=False,
-        indent=2,
-    )
-
-
-def project_entity_profiles(profiles: list[EntityProfileUpdateInput]) -> str:
-    return json.dumps(
-        [strip_empty(p.model_dump(mode="json")) for p in profiles],
         ensure_ascii=False,
         indent=2,
     )

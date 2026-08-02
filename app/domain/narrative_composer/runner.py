@@ -12,7 +12,6 @@ from app.domain.scene_writer.schemas import NextActionDirection
 from app.domain.short_term_memory.schemas import ShortTermScene
 from app.domain.views import (
     project_current_state,
-    project_entity_profiles,
     project_npc_profiles,
 )
 
@@ -142,7 +141,6 @@ def _base_input(
         "user_input": context.user_input,
         "turn_resolution_json": project_turn_resolution(context.turn_resolution),
         "context_facts_json": project_context_facts(context.context_facts),
-        "entity_profiles_json": project_entity_profiles(context.entity_profiles),
         "npc_profiles_json": project_npc_profiles(context.npc_profiles),
         "director_stage_json": json.dumps(
             (

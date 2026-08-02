@@ -9,7 +9,6 @@ from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director.schemas import DirectorStageResult
-from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.roll.schemas import Difficulty
@@ -30,7 +29,6 @@ def assemble_narrative_context(
     turn_resolution: TurnResolutionResult,
     core_memory: CoreMemory,
     context_facts: ContextFactSet | None = None,
-    entity_profiles: list[EntityProfileUpdateInput] | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
     director_stage: DirectorStageResult | None = None,
 ) -> NarrativeComposerContext:
@@ -41,7 +39,6 @@ def assemble_narrative_context(
         core_memory=core_memory,
         context_facts=context_facts
         or ContextFactSet(turn_focus="No Context Facts", facts=[]),
-        entity_profiles=entity_profiles or [],
         npc_profiles=npc_profiles or [],
         director_stage=director_stage,
     )
@@ -101,20 +98,15 @@ def prepare_generation_state(
         "recent_summaries": recent_summaries,
     }
 
-    with stores.entity() as ent_store, stores.npc_profile() as npc_store:
+    with stores.npc_profile() as npc_store:
         selection = select_context_profiles(
             user_input=user_input,
             current_state=current_state,
-            entity_store=ent_store,
             npc_store=npc_store,
         )
 
     state.update({
         "matched_anchors": selection.anchors,
-        "action_entity_profile_views": [
-            profile.semantic_view()
-            for profile in selection.entity_profiles
-        ],
         "action_npc_director_views": [
             profile.director_view()
             for profile in selection.npc_profiles
@@ -199,12 +191,9 @@ def state_loaded_event(state: dict[str, Any]) -> GenerationEvent:
 
 def profiles_loaded_event(state: dict[str, Any]) -> GenerationEvent:
     return {
-        "step": "entity_profiles_loaded",
+        "step": "npc_profiles_loaded",
         "data": {
             "anchors": model_data(state.get("matched_anchors", [])),
-            "entity_profiles": model_data(
-                state.get("action_entity_profile_views", [])
-            ),
             "npc_profiles": model_data(
                 state.get("action_npc_director_views", [])
             ),
@@ -222,9 +211,6 @@ def scene_written_event(state: dict[str, Any]) -> GenerationEvent:
             "trace_id": state["trace_id"],
             "turn_index": state["turn_index"],
             "token_usage": state.get("token_usage"),
-            "composer_entity_profiles": model_data(
-                state.get("composer_entity_profile_views", [])
-            ),
             "composer_npc_profiles": model_data(
                 state.get("composer_npc_public_views", [])
             ),

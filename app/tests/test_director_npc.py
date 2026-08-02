@@ -36,7 +36,7 @@ def _draft() -> DirectorNPCDraft:
         conflict_style="先协商后行动。",
         social_style="克制而友善。",
         encounter_potentials=["诊所求助", "街区冲突", "旧案线索"],
-        creation_anchors=["河岸社区"],
+        source_setting_ids=[],
         created_turn=3,
     )
 
@@ -72,19 +72,18 @@ def test_creator_uses_general_context_without_setting_prerequisite():
     draft = DirectorNPCCreator(gateway).create(
         core_memory=_core_memory(),
         existing_npcs=[],
-        creation_context=NPCCreationContext(
-            anchors=["河岸社区"],
-        ),
+        creation_context=NPCCreationContext(setting_ids=[]),
+        settings=[],
         creative_brief=draw_creative_brief(),
         protagonist_name="周明",
         turn_index=3,
     )
 
     assert draft.status == "prepared"
-    assert draft.creation_anchors == ["河岸社区"]
+    assert draft.source_setting_ids == []
     trace = gateway.calls[0]["input_data"]
     assert "creation_context_json" in trace
-    assert "setting_json" not in trace
+    assert trace["settings_json"] == "[]"
 
 
 def test_store_uses_prepared_introduced_retired_lifecycle():
@@ -170,7 +169,8 @@ def test_creator_includes_recent_creations_in_prompt():
     DirectorNPCCreator(gateway).create(
         core_memory=_core_memory(),
         existing_npcs=[],
-        creation_context=NPCCreationContext(anchors=[]),
+        creation_context=NPCCreationContext(setting_ids=[]),
+        settings=[],
         creative_brief=draw_creative_brief(),
         protagonist_name="周明",
         turn_index=3,
@@ -204,7 +204,8 @@ def test_creator_brief_hides_social_dimensions_from_prompt():
     DirectorNPCCreator(gateway).create(
         core_memory=_core_memory(),
         existing_npcs=[],
-        creation_context=NPCCreationContext(anchors=[]),
+        creation_context=NPCCreationContext(setting_ids=[]),
+        settings=[],
         creative_brief=draw_creative_brief(),
         protagonist_name="周明",
         turn_index=3,

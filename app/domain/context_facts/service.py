@@ -33,7 +33,6 @@ class ContextFactsService:
             user_input=input_data.user_input,
             current_state=input_data.current_state,
             matched_anchors=input_data.matched_anchors,
-            entity_profiles=input_data.entity_profiles,
             npc_profiles=input_data.npc_profiles,
         )
         history_evidence = ContextHistoryRetriever(
@@ -58,7 +57,6 @@ class ContextFactsService:
                 search_plan=search_plan,
                 history_evidence=history_evidence,
                 continuity=continuity,
-                entity_profiles=input_data.entity_profiles,
                 npc_profiles=input_data.npc_profiles,
             ),
             trace_id=trace_id,

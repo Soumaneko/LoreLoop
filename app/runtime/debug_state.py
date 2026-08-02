@@ -27,8 +27,8 @@ def _load_debug_state(runtime) -> dict:
         scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)
 
-    with stores.entity() as ent_store:
-        entity_profiles = ent_store.list_all()
+    with stores.world_setting() as setting_store:
+        world_settings = setting_store.list_all()
 
     with stores.npc_profile() as npc_store:
         npc_profiles = npc_store.list_all()
@@ -103,7 +103,7 @@ def _load_debug_state(runtime) -> dict:
         "active_continuity_count": len(active_continuity_items),
         "scene_summaries": model_data(scene_summaries),
         "recent_summaries": model_data(recent_summaries),
-        "entity_profiles": model_data(entity_profiles),
+        "world_settings": model_data(world_settings),
         "npc_profiles": model_data(npc_profiles),
         "npc_profile_count": npc_profile_count,
         "npc_active_profile_count": npc_active_profile_count,

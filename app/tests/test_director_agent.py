@@ -430,12 +430,14 @@ class _PhaseGateway:
         backfill_output: dict | None = None,
         event_selection_output: dict | None = None,
         event_review_output: dict | None = None,
+        setting_output: dict | None = None,
     ):
         self.decision = decision
         self.npc_output = npc_output
         self.backfill_output = backfill_output
         self.event_selection_output = event_selection_output
         self.event_review_output = event_review_output
+        self.setting_output = setting_output
         self.tasks: list[str] = []
         self.input_data: list[dict] = []
 
@@ -460,6 +462,8 @@ class _PhaseGateway:
             payload = self.npc_output
         elif task == "npc_profile_backfill" and self.backfill_output is not None:
             payload = self.backfill_output
+        elif task == "director_setting_create" and self.setting_output is not None:
+            payload = self.setting_output
         else:
             raise AssertionError(f"unexpected Director integration task: {task}")
         result = kwargs["output_schema"].model_validate(payload)
@@ -494,6 +498,53 @@ def _director_npc() -> DirectorNPCDraft:
         encounter_potentials=["诊所求助", "街区冲突", "旧案线索"],
         created_turn=2,
     )
+
+
+def test_generation_director_observes_setting_without_facts(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="lore",
+        name="潮汐旧约",
+        summary="约束沿海商会共同救援遇险船只的古老约定。",
+        public_facts=["拒绝救援会被同行抵制"],
+        hidden_facts=["旧约最初用于掩护违禁货运"],
+        created_turn=1,
+    )
+    unrelated = setting.model_copy(update={
+        "setting_id": "setting_unrelated",
+        "name": "山邮驿",
+        "summary": "负责内陆山路信件转运的驿站。",
+    })
+    with stores.world_setting() as store:
+        store.save(setting)
+        store.save(unrelated)
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []},
+    )
+
+    run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="观察港口。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    observed_settings = observation["resources"]["settings"]
+    assert {
+        item["setting_id"] for item in observed_settings
+    } == {setting.setting_id, unrelated.setting_id}
+    assert all("public_facts" not in item for item in observed_settings)
+    assert all("hidden_facts" not in item for item in observed_settings)
 
 
 def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
@@ -736,9 +787,7 @@ def test_confirmation_agent_can_create_npc_without_setting(tmp_path):
                 {
                     "request_id": "create_1",
                     "skill": "create_npc",
-                    "arguments": {
-                        "anchors": ["河岸社区"],
-                    },
+                    "arguments": {},
                     "guidance": "准备一个长期社区人物。",
                 }
             ],
@@ -768,10 +817,7 @@ def test_confirmation_agent_can_create_npc_without_setting(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        entity_profiles=[],
         npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -781,9 +827,87 @@ def test_confirmation_agent_can_create_npc_without_setting(tmp_path):
     assert gateway.tasks == ["director_agent_decide_confirmation", "director_npc_create"]
     with stores.director_npc() as store:
         [saved] = store.list_prepared()
-    assert saved.creation_anchors == ["河岸社区"]
+    assert saved.source_setting_ids == []
     with stores.world_setting() as store:
         assert store.list_all() == []
+
+
+def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="盐雾港",
+        summary="依靠潮汐盐田与近海货运生存的港镇。",
+        public_facts=["港民熟悉潮汐航道"],
+        hidden_facts=["旧盐仓下有走私暗渠"],
+        created_turn=1,
+    )
+    unrelated = setting.model_copy(update={
+        "setting_id": "setting_unrelated",
+        "name": "山邮驿",
+        "summary": "负责内陆山路信件转运的驿站。",
+    })
+    with stores.world_setting() as store:
+        store.save(setting)
+        store.save(unrelated)
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "港镇需要一名长期人物。",
+            "requests": [{
+                "request_id": "npc_1",
+                "skill": "create_npc",
+                "arguments": {"setting_ids": [setting.setting_id]},
+                "guidance": "创建一名以本地航运为生的人物。",
+            }],
+        },
+        npc_output={
+            "creation_reason": "港镇日常需要熟悉潮路的船工。",
+            "core_motivation": "保住家族赖以生存的小船。",
+            "hidden_secret": "偶然发现旧盐仓暗渠仍有人使用。",
+            "conflict_style": "先避让，退无可退时正面交涉。",
+            "social_style": "寡言但会直接指出航路风险。",
+            "role": "潮路船工",
+            "faction": None,
+            "personality_traits": ["谨慎", "务实"],
+            "known_abilities": ["辨潮", "操舟"],
+            "appearance": "皮肤被海风晒得黝黑。",
+            "name": "周汐",
+            "encounter_potentials": ["雇船", "避风", "港口纠纷"],
+        },
+    )
+
+    run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        npc_profiles=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    npc_input = gateway.input_data[gateway.tasks.index("director_npc_create")]
+    assert setting.name in npc_input["settings_json"]
+    assert setting.hidden_facts[0] in npc_input["settings_json"]
+    assert unrelated.name not in npc_input["settings_json"]
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    observed_settings = observation["resources"]["settings"]
+    assert {
+        item["setting_id"] for item in observed_settings
+    } == {setting.setting_id, unrelated.setting_id}
+    assert all("public_facts" not in item for item in observed_settings)
+    assert all("hidden_facts" not in item for item in observed_settings)
+    with stores.director_npc() as store:
+        [saved] = store.list_prepared()
+    assert saved.source_setting_ids == [setting.setting_id]
 
 
 def test_director_skill_specs_cover_every_registered_skill():
@@ -798,7 +922,7 @@ def test_director_skill_specs_cover_every_registered_skill():
         "foreshadow_setting",
         "create_npc",
         "create_event",
-        "enrich_setting",
+        "create_setting",
         "bind_event_actor",
         "enrich_npc",
     }
@@ -823,7 +947,7 @@ def test_director_skill_specs_cover_every_registered_skill():
     assert {spec.name for spec in service.specs_for_phase("confirmation")} == {
         "create_npc",
         "create_event",
-        "enrich_setting",
+        "create_setting",
         "bind_event_actor",
         "enrich_npc",
     }
@@ -832,6 +956,98 @@ def test_director_skill_specs_cover_every_registered_skill():
             assert spec.mutates is False
         if "confirmation" in spec.phases:
             assert spec.mutates is True
+
+
+def test_confirmation_agent_creates_static_setting_through_specialized_creator(
+    tmp_path,
+):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "世界需要一个能长期影响货运的组织。",
+            "requests": [{
+                "request_id": "setting_1",
+                "skill": "create_setting",
+                "arguments": {
+                    "kind": "faction",
+                    "purpose": "调查主角近期活动留下的痕迹。",
+                },
+                "guidance": "建立可长期复用的背景势力。",
+            }],
+        },
+        setting_output={
+            "name": "巡潮司",
+            "summary": "控制沿河航运并暗中收集各地异动的官署。",
+            "public_facts": ["在主要港口设有验货所"],
+            "hidden_facts": ["密探会收购异常活动记录"],
+        },
+    )
+
+    _, executions = run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        npc_profiles=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    assert executions.executions[0].output["name"] == "巡潮司"
+    assert gateway.tasks == [
+        "director_agent_decide_confirmation",
+        "director_setting_create",
+    ]
+    creator_input = gateway.input_data[1]
+    assert creator_input["purpose"] == "调查主角近期活动留下的痕迹。"
+    assert "建立可长期复用" not in json.dumps(
+        creator_input,
+        ensure_ascii=False,
+    )
+    with stores.world_setting() as store:
+        [setting] = store.list_all()
+    assert setting.kind == "faction"
+    assert setting.hidden_facts == ["密探会收购异常活动记录"]
+
+
+def test_confirmation_batch_rejects_non_preexisting_setting_reference(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "错误地串联本轮尚不存在的设定。",
+            "requests": [{
+                "request_id": "npc_1",
+                "skill": "create_npc",
+                "arguments": {"setting_ids": ["setting_future"]},
+                "guidance": "引用本轮稍后才会创建的资产。",
+            }],
+        },
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="setting IDs must exist before this Director turn",
+    ):
+        run_confirmation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="询问昨夜发生的事。",
+            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+            recent_summaries=[],
+            selection_summaries=[],
+            npc_profiles=[],
+            turn_index=3,
+            trace_id="confirmation-director",
+        )
+
+    with stores.director_npc() as store:
+        assert store.list_all() == []
 
 
 def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
@@ -880,10 +1096,7 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        entity_profiles=[],
         npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
         turn_index=3,
         trace_id="confirmation-director",
         new_npc_profiles=[new_profile],
@@ -953,10 +1166,7 @@ def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            entity_profiles=[],
             npc_profiles=[],
-            entity_mentions=[],
-            npc_mentions=[],
             turn_index=3,
             trace_id="confirmation-director",
             new_npc_profiles=[other_new],
@@ -1058,10 +1268,7 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        entity_profiles=[],
         npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
         turn_index=3,
         trace_id="confirmation-director",
         new_npc_profiles=[new_profile],
@@ -1148,10 +1355,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        entity_profiles=[],
         npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1274,10 +1478,7 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        entity_profiles=[],
         npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1339,10 +1540,7 @@ def test_create_event_rejects_missing_required_actor_role(tmp_path):
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            entity_profiles=[],
             npc_profiles=[],
-            entity_mentions=[],
-            npc_mentions=[],
             turn_index=3,
             trace_id="confirmation-director",
         )
@@ -1382,10 +1580,7 @@ def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            entity_profiles=[],
             npc_profiles=[],
-            entity_mentions=[],
-            npc_mentions=[],
             turn_index=3,
             trace_id="confirmation-director",
         )
@@ -1458,10 +1653,7 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            entity_profiles=[],
             npc_profiles=[],
-            entity_mentions=[],
-            npc_mentions=[],
             turn_index=3,
             trace_id="confirmation-director",
         )
@@ -1473,7 +1665,25 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
 
 
 def test_create_event_guidance_falls_back_to_request_guidance(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="河岸船坞",
+        summary="承担沿河商船修造与维护的老船坞。",
+        public_facts=["船坞由几个老师傅共同经营"],
+        hidden_facts=["部分旧账从未对外公开"],
+        created_turn=1,
+    )
+    unrelated = setting.model_copy(update={
+        "setting_id": "setting_unrelated",
+        "name": "北岭矿场",
+        "summary": "为内陆城镇供应铁矿的露天矿场。",
+    })
+    with stores.world_setting() as store:
+        store.save(setting)
+        store.save(unrelated)
     gateway = _PhaseGateway(
         decision={
             "reasoning": "需要孕育事件班底。",
@@ -1481,7 +1691,11 @@ def test_create_event_guidance_falls_back_to_request_guidance(tmp_path):
                 {
                     "request_id": "event_1",
                     "skill": "create_event",
-                    "arguments": {"role": "ambient", "actors": []},
+                    "arguments": {
+                        "role": "ambient",
+                        "actors": [],
+                        "setting_ids": [setting.setting_id],
+                    },
                     "guidance": "以船坞翻修风波为整体方向。",
                 }
             ],
@@ -1498,10 +1712,7 @@ def test_create_event_guidance_falls_back_to_request_guidance(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        entity_profiles=[],
         npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1513,7 +1724,12 @@ def test_create_event_guidance_falls_back_to_request_guidance(tmp_path):
         if task == "director_event_select_ambient"
     ]
     assert selector_input[0]["director_guidance"] == "以船坞翻修风波为整体方向。"
+    assert setting.name in selector_input[0]["settings_json"]
+    assert unrelated.name not in selector_input[0]["settings_json"]
     assert "director_npc_create" not in gateway.tasks
+    with stores.director_event() as store:
+        [saved] = store.list_all()
+    assert saved.source_setting_ids == [setting.setting_id]
 
 
 def test_create_event_rejects_more_than_three_new_actors():
@@ -1718,7 +1934,6 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
         "scene_facts": SceneFactSet(scene_focus="药山。"),
         "recent_summaries": [],
         "selection_summaries": [],
-        "entity_extraction": None,
         "npc_extraction": None,
         "existing_npc_profiles": [],
         "new_npc_profiles": [new_profile],
@@ -1962,7 +2177,6 @@ def test_due_engaged_event_applies_adjusted_impact_after_player_disengages(tmp_p
                 "player_still_involved": False,
                 "final_world_impact": {
                     "description": "码头垄断仍然形成，但失去一条主要货路。",
-                    "setting_hint": "受损的码头垄断",
                 },
             }],
         },

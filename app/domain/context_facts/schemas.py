@@ -7,7 +7,6 @@ from app.domain.confirmed_history.schemas import HistorySource
 from app.domain.continuity import ContinuitySelection
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.scene_summary.schemas import SceneSummary
 
@@ -151,7 +150,6 @@ class ContextExtractorInput(BaseModel):
     search_plan: ContextSearchPlan
     history_evidence: ContextHistoryEvidenceSet
     continuity: ContinuitySelection
-    entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
 
 
@@ -163,7 +161,6 @@ class ContextFactsInput(BaseModel):
     current_state: CurrentState
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
     matched_anchors: list[Anchor] = Field(default_factory=list)
-    entity_profiles: list[EntityProfileUpdateInput] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
     current_turn_index: int = Field(ge=0)
 

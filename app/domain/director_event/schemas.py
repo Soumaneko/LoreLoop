@@ -49,7 +49,6 @@ class WorldImpact(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     description: str = Field(min_length=1)
-    setting_hint: str | None = None
 
 
 class DirectorEvent(BaseModel):
@@ -68,6 +67,7 @@ class DirectorEvent(BaseModel):
     hook_pool: list[EventHook] = Field(default_factory=list)
 
     actors: list[DirectorActorRef] = Field(default_factory=list)
+    source_setting_ids: list[str] = Field(default_factory=list, max_length=4)
 
     world_impact: WorldImpact | None = None
     deadline_clock: WorldClock
@@ -114,6 +114,7 @@ class DirectorEvent(BaseModel):
                 actor.model_dump(mode="json")
                 for actor in self.actors
             ],
+            "source_setting_ids": list(self.source_setting_ids),
         }
 
 
@@ -149,6 +150,7 @@ class DirectorEventSelectionResult(BaseModel):
         role: DirectorEventRole,
         turn_index: int,
         current_clock: WorldClock,
+        source_setting_ids: list[str] | None = None,
         actors: list[DirectorActorRef] | None = None,
     ) -> DirectorEvent:
         now = utc_now()
@@ -162,6 +164,7 @@ class DirectorEventSelectionResult(BaseModel):
             macro_intent=self.macro_intent,
             hook_pool=list(self.hook_pool),
             actors=list(actors or []),
+            source_setting_ids=list(source_setting_ids or []),
             world_impact=self.world_impact,
             deadline_clock=current_clock.advance_phase(self.duration_phases),
             final_world_impact=None,

@@ -8,13 +8,19 @@
 {core_memory_json}
 ```
 
-# 创建意图与可选世界锚点
+# 可选 Setting 引用
 
 ```json
 {creation_context_json}
 ```
 
-`anchors` 只包含可选参考；为空时也必须能够根据 CoreMemory 创造人物。不得把任何锚点视为必须消费、占有或专属于该 NPC 的资源。人物为何被准备、被指派怎样的身份与功能，以 `director_guidance` 为准，不以 anchors 为准。
+`setting_ids` 是导演显式选择的人物世界基础；为空时根据 CoreMemory 独立创造人物。
+
+```json
+{settings_json}
+```
+
+非空时，人物的身份、生活环境、社会关系与能力必须和这些 Setting 一致，但不得把 Setting 视为此人的私有资源。
 
 # 程序随机抽取的人物维度
 
@@ -77,7 +83,7 @@
 2. `core_motivation`、`hidden_secret`、`role` 等业务字段必须能够脱离 `creation_reason` 独立理解。
 3. 人物必须有专有姓名，并与主角及已有 NPC 明显不同。
 4. 不得复制主角的专属背景、能力或命运。
-5. 不得假定人物已经认识主角、参与当前事件或位于当前场景，除非 anchors 明确包含已经确认的对应事实。
+5. 不得假定人物已经认识主角、参与当前事件或位于当前场景。
 6. 不得为满足 `director_guidance` 编造已经发生的历史；`director_guidance` 只决定人物的可用方向，不构成已确认事实。
 7. 能力、身份、秘密和社会地位必须符合 CoreMemory 的文明与能力基准。
 8. `encounter_potentials` 提供 3-5 种不同的未来接触可能，但不得预写具体剧情结果。

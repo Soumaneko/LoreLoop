@@ -81,17 +81,6 @@ def _project_text_highlights(
                 (surface, "npc", public_profile)
                 for surface in [profile.name, *profile.aliases]
             )
-    with runtime.stores.entity() as store:
-        for profile in store.list_all():
-            public_profile = {
-                "kind": "entity",
-                **model_data(profile.semantic_view()),
-            }
-            candidates.extend(
-                (surface, "entity", public_profile)
-                for surface in [profile.name, *profile.aliases]
-            )
-
     projected: list[dict[str, Any]] = []
     seen: set[str] = set()
     player_key = player_name.strip().casefold()

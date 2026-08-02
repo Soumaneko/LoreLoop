@@ -29,8 +29,6 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
-from app.domain.entity.schemas import EntityProfile
-from app.domain.entity.store import EntityStore
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.schemas import SceneSummary
@@ -69,15 +67,6 @@ def _npc_view():
         role="万象阁阁主",
         attitude_to_player="部分信任但仍戒备",
     ).director_view()
-
-
-def _entity_view():
-    return EntityProfile(
-        entity_type="organization",
-        name="盐帮",
-        aliases=["盐运帮"],
-        summary="正在追捕顾晚棠的组织。",
-    ).semantic_view()
 
 
 def _upsert_scenes(
@@ -149,7 +138,6 @@ def test_deterministic_intents_use_location_participants_aliases_and_topics():
         user_input="我告诉顾阁主盐运帮的动向，再问她解决方法。",
         current_state=_state(),
         matched_anchors=[],
-        entity_profiles=[_entity_view()],
         npc_profiles=[_npc_view()],
     )
 
@@ -164,19 +152,12 @@ def test_deterministic_intents_use_location_participants_aliases_and_topics():
         and "顾阁主" in intent.entities[0].aliases
         for intent in plan.intents
     )
-    assert any(
-        intent.focus == "entity"
-        and intent.entities[0].name == "盐帮"
-        and "盐运帮" in intent.entities[0].aliases
-        for intent in plan.intents
-    )
     relationship = next(
         intent for intent in plan.intents if intent.focus == "relationship"
     )
     assert {entity.name for entity in relationship.entities} >= {
         "萧云痕",
         "顾晚棠",
-        "盐帮",
     }
     topic = next(intent for intent in plan.intents if intent.focus == "topic")
     assert "解决方法" in topic.topics
@@ -198,7 +179,6 @@ def test_deterministic_intents_keep_all_matched_anchors():
         user_input="我继续等待。",
         current_state=_state(),
         matched_anchors=anchors,
-        entity_profiles=[],
         npc_profiles=[],
     )
 
@@ -334,7 +314,6 @@ def test_context_extractor_receives_raw_history_and_cites_it():
                 search_plan=search_plan,
                 history_evidence=history,
                 continuity=ContinuitySelection(),
-                entity_profiles=[_entity_view()],
             npc_profiles=[_npc_view()],
         )
     )
@@ -393,7 +372,6 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
                 current_state=_state(),
                 scene_summaries=[],
                 matched_anchors=[],
-                entity_profiles=[_entity_view()],
                 npc_profiles=[_npc_view()],
                 current_turn_index=4,
         )
@@ -423,24 +401,8 @@ def test_context_facts_projection_hides_internal_evidence_ids():
 
 
 def test_select_context_profiles_matches_state_and_user_input(tmp_path):
-    entity_store = EntityStore(str(tmp_path / "entities.db"))
     npc_store = NPCProfileStore(str(tmp_path / "npcs.db"))
     try:
-        entity_store.upsert(
-            EntityProfile(
-                entity_type="item",
-                name="麂皮褡裢",
-                aliases=["褡裢"],
-                summary="萧云痕随身携带的包裹。",
-            )
-        )
-        entity_store.upsert(
-            EntityProfile(
-                entity_type="organization",
-                name="盐帮",
-                summary="正在追捕顾晚棠的组织。",
-            )
-        )
         npc_store.upsert(
             NPCProfile(
                 name="顾晚棠",
@@ -452,36 +414,18 @@ def test_select_context_profiles_matches_state_and_user_input(tmp_path):
         result = select_context_profiles(
             user_input="外面都是盐帮追兵，我让顾阁主在这里躲一阵。",
             current_state=_state(),
-            entity_store=entity_store,
             npc_store=npc_store,
         )
     finally:
-        entity_store.close()
         npc_store.close()
 
-    assert {profile.name for profile in result.entity_profiles} >= {
-        "麂皮褡裢",
-        "盐帮",
-    }
     assert [profile.name for profile in result.npc_profiles] == ["顾晚棠"]
-    assert {anchor.text for anchor in result.anchors} >= {
-        "顾晚棠",
-        "麂皮褡裢",
-        "盐帮",
-    }
+    assert {anchor.text for anchor in result.anchors} == {"顾晚棠"}
 
 
 def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
-    entity_store = EntityStore(str(tmp_path / "entities.db"))
     npc_store = NPCProfileStore(str(tmp_path / "npcs.db"))
     try:
-        entity_store.upsert(
-            EntityProfile(
-                entity_type="item",
-                name="棕色皮面旧书",
-                aliases=["失窃旧书"],
-            )
-        )
         npc_store.upsert(
             NPCProfile(
                 name="希尔达·布拉斯科特",
@@ -504,16 +448,11 @@ def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
         result = select_context_profiles(
             user_input="我留意四周。",
             current_state=state,
-            entity_store=entity_store,
             npc_store=npc_store,
         )
     finally:
-        entity_store.close()
         npc_store.close()
 
     assert [profile.name for profile in result.npc_profiles] == [
         "希尔达·布拉斯科特"
-    ]
-    assert [profile.name for profile in result.entity_profiles] == [
-        "棕色皮面旧书"
     ]

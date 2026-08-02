@@ -28,7 +28,7 @@ const tabs = [
   ["generation", "生成"],
   ["confirmation", "确认"],
   ["continuity", "Continuity"],
-  ["entity", "实体"],
+  ["setting", "Setting"],
   ["npc", "NPC档案"],
   ["director", "导演"],
   ["preview", "行动预览"],
@@ -851,7 +851,7 @@ function renderStatePanel() {
       ])}
       ${(recentSummaries.length ? recentSummaries : summaries.slice(0, 8)).map(sceneSummaryCard).join("") || `<div class="empty">暂无场景摘要</div>`}
     `)}
-    ${details(`实体档案 (${(data.entity_profiles || []).length})`, renderEntityGroups(data.entity_profiles || []))}
+    ${details(`Setting (${(data.world_settings || []).length})`, renderSettingGroups(data.world_settings || []))}
     ${details(`Continuity (${activeContinuity.length}/${continuityItems.length})`, activeContinuity.map(continuityItemCard).join("") || `<div class="empty">暂无活跃事项</div>`)}
     ${details(`后台任务 (${jobs.length})`, `
       ${metrics([
@@ -903,7 +903,7 @@ function renderDebug() {
     generation: renderGeneration,
     confirmation: renderConfirmation,
     continuity: renderContinuity,
-    entity: renderEntityDebug,
+    setting: renderSettingDebug,
     npc: renderNpcDebug,
     director: renderDirectorDebug,
     preview: renderPreview,
@@ -1053,7 +1053,7 @@ function isRevisionComposerTrace(trace) {
 
 function stepTasks(scope, stepName) {
   const generation = {
-    entity_profiles_loaded: [],
+    npc_profiles_loaded: [],
     context_facts_done: ["context_extract"],
     context_extract_failed: ["context_extract"],
     action_parsed: ["action_extract"],
@@ -1074,10 +1074,9 @@ function stepTasks(scope, stepName) {
     scene_facts_done: ["scene_fact_extract"],
     state_update_done: ["state_update"],
     continuity_projected: ["continuity_project"],
-    entity_extract_done: ["entity_extract"],
     npc_extract_done: ["npc_profile_extract"],
     action_preview_done: ["action_preview"],
-    entity_profiles_updated: ["entity_profile_update", "npc_profile_update"],
+    npc_profiles_updated: ["npc_profile_update"],
     director_agent_confirmed: [
       "director_agent_decide_confirmation",
       "director_event_review_hidden",
@@ -1143,7 +1142,6 @@ function stepSummary(name, data) {
   if (name === "state_update_done") return "state updated";
   if (name === "scene_facts_done") return `${data.scene_facts?.facts?.length || 0} facts`;
   if (name === "continuity_projected") return `${data.continuity_projection?.operations?.length || 0} operations`;
-  if (name === "entity_extract_done") return `${data.entity_extraction?.retrieved_entities?.length || 0} entities`;
   if (name === "npc_extract_done") return `${data.npc_extraction?.mentions?.length || 0} npcs`;
   if (name === "finish") return data.status || "done";
   return Object.keys(data || {}).join(", ") || "event";
@@ -1168,12 +1166,9 @@ function renderGeneration() {
     ${card("Narrative Composer · Scene", g.scene_result ? `${g.scene_result.scene_reasoning ? `<div class="section-card muted">${esc(g.scene_result.scene_reasoning)}</div>` : ""}<div class="section-card">${esc(g.scene_result.scene_text)}</div>${g.scene_result.closing_prompt ? `<div class="section-card muted">${esc(g.scene_result.closing_prompt)}</div>` : ""}` : `<div class="empty">未生成正文</div>`)}
     ${card("上下文档案", `
       ${metrics([
-        metric("行动实体", g.entity_profiles?.length || 0),
         metric("行动NPC", g.npc_profiles?.length || 0),
-        metric("Composer实体", g.composer_entity_profiles?.length || 0, "info"),
         metric("Composer NPC", g.composer_npc_profiles?.length || 0, "info"),
       ])}
-      ${details("Composer 实体", (g.composer_entity_profiles || []).map(entityCard).join("") || `<div class="empty">无</div>`)}
       ${details("Composer NPC", (g.composer_npc_profiles || []).map(npcProfileCard).join("") || `<div class="empty">无</div>`)}
       ${g.recent_scene ? details("最近场景", jsonBlock(g.recent_scene)) : ""}
     `)}
@@ -1214,13 +1209,12 @@ function renderConfirmation() {
   const sceneFacts = c.scene_facts || step("confirmation", "scene_facts_done")?.scene_facts;
   const facts = sceneFacts?.facts || [];
   const npcExtraction = c.npc_extraction || step("confirmation", "npc_extract_done")?.npc_extraction;
-  const updatedNpcIds = c.updated_npc_profile_ids || step("confirmation", "entity_profiles_updated")?.updated_npc_profile_ids;
+  const updatedNpcIds = c.updated_npc_profile_ids || step("confirmation", "npc_profiles_updated")?.updated_npc_profile_ids;
   return `
     ${timeline("confirmation", "确认事件")}
     ${card("Scene Facts", facts.length ? facts.map(contextFactCard).join("") : `<div class="empty">暂无事实</div>`)}
     ${renderStateDiff()}
     ${card("Continuity Operations", renderContinuityProjection(c.continuity_projection || step("confirmation", "continuity_projected")?.continuity_projection))}
-    ${card("Entity Updates", renderEntityExtraction(c.entity_extraction || step("confirmation", "entity_extract_done")?.entity_extraction, c.updated_entity_ids))}
     ${card("NPC Profile Updates", renderNpcExtraction(npcExtraction, updatedNpcIds))}
   `;
 }
@@ -1244,18 +1238,16 @@ function renderContinuity() {
   `;
 }
 
-function renderEntityDebug() {
-  const extraction = step("confirmation", "entity_extract_done")?.entity_extraction || merged("confirmation").entity_extraction;
-  const updated = step("confirmation", "entity_profiles_updated")?.updated_entity_ids || merged("confirmation").updated_entity_ids;
-  return `
-    ${card("实体提取", renderEntityExtraction(extraction, updated))}
-    ${card("实体档案快照", renderEntityGroups(state.serverState?.entity_profiles || []))}
-  `;
+function renderSettingDebug() {
+  return card(
+    "静态 Setting",
+    renderSettingGroups(state.serverState?.world_settings || []),
+  );
 }
 
 function renderNpcDebug() {
   const extraction = step("confirmation", "npc_extract_done")?.npc_extraction || merged("confirmation").npc_extraction;
-  const updatedIds = step("confirmation", "entity_profiles_updated")?.updated_npc_profile_ids || merged("confirmation").updated_npc_profile_ids;
+  const updatedIds = step("confirmation", "npc_profiles_updated")?.updated_npc_profile_ids || merged("confirmation").updated_npc_profile_ids;
   const server = state.serverState || {};
   const npcProfiles = server.npc_profiles || [];
   const npcCount = server.npc_profile_count ?? npcProfiles.length;
@@ -1578,29 +1570,6 @@ function stateSummary(s) {
   ]);
 }
 
-function renderEntityExtraction(data, updatedIds = []) {
-  if (!data) return `<div class="empty">暂无实体提取。</div>`;
-  const aliasMatches = data.alias_matches || [];
-  const retrieved = data.retrieved_entities || [];
-  return `
-    ${metrics([metric("别名匹配", aliasMatches.length, "info"), metric("实体", retrieved.length), metric("更新", updatedIds?.length || 0, "ok")])}
-    ${aliasMatches.map((m) => `<div class="section-card">${kv([
-      ["称呼", esc(text(m.extracted_text))],
-      ["匹配", esc(text(m.matched_entity_name))],
-      ["类型", esc(text(m.matched_entity_type))],
-      ["新增别名", esc(text(m.new_alias))],
-    ])}</div>`).join("")}
-    ${retrieved.map((e) => `<div class="section-card">${kv([
-      ["名称", esc(text(e.name))],
-      ["类型", esc(text(e.entity_type))],
-      ["来源", esc(text(e.source))],
-      ["匹配", esc(text(e.matched_entity_name))],
-      ["原文", esc(text(e.context_span))],
-    ])}</div>`).join("")}
-    ${updatedIds?.length ? card("更新实体ID", chips(updatedIds)) : ""}
-  `;
-}
-
 function renderNpcExtraction(data, updatedIds = []) {
   if (!data) return `<div class="empty">No write_db or 暂无 NPC 提取。</div>`;
   const mentions = data.mentions || [];
@@ -1654,16 +1623,19 @@ function npcProfileCard(profile) {
   </div>`;
 }
 
-function renderEntityGroups(profiles) {
-  if (!profiles.length) return `<div class="empty">暂无实体档案。</div>`;
+function renderSettingGroups(settings) {
+  if (!settings.length) return `<div class="empty">暂无 Setting。</div>`;
   const groups = {};
-  for (const profile of profiles) {
-    const type = profile.entity_type || "unknown";
+  for (const setting of settings) {
+    const type = setting.kind || "unknown";
     if (!groups[type]) groups[type] = [];
-    groups[type].push(profile);
+    groups[type].push(setting);
   }
-  const labels = { npc: "NPC", item: "物品", location: "地点", organization: "组织" };
-  return Object.entries(groups).map(([type, items]) => details(`${labels[type] || type} (${items.length})`, items.map(entityCard).join(""), type === "npc")).join("");
+  const labels = { faction: "势力", location: "地点", item: "物品", lore: "概念" };
+  return Object.entries(groups).map(([type, items]) => details(
+    `${labels[type] || type} (${items.length})`,
+    items.map(settingCard).join(""),
+  )).join("");
 }
 
 function renderNpcStateGroup(profiles) {
@@ -1693,17 +1665,16 @@ function directorNpcCard(npc) {
   </div>`;
 }
 
-function entityCard(profile) {
-  const aliasHits = Object.entries(profile.alias_hit_counts || {}).sort((a, b) => Number(b[1]) - Number(a[1])).map(([k, v]) => `${k} ×${v}`);
+function settingCard(setting) {
   return `<div class="section-card">
-    <div class="card-title"><span>${esc(profile.name)} · ${esc(profile.entity_type)}</span>${metric("hit", profile.name_hit_count ?? 0)}</div>
-    ${profile.summary ? `<div style="margin-bottom:8px">${esc(profile.summary)}</div>` : ""}
+    <div class="card-title"><span>${esc(setting.name)} · ${esc(setting.kind)}</span></div>
+    ${setting.summary ? `<div style="margin-bottom:8px">${esc(setting.summary)}</div>` : ""}
     ${kv([
-      ["ID", esc(text(profile.entity_id))],
-      ["别名", chips(profile.aliases)],
-      ["别名命中", chips(aliasHits)],
-      ["来源场景", chips(profile.source_scene_ids)],
-      ["更新", esc(text(profile.updated_at))],
+      ["ID", esc(text(setting.setting_id))],
+      ["公开事实", chips(setting.public_facts)],
+      ["导演事实", chips(setting.hidden_facts)],
+      ["关联", chips(setting.related_setting_ids)],
+      ["创建回合", esc(text(setting.created_turn))],
     ])}
   </div>`;
 }
@@ -1881,7 +1852,6 @@ function handleGenerationPipelineEvent(event, { retry = false } = {}) {
 function handleConfirmationPipelineEvent(event) {
   if (event.step === "state_update_done") state.activeTab = "diff";
   if (event.step === "scene_facts_done") state.activeTab = "confirmation";
-  if (event.step === "entity_extract_done") state.activeTab = "entity";
   if (event.step === "npc_extract_done") state.activeTab = "npc";
   if (event.step === "action_preview_done") state.activeTab = "preview";
   if (event.step === "finish") {

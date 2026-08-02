@@ -27,6 +27,7 @@ from pydantic import (
 
 from app.domain.director.schemas import DirectorPhase
 from app.domain.director_event.schemas import DirectorEventRole
+from app.domain.world_setting.schemas import SettingKind
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +93,7 @@ class ForeshadowSettingArguments(BaseModel):
 class CreateNPCArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    anchors: list[str] = Field(default_factory=list, max_length=8)
+    setting_ids: list[str] = Field(default_factory=list, max_length=4)
 
 
 class ExistingEventActorInput(BaseModel):
@@ -121,6 +122,7 @@ class CreateEventArguments(BaseModel):
 
     role: DirectorEventRole
     event_guidance: str = Field(default="", max_length=500)
+    setting_ids: list[str] = Field(default_factory=list, max_length=4)
     actors: list[EventActorInput] = Field(default_factory=list, max_length=6)
 
     @model_validator(mode="after")
@@ -138,10 +140,11 @@ class CreateEventArguments(BaseModel):
         return self
 
 
-class EnrichSettingArguments(BaseModel):
+class CreateSettingArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    setting_id: str = Field(min_length=1)
+    kind: SettingKind
+    purpose: str = Field(min_length=1, max_length=300)
 
 
 class BindEventActorArguments(BaseModel):
@@ -222,12 +225,10 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         name="create_event",
         description=(
             "创建一个长线事件（arc）或环境事件（ambient）。这是创建事件的唯一技能。"
-            "arguments.actors 是强制演员清单：source=existing 时引用现有 NPC，"
-            "source=new 时按 guidance 孕育新 NPC；两类可混合，也可留空创建不依赖具体"
-            "NPC 的环境、制度或灾害事件。所有声明的演员都会被绑定并参与事件设计。"
-            "只用于世界在主角视线之外的平行动态，"
-            "不得用于推动、包装或代劳主角当前正在执行的主线行动。"
-            "事件方向使用 event_guidance；每个演员在该事件中的预期作用使用其 guidance。"
+            "actors 是强制演员清单：existing 引用现有 NPC，new 按 guidance 创建新 NPC；"
+            "两类可混合，也可留空。所有演员都会被绑定并参与设计。"
+            "只用于主角视线之外的世界动态，不得用于推动、包装或代劳主角当前正在执行的主线行动。"
+            "setting_ids 可选且只能引用回合开始前已有 Setting；event_guidance 指定事件方向。"
         ),
         phases=_CONFIRMATION,
         mutates=True,
@@ -235,17 +236,26 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     ),
     DirectorSkillSpec(
         name="create_npc",
-        description="基于未来可能的剧情需求，在幕后‘招募’并捏造一名新的导演 NPC 草案（处于 prepared 状态）。该角色将作为你未来干预场景的备用棋子。",
+        description=(
+            "基于未来可能的剧情需求，在幕后招募一名新的导演 NPC 草案。"
+            "setting_ids 可选；填写时人物必须真实生活在这些已有 Setting 所构成的世界中，"
+            "留空时允许依据 CoreMemory 独立创造。"
+        ),
         phases=_CONFIRMATION,
         mutates=True,
         arguments_model=CreateNPCArguments,
     ),
     DirectorSkillSpec(
-        name="enrich_setting",
-        description="将一个粗糙的‘设定种子 (Setting seed)’扩写并孵化为内容丰满的世界设定资产，为后续的场景渲染和事件铺垫提供具体支撑。",
+        name="create_setting",
+        description=(
+            "创建一个静态世界资产。只决定 kind、它在世界中需要承担的 purpose，"
+            "名称、形态、组成、地理、风格和具体事实由专门的 Setting Creator 自由创造。"
+            "不得用 purpose 预写这些创意答案。"
+            "本轮新建 Setting 不能在同一轮被 NPC 或事件创建引用。"
+        ),
         phases=_CONFIRMATION,
         mutates=True,
-        arguments_model=EnrichSettingArguments,
+        arguments_model=CreateSettingArguments,
     ),
     DirectorSkillSpec(
         name="bind_event_actor",

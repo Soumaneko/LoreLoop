@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from app.domain.continuity.schemas import ContinuityItemDraft
-from app.domain.entity.schemas import profile_from_semantic
 from app.domain.npc_profile.schemas import (
     NPCProfile,
     NPCProfileUpdateInput,
     profile_from_update,
 )
+from app.domain.world_setting.schemas import WorldSetting
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, get_campaign_runtime
 
@@ -56,27 +56,19 @@ _NPC_DIRECTOR_FIELDS = {
     "created_turn",
     "introduced_turn",
 }
-_ENTITY_EDITABLE_FIELDS = {
-    "entity_type",
+_SETTING_EDITABLE_FIELDS = {
+    "kind",
     "name",
-    "aliases",
     "summary",
-    "item_type",
-    "item_source",
-    "location_type",
-    "features",
-    "parent_location",
-    "description",
+    "public_facts",
+    "hidden_facts",
+    "related_setting_ids",
 }
-_ENTITY_NULLABLE_FIELDS = {
-    "summary",
-    "item_type",
-    "item_source",
-    "location_type",
-    "parent_location",
-    "description",
+_SETTING_LIST_FIELDS = {
+    "public_facts",
+    "hidden_facts",
+    "related_setting_ids",
 }
-_ENTITY_LIST_FIELDS = {"aliases", "features"}
 
 
 def _normalize_payload(
@@ -121,7 +113,7 @@ def _maintenance_running(runtime: CampaignRuntime) -> bool:
 
 
 def load_player_records() -> dict[str, Any]:
-    """Player-safe archive projection: continuity + NPC + entity records."""
+    """Player archive projection: continuity + NPC + Setting records."""
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
         return _load_player_records(runtime)
@@ -132,8 +124,8 @@ def _load_player_records(runtime: CampaignRuntime) -> dict[str, Any]:
         continuity_items = store.list_all()
     with runtime.stores.npc_profile() as store:
         npc_profiles = store.list_all(active_only=False)
-    with runtime.stores.entity() as store:
-        entity_profiles = store.list_all(active_only=False)
+    with runtime.stores.world_setting() as store:
+        world_settings = store.list_all()
     return {
         "maintenance_running": _maintenance_running(runtime),
         "continuity": [
@@ -167,13 +159,12 @@ def _load_player_records(runtime: CampaignRuntime) -> dict[str, Any]:
             }
             for profile in npc_profiles
         ],
-        "entity_profiles": [
+        "world_settings": [
             {
-                "id": profile.entity_id,
-                "entity_type": profile.entity_type,
-                "fields": model_data(profile.semantic_view()),
+                "id": setting.setting_id,
+                "fields": setting.director_view(),
             }
-            for profile in entity_profiles
+            for setting in world_settings
         ],
     }
 
@@ -187,10 +178,10 @@ def update_player_record(
 
     Continuity edits accept only active items and never change status.
     NPC edits are restricted to public fields; director fields are read-only.
-    Entity edits accept the semantic fields only.
+    Setting edits accept only the static asset fields.
     """
     runtime = get_campaign_runtime()
-    if kind not in {"continuity", "npc", "entity"}:
+    if kind not in {"continuity", "npc", "setting"}:
         raise ValueError(f"unknown record kind: {kind}")
     if not record_id:
         raise ValueError("record_id is required")
@@ -201,7 +192,7 @@ def update_player_record(
             return _update_continuity(runtime, record_id, payload)
         if kind == "npc":
             return _update_npc_profile(runtime, record_id, payload)
-        return _update_entity_profile(runtime, record_id, payload)
+        return _update_world_setting(runtime, record_id, payload)
 
 
 def _latest_confirmed_turn(runtime: CampaignRuntime) -> int:
@@ -340,68 +331,35 @@ def _validate_npc_name_conflicts(store, npc_id: str, update: NPCProfileUpdateInp
             )
 
 
-def _validate_entity_name_conflicts(store, entity_id: str, update) -> None:
-    keys = {
-        update.name.strip().casefold(),
-        *[alias.strip().casefold() for alias in update.aliases],
-    }
-    for other in store.list_all(active_only=False):
-        if other.entity_id == entity_id:
-            continue
-        if other.entity_type != update.entity_type:
-            continue
-        other_keys = {
-            other.name.strip().casefold(),
-            *[alias.strip().casefold() for alias in other.aliases],
-        }
-        if keys & other_keys:
-            raise ValueError(
-                f"entity name or alias conflicts with existing profile: {other.name}"
-            )
-
-
-def _update_entity_profile(
+def _update_world_setting(
     runtime: CampaignRuntime,
-    entity_id: str,
+    setting_id: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    unknown = set(payload) - _ENTITY_EDITABLE_FIELDS
+    unknown = set(payload) - _SETTING_EDITABLE_FIELDS
     if unknown:
         raise ValueError(
-            "entity semantic fields only: "
-            + ", ".join(sorted(_ENTITY_EDITABLE_FIELDS))
+            "Setting fields only: "
+            + ", ".join(sorted(_SETTING_EDITABLE_FIELDS))
         )
-    with runtime.stores.entity() as store:
-        current = store.get_by_id(entity_id)
+    with runtime.stores.world_setting() as store:
+        current = store.get_by_id(setting_id)
         if current is None:
-            raise ValueError(f"entity profile not found: {entity_id}")
+            raise ValueError(f"Setting not found: {setting_id}")
         payload = _normalize_payload(
             payload,
-            nullable=_ENTITY_NULLABLE_FIELDS,
-            list_fields=_ENTITY_LIST_FIELDS,
+            nullable=set(),
+            list_fields=_SETTING_LIST_FIELDS,
         )
-        semantic = current.semantic_view()
-        for field in _ENTITY_EDITABLE_FIELDS:
-            if field in payload:
-                setattr(semantic, field, payload[field])
-        _strip_name_and_aliases(semantic)
-        _validate_entity_name_conflicts(store, entity_id, semantic)
-        merged = profile_from_semantic(
-            semantic,
-            entity_id=current.entity_id,
-            source_scene_ids=list(current.source_scene_ids),
-            confidence=current.confidence,
-            updated_at=None,
-            active=current.active,
-            name_hit_count=current.name_hit_count,
-            alias_hit_counts=dict(current.alias_hit_counts),
-        )
-        store.upsert(merged)
-        saved = store.get_by_id(entity_id)
+        data = current.model_dump()
+        data.update(payload)
+        data["name"] = str(data["name"]).strip()
+        updated = WorldSetting.model_validate(data)
+        store.update(updated)
+        saved = store.get_by_id(setting_id)
         if saved is None:
-            raise RuntimeError("entity profile disappeared after save")
+            raise RuntimeError("Setting disappeared after save")
     return {
-        "id": saved.entity_id,
-        "entity_type": saved.entity_type,
-        "fields": model_data(saved.semantic_view()),
+        "id": saved.setting_id,
+        "fields": saved.director_view(),
     }

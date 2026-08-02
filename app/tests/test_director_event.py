@@ -165,7 +165,7 @@ def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
     try:
         DirectorEventStore(str(db_path))
     except RuntimeError as exc:
-        assert "expected 10" in str(exc)
+        assert "expected 11" in str(exc)
     else:
         raise AssertionError("previous DirectorEvent schema must be rejected")
 

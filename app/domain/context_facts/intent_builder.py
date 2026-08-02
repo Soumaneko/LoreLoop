@@ -4,7 +4,6 @@ import re
 
 from app.domain.action.schemas import Anchor
 from app.domain.current_state.schemas import CurrentState
-from app.domain.entity.schemas import EntityProfileUpdateInput
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 
 from .schemas import (
@@ -27,10 +26,9 @@ def build_context_search_plan(
     user_input: str,
     current_state: CurrentState,
     matched_anchors: list[Anchor],
-    entity_profiles: list[EntityProfileUpdateInput],
     npc_profiles: list[NPCProfileDirectorView],
 ) -> ContextSearchPlan:
-    profile_entities = _profile_entities(entity_profiles, npc_profiles)
+    profile_entities = _profile_entities(npc_profiles)
     intents: list[ContextSearchIntent] = []
     seen_entities: set[str] = set()
     relevant_entities: list[ContextSearchEntity] = []
@@ -127,18 +125,13 @@ def build_context_search_plan(
 
 
 def _profile_entities(
-    entity_profiles: list[EntityProfileUpdateInput],
     npc_profiles: list[NPCProfileDirectorView],
 ) -> list[ContextSearchEntity]:
     return _unique_entities([
-        *[
+        *(
             ContextSearchEntity(name=profile.name, aliases=profile.aliases)
             for profile in npc_profiles
-        ],
-        *[
-            ContextSearchEntity(name=profile.name, aliases=profile.aliases)
-            for profile in entity_profiles
-        ],
+        ),
     ])
 
 

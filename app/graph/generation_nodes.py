@@ -36,7 +36,6 @@ from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.domain.turn_resolution.views import project_turn_resolution
 from app.runtime.serialization import model_data
-from app.domain.entity.workflows import gather_entity_profiles_from_state_and_anchors
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
 from .generation_helpers import assemble_narrative_context, gateway_for
@@ -71,15 +70,7 @@ def _composition_output_state(
     ]
     # Context profiles were selected before composition. Re-select from the final
     # outline so newly planned entities are represented and NPCs use public views.
-    with (
-        _store_factory(state, "entity")() as ent_store,
-        _store_factory(state, "npc_profile")() as npc_store,
-    ):
-        composer_entity_profiles = gather_entity_profiles_from_state_and_anchors(
-            current_state=state["current_state"],
-            anchors=anchors,
-            entity_store=ent_store,
-        )
+    with _store_factory(state, "npc_profile")() as npc_store:
         composer_npc_profiles = gather_npc_profiles_from_state_and_anchors(
             current_state=state["current_state"],
             anchors=anchors,
@@ -89,10 +80,6 @@ def _composition_output_state(
         "narrative_composition": composition,
         "outline": outline,
         "beat_entity_anchors": beat_entity_anchors,
-        "composer_entity_profile_views": [
-            profile.semantic_view()
-            for profile in composer_entity_profiles
-        ],
         "composer_npc_public_views": [
             profile.public_view()
             for profile in composer_npc_profiles
@@ -118,7 +105,6 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                     current_state=state["current_state"],
                     scene_summaries=state["scene_summaries"],
                     matched_anchors=state.get("matched_anchors", []),
-                    entity_profiles=state.get("action_entity_profile_views", []),
                     npc_profiles=state.get("action_npc_director_views", []),
                     current_turn_index=state["next_turn_index"],
                 ),
@@ -184,7 +170,6 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         current_state=state["current_state"],
         core_memory=state["core_memory"],
         recent_summaries=state.get("recent_summaries", []),
-        entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
         events=hidden_events,
         trace_id=state["trace_id"],
@@ -303,7 +288,6 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
         roll_results=state["roll_results"],
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
-        entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
         trace_id=state["trace_id"],
     )
@@ -405,7 +389,6 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
         turn_resolution=state["turn_resolution"],
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
-        entity_profiles=state.get("action_entity_profile_views", []),
         npc_profiles=state.get("action_npc_director_views", []),
         director_stage=state.get("director_stage"),
     )
@@ -476,27 +459,18 @@ def generate_canon_queries_node(state: GenerationState) -> GenerationState:
         "step": "canon_query_started",
         "data": {"trace_id": state["trace_id"]},
     })
-    with (
-        _store_factory(state, "entity")() as entity_store,
-        _store_factory(state, "npc_profile")() as npc_store,
-    ):
-        entity_profiles = [
-            profile.semantic_view()
-            for profile in entity_store.list_all()
-        ]
+    with _store_factory(state, "npc_profile")() as npc_store:
         npc_profiles = [
             profile.director_view()
             for profile in npc_store.list_all()
         ]
         entity_catalog = build_entity_catalog(
             player_name=state["current_state"].player.name,
-            entity_profiles=entity_profiles,
             npc_profiles=npc_profiles,
         )
     query_set = NarrativeCanonQueryAgent(gateway_for(state)).generate(
         scene_text=state["narrative_composition"].scene_text,
         player_name=state["current_state"].player.name,
-        entity_profiles=entity_profiles,
         npc_profiles=npc_profiles,
         trace_id=state["trace_id"],
     )

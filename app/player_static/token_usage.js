@@ -18,8 +18,6 @@ const TASK_LABELS = {
   scene_fact_extract: "场景事实提取",
   state_update: "世界状态更新",
   continuity_project: "连续性账本",
-  entity_extract: "实体提取",
-  entity_profile_update: "实体资料更新",
   npc_profile_extract: "人物资料提取",
   npc_profile_backfill: "人物资料补全",
   npc_profile_update: "人物资料更新",
