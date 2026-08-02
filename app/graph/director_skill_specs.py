@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import (
     BaseModel,
@@ -95,18 +95,46 @@ class CreateNPCArguments(BaseModel):
     anchors: list[str] = Field(default_factory=list, max_length=8)
 
 
-class CreateCoupledSceneArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ExistingEventActorInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    source: Literal["existing"]
+    npc_id: str = Field(min_length=1)
+    guidance: str = Field(default="", max_length=500)
+
+
+class NewEventActorInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    source: Literal["new"]
+    guidance: str = Field(min_length=1, max_length=500)
+
+
+EventActorInput = Annotated[
+    ExistingEventActorInput | NewEventActorInput,
+    Field(discriminator="source"),
+]
+
+
+class CreateEventArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     role: DirectorEventRole
-    npc_count: int = Field(ge=1, le=3)
     event_guidance: str = Field(default="", max_length=500)
-    npc_guidances: list[str] = Field(default_factory=list, max_length=3)
+    actors: list[EventActorInput] = Field(default_factory=list, max_length=6)
 
     @model_validator(mode="after")
-    def _npc_guidances_fit_count(self):
-        if len(self.npc_guidances) > self.npc_count:
-            raise ValueError("npc_guidances must not exceed npc_count")
+    def _validate_actor_mix(self):
+        new_count = sum(actor.source == "new" for actor in self.actors)
+        if new_count > 3:
+            raise ValueError("create_event supports at most 3 new actors")
+        existing_ids = [
+            actor.npc_id
+            for actor in self.actors
+            if actor.source == "existing"
+        ]
+        if len(existing_ids) != len(set(existing_ids)):
+            raise ValueError("create_event has duplicate existing npc_id")
         return self
 
 
@@ -191,19 +219,19 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         arguments_model=ForeshadowSettingArguments,
     ),
     DirectorSkillSpec(
-        name="create_coupled_scene",
+        name="create_event",
         description=(
-            "创建一个长线事件（arc）或环境事件（ambient），并同时孕育若干个与该事件"
-            "互相耦合的新 NPC，将其全部绑定为该事件的演员。这是创建事件的唯一技能，"
-            "事件总是伴随至少一个新 NPC。"
+            "创建一个长线事件（arc）或环境事件（ambient）。这是创建事件的唯一技能。"
+            "arguments.actors 是强制演员清单：source=existing 时引用现有 NPC，"
+            "source=new 时按 guidance 孕育新 NPC；两类可混合，也可留空创建不依赖具体"
+            "NPC 的环境、制度或灾害事件。所有声明的演员都会被绑定并参与事件设计。"
             "只用于世界在主角视线之外的平行动态，"
             "不得用于推动、包装或代劳主角当前正在执行的主线行动。"
-            "方向请通过 arguments 中的 event_guidance 与 npc_guidances 分别给出"
-            "（npc_guidances 数量不得超过 npc_count，缺省时用请求级 guidance 兜底）。"
+            "事件方向使用 event_guidance；每个演员在该事件中的预期作用使用其 guidance。"
         ),
         phases=_CONFIRMATION,
         mutates=True,
-        arguments_model=CreateCoupledSceneArguments,
+        arguments_model=CreateEventArguments,
     ),
     DirectorSkillSpec(
         name="create_npc",

@@ -4,6 +4,7 @@ from .reviewer import (
 )
 from .schemas import (
     DirectorActorRef,
+    DirectorEventActorRole,
     DirectorEvent,
     DirectorEventEngagedReviewBatch,
     DirectorEventEngagedReviewResult,
@@ -18,6 +19,7 @@ from .store import DirectorEventStore
 
 __all__ = [
     "DirectorActorRef",
+    "DirectorEventActorRole",
     "DirectorEvent",
     "DirectorEventEngagedReviewBatch",
     "DirectorEventEngagedReviewResult",

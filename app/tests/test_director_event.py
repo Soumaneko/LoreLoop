@@ -4,6 +4,8 @@ import pytest
 
 from app.domain.director import DirectorResourceRef
 from app.domain.director_event import (
+    DirectorActorRef,
+    DirectorEventActorRole,
     DirectorEventSelectionResult,
     DirectorEventStore,
     EventHook,
@@ -16,7 +18,7 @@ def _event_selection() -> DirectorEventSelectionResult:
         current_story_direction="港口失踪案仍在扩大。",
         reason="这是独立的长期世界活动。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -42,7 +44,11 @@ def _event_selection() -> DirectorEventSelectionResult:
 
 
 def _event():
-    return _event_selection().to_event(role="ambient", turn_index=3)
+    return _event_selection().to_event(
+        role="ambient",
+        turn_index=3,
+        actors=[DirectorActorRef(name="港务署")],
+    )
 
 
 def test_event_contract_has_generic_actor_refs_without_npc_dependency():
@@ -86,7 +92,11 @@ def test_bind_actor_upgrades_same_name_unreferenced_actor_instead_of_duplicating
     from app.domain.director_event.schemas import DirectorActorRef, DirectorEventSelectionResult
 
     store = DirectorEventStore()
-    event = _event_selection().to_event(role="ambient", turn_index=3)
+    event = _event_selection().to_event(
+        role="ambient",
+        turn_index=3,
+        actors=[DirectorActorRef(name="港务署"), DirectorActorRef(name="林澈")],
+    )
     store.save(event)
 
     updated = store.bind_actor(
@@ -108,7 +118,11 @@ def test_bind_actor_does_not_duplicate_same_resource_ref():
     from app.domain.director_event.schemas import DirectorActorRef
 
     store = DirectorEventStore()
-    event = _event_selection().to_event(role="ambient", turn_index=3)
+    event = _event_selection().to_event(
+        role="ambient",
+        turn_index=3,
+        actors=[DirectorActorRef(name="港务署")],
+    )
     store.save(event)
     ref = DirectorResourceRef(kind="npc", resource_id="npc_1")
 
@@ -291,14 +305,14 @@ def test_reconsuming_a_hook_preserves_original_consumed_turn():
     store.close()
 
 
-def test_selection_actors_are_stripped_deduped_and_reject_blank():
+def test_selection_actor_roles_require_unique_keys_and_event_uses_bound_actors():
     from pydantic import ValidationError
 
     selection = DirectorEventSelectionResult(
         current_story_direction="港口失踪案仍在扩大。",
         reason="这是独立的长期世界活动。",
         title="无灯船",
-        actors=[" 林澈 ", "林澈", "港务署", "", "   "],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -316,7 +330,11 @@ def test_selection_actors_are_stripped_deduped_and_reject_blank():
         ),
     )
 
-    event = selection.to_event(role="ambient", turn_index=3)
+    event = selection.to_event(
+        role="ambient",
+        turn_index=3,
+        actors=[DirectorActorRef(name="林澈"), DirectorActorRef(name="港务署")],
+    )
     assert [actor.name for actor in event.actors] == ["林澈", "港务署"]
 
     with pytest.raises(ValidationError):
@@ -324,7 +342,10 @@ def test_selection_actors_are_stripped_deduped_and_reject_blank():
             current_story_direction="港口失踪案仍在扩大。",
             reason="这是独立的长期世界活动。",
             title="无灯船",
-            actors=["", "  "],
+            actor_roles=[
+                DirectorEventActorRole(actor_key="actor_1", role_in_event="调查"),
+                DirectorEventActorRole(actor_key="actor_1", role_in_event="掩护"),
+            ],
             subject="陷空山脚猎户",
             intent="查明灵气异动",
             method="组队搜山",
@@ -340,4 +361,14 @@ def test_selection_actors_are_stripped_deduped_and_reject_blank():
             world_impact=WorldImpact(
                 description="猎户带走了码头封存的一批物资，外围变为凡人活动区。",
             ),
+        )
+
+
+def test_actor_role_rejects_blank_role_in_event():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        DirectorEventActorRole(
+            actor_key="actor_1",
+            role_in_event="   ",
         )

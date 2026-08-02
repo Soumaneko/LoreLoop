@@ -29,7 +29,7 @@ from app.domain.world_setting.preparer import SettingAnchorPreparer
 
 from .director_skill_specs import (
     BindEventActorArguments,
-    CreateCoupledSceneArguments,
+    CreateEventArguments,
     CreateNPCArguments,
     EnrichNPCArguments,
     EnrichSettingArguments,
@@ -285,17 +285,58 @@ def run_confirmation_director_agent(
             director_npc_store.save(draft)
             return {"npc_id": draft.draft_id, "name": draft.name}
 
-        def create_coupled_scene(
-            args: CreateCoupledSceneArguments,
+        def create_event(
+            args: CreateEventArguments,
             guidance: str | None = None,
         ):
             event_guidance = args.event_guidance.strip() or (guidance or "")
-            npc_guidance_for = lambda index: (
-                args.npc_guidances[index].strip()
-                if index < len(args.npc_guidances)
-                and args.npc_guidances[index].strip()
-                else (guidance or "")
-            )
+            required_actors: list[dict] = []
+            bound_actors: list[DirectorActorRef] = []
+            actor_inputs_by_key = {}
+            for index, actor_input in enumerate(args.actors, start=1):
+                actor_key = f"actor_{index}"
+                actor_inputs_by_key[actor_key] = actor_input
+                if actor_input.source == "new":
+                    required_actors.append({
+                        "actor_key": actor_key,
+                        "source": "new",
+                        "guidance": actor_input.guidance,
+                    })
+                    continue
+
+                draft = director_npc_store.get_by_id(actor_input.npc_id)
+                profile = npc_profile_store.get_by_id(actor_input.npc_id)
+                if draft is not None and draft.status != "retired":
+                    actor_name = draft.name
+                    actor_profile = {
+                        "resource_type": "director_npc",
+                        **draft.private_view().model_dump(mode="json"),
+                    }
+                elif profile is not None and profile.active:
+                    actor_name = profile.name
+                    actor_profile = {
+                        "resource_type": "npc_profile",
+                        "npc_id": profile.npc_id,
+                        **profile.director_view().model_dump(mode="json"),
+                    }
+                else:
+                    raise ValueError("create_event references an unknown active NPC")
+                required_actors.append({
+                    "actor_key": actor_key,
+                    "source": "existing",
+                    "npc_id": actor_input.npc_id,
+                    "guidance": actor_input.guidance,
+                    "profile": actor_profile,
+                })
+                bound_actors.append(
+                    DirectorActorRef(
+                        name=actor_name,
+                        ref=DirectorResourceRef(
+                            kind="npc",
+                            resource_id=actor_input.npc_id,
+                        ),
+                    )
+                )
             selection = DirectorEventSelector(gateway).select_or_create(
                 role=args.role,
                 events=event_store.list_all(),
@@ -304,18 +345,37 @@ def run_confirmation_director_agent(
                 recent_summaries=selection_summaries,
                 entity_profiles=entity_profiles,
                 npc_profiles=npc_profiles,
+                required_actors=required_actors,
                 trace_id=trace_id,
                 guidance=event_guidance,
             )
             event = selection.to_event(
                 role=args.role,
                 turn_index=turn_index,
+                actors=bound_actors,
             )
             drafts: list = []
-            npc_ids: list[str] = []
-            npc_names: list[str] = []
-            recent_creations: list[dict] = [event.semantic_view()]
-            for index in range(args.npc_count):
+            new_npc_ids: list[str] = []
+            actor_names: list[str] = [actor.name for actor in bound_actors]
+            role_by_key = {
+                role.actor_key: role.role_in_event
+                for role in selection.actor_roles
+            }
+            actor_roles_view = [
+                role.model_dump(mode="json")
+                for role in selection.actor_roles
+            ]
+            recent_creations: list[dict] = [{
+                **event.semantic_view(),
+                "actor_roles": actor_roles_view,
+            }]
+            for actor_key, actor_input in actor_inputs_by_key.items():
+                if actor_input.source != "new":
+                    continue
+                npc_guidance = (
+                    f"{actor_input.guidance}\n"
+                    f"在本事件中的职责：{role_by_key[actor_key]}"
+                )
                 draft = DirectorNPCCreator(gateway).create(
                     core_memory=core_memory,
                     existing_npcs=npc_profile_store.list_all(),
@@ -342,7 +402,7 @@ def run_confirmation_director_agent(
                     protagonist_name=current_state.player.name,
                     turn_index=turn_index,
                     trace_id=trace_id,
-                    guidance=npc_guidance_for(index),
+                    guidance=npc_guidance,
                     recent_creations=recent_creations,
                 )
                 drafts.append(draft)
@@ -381,7 +441,10 @@ def run_confirmation_director_agent(
                         "updated_at": utc_now(),
                     }
                 )
-                recent_creations[0] = event.semantic_view()
+                recent_creations[0] = {
+                    **event.semantic_view(),
+                    "actor_roles": actor_roles_view,
+                }
                 recent_creations.append(
                     {
                         "kind": "npc",
@@ -391,16 +454,16 @@ def run_confirmation_director_agent(
                         "core_motivation": draft.core_motivation,
                     }
                 )
-                npc_ids.append(draft.draft_id)
-                npc_names.append(draft.name)
+                new_npc_ids.append(draft.draft_id)
+                actor_names.append(draft.name)
             for draft in drafts:
                 director_npc_store.save(draft)
             event_store.save(event)
             return {
                 "event_id": event.event_id,
                 "role": event.role,
-                "npc_ids": npc_ids,
-                "npc_names": npc_names,
+                "new_npc_ids": new_npc_ids,
+                "actor_names": actor_names,
             }
 
         def enrich_setting(args: EnrichSettingArguments, guidance: str | None = None):
@@ -521,8 +584,8 @@ def run_confirmation_director_agent(
         )
         _register_skill(
             service,
-            "create_coupled_scene",
-            handler=create_coupled_scene,
+            "create_event",
+            handler=create_event,
         )
         _register_skill(
             service,

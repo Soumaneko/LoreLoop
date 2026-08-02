@@ -22,7 +22,7 @@ def utc_now() -> str:
 
 
 class DirectorNPCDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     draft_id: str = Field(default_factory=_new_id)
     core_motivation: str = Field(min_length=1)
@@ -63,7 +63,7 @@ class DirectorNPCDraft(BaseModel):
 
 
 class DirectorNPCCreateOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     creation_reason: str = Field(min_length=1)
     core_motivation: str = Field(min_length=1)

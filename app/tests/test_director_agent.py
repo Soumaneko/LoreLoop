@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -68,7 +69,7 @@ def test_skill_service_exposes_only_skills_available_in_phase():
         handler=lambda arguments, guidance=None: {"event_id": arguments.event_id},
     )
     service.register(
-        name="create_coupled_scene",
+        name="create_event",
         description="创建新的导演事件。",
         phases={"confirmation"},
         mutates=True,
@@ -81,7 +82,7 @@ def test_skill_service_exposes_only_skills_available_in_phase():
     ] == ["present_event"]
     assert [
         spec.name for spec in service.specs_for_phase("confirmation")
-    ] == ["present_event", "create_coupled_scene"]
+    ] == ["present_event", "create_event"]
 
 
 def test_skill_service_rejects_mutating_generation_skill():
@@ -256,7 +257,7 @@ def test_skill_service_rejects_duplicate_requests_and_invalid_resources():
 def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
     service = DirectorSkillService()
     service.register(
-        name="create_coupled_scene",
+        name="create_event",
         description="创建新的导演事件。",
         phases={"confirmation"},
         mutates=True,
@@ -268,13 +269,13 @@ def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
         requests=[
             DirectorSkillRequest(
                 request_id="one",
-                skill="create_coupled_scene",
+                skill="create_event",
                 arguments={"title": "码头暗涌"},
                 guidance="码头势力正在暗中重整旗鼓。",
             ),
             DirectorSkillRequest(
                 request_id="two",
-                skill="create_coupled_scene",
+                skill="create_event",
                 arguments={"title": "码头暗涌"},
                 guidance="城中旧案出现新的线索。",
             ),
@@ -294,13 +295,13 @@ def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
         requests=[
             DirectorSkillRequest(
                 request_id="one",
-                skill="create_coupled_scene",
+                skill="create_event",
                 arguments={"title": "码头暗涌"},
                 guidance="码头势力正在暗中重整旗鼓。",
             ),
             DirectorSkillRequest(
                 request_id="two",
-                skill="create_coupled_scene",
+                skill="create_event",
                 arguments={"title": "码头暗涌"},
                 guidance="码头势力正在暗中重整旗鼓。",
             ),
@@ -413,10 +414,10 @@ def test_director_decide_prompts_are_phase_separated():
 
     assert "生成阶段只能提出非持久化的舞台调度" in generation_prompt
     assert "`view_mode`" in generation_prompt
-    assert "create_coupled_scene" not in generation_prompt
+    assert "create_event" not in generation_prompt
 
     assert "主动造物的导演特权" in confirmation_prompt
-    assert "`create_coupled_scene`" in confirmation_prompt
+    assert "`create_event`" in confirmation_prompt
     assert "`view_mode`" not in confirmation_prompt
 
 
@@ -796,7 +797,7 @@ def test_director_skill_specs_cover_every_registered_skill():
         "introduce_npc",
         "foreshadow_setting",
         "create_npc",
-        "create_coupled_scene",
+        "create_event",
         "enrich_setting",
         "bind_event_actor",
         "enrich_npc",
@@ -821,7 +822,7 @@ def test_director_skill_specs_cover_every_registered_skill():
     }
     assert {spec.name for spec in service.specs_for_phase("confirmation")} == {
         "create_npc",
-        "create_coupled_scene",
+        "create_event",
         "enrich_setting",
         "bind_event_actor",
         "enrich_npc",
@@ -1072,12 +1073,12 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
     assert backfill_input["director_guidance"] == "出身行商世家，隐瞒真实货主身份。"
 
 
-def _event_selection_output() -> dict:
+def _event_selection_output(actor_roles: list[dict] | None = None) -> dict:
     return {
         "current_story_direction": "一条围绕河岸码头旧案的复仇线。",
         "reason": "世界缺乏明确的长期目标。",
         "title": "沉船账本",
-        "actors": ["码头苦力"],
+        "actor_roles": actor_roles or [],
         "subject": "码头旧账房",
         "intent": "追回被私吞的账目",
         "method": "暗中盘查往来货船",
@@ -1096,29 +1097,31 @@ def _event_selection_output() -> dict:
     }
 
 
-def test_confirmation_agent_can_create_coupled_scene_via_skill(tmp_path):
+def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     gateway = _PhaseGateway(
         decision={
             "reasoning": "需要同时孕育一个事件与它的核心班底。",
             "requests": [
                 {
-                    "request_id": "coupled_1",
-                    "skill": "create_coupled_scene",
+                    "request_id": "event_1",
+                    "skill": "create_event",
                     "arguments": {
                         "role": "arc",
-                        "npc_count": 2,
                         "event_guidance": "码头货运世家的旧账成为导火索。",
-                        "npc_guidances": [
-                            "码头把头，世代守着货路。",
-                            "账房先生，暗中替世家管账。",
+                        "actors": [
+                            {"source": "new", "guidance": "码头把头，世代守着货路。"},
+                            {"source": "new", "guidance": "账房先生，暗中替世家管账。"},
                         ],
                     },
                     "guidance": "以码头货运世家为核心演员班底。",
                 }
             ],
         },
-        event_selection_output=_event_selection_output(),
+        event_selection_output=_event_selection_output([
+            {"actor_key": "actor_1", "role_in_event": "控制码头货路"},
+            {"actor_key": "actor_2", "role_in_event": "管理隐秘账目"},
+        ]),
         npc_output={
             "creation_reason": "码头上的一等把式。",
             "core_motivation": "守住码头的货路。",
@@ -1152,11 +1155,11 @@ def test_confirmation_agent_can_create_coupled_scene_via_skill(tmp_path):
         trace_id="confirmation-director",
     )
 
-    assert executions.executions[0].skill == "create_coupled_scene"
+    assert executions.executions[0].skill == "create_event"
     output = executions.executions[0].output
     assert output["role"] == "arc"
-    assert len(output["npc_ids"]) == 2
-    assert len(output["npc_names"]) == 2
+    assert len(output["new_npc_ids"]) == 2
+    assert len(output["actor_names"]) == 2
     assert gateway.tasks == [
         "director_agent_decide_confirmation",
         "director_event_select_arc",
@@ -1170,12 +1173,12 @@ def test_confirmation_agent_can_create_coupled_scene_via_skill(tmp_path):
         bound = store.get_by_id(output["event_id"])
         assert bound is not None
         assert {(actor.ref.kind, actor.ref.resource_id) for actor in bound.actors if actor.ref} == {
-            ("npc", npc_id) for npc_id in output["npc_ids"]
+            ("npc", npc_id) for npc_id in output["new_npc_ids"]
         }
-        assert set(output["npc_names"]) <= {actor.name for actor in bound.actors}
+        assert set(output["actor_names"]) <= {actor.name for actor in bound.actors}
     with stores.director_npc() as store:
         prepared = store.list_prepared()
-        assert {draft.draft_id for draft in prepared} == set(output["npc_ids"])
+        assert {draft.draft_id for draft in prepared} == set(output["new_npc_ids"])
 
     create_calls = [
         entry
@@ -1189,8 +1192,13 @@ def test_confirmation_agent_can_create_coupled_scene_via_skill(tmp_path):
     second = create_calls[1]["batch_recent_creations_json"]
     assert second.count("沉船账本") == 1
     assert "沈二爷" in second
-    assert create_calls[0]["director_guidance"] == "码头把头，世代守着货路。"
-    assert create_calls[1]["director_guidance"] == "账房先生，暗中替世家管账。"
+    assert "actor_roles" in second
+    assert "控制码头货路" in second
+    assert "管理隐秘账目" in second
+    assert "码头把头，世代守着货路。" in create_calls[0]["director_guidance"]
+    assert "控制码头货路" in create_calls[0]["director_guidance"]
+    assert "账房先生，暗中替世家管账。" in create_calls[1]["director_guidance"]
+    assert "管理隐秘账目" in create_calls[1]["director_guidance"]
 
     selector_input = [
         entry
@@ -1200,7 +1208,189 @@ def test_confirmation_agent_can_create_coupled_scene_via_skill(tmp_path):
     assert selector_input[0]["director_guidance"] == "码头货运世家的旧账成为导火索。"
 
 
-def test_coupled_scene_defers_persistence_when_npc_creation_fails(
+def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile() as npc_store:
+        existing_id = npc_store.upsert(
+            NPCProfile(
+                name="陆远舟",
+                role="镖师",
+                core_motivation="守住商路信誉。",
+                hidden_secret="曾替码头世家运过密货。",
+            )
+        )
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "已有镖师会雇用一个新的执行者。",
+            "requests": [{
+                "request_id": "event_1",
+                "skill": "create_event",
+                "arguments": {
+                    "role": "arc",
+                    "event_guidance": "围绕旧商路形成独立事件。",
+                    "actors": [
+                        {
+                            "source": "existing",
+                            "npc_id": existing_id,
+                            "guidance": "作为幕后委托者，不改变既有动机。",
+                        },
+                        {
+                            "source": "new",
+                            "guidance": "受雇调查沉船的新面孔。",
+                        },
+                    ],
+                },
+                "guidance": "让新旧演员共同推动事件。",
+            }],
+        },
+        event_selection_output=_event_selection_output([
+            {"actor_key": "actor_1", "role_in_event": "提供目标与资源"},
+            {"actor_key": "actor_2", "role_in_event": "执行沉船调查"},
+        ]),
+        npc_output={
+            "creation_reason": "沉船事件需要一名现场调查者。",
+            "core_motivation": "靠查明沉船真相获得立足之地。",
+            "hidden_secret": "曾参与伪造一份船货清单。",
+            "conflict_style": "先观察再突然行动。",
+            "social_style": "谨慎而直接。",
+            "role": "沉船调查者",
+            "faction": None,
+            "personality_traits": ["谨慎", "果断"],
+            "known_abilities": ["潜水", "辨认船货"],
+            "appearance": "总穿着防水短衣。",
+            "name": "闻潮",
+            "encounter_potentials": ["沉船调查", "货单争议", "码头冲突"],
+        },
+    )
+
+    _, executions = run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        entity_profiles=[],
+        npc_profiles=[],
+        entity_mentions=[],
+        npc_mentions=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    output = executions.executions[0].output
+    assert len(output["new_npc_ids"]) == 1
+    with stores.director_event() as event_store:
+        event = event_store.get_by_id(output["event_id"])
+    assert event is not None
+    assert {actor.name for actor in event.actors} == {"陆远舟", "闻潮"}
+    assert {actor.ref.resource_id for actor in event.actors if actor.ref} == {
+        existing_id,
+        output["new_npc_ids"][0],
+    }
+    selector_input = next(
+        entry
+        for entry, task in zip(gateway.input_data, gateway.tasks)
+        if task == "director_event_select_arc"
+    )
+    required = json.loads(selector_input["required_actors_json"])
+    assert required[0]["actor_key"] == "actor_1"
+    assert required[0]["profile"]["name"] == "陆远舟"
+    assert required[0]["profile"]["hidden_secret"] == "曾替码头世家运过密货。"
+    assert required[1] == {
+        "actor_key": "actor_2",
+        "source": "new",
+        "guidance": "受雇调查沉船的新面孔。",
+    }
+
+
+def test_create_event_rejects_missing_required_actor_role(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "创建带新演员的事件。",
+            "requests": [{
+                "request_id": "event_1",
+                "skill": "create_event",
+                "arguments": {
+                    "role": "ambient",
+                    "actors": [{"source": "new", "guidance": "码头巡夜人。"}],
+                },
+                "guidance": "围绕码头夜巡建立事件。",
+            }],
+        },
+        event_selection_output=_event_selection_output(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="actor_roles must cover exactly every required actor_key",
+    ):
+        run_confirmation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="询问昨夜发生的事。",
+            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+            recent_summaries=[],
+            selection_summaries=[],
+            entity_profiles=[],
+            npc_profiles=[],
+            entity_mentions=[],
+            npc_mentions=[],
+            turn_index=3,
+            trace_id="confirmation-director",
+        )
+
+
+def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "错误地引用不存在的演员。",
+            "requests": [{
+                "request_id": "event_1",
+                "skill": "create_event",
+                "arguments": {
+                    "role": "arc",
+                    "actors": [{
+                        "source": "existing",
+                        "npc_id": "npc_missing",
+                        "guidance": "作为幕后行动者。",
+                    }],
+                },
+                "guidance": "建立幕后事件。",
+            }],
+        },
+        event_selection_output=_event_selection_output([
+            {"actor_key": "actor_1", "role_in_event": "幕后行动"},
+        ]),
+    )
+
+    with pytest.raises(ValueError, match="unknown active NPC"):
+        run_confirmation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="询问昨夜发生的事。",
+            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+            recent_summaries=[],
+            selection_summaries=[],
+            entity_profiles=[],
+            npc_profiles=[],
+            entity_mentions=[],
+            npc_mentions=[],
+            turn_index=3,
+            trace_id="confirmation-director",
+        )
+    assert gateway.tasks == ["director_agent_decide_confirmation"]
+
+
+def test_create_event_defers_persistence_when_new_actor_creation_fails(
     tmp_path, monkeypatch
 ):
     from app.domain.director_npc.creator import DirectorNPCCreator
@@ -1211,22 +1401,24 @@ def test_coupled_scene_defers_persistence_when_npc_creation_fails(
             "reasoning": "需要同时孕育一个事件与它的核心班底。",
             "requests": [
                 {
-                    "request_id": "coupled_1",
-                    "skill": "create_coupled_scene",
+                    "request_id": "event_1",
+                    "skill": "create_event",
                     "arguments": {
                         "role": "arc",
-                        "npc_count": 2,
                         "event_guidance": "码头货运世家的旧账成为导火索。",
-                        "npc_guidances": [
-                            "码头把头，世代守着货路。",
-                            "账房先生，暗中替世家管账。",
+                        "actors": [
+                            {"source": "new", "guidance": "码头把头，世代守着货路。"},
+                            {"source": "new", "guidance": "账房先生，暗中替世家管账。"},
                         ],
                     },
                     "guidance": "以码头货运世家为核心演员班底。",
                 }
             ],
         },
-        event_selection_output=_event_selection_output(),
+        event_selection_output=_event_selection_output([
+            {"actor_key": "actor_1", "role_in_event": "控制码头货路"},
+            {"actor_key": "actor_2", "role_in_event": "管理隐秘账目"},
+        ]),
         npc_output={
             "creation_reason": "码头上的一等把式。",
             "core_motivation": "守住码头的货路。",
@@ -1278,35 +1470,21 @@ def test_coupled_scene_defers_persistence_when_npc_creation_fails(
         assert store.list_all() == []
 
 
-def test_coupled_scene_guidance_falls_back_to_request_guidance(tmp_path):
+def test_create_event_guidance_falls_back_to_request_guidance(tmp_path):
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     gateway = _PhaseGateway(
         decision={
             "reasoning": "需要孕育事件班底。",
             "requests": [
                 {
-                    "request_id": "coupled_1",
-                    "skill": "create_coupled_scene",
-                    "arguments": {"role": "ambient", "npc_count": 1},
+                    "request_id": "event_1",
+                    "skill": "create_event",
+                    "arguments": {"role": "ambient", "actors": []},
                     "guidance": "以船坞翻修风波为整体方向。",
                 }
             ],
         },
         event_selection_output=_event_selection_output(),
-        npc_output={
-            "creation_reason": "船坞里的一把好手。",
-            "core_motivation": "保住船坞的饭碗。",
-            "hidden_secret": "曾替人藏过一批货。",
-            "conflict_style": "先动手再讲理。",
-            "social_style": "嗓门大。",
-            "role": "船坞工头",
-            "faction": "船坞行会",
-            "personality_traits": ["爽利", "护短"],
-            "known_abilities": ["修船", "排班"],
-            "appearance": "满手老茧。",
-            "name": "赵铁柱",
-            "encounter_potentials": ["船坞冲突", "藏货旧案", "工钱纷争"],
-        },
     )
 
     _, executions = run_confirmation_director_agent(
@@ -1326,29 +1504,44 @@ def test_coupled_scene_guidance_falls_back_to_request_guidance(tmp_path):
         trace_id="confirmation-director",
     )
 
-    assert executions.executions[0].skill == "create_coupled_scene"
+    assert executions.executions[0].skill == "create_event"
     selector_input = [
         entry
         for entry, task in zip(gateway.input_data, gateway.tasks)
         if task == "director_event_select_ambient"
     ]
     assert selector_input[0]["director_guidance"] == "以船坞翻修风波为整体方向。"
-    create_calls = [
-        entry
-        for entry, task in zip(gateway.input_data, gateway.tasks)
-        if task == "director_npc_create"
-    ]
-    assert create_calls[0]["director_guidance"] == "以船坞翻修风波为整体方向。"
+    assert "director_npc_create" not in gateway.tasks
 
 
-def test_coupled_scene_rejects_oversized_npc_guidances():
-    from app.graph.director_skill_specs import CreateCoupledSceneArguments
+def test_create_event_rejects_more_than_three_new_actors():
+    from app.graph.director_skill_specs import CreateEventArguments
 
     with pytest.raises(ValidationError):
-        CreateCoupledSceneArguments(
+        CreateEventArguments(
             role="arc",
-            npc_count=1,
-            npc_guidances=["方向一", "方向二"],
+            actors=[
+                {"source": "new", "guidance": f"方向{index}"}
+                for index in range(4)
+            ],
+        )
+
+
+def test_director_npc_output_rejects_blank_name():
+    from app.domain.director_npc.schemas import DirectorNPCCreateOutput
+
+    with pytest.raises(ValidationError):
+        DirectorNPCCreateOutput(
+            creation_reason="事件需要现场演员。",
+            core_motivation="完成受托调查。",
+            hidden_secret="隐瞒过去的失败。",
+            conflict_style="先观察后行动。",
+            social_style="谨慎寡言。",
+            role="调查者",
+            personality_traits=["谨慎", "果断"],
+            appearance="穿着防水短衣。",
+            name="   ",
+            encounter_potentials=["现场调查", "旧案冲突", "身份暴露"],
         )
 
 
@@ -1368,15 +1561,16 @@ def test_director_event_semantic_view_hides_internal_state(tmp_path):
     assert "world_impact" not in saved.semantic_view()
 
 
-def test_director_decide_prompt_defines_coupled_scene_boundary():
+def test_director_decide_prompt_defines_create_event_boundary():
     prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
-    assert "create_coupled_scene" in prompt
+    assert "create_event" in prompt
     assert "唯一技能" in prompt
     assert "`create_npc`" in prompt
     assert "绝不可强迫主角参与" in prompt
     assert "`event_guidance`" in prompt
-    assert "`npc_guidances`" in prompt
+    assert "source=existing" in prompt
+    assert "source=new" in prompt
 
 
 def test_director_decide_prompt_forbids_quest_wrapping():
@@ -1394,7 +1588,7 @@ def test_event_skill_descriptions_forbid_quest_wrapping():
     specs = {
         spec.name: spec
         for spec in get_director_skill_specs()
-        if spec.name in {"create_coupled_scene"}
+        if spec.name in {"create_event"}
     }
     for spec in specs.values():
         assert "主角视线之外" in spec.description
@@ -1544,7 +1738,7 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -1635,7 +1829,7 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -1712,7 +1906,7 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -1756,7 +1950,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -1813,7 +2007,7 @@ def test_generation_presents_persisted_engaged_event(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -1894,7 +2088,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -1953,7 +2147,7 @@ def test_present_event_hidden_without_hook_id_presents_nothing(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2013,7 +2207,7 @@ def test_hidden_review_engages_event(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2061,7 +2255,7 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2105,7 +2299,7 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2150,7 +2344,7 @@ def test_engaged_review_resolves_event(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2200,7 +2394,7 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2248,7 +2442,7 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2297,7 +2491,7 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2347,7 +2541,7 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
             current_story_direction="河岸码头出现异常动静。",
             reason="独立世界事件。",
             title=title,
-            actors=["港务署"],
+            actor_roles=[],
             subject=f"行动方{index}",
             intent="查明灵气异动",
             method="组队搜山",
@@ -2408,7 +2602,7 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
             current_story_direction="河岸码头出现异常动静。",
             reason="独立世界事件。",
             title=title,
-            actors=["港务署"],
+            actor_roles=[],
             subject=f"行动方{index}",
             intent="查明灵气异动",
             method="组队搜山",
@@ -2465,7 +2659,7 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2508,14 +2702,19 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
 
 
 def test_review_input_uses_actor_names_only(tmp_path):
-    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+    from app.domain.director_event.schemas import (
+        DirectorActorRef,
+        DirectorEventSelectionResult,
+        EventHook,
+        WorldImpact,
+    )
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
-        actors=["港务署", "林澈"],
+        actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
         method="组队搜山",
@@ -2529,7 +2728,11 @@ def test_review_input_uses_actor_names_only(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(
+        role="ambient",
+        turn_index=1,
+        actors=[DirectorActorRef(name="港务署"), DirectorActorRef(name="林澈")],
+    )
     with stores.director_event() as store:
         event_id = store.save(selection)
 

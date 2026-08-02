@@ -26,6 +26,13 @@ class DirectorActorRef(BaseModel):
     ref: DirectorResourceRef | None = None
 
 
+class DirectorEventActorRole(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    actor_key: str = Field(min_length=1, max_length=40)
+    role_in_event: str = Field(min_length=1, max_length=200)
+
+
 class EventHook(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -112,7 +119,10 @@ class DirectorEventSelectionResult(BaseModel):
     current_story_direction: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     title: str = Field(min_length=1)
-    actors: list[str] = Field(min_length=1)
+    actor_roles: list[DirectorEventActorRole] = Field(
+        default_factory=list,
+        max_length=6,
+    )
     subject: str = Field(min_length=1)
     intent: str = Field(min_length=1)
     method: str = Field(min_length=1)
@@ -120,25 +130,20 @@ class DirectorEventSelectionResult(BaseModel):
     hook_pool: list[EventHook] = Field(min_length=1)
     world_impact: WorldImpact
 
-    @field_validator("actors", mode="before")
+    @field_validator("actor_roles")
     @classmethod
-    def _clean_actors(cls, value):
-        if not isinstance(value, list):
-            return value
-        cleaned = []
-        seen: set[str] = set()
-        for item in value:
-            text = str(item).strip()
-            if text and text not in seen:
-                seen.add(text)
-                cleaned.append(text)
-        return cleaned
+    def _unique_actor_keys(cls, value):
+        keys = [item.actor_key for item in value]
+        if len(keys) != len(set(keys)):
+            raise ValueError("actor_roles has duplicate actor_key")
+        return value
 
     def to_event(
         self,
         *,
         role: DirectorEventRole,
         turn_index: int,
+        actors: list[DirectorActorRef] | None = None,
     ) -> DirectorEvent:
         now = utc_now()
         return DirectorEvent(
@@ -150,7 +155,7 @@ class DirectorEventSelectionResult(BaseModel):
             method=self.method,
             macro_intent=self.macro_intent,
             hook_pool=list(self.hook_pool),
-            actors=[DirectorActorRef(name=name) for name in self.actors],
+            actors=list(actors or []),
             world_impact=self.world_impact,
             created_turn=turn_index,
             updated_turn=turn_index,

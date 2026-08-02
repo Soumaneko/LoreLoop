@@ -43,9 +43,11 @@ class DirectorEventSelector:
         recent_summaries: list[SceneSummary] | None = None,
         entity_profiles: list[EntityProfileUpdateInput] | None = None,
         npc_profiles: list[NPCProfileDirectorView] | None = None,
+        required_actors: list[dict] | None = None,
         trace_id: str | None = None,
         guidance: str | None = None,
     ) -> DirectorEventSelectionResult:
+        required_actors = required_actors or []
         input_data = {
             "events_json": json.dumps(
                 [_event_list_view(event) for event in events],
@@ -57,6 +59,11 @@ class DirectorEventSelector:
             "recent_summaries_json": project_scene_summaries(recent_summaries or []),
             "entity_profiles_json": project_entity_profiles(entity_profiles or []),
             "npc_profiles_json": project_npc_profiles(npc_profiles or []),
+            "required_actors_json": json.dumps(
+                required_actors,
+                ensure_ascii=False,
+                indent=2,
+            ),
             "director_guidance": guidance or "",
             "output_schema_json": json.dumps(
                 DirectorEventSelectionResult.model_json_schema(),
@@ -64,6 +71,21 @@ class DirectorEventSelector:
                 indent=2,
             ),
         }
+        expected_actor_keys = {
+            str(actor["actor_key"])
+            for actor in required_actors
+        }
+
+        def validate_actor_coverage(selection: DirectorEventSelectionResult) -> None:
+            actual_actor_keys = {
+                role.actor_key
+                for role in selection.actor_roles
+            }
+            if actual_actor_keys != expected_actor_keys:
+                raise ValueError(
+                    "actor_roles must cover exactly every required actor_key"
+                )
+
         return cast(
             DirectorEventSelectionResult,
             self.llm.run(
@@ -72,5 +94,6 @@ class DirectorEventSelector:
                 output_schema=DirectorEventSelectionResult,
                 temperature=0.3,
                 trace_id=trace_id,
+                output_validator=validate_actor_coverage,
             ),
         )
