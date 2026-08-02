@@ -1169,10 +1169,10 @@ def test_confirmation_agent_can_create_coupled_scene_via_skill(tmp_path):
         assert [event.title for event in events] == ["沉船账本"]
         bound = store.get_by_id(output["event_id"])
         assert bound is not None
-        assert {(ref.kind, ref.resource_id) for ref in bound.actor_refs} == {
+        assert {(actor.ref.kind, actor.ref.resource_id) for actor in bound.actors if actor.ref} == {
             ("npc", npc_id) for npc_id in output["npc_ids"]
         }
-        assert set(output["npc_names"]) <= set(bound.actors)
+        assert set(output["npc_names"]) <= {actor.name for actor in bound.actors}
     with stores.director_npc() as store:
         prepared = store.list_prepared()
         assert {draft.draft_id for draft in prepared} == set(output["npc_ids"])
@@ -1665,7 +1665,6 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
                     "reason": "核心冲突仍在持续。",
                     "action": "keep_hidden",
                     "consume_hook_ids": [],
-                    "new_player_contact": None,
                 }
             ],
         },
@@ -1688,7 +1687,6 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
                     "reason": "核心冲突仍在持续。",
                     "action": "engage",
                     "consume_hook_ids": ["hook_sound"],
-                    "new_player_contact": "玩家深夜前往旧码头并听到摇橹声。",
                 }
             ],
         },
@@ -1791,7 +1789,6 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
                 "reason": "核心冲突仍在持续。",
                 "action": "engage",
                 "consume_hook_ids": ["hook_sound", "hook_rumor"],
-                "new_player_contact": "玩家深夜前往旧码头。",
         }
     ],
 },
@@ -2008,7 +2005,7 @@ def test_present_event_hidden_without_hook_id_presents_nothing(tmp_path):
     assert "macro_intent" not in payload
 
 
-def test_first_hold_records_last_presented_turn_when_engaging(tmp_path):
+def test_hidden_review_engages_event(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
@@ -2043,7 +2040,6 @@ def test_first_hold_records_last_presented_turn_when_engaging(tmp_path):
                 "reason": "核心冲突仍在持续。",
                 "action": "engage",
                 "consume_hook_ids": [],
-                "new_player_contact": "玩家深夜前往旧码头并听到摇橹声。",
         }
     ],
 },
@@ -2055,7 +2051,6 @@ def test_first_hold_records_last_presented_turn_when_engaging(tmp_path):
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "engaged"
-        assert persisted.last_presented_turn == 3
 
 
 def test_review_event_rejects_unknown_consume_hook(tmp_path):
@@ -2093,7 +2088,6 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
                     "reason": "错误地消费不存在的事件 hook。",
                     "action": "engage",
                     "consume_hook_ids": ["hook_ghost"],
-                    "new_player_contact": "玩家深夜前往旧码头。",
                 }
             ],
         },
@@ -2139,7 +2133,6 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
                     "reason": "错误地重复消费已消费 hook。",
                     "action": "engage",
                     "consume_hook_ids": ["hook_sound"],
-                    "new_player_contact": "玩家深夜前往旧码头。",
                 }
             ],
         },
@@ -2184,7 +2177,6 @@ def test_engaged_review_resolves_event(tmp_path):
             "event_id": event_id,
                 "reason": "猎户撤离码头，冲突收束。",
                 "action": "resolve",
-                "new_player_contact": None,
                 "resolved_reason": "猎户撤离码头。",
         }
     ],
@@ -2235,7 +2227,6 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
             "event_id": event_id,
                 "reason": "核心冲突仍在持续。",
                 "action": "engage",
-                "new_player_contact": "玩家继续追踪摇橹声。",
         }
     ],
 },
@@ -2247,7 +2238,6 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "engaged"
-        assert persisted.last_presented_turn == 3
 
 
 def test_review_node_skips_events_created_this_turn(tmp_path):
@@ -2285,7 +2275,6 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
                 "reason": "不应被调用。",
                 "action": "engage",
                 "consume_hook_ids": [],
-                "new_player_contact": None,
         }
     ],
 },
@@ -2335,7 +2324,6 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
                 "reason": "玩家未接触事件。",
                 "action": "keep_hidden",
                 "consume_hook_ids": [],
-                "new_player_contact": None,
         }
     ],
 },
@@ -2347,7 +2335,6 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "hidden"
-        assert persisted.last_presented_turn is None
 
 
 def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
@@ -2387,14 +2374,12 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
                     "reason": "事件一未接触。",
                     "action": "keep_hidden",
                     "consume_hook_ids": [],
-                    "new_player_contact": None,
                 },
                 {
                     "event_id": ids[1],
                     "reason": "事件二被接触。",
                     "action": "engage",
                     "consume_hook_ids": ["hook_2"],
-                    "new_player_contact": "玩家夜探码头听到异响。",
                 },
             ],
         },
@@ -2450,14 +2435,12 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
                     "event_id": ids[0],
                     "reason": "事件一已收束。",
                     "action": "resolve",
-                    "new_player_contact": None,
                     "resolved_reason": "行动方撤离。",
                 },
                 {
                     "event_id": ids[1],
                     "reason": "事件二仍在追踪。",
                     "action": "engage",
-                    "new_player_contact": None,
                 },
             ],
         },
@@ -2473,41 +2456,99 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
         assert second is not None and second.stage == "engaged"
 
 
-def test_hidden_review_requires_contact_when_engaging():
-    from app.domain.director_event.schemas import (
-        DirectorEventHiddenReviewBatch,
-        DirectorEventHiddenReviewResult,
+
+def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    selection = DirectorEventSelectionResult(
+        current_story_direction="河岸码头出现异常动静。",
+        reason="独立世界事件。",
+        title="无灯船",
+        actors=["港务署"],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头", "港务署"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    ).to_event(role="ambient", turn_index=1)
+    with stores.director_event() as store:
+        event_id = store.save(selection)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [
+                {
+                    "event_id": event_id,
+                    "reason": "事件未接触。",
+                    "action": "keep_hidden",
+                    "consume_hook_ids": [],
+                }
+            ],
+        },
     )
 
-    with pytest.raises(ValidationError, match="engage requires new_player_contact"):
-        DirectorEventHiddenReviewBatch(
-            reviews=[
-                DirectorEventHiddenReviewResult(
-                    event_id="evt_1",
-                    reason="被接触。",
-                    action="engage",
-                    consume_hook_ids=[],
-                    new_player_contact=None,
-                )
-            ]
-        )
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+    assert gateway.tasks == ["director_event_review_hidden"]
+    hidden_input = gateway.input_data[0]["events_json"]
+    assert '"trigger_anchors"' in hidden_input
+    assert "旧码头" in hidden_input
+    assert "player_contacts" not in hidden_input
+    assert "last_presented_turn" not in hidden_input
 
 
-def test_hidden_review_forbids_contact_when_keeping_hidden():
-    from app.domain.director_event.schemas import (
-        DirectorEventHiddenReviewBatch,
-        DirectorEventHiddenReviewResult,
+def test_review_input_uses_actor_names_only(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    selection = DirectorEventSelectionResult(
+        current_story_direction="河岸码头出现异常动静。",
+        reason="独立世界事件。",
+        title="无灯船",
+        actors=["港务署", "林澈"],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    ).to_event(role="ambient", turn_index=1)
+    with stores.director_event() as store:
+        event_id = store.save(selection)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [
+                {
+                    "event_id": event_id,
+                    "reason": "事件未接触。",
+                    "action": "keep_hidden",
+                    "consume_hook_ids": [],
+                }
+            ],
+        },
     )
 
-    with pytest.raises(ValidationError, match="keep_hidden cannot record new_player_contact"):
-        DirectorEventHiddenReviewBatch(
-            reviews=[
-                DirectorEventHiddenReviewResult(
-                    event_id="evt_1",
-                    reason="未接触。",
-                    action="keep_hidden",
-                    consume_hook_ids=[],
-                    new_player_contact="不应记录接触。",
-                )
-            ]
-        )
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+    hidden_input = gateway.input_data[0]["events_json"]
+    assert '"港务署"' in hidden_input
+    assert '"林澈"' in hidden_input

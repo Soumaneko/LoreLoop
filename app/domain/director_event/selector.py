@@ -25,7 +25,7 @@ def _event_list_view(event: DirectorEvent) -> dict:
         "subject": event.subject,
         "intent": event.intent,
         "method": event.method,
-        "actors": event.actors,
+        "actors": [actor.name for actor in event.actors],
     }
 
 

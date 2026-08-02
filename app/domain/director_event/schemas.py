@@ -9,8 +9,6 @@ from app.domain.director.schemas import DirectorResourceRef
 DirectorEventRole = Literal["arc", "ambient"]
 DirectorEventStage = Literal["hidden", "engaged", "resolved"]
 EventHookKind = Literal["auditory", "visual", "rumor", "item", "environment"]
-PLAYER_CONTACT_MAX_LENGTH = 200
-PLAYER_CONTACT_MAX_RECORDS = 5
 
 
 def _new_id() -> str:
@@ -21,11 +19,11 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class PlayerContactRecord(BaseModel):
+class DirectorActorRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    turn_index: int = Field(ge=0)
-    contact: str = Field(min_length=1, max_length=PLAYER_CONTACT_MAX_LENGTH)
+    name: str = Field(min_length=1)
+    ref: DirectorResourceRef | None = None
 
 
 class EventHook(BaseModel):
@@ -61,16 +59,9 @@ class DirectorEvent(BaseModel):
 
     hook_pool: list[EventHook] = Field(default_factory=list)
 
-    actors: list[str] = Field(default_factory=list)
-    actor_refs: list[DirectorResourceRef] = Field(default_factory=list)
+    actors: list[DirectorActorRef] = Field(default_factory=list)
 
     world_impact: WorldImpact | None = None
-
-    player_contacts: list[PlayerContactRecord] = Field(
-        default_factory=list,
-        max_length=PLAYER_CONTACT_MAX_RECORDS,
-    )
-    last_presented_turn: int | None = Field(default=None, ge=0)
 
     resolved_reason: str | None = None
     resolved_turn: int | None = Field(default=None, ge=0)
@@ -108,16 +99,10 @@ class DirectorEvent(BaseModel):
             "intent": self.intent,
             "method": self.method,
             "macro_intent": self.macro_intent,
-            "actors": self.actors,
-            "actor_refs": [
-                actor_ref.model_dump(mode="json")
-                for actor_ref in self.actor_refs
+            "actors": [
+                actor.model_dump(mode="json")
+                for actor in self.actors
             ],
-            "player_contacts": [
-                contact.model_dump(mode="json")
-                for contact in self.player_contacts
-            ],
-            "last_presented_turn": self.last_presented_turn,
         }
 
 
@@ -135,6 +120,20 @@ class DirectorEventSelectionResult(BaseModel):
     hook_pool: list[EventHook] = Field(min_length=1)
     world_impact: WorldImpact
 
+    @field_validator("actors", mode="before")
+    @classmethod
+    def _clean_actors(cls, value):
+        if not isinstance(value, list):
+            return value
+        cleaned = []
+        seen: set[str] = set()
+        for item in value:
+            text = str(item).strip()
+            if text and text not in seen:
+                seen.add(text)
+                cleaned.append(text)
+        return cleaned
+
     def to_event(
         self,
         *,
@@ -151,8 +150,7 @@ class DirectorEventSelectionResult(BaseModel):
             method=self.method,
             macro_intent=self.macro_intent,
             hook_pool=list(self.hook_pool),
-            actors=list(self.actors),
-            actor_refs=[],
+            actors=[DirectorActorRef(name=name) for name in self.actors],
             world_impact=self.world_impact,
             created_turn=turn_index,
             updated_turn=turn_index,
@@ -166,18 +164,6 @@ class DirectorEventHiddenReviewResult(BaseModel):
     reason: str = Field(min_length=1)
     action: Literal["keep_hidden", "engage"]
     consume_hook_ids: list[str] = Field(default_factory=list, max_length=16)
-    new_player_contact: str | None = Field(
-        min_length=1,
-        max_length=PLAYER_CONTACT_MAX_LENGTH,
-    )
-
-    @model_validator(mode="after")
-    def _validate_contact_consistency(self):
-        if self.action == "engage" and not (self.new_player_contact or "").strip():
-            raise ValueError("engage requires new_player_contact")
-        if self.action == "keep_hidden" and self.new_player_contact:
-            raise ValueError("keep_hidden cannot record new_player_contact")
-        return self
 
 
 class DirectorEventHiddenReviewBatch(BaseModel):
@@ -197,10 +183,6 @@ class DirectorEventEngagedReviewResult(BaseModel):
     event_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     action: Literal["engage", "resolve"]
-    new_player_contact: str | None = Field(
-        min_length=1,
-        max_length=PLAYER_CONTACT_MAX_LENGTH,
-    )
     resolved_reason: str | None = None
 
     @model_validator(mode="after")

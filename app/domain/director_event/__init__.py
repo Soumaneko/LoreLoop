@@ -3,6 +3,7 @@ from .reviewer import (
     DirectorEventHiddenReviewer,
 )
 from .schemas import (
+    DirectorActorRef,
     DirectorEvent,
     DirectorEventEngagedReviewBatch,
     DirectorEventEngagedReviewResult,
@@ -16,6 +17,7 @@ from .selector import DirectorEventSelector
 from .store import DirectorEventStore
 
 __all__ = [
+    "DirectorActorRef",
     "DirectorEvent",
     "DirectorEventEngagedReviewBatch",
     "DirectorEventEngagedReviewResult",

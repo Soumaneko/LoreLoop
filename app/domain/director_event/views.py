@@ -34,7 +34,7 @@ def project_director_event(
             "stage": stage,
             "macro_intent": event.macro_intent,
             "subject": event.subject,
-            "actors": event.actors,
+            "actors": [actor.name for actor in event.actors],
         }
     return json.dumps(data, ensure_ascii=False, indent=2)
 

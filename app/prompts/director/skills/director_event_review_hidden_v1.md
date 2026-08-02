@@ -65,18 +65,16 @@
 - event_id：对应列表中的事件 ID。
 - reason：简短说明该事件本次审查判断依据。
 - action：只能是 `keep_hidden` 或 `engage`。
-  - keep_hidden：玩家本轮没有直接接触该事件的任何可见痕迹，事件保持 hidden。**此时 new_player_contact 必须为 null。**
-  - engage：玩家本轮直接接触了该事件的可见痕迹（hook 的 content 或 trigger_anchors、subject 提及的人物/地点/动静），事件转入 engaged。**此时 new_player_contact 必须填写本轮的接触记录。**
+  - keep_hidden：玩家本轮没有直接接触该事件的任何可见痕迹，事件保持 hidden。
+  - engage：玩家本轮直接接触了该事件的可见痕迹（hook 的 content 或 trigger_anchors、subject 提及的人物/地点/动静），事件转入 engaged。
 - consume_hook_ids：该事件本轮被采用或呈现、因此应标记为已消费的 hook_id 列表。只从该事件自己的 `hook_pool` 中选取本轮 Scene Facts 明确呈现或采用了其内容的 hook；未被采用的留空列表。**每个 hook 只消费一次，绝不消费未在本轮出现的 hook。**
-- new_player_contact：该事件本轮新增接触记录，硬性上限 200 字符。只记录本轮 Scene Facts 新增的、与该导演事件直接相关的玩家可见事实；没有新增接触时必须填 null。不要总结旧历史，不要输出当前目标或尚未确认的未知信息。
 
 # 核心规则
 
 1. 接触判定依据是玩家行动是否**直接指向**该事件可见痕迹；玩家只是身处附近、提及无关人物或普通环境观察不算接触。
 2. 事件的核心冲突由其 subject、intent、method 描述；判定接触要依据本轮 Scene Facts 是否触及这些动机的可见表现。
 3. consume_hook_ids 只包含本轮实际被采用/呈现的 hook；未被采用的 hook 保持未消费，供后续回合使用。
-4. new_player_contact 是本轮增量，不是完整接触状态。只依据本轮 Scene Facts 提炼一条新增接触；不得复述旧接触，不得改写或汇总历史。程序会在确认后将非空记录追加到最多五条的接触日志中。
-5. 每个事件必须独立审查，互不影响；不得因一个事件的状态影响另一个事件的判定。
+4. 每个事件必须独立审查，互不影响；不得因一个事件的状态影响另一个事件的判定。
 
 # 禁止事项
 

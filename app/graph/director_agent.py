@@ -14,7 +14,7 @@ from app.domain.director import (
     DirectorStageMaterial,
     DirectorStageResult,
 )
-from app.domain.director_event.schemas import utc_now
+from app.domain.director_event.schemas import DirectorActorRef, utc_now
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.views import project_director_event
 from app.domain.director_npc.creator import DirectorNPCCreator
@@ -350,17 +350,33 @@ def run_confirmation_director_agent(
                     kind="npc",
                     resource_id=draft.draft_id,
                 )
-                actor_refs = list(event.actor_refs)
-                if actor_ref not in actor_refs:
-                    actor_refs.append(actor_ref)
                 actors = list(event.actors)
                 clean_name = draft.name.strip()
-                if clean_name and clean_name not in actors:
-                    actors.append(clean_name)
+                replaced = False
+                for index, existing in enumerate(actors):
+                    if existing.ref is not None and existing.ref == actor_ref:
+                        replaced = True
+                        break
+                    if clean_name and existing.name == clean_name and existing.ref is None:
+                        actors[index] = DirectorActorRef(
+                            name=clean_name,
+                            ref=actor_ref,
+                        )
+                        replaced = True
+                        break
+                if not replaced and clean_name and not any(
+                    existing.name == clean_name and existing.ref == actor_ref
+                    for existing in actors
+                ):
+                    actors.append(
+                        DirectorActorRef(
+                            name=clean_name,
+                            ref=actor_ref,
+                        )
+                    )
                 event = event.model_copy(
                     update={
                         "actors": actors,
-                        "actor_refs": actor_refs,
                         "updated_turn": turn_index,
                         "updated_at": utc_now(),
                     }

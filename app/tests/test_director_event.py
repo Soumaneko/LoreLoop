@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 from app.domain.director import DirectorResourceRef
 from app.domain.director_event import (
     DirectorEventSelectionResult,
@@ -46,7 +48,8 @@ def _event():
 def test_event_contract_has_generic_actor_refs_without_npc_dependency():
     event = _event()
 
-    assert event.actor_refs == []
+    assert [actor.name for actor in event.actors] == ["港务署"]
+    assert all(actor.ref is None for actor in event.actors)
     assert "director_npc_id" not in event.model_dump()
     assert "director_npc_id" not in DirectorEventSelectionResult.model_json_schema()[
         "properties"
@@ -57,6 +60,8 @@ def test_event_contract_has_generic_actor_refs_without_npc_dependency():
 
 
 def test_event_store_binds_existing_resources_without_owning_their_lifecycle():
+    from app.domain.director_event.schemas import DirectorActorRef
+
     store = DirectorEventStore()
     event = _event()
     store.save(event)
@@ -68,11 +73,60 @@ def test_event_store_binds_existing_resources_without_owning_their_lifecycle():
         turn_index=4,
     )
 
-    assert updated.actors == ["港务署", "林澈"]
-    assert updated.actor_refs == [
-        DirectorResourceRef(kind="npc", resource_id="npc_1")
-    ]
+    assert [actor.name for actor in updated.actors] == ["港务署", "林澈"]
+    assert updated.actors[-1] == DirectorActorRef(
+        name="林澈",
+        ref=DirectorResourceRef(kind="npc", resource_id="npc_1"),
+    )
     assert store.get_by_id(event.event_id) == updated
+    store.close()
+
+
+def test_bind_actor_upgrades_same_name_unreferenced_actor_instead_of_duplicating():
+    from app.domain.director_event.schemas import DirectorActorRef, DirectorEventSelectionResult
+
+    store = DirectorEventStore()
+    event = _event_selection().to_event(role="ambient", turn_index=3)
+    store.save(event)
+
+    updated = store.bind_actor(
+        event.event_id,
+        actor_name="林澈",
+        actor_ref=DirectorResourceRef(kind="npc", resource_id="npc_1"),
+        turn_index=4,
+    )
+
+    assert [actor.name for actor in updated.actors] == ["港务署", "林澈"]
+    assert updated.actors[-1] == DirectorActorRef(
+        name="林澈",
+        ref=DirectorResourceRef(kind="npc", resource_id="npc_1"),
+    )
+    store.close()
+
+
+def test_bind_actor_does_not_duplicate_same_resource_ref():
+    from app.domain.director_event.schemas import DirectorActorRef
+
+    store = DirectorEventStore()
+    event = _event_selection().to_event(role="ambient", turn_index=3)
+    store.save(event)
+    ref = DirectorResourceRef(kind="npc", resource_id="npc_1")
+
+    store.bind_actor(
+        event.event_id,
+        actor_name="林澈",
+        actor_ref=ref,
+        turn_index=4,
+    )
+    updated = store.bind_actor(
+        event.event_id,
+        actor_name="林澈",
+        actor_ref=ref,
+        turn_index=5,
+    )
+
+    assert [actor.name for actor in updated.actors] == ["港务署", "林澈"]
+    assert sum(actor.name == "林澈" for actor in updated.actors) == 1
     store.close()
 
 
@@ -83,7 +137,7 @@ def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
         "CREATE TABLE schema_versions(component TEXT PRIMARY KEY, version INTEGER)"
     )
     conn.execute(
-        "INSERT INTO schema_versions(component, version) VALUES ('director_event', 7)"
+        "INSERT INTO schema_versions(component, version) VALUES ('director_event', 8)"
     )
     conn.commit()
     conn.close()
@@ -91,7 +145,7 @@ def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
     try:
         DirectorEventStore(str(db_path))
     except RuntimeError as exc:
-        assert "expected 8" in str(exc)
+        assert "expected 9" in str(exc)
     else:
         raise AssertionError("previous DirectorEvent schema must be rejected")
 
@@ -235,3 +289,55 @@ def test_reconsuming_a_hook_preserves_original_consumed_turn():
     assert hook_sound.consumed is True
     assert hook_sound.consumed_turn == 5
     store.close()
+
+
+def test_selection_actors_are_stripped_deduped_and_reject_blank():
+    from pydantic import ValidationError
+
+    selection = DirectorEventSelectionResult(
+        current_story_direction="港口失踪案仍在扩大。",
+        reason="这是独立的长期世界活动。",
+        title="无灯船",
+        actors=[" 林澈 ", "林澈", "港务署", "", "   "],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(
+            description="猎户带走了码头封存的一批物资，外围变为凡人活动区。",
+        ),
+    )
+
+    event = selection.to_event(role="ambient", turn_index=3)
+    assert [actor.name for actor in event.actors] == ["林澈", "港务署"]
+
+    with pytest.raises(ValidationError):
+        DirectorEventSelectionResult(
+            current_story_direction="港口失踪案仍在扩大。",
+            reason="这是独立的长期世界活动。",
+            title="无灯船",
+            actors=["", "  "],
+            subject="陷空山脚猎户",
+            intent="查明灵气异动",
+            method="组队搜山",
+            macro_intent="猎户为了生存不择手段。",
+            hook_pool=[
+                EventHook(
+                    hook_id="hook_sound",
+                    kind="auditory",
+                    content="深夜水面传来无人摇橹声。",
+                    trigger_anchors=["旧码头"],
+                )
+            ],
+            world_impact=WorldImpact(
+                description="猎户带走了码头封存的一批物资，外围变为凡人活动区。",
+            ),
+        )

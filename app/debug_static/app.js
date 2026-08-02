@@ -1729,15 +1729,12 @@ function directorCard(event) {
       ["行动方", esc(text(event.subject))],
       ["意图", esc(text(event.intent))],
       ["手段", esc(text(event.method))],
-      ["演员引用", chips((event.actor_refs || []).map((ref) => `${text(ref.kind)}:${text(ref.resource_id)}`))],
+      ["演员", chips((event.actors || []).map((actor) =>
+        actor.ref ? `${text(actor.name)} (${text(actor.ref.kind)}:${text(actor.ref.resource_id)})` : text(actor.name)
+      ))],
       ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
       ["解决原因", esc(text(event.resolved_reason))],
-      ["接触记录", list((event.player_contacts || []).map((item) =>
-        `T${text(item.turn_index)} · ${text(item.contact)}`
-      ))],
-      ["最近呈现", event.last_presented_turn === null || event.last_presented_turn === undefined ? `<span class="empty">无</span>` : esc(`T${event.last_presented_turn}`)],
-      ["参与者", chips(event.actors)],
       ["world_impact", worldImpact ? esc(text(worldImpact.description)) : `<span class="empty">无</span>`],
     ])}
     ${hookCards || `<div class="empty">无 Hook</div>`}

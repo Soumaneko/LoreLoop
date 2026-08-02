@@ -5,10 +5,9 @@ from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version, tran
 from app.domain.director.schemas import DirectorResourceRef
 
 from .schemas import (
+    DirectorActorRef,
     DirectorEvent,
     DirectorEventStage,
-    PLAYER_CONTACT_MAX_RECORDS,
-    PlayerContactRecord,
     utc_now,
 )
 
@@ -32,7 +31,7 @@ class DirectorEventStore:
             )
             """
         )
-        ensure_exact_schema_version(self._conn, "director_event", 8)
+        ensure_exact_schema_version(self._conn, "director_event", 9)
         self._conn.commit()
 
     def save(self, event: DirectorEvent) -> str:
@@ -121,41 +120,6 @@ class DirectorEventStore:
         self.save(updated)
         return True
 
-    def append_player_contact(
-        self,
-        event_id: str,
-        *,
-        new_player_contact: str | None,
-        turn_index: int,
-    ) -> bool:
-        event = self.get_by_id(event_id)
-        if event is None:
-            return False
-        contacts = list(event.player_contacts)
-        clean_contact = (new_player_contact or "").strip()
-        if clean_contact and (
-            not contacts or contacts[-1].contact != clean_contact
-        ):
-            contacts.append(
-                PlayerContactRecord(
-                    turn_index=turn_index,
-                    contact=clean_contact,
-                )
-            )
-            contacts = contacts[-PLAYER_CONTACT_MAX_RECORDS:]
-        updated = event.model_copy(
-            update={
-                "player_contacts": contacts,
-                "last_presented_turn": (
-                    turn_index if event.stage != "hidden" else event.last_presented_turn
-                ),
-                "updated_turn": turn_index,
-                "updated_at": utc_now(),
-            }
-        )
-        self.save(updated)
-        return True
-
     def resolve_event(
         self,
         event_id: str,
@@ -189,17 +153,25 @@ class DirectorEventStore:
         event = self.get_by_id(event_id)
         if event is None or event.stage == "resolved":
             raise ValueError("actor can only be bound to an active DirectorEvent")
-        actor_refs = list(event.actor_refs)
-        if actor_ref not in actor_refs:
-            actor_refs.append(actor_ref)
         actors = list(event.actors)
         clean_name = actor_name.strip()
-        if clean_name and clean_name not in actors:
-            actors.append(clean_name)
+        new_actor = DirectorActorRef(name=clean_name, ref=actor_ref)
+        replaced = False
+        for index, existing in enumerate(actors):
+            if existing.ref is not None and existing.ref == actor_ref:
+                return event
+            if clean_name and existing.name == clean_name and existing.ref is None:
+                actors[index] = new_actor
+                replaced = True
+                break
+        if not replaced and clean_name and not any(
+            existing.name == clean_name and existing.ref == actor_ref
+            for existing in actors
+        ):
+            actors.append(new_actor)
         updated = event.model_copy(
             update={
                 "actors": actors,
-                "actor_refs": actor_refs,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
             }

@@ -91,12 +91,6 @@ def review_hidden_events_workflow(
         else:
             notes.append("kept_hidden_event")
 
-        store.append_player_contact(
-            active.event_id,
-            new_player_contact=review.new_player_contact,
-            turn_index=turn_index,
-        )
-
         active_after = store.get_by_id(active.event_id)
         results.append(
             DirectorEventWorkflowResult(
@@ -148,12 +142,6 @@ def review_engaged_events_workflow(
             notes = ["resolved_engaged_event"]
         else:
             notes = ["kept_engaged_event"]
-
-        store.append_player_contact(
-            active.event_id,
-            new_player_contact=review.new_player_contact,
-            turn_index=turn_index,
-        )
 
         active_after = store.get_by_id(active.event_id)
         results.append(

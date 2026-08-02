@@ -27,7 +27,6 @@ def _shared_inputs(
     event_views = []
     for event in events:
         view = event.semantic_view()
-        view.pop("player_contacts", None)
         view.update(
             subject=event.subject,
             intent=event.intent,
@@ -40,6 +39,7 @@ def _shared_inputs(
                     "hook_id": hook.hook_id,
                     "kind": hook.kind,
                     "content": hook.content,
+                    "trigger_anchors": list(hook.trigger_anchors),
                 }
                 for hook in event.hook_pool
                 if not hook.consumed
