@@ -42,6 +42,7 @@ _WRITE_CACHED_NODE_RESULTS = {
     "npc_extraction",
     "director_decision",
     "director_executions",
+    "director_event_reviews",
     "updated_entity_ids",
     "updated_npc_profile_ids",
     "new_npc_profiles",

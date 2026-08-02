@@ -89,20 +89,6 @@ class ForeshadowSettingArguments(BaseModel):
     setting_id: str = Field(min_length=1)
 
 
-class ReviewEventArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    event_id: str = Field(min_length=1)
-    consume_hooks: list[str] = Field(
-        default_factory=list,
-        max_length=16,
-        description=(
-            "本轮确认后应标记为已消费的 hook_id 列表（仅消费该事件尚未消费的 hook）。"
-            "hook 属于消耗型引子，被采用/呈现后必须在此声明，防止后续回合复读。"
-        ),
-    )
-
-
 class CreateNPCArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -203,19 +189,6 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         phases=_GENERATION,
         mutates=False,
         arguments_model=ForeshadowSettingArguments,
-    ),
-    DirectorSkillSpec(
-        name="review_event",
-        description=(
-            "根据本轮已确认的场景事实审查一个活跃导演事件，并掌握该事件的所有写库判定："
-            "1. 阶段判定：事件核心冲突仍在持续时保持追踪(hold，hidden 转入 engaged)，"
-            "已形成稳定结果时走向终结(resolve)。"
-            "2. Hook 消费：本回合采用或呈现了该事件的哪个 hook，就在 consume_hooks 中声明，"
-            "程序会将其标记为已消费防止复读。只有确认端的事件审查才能消费 hook 或推进阶段。"
-        ),
-        phases=_CONFIRMATION,
-        mutates=True,
-        arguments_model=ReviewEventArguments,
     ),
     DirectorSkillSpec(
         name="create_coupled_scene",

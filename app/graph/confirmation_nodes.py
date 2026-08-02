@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import json
+
 from app.core.diagnostics import NullDiagnosticLogger
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.continuity import ContinuityProjector
 from app.domain.current_state import StateChangeSet, StateUpdater
+from app.domain.director_event.reviewer import (
+    DirectorEventEngagedReviewer,
+    DirectorEventHiddenReviewer,
+)
+from app.domain.director_event.workflows import (
+    review_engaged_events_workflow,
+    review_hidden_events_workflow,
+)
 from app.domain.entity.extractor import EntityExtractor
 from app.domain.entity.schemas import EntityExtractionResult
 from app.domain.npc_profile.extractor import NPCProfileExtractor
@@ -432,4 +442,84 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     return {
         "updated_npc_profile_ids": updated_npc_profile_ids,
         "new_npc_profiles": new_npc_profiles,
+    }
+
+
+def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
+    pipeline_input = state["pipeline_input"]
+    if (
+        not state.get("write_db", True)
+        or not pipeline_input.run_director_agent
+    ):
+        return {
+            "director_event_reviews": state["cache"].get(
+                "director_event_reviews", []
+            ),
+        }
+
+    cache = state["cache"]
+    reviews = cache.get("director_event_reviews")
+    if reviews is not None:
+        return {"director_event_reviews": reviews}
+
+    gateway = _gateway_for(state)
+    turn_index = pipeline_input.turn_index
+    reviews = []
+    scene_facts_json = json.dumps(
+        state["scene_facts"].model_dump(mode="json"),
+        ensure_ascii=False,
+        indent=2,
+    )
+    with _store_factory(state, "director_event")() as event_store:
+        active_events = [
+            event
+            for event in event_store.list_active()
+            if event.created_turn < turn_index
+        ]
+        hidden_events = [event for event in active_events if event.stage == "hidden"]
+        engaged_events = [
+            event for event in active_events if event.stage == "engaged"
+        ]
+        if hidden_events:
+            reviews.extend(
+                result.model_dump(mode="json")
+                for result in review_hidden_events_workflow(
+                    active_events=hidden_events,
+                    user_input=pipeline_input.user_input,
+                    scene_facts=scene_facts_json,
+                    current_state=state["updated_state"],
+                    core_memory=state["core_memory"],
+                    scene_summaries=state.get("recent_summaries", []),
+                    turn_index=turn_index,
+                    store=event_store,
+                    reviewer=DirectorEventHiddenReviewer(gateway),
+                    trace_id=state["trace_id"],
+                )
+            )
+        if engaged_events:
+            reviews.extend(
+                result.model_dump(mode="json")
+                for result in review_engaged_events_workflow(
+                    active_events=engaged_events,
+                    user_input=pipeline_input.user_input,
+                    scene_facts=scene_facts_json,
+                    current_state=state["updated_state"],
+                    core_memory=state["core_memory"],
+                    scene_summaries=state.get("recent_summaries", []),
+                    turn_index=turn_index,
+                    store=event_store,
+                    reviewer=DirectorEventEngagedReviewer(gateway),
+                    trace_id=state["trace_id"],
+                )
+            )
+
+    cache["director_event_reviews"] = reviews
+    return {
+        "director_event_reviews": reviews,
+        "events": [{
+            "step": "director_event_reviewed",
+            "data": {
+                "director_event_reviews": reviews,
+            },
+        }],
     }

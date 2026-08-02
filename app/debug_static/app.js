@@ -1080,7 +1080,8 @@ function stepTasks(scope, stepName) {
     entity_profiles_updated: ["entity_profile_update", "npc_profile_update"],
     director_agent_confirmed: [
       "director_agent_decide_confirmation",
-      "director_event_review",
+      "director_event_review_hidden",
+      "director_event_review_engaged",
       "director_event_select_arc",
       "director_event_select_ambient",
       "director_npc_create",

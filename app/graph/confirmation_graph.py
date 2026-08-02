@@ -22,6 +22,7 @@ from .confirmation_nodes import (
     action_preview_node,
     continuity_project_node,
     director_agent_confirm_node,
+    director_event_review_node,
     entity_extract_node,
     entity_profile_update_node,
     npc_profile_extract_node,
@@ -159,7 +160,7 @@ def _compile_confirmation_second_wave_graph():
 def build_confirmation_director_graph():
     return get_cached_graph(
         "confirmation_director_agent",
-        (director_agent_confirm_node,),
+        (director_event_review_node, director_agent_confirm_node),
         _compile_confirmation_director_graph,
     )
 
@@ -167,13 +168,21 @@ def build_confirmation_director_graph():
 def _compile_confirmation_director_graph():
     graph = StateGraph(ConfirmationState)
     graph.add_node(
+        "director_event_review",
+        capture_confirmation_node_errors(
+            "director_event_review",
+            director_event_review_node,
+        ),
+    )
+    graph.add_node(
         "director_agent_confirm",
         capture_confirmation_node_errors(
             "director_agent_confirm",
             director_agent_confirm_node,
         ),
     )
-    graph.add_edge(START, "director_agent_confirm")
+    graph.add_edge(START, "director_event_review")
+    graph.add_edge("director_event_review", "director_agent_confirm")
     graph.add_edge("director_agent_confirm", END)
     return graph.compile()
 

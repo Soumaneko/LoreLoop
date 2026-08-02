@@ -1,7 +1,13 @@
-from .reviewer import DirectorEventReviewer
+from .reviewer import (
+    DirectorEventEngagedReviewer,
+    DirectorEventHiddenReviewer,
+)
 from .schemas import (
     DirectorEvent,
-    DirectorEventReviewResult,
+    DirectorEventEngagedReviewBatch,
+    DirectorEventEngagedReviewResult,
+    DirectorEventHiddenReviewBatch,
+    DirectorEventHiddenReviewResult,
     DirectorEventSelectionResult,
     EventHook,
     WorldImpact,
@@ -11,8 +17,12 @@ from .store import DirectorEventStore
 
 __all__ = [
     "DirectorEvent",
-    "DirectorEventReviewResult",
-    "DirectorEventReviewer",
+    "DirectorEventEngagedReviewBatch",
+    "DirectorEventEngagedReviewResult",
+    "DirectorEventEngagedReviewer",
+    "DirectorEventHiddenReviewBatch",
+    "DirectorEventHiddenReviewResult",
+    "DirectorEventHiddenReviewer",
     "DirectorEventSelectionResult",
     "DirectorEventSelector",
     "DirectorEventStore",

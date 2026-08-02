@@ -451,7 +451,7 @@ class _PhaseGateway:
             self.event_selection_output is not None
         ):
             payload = self.event_selection_output
-        elif task == "director_event_review" and (
+        elif task.startswith("director_event_review_") and (
             self.event_review_output is not None
         ):
             payload = self.event_review_output
@@ -795,7 +795,6 @@ def test_director_skill_specs_cover_every_registered_skill():
         "present_event",
         "introduce_npc",
         "foreshadow_setting",
-        "review_event",
         "create_npc",
         "create_coupled_scene",
         "enrich_setting",
@@ -821,7 +820,6 @@ def test_director_skill_specs_cover_every_registered_skill():
         "foreshadow_setting",
     }
     assert {spec.name for spec in service.specs_for_phase("confirmation")} == {
-        "review_event",
         "create_npc",
         "create_coupled_scene",
         "enrich_setting",
@@ -1607,6 +1605,28 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
         assert store.get_by_id(draft.draft_id).status == "prepared"
 
 
+def _review_node_state(stores, gateway, *, turn_index=3):
+    return {
+        "write_db": True,
+        "pipeline_input": SimpleNamespace(
+            run_director_agent=True,
+            user_input="深夜去旧码头看看。",
+            turn_index=turn_index,
+        ),
+        "cache": {},
+        "trace_id": "confirmation-director",
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: gateway,
+        ),
+        "core_memory": CoreMemory(items=[]),
+        "updated_state": _current_state(),
+        "scene_facts": SceneFactSet(scene_focus="深夜码头。"),
+        "recent_summaries": [],
+        "events": [],
+    }
+
+
 def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
@@ -1637,28 +1657,22 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
         event_id = store.save(selection)
 
     gateway = _PhaseGateway(
-        decision={
-            "reasoning": "本轮无额外调度。",
-            "requests": [],
-        }
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [
+                {
+                    "event_id": event_id,
+                    "reason": "核心冲突仍在持续。",
+                    "action": "keep_hidden",
+                    "consume_hook_ids": [],
+                    "new_player_contact": None,
+                }
+            ],
+        },
     )
 
-    run_confirmation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=_current_state(),
-        user_input="深夜去旧码头看看。",
-        scene_facts={"scene_focus": "深夜码头。", "facts": []},
-        recent_summaries=[],
-        selection_summaries=[],
-        entity_profiles=[],
-        npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
-        turn_index=3,
-        trace_id="confirmation-director",
-    )
+    node_state = _review_node_state(stores, gateway)
+    confirmation_nodes.director_event_review_node(node_state)
 
     with stores.director_event() as store:
         persisted = store.get_by_id(event_id)
@@ -1666,44 +1680,22 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
         assert persisted.stage == "hidden"
 
     gateway = _PhaseGateway(
-        decision={
-            "reasoning": "事件已被接触，消费征兆。",
-            "requests": [
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [
                 {
-                    "request_id": "evt_1",
-                    "skill": "review_event",
-                    "arguments": {
-                        "event_id": event_id,
-                        "consume_hooks": ["hook_sound"],
-                    },
-                    "guidance": "玩家听到摇橹声并追查。",
+                    "event_id": event_id,
+                    "reason": "核心冲突仍在持续。",
+                    "action": "engage",
+                    "consume_hook_ids": ["hook_sound"],
+                    "new_player_contact": "玩家深夜前往旧码头并听到摇橹声。",
                 }
             ],
         },
-        event_review_output={
-            "reason": "核心冲突仍在持续。",
-            "action": "hold",
-            "new_player_contact": "玩家深夜前往旧码头并听到摇橹声。",
-            "resolved_reason": None,
-        },
     )
 
-    run_confirmation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=_current_state(),
-        user_input="深夜去旧码头看看。",
-        scene_facts={"scene_focus": "深夜码头。", "facts": []},
-        recent_summaries=[],
-        selection_summaries=[],
-        entity_profiles=[],
-        npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
-        turn_index=3,
-        trace_id="confirmation-director",
-    )
+    node_state = _review_node_state(stores, gateway)
+    confirmation_nodes.director_event_review_node(node_state)
 
     with stores.director_event() as store:
         persisted = store.get_by_id(event_id)
@@ -1791,44 +1783,21 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
         event_id = store.save(selection)
 
     gateway = _PhaseGateway(
-        decision={
-            "reasoning": "事件被接触。",
-            "requests": [
-                {
-                    "request_id": "evt_1",
-                    "skill": "review_event",
-                    "arguments": {
-                        "event_id": event_id,
-                        "consume_hooks": ["hook_sound", "hook_rumor"],
-                    },
-                    "guidance": "玩家听到摇橹声并得知传闻。",
-                }
-            ],
-        },
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
         event_review_output={
-            "reason": "核心冲突仍在持续。",
-            "action": "hold",
-            "new_player_contact": "玩家深夜前往旧码头。",
-            "resolved_reason": None,
-        },
+    "reviews": [
+        {
+            "event_id": event_id,
+                "reason": "核心冲突仍在持续。",
+                "action": "engage",
+                "consume_hook_ids": ["hook_sound", "hook_rumor"],
+                "new_player_contact": "玩家深夜前往旧码头。",
+        }
+    ],
+},
     )
 
-    run_confirmation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=_current_state(),
-        user_input="深夜去旧码头看看。",
-        scene_facts={"scene_focus": "深夜码头。", "facts": []},
-        recent_summaries=[],
-        selection_summaries=[],
-        entity_profiles=[],
-        npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
-        turn_index=3,
-        trace_id="confirmation-director",
-    )
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
 
     with stores.director_event() as store:
         persisted = store.get_by_id(event_id)
@@ -2041,7 +2010,6 @@ def test_present_event_hidden_without_hook_id_presents_nothing(tmp_path):
 
 def test_first_hold_records_last_presented_turn_when_engaging(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
-    from app.domain.director_event.store import DirectorEventStore
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
@@ -2067,41 +2035,21 @@ def test_first_hold_records_last_presented_turn_when_engaging(tmp_path):
         event_id = store.save(selection)
 
     gateway = _PhaseGateway(
-        decision={
-            "reasoning": "事件被接触。",
-            "requests": [
-                {
-                    "request_id": "evt_1",
-                    "skill": "review_event",
-                    "arguments": {"event_id": event_id},
-                    "guidance": "玩家听到摇橹声。",
-                }
-            ],
-        },
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
         event_review_output={
-            "reason": "核心冲突仍在持续。",
-            "action": "hold",
-            "new_player_contact": "玩家深夜前往旧码头并听到摇橹声。",
-            "resolved_reason": None,
-        },
+    "reviews": [
+        {
+            "event_id": event_id,
+                "reason": "核心冲突仍在持续。",
+                "action": "engage",
+                "consume_hook_ids": [],
+                "new_player_contact": "玩家深夜前往旧码头并听到摇橹声。",
+        }
+    ],
+},
     )
 
-    run_confirmation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=_current_state(),
-        user_input="深夜去旧码头看看。",
-        scene_facts={"scene_focus": "深夜码头。", "facts": []},
-        recent_summaries=[],
-        selection_summaries=[],
-        entity_profiles=[],
-        npc_profiles=[],
-        entity_mentions=[],
-        npc_mentions=[],
-        turn_index=3,
-        trace_id="confirmation-director",
-    )
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
 
     with stores.director_event() as store:
         persisted = store.get_by_id(event_id)
@@ -2137,45 +2085,22 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
         event_id = store.save(selection)
 
     gateway = _PhaseGateway(
-        decision={
-            "reasoning": "错误地消费不存在的事件 hook。",
-            "requests": [
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [
                 {
-                    "request_id": "evt_1",
-                    "skill": "review_event",
-                    "arguments": {
-                        "event_id": event_id,
-                        "consume_hooks": ["hook_ghost"],
-                    },
-                    "guidance": "消费该征兆。",
+                    "event_id": event_id,
+                    "reason": "错误地消费不存在的事件 hook。",
+                    "action": "engage",
+                    "consume_hook_ids": ["hook_ghost"],
+                    "new_player_contact": "玩家深夜前往旧码头。",
                 }
             ],
         },
-        event_review_output={
-            "reason": "核心冲突仍在持续。",
-            "action": "hold",
-            "new_player_contact": "玩家深夜前往旧码头。",
-            "resolved_reason": None,
-        },
     )
 
-    with pytest.raises(ValueError, match="consume_hooks not part of this event"):
-        run_confirmation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=_current_state(),
-            user_input="深夜去旧码头看看。",
-            scene_facts={"scene_focus": "深夜码头。", "facts": []},
-            recent_summaries=[],
-            selection_summaries=[],
-            entity_profiles=[],
-            npc_profiles=[],
-            entity_mentions=[],
-            npc_mentions=[],
-            turn_index=3,
-            trace_id="confirmation-director",
-        )
+    with pytest.raises(ValueError, match="consume_hook_ids not part of this event"):
+        confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
 
 
 def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
@@ -2206,42 +2131,383 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
         store.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
 
     gateway = _PhaseGateway(
-        decision={
-            "reasoning": "错误地重复消费已消费 hook。",
-            "requests": [
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [
                 {
-                    "request_id": "evt_1",
-                    "skill": "review_event",
-                    "arguments": {
-                        "event_id": event_id,
-                        "consume_hooks": ["hook_sound"],
-                    },
-                    "guidance": "再次消费该征兆。",
+                    "event_id": event_id,
+                    "reason": "错误地重复消费已消费 hook。",
+                    "action": "engage",
+                    "consume_hook_ids": ["hook_sound"],
+                    "new_player_contact": "玩家深夜前往旧码头。",
                 }
             ],
         },
+    )
+
+    with pytest.raises(ValueError, match="consume_hook_ids already consumed"):
+        confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+
+def test_engaged_review_resolves_event(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    selection = DirectorEventSelectionResult(
+        current_story_direction="河岸码头出现异常动静。",
+        reason="独立世界事件。",
+        title="无灯船",
+        actors=["港务署"],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    ).to_event(role="ambient", turn_index=1)
+    with stores.director_event() as store:
+        event_id = store.save(selection)
+        store.set_stage(event_id, "engaged", turn_index=2)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
         event_review_output={
-            "reason": "核心冲突仍在持续。",
-            "action": "hold",
-            "new_player_contact": "玩家深夜前往旧码头。",
-            "resolved_reason": None,
+    "reviews": [
+        {
+            "event_id": event_id,
+                "reason": "猎户撤离码头，冲突收束。",
+                "action": "resolve",
+                "new_player_contact": None,
+                "resolved_reason": "猎户撤离码头。",
+        }
+    ],
+},
+    )
+
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+    with stores.director_event() as store:
+        persisted = store.get_by_id(event_id)
+        assert persisted is not None
+        assert persisted.stage == "resolved"
+        assert persisted.resolved_turn == 3
+
+
+def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    selection = DirectorEventSelectionResult(
+        current_story_direction="河岸码头出现异常动静。",
+        reason="独立世界事件。",
+        title="无灯船",
+        actors=["港务署"],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    ).to_event(role="ambient", turn_index=1)
+    with stores.director_event() as store:
+        event_id = store.save(selection)
+        store.set_stage(event_id, "engaged", turn_index=2)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+    "reviews": [
+        {
+            "event_id": event_id,
+                "reason": "核心冲突仍在持续。",
+                "action": "engage",
+                "new_player_contact": "玩家继续追踪摇橹声。",
+        }
+    ],
+},
+    )
+
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+    with stores.director_event() as store:
+        persisted = store.get_by_id(event_id)
+        assert persisted is not None
+        assert persisted.stage == "engaged"
+        assert persisted.last_presented_turn == 3
+
+
+def test_review_node_skips_events_created_this_turn(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    selection = DirectorEventSelectionResult(
+        current_story_direction="河岸码头出现异常动静。",
+        reason="独立世界事件。",
+        title="无灯船",
+        actors=["港务署"],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    ).to_event(role="ambient", turn_index=3)
+    with stores.director_event() as store:
+        event_id = store.save(selection)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+    "reviews": [
+        {
+            "event_id": event_id,
+                "reason": "不应被调用。",
+                "action": "engage",
+                "consume_hook_ids": [],
+                "new_player_contact": None,
+        }
+    ],
+},
+    )
+
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+    with stores.director_event() as store:
+        persisted = store.get_by_id(event_id)
+        assert persisted is not None
+        assert persisted.stage == "hidden"
+    assert gateway.tasks == []
+
+
+def test_keep_hidden_does_not_transition_stage(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    selection = DirectorEventSelectionResult(
+        current_story_direction="河岸码头出现异常动静。",
+        reason="独立世界事件。",
+        title="无灯船",
+        actors=["港务署"],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    ).to_event(role="ambient", turn_index=1)
+    with stores.director_event() as store:
+        event_id = store.save(selection)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+    "reviews": [
+        {
+            "event_id": event_id,
+                "reason": "玩家未接触事件。",
+                "action": "keep_hidden",
+                "consume_hook_ids": [],
+                "new_player_contact": None,
+        }
+    ],
+},
+    )
+
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+    with stores.director_event() as store:
+        persisted = store.get_by_id(event_id)
+        assert persisted is not None
+        assert persisted.stage == "hidden"
+        assert persisted.last_presented_turn is None
+
+
+def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    ids = []
+    for index, title in enumerate(["无灯船", "夜探码头"], start=1):
+        selection = DirectorEventSelectionResult(
+            current_story_direction="河岸码头出现异常动静。",
+            reason="独立世界事件。",
+            title=title,
+            actors=["港务署"],
+            subject=f"行动方{index}",
+            intent="查明灵气异动",
+            method="组队搜山",
+            macro_intent=f"{title}的动机。",
+            hook_pool=[
+                EventHook(
+                    hook_id=f"hook_{index}",
+                    kind="auditory",
+                    content=f"{title}的水面异响。",
+                    trigger_anchors=["旧码头"],
+                )
+            ],
+            world_impact=WorldImpact(description="外围变为凡人活动区。"),
+        ).to_event(role="ambient", turn_index=index)
+        with stores.director_event() as store:
+            ids.append(store.save(selection))
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [
+                {
+                    "event_id": ids[0],
+                    "reason": "事件一未接触。",
+                    "action": "keep_hidden",
+                    "consume_hook_ids": [],
+                    "new_player_contact": None,
+                },
+                {
+                    "event_id": ids[1],
+                    "reason": "事件二被接触。",
+                    "action": "engage",
+                    "consume_hook_ids": ["hook_2"],
+                    "new_player_contact": "玩家夜探码头听到异响。",
+                },
+            ],
         },
     )
 
-    with pytest.raises(ValueError, match="consume_hooks already consumed"):
-        run_confirmation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=_current_state(),
-            user_input="深夜去旧码头看看。",
-            scene_facts={"scene_focus": "深夜码头。", "facts": []},
-            recent_summaries=[],
-            selection_summaries=[],
-            entity_profiles=[],
-            npc_profiles=[],
-            entity_mentions=[],
-            npc_mentions=[],
-            turn_index=3,
-            trace_id="confirmation-director",
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+    assert gateway.tasks == ["director_event_review_hidden"]
+    with stores.director_event() as store:
+        first = store.get_by_id(ids[0])
+        second = store.get_by_id(ids[1])
+        assert first is not None and first.stage == "hidden"
+        assert second is not None and second.stage == "engaged"
+        assert {hook.hook_id for hook in second.hook_pool if hook.consumed} == {
+            "hook_2"
+        }
+
+
+def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    ids = []
+    for index, title in enumerate(["无灯船", "夜探码头"], start=1):
+        selection = DirectorEventSelectionResult(
+            current_story_direction="河岸码头出现异常动静。",
+            reason="独立世界事件。",
+            title=title,
+            actors=["港务署"],
+            subject=f"行动方{index}",
+            intent="查明灵气异动",
+            method="组队搜山",
+            macro_intent=f"{title}的动机。",
+            hook_pool=[
+                EventHook(
+                    hook_id=f"hook_{index}",
+                    kind="auditory",
+                    content=f"{title}的水面异响。",
+                    trigger_anchors=["旧码头"],
+                )
+            ],
+            world_impact=WorldImpact(description="外围变为凡人活动区。"),
+        ).to_event(role="ambient", turn_index=index)
+        with stores.director_event() as store:
+            ids.append(store.save(selection))
+            store.set_stage(ids[-1], "engaged", turn_index=index)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [
+                {
+                    "event_id": ids[0],
+                    "reason": "事件一已收束。",
+                    "action": "resolve",
+                    "new_player_contact": None,
+                    "resolved_reason": "行动方撤离。",
+                },
+                {
+                    "event_id": ids[1],
+                    "reason": "事件二仍在追踪。",
+                    "action": "engage",
+                    "new_player_contact": None,
+                },
+            ],
+        },
+    )
+
+    confirmation_nodes.director_event_review_node(_review_node_state(stores, gateway))
+
+    assert gateway.tasks == ["director_event_review_engaged"]
+    with stores.director_event() as store:
+        first = store.get_by_id(ids[0])
+        second = store.get_by_id(ids[1])
+        assert first is not None and first.stage == "resolved"
+        assert second is not None and second.stage == "engaged"
+
+
+def test_hidden_review_requires_contact_when_engaging():
+    from app.domain.director_event.schemas import (
+        DirectorEventHiddenReviewBatch,
+        DirectorEventHiddenReviewResult,
+    )
+
+    with pytest.raises(ValidationError, match="engage requires new_player_contact"):
+        DirectorEventHiddenReviewBatch(
+            reviews=[
+                DirectorEventHiddenReviewResult(
+                    event_id="evt_1",
+                    reason="被接触。",
+                    action="engage",
+                    consume_hook_ids=[],
+                    new_player_contact=None,
+                )
+            ]
+        )
+
+
+def test_hidden_review_forbids_contact_when_keeping_hidden():
+    from app.domain.director_event.schemas import (
+        DirectorEventHiddenReviewBatch,
+        DirectorEventHiddenReviewResult,
+    )
+
+    with pytest.raises(ValidationError, match="keep_hidden cannot record new_player_contact"):
+        DirectorEventHiddenReviewBatch(
+            reviews=[
+                DirectorEventHiddenReviewResult(
+                    event_id="evt_1",
+                    reason="未接触。",
+                    action="keep_hidden",
+                    consume_hook_ids=[],
+                    new_player_contact="不应记录接触。",
+                )
+            ]
         )

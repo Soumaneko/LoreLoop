@@ -14,11 +14,9 @@ from app.domain.director import (
     DirectorStageMaterial,
     DirectorStageResult,
 )
-from app.domain.director_event.reviewer import DirectorEventReviewer
 from app.domain.director_event.schemas import utc_now
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.views import project_director_event
-from app.domain.director_event.workflows import review_director_event_workflow
 from app.domain.director_npc.creator import DirectorNPCCreator
 from app.domain.director_npc.schemas import NPCCreationContext
 from app.domain.npc_profile.schemas import NPCProfile
@@ -40,7 +38,6 @@ from .director_skill_specs import (
     NPC_VIEW_ALWAYS_KEPT,
     NPC_VIEW_MODE_FIELDS,
     PresentEventArguments,
-    ReviewEventArguments,
     get_director_skill_specs,
 )
 
@@ -262,30 +259,6 @@ def run_confirmation_director_agent(
         stores.npc_profile() as npc_profile_store,
         stores.world_setting() as setting_store,
     ):
-        def review_event(args: ReviewEventArguments, guidance: str | None = None):
-            event = event_store.get_by_id(args.event_id)
-            if event is None or event.stage == "resolved":
-                raise ValueError("review_event requires an active event")
-            result = review_director_event_workflow(
-                active_event=event,
-                user_input=user_input,
-                scene_facts=json.dumps(
-                    scene_facts,
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                current_state=current_state,
-                core_memory=core_memory,
-                scene_summaries=recent_summaries,
-                turn_index=turn_index,
-                store=event_store,
-                reviewer=DirectorEventReviewer(gateway),
-                trace_id=trace_id,
-                guidance=guidance,
-                consume_hooks=args.consume_hooks,
-            )
-            return result.model_dump(mode="json")
-
         def create_npc(args: CreateNPCArguments, guidance: str | None = None):
             draft = DirectorNPCCreator(gateway).create(
                 core_memory=core_memory,
@@ -525,15 +498,6 @@ def run_confirmation_director_agent(
                 "name": backfilled.name,
             }
 
-        _register_skill(
-            service,
-            "review_event",
-            handler=review_event,
-            arguments_validator=lambda args: _require_review_event(
-                event_store,
-                args,
-            ),
-        )
         _register_skill(
             service,
             "create_npc",
@@ -783,33 +747,6 @@ def _require_active_event(store, event_id: str) -> None:
     event = store.get_by_id(event_id)
     if event is None or event.stage == "resolved":
         raise ValueError("director skill requires an active event_id")
-
-
-def _require_review_event(store, args) -> None:
-    event = store.get_by_id(args.event_id)
-    if event is None or event.stage == "resolved":
-        raise ValueError("review_event requires an active event_id")
-    if not args.consume_hooks:
-        return
-    known = {hook.hook_id for hook in event.hook_pool}
-    invalid = [
-        hook_id for hook_id in args.consume_hooks if hook_id not in known
-    ]
-    if invalid:
-        raise ValueError(
-            "review_event consume_hooks not part of this event: "
-            + ", ".join(sorted(invalid))
-        )
-    consumed = [
-        hook.hook_id
-        for hook in event.hook_pool
-        if hook.hook_id in args.consume_hooks and hook.consumed
-    ]
-    if consumed:
-        raise ValueError(
-            "review_event consume_hooks already consumed: "
-            + ", ".join(sorted(consumed))
-        )
 
 
 def _require_npc(director_npc_store, npc_profile_store, npc_id: str) -> None:

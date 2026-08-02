@@ -307,7 +307,8 @@ def test_confirmation_second_wave_starts_after_helper_state_is_ready():
 
     director_graph = confirmation_graph.build_confirmation_director_graph().get_graph()
     director_edges = {(edge.source, edge.target) for edge in director_graph.edges}
-    assert ("__start__", "director_agent_confirm") in director_edges
+    assert ("__start__", "director_event_review") in director_edges
+    assert ("director_event_review", "director_agent_confirm") in director_edges
     assert ("director_agent_confirm", "__end__") in director_edges
 
 

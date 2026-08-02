@@ -61,6 +61,7 @@ class ConfirmationCache(TypedDict, total=False):
     action_preview: ActionPreviewResult
     director_decision: DirectorDecisionBatch
     director_executions: DirectorSkillExecutionBatch
+    director_event_reviews: list[dict[str, Any]]
     updated_entity_ids: list[str]
     updated_npc_profile_ids: list[str]
     new_npc_profiles: list[NPCProfile]
@@ -121,3 +122,4 @@ class ConfirmationState(TypedDict, total=False):
     new_npc_profiles: list[NPCProfile]
     director_decision: DirectorDecisionBatch
     director_executions: DirectorSkillExecutionBatch
+    director_event_reviews: list[dict[str, Any]]

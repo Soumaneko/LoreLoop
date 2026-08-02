@@ -9,7 +9,6 @@ from app.domain.director.schemas import DirectorResourceRef
 DirectorEventRole = Literal["arc", "ambient"]
 DirectorEventStage = Literal["hidden", "engaged", "resolved"]
 EventHookKind = Literal["auditory", "visual", "rumor", "item", "environment"]
-ReviewAction = Literal["hold", "resolve"]
 PLAYER_CONTACT_MAX_LENGTH = 200
 PLAYER_CONTACT_MAX_RECORDS = 5
 
@@ -162,9 +161,42 @@ class DirectorEventSelectionResult(BaseModel):
         )
 
 
-class DirectorEventReviewResult(BaseModel):
+class DirectorEventHiddenReviewResult(BaseModel):
+    event_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
-    action: ReviewAction
+    action: Literal["keep_hidden", "engage"]
+    consume_hook_ids: list[str] = Field(default_factory=list, max_length=16)
+    new_player_contact: str | None = Field(
+        min_length=1,
+        max_length=PLAYER_CONTACT_MAX_LENGTH,
+    )
+
+    @model_validator(mode="after")
+    def _validate_contact_consistency(self):
+        if self.action == "engage" and not (self.new_player_contact or "").strip():
+            raise ValueError("engage requires new_player_contact")
+        if self.action == "keep_hidden" and self.new_player_contact:
+            raise ValueError("keep_hidden cannot record new_player_contact")
+        return self
+
+
+class DirectorEventHiddenReviewBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviews: list[DirectorEventHiddenReviewResult] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_event_ids(self):
+        event_ids = [review.event_id for review in self.reviews]
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("hidden review batch has duplicate event_id")
+        return self
+
+
+class DirectorEventEngagedReviewResult(BaseModel):
+    event_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    action: Literal["engage", "resolve"]
     new_player_contact: str | None = Field(
         min_length=1,
         max_length=PLAYER_CONTACT_MAX_LENGTH,
@@ -175,4 +207,17 @@ class DirectorEventReviewResult(BaseModel):
     def _validate_resolved_reason(self):
         if self.action == "resolve" and not (self.resolved_reason or "").strip():
             self.resolved_reason = self.reason
+        return self
+
+
+class DirectorEventEngagedReviewBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviews: list[DirectorEventEngagedReviewResult] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_event_ids(self):
+        event_ids = [review.event_id for review in self.reviews]
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("engaged review batch has duplicate event_id")
         return self
