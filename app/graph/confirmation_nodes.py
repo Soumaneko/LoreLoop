@@ -481,21 +481,35 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
             event for event in active_events if event.stage == "engaged"
         ]
         if hidden_events:
+            hidden_results = review_hidden_events_workflow(
+                active_events=hidden_events,
+                user_input=pipeline_input.user_input,
+                scene_facts=scene_facts_json,
+                current_state=state["updated_state"],
+                core_memory=state["core_memory"],
+                scene_summaries=state.get("recent_summaries", []),
+                turn_index=turn_index,
+                store=event_store,
+                reviewer=DirectorEventHiddenReviewer(gateway),
+                trace_id=state["trace_id"],
+            )
             reviews.extend(
                 result.model_dump(mode="json")
-                for result in review_hidden_events_workflow(
-                    active_events=hidden_events,
-                    user_input=pipeline_input.user_input,
-                    scene_facts=scene_facts_json,
-                    current_state=state["updated_state"],
-                    core_memory=state["core_memory"],
-                    scene_summaries=state.get("recent_summaries", []),
-                    turn_index=turn_index,
-                    store=event_store,
-                    reviewer=DirectorEventHiddenReviewer(gateway),
-                    trace_id=state["trace_id"],
-                )
+                for result in hidden_results
             )
+            engaged_ids = {event.event_id for event in engaged_events}
+            for result in hidden_results:
+                event = result.active_after
+                if (
+                    event is not None
+                    and event.stage == "engaged"
+                    and state["updated_state"].world_clock.has_reached(
+                        event.deadline_clock
+                    )
+                    and event.event_id not in engaged_ids
+                ):
+                    engaged_events.append(event)
+                    engaged_ids.add(event.event_id)
         if engaged_events:
             reviews.extend(
                 result.model_dump(mode="json")

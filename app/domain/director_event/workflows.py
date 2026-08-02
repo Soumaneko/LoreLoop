@@ -91,6 +91,18 @@ def review_hidden_events_workflow(
         else:
             notes.append("kept_hidden_event")
 
+        if (
+            review.action == "keep_hidden"
+            and current_state.world_clock.has_reached(active.deadline_clock)
+        ):
+            store.resolve_event(
+                active.event_id,
+                turn_index=turn_index,
+                resolved_reason="事件在潜伏期到期，按无人干预结果结算。",
+                final_world_impact=active.world_impact,
+            )
+            notes.append("resolved_due_hidden_event")
+
         active_after = store.get_by_id(active.event_id)
         results.append(
             DirectorEventWorkflowResult(
@@ -133,13 +145,43 @@ def review_engaged_events_workflow(
     results: list[DirectorEventWorkflowResult] = []
     for review in batch.reviews:
         active = by_id[review.event_id]
+        deadline_reached = current_state.world_clock.has_reached(
+            active.deadline_clock
+        )
         if review.action == "resolve":
             store.resolve_event(
                 active.event_id,
                 turn_index=turn_index,
                 resolved_reason=review.resolved_reason or review.reason,
+                final_world_impact=None,
             )
             notes = ["resolved_engaged_event"]
+        elif deadline_reached and review.player_still_involved is True:
+            store.resolve_event(
+                active.event_id,
+                turn_index=turn_index,
+                resolved_reason=(
+                    "事件到期时玩家仍在实际介入，退出导演后台管理："
+                    + review.reason
+                ),
+                final_world_impact=None,
+            )
+            notes = ["resolved_due_event_with_active_player"]
+        elif deadline_reached and review.player_still_involved is False:
+            store.resolve_event(
+                active.event_id,
+                turn_index=turn_index,
+                resolved_reason=(
+                    "事件到期时玩家已停止介入，结算最终世界影响："
+                    + review.reason
+                ),
+                final_world_impact=review.final_world_impact,
+            )
+            notes = ["resolved_due_event_after_disengagement"]
+        elif deadline_reached:
+            raise ValueError(
+                "due engaged event is missing player involvement decision"
+            )
         else:
             notes = ["kept_engaged_event"]
 

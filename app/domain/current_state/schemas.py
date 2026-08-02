@@ -33,6 +33,15 @@ class WorldClock(BaseModel):
         phase = PHASE_ORDER[index % len(PHASE_ORDER)]
         return WorldClock(day=day, phase=phase)
 
+    def has_reached(self, deadline: "WorldClock") -> bool:
+        current_index = (self.day - 1) * len(PHASE_ORDER) + PHASE_ORDER.index(
+            self.phase
+        )
+        deadline_index = (deadline.day - 1) * len(PHASE_ORDER) + PHASE_ORDER.index(
+            deadline.phase
+        )
+        return current_index >= deadline_index
+
 
 class ParticipantState(BaseModel):
     model_config = ConfigDict(extra="forbid")

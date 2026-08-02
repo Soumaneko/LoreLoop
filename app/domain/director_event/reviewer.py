@@ -32,6 +32,11 @@ def _shared_inputs(
             intent=event.intent,
             method=event.method,
             macro_intent=event.macro_intent,
+            world_impact=(
+                event.world_impact.model_dump(mode="json")
+                if event.world_impact is not None
+                else None
+            ),
         )
         if include_hooks:
             view["hook_pool"] = [
@@ -147,12 +152,31 @@ class DirectorEventEngagedReviewer:
             indent=2,
         )
         expected_ids = {event.event_id for event in events}
+        events_by_id = {event.event_id: event for event in events}
 
         def validator(batch) -> None:
             if {review.event_id for review in batch.reviews} != expected_ids:
                 raise ValueError(
                     "engaged review batch must cover every supplied event"
                 )
+            for review in batch.reviews:
+                event = events_by_id[review.event_id]
+                deadline_decision_required = (
+                    review.action == "engage"
+                    and current_state.world_clock.has_reached(event.deadline_clock)
+                )
+                if deadline_decision_required:
+                    if review.player_still_involved is None:
+                        raise ValueError(
+                            "due engaged event requires player_still_involved"
+                        )
+                elif (
+                    review.player_still_involved is not None
+                    or review.final_world_impact is not None
+                ):
+                    raise ValueError(
+                        "deadline fields are only valid for unresolved due events"
+                    )
 
         return cast(
             DirectorEventEngagedReviewBatch,

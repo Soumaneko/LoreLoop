@@ -13,7 +13,7 @@ from app.domain.director import (
     DirectorSkillService,
 )
 from app.domain.core_memory import CoreMemory
-from app.domain.current_state import CurrentState, PlayerState, SceneState
+from app.domain.current_state import CurrentState, PlayerState, SceneState, WorldClock
 from app.domain.director_npc import DirectorNPCDraft
 from app.domain.npc_profile.schemas import (
     NPCExtractionResult,
@@ -1078,6 +1078,7 @@ def _event_selection_output(actor_roles: list[dict] | None = None) -> dict:
         "current_story_direction": "一条围绕河岸码头旧案的复仇线。",
         "reason": "世界缺乏明确的长期目标。",
         "title": "沉船账本",
+        "duration_phases": 7,
         "actor_roles": actor_roles or [],
         "subject": "码头旧账房",
         "intent": "追回被私吞的账目",
@@ -1172,6 +1173,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         assert [event.title for event in events] == ["沉船账本"]
         bound = store.get_by_id(output["event_id"])
         assert bound is not None
+        assert bound.deadline_clock == WorldClock(day=2, phase="清晨")
         assert {(actor.ref.kind, actor.ref.resource_id) for actor in bound.actors if actor.ref} == {
             ("npc", npc_id) for npc_id in output["new_npc_ids"]
         }
@@ -1549,7 +1551,9 @@ def test_director_event_semantic_view_hides_internal_state(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult
 
     selection = DirectorEventSelectionResult.model_validate(_event_selection_output())
-    event = selection.to_event(role="arc", turn_index=3)
+    event = selection.to_event(
+        role="arc", turn_index=3, current_clock=WorldClock()
+    )
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     with stores.director_event() as store:
         store.save(event)
@@ -1738,6 +1742,7 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -1755,6 +1760,7 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
     ).to_event(
         role="ambient",
         turn_index=1,
+        current_clock=WorldClock(),
     )
     with stores.director_event() as store:
         event_id = store.save(selection)
@@ -1799,7 +1805,16 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
         assert store.get_by_id(draft.draft_id).status == "prepared"
 
 
-def _review_node_state(stores, gateway, *, turn_index=3):
+def _review_node_state(
+    stores,
+    gateway,
+    *,
+    turn_index=3,
+    world_clock: WorldClock | None = None,
+):
+    updated_state = _current_state()
+    if world_clock is not None:
+        updated_state.world_clock = world_clock
     return {
         "write_db": True,
         "pipeline_input": SimpleNamespace(
@@ -1814,11 +1829,161 @@ def _review_node_state(stores, gateway, *, turn_index=3):
             gateway=lambda **kwargs: gateway,
         ),
         "core_memory": CoreMemory(items=[]),
-        "updated_state": _current_state(),
+        "updated_state": updated_state,
         "scene_facts": SceneFactSet(scene_focus="深夜码头。"),
         "recent_summaries": [],
         "events": [],
     }
+
+
+def _save_deadline_event(stores, *, stage="hidden"):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult
+
+    selection = DirectorEventSelectionResult.model_validate(
+        _event_selection_output()
+    )
+    event = selection.to_event(
+        role="ambient",
+        turn_index=1,
+        current_clock=WorldClock(day=1, phase="清晨"),
+    )
+    with stores.director_event() as store:
+        event_id = store.save(event)
+        if stage == "engaged":
+            store.set_stage(event_id, "engaged", turn_index=2)
+    return event_id
+
+
+def test_hidden_event_uses_original_world_impact_when_world_clock_expires(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    event_id = _save_deadline_event(stores)
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [{
+                "event_id": event_id,
+                "reason": "玩家没有接触事件。",
+                "action": "keep_hidden",
+                "consume_hook_ids": [],
+            }],
+        },
+    )
+
+    confirmation_nodes.director_event_review_node(
+        _review_node_state(
+            stores,
+            gateway,
+            world_clock=WorldClock(day=2, phase="清晨"),
+        )
+    )
+
+    with stores.director_event() as store:
+        resolved = store.get_by_id(event_id)
+    assert resolved is not None
+    assert resolved.stage == "resolved"
+    assert resolved.final_world_impact == resolved.world_impact
+
+
+def test_hidden_event_expires_without_impact_when_player_engages_at_deadline(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    event_id = _save_deadline_event(stores)
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [{
+                "event_id": event_id,
+                "reason": "玩家正在调查事件主体。",
+                "action": "engage",
+                "consume_hook_ids": ["hook_rumor"],
+                "player_still_involved": True,
+                "final_world_impact": None,
+            }],
+        },
+    )
+
+    confirmation_nodes.director_event_review_node(
+        _review_node_state(
+            stores,
+            gateway,
+            world_clock=WorldClock(day=2, phase="清晨"),
+        )
+    )
+
+    with stores.director_event() as store:
+        resolved = store.get_by_id(event_id)
+    assert resolved is not None
+    assert resolved.stage == "resolved"
+    assert resolved.final_world_impact is None
+
+
+def test_due_engaged_event_exits_without_impact_while_player_is_involved(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    event_id = _save_deadline_event(stores, stage="engaged")
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [{
+                "event_id": event_id,
+                "reason": "玩家仍在追查沉船账本。",
+                "action": "engage",
+                "resolved_reason": None,
+                "player_still_involved": True,
+                "final_world_impact": None,
+            }],
+        },
+    )
+
+    confirmation_nodes.director_event_review_node(
+        _review_node_state(
+            stores,
+            gateway,
+            world_clock=WorldClock(day=2, phase="清晨"),
+        )
+    )
+
+    with stores.director_event() as store:
+        resolved = store.get_by_id(event_id)
+    assert resolved is not None
+    assert resolved.stage == "resolved"
+    assert resolved.final_world_impact is None
+
+
+def test_due_engaged_event_applies_adjusted_impact_after_player_disengages(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    event_id = _save_deadline_event(stores, stage="engaged")
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无额外调度。", "requests": []},
+        event_review_output={
+            "reviews": [{
+                "event_id": event_id,
+                "reason": "玩家已经转向其他目标，但此前破坏了一条货路。",
+                "action": "engage",
+                "resolved_reason": None,
+                "player_still_involved": False,
+                "final_world_impact": {
+                    "description": "码头垄断仍然形成，但失去一条主要货路。",
+                    "setting_hint": "受损的码头垄断",
+                },
+            }],
+        },
+    )
+
+    confirmation_nodes.director_event_review_node(
+        _review_node_state(
+            stores,
+            gateway,
+            world_clock=WorldClock(day=2, phase="清晨"),
+        )
+    )
+
+    with stores.director_event() as store:
+        resolved = store.get_by_id(event_id)
+    assert resolved is not None
+    assert resolved.stage == "resolved"
+    assert resolved.final_world_impact is not None
+    assert resolved.final_world_impact.description == (
+        "码头垄断仍然形成，但失去一条主要货路。"
+    )
 
 
 def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_path):
@@ -1829,6 +1994,7 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -1846,6 +2012,7 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
     ).to_event(
         role="ambient",
         turn_index=1,
+        current_clock=WorldClock(),
     )
     with stores.director_event() as store:
         event_id = store.save(selection)
@@ -1906,6 +2073,7 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -1920,7 +2088,7 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
 
@@ -1950,6 +2118,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -1970,7 +2139,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
             ),
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
 
@@ -2007,6 +2176,7 @@ def test_generation_presents_persisted_engaged_event(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2024,6 +2194,7 @@ def test_generation_presents_persisted_engaged_event(tmp_path):
     ).to_event(
         role="ambient",
         turn_index=1,
+        current_clock=WorldClock(),
     )
     with stores.director_event() as store:
         event_id = store.save(selection)
@@ -2088,6 +2259,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2102,7 +2274,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
         store.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
@@ -2147,6 +2319,7 @@ def test_present_event_hidden_without_hook_id_presents_nothing(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2161,7 +2334,7 @@ def test_present_event_hidden_without_hook_id_presents_nothing(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
 
@@ -2207,6 +2380,7 @@ def test_hidden_review_engages_event(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2221,7 +2395,7 @@ def test_hidden_review_engages_event(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
 
@@ -2255,6 +2429,7 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2269,7 +2444,7 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
 
@@ -2299,6 +2474,7 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2313,7 +2489,7 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
         store.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
@@ -2344,6 +2520,7 @@ def test_engaged_review_resolves_event(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2358,7 +2535,7 @@ def test_engaged_review_resolves_event(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
         store.set_stage(event_id, "engaged", turn_index=2)
@@ -2394,6 +2571,7 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2408,7 +2586,7 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
         store.set_stage(event_id, "engaged", turn_index=2)
@@ -2442,6 +2620,7 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2456,7 +2635,7 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=3)
+    ).to_event(role="ambient", turn_index=3, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
 
@@ -2491,6 +2670,7 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2505,7 +2685,7 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
 
@@ -2541,6 +2721,7 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
             current_story_direction="河岸码头出现异常动静。",
             reason="独立世界事件。",
             title=title,
+            duration_phases=7,
             actor_roles=[],
             subject=f"行动方{index}",
             intent="查明灵气异动",
@@ -2555,7 +2736,9 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
                 )
             ],
             world_impact=WorldImpact(description="外围变为凡人活动区。"),
-        ).to_event(role="ambient", turn_index=index)
+        ).to_event(
+            role="ambient", turn_index=index, current_clock=WorldClock()
+        )
         with stores.director_event() as store:
             ids.append(store.save(selection))
 
@@ -2602,6 +2785,7 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
             current_story_direction="河岸码头出现异常动静。",
             reason="独立世界事件。",
             title=title,
+            duration_phases=7,
             actor_roles=[],
             subject=f"行动方{index}",
             intent="查明灵气异动",
@@ -2616,7 +2800,9 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
                 )
             ],
             world_impact=WorldImpact(description="外围变为凡人活动区。"),
-        ).to_event(role="ambient", turn_index=index)
+        ).to_event(
+            role="ambient", turn_index=index, current_clock=WorldClock()
+        )
         with stores.director_event() as store:
             ids.append(store.save(selection))
             store.set_stage(ids[-1], "engaged", turn_index=index)
@@ -2659,6 +2845,7 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2673,7 +2860,7 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1)
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
     with stores.director_event() as store:
         event_id = store.save(selection)
 
@@ -2714,6 +2901,7 @@ def test_review_input_uses_actor_names_only(tmp_path):
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
         title="无灯船",
+        duration_phases=7,
         actor_roles=[],
         subject="陷空山脚猎户",
         intent="查明灵气异动",
@@ -2731,6 +2919,7 @@ def test_review_input_uses_actor_names_only(tmp_path):
     ).to_event(
         role="ambient",
         turn_index=1,
+        current_clock=WorldClock(),
         actors=[DirectorActorRef(name="港务署"), DirectorActorRef(name="林澈")],
     )
     with stores.director_event() as store:

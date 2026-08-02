@@ -8,6 +8,7 @@ from .schemas import (
     DirectorActorRef,
     DirectorEvent,
     DirectorEventStage,
+    WorldImpact,
     utc_now,
 )
 
@@ -31,7 +32,7 @@ class DirectorEventStore:
             )
             """
         )
-        ensure_exact_schema_version(self._conn, "director_event", 9)
+        ensure_exact_schema_version(self._conn, "director_event", 10)
         self._conn.commit()
 
     def save(self, event: DirectorEvent) -> str:
@@ -126,6 +127,7 @@ class DirectorEventStore:
         *,
         turn_index: int,
         resolved_reason: str,
+        final_world_impact: WorldImpact | None = None,
     ) -> bool:
         event = self.get_by_id(event_id)
         if event is None or event.stage == "resolved":
@@ -135,6 +137,7 @@ class DirectorEventStore:
                 "stage": "resolved",
                 "resolved_reason": resolved_reason,
                 "resolved_turn": turn_index,
+                "final_world_impact": final_world_impact,
                 "updated_turn": turn_index,
                 "updated_at": utc_now(),
             }

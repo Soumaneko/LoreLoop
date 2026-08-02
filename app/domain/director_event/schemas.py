@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.domain.current_state.schemas import WorldClock
 from app.domain.director.schemas import DirectorResourceRef
 
 DirectorEventRole = Literal["arc", "ambient"]
@@ -69,6 +70,8 @@ class DirectorEvent(BaseModel):
     actors: list[DirectorActorRef] = Field(default_factory=list)
 
     world_impact: WorldImpact | None = None
+    deadline_clock: WorldClock
+    final_world_impact: WorldImpact | None = None
 
     resolved_reason: str | None = None
     resolved_turn: int | None = Field(default=None, ge=0)
@@ -106,6 +109,7 @@ class DirectorEvent(BaseModel):
             "intent": self.intent,
             "method": self.method,
             "macro_intent": self.macro_intent,
+            "deadline_clock": self.deadline_clock.model_dump(mode="json"),
             "actors": [
                 actor.model_dump(mode="json")
                 for actor in self.actors
@@ -119,6 +123,7 @@ class DirectorEventSelectionResult(BaseModel):
     current_story_direction: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     title: str = Field(min_length=1)
+    duration_phases: int = Field(ge=1, le=140)
     actor_roles: list[DirectorEventActorRole] = Field(
         default_factory=list,
         max_length=6,
@@ -143,6 +148,7 @@ class DirectorEventSelectionResult(BaseModel):
         *,
         role: DirectorEventRole,
         turn_index: int,
+        current_clock: WorldClock,
         actors: list[DirectorActorRef] | None = None,
     ) -> DirectorEvent:
         now = utc_now()
@@ -157,6 +163,8 @@ class DirectorEventSelectionResult(BaseModel):
             hook_pool=list(self.hook_pool),
             actors=list(actors or []),
             world_impact=self.world_impact,
+            deadline_clock=current_clock.advance_phase(self.duration_phases),
+            final_world_impact=None,
             created_turn=turn_index,
             updated_turn=turn_index,
             created_at=now,
@@ -189,11 +197,25 @@ class DirectorEventEngagedReviewResult(BaseModel):
     reason: str = Field(min_length=1)
     action: Literal["engage", "resolve"]
     resolved_reason: str | None = None
+    player_still_involved: bool | None = None
+    final_world_impact: WorldImpact | None = None
 
     @model_validator(mode="after")
     def _validate_resolved_reason(self):
         if self.action == "resolve" and not (self.resolved_reason or "").strip():
             self.resolved_reason = self.reason
+        if self.player_still_involved is True and self.final_world_impact is not None:
+            raise ValueError(
+                "an involved player cannot receive an automatic final_world_impact"
+            )
+        if self.player_still_involved is False and self.final_world_impact is None:
+            raise ValueError(
+                "a disengaged player requires final_world_impact"
+            )
+        if self.player_still_involved is None and self.final_world_impact is not None:
+            raise ValueError(
+                "final_world_impact requires a deadline involvement decision"
+            )
         return self
 
 

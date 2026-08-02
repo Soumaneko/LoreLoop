@@ -1721,6 +1721,8 @@ function directorCard(event) {
     </div>
   `).join("");
   const worldImpact = event.world_impact || null;
+  const finalWorldImpact = event.final_world_impact || null;
+  const deadlineClock = event.deadline_clock || null;
   return `<div class="section-card">
     <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.role || "role?", event.stage || "active", event.stage === "resolved" ? "info" : "ok")}</div>
     ${event.macro_intent ? `<div style="margin-bottom:8px">${esc(event.macro_intent)}</div>` : ""}
@@ -1733,9 +1735,13 @@ function directorCard(event) {
         actor.ref ? `${text(actor.name)} (${text(actor.ref.kind)}:${text(actor.ref.resource_id)})` : text(actor.name)
       ))],
       ["创建/更新", esc(`T${text(event.created_turn)} / T${text(event.updated_turn)}`)],
+      ["世界时钟期限", deadlineClock
+        ? esc(`第${text(deadlineClock.day)}日${text(deadlineClock.phase)}`)
+        : `<span class="empty">无</span>`],
       ["解决", event.resolved_turn ? esc(`T${event.resolved_turn}`) : `<span class="empty">无</span>`],
       ["解决原因", esc(text(event.resolved_reason))],
       ["world_impact", worldImpact ? esc(text(worldImpact.description)) : `<span class="empty">无</span>`],
+      ["final_world_impact", finalWorldImpact ? esc(text(finalWorldImpact.description)) : `<span class="empty">无</span>`],
     ])}
     ${hookCards || `<div class="empty">无 Hook</div>`}
   </div>`;

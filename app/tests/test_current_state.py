@@ -39,6 +39,13 @@ class TestWorldClock:
         assert advanced.phase == "凌晨"
         assert advanced.label == "第2日凌晨"
 
+    def test_has_reached_compares_world_day_and_phase(self):
+        deadline = WorldClock(day=3, phase="黄昏")
+
+        assert not WorldClock(day=3, phase="下午").has_reached(deadline)
+        assert WorldClock(day=3, phase="黄昏").has_reached(deadline)
+        assert WorldClock(day=4, phase="凌晨").has_reached(deadline)
+
 
 class TestPlayerState:
     def test_defaults_are_empty_or_none(self):

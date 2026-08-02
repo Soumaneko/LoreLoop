@@ -353,6 +353,7 @@ def run_confirmation_director_agent(
                 role=args.role,
                 turn_index=turn_index,
                 actors=bound_actors,
+                current_clock=current_state.world_clock,
             )
             drafts: list = []
             new_npc_ids: list[str] = []
