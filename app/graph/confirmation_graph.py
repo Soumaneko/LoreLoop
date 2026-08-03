@@ -27,6 +27,7 @@ from .confirmation_nodes import (
     npc_profile_update_node,
     scene_fact_extract_node,
     scene_summarize_node,
+    setting_appearance_update_node,
     state_update_node,
 )
 from .confirmation_state import ConfirmationPipelineInput, ConfirmationState
@@ -99,6 +100,7 @@ def build_confirmation_second_wave_graph():
         action_preview_node,
         continuity_project_node,
         npc_profile_update_node,
+        setting_appearance_update_node,
     )
     return get_cached_graph(
         "confirmation_second_wave",
@@ -127,13 +129,22 @@ def _compile_confirmation_second_wave_graph():
             npc_profile_update_node,
         ),
     )
+    graph.add_node(
+        "setting_appearance_update",
+        capture_confirmation_node_errors(
+            "setting_appearance_update",
+            setting_appearance_update_node,
+        ),
+    )
 
     graph.add_edge(START, "action_preview")
     graph.add_edge(START, "continuity_project")
     graph.add_edge(START, "npc_profile_update")
+    graph.add_edge(START, "setting_appearance_update")
     graph.add_edge("action_preview", END)
     graph.add_edge("continuity_project", END)
     graph.add_edge("npc_profile_update", END)
+    graph.add_edge("setting_appearance_update", END)
 
     return graph.compile()
 

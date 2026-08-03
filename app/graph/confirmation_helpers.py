@@ -43,6 +43,7 @@ _WRITE_CACHED_NODE_RESULTS = {
     "director_event_reviews",
     "updated_npc_profile_ids",
     "new_npc_profiles",
+    "recorded_setting_ids",
 }
 _ROLLBACK_SAFE_CACHE_KEYS = {
     "key",

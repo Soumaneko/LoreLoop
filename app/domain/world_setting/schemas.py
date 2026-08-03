@@ -63,6 +63,7 @@ class WorldSetting(BaseModel):
     created_turn: int = Field(ge=0)
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)
+    hit_count: int = Field(default=0, ge=0)
 
     @field_validator("public_facts", "hidden_facts", "related_setting_ids")
     @classmethod
@@ -85,7 +86,7 @@ class WorldSetting(BaseModel):
     def director_view(self) -> dict:
         return self.model_dump(
             mode="json",
-            exclude={"created_at", "updated_at"},
+            exclude={"created_at", "updated_at", "hit_count"},
         )
 
     def reference_view(self) -> dict:

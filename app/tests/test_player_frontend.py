@@ -29,6 +29,7 @@ from app.domain.current_state import (
 )
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.turn_resolution import PlayerTurnResolution
+from app.domain.world_setting.schemas import WorldSetting
 from app.runtime.player_state import (
     load_player_history,
     load_player_state,
@@ -993,6 +994,15 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             public_summary="一名公开身份不明的木偶师。",
             hidden_secret="不应投影的 NPC 秘密",
         ))
+    with runtime.stores.world_setting() as store:
+        store.save(WorldSetting(
+            kind="location",
+            name="图书馆",
+            summary="一座石砌的公共图书馆。",
+            public_facts=["登记读者可借阅。"],
+            hidden_facts=["地下层保存未登记档案。"],
+            created_turn=1,
+        ))
     runtime.pending_turns.add(SimpleNamespace(
         turn_id="turn-v1",
         group_id="group-1",
@@ -1032,9 +1042,14 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     assert "流浪木偶师" in str(payload)
     assert "不应投影的 NPC 秘密" not in str(payload)
     assert {item["surface"] for item in payload["highlights"]} == {
-        "木偶师", "埃利奥",
+        "木偶师", "埃利奥", "图书馆",
     }
-    assert {item["kind"] for item in payload["highlights"]} == {"npc"}
+    assert {item["kind"] for item in payload["highlights"]} == {"npc", "setting"}
+    setting_highlight = next(
+        item for item in payload["highlights"] if item["kind"] == "setting"
+    )
+    assert setting_highlight["profile"]["setting_kind"] == "location"
+    assert "地下层保存未登记档案。" not in str(payload)
     assert not any(
         item["surface"] == "莱尔"
         for item in payload["highlights"]
@@ -1054,6 +1069,55 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     assert payload["dice_display"] == "outcome"
     assert payload["canon_validation_enabled"] is False
     assert payload["director_enabled"] is True
+
+
+def test_text_highlights_exclude_single_char_settings_and_prefer_npc_on_collision():
+    from app.runtime.player_state import _project_text_highlights
+
+    runtime = get_campaign_runtime()
+    with runtime.stores.npc_profile() as store:
+        store.upsert(NPCProfile(
+            name="商会",
+            role="行商首领",
+            public_summary="执掌商会的老人。",
+        ))
+    with runtime.stores.world_setting() as store:
+        store.save(WorldSetting(
+            kind="lore",
+            name="道",
+            summary="修行之途。",
+            public_facts=["道法自然。"],
+            created_turn=1,
+        ))
+        store.save(WorldSetting(
+            kind="faction",
+            name="商会",
+            summary="北境的商帮。",
+            public_facts=["收取商税。"],
+            created_turn=1,
+        ))
+
+    items = _project_text_highlights(
+        runtime,
+        texts=["他知晓商会收税的规矩，也听闻道法自然的道理。"],
+        player_name="莱尔",
+    )
+
+    surfaces = {item["surface"]: item for item in items}
+    assert "道" not in surfaces
+    assert surfaces["商会"]["kind"] == "npc"
+    assert not any(
+        item["kind"] == "setting"
+        for item in items
+        if item["surface"] == "商会"
+    )
+
+    again = _project_text_highlights(
+        runtime,
+        texts=["他知晓商会收税的规矩，也听闻道法自然的道理。"],
+        player_name="莱尔",
+    )
+    assert [item["surface"] for item in again] == [item["surface"] for item in items]
 
 
 def test_player_history_loads_five_turn_pages_oldest_to_newest():

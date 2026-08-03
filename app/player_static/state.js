@@ -11,6 +11,7 @@ export const state = {
   historyPagingEnabled: false,
   records: null,
   recordsDrawerOpen: false,
+  recordsView: "general",
   readerPreferences: {
     font_size: "16.5",
     font_family: "serif",

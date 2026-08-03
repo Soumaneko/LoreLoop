@@ -5,6 +5,7 @@ import sqlite3
 
 from app.runtime.sqlite import (
     connect_sqlite,
+    ensure_column,
     ensure_exact_schema_version,
     transaction,
 )
@@ -31,10 +32,12 @@ class WorldSettingStore:
                 related_setting_ids_json TEXT NOT NULL,
                 created_turn INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                hit_count INTEGER NOT NULL DEFAULT 0
             )
             """
         )
+        self._migrate_v11_to_v12()
         expected_columns = {
             "setting_id",
             "kind",
@@ -47,6 +50,7 @@ class WorldSettingStore:
             "created_turn",
             "created_at",
             "updated_at",
+            "hit_count",
         }
         actual_columns = {
             row["name"]
@@ -64,8 +68,37 @@ class WorldSettingStore:
             ON world_settings(kind, created_turn, setting_id)
             """
         )
-        ensure_exact_schema_version(self._conn, "world_setting", 11)
+        ensure_exact_schema_version(self._conn, "world_setting", 12)
         self._conn.commit()
+
+    def _migrate_v11_to_v12(self) -> None:
+        """One-time transactional migration: add the appearance counter column."""
+        row = self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ("schema_versions",),
+        ).fetchone()
+        if row is None:
+            return
+        current = self._conn.execute(
+            "SELECT version FROM schema_versions WHERE component = ?",
+            ("world_setting",),
+        ).fetchone()
+        if current is None or int(current["version"]) != 11:
+            return
+        with transaction(self._conn):
+            ensure_column(
+                self._conn,
+                "world_settings",
+                "hit_count",
+                "INTEGER NOT NULL DEFAULT 0",
+            )
+            self._conn.execute(
+                """
+                UPDATE schema_versions
+                SET version = 12, updated_at = CURRENT_TIMESTAMP
+                WHERE component = 'world_setting'
+                """
+            )
 
     def save(self, setting: WorldSetting) -> str:
         self._require_related_settings(setting.related_setting_ids)
@@ -80,9 +113,10 @@ class WorldSettingStore:
                 INSERT INTO world_settings (
                     setting_id, kind, name, normalized_name, summary,
                     public_facts_json, hidden_facts_json,
-                    related_setting_ids_json, created_turn, created_at, updated_at
+                    related_setting_ids_json, created_turn, created_at, updated_at,
+                    hit_count
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     setting.setting_id,
@@ -96,6 +130,7 @@ class WorldSettingStore:
                     setting.created_turn,
                     setting.created_at,
                     setting.updated_at,
+                    setting.hit_count,
                 ),
             )
         except sqlite3.IntegrityError as exc:
@@ -150,6 +185,24 @@ class WorldSettingStore:
         ).fetchone()
         return int(row["count"])
 
+    def record_mention(self, setting_id: str) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM world_settings WHERE setting_id = ?",
+            (setting_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        self._conn.execute(
+            """
+            UPDATE world_settings
+            SET hit_count = hit_count + 1, updated_at = ?
+            WHERE setting_id = ?
+            """,
+            (utc_now(), setting_id),
+        )
+        self._conn.commit()
+        return True
+
     def _require_related_settings(self, setting_ids: list[str]) -> None:
         if not setting_ids:
             return
@@ -178,6 +231,7 @@ class WorldSettingStore:
             created_turn=row["created_turn"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            hit_count=int(row["hit_count"] or 0),
         )
 
     def delete_by_id(self, setting_id: str) -> None:

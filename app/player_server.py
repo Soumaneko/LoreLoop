@@ -124,7 +124,9 @@ class PlayerHandler(BaseHTTPRequestHandler):
             self._handle_player_json(lambda: player_saves_payload(list_saves()))
             return
         if path == "/api/player/records":
-            self._handle_player_json(load_player_records)
+            query = parse_qs(parsed_url.query)
+            view = query.get("view", ["general"])[0] or "general"
+            self._handle_player_json(lambda: load_player_records(view=view))
             return
         if path == "/api/player/saves/export":
             query = parse_qs(parsed_url.query)
@@ -856,10 +858,12 @@ class PlayerHandler(BaseHTTPRequestHandler):
         payload = _read_json(self)
         kind = str(payload.get("kind", "")).strip()
         record_id = str(payload.get("record_id", "")).strip()
+        view = str(payload.get("view", "general")).strip() or "general"
         return update_player_record(
             kind,
             record_id,
             payload.get("payload"),
+            view=view,
         )
 
 

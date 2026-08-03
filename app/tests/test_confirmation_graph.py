@@ -300,13 +300,120 @@ def test_confirmation_second_wave_starts_after_helper_state_is_ready():
     assert ("__start__", "action_preview") in edges
     assert ("__start__", "continuity_project") in edges
     assert ("__start__", "npc_profile_update") in edges
-    assert ("__start__", "npc_profile_update") in edges
+    assert ("__start__", "setting_appearance_update") in edges
+    assert ("setting_appearance_update", "__end__") in edges
 
     director_graph = confirmation_graph.build_confirmation_director_graph().get_graph()
     director_edges = {(edge.source, edge.target) for edge in director_graph.edges}
     assert ("__start__", "director_event_review") in director_edges
     assert ("director_event_review", "director_agent_confirm") in director_edges
     assert ("director_agent_confirm", "__end__") in director_edges
+
+
+def test_setting_appearance_node_counts_once_and_is_cached(monkeypatch, tmp_path):
+    from app.domain.world_setting import WorldSetting, WorldSettingStore
+
+    db_path = tmp_path / "world_settings.db"
+    with WorldSettingStore(str(db_path)) as seed_store:
+        library = WorldSetting(
+            kind="location",
+            name="灰烬图书馆",
+            summary="一座石砌图书馆。",
+            public_facts=["对登记学者开放。"],
+            created_turn=1,
+        )
+        guild = WorldSetting(
+            kind="faction",
+            name="北陆商盟",
+            summary="北境商会。",
+            public_facts=["统一收取过路费。"],
+            created_turn=1,
+        )
+        seed_store.save(library)
+        seed_store.save(guild)
+
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, name: lambda: WorldSettingStore(str(db_path)),
+    )
+    state = {
+        "write_db": True,
+        "effective_scene_text": "莱尔走进了灰烬图书馆的借阅室。",
+        "cache": {},
+    }
+
+    result = confirmation_nodes.setting_appearance_update_node(state)
+    assert result["recorded_setting_ids"] == [library.setting_id]
+    merge_confirmation_node_update(state, result)
+    assert state["cache"]["recorded_setting_ids"] == [library.setting_id]
+    with WorldSettingStore(str(db_path)) as check:
+        assert check.get_by_id(library.setting_id).hit_count == 1
+        assert check.get_by_id(guild.setting_id).hit_count == 0
+
+    replayed = confirmation_nodes.setting_appearance_update_node(state)
+    assert replayed["recorded_setting_ids"] == [library.setting_id]
+    with WorldSettingStore(str(db_path)) as check:
+        assert check.get_by_id(library.setting_id).hit_count == 1
+
+
+def test_setting_appearance_node_skips_when_not_writing_db(monkeypatch):
+    from app.domain.world_setting import WorldSettingStore
+
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, name: lambda: WorldSettingStore(":memory:"),
+    )
+    state = {
+        "write_db": False,
+        "effective_scene_text": "灰烬图书馆",
+        "cache": {},
+    }
+
+    result = confirmation_nodes.setting_appearance_update_node(state)
+    assert result == {"recorded_setting_ids": []}
+
+
+def test_setting_appearance_node_ignores_single_character_names(monkeypatch, tmp_path):
+    from app.domain.world_setting import WorldSetting, WorldSettingStore
+
+    db_path = tmp_path / "world_settings.db"
+    with WorldSettingStore(str(db_path)) as seed_store:
+        single = WorldSetting(
+            kind="lore",
+            name="道",
+            summary="修行之途。",
+            public_facts=["道法自然。"],
+            created_turn=1,
+        )
+        guild = WorldSetting(
+            kind="faction",
+            name="镖局",
+            summary="押送货物的行会。",
+            public_facts=["收取镖费。"],
+            created_turn=1,
+        )
+        seed_store.save(single)
+        seed_store.save(guild)
+
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, name: lambda: WorldSettingStore(str(db_path)),
+    )
+    state = {
+        "write_db": True,
+        "effective_scene_text": "他知晓镖局的规矩。",
+        "cache": {},
+    }
+
+    result = confirmation_nodes.setting_appearance_update_node(state)
+    assert guild.setting_id in result["recorded_setting_ids"]
+    assert single.setting_id not in result["recorded_setting_ids"]
+    with WorldSettingStore(str(db_path)) as check:
+        assert check.get_by_id(single.setting_id).hit_count == 0
+        assert check.get_by_id(guild.setting_id).hit_count == 1
 
 
 def test_confirmation_events_reducer_appends_node_events():

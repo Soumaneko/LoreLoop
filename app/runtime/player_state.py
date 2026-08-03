@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.text import eligible_highlight_term
 from .current_state_access import load_effective_current_state
 from .serialization import model_data
 from .session import CampaignRuntime, get_campaign_runtime
@@ -81,9 +82,24 @@ def _project_text_highlights(
                 (surface, "npc", public_profile)
                 for surface in [profile.name, *profile.aliases]
             )
+    with runtime.stores.world_setting() as store:
+        for setting in store.list_all():
+            if not eligible_highlight_term(setting.name):
+                continue
+            public_profile = {
+                "kind": "setting",
+                "setting_kind": setting.kind,
+                "setting_id": setting.setting_id,
+                "name": setting.name,
+                "summary": setting.summary,
+                "public_facts": list(setting.public_facts),
+            }
+            candidates.append((setting.name, "setting", public_profile))
     projected: list[dict[str, Any]] = []
     seen: set[str] = set()
     player_key = player_name.strip().casefold()
+    # Surfaces are deduplicated by text with NPC candidates added first, so a
+    # Setting sharing a name with an NPC deterministically loses: NPC wins.
     for raw_surface, kind, profile in candidates:
         surface = str(raw_surface).strip()
         key = surface.casefold()

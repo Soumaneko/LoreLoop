@@ -53,22 +53,46 @@ _NPC_DIRECTOR_FIELDS = {
     "encounter_potentials",
     "director_notes",
     "source_director_npc_id",
+    "source_setting_ids",
     "created_turn",
     "introduced_turn",
 }
-_SETTING_EDITABLE_FIELDS = {
+_NPC_ADVANCED_DIRECTOR_FIELDS = {
+    "core_motivation",
+    "hidden_secret",
+    "conflict_style",
+    "social_style",
+    "encounter_potentials",
+    "director_notes",
+}
+_NPC_ADVANCED_NULLABLE_FIELDS = {
+    "core_motivation",
+    "hidden_secret",
+    "conflict_style",
+    "social_style",
+    "director_notes",
+}
+_NPC_ADVANCED_LIST_FIELDS = {"encounter_potentials"}
+_SETTING_GENERAL_FIELDS = {
+    "kind",
+    "name",
+    "summary",
+    "public_facts",
+}
+_SETTING_ADVANCED_FIELDS = {
     "kind",
     "name",
     "summary",
     "public_facts",
     "hidden_facts",
-    "related_setting_ids",
 }
 _SETTING_LIST_FIELDS = {
     "public_facts",
     "hidden_facts",
     "related_setting_ids",
 }
+
+RECORD_VIEWS = ("general", "advanced")
 
 
 def _normalize_payload(
@@ -112,14 +136,16 @@ def _maintenance_running(runtime: CampaignRuntime) -> bool:
     return bool(counts.get("queued") or counts.get("running"))
 
 
-def load_player_records() -> dict[str, Any]:
+def load_player_records(view: str = "general") -> dict[str, Any]:
     """Player archive projection: continuity + NPC + Setting records."""
+    if view not in RECORD_VIEWS:
+        raise ValueError(f"unknown records view: {view}")
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
-        return _load_player_records(runtime)
+        return _load_player_records(runtime, view=view)
 
 
-def _load_player_records(runtime: CampaignRuntime) -> dict[str, Any]:
+def _load_player_records(runtime: CampaignRuntime, *, view: str = "general") -> dict[str, Any]:
     with runtime.stores.continuity() as store:
         continuity_items = store.list_all()
     with runtime.stores.npc_profile() as store:
@@ -149,23 +175,45 @@ def _load_player_records(runtime: CampaignRuntime) -> dict[str, Any]:
             for item in continuity_items
         ],
         "npc_profiles": [
-            {
-                "id": profile.npc_id,
-                "public": model_data(profile.update_view()),
-                "director_only": {
-                    key: model_data(getattr(profile, key))
-                    for key in _NPC_DIRECTOR_FIELDS
-                },
-            }
+            _npc_profile_record(profile, view=view)
             for profile in npc_profiles
+            if view == "advanced" or _npc_has_appeared(profile)
         ],
         "world_settings": [
-            {
-                "id": setting.setting_id,
-                "fields": setting.director_view(),
-            }
+            _setting_record(setting, view=view)
             for setting in world_settings
+            if view == "advanced" or setting.hit_count > 0
         ],
+    }
+
+
+def _npc_has_appeared(profile) -> bool:
+    if profile.name_hit_count > 0:
+        return True
+    return any(count > 0 for count in profile.alias_hit_counts.values())
+
+
+def _npc_profile_record(profile, *, view: str) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "id": profile.npc_id,
+        "public": model_data(profile.update_view()),
+    }
+    if view == "advanced":
+        record["director_only"] = {
+            key: model_data(getattr(profile, key))
+            for key in _NPC_ADVANCED_DIRECTOR_FIELDS
+        }
+    return record
+
+
+def _setting_record(setting, *, view: str) -> dict[str, Any]:
+    fields = _SETTING_ADVANCED_FIELDS if view == "advanced" else _SETTING_GENERAL_FIELDS
+    return {
+        "id": setting.setting_id,
+        "fields": setting.model_dump(
+            mode="json",
+            include=fields,
+        ),
     }
 
 
@@ -173,14 +221,18 @@ def update_player_record(
     kind: str,
     record_id: str,
     payload: dict[str, Any] | None,
+    view: str = "general",
 ) -> dict[str, Any]:
     """Update one existing record's editable fields.
 
     Continuity edits accept only active items and never change status.
-    NPC edits are restricted to public fields; director fields are read-only.
-    Setting edits accept only the static asset fields.
+    NPC edits are restricted to public fields, plus the director content fields
+    when view is "advanced"; system/meta fields are always read-only.
+    Setting edits accept only the static asset fields visible in the view.
     """
     runtime = get_campaign_runtime()
+    if view not in RECORD_VIEWS:
+        raise ValueError(f"unknown records view: {view}")
     if kind not in {"continuity", "npc", "setting"}:
         raise ValueError(f"unknown record kind: {kind}")
     if not record_id:
@@ -191,8 +243,8 @@ def update_player_record(
         if kind == "continuity":
             return _update_continuity(runtime, record_id, payload)
         if kind == "npc":
-            return _update_npc_profile(runtime, record_id, payload)
-        return _update_world_setting(runtime, record_id, payload)
+            return _update_npc_profile(runtime, record_id, payload, view=view)
+        return _update_world_setting(runtime, record_id, payload, view=view)
 
 
 def _latest_confirmed_turn(runtime: CampaignRuntime) -> int:
@@ -254,26 +306,31 @@ def _update_npc_profile(
     runtime: CampaignRuntime,
     npc_id: str,
     payload: dict[str, Any],
+    *,
+    view: str = "general",
 ) -> dict[str, Any]:
-    director_fields = set(payload) & _NPC_DIRECTOR_FIELDS
-    if director_fields:
-        raise ValueError(
-            "NPC director fields are read-only: "
-            + ", ".join(sorted(director_fields))
-        )
-    unknown = set(payload) - _NPC_PUBLIC_FIELDS
+    allowed = _NPC_PUBLIC_FIELDS | (
+        _NPC_ADVANCED_DIRECTOR_FIELDS if view == "advanced" else set()
+    )
+    unknown = set(payload) - allowed
     if unknown:
         raise ValueError(
-            "NPC public fields only: " + ", ".join(sorted(_NPC_PUBLIC_FIELDS))
+            f"NPC {view} fields only: " + ", ".join(sorted(allowed))
         )
     with runtime.stores.npc_profile() as store:
         current = store.get_by_id(npc_id)
         if current is None:
             raise ValueError(f"NPC profile not found: {npc_id}")
+        nullable = _NPC_NULLABLE_FIELDS | (
+            _NPC_ADVANCED_NULLABLE_FIELDS if view == "advanced" else set()
+        )
+        list_fields = _NPC_LIST_FIELDS | (
+            _NPC_ADVANCED_LIST_FIELDS if view == "advanced" else set()
+        )
         payload = _normalize_payload(
             payload,
-            nullable=_NPC_NULLABLE_FIELDS,
-            list_fields=_NPC_LIST_FIELDS,
+            nullable=nullable,
+            list_fields=list_fields,
         )
         update = current.update_view()
         for field in _NPC_PUBLIC_FIELDS:
@@ -294,18 +351,24 @@ def _update_npc_profile(
         )
         merged.absent_turns = current.absent_turns
         _preserve_npc_director_fields(merged, current)
+        if view == "advanced":
+            for field in _NPC_ADVANCED_DIRECTOR_FIELDS:
+                if field in payload:
+                    setattr(merged, field, payload[field])
         store.upsert(merged)
         saved = store.get_by_id(npc_id)
         if saved is None:
             raise RuntimeError("NPC profile disappeared after save")
-    return {
+    record = {
         "id": saved.npc_id,
         "public": model_data(saved.update_view()),
-        "director_only": {
-            key: model_data(getattr(saved, key))
-            for key in _NPC_DIRECTOR_FIELDS
-        },
     }
+    if view == "advanced":
+        record["director_only"] = {
+            key: model_data(getattr(saved, key))
+            for key in _NPC_ADVANCED_DIRECTOR_FIELDS
+        }
+    return record
 
 
 def _preserve_npc_director_fields(profile: NPCProfile, current: NPCProfile) -> None:
@@ -335,12 +398,14 @@ def _update_world_setting(
     runtime: CampaignRuntime,
     setting_id: str,
     payload: dict[str, Any],
+    *,
+    view: str = "general",
 ) -> dict[str, Any]:
-    unknown = set(payload) - _SETTING_EDITABLE_FIELDS
+    allowed = _SETTING_ADVANCED_FIELDS if view == "advanced" else _SETTING_GENERAL_FIELDS
+    unknown = set(payload) - allowed
     if unknown:
         raise ValueError(
-            "Setting fields only: "
-            + ", ".join(sorted(_SETTING_EDITABLE_FIELDS))
+            f"Setting {view} fields only: " + ", ".join(sorted(allowed))
         )
     with runtime.stores.world_setting() as store:
         current = store.get_by_id(setting_id)
@@ -361,5 +426,5 @@ def _update_world_setting(
             raise RuntimeError("Setting disappeared after save")
     return {
         "id": saved.setting_id,
-        "fields": saved.director_view(),
+        "fields": _setting_record(saved, view=view)["fields"],
     }

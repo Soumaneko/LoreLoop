@@ -246,18 +246,19 @@ def save_pending_scene_edit(
     return get_campaign_runtime().save_pending_scene_edit(turn_id, scene_text)
 
 
-def load_player_records() -> dict:
+def load_player_records(view: str = "general") -> dict:
     """Return the player-visible archive projection for the records drawer."""
-    return _load_player_records()
+    return _load_player_records(view=view)
 
 
 def update_player_record(
     kind: str,
     record_id: str,
     payload: dict | None,
+    view: str = "general",
 ) -> dict:
     """Update one existing continuity/NPC/Setting record from the player UI."""
-    return _update_player_record(kind, record_id, payload)
+    return _update_player_record(kind, record_id, payload, view=view)
 
 
 def record_player_diagnostic(payload: dict[str, Any]) -> dict[str, bool]:

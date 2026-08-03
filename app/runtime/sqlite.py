@@ -17,7 +17,7 @@ SUPPORTED_SCHEMA_VERSIONS = {
     "npc_profile": 3,
     "scene_summary": 1,
     "short_term_memory": 5,
-    "world_setting": 11,
+    "world_setting": 12,
 }
 _savepoint_counter = 0
 _savepoint_lock = threading.Lock()

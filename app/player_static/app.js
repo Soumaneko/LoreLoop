@@ -38,6 +38,7 @@ const els = {
   drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"), openLeftDrawerBtn: $("openLeftDrawerBtn"), closeLeftDrawerBtn: $("closeLeftDrawerBtn"),
   recordsDrawer: $("recordsDrawer"), openRecordsDrawerBtn: $("openRecordsDrawerBtn"), closeRecordsDrawerBtn: $("closeRecordsDrawerBtn"),
   refreshRecordsBtn: $("refreshRecordsBtn"), recordsRefreshState: $("recordsRefreshState"),
+  recordsViewGeneralBtn: $("recordsViewGeneralBtn"), recordsViewAdvancedBtn: $("recordsViewAdvancedBtn"),
   recordsContinuityList: $("recordsContinuityList"), recordsNpcList: $("recordsNpcList"), recordsSettingList: $("recordsSettingList"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), sceneSummary: $("sceneSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
@@ -1316,8 +1317,92 @@ window.addEventListener("resize", () => {
   }
 });
 
+function presentCodexDialog(triggerElement) {
+  if (triggerElement && window.innerWidth >= 640) {
+    els.codexDialog.classList.add("is-floating");
+    if (!els.codexDialog.open) els.codexDialog.show();
+    positionCodexPopover(triggerElement);
+  } else {
+    els.codexDialog.classList.remove("is-floating");
+    els.codexDialog.style.position = "";
+    els.codexDialog.style.top = "";
+    els.codexDialog.style.left = "";
+    els.codexDialog.style.margin = "";
+    els.codexDialog.style.width = "";
+    if (!els.codexDialog.open) els.codexDialog.showModal();
+  }
+
+  window.setTimeout(() => {
+    document.addEventListener("pointerdown", handleCodexOutsideClick);
+    document.addEventListener("keydown", handleCodexKeydown);
+  }, 0);
+}
+
+const SETTING_KIND_LABELS = {
+  faction: "势力",
+  location: "地点",
+  item: "物品",
+  lore: "知识",
+};
+
+function openSettingCodex(profile, triggerElement) {
+  if (!profile) return;
+  if (els.codexDialog && els.codexDialog.open && (activeCodexProfile === profile || (triggerElement && activeCodexTrigger === triggerElement))) {
+    closeCodexProfile();
+    return;
+  }
+
+  activeCodexProfile = profile;
+  activeCodexTrigger = triggerElement || null;
+
+  els.codexDialog.classList.remove("is-expanded");
+  els.codexTitle.textContent = profile.name || "典籍条目";
+  els.codexContent.replaceChildren();
+
+  const typeBadge = node("span", "codex-kind-tag", "世界设定");
+  const kindLabel = SETTING_KIND_LABELS[profile.setting_kind] || profile.setting_kind || "";
+  const subHeader = node("div", "codex-sub-header");
+  if (kindLabel) subHeader.appendChild(node("span", "codex-sub-text", kindLabel));
+  subHeader.appendChild(typeBadge);
+  els.codexContent.appendChild(subHeader);
+
+  if (profile.summary) {
+    els.codexContent.appendChild(node("div", "codex-quote-box", `“${profile.summary}”`));
+  }
+
+  if (profile.public_facts?.length) {
+    const factsPanel = node("div", "codex-details-panel");
+    factsPanel.hidden = true;
+    const facts = node("section", "codex-field");
+    facts.append(node("span", "resource-label", "公开记载"));
+    const factList = node("ul", "codex-fact-list");
+    profile.public_facts.forEach((fact) => factList.appendChild(node("li", "", fact)));
+    facts.appendChild(factList);
+    factsPanel.appendChild(facts);
+    els.codexContent.appendChild(factsPanel);
+    const toggleBtn = node("button", "codex-toggle-more", "▸ 展开公开记载");
+    toggleBtn.onclick = () => {
+      const isExpanding = factsPanel.hidden;
+      factsPanel.hidden = !isExpanding;
+      toggleBtn.textContent = isExpanding ? "▾ 收起记载" : "▸ 展开公开记载";
+      els.codexDialog.classList.toggle("is-expanded", isExpanding);
+      window.requestAnimationFrame(() => positionCodexPopover(triggerElement));
+    };
+    const footerAction = node("div", "codex-footer-action");
+    footerAction.appendChild(toggleBtn);
+    els.codexContent.appendChild(footerAction);
+  }
+
+  presentCodexDialog(triggerElement);
+}
+
 function openCodexProfile(profile, triggerElement) {
   if (!profile) return;
+
+  if (profile.kind === "setting") {
+    openSettingCodex(profile, triggerElement);
+    return;
+  }
 
   if (els.codexDialog && els.codexDialog.open && (activeCodexProfile === profile || (triggerElement && activeCodexTrigger === triggerElement))) {
     closeCodexProfile();
@@ -1397,24 +1482,7 @@ function openCodexProfile(profile, triggerElement) {
     els.codexContent.appendChild(footerAction);
   }
 
-  if (triggerElement && window.innerWidth >= 640) {
-    els.codexDialog.classList.add("is-floating");
-    if (!els.codexDialog.open) els.codexDialog.show();
-    positionCodexPopover(triggerElement);
-  } else {
-    els.codexDialog.classList.remove("is-floating");
-    els.codexDialog.style.position = "";
-    els.codexDialog.style.top = "";
-    els.codexDialog.style.left = "";
-    els.codexDialog.style.margin = "";
-    els.codexDialog.style.width = "";
-    if (!els.codexDialog.open) els.codexDialog.showModal();
-  }
-
-  window.setTimeout(() => {
-    document.addEventListener("pointerdown", handleCodexOutsideClick);
-    document.addEventListener("keydown", handleCodexKeydown);
-  }, 0);
+  presentCodexDialog(triggerElement);
 }
 
 function renderDrawer() {
@@ -2086,6 +2154,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
 
 async function bootstrap() {
   initAutoExpandingTextareas();
+  restoreRecordsViewPreference();
   await readerPreferences.load();
   const modelConfig = await request("/api/player/model-config");
   state.modelConfig = modelConfig;
@@ -3137,16 +3206,13 @@ const NPC_PUBLIC_FIELDS = [
   ["current_intent", "当前意图", false],
 ];
 
-const NPC_DIRECTOR_FIELDS = [
+const NPC_ADVANCED_DIRECTOR_FIELDS = [
   ["core_motivation", "核心动机", false],
   ["hidden_secret", "隐藏秘密", false],
   ["conflict_style", "冲突风格", false],
   ["social_style", "社交风格", false],
   ["encounter_potentials", "相遇潜能", true],
   ["director_notes", "导演备注", false],
-  ["source_director_npc_id", "来源导演NPC", false],
-  ["created_turn", "创建回合", false],
-  ["introduced_turn", "登场回合", false],
 ];
 
 const SETTING_FIELDS = [
@@ -3155,8 +3221,51 @@ const SETTING_FIELDS = [
   ["summary", "摘要", false, "textarea"],
   ["public_facts", "公开事实", true, "textarea"],
   ["hidden_facts", "导演事实", true, "textarea"],
-  ["related_setting_ids", "关联 Setting ID", true],
 ];
+
+const RECORDS_VIEW_STORAGE_KEY = "loreloop:records-view";
+
+function restoreRecordsViewPreference() {
+  let view = "general";
+  try {
+    const stored = window.localStorage.getItem(RECORDS_VIEW_STORAGE_KEY);
+    if (stored === "advanced" || stored === "general") view = stored;
+  } catch (_error) {
+    // Fall back to the default general view.
+  }
+  state.recordsView = view;
+  renderRecordsViewToggle();
+}
+
+function renderRecordsViewToggle() {
+  if (!els.recordsViewGeneralBtn || !els.recordsViewAdvancedBtn) return;
+  const active = state.recordsView === "advanced";
+  els.recordsViewGeneralBtn.classList.toggle("is-active", !active);
+  els.recordsViewAdvancedBtn.classList.toggle("is-active", active);
+}
+
+async function setRecordsView(view) {
+  if (!els.recordsDrawer || view === state.recordsView) return;
+  if (recordsDirty || recomputeRecordsDirty()) {
+    const proceed = await showConfirmModal({
+      title: "切换档案视图",
+      message: "当前有未保存的修改，切换视图会丢弃它们。确定继续吗？",
+      eyebrow: "RECORDS VIEW",
+      confirmText: "继续切换",
+      cancelText: "取消",
+    });
+    if (!proceed) return;
+    recordsDirty = false;
+  }
+  state.recordsView = view;
+  try {
+    window.localStorage.setItem(RECORDS_VIEW_STORAGE_KEY, view);
+  } catch (_error) {
+    // Preference is per-session only when storage is unavailable.
+  }
+  renderRecordsViewToggle();
+  refreshRecords({ force: true });
+}
 
 function setRecordsRefreshState(text) {
   els.recordsRefreshState.textContent = text || "";
@@ -3191,6 +3300,9 @@ function startRecordsPoll() {
 }
 
 let recordsRefreshInFlight = false;
+let recordsRefreshGeneration = 0;
+let recordsRefreshPending = false;
+let recordsRefreshPendingForce = false;
 let recordsDirty = false;
 function recomputeRecordsDirty() {
   for (const list of [els.recordsContinuityList, els.recordsNpcList, els.recordsSettingList]) {
@@ -3212,10 +3324,21 @@ function recomputeRecordsDirty() {
 }
 async function refreshRecords({ force = false } = {}) {
   if (!els.recordsDrawer?.classList.contains("open")) return;
-  if (recordsRefreshInFlight) return;
+  const generation = ++recordsRefreshGeneration;
+  if (recordsRefreshInFlight) {
+    recordsRefreshPending = true;
+    recordsRefreshPendingForce = recordsRefreshPendingForce || force;
+    return;
+  }
   recordsRefreshInFlight = true;
+  const viewAtRequest = state.recordsView;
   try {
-    const records = await loadRecords();
+    const records = await loadRecords(viewAtRequest);
+    if (generation !== recordsRefreshGeneration) {
+      recordsRefreshPending = true;
+      recordsRefreshPendingForce = recordsRefreshPendingForce || force;
+      return;
+    }
     state.records = records;
     if (force || !recordsDirty) {
       renderRecords(records);
@@ -3228,10 +3351,21 @@ async function refreshRecords({ force = false } = {}) {
       stopRecordsPoll();
     }
   } catch (error) {
+    if (generation !== recordsRefreshGeneration) {
+      recordsRefreshPending = true;
+      recordsRefreshPendingForce = recordsRefreshPendingForce || force;
+      return;
+    }
     setRecordsRefreshState("读取失败");
     reportClientError(error, "records_load_failed");
   } finally {
     recordsRefreshInFlight = false;
+    if (recordsRefreshPending) {
+      const pendingForce = recordsRefreshPendingForce;
+      recordsRefreshPending = false;
+      recordsRefreshPendingForce = false;
+      refreshRecords({ force: pendingForce });
+    }
   }
 }
 
@@ -3331,6 +3465,23 @@ function renderContinuityRecords(items) {
   }
 }
 
+function _fieldMetaByKey(lists) {
+  const meta = new Map();
+  for (const fields of lists) {
+    for (const entry of fields) meta.set(entry[0], entry);
+  }
+  return meta;
+}
+
+const NPC_FIELD_META = _fieldMetaByKey([NPC_PUBLIC_FIELDS, NPC_ADVANCED_DIRECTOR_FIELDS]);
+const SETTING_FIELD_META = _fieldMetaByKey([SETTING_FIELDS]);
+
+function _editableFieldsFor(data, meta) {
+  return Object.keys(data)
+    .map((key) => meta.get(key))
+    .filter(Boolean);
+}
+
 function renderNpcRecords(profiles) {
   els.recordsNpcList.replaceChildren();
   if (!profiles.length) {
@@ -3338,19 +3489,18 @@ function renderNpcRecords(profiles) {
     return;
   }
   for (const profile of profiles) {
+    const data = { ...(profile.public || {}), ...(profile.director_only || {}) };
     const builder = buildRecordCard({
       title: profile.public?.name || "（未命名）",
       statusText: "人物",
-      editableFields: NPC_PUBLIC_FIELDS,
-      readonlyFields: NPC_DIRECTOR_FIELDS,
+      editableFields: _editableFieldsFor(data, NPC_FIELD_META),
       onSave: async (values) => {
-        await updateRecord("npc", profile.id, values);
+        await updateRecord("npc", profile.id, values, state.recordsView);
         showToast("人物档案已更新");
       },
     });
-    builder.populate({ ...profile.public, ...profile.director_only });
+    builder.populate(data);
     builder.editableFields.forEach(builder.appendEditable.bind(builder));
-    builder.readonlyFields.forEach(builder.appendReadonly.bind(builder));
     appendSaveActions(builder);
     els.recordsNpcList.appendChild(builder.card);
   }
@@ -3363,16 +3513,17 @@ function renderSettingRecords(settings) {
     return;
   }
   for (const setting of settings) {
+    const data = setting.fields || {};
     const builder = buildRecordCard({
-      title: setting.fields?.name || "（未命名）",
-      statusText: setting.fields?.kind || "Setting",
-      editableFields: SETTING_FIELDS,
+      title: data.name || "（未命名）",
+      statusText: data.kind || "Setting",
+      editableFields: _editableFieldsFor(data, SETTING_FIELD_META),
       onSave: async (values) => {
-        await updateRecord("setting", setting.id, values);
+        await updateRecord("setting", setting.id, values, state.recordsView);
         showToast("世界设定已更新");
       },
     });
-    builder.populate(setting.fields || {});
+    builder.populate(data);
     builder.editableFields.forEach(builder.appendEditable.bind(builder));
     appendSaveActions(builder);
     els.recordsSettingList.appendChild(builder.card);
@@ -3471,6 +3622,8 @@ if (els.closeLeftDrawerBtn) els.closeLeftDrawerBtn.onclick = closeLeftDrawer;
 if (els.openRecordsDrawerBtn) els.openRecordsDrawerBtn.onclick = openRecordsDrawer;
 if (els.closeRecordsDrawerBtn) els.closeRecordsDrawerBtn.onclick = closeRecordsDrawer;
 if (els.refreshRecordsBtn) els.refreshRecordsBtn.onclick = () => refreshRecords({ force: true });
+if (els.recordsViewGeneralBtn) els.recordsViewGeneralBtn.onclick = () => setRecordsView("general");
+if (els.recordsViewAdvancedBtn) els.recordsViewAdvancedBtn.onclick = () => setRecordsView("advanced");
 els.drawerBackdrop.onclick = () => { closeDrawer(); closeLeftDrawer(); closeRecordsDrawer(); };
 els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
 els.newSaveBtn.onclick = () => { els.saveNameInput.value = ""; els.saveDialog.showModal(); window.setTimeout(() => els.saveNameInput.focus(), 0); };

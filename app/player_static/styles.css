@@ -1518,6 +1518,8 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .codex-content { display: grid; gap: 6px; max-height: min(68vh, 520px); overflow-y: auto; padding-right: 2px; }
 .codex-field { padding-top: 8px; border-top: 1px solid var(--line); }
 .codex-field p { margin: 4px 0 0; color: var(--muted); font-family: var(--serif); font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+.codex-fact-list { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-family: var(--serif); font-size: 13px; line-height: 1.65; }
+.codex-fact-list li { margin: 2px 0; }
 
 /* Codex Inventory & Asset Grid */
 .resource-list { display: grid; gap: 14px; color: var(--muted); font-size: 13px; }
@@ -2032,6 +2034,31 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .records-toolbar .soft-button {
   padding: 6px 14px;
   font-size: 12px;
+}
+.records-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.records-view-toggle button {
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+.records-view-toggle button:hover:not(.is-active) {
+  color: var(--text);
+}
+.records-view-toggle button.is-active {
+  color: var(--text);
+  background: var(--accent);
 }
 .records-refresh-state {
   font-size: 11px;

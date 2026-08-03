@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from app.core.diagnostics import NullDiagnosticLogger
+from app.core.text import eligible_highlight_term
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.continuity import ContinuityProjector
@@ -342,6 +343,36 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     return {
         "updated_npc_profile_ids": updated_npc_profile_ids,
         "new_npc_profiles": new_npc_profiles,
+    }
+
+
+def setting_appearance_update_node(state: ConfirmationState) -> ConfirmationState:
+    """Count once how many world settings appear in the confirmed scene text.
+
+    Mirrors npc_profile_update_node: writes directly to the store, keeps its
+    result in the write-scoped confirmation cache so re-entry never double
+    counts, and rolls back with the confirmation as a whole on failure.
+    """
+    if not state.get("write_db", True):
+        return {"recorded_setting_ids": []}
+    cache = state["cache"]
+    recorded = cache.get("recorded_setting_ids")
+    if recorded is not None:
+        return {"recorded_setting_ids": recorded}
+    folded_text = state["effective_scene_text"].casefold()
+    recorded_ids: list[str] = []
+    if folded_text:
+        with _store_factory(state, "world_setting")() as setting_store:
+            for setting in setting_store.list_all():
+                if eligible_highlight_term(setting.name) and setting.name.casefold() in folded_text:
+                    if setting_store.record_mention(setting.setting_id):
+                        recorded_ids.append(setting.setting_id)
+    return {
+        "recorded_setting_ids": recorded_ids,
+        "events": [{
+            "step": "setting_appearances_recorded",
+            "data": {"count": len(recorded_ids)},
+        }],
     }
 
 
