@@ -462,7 +462,10 @@ def _is_allowed_relative_path(value: str) -> bool:
     if len(path.parts) == 1:
         return path.name in _ROOT_FILES
     if path.parts[0] == ".runtime":
-        return path.parts == (".runtime", "turn_history.db")
+        return path.parts in {
+            (".runtime", "turn_history.db"),
+            (".runtime", "director_mutation.json"),
+        }
     if path.parts[0] == ".snapshots" and len(path.parts) == 3:
         return path.name in (_ROOT_FILES - {"save_manifest.json"}) | {"manifest.json"}
     return False

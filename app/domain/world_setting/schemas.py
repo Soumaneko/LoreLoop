@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 SettingKind = Literal["faction", "location", "item", "lore"]
-SettingFact = Annotated[str, Field(min_length=1, max_length=50)]
+SettingFact = Annotated[str, Field(min_length=1, max_length=100)]
 SettingID = Annotated[str, Field(min_length=1, max_length=100)]
 
 
@@ -26,9 +26,9 @@ class SettingCreateOutput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str = Field(min_length=1, max_length=10)
-    summary: str = Field(min_length=1, max_length=50)
-    public_facts: list[SettingFact] = Field(default_factory=list, max_length=12)
-    hidden_facts: list[SettingFact] = Field(default_factory=list, max_length=12)
+    summary: str = Field(min_length=1, max_length=100)
+    public_facts: list[SettingFact] = Field(default_factory=list, max_length=5)
+    hidden_facts: list[SettingFact] = Field(default_factory=list, max_length=3)
 
     @field_validator("public_facts", "hidden_facts")
     @classmethod
@@ -56,9 +56,9 @@ class WorldSetting(BaseModel):
     setting_id: SettingID = Field(default_factory=_new_setting_id)
     kind: SettingKind
     name: str = Field(min_length=1, max_length=10)
-    summary: str = Field(min_length=1, max_length=50)
-    public_facts: list[SettingFact] = Field(default_factory=list, max_length=12)
-    hidden_facts: list[SettingFact] = Field(default_factory=list, max_length=12)
+    summary: str = Field(min_length=1, max_length=100)
+    public_facts: list[SettingFact] = Field(default_factory=list, max_length=5)
+    hidden_facts: list[SettingFact] = Field(default_factory=list, max_length=3)
     related_setting_ids: list[SettingID] = Field(default_factory=list, max_length=6)
     created_turn: int = Field(ge=0)
     created_at: str = Field(default_factory=utc_now)
@@ -97,7 +97,17 @@ class WorldSetting(BaseModel):
                 "kind",
                 "name",
                 "summary",
-                "related_setting_ids",
+            },
+        )
+
+    def dedup_view(self) -> dict:
+        """Name-level identity used by the Setting creator for deduplication."""
+        return self.model_dump(
+            mode="json",
+            include={
+                "kind",
+                "name",
+                "summary",
             },
         )
 

@@ -7,9 +7,7 @@ from app.runtime.graph_cache import get_cached_graph
 
 from app.runtime.session import get_campaign_runtime
 
-from .maintenance_helpers import (
-    prepare_scene_summary_state,
-)
+from .maintenance_helpers import prepare_scene_summary_state
 from .maintenance_nodes import scene_summary_condense_node
 from .maintenance_state import SceneSummaryMaintenanceState
 

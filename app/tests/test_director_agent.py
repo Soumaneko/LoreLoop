@@ -1,4 +1,5 @@
 import json
+import threading
 from types import SimpleNamespace
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -28,6 +29,10 @@ from app.graph.director_agent import (
 )
 from app.runtime.paths import CampaignPaths
 from app.runtime.stores import StoreBundle
+
+
+def _decision_batch(**kwargs) -> DirectorDecisionBatch:
+    return DirectorDecisionBatch(**kwargs)
 
 
 class _PresentEventArguments(BaseModel):
@@ -102,6 +107,49 @@ def test_skill_service_rejects_mutating_generation_skill():
         )
 
 
+def test_skill_service_executes_wave_b_concurrently_and_preserves_order():
+    service = DirectorSkillService()
+    barrier = threading.Barrier(2)
+    worker_ids: set[int] = set()
+
+    def handle(arguments, guidance=None):
+        worker_ids.add(threading.get_ident())
+        barrier.wait(timeout=2)
+        return {"name": arguments.name}
+
+    service.register(
+        name="create_npc",
+        description="创建人物。",
+        phases={"confirmation"},
+        mutates=True,
+        arguments_model=_CreateNPCArguments,
+        handler=handle,
+    )
+    batch = _decision_batch(
+        reasoning="两个无冲突人物可以同时创建。",
+        requests=[
+            DirectorSkillRequest(
+                request_id=f"npc_{index}",
+                skill="create_npc",
+                arguments={"name": name},
+                guidance="创建独立人物。",
+            )
+            for index, name in enumerate(["甲", "乙"], start=1)
+        ],
+    )
+
+    result = service.execute_batch(
+        batch,
+        phase="confirmation",
+        max_workers=2,
+    )
+
+    assert len(worker_ids) == 2
+    assert [execution.output["name"] for execution in result.executions] == [
+        "甲", "乙"
+    ]
+
+
 def test_generation_skill_requires_request_guidance():
     service = DirectorSkillService()
     service.register(
@@ -112,7 +160,7 @@ def test_generation_skill_requires_request_guidance():
         arguments_model=_PresentEventArguments,
         handler=lambda arguments, guidance=None: None,
     )
-    batch = DirectorDecisionBatch(
+    batch = _decision_batch(
         reasoning="需要呈现事件。",
         requests=[
             DirectorSkillRequest(
@@ -126,7 +174,7 @@ def test_generation_skill_requires_request_guidance():
 
     with pytest.raises(
         ValueError,
-        match="generation director skills require guidance",
+        match="director skills require guidance",
     ):
         service.validate_batch(batch, phase="generation")
 
@@ -161,7 +209,7 @@ def test_skill_service_validates_arguments_and_executes_in_request_order():
         arguments_model=_PresentEventArguments,
         handler=handle,
     )
-    batch = DirectorDecisionBatch(
+    batch = _decision_batch(
         reasoning="两个事件都与本轮行动直接相关。",
         requests=[
             DirectorSkillRequest(
@@ -187,7 +235,7 @@ def test_skill_service_validates_arguments_and_executes_in_request_order():
         for execution in result.executions
     ] == ["event_a", "event_b"]
 
-    invalid_batch = DirectorDecisionBatch(
+    invalid_batch = _decision_batch(
         reasoning="参数错误。",
         requests=[
                 DirectorSkillRequest(
@@ -218,7 +266,7 @@ def test_skill_service_rejects_duplicate_requests_and_invalid_resources():
         handler=lambda arguments, guidance=None: None,
         arguments_validator=validate_event,
     )
-    duplicate = DirectorDecisionBatch(
+    duplicate = _decision_batch(
         reasoning="错误地重复请求。",
         requests=[
             DirectorSkillRequest(
@@ -239,7 +287,7 @@ def test_skill_service_rejects_duplicate_requests_and_invalid_resources():
     with pytest.raises(ValueError, match="duplicate director skill request"):
         service.validate_batch(duplicate, phase="generation")
 
-    unknown = DirectorDecisionBatch(
+    unknown = _decision_batch(
         reasoning="引用了不存在的资源。",
         requests=[
             DirectorSkillRequest(
@@ -264,7 +312,7 @@ def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
         arguments_model=_CreateEventArguments,
         handler=lambda arguments, guidance=None: {"title": arguments.title},
     )
-    distinct = DirectorDecisionBatch(
+    distinct = _decision_batch(
         reasoning="两次同参数但方向不同的创建。",
         requests=[
             DirectorSkillRequest(
@@ -290,7 +338,7 @@ def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
         "城中旧案出现新的线索。",
     ]
 
-    duplicated = DirectorDecisionBatch(
+    duplicated = _decision_batch(
         reasoning="同技能同参数且 guidance 相同，视为重复。",
         requests=[
             DirectorSkillRequest(
@@ -311,8 +359,121 @@ def test_skill_service_treats_guidance_as_part_of_request_uniqueness():
         service.validate_batch(duplicated, phase="confirmation")
 
 
+def test_structured_guidance_forwards_name_purpose_and_discards_description():
+    from app.domain.director import DirectorGuidance
+
+    service = DirectorSkillService()
+    service.register(
+        name="create_npc",
+        description="创建新的导演 NPC。",
+        phases={"confirmation"},
+        mutates=True,
+        arguments_model=_CreateNPCArguments,
+        handler=lambda arguments, guidance=None: {"name": arguments.name},
+    )
+    batch = _decision_batch(
+        reasoning="用结构化指导创建一个 NPC。",
+        requests=[
+            DirectorSkillRequest(
+                request_id="npc_1",
+                skill="create_npc",
+                arguments={"name": "林澈"},
+                guidance=DirectorGuidance(
+                    name="林澈",
+                    purpose="社区常驻的可靠医生。",
+                    description="这是一行以内的背景蜜罐。",
+                ),
+            ),
+        ],
+    )
+
+    executed = service.execute_batch(batch, phase="confirmation")
+
+    assert executed.executions[0].guidance == "林澈: 社区常驻的可靠医生。"
+    assert "蜜罐" not in executed.executions[0].guidance
+
+
+def test_structured_guidance_dedup_ignores_description_honeypot():
+    from app.domain.director import DirectorGuidance
+
+    service = DirectorSkillService()
+    service.register(
+        name="create_npc",
+        description="创建新的导演 NPC。",
+        phases={"confirmation"},
+        mutates=True,
+        arguments_model=_CreateNPCArguments,
+        handler=lambda arguments, guidance=None: {"name": arguments.name},
+    )
+    duplicate = _decision_batch(
+        reasoning="两个请求 name/purpose 相同、仅 description 不同，应视为重复。",
+        requests=[
+            DirectorSkillRequest(
+                request_id="npc_1",
+                skill="create_npc",
+                arguments={"name": "林澈"},
+                guidance=DirectorGuidance(
+                    name="林澈",
+                    purpose="社区常驻的可靠医生。",
+                    description="第一版背景蜜罐。",
+                ),
+            ),
+            DirectorSkillRequest(
+                request_id="npc_2",
+                skill="create_npc",
+                arguments={"name": "林澈"},
+                guidance=DirectorGuidance(
+                    name="林澈",
+                    purpose="社区常驻的可靠医生。",
+                    description="第二版背景蜜罐，不影响执行。",
+                ),
+            ),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="duplicate director skill request"):
+        service.validate_batch(duplicate, phase="confirmation")
+
+
+def test_event_guidance_accepts_free_text():
+    service = DirectorSkillService()
+    service.register(
+        name="create_event",
+        description="创建新的导演事件。",
+        phases={"confirmation"},
+        mutates=True,
+        arguments_model=_CreateEventArguments,
+        handler=lambda arguments, guidance=None: {"title": arguments.title},
+    )
+    batch = _decision_batch(
+        reasoning="用自由文本方向创建事件。",
+        requests=[
+            DirectorSkillRequest(
+                request_id="event_1",
+                skill="create_event",
+                arguments={"title": "码头暗涌"},
+                guidance="围绕货运垄断在码头酝酿一场幕后冲突。",
+            ),
+        ],
+    )
+
+    executed = service.execute_batch(batch, phase="confirmation")
+
+    assert executed.executions[0].guidance == (
+        "围绕货运垄断在码头酝酿一场幕后冲突。"
+    )
+
+
 def test_director_agent_returns_empty_batch_without_available_skills():
     mock = MockLLM()
+    mock.set_responses([
+        """
+        {
+          "reasoning": "当前阶段没有可用的导演技能。",
+          "requests": []
+        }
+        """
+    ])
     agent = DirectorAgent(mock.build_gateway(), DirectorSkillService())
 
     result = agent.decide_generation(_observation())
@@ -412,12 +573,13 @@ def test_director_decide_prompts_are_phase_separated():
     generation_prompt, _ = PromptLoader().load("director_agent_decide_generation")
     confirmation_prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
-    assert "生成阶段只能提出非持久化的舞台调度" in generation_prompt
+    assert "生成阶段每个技能请求都必须填写非空 `guidance`" in generation_prompt
     assert "`view_mode`" in generation_prompt
     assert "create_event" not in generation_prompt
 
-    assert "主动造物的导演特权" in confirmation_prompt
+    assert "世界设定的绝对依赖性" in confirmation_prompt
     assert "`create_event`" in confirmation_prompt
+    assert "`setting_requirements`" in confirmation_prompt
     assert "`view_mode`" not in confirmation_prompt
 
 
@@ -449,7 +611,8 @@ class _PhaseGateway:
             "director_agent_decide_generation",
             "director_agent_decide_confirmation",
         }:
-            payload = self.decision
+            payload = dict(self.decision)
+            payload.setdefault("requests", [])
         elif task.startswith("director_event_select_") and (
             self.event_selection_output is not None
         ):
@@ -463,7 +626,11 @@ class _PhaseGateway:
         elif task == "npc_profile_backfill" and self.backfill_output is not None:
             payload = self.backfill_output
         elif task == "director_setting_create" and self.setting_output is not None:
-            payload = self.setting_output
+            payload = (
+                self.setting_output(kwargs.get("input_data") or {})
+                if callable(self.setting_output)
+                else self.setting_output
+            )
         else:
             raise AssertionError(f"unexpected Director integration task: {task}")
         result = kwargs["output_schema"].model_validate(payload)
@@ -778,11 +945,11 @@ def test_generation_agent_receives_projected_turn_resolution(tmp_path):
     assert "action_resolutions" in observation["turn_resolution"]
 
 
-def test_confirmation_agent_can_create_npc_without_setting(tmp_path):
+def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     gateway = _PhaseGateway(
         decision={
-            "reasoning": "需要准备一个长期社区人物。",
+            "reasoning": "错误地在没有任何 Setting 依托的情况下创建人物。",
             "requests": [
                 {
                     "request_id": "create_1",
@@ -808,26 +975,23 @@ def test_confirmation_agent_can_create_npc_without_setting(tmp_path):
         },
     )
 
-    decision, executions = run_confirmation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=_current_state(),
-        user_input="询问昨夜发生的事。",
-        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
-        recent_summaries=[],
-        selection_summaries=[],
-        npc_profiles=[],
-        turn_index=3,
-        trace_id="confirmation-director",
-    )
+    with pytest.raises(ValidationError, match="setting_requirements"):
+        run_confirmation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="询问昨夜发生的事。",
+            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+            recent_summaries=[],
+            selection_summaries=[],
+            npc_profiles=[],
+            turn_index=3,
+            trace_id="confirmation-director",
+        )
 
-    assert decision.requests[0].skill == "create_npc"
-    assert executions.executions[0].output["name"] == "林澈"
-    assert gateway.tasks == ["director_agent_decide_confirmation", "director_npc_create"]
     with stores.director_npc() as store:
-        [saved] = store.list_prepared()
-    assert saved.source_setting_ids == []
+        assert store.list_prepared() == []
     with stores.world_setting() as store:
         assert store.list_all() == []
 
@@ -858,7 +1022,13 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
             "requests": [{
                 "request_id": "npc_1",
                 "skill": "create_npc",
-                "arguments": {"setting_ids": [setting.setting_id]},
+                "arguments": {
+                    "setting_requirements": [{
+                        "kind": "location",
+                        "setting_description": "人物以本地航运为生。",
+                        "matched_setting_id": setting.setting_id,
+                    }],
+                },
                 "guidance": "创建一名以本地航运为生的人物。",
             }],
         },
@@ -922,7 +1092,6 @@ def test_director_skill_specs_cover_every_registered_skill():
         "foreshadow_setting",
         "create_npc",
         "create_event",
-        "create_setting",
         "bind_event_actor",
         "enrich_npc",
     }
@@ -938,6 +1107,7 @@ def test_director_skill_specs_cover_every_registered_skill():
             mutates=spec.mutates,
             arguments_model=spec.arguments_model,
             handler=lambda args, guidance=None: {},
+            max_requests_per_batch=spec.max_requests_per_batch,
         )
     assert {spec.name for spec in service.specs_for_phase("generation")} == {
         "present_event",
@@ -947,7 +1117,6 @@ def test_director_skill_specs_cover_every_registered_skill():
     assert {spec.name for spec in service.specs_for_phase("confirmation")} == {
         "create_npc",
         "create_event",
-        "create_setting",
         "bind_event_actor",
         "enrich_npc",
     }
@@ -958,28 +1127,304 @@ def test_director_skill_specs_cover_every_registered_skill():
             assert spec.mutates is True
 
 
-def test_confirmation_agent_creates_static_setting_through_specialized_creator(
-    tmp_path,
-):
+def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
+    from app.graph.director_skill_specs import CreateEventArguments
+
+    validated = CreateEventArguments.model_validate({
+        "role": "arc",
+        "setting_requirements": [
+            {
+                "kind": "location",
+                "setting_description": "需要一个山道驿站。",
+                "matched_setting_id": "setting_known",
+            },
+        ],
+    })
+    assert [item.kind for item in validated.setting_requirements] == ["location"]
+    assert validated.setting_requirements[0].matched_setting_id == "setting_known"
+
+    with pytest.raises(ValidationError, match="at most 1 item"):
+        CreateEventArguments.model_validate({
+            "role": "arc",
+            "setting_requirements": [
+                {"kind": "lore", "guidance": "规则一。"},
+                {"kind": "item", "guidance": "规则二。"},
+            ],
+        })
+
+    with pytest.raises(ValidationError):
+        CreateEventArguments.model_validate({
+            "role": "arc",
+            "setting_requirements": [
+                {"kind": "lore", "guidance": f"抽象规则 {index}"}
+                for index in range(5)
+            ],
+        })
+
+
+def test_confirmation_agent_creates_missing_setting_then_event_in_same_turn(tmp_path):
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     gateway = _PhaseGateway(
         decision={
-            "reasoning": "世界需要一个能长期影响货运的组织。",
+            "reasoning": "事件需要一块尚未存在的生态土壤。",
             "requests": [{
-                "request_id": "setting_1",
-                "skill": "create_setting",
+                "request_id": "event_1",
+                "skill": "create_event",
                 "arguments": {
-                    "kind": "faction",
-                    "purpose": "调查主角近期活动留下的痕迹。",
+                    "role": "arc",
+                    "setting_requirements": [
+                        {
+                            "kind": "faction",
+                            "setting_description": "需要一个能长期控制货运的北境势力。",
+                        },
+                    ],
                 },
-                "guidance": "建立可长期复用的背景势力。",
+                "guidance": "扩展北境货运生态。",
             }],
         },
         setting_output={
-            "name": "巡潮司",
-            "summary": "控制沿河航运并暗中收集各地异动的官署。",
-            "public_facts": ["在主要港口设有验货所"],
-            "hidden_facts": ["密探会收购异常活动记录"],
+            "name": "北陆商盟",
+            "summary": "控制北境货运节点并协调沿途商队的松散联盟。",
+            "public_facts": ["联盟在主要驿站设有货栈。"],
+            "hidden_facts": ["部分执事私下垄断紧缺货物。"],
+        },
+        event_selection_output=_event_selection_output(),
+    )
+
+    _, executions = run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        npc_profiles=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    assert executions.executions[0].output["event_id"].startswith("director_event_")
+    assert gateway.tasks == [
+        "director_agent_decide_confirmation",
+        "director_setting_create",
+        "director_event_select_arc",
+    ]
+    with stores.world_setting() as store:
+        [setting] = store.list_all()
+    assert setting.name == "北陆商盟"
+    with stores.director_event() as store:
+        [event] = store.list_all()
+    assert event.source_setting_ids == [setting.setting_id]
+
+
+def test_confirmation_agent_replaces_kind_mismatched_setting_before_execution(
+    tmp_path,
+):
+    from app.domain.world_setting import WorldSetting
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="盐雾港",
+        summary="依靠潮汐盐田与近海货运生存的港镇。",
+        public_facts=["港民熟悉潮汐航道"],
+        hidden_facts=["旧盐仓下有走私暗渠"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "把地点误声明成势力，应按声明类型补建。",
+            "requests": [{
+                "request_id": "event_1",
+                "skill": "create_event",
+                "arguments": {
+                    "role": "arc",
+                    "setting_requirements": [
+                        {
+                            "kind": "faction",
+                            "setting_description": "需要一个能承载事件的货运势力。",
+                            "matched_setting_id": setting.setting_id,
+                        },
+                    ],
+                },
+                "guidance": "扩展货运生态。",
+            }],
+        },
+        setting_output={
+            "name": "北陆商盟",
+            "summary": "控制北境货运节点并协调沿途商队的松散联盟。",
+            "public_facts": ["联盟在主要驿站设有货栈。"],
+            "hidden_facts": ["部分执事私下垄断紧缺货物。"],
+        },
+        event_selection_output=_event_selection_output(),
+    )
+
+    _, executions = run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        npc_profiles=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    assert executions.executions[0].output["event_id"].startswith("director_event_")
+    with stores.world_setting() as store:
+        settings = store.list_all()
+    assert {item.kind for item in settings} == {"location", "faction"}
+    created = next(item for item in settings if item.kind == "faction")
+    with stores.director_event() as store:
+        [event] = store.list_all()
+    assert event.source_setting_ids == [created.setting_id]
+
+
+def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
+    tmp_path,
+):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting_barrier = threading.Barrier(2)
+    setting_worker_ids: set[int] = set()
+
+    def setting_output(data):
+        setting_worker_ids.add(threading.get_ident())
+        setting_barrier.wait(timeout=2)
+        if data["kind"] == "faction":
+            return {
+                "name": "北陆商盟",
+                "summary": "控制北境货运节点并协调沿途商队的松散联盟。",
+                "public_facts": ["联盟在主要驿站设有货栈。"],
+                "hidden_facts": ["部分执事私下垄断紧缺货物。"],
+            }
+        return {
+            "name": "寒川驿",
+            "summary": "连接北境山道和河运的交通节点。",
+            "public_facts": ["商旅会在此更换车马。"],
+            "hidden_facts": ["地下仓道通往废弃河港。"],
+        }
+
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "两个技能各自缺少一个 Setting，补齐后都应执行。",
+            "requests": [
+                {
+                    "request_id": "npc_1",
+                    "skill": "create_npc",
+                    "arguments": {
+                        "setting_requirements": [{
+                            "kind": "faction",
+                            "setting_description": "agent 需要的北境势力。",
+                        }],
+                    },
+                    "guidance": "凭空补建北境势力。",
+                },
+                {
+                    "request_id": "event_1",
+                    "skill": "create_event",
+                    "arguments": {
+                        "role": "ambient",
+                        "setting_requirements": [{
+                            "kind": "location",
+                            "setting_description": "agent 需要的交通节点。",
+                        }],
+                        "actors": [],
+                    },
+                        "guidance": "建立独立环境事件。",
+                },
+            ],
+        },
+        setting_output=setting_output,
+        npc_output={
+            "creation_reason": "北境商路需要一个长期活动的人物。",
+            "name": "沈栖舟",
+            "role": "北境行商",
+            "appearance": "常穿防风皮袍。",
+            "personality_traits": ["谨慎", "务实"],
+            "known_abilities": ["估价"],
+            "faction": "北陆商盟",
+            "core_motivation": "守住商队赖以生存的货路。",
+            "hidden_secret": "私下追查一批失踪货物。",
+            "conflict_style": "先谈条件，再切断补给。",
+            "social_style": "言简意赅，重视信用。",
+            "encounter_potentials": ["货路求援", "账目争议", "失货调查"],
+        },
+        event_selection_output=_event_selection_output(),
+    )
+
+    _, executions = run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        npc_profiles=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    assert [execution.skill for execution in executions.executions] == [
+        "create_npc", "create_event"
+    ]
+    assert len(setting_worker_ids) == 2
+    assert executions.executions[0].output["name"] == "沈栖舟"
+    assert executions.executions[1].output["event_id"].startswith("director_event_")
+    with stores.world_setting() as store:
+        settings = store.list_all()
+    assert {setting.name for setting in settings} == {"北陆商盟", "寒川驿"}
+    with stores.director_npc() as store:
+        assert [npc.name for npc in store.list_all()] == ["沈栖舟"]
+    with stores.director_event() as store:
+        assert len(store.list_all()) == 1
+
+
+def test_confirmation_agent_replaces_unknown_setting_reference(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "引用了尚不存在的设定，应改为补建该设定。",
+            "requests": [{
+                "request_id": "npc_1",
+                "skill": "create_npc",
+                "arguments": {
+                    "setting_requirements": [{
+                        "kind": "faction",
+                        "setting_description": "需要一个尚未存在的北境势力。",
+                        "matched_setting_id": "setting_future",
+                    }],
+                },
+                "guidance": "人物依托一块尚未存在的土壤。",
+            }],
+        },
+        setting_output={
+            "name": "北陆商盟",
+            "summary": "控制北境货运节点并协调沿途商队的松散联盟。",
+            "public_facts": ["联盟在主要驿站设有货栈。"],
+            "hidden_facts": ["部分执事私下垄断紧缺货物。"],
+        },
+        npc_output={
+            "creation_reason": "北境商路需要一个长期活动的人物。",
+            "name": "沈栖舟",
+            "role": "北境行商",
+            "appearance": "常穿防风皮袍。",
+            "personality_traits": ["谨慎", "务实"],
+            "known_abilities": ["估价"],
+            "faction": "北陆商盟",
+            "core_motivation": "守住商队赖以生存的货路。",
+            "hidden_secret": "私下追查一批失踪货物。",
+            "conflict_style": "先谈条件，再切断补给。",
+            "social_style": "言简意赅，重视信用。",
+            "encounter_potentials": ["货路求援", "账目争议", "失货调查"],
         },
     )
 
@@ -997,63 +1442,31 @@ def test_confirmation_agent_creates_static_setting_through_specialized_creator(
         trace_id="confirmation-director",
     )
 
-    assert executions.executions[0].output["name"] == "巡潮司"
-    assert gateway.tasks == [
-        "director_agent_decide_confirmation",
-        "director_setting_create",
-    ]
-    creator_input = gateway.input_data[1]
-    assert creator_input["purpose"] == "调查主角近期活动留下的痕迹。"
-    assert "建立可长期复用" not in json.dumps(
-        creator_input,
-        ensure_ascii=False,
-    )
+    assert executions.executions[0].output["name"] == "沈栖舟"
     with stores.world_setting() as store:
         [setting] = store.list_all()
     assert setting.kind == "faction"
-    assert setting.hidden_facts == ["密探会收购异常活动记录"]
-
-
-def test_confirmation_batch_rejects_non_preexisting_setting_reference(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    gateway = _PhaseGateway(
-        decision={
-            "reasoning": "错误地串联本轮尚不存在的设定。",
-            "requests": [{
-                "request_id": "npc_1",
-                "skill": "create_npc",
-                "arguments": {"setting_ids": ["setting_future"]},
-                "guidance": "引用本轮稍后才会创建的资产。",
-            }],
-        },
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="setting IDs must exist before this Director turn",
-    ):
-        run_confirmation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=_current_state(),
-            user_input="询问昨夜发生的事。",
-            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
-            recent_summaries=[],
-            selection_summaries=[],
-            npc_profiles=[],
-            turn_index=3,
-            trace_id="confirmation-director",
-        )
-
     with stores.director_npc() as store:
-        assert store.list_all() == []
+        [npc] = store.list_all()
+    assert npc.source_setting_ids == [setting.setting_id]
 
 
 def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
     import json
 
+    from app.domain.world_setting import WorldSetting
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="醉花楼",
+        summary="城中最大的歌舞酒楼，也是大额生意往来的地点。",
+        public_facts=["二楼雅间常谈大宗买卖。"],
+        hidden_facts=["掌柜暗中把持着几条商路。"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
     new_profile = NPCProfile(
         name="二楼女子",
         role="生意谈判方",
@@ -1068,7 +1481,14 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
                 {
                     "request_id": "enrich_1",
                     "skill": "enrich_npc",
-                    "arguments": {"npc_id": new_id},
+                    "arguments": {
+                        "npc_id": new_id,
+                        "setting_requirements": [{
+                            "kind": "location",
+                            "setting_description": "她长期在醉花楼二楼雅间谈生意。",
+                            "matched_setting_id": setting.setting_id,
+                        }],
+                    },
                     "guidance": "补全谈判方的完整人设。",
                 }
             ],
@@ -1105,8 +1525,11 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
     assert decision.requests[0].skill == "enrich_npc"
     assert executions.executions[0].output["name"] == "苏锦屏"
     assert gateway.tasks == ["director_agent_decide_confirmation", "npc_profile_backfill"]
+    backfill_input = gateway.input_data[1]
+    assert setting.name in backfill_input["settings_json"]
+    assert "醉花楼" in backfill_input["settings_json"]
     creative_brief = json.loads(
-        gateway.input_data[1]["creative_brief_json"]
+        backfill_input["creative_brief_json"]
     )
     assert set(creative_brief) == {
         "world_connection",
@@ -1121,10 +1544,23 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
     assert saved.transient_aliases["二楼女子"] == 6
     assert saved.core_motivation == "建立一张足以保护自身生意的合作网络。"
     assert saved.hidden_secret == "她正在隐瞒真正货主的身份。"
+    assert saved.source_setting_ids == [setting.setting_id]
 
 
 def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="醉花楼",
+        summary="城中最大的歌舞酒楼，也是大额生意往来的地点。",
+        public_facts=["二楼雅间常谈大宗买卖。"],
+        hidden_facts=["掌柜暗中把持着几条商路。"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
     with stores.npc_profile() as npc_store:
         existing_id = npc_store.upsert(NPCProfile(name="陆远舟", role="镖师"))
         other_new_id = npc_store.upsert(NPCProfile(name="二楼女子", role="生意谈判方"))
@@ -1137,7 +1573,14 @@ def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
                 {
                     "request_id": "enrich_1",
                     "skill": "enrich_npc",
-                    "arguments": {"npc_id": existing_id},
+                    "arguments": {
+                        "npc_id": existing_id,
+                        "setting_requirements": [{
+                            "kind": "location",
+                            "setting_description": "错误地补全既有 NPC 的土壤。",
+                            "matched_setting_id": setting.setting_id,
+                        }],
+                    },
                     "guidance": "错误地补全既有 NPC。",
                 }
             ],
@@ -1189,7 +1632,7 @@ def test_skill_guidance_flows_through_to_execution_handler():
         arguments_model=_PresentEventArguments,
         handler=handle,
     )
-    batch = DirectorDecisionBatch(
+    batch = _decision_batch(
         reasoning="两个事件都与本轮行动直接相关。",
         requests=[
             DirectorSkillRequest(
@@ -1221,7 +1664,19 @@ def test_skill_guidance_flows_through_to_execution_handler():
 
 
 def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="醉花楼",
+        summary="城中最大的歌舞酒楼，也是大额生意往来的地点。",
+        public_facts=["二楼雅间常谈大宗买卖。"],
+        hidden_facts=["掌柜暗中把持着几条商路。"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
     with stores.npc_profile() as npc_store:
         new_id = npc_store.upsert(
             NPCProfile(
@@ -1240,7 +1695,14 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
                 {
                     "request_id": "enrich_1",
                     "skill": "enrich_npc",
-                    "arguments": {"npc_id": new_id},
+                    "arguments": {
+                        "npc_id": new_id,
+                        "setting_requirements": [{
+                            "kind": "location",
+                            "setting_description": "她长期在醉花楼二楼雅间谈生意。",
+                            "matched_setting_id": setting.setting_id,
+                        }],
+                    },
                     "guidance": "出身行商世家，隐瞒真实货主身份。",
                 }
             ],
@@ -1306,7 +1768,19 @@ def _event_selection_output(actor_roles: list[dict] | None = None) -> dict:
 
 
 def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="盐雾港",
+        summary="依靠潮汐盐田与近海货运生存的港镇。",
+        public_facts=["港民熟悉潮汐航道"],
+        hidden_facts=["旧盐仓下有走私暗渠"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
     gateway = _PhaseGateway(
         decision={
             "reasoning": "需要同时孕育一个事件与它的核心班底。",
@@ -1316,7 +1790,11 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
                     "skill": "create_event",
                     "arguments": {
                         "role": "arc",
-                        "event_guidance": "码头货运世家的旧账成为导火索。",
+                        "setting_requirements": [{
+                            "kind": "location",
+                            "setting_description": "事件依托该港镇的生态。",
+                            "matched_setting_id": setting.setting_id,
+                        }],
                         "actors": [
                             {"source": "new", "guidance": "码头把头，世代守着货路。"},
                             {"source": "new", "guidance": "账房先生，暗中替世家管账。"},
@@ -1411,11 +1889,23 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         for entry, task in zip(gateway.input_data, gateway.tasks)
         if task == "director_event_select_arc"
     ]
-    assert selector_input[0]["director_guidance"] == "码头货运世家的旧账成为导火索。"
+    assert selector_input[0]["director_guidance"] == "以码头货运世家为核心演员班底。"
 
 
 def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="盐雾港",
+        summary="依靠潮汐盐田与近海货运生存的港镇。",
+        public_facts=["港民熟悉潮汐航道"],
+        hidden_facts=["旧盐仓下有走私暗渠"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
     with stores.npc_profile() as npc_store:
         existing_id = npc_store.upsert(
             NPCProfile(
@@ -1433,7 +1923,11 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
                 "skill": "create_event",
                 "arguments": {
                     "role": "arc",
-                    "event_guidance": "围绕旧商路形成独立事件。",
+                    "setting_requirements": [{
+                        "kind": "location",
+                        "setting_description": "事件依托该港镇的生态。",
+                        "matched_setting_id": setting.setting_id,
+                    }],
                     "actors": [
                         {
                             "source": "existing",
@@ -1510,7 +2004,19 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
 
 
 def test_create_event_rejects_missing_required_actor_role(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="盐雾港",
+        summary="依靠潮汐盐田与近海货运生存的港镇。",
+        public_facts=["港民熟悉潮汐航道"],
+        hidden_facts=["旧盐仓下有走私暗渠"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
     gateway = _PhaseGateway(
         decision={
             "reasoning": "创建带新演员的事件。",
@@ -1519,6 +2025,11 @@ def test_create_event_rejects_missing_required_actor_role(tmp_path):
                 "skill": "create_event",
                 "arguments": {
                     "role": "ambient",
+                    "setting_requirements": [{
+                        "kind": "location",
+                        "setting_description": "事件依托该港镇的生态。",
+                        "matched_setting_id": setting.setting_id,
+                    }],
                     "actors": [{"source": "new", "guidance": "码头巡夜人。"}],
                 },
                 "guidance": "围绕码头夜巡建立事件。",
@@ -1547,7 +2058,19 @@ def test_create_event_rejects_missing_required_actor_role(tmp_path):
 
 
 def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="盐雾港",
+        summary="依靠潮汐盐田与近海货运生存的港镇。",
+        public_facts=["港民熟悉潮汐航道"],
+        hidden_facts=["旧盐仓下有走私暗渠"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
     gateway = _PhaseGateway(
         decision={
             "reasoning": "错误地引用不存在的演员。",
@@ -1556,6 +2079,11 @@ def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
                 "skill": "create_event",
                 "arguments": {
                     "role": "arc",
+                    "setting_requirements": [{
+                        "kind": "location",
+                        "setting_description": "事件依托该港镇的生态。",
+                        "matched_setting_id": setting.setting_id,
+                    }],
                     "actors": [{
                         "source": "existing",
                         "npc_id": "npc_missing",
@@ -1591,8 +2119,19 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
     tmp_path, monkeypatch
 ):
     from app.domain.director_npc.creator import DirectorNPCCreator
+    from app.domain.world_setting import WorldSetting
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="盐雾港",
+        summary="依靠潮汐盐田与近海货运生存的港镇。",
+        public_facts=["港民熟悉潮汐航道"],
+        hidden_facts=["旧盐仓下有走私暗渠"],
+        created_turn=1,
+    )
+    with stores.world_setting() as store:
+        store.save(setting)
     gateway = _PhaseGateway(
         decision={
             "reasoning": "需要同时孕育一个事件与它的核心班底。",
@@ -1602,7 +2141,11 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
                     "skill": "create_event",
                     "arguments": {
                         "role": "arc",
-                        "event_guidance": "码头货运世家的旧账成为导火索。",
+                        "setting_requirements": [{
+                            "kind": "location",
+                            "setting_description": "事件依托该港镇的生态。",
+                            "matched_setting_id": setting.setting_id,
+                        }],
                         "actors": [
                             {"source": "new", "guidance": "码头把头，世代守着货路。"},
                             {"source": "new", "guidance": "账房先生，暗中替世家管账。"},
@@ -1664,7 +2207,94 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
         assert store.list_all() == []
 
 
-def test_create_event_guidance_falls_back_to_request_guidance(tmp_path):
+def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
+    tmp_path, monkeypatch
+):
+    from app.domain.director_npc.creator import DirectorNPCCreator
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "同批一个 NPC 和一个事件都缺 Setting，事件侧演员创建失败。",
+            "requests": [
+                {
+                    "request_id": "npc_1",
+                    "skill": "create_npc",
+                    "arguments": {
+                        "setting_requirements": [{
+                            "kind": "faction",
+                            "setting_description": "agent 需要的北境势力。",
+                        }],
+                    },
+                    "guidance": "凭空补建北境势力。",
+                },
+                {
+                    "request_id": "event_1",
+                    "skill": "create_event",
+                    "arguments": {
+                        "role": "ambient",
+                        "setting_requirements": [{
+                            "kind": "location",
+                            "setting_description": "agent 需要的交通节点。",
+                        }],
+                        "actors": [{"source": "new", "guidance": "码头巡夜人。"}],
+                    },
+                    "guidance": "建立独立环境事件。",
+                },
+            ],
+        },
+        event_selection_output=_event_selection_output(),
+        setting_output={
+            "name": "寒川驿",
+            "summary": "连接北境山道和河运的交通节点。",
+            "public_facts": ["商旅会在此更换车马。"],
+            "hidden_facts": ["地下仓道通往废弃河港。"],
+        },
+        npc_output={
+            "creation_reason": "北境商路需要一个长期活动的人物。",
+            "name": "沈栖舟",
+            "role": "北境行商",
+            "appearance": "常穿防风皮袍。",
+            "personality_traits": ["谨慎", "务实"],
+            "known_abilities": ["估价"],
+            "faction": "北陆商盟",
+            "core_motivation": "守住商队赖以生存的货路。",
+            "hidden_secret": "私下追查一批失踪货物。",
+            "conflict_style": "先谈条件，再切断补给。",
+            "social_style": "言简意赅，重视信用。",
+            "encounter_potentials": ["货路求援", "账目争议", "失货调查"],
+        },
+    )
+
+    def flaky_create(self, **kwargs):
+        raise TimeoutError("LLM 超时")
+
+    monkeypatch.setattr(DirectorNPCCreator, "create", flaky_create)
+
+    with pytest.raises(TimeoutError, match="LLM 超时"):
+        run_confirmation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="询问昨夜发生的事。",
+            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+            recent_summaries=[],
+            selection_summaries=[],
+            npc_profiles=[],
+            turn_index=3,
+            trace_id="confirmation-director",
+        )
+
+    with stores.world_setting() as store:
+        assert store.list_all() == []
+    with stores.director_npc() as store:
+        assert store.list_all() == []
+    with stores.director_event() as store:
+        assert store.list_all() == []
+
+
+def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
     from app.domain.world_setting import WorldSetting
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
@@ -1694,7 +2324,11 @@ def test_create_event_guidance_falls_back_to_request_guidance(tmp_path):
                     "arguments": {
                         "role": "ambient",
                         "actors": [],
-                        "setting_ids": [setting.setting_id],
+                        "setting_requirements": [{
+                            "kind": "location",
+                            "setting_description": "事件依托该港镇的生态。",
+                            "matched_setting_id": setting.setting_id,
+                        }],
                     },
                     "guidance": "以船坞翻修风波为整体方向。",
                 }
@@ -1735,9 +2369,14 @@ def test_create_event_guidance_falls_back_to_request_guidance(tmp_path):
 def test_create_event_rejects_more_than_three_new_actors():
     from app.graph.director_skill_specs import CreateEventArguments
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="at most 3 new actors"):
         CreateEventArguments(
             role="arc",
+            setting_requirements=[{
+                "kind": "location",
+                "setting_description": "事件依托的既有土壤。",
+                "matched_setting_id": "setting_1",
+            }],
             actors=[
                 {"source": "new", "guidance": f"方向{index}"}
                 for index in range(4)
@@ -1785,10 +2424,9 @@ def test_director_decide_prompt_defines_create_event_boundary():
     prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
     assert "create_event" in prompt
-    assert "唯一技能" in prompt
+    assert "`setting_requirements`" in prompt
     assert "`create_npc`" in prompt
-    assert "绝不可强迫主角参与" in prompt
-    assert "`event_guidance`" in prompt
+    assert "`enrich_npc`" in prompt
     assert "source=existing" in prompt
     assert "source=new" in prompt
 
@@ -1796,9 +2434,8 @@ def test_director_decide_prompt_defines_create_event_boundary():
 def test_director_decide_prompt_forbids_quest_wrapping():
     prompt, _ = PromptLoader().load("director_agent_decide_confirmation")
 
-    assert "主角视线之外的平行运转" in prompt
-    assert "绝不可强迫主角参与" in prompt
-    assert "也不可代劳主角的工作" in prompt
+    assert "世界设定的绝对依赖性" in prompt
+    assert "严禁凭空捏造未备案的专有名词" in prompt
     assert "长草期" in prompt
 
 

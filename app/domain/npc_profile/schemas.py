@@ -38,6 +38,7 @@ class NPCProfileDirectorView(NPCProfilePublicView):
     encounter_potentials: list[str] = Field(default_factory=list)
     director_notes: str | None = None
     source_director_npc_id: str | None = None
+    source_setting_ids: list[str] = Field(default_factory=list)
     created_turn: int | None = None
     introduced_turn: int | None = None
 
@@ -145,6 +146,7 @@ class NPCProfile(BaseModel):
     encounter_potentials: list[str] = Field(default_factory=list)
     director_notes: str | None = None
     source_director_npc_id: str | None = None
+    source_setting_ids: list[str] = Field(default_factory=list)
     created_turn: int | None = None
     introduced_turn: int | None = None
 
@@ -186,6 +188,7 @@ class NPCProfile(BaseModel):
             encounter_potentials=list(self.encounter_potentials),
             director_notes=self.director_notes,
             source_director_npc_id=self.source_director_npc_id,
+            source_setting_ids=list(self.source_setting_ids),
             created_turn=self.created_turn,
             introduced_turn=self.introduced_turn,
         )

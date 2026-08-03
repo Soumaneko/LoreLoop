@@ -72,6 +72,9 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     SaveManifestRepository(source).create("Alpha")
     _make_database(source / "continuity.db")
     _make_database(source / "confirmed_history.db", "indexed")
+    journal = source / ".runtime" / "director_mutation.json"
+    journal.parent.mkdir(parents=True)
+    journal.write_text('{"version": 1}', encoding="utf-8")
     _make_database(source / ".snapshots" / "undo-one" / "continuity.db", "old")
     (source / ".snapshots" / "undo-one" / "manifest.json").write_text(
         '{"files": ["continuity.db"]}', encoding="utf-8"
@@ -86,6 +89,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
         assert "manifest.json" in bundle.namelist()
         assert "save/continuity.db" in bundle.namelist()
         assert "save/confirmed_history.db" in bundle.namelist()
+        assert "save/.runtime/director_mutation.json" in bundle.namelist()
         assert "save/ignored.txt" not in bundle.namelist()
 
     inspected = inspect_archive(archive)
@@ -93,6 +97,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     extracted = extract_archive(archive, destination)
     assert extracted == inspected
     assert SaveManifestRepository(destination).load().display_name == "Alpha"
+    assert (destination / ".runtime" / "director_mutation.json").is_file()
     with sqlite3.connect(destination / ".snapshots" / "undo-one" / "continuity.db") as db:
         assert db.execute("SELECT value FROM values_for_test").fetchone()[0] == "old"
 

@@ -3,14 +3,11 @@ from typing import cast
 
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.current_state.schemas import CurrentState
 from app.domain.creative_brief import CreativeBrief
 from app.domain.npc_profile.schemas import (
     NPCProfile,
     NPCProfileBackfillOutput,
 )
-from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.views import project_current_state, project_scene_summaries
 
 
 class NPCProfileBackfiller:
@@ -22,10 +19,8 @@ class NPCProfileBackfiller:
         *,
         profile: NPCProfile,
         existing_profiles: list[NPCProfile],
-        scene_facts: str,
-        current_state: CurrentState,
         core_memory: CoreMemory,
-        recent_summaries: list[SceneSummary] | None = None,
+        settings: list | None = None,
         trace_id: str | None = None,
         guidance: str | None = None,
         creative_brief: CreativeBrief | None = None,
@@ -35,13 +30,17 @@ class NPCProfileBackfiller:
             self._gateway.run(
                 task="npc_profile_backfill",
                 input_data={
-                    "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "current_state_summary_json": project_current_state(current_state),
-                    "recent_summaries_json": project_scene_summaries(recent_summaries or []),
-                    "scene_facts_json": scene_facts,
+                    "core_memory_json": core_memory.without_protagonist().model_dump_json(
+                        indent=2
+                    ),
                     "new_npc_profile_json": profile.public_view().model_dump_json(indent=2),
                     "existing_npcs_json": json.dumps(
                         [_existing_npc_view(npc) for npc in existing_profiles],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    "settings_json": json.dumps(
+                        [setting.director_view() for setting in (settings or [])],
                         ensure_ascii=False,
                         indent=2,
                     ),

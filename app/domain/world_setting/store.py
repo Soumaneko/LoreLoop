@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version
+from app.runtime.sqlite import (
+    connect_sqlite,
+    ensure_exact_schema_version,
+    transaction,
+)
 
 from .schemas import WorldSetting, utc_now
 
@@ -60,11 +64,16 @@ class WorldSettingStore:
             ON world_settings(kind, created_turn, setting_id)
             """
         )
-        ensure_exact_schema_version(self._conn, "world_setting", 8)
+        ensure_exact_schema_version(self._conn, "world_setting", 11)
         self._conn.commit()
 
     def save(self, setting: WorldSetting) -> str:
         self._require_related_settings(setting.related_setting_ids)
+        with transaction(self._conn):
+            self._insert_setting(setting)
+        return setting.setting_id
+
+    def _insert_setting(self, setting: WorldSetting) -> None:
         try:
             self._conn.execute(
                 """
@@ -91,8 +100,6 @@ class WorldSettingStore:
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"setting name already exists: {setting.name}") from exc
-        self._conn.commit()
-        return setting.setting_id
 
     def update(self, setting: WorldSetting) -> None:
         if self.get_by_id(setting.setting_id) is None:
@@ -172,6 +179,13 @@ class WorldSettingStore:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    def delete_by_id(self, setting_id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM world_settings WHERE setting_id = ?",
+            (setting_id,),
+        )
+        self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()

@@ -50,9 +50,9 @@ def test_setting_kind_is_restricted_to_four_general_categories():
     ("field", "value"),
     [
         ("name", "设" * 11),
-        ("summary", "设" * 51),
-        ("public_facts", ["设" * 51]),
-        ("hidden_facts", ["设" * 51]),
+        ("summary", "设" * 101),
+        ("public_facts", ["设" * 101]),
+        ("hidden_facts", ["设" * 101]),
     ],
 )
 def test_setting_text_fields_enforce_compact_limits(field, value):
@@ -67,7 +67,15 @@ def test_setting_reference_view_omits_facts():
         "kind": setting.kind,
         "name": setting.name,
         "summary": setting.summary,
-        "related_setting_ids": [],
+    }
+
+
+def test_setting_dedup_view_omits_id_and_facts():
+    setting = _setting()
+    assert setting.dedup_view() == {
+        "kind": setting.kind,
+        "name": setting.name,
+        "summary": setting.summary,
     }
 
 
@@ -89,7 +97,7 @@ def test_setting_store_requires_existing_explicit_relations():
     store.close()
 
 
-def test_creator_freely_builds_complete_setting_from_limited_purpose():
+def test_creator_freely_builds_complete_setting_from_limited_guidance():
     gateway = _Gateway({
         "name": "听潮院",
         "summary": "沿海城镇间共享航路情报的松散组织。",
@@ -106,7 +114,7 @@ def test_creator_freely_builds_complete_setting_from_limited_purpose():
 
     setting = WorldSettingCreator(gateway).create(
         kind="faction",
-        purpose="创建一个调查异常航迹的组织",
+        guidance="创建一个调查异常航迹的组织",
         core_memory=core_memory,
         existing_settings=[_setting(name="潮讯社"), _setting(name="远帆会")],
         turn_index=3,
@@ -115,7 +123,10 @@ def test_creator_freely_builds_complete_setting_from_limited_purpose():
     assert setting.name == "听潮院"
     assert setting.kind == "faction"
     assert gateway.calls[0]["temperature"] == 0.9
-    assert "purpose" in gateway.calls[0]["input_data"]
+    assert (
+        gateway.calls[0]["input_data"]["guidance"]
+        == "创建一个调查异常航迹的组织"
+    )
     existing_json = gateway.calls[0]["input_data"]["existing_settings_json"]
     assert "潮讯社" in existing_json
     assert "远帆会" in existing_json

@@ -41,6 +41,10 @@ class DirectorEventStore:
         self._write(event)
         return event.event_id
 
+    def restore_snapshot(self, event: DirectorEvent) -> None:
+        """Restore an exact pre-commit image during transaction recovery."""
+        self._write(event)
+
     def list_active(self) -> list[DirectorEvent]:
         return self._list_by_stages(["hidden", "engaged"])
 
@@ -188,6 +192,13 @@ class DirectorEventStore:
     def count(self) -> int:
         row = self._conn.execute("SELECT COUNT(*) FROM director_events").fetchone()
         return int(row[0])
+
+    def delete_by_id(self, event_id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM director_events WHERE event_id = ?",
+            (event_id,),
+        )
+        self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()

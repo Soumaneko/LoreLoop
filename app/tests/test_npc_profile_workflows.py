@@ -35,6 +35,35 @@ def _state() -> CurrentState:
     )
 
 
+def test_backfill_core_memory_projection_excludes_protagonist_profile():
+    from app.domain.core_memory.schemas import CoreMemoryItem
+
+    core_memory = CoreMemory(items=[
+        CoreMemoryItem(
+            id="core_world_identity",
+            kind="world_invariant",
+            strength="hard_constraint",
+            source="player",
+            content="这是一个以航海贸易为主的世界。",
+        ),
+        CoreMemoryItem(
+            id="core_player_identity",
+            kind="protagonist_invariant",
+            strength="hard_constraint",
+            source="player",
+            content="主角是萧云痕，曾为镖局总镖头。",
+        ),
+    ])
+
+    projected = core_memory.without_protagonist()
+
+    assert [item.id for item in projected.items] == ["core_world_identity"]
+    assert all(
+        item.kind != "protagonist_invariant"
+        for item in projected.items
+    )
+
+
 def test_npc_agents_use_scene_facts_without_director_resource_dependencies():
     extractor_gateway = _Gateway([{"mentions": []}])
     NPCProfileExtractor(extractor_gateway).extract(

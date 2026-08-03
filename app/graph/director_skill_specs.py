@@ -90,10 +90,25 @@ class ForeshadowSettingArguments(BaseModel):
     setting_id: str = Field(min_length=1)
 
 
+class SettingRequirement(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    kind: SettingKind
+    setting_description: str = Field(
+        min_length=1,
+        max_length=500,
+        description="描述 setting 本身，而不是 npc 和 事件"
+    )
+    matched_setting_id: str | None = None
+
+
 class CreateNPCArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    setting_ids: list[str] = Field(default_factory=list, max_length=4)
+    setting_requirements: list[SettingRequirement] = Field(
+        min_length=1,
+        max_length=1,
+    )
 
 
 class ExistingEventActorInput(BaseModel):
@@ -121,8 +136,10 @@ class CreateEventArguments(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     role: DirectorEventRole
-    event_guidance: str = Field(default="", max_length=500)
-    setting_ids: list[str] = Field(default_factory=list, max_length=4)
+    setting_requirements: list[SettingRequirement] = Field(
+        min_length=1,
+        max_length=1,
+    )
     actors: list[EventActorInput] = Field(default_factory=list, max_length=6)
 
     @model_validator(mode="after")
@@ -140,13 +157,6 @@ class CreateEventArguments(BaseModel):
         return self
 
 
-class CreateSettingArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: SettingKind
-    purpose: str = Field(min_length=1, max_length=300)
-
-
 class BindEventActorArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -158,6 +168,10 @@ class EnrichNPCArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     npc_id: str = Field(min_length=1)
+    setting_requirements: list[SettingRequirement] = Field(
+        min_length=1,
+        max_length=1,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +188,7 @@ class DirectorSkillSpec:
     phases: frozenset[DirectorPhase]
     mutates: bool
     arguments_model: type[BaseModel]
+    max_requests_per_batch: int | None = None
 
 
 _GENERATION: frozenset[DirectorPhase] = frozenset({"generation"})
@@ -225,10 +240,11 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         name="create_event",
         description=(
             "创建一个长线事件（arc）或环境事件（ambient）。这是创建事件的唯一技能。"
-            "actors 是强制演员清单：existing 引用现有 NPC，new 按 guidance 创建新 NPC；"
-            "两类可混合，也可留空。所有演员都会被绑定并参与设计。"
             "只用于主角视线之外的世界动态，不得用于推动、包装或代劳主角当前正在执行的主线行动。"
-            "setting_ids 可选且只能引用回合开始前已有 Setting；event_guidance 指定事件方向。"
+            "actors 是强制演员清单（existing/new 可混合，也可留空）。"
+            "在 arguments.setting_requirements 中声明该事件因果依托的 1 个 Setting："
+            "命中已有 Setting 时填其 matched_setting_id，否则该项留空。"
+            "请求级 guidance 用自由文本指定事件方向。"
         ),
         phases=_CONFIRMATION,
         mutates=True,
@@ -238,24 +254,14 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         name="create_npc",
         description=(
             "基于未来可能的剧情需求，在幕后招募一名新的导演 NPC 草案。"
-            "setting_ids 可选；填写时人物必须真实生活在这些已有 Setting 所构成的世界中，"
-            "留空时允许依据 CoreMemory 独立创造。"
+            "在 arguments.setting_requirements 中声明该人物真实生活依托的 1 个 Setting："
+            "命中已有 Setting 时填其 matched_setting_id，否则该项留空。"
+            "在 guidance 中，name 填写你要为该角色设定的专有姓名；purpose 填写其系统功能或剧情目的（50字以内）；"
+            "description 填写背景，性格和设想。"
         ),
         phases=_CONFIRMATION,
         mutates=True,
         arguments_model=CreateNPCArguments,
-    ),
-    DirectorSkillSpec(
-        name="create_setting",
-        description=(
-            "创建一个静态世界资产。只决定 kind、它在世界中需要承担的 purpose，"
-            "名称、形态、组成、地理、风格和具体事实由专门的 Setting Creator 自由创造。"
-            "不得用 purpose 预写这些创意答案。"
-            "本轮新建 Setting 不能在同一轮被 NPC 或事件创建引用。"
-        ),
-        phases=_CONFIRMATION,
-        mutates=True,
-        arguments_model=CreateSettingArguments,
     ),
     DirectorSkillSpec(
         name="bind_event_actor",
@@ -269,10 +275,12 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="enrich_npc",
         description=(
-            "为本轮新出现、档案尚不完整（缺少幕后动机/秘密/冲突/社交设定）的非导演 NPC "
-            "补全完整人设并规范其姓名；若其当前 name 只是身份代称、职业泛称或外观代称，"
-            "必须为其创造符合世界观的专有姓名。只用于本轮新入库、仍需补全的 NPC，"
-            "每轮至多处理三个。"
+            "为NPC补全完整人设并规范其姓名；若其当前 name 只是身份代称、职业泛称或外观代称，"
+            "必须为其创造符合世界观的专有姓名。只用于本轮新入库、仍需补全的 NPC。"
+            "在 arguments.setting_requirements 中声明该人物真实生活依托的 1 个 Setting："
+            "命中已有 Setting 时填其 matched_setting_id，否则该项留空。每轮至多处理三个。"
+            "在 guidance 中，name 填写你要为该角色设定的专有姓名；purpose 填写其剧情目的（50字以内）；"
+            "description 填写背景，性格和设想。"
         ),
         phases=_CONFIRMATION,
         mutates=True,

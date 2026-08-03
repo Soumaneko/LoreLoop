@@ -256,7 +256,7 @@ def update_player_record(
     record_id: str,
     payload: dict | None,
 ) -> dict:
-    """Update one existing continuity/NPC/entity record from the player UI."""
+    """Update one existing continuity/NPC/Setting record from the player UI."""
     return _update_player_record(kind, record_id, payload)
 
 

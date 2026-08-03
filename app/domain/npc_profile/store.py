@@ -119,6 +119,13 @@ class NPCProfileStore:
         ).fetchone()
         return self._row_to_profile(row) if row is not None else None
 
+    def delete_by_id(self, npc_id: str) -> None:
+        self._db.execute(
+            "DELETE FROM npc_profiles WHERE id = ?",
+            (npc_id,),
+        )
+        self._db.commit()
+
     def get_by_name(self, name: str) -> NPCProfile | None:
         term = _norm(name)
         if not term:

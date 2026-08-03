@@ -17,7 +17,7 @@ class WorldSettingCreator:
         self,
         *,
         kind: SettingKind,
-        purpose: str,
+        guidance: str,
         core_memory: CoreMemory,
         existing_settings: list[WorldSetting],
         turn_index: int,
@@ -29,10 +29,10 @@ class WorldSettingCreator:
                 task="director_setting_create",
                 input_data={
                     "kind": kind,
-                    "purpose": purpose,
+                    "guidance": guidance,
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "existing_settings_json": json.dumps(
-                        [setting.reference_view() for setting in existing_settings],
+                        [setting.dedup_view() for setting in existing_settings],
                         ensure_ascii=False,
                         indent=2,
                     ),

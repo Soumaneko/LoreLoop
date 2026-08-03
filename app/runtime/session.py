@@ -25,6 +25,7 @@ from app.runtime.model_config import effective_gateway_factory
 from app.core.diagnostics import NullDiagnosticLogger
 from app.runtime.serialization import model_data
 from app.runtime.turn_history import CampaignHistory
+from app.runtime.director_mutation import recover_pending_director_mutation
 
 
 @dataclass
@@ -241,6 +242,7 @@ class CampaignRuntime:
         self.campaign_id = campaign_id
         self.paths = paths or DEFAULT_CAMPAIGN_PATHS
         self.stores = stores or StoreBundle(self.paths)
+        recover_pending_director_mutation(self.stores)
         self.gateway_factory = gateway_factory or effective_gateway_factory()
         self.diagnostics = getattr(
             self.gateway_factory,
@@ -671,6 +673,7 @@ class CampaignRuntime:
             self.campaign_id = campaign_id
             self.paths = paths
             self.stores = StoreBundle(paths)
+            recover_pending_director_mutation(self.stores)
             from app.runtime.initialization import InitializationStore
 
             self.initialization = InitializationStore(paths.initialization_json)

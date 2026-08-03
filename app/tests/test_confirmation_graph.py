@@ -21,7 +21,9 @@ from app.graph.confirmation_helpers import merge_confirmation_node_update
 from app.graph.confirmation_helpers import prepare_confirmation_second_wave
 from app.graph.confirmation_helpers import reset_confirmation_cache_after_rollback
 from app.graph.confirmation_state import ConfirmationState
-from app.graph.confirmation_lifecycle import ConfirmationFinalizer
+from app.graph.confirmation_lifecycle import (
+    ConfirmationFinalizer,
+)
 
 
 def test_confirmation_first_wave_preserves_parallel_extract_dependencies():

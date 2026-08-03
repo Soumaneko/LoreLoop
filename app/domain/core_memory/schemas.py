@@ -40,3 +40,13 @@ class CoreMemory(BaseModel):
 
     version: Literal[2] = 2
     items: list[CoreMemoryItem]
+
+    def without_protagonist(self) -> "CoreMemory":
+        """Projection that excludes protagonist profile and backstory items."""
+        return CoreMemory(
+            items=[
+                item
+                for item in self.items
+                if item.kind != "protagonist_invariant"
+            ]
+        )

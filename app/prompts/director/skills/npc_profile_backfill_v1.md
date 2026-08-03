@@ -9,24 +9,6 @@
 {core_memory_json}
 ```
 
-## CurrentState Summary
-
-```json
-{current_state_summary_json}
-```
-
-## Scene Summaries
-
-```json
-{recent_summaries_json}
-```
-
-## Scene Facts
-
-```json
-{scene_facts_json}
-```
-
 ## New NPC Public Profile
 
 ```json
@@ -39,28 +21,29 @@
 {existing_npcs_json}
 ```
 
-## 程序随机抽取的人物维度
+## 该人物依托的 Setting
+
+```json
+{settings_json}
+```
+
+## 人物维度
 
 ```json
 {creative_brief_json}
 ```
-
-这些维度用于避免人物同质化，只提供角色的灵魂底色、基准性情与内驱力，不构成身份、职业或社会阶层的硬性约束：
 
 - `world_connection`：人物与世界日常运作的连接方式。
 - `life_phase`：人物当前人生阶段。
 - `desire_pattern`：长期欲望、恐惧或秘密的方向。
 - `baseline_temperament`：人物不设防状态下的基准性情底色，是言行举止的自然基调。
 
-主副轴次序：公开档案、Scene Facts 与 `director_guidance` 规定的身份和已知事实是核心；`creative_brief` 只作为丰富其内心深度的材料，若与公开事实或 guidance 冲突，请将其内在化处理，不得改写已确认的表层身份。
 
-## 导演协调层指导意见
+## 导演指导意见
 
 ```text
 {director_guidance}
 ```
-
-若 `director_guidance` 非空，它是导演协调层的方向性意图（如人物设定方向、身份走向或未来用途）。你必须在遵循下方核心规则的前提下遵守它，不得与之冲突；不得把指导意见本身当作已确认事实。
 
 
 # 输出规范
@@ -86,17 +69,16 @@
 
 # 核心规则
 
+0. 必须将 Setting，人物维度和导演执导意见有机的结合在一起。
 1. 这是对已经出现的新 NPC 的补全，不是创造另一个新 NPC；不得替换身份核心。
-2. 如果 New NPC Public Profile 中的 name 是"来历不明者""筑基初期女修""练气巅峰采药女""兜帽女""二楼女子""黑衣人""店小二"这类身份代称、职业泛称或外观代称，必须为 TA 创造一个符合世界观、风格一致的专有姓名，不得沿用代称作为最终姓名；原代称会由系统自动保留为临时别名（数回合后自动过期），不必在输出中重复。
+2. 如果 New NPC Public Profile 中的 name 是身份代称、职业泛称或外观代称，必须为 TA 创造一个符合世界观、独特的专有姓名，不得沿用代称作为最终姓名。
 3. 如果 New NPC Public Profile 中的 name 已经是专有姓名，必须保持原名，不要改写。
 4. 创建的姓名应避免与 Existing NPCs 中的既有姓名或别名重复，也不要与主角姓名相同。
-5. 公开字段必须尊重 New NPC Public Profile 和 Scene Facts，不得与已公开事实冲突。
-6. 幕后字段可以基于公开表现、身份位置、CoreMemory 世界观进行合理创作，但不得把玩家想法、吐槽或猜测当作事实。
-7. 不要复制、镜像或平移主角的核心背景；CoreMemory 中属于主角的事实只能用于理解世界风格。
-8. 对照 Existing NPCs 的 `core_motivation` 与 `hidden_secret`，不得创造同构动机、同构秘密或相同人生困境。
-9. 同一 NPC 的 `hidden_secret` 不得与 `core_motivation` 自相矛盾。
-10. 不要把 NPC 设计成单一功能按钮；TA 必须有自己的生活、动机、缺陷、能力边界和秘密。
-11. 如果 Scene Facts 只支持临时路人、职业泛称或无长期叙事潜力的人物，应仍按 schema 输出最保守的完整人物设定，但不要夸大其身份层级。
+5. 公开字段必须尊重 New NPC Public Profile，不得与已公开事实冲突。
+6. 对照 Existing NPCs 的 `core_motivation` 与 `hidden_secret`，不得创造同构动机、同构秘密或相同人生困境。
+7. 同一 NPC 的 `hidden_secret` 不得与 `core_motivation` 自相矛盾。
+8. 不要把 NPC 设计成单一功能按钮；TA 必须有自己的生活、动机、缺陷、能力边界和秘密。
+9. 如果公开档案只支持临时路人、职业泛称或无长期叙事潜力的人物，应仍按 schema 输出最保守的完整人物设定，但不要夸大其身份层级。
 
 
 # 禁止事项

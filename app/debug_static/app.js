@@ -1084,7 +1084,7 @@ function stepTasks(scope, stepName) {
       "director_event_select_arc",
       "director_event_select_ambient",
       "director_npc_create",
-      "setting_anchor_prepare",
+      "director_setting_create",
     ],
     finish: ["*"],
   };

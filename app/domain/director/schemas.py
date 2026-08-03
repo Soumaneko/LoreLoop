@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -27,19 +27,48 @@ class DirectorObservation(BaseModel):
     resources: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
 
 
+class DirectorGuidance(BaseModel):
+    """Structured guidance for character-oriented skills.
+
+    ``description`` is a honeypot: the model may pour creative detail into it,
+    but the backend discards it and only forwards ``name`` + ``purpose``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=20)
+    purpose: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=150)
+
+
+#: Free-form direction text (events, stage direction) OR structured guidance
+#: (character creation/enrichment). Pydantic disambiguates on shape.
+DirectorGuidanceInput = Annotated[
+    str | DirectorGuidance,
+    Field(
+        description=(
+            "自由文本方向（事件/舞台调度），或 {name, purpose, description} "
+            "结构化人物指导（create_npc/enrich_npc）。"
+        )
+    ),
+]
+
+
 class DirectorSkillRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request_id: str = Field(min_length=1, max_length=80)
     skill: str = Field(min_length=1, max_length=80)
     arguments: dict[str, Any] = Field(default_factory=dict)
-    guidance: str = Field(min_length=1, max_length=500)
+    guidance: DirectorGuidanceInput
 
 
 class DirectorDecisionBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    reasoning: str = Field(min_length=1, max_length=500)
+    reasoning: str = Field(
+        min_length=1, max_length=500,
+    )
     requests: list[DirectorSkillRequest] = Field(
         default_factory=list,
         max_length=MAX_DIRECTOR_SKILL_REQUESTS,
@@ -61,6 +90,7 @@ class DirectorSkillSpec(BaseModel):
     phases: list[DirectorPhase] = Field(min_length=1)
     mutates: bool
     input_schema: dict[str, Any]
+    max_requests_per_batch: int | None = Field(default=None, ge=1)
 
 
 class DirectorSkillExecution(BaseModel):

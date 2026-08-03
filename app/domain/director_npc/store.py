@@ -127,6 +127,13 @@ class DirectorNPCStore:
         self.save(updated)
         return updated
 
+    def delete_by_id(self, draft_id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM director_npcs WHERE draft_id = ?",
+            (draft_id,),
+        )
+        self._conn.commit()
+
     def close(self) -> None:
         self._conn.close()
 

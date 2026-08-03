@@ -26,7 +26,7 @@ const TASK_LABELS = {
   director_event_review_engaged: "导演事件追踪检查",
   director_event_select_arc: "主线事件选择",
   director_event_select_ambient: "环境事件选择",
-  setting_anchor_prepare: "世界设定补全",
+  director_setting_create: "世界设定生成",
 };
 
 const PIPELINE_LABELS = {

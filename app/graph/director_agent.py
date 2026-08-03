@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
+from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor
 
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -14,11 +17,15 @@ from app.domain.director import (
     DirectorStageMaterial,
     DirectorStageResult,
 )
-from app.domain.director_event.schemas import DirectorActorRef, utc_now
+from app.domain.director_event.schemas import (
+    DirectorActorRef,
+    DirectorEvent,
+    utc_now,
+)
 from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.views import project_director_event
 from app.domain.director_npc.creator import DirectorNPCCreator
-from app.domain.director_npc.schemas import NPCCreationContext
+from app.domain.director_npc.schemas import DirectorNPCDraft, NPCCreationContext
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.workflows import (
     attach_transient_alias_for_rename,
@@ -26,12 +33,19 @@ from app.domain.npc_profile.workflows import (
 )
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.world_setting.creator import WorldSettingCreator
+from app.domain.world_setting.schemas import WorldSetting
+from app.runtime.director_mutation import (
+    DirectorEventBeforeImage,
+    DirectorMutationJournal,
+    DirectorMutationJournalStore,
+    DirectorProfileBeforeImage,
+    recover_pending_director_mutation,
+)
 
 from .director_skill_specs import (
     BindEventActorArguments,
     CreateEventArguments,
     CreateNPCArguments,
-    CreateSettingArguments,
     EnrichNPCArguments,
     ForeshadowSettingArguments,
     IntroduceNPCArguments,
@@ -40,6 +54,47 @@ from .director_skill_specs import (
     PresentEventArguments,
     get_director_skill_specs,
 )
+
+
+DIRECTOR_WAVE_MAX_WORKERS = 3
+
+
+@dataclass
+class _PendingActorBinding:
+    event_id: str
+    actor_name: str
+    actor_ref: DirectorResourceRef
+    turn_index: int
+
+
+@dataclass
+class _DirectorMutationPlan:
+    """Deferred writes accumulated by confirmation handlers.
+
+    Handlers never write to stores directly. All intended mutations are
+    collected here and committed as one recoverable batch only after every
+    request has succeeded.
+    """
+
+    settings: list[WorldSetting] = field(default_factory=list)
+    npc_drafts: list[DirectorNPCDraft] = field(default_factory=list)
+    events: list[DirectorEvent] = field(default_factory=list)
+    profile_upserts: list[NPCProfile] = field(default_factory=list)
+    actor_bindings: list[_PendingActorBinding] = field(default_factory=list)
+
+
+class _FreshStoreProxy:
+    """Give each concurrent skill operation its own SQLite connection."""
+
+    def __init__(self, factory):
+        self._factory = factory
+
+    def __getattr__(self, name):
+        def invoke(*args, **kwargs):
+            with self._factory() as store:
+                return getattr(store, name)(*args, **kwargs)
+
+        return invoke
 
 
 def _register_skill(
@@ -64,7 +119,209 @@ def _register_skill(
         arguments_model=spec.arguments_model,
         handler=handler,
         arguments_validator=arguments_validator,
+        max_requests_per_batch=spec.max_requests_per_batch,
     )
+
+
+def _run_setting_creation_wave(
+    decision,
+    *,
+    gateway,
+    core_memory: CoreMemory,
+    available_settings: list,
+    turn_index: int,
+    trace_id: str,
+):
+    """Create one missing Setting per unique requirement in memory.
+
+    Requests that declare the identical missing requirement (same ``kind`` and
+    ``setting_description``) share a single generated Setting instead of
+    producing duplicate assets. Nothing is persisted here; the caller commits
+    the generated Settings only after the whole confirmation batch succeeds.
+    """
+    argument_models = {
+        "create_npc": CreateNPCArguments,
+        "create_event": CreateEventArguments,
+        "enrich_npc": EnrichNPCArguments,
+    }
+    settings_by_id = {
+        setting.setting_id: setting for setting in available_settings
+    }
+    parsed_arguments: dict[str, object] = {}
+    missing_groups: dict[tuple[str, str], list[tuple[object, object]]] = {}
+
+    for request in decision.requests:
+        arguments_model = argument_models.get(request.skill)
+        if arguments_model is None:
+            continue
+        arguments = arguments_model.model_validate(request.arguments)
+        parsed_arguments[request.request_id] = arguments
+        requirement = arguments.setting_requirements[0]
+        matched = settings_by_id.get(requirement.matched_setting_id)
+        if matched is None or matched.kind != requirement.kind:
+            key = (requirement.kind, requirement.setting_description)
+            missing_groups.setdefault(key, []).append((request, requirement))
+
+    created_by_request: dict[str, object] = {}
+    created_settings: list = []
+    if missing_groups:
+        with ThreadPoolExecutor(
+            max_workers=min(DIRECTOR_WAVE_MAX_WORKERS, len(missing_groups)),
+            thread_name_prefix="director-setting",
+        ) as executor:
+            futures = {
+                executor.submit(
+                    _create_missing_setting,
+                    group[0][1],
+                    gateway=gateway,
+                    core_memory=core_memory,
+                    available_settings=available_settings,
+                    turn_index=turn_index,
+                    trace_id=trace_id,
+                ): key
+                for key, group in missing_groups.items()
+            }
+            for future in futures:
+                setting = future.result()
+                created_settings.append(setting)
+                for request, _requirement in missing_groups[futures[future]]:
+                    created_by_request[request.request_id] = setting
+
+    if not created_by_request:
+        return decision, created_settings
+
+    patched_requests = []
+    for request in decision.requests:
+        created = created_by_request.get(request.request_id)
+        if created is None:
+            patched_requests.append(request)
+            continue
+        arguments = parsed_arguments[request.request_id]
+        requirement = arguments.setting_requirements[0].model_copy(
+            update={"matched_setting_id": created.setting_id}
+        )
+        patched_arguments = arguments.model_copy(
+            update={"setting_requirements": [requirement]}
+        )
+        patched_requests.append(
+            request.model_copy(
+                update={"arguments": patched_arguments.model_dump(mode="json")}
+            )
+        )
+    return (
+        decision.model_copy(update={"requests": patched_requests}),
+        created_settings,
+    )
+
+
+def _create_missing_setting(
+    requirement,
+    *,
+    gateway,
+    core_memory: CoreMemory,
+    available_settings: list,
+    turn_index: int,
+    trace_id: str,
+):
+    return WorldSettingCreator(gateway).create(
+        kind=requirement.kind,
+        guidance=requirement.setting_description,
+        core_memory=core_memory,
+        existing_settings=available_settings,
+        turn_index=turn_index,
+        trace_id=trace_id,
+    )
+
+
+def _commit_director_mutations(
+    plan: _DirectorMutationPlan,
+    stores,
+) -> None:
+    """Persist one Director batch with durable cross-database rollback data."""
+    recover_pending_director_mutation(stores)
+
+    with stores.world_setting() as store:
+        if any(store.get_by_id(item.setting_id) for item in plan.settings):
+            raise RuntimeError("Director commit would overwrite an existing Setting")
+    with stores.director_npc() as store:
+        if any(store.get_by_id(item.draft_id) for item in plan.npc_drafts):
+            raise RuntimeError("Director commit would overwrite an existing NPC draft")
+    with stores.director_event() as store:
+        if any(store.get_by_id(item.event_id) for item in plan.events):
+            raise RuntimeError("Director commit would overwrite an existing Event")
+        event_before = []
+        seen_event_ids: set[str] = set()
+        for binding in plan.actor_bindings:
+            if binding.event_id in seen_event_ids:
+                continue
+            existing = store.get_by_id(binding.event_id)
+            if existing is None:
+                raise ValueError("actor binding references an unknown DirectorEvent")
+            seen_event_ids.add(binding.event_id)
+            event_before.append(
+                DirectorEventBeforeImage(
+                    event_id=binding.event_id,
+                    event=existing,
+                )
+            )
+
+    with stores.npc_profile() as store:
+        profile_before = []
+        seen_profile_ids: set[str] = set()
+        for profile in plan.profile_upserts:
+            if profile.npc_id in seen_profile_ids:
+                continue
+            seen_profile_ids.add(profile.npc_id)
+            profile_before.append(
+                DirectorProfileBeforeImage(
+                    npc_id=profile.npc_id,
+                    profile=store.get_by_id(profile.npc_id),
+                )
+            )
+
+    journal_store = DirectorMutationJournalStore(
+        stores.paths.director_mutation_journal
+    )
+    journal_store.save(
+        DirectorMutationJournal(
+            new_setting_ids=[item.setting_id for item in plan.settings],
+            new_npc_ids=[item.draft_id for item in plan.npc_drafts],
+            new_event_ids=[item.event_id for item in plan.events],
+            profile_before_images=profile_before,
+            event_before_images=event_before,
+        )
+    )
+
+    try:
+        if plan.settings:
+            with stores.world_setting() as store:
+                for setting in plan.settings:
+                    store.save(setting)
+        if plan.npc_drafts:
+            with stores.director_npc() as store:
+                for draft in plan.npc_drafts:
+                    store.save(draft)
+        if plan.events:
+            with stores.director_event() as store:
+                for event in plan.events:
+                    store.save(event)
+        if plan.profile_upserts:
+            with stores.npc_profile() as store:
+                for profile in plan.profile_upserts:
+                    store.upsert(profile)
+        if plan.actor_bindings:
+            with stores.director_event() as store:
+                for binding in plan.actor_bindings:
+                    store.bind_actor(
+                        binding.event_id,
+                        actor_name=binding.actor_name,
+                        actor_ref=binding.actor_ref,
+                        turn_index=binding.turn_index,
+                    )
+        journal_store.clear()
+    except BaseException:
+        recover_pending_director_mutation(stores)
+        raise
 
 
 def run_generation_director_agent(
@@ -81,6 +338,7 @@ def run_generation_director_agent(
     turn_resolution_json: str = "",
     pending_engagements: list[str] | None = None,
 ) -> tuple[DirectorStageResult, object]:
+    recover_pending_director_mutation(stores)
     service = DirectorSkillService()
     pending_engagements = pending_engagements or []
     with (
@@ -249,6 +507,7 @@ def run_confirmation_director_agent(
     trace_id: str,
     new_npc_profiles: list[NPCProfile] | None = None,
 ) -> tuple[object, DirectorSkillExecutionBatch]:
+    recover_pending_director_mutation(stores)
     service = DirectorSkillService()
     with (
         stores.director_event() as event_store,
@@ -257,25 +516,31 @@ def run_confirmation_director_agent(
         stores.world_setting() as setting_store,
     ):
         available_settings = setting_store.list_all()
-        available_setting_ids = {
-            setting.setting_id for setting in available_settings
+        plan = _DirectorMutationPlan()
+        plan_lock = threading.Lock()
+        settings_by_id = {
+            setting.setting_id: setting for setting in available_settings
         }
 
-        def referenced_settings(setting_ids: list[str]):
-            _require_setting_ids(
-                setting_ids,
-                allowed_ids=available_setting_ids,
-            )
-            resolved = []
-            for setting_id in setting_ids:
-                setting = setting_store.get_by_id(setting_id)
-                if setting is None:
-                    raise ValueError(f"unknown setting ID: {setting_id}")
-                resolved.append(setting)
+        def dispatch_setting_requirements(requirements):
+            """Resolve the requirement from available + Wave-A in-memory Settings."""
+            resolved: list = []
+            for requirement in requirements:
+                if requirement.matched_setting_id is not None:
+                    setting = settings_by_id.get(
+                        requirement.matched_setting_id
+                    )
+                    if setting is not None and setting.kind == requirement.kind:
+                        resolved.append(setting)
+                        continue
+                raise ValueError(
+                    "confirmation skill reached Wave B without a valid Setting"
+                )
             return resolved
 
         def create_npc(args: CreateNPCArguments, guidance: str | None = None):
-            settings = referenced_settings(args.setting_ids)
+            settings = dispatch_setting_requirements(args.setting_requirements)
+            setting_ids = [setting.setting_id for setting in settings]
             draft = DirectorNPCCreator(gateway).create(
                 core_memory=core_memory,
                 existing_npcs=npc_profile_store.list_all(),
@@ -290,7 +555,7 @@ def run_confirmation_director_agent(
                     if npc.status != "retired"
                 ],
                 creation_context=NPCCreationContext(
-                    setting_ids=args.setting_ids,
+                    setting_ids=setting_ids,
                 ),
                 settings=settings,
                 creative_brief=draw_creative_brief(),
@@ -299,15 +564,17 @@ def run_confirmation_director_agent(
                 trace_id=trace_id,
                 guidance=guidance,
             )
-            director_npc_store.save(draft)
+            with plan_lock:
+                plan.npc_drafts.append(draft)
             return {"npc_id": draft.draft_id, "name": draft.name}
 
         def create_event(
             args: CreateEventArguments,
             guidance: str | None = None,
         ):
-            settings = referenced_settings(args.setting_ids)
-            event_guidance = args.event_guidance.strip() or (guidance or "")
+            settings = dispatch_setting_requirements(args.setting_requirements)
+            setting_ids = [setting.setting_id for setting in settings]
+            event_guidance = guidance or ""
             required_actors: list[dict] = []
             bound_actors: list[DirectorActorRef] = []
             actor_inputs_by_key = {}
@@ -372,7 +639,7 @@ def run_confirmation_director_agent(
                 turn_index=turn_index,
                 actors=bound_actors,
                 current_clock=current_state.world_clock,
-                source_setting_ids=args.setting_ids,
+                source_setting_ids=setting_ids,
             )
             drafts: list = []
             new_npc_ids: list[str] = []
@@ -418,7 +685,7 @@ def run_confirmation_director_agent(
                         for staged in drafts
                     ],
                     creation_context=NPCCreationContext(
-                        setting_ids=args.setting_ids
+                        setting_ids=setting_ids
                     ),
                     settings=settings,
                     creative_brief=draw_creative_brief(),
@@ -479,33 +746,14 @@ def run_confirmation_director_agent(
                 )
                 new_npc_ids.append(draft.draft_id)
                 actor_names.append(draft.name)
-            for draft in drafts:
-                director_npc_store.save(draft)
-            event_store.save(event)
+            with plan_lock:
+                plan.events.append(event)
+                plan.npc_drafts.extend(drafts)
             return {
                 "event_id": event.event_id,
                 "role": event.role,
                 "new_npc_ids": new_npc_ids,
                 "actor_names": actor_names,
-            }
-
-        def create_setting(
-            args: CreateSettingArguments,
-            guidance: str | None = None,
-        ):
-            setting = WorldSettingCreator(gateway).create(
-                kind=args.kind,
-                purpose=args.purpose,
-                core_memory=core_memory,
-                existing_settings=available_settings,
-                turn_index=turn_index,
-                trace_id=trace_id,
-            )
-            setting_store.save(setting)
-            return {
-                "setting_id": setting.setting_id,
-                "name": setting.name,
-                "kind": setting.kind,
             }
 
         def bind_actor(args: BindEventActorArguments, guidance: str | None = None):
@@ -517,18 +765,23 @@ def run_confirmation_director_agent(
                 actor_name = profile.name
             else:
                 raise ValueError("bind_event_actor references an unknown NPC")
-            event = event_store.bind_actor(
-                args.event_id,
-                actor_name=actor_name,
-                actor_ref=DirectorResourceRef(
-                    kind="npc",
-                    resource_id=args.npc_id,
-                ),
-                turn_index=turn_index,
-            )
-            return {"event_id": event.event_id, "npc_id": args.npc_id}
+            with plan_lock:
+                plan.actor_bindings.append(
+                    _PendingActorBinding(
+                        event_id=args.event_id,
+                        actor_name=actor_name,
+                        actor_ref=DirectorResourceRef(
+                            kind="npc",
+                            resource_id=args.npc_id,
+                        ),
+                        turn_index=turn_index,
+                    )
+                )
+            return {"event_id": args.event_id, "npc_id": args.npc_id}
 
         def enrich_npc(args: EnrichNPCArguments, guidance: str | None = None):
+            settings = dispatch_setting_requirements(args.setting_requirements)
+            setting_ids = [setting.setting_id for setting in settings]
             original = next(
                 (
                     profile
@@ -548,28 +801,24 @@ def run_confirmation_director_agent(
                     for npc in npc_profile_store.list_all()
                     if npc.npc_id != args.npc_id
                 ],
-                scene_facts=json.dumps(
-                    scene_facts,
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                current_state=current_state,
                 core_memory=core_memory,
                 gateway=gateway,
                 npc_store=npc_profile_store,
-                recent_summaries=recent_summaries,
+                settings=settings,
                 trace_id=trace_id,
                 guidance=guidance,
             )
+            backfilled.source_setting_ids = list(setting_ids)
             if backfilled.name != original.name:
                 attach_transient_alias_for_rename(
                     backfilled,
                     old_name=original.name,
                     turn_index=turn_index,
                 )
-            saved_id = npc_profile_store.upsert(backfilled)
+            with plan_lock:
+                plan.profile_upserts.append(backfilled)
             return {
-                "npc_id": saved_id,
+                "npc_id": backfilled.npc_id,
                 "name": backfilled.name,
             }
 
@@ -582,11 +831,6 @@ def run_confirmation_director_agent(
             service,
             "create_event",
             handler=create_event,
-        )
-        _register_skill(
-            service,
-            "create_setting",
-            handler=create_setting,
         )
         _register_skill(
             service,
@@ -674,10 +918,32 @@ def run_confirmation_director_agent(
             observation,
             trace_id=trace_id,
         )
+        service.validate_batch(decision, phase="confirmation")
+        decision, created_settings = _run_setting_creation_wave(
+            decision,
+            gateway=gateway,
+            core_memory=core_memory,
+            available_settings=available_settings,
+            turn_index=turn_index,
+            trace_id=trace_id,
+        )
+        plan.settings.extend(created_settings)
+        for setting in created_settings:
+            settings_by_id[setting.setting_id] = setting
+
+        # Wave B may execute every request concurrently. Each proxy opens a
+        # dedicated SQLite connection per operation; semantic conflicts are
+        # prevented by the upstream Director contract.
+        event_store = _FreshStoreProxy(stores.director_event)
+        director_npc_store = _FreshStoreProxy(stores.director_npc)
+        npc_profile_store = _FreshStoreProxy(stores.npc_profile)
+        setting_store = _FreshStoreProxy(stores.world_setting)
         executions = service.execute_batch(
             decision,
             phase="confirmation",
+            max_workers=DIRECTOR_WAVE_MAX_WORKERS,
         )
+        _commit_director_mutations(plan, stores)
     return decision, executions
 
 
@@ -831,15 +1097,6 @@ def _require_new_npc(npc_profile_store, new_npc_profiles, npc_id: str) -> None:
         raise ValueError("enrich_npc references an invalid npc_id")
 
 
-def _require_setting_ids(setting_ids: list[str], *, allowed_ids: set[str]) -> None:
-    if len(setting_ids) != len(set(setting_ids)):
-        raise ValueError("setting_ids must be unique")
-    unavailable = sorted(set(setting_ids) - allowed_ids)
-    if unavailable:
-        raise ValueError(
-            "setting IDs must exist before this Director turn: "
-            + ", ".join(unavailable)
-        )
 def _require_event_actor_binding(
     event_store,
     director_npc_store,

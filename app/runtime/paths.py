@@ -94,6 +94,10 @@ class CampaignPaths:
         return self.data_dir / "world_settings.db"
 
     @property
+    def director_mutation_journal(self) -> Path:
+        return self.data_dir / ".runtime" / "director_mutation.json"
+
+    @property
     def core_memory_json(self) -> Path:
         return self.data_dir / "core_memory.json"
 
