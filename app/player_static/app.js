@@ -102,6 +102,8 @@ const progressLabels = {
   campaign_setup_started: "正在生成公开世界惯例",
   initialization_started: "正在准备开场",
   opening_foundation_ready: "私有开局基础已经准备完成",
+  opening_settings_started: "正在建立世界设定",
+  opening_settings_done: "世界设定已经建立",
   opening_scene_done: "开场已经生成",
   initialization_pending: "正在保存待确认开场",
 };

@@ -451,6 +451,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
             }
         elif step == "opening_foundation_ready":
             public_data = {"reused": bool(data.get("reused"))}
+        elif step == "opening_settings_done":
+            public_data = {
+                "reused": bool(data.get("reused")),
+                "count": int(data.get("count") or 0),
+            }
         elif step == "initialization_pending":
             public_data = {
                 "turn_id": data.get("turn_id"),

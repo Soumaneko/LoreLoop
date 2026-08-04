@@ -71,6 +71,51 @@ class RecordingGateway:
         self.calls.append((task, input_data))
         if task == "opening_foundation":
             return output_schema.model_validate(_foundation_payload())
+        if task == "opening_setting_requirements":
+            return output_schema.model_validate({
+                "specs": [
+                    {
+                        "kind": "faction",
+                        "setting_description": (
+                            "掌控北境商路的商会联盟，对边境贸易影响深远。"
+                        ),
+                    },
+                    {
+                        "kind": "location",
+                        "setting_description": (
+                            "一座依山而建的贸易港，作为故事开场的起点。"
+                        ),
+                    },
+                    {
+                        "kind": "lore",
+                        "setting_description": (
+                            "帝国以成文律法维系边境秩序，边境诸国受其挤压。"
+                        ),
+                    },
+                ],
+            })
+        if task == "director_setting_create":
+            canned_by_kind = {
+                "faction": {
+                    "name": "北境商盟",
+                    "summary": "掌控北境商路的商会联盟。",
+                    "public_facts": ["统一收取过路费。"],
+                },
+                "location": {
+                    "name": "白塔港",
+                    "summary": "依山而建的贸易港，入城需登记。",
+                    "public_facts": ["入城需在登记大厅办理手续。"],
+                },
+                "lore": {
+                    "name": "大陆律法",
+                    "summary": "帝国以成文律法维系边境秩序。",
+                    "public_facts": ["帝国扩张持续挤压边境诸国。"],
+                },
+            }
+            canned = canned_by_kind.get(input_data["kind"])
+            if canned is None:
+                raise AssertionError(f"unexpected setting kind: {input_data['kind']}")
+            return output_schema.model_validate(canned)
         if task == "opening_scene":
             self.opening_attempts += 1
             if self.fail_first_opening and self.opening_attempts == 1:
@@ -81,11 +126,12 @@ class RecordingGateway:
         raise AssertionError(f"unexpected task: {task}")
 
 
-def test_initialization_graph_has_only_foundation_then_opening():
+def test_initialization_graph_has_only_foundation_then_settings_then_opening():
     graph = initialization_graph.build_initialization_graph()
     assert set(graph.get_graph().nodes) == {
         "__start__",
         "opening_foundation",
+        "opening_setting",
         "opening_scene",
         "__end__",
     }
@@ -134,13 +180,25 @@ def test_setup_and_initial_state_are_persisted_before_their_consumers(
     events = list(initialization_graph.initialization_stream(_payload()))
     record = runtime.initialization.load()
 
-    assert [task for task, _ in gateway.calls] == [
+    ordered_tasks = [
+        task for task, _ in gateway.calls
+        if task != "director_setting_create"
+    ]
+    assert ordered_tasks == [
         "opening_foundation",
+        "opening_setting_requirements",
         "opening_scene",
+    ]
+    assert [task for task, _ in gateway.calls if task == "director_setting_create"] == [
+        "director_setting_create",
+        "director_setting_create",
+        "director_setting_create",
     ]
     assert [event["step"] for event in events] == [
         "initialization_started",
         "opening_foundation_ready",
+        "opening_settings_started",
+        "opening_settings_done",
         "opening_scene_done",
         "initialization_pending",
     ]
@@ -154,6 +212,13 @@ def test_setup_and_initial_state_are_persisted_before_their_consumers(
     assert persisted.resources.money_unit == "金币"
     assert [item.name for item in persisted.resources.inventory] == ["旅行包"]
     assert len(runtime.pending_openings.values()) == 1
+
+    with runtime.stores.world_setting() as store:
+        settings = store.list_all()
+    assert {setting.kind for setting in settings} == {"faction", "location", "lore"}
+    assert {setting.name for setting in settings} == {"北境商盟", "白塔港", "大陆律法"}
+    assert all(setting.created_turn == 0 for setting in settings)
+    assert all(setting.hit_count == 0 for setting in settings)
 
 
 def test_opening_retry_reuses_same_persisted_foundation(
@@ -171,17 +236,66 @@ def test_opening_retry_reuses_same_persisted_foundation(
 
     events = list(initialization_graph.initialization_stream(_payload()))
 
-    assert [task for task, _ in gateway.calls] == [
+    ordered_tasks = [
+        task for task, _ in gateway.calls
+        if task != "director_setting_create"
+    ]
+    assert ordered_tasks == [
         "opening_foundation",
+        "opening_setting_requirements",
         "opening_scene",
         "opening_scene",
+    ]
+    assert [task for task, _ in gateway.calls if task == "director_setting_create"] == [
+        "director_setting_create",
+        "director_setting_create",
+        "director_setting_create",
     ]
     ready = next(
         event for event in events
         if event["step"] == "opening_foundation_ready"
     )
     assert ready["data"]["reused"] is True
+    settings_done = next(
+        event for event in events
+        if event["step"] == "opening_settings_done"
+    )
+    assert settings_done["data"]["reused"] is True
     assert get_campaign_runtime().stores.current_state().load() == state_after_failure
+    with get_campaign_runtime().stores.world_setting() as store:
+        assert len(store.list_all()) == 3
+
+
+def test_opening_settings_node_generates_once_and_reuses(
+    configure_runtime_services,
+):
+    runtime = get_campaign_runtime()
+    gateway = RecordingGateway()
+    configure_runtime_services(gateway_factory=lambda **_kwargs: gateway)
+
+    from app.domain.opening_foundation import OpeningFoundation
+    from app.graph.initialization_helpers import prepare_initialization_state
+    from app.graph.initialization_nodes import opening_setting_node
+
+    state = {
+        **prepare_initialization_state(_payload()),
+        "opening_foundation": OpeningFoundation.model_validate(_foundation_payload()),
+    }
+
+    first = opening_setting_node(state)
+    assert first["events"][0]["data"]["reused"] is False
+    with runtime.stores.world_setting() as store:
+        assert len(store.list_all()) == 3
+
+    second = opening_setting_node(state)
+    assert second["events"][0]["data"]["reused"] is True
+    assert [task for task, _ in gateway.calls if task == "director_setting_create"] == [
+        "director_setting_create",
+        "director_setting_create",
+        "director_setting_create",
+    ]
+    with runtime.stores.world_setting() as store:
+        assert len(store.list_all()) == 3
 
 
 def test_submitting_setup_clears_public_draft(

@@ -7,6 +7,7 @@ from app.domain.core_memory import CampaignSetupProposal, CoreMemory, InitConfig
 from app.domain.current_state import CurrentState
 from app.domain.opening_foundation import OpeningFoundation
 from app.domain.scene_writer.schemas import SceneWriterResult
+from app.domain.world_setting import WorldSetting
 from app.runtime.initialization import InitializationRecord
 from app.runtime.services import RuntimeServices
 
@@ -24,8 +25,10 @@ class InitializationState(TypedDict, total=False):
     core_memory: CoreMemory
     initialization_record: InitializationRecord
     foundation_trace_id: str
+    settings_trace_id: str
     opening_trace_id: str
     opening_foundation: OpeningFoundation
+    opening_settings: list[WorldSetting]
     current_state: CurrentState
     opening_scene: SceneWriterResult
     turn_id: str

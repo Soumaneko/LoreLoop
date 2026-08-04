@@ -90,6 +90,32 @@ def test_static_setting_store_round_trip_and_rejects_duplicate_name():
     store.close()
 
 
+def test_setting_store_save_many_persists_all_atomically():
+    store = WorldSettingStore()
+    ids = store.save_many([
+        _setting(name="北港", kind="location"),
+        _setting(name="夜航司", kind="faction"),
+    ])
+    assert len(ids) == 2
+    assert len(store.list_all()) == 2
+    store.close()
+
+
+def test_setting_store_save_many_rolls_back_entire_batch_on_collision():
+    store = WorldSettingStore()
+    store.save(_setting())
+    first = _setting(name="北港", kind="location")
+    second = _setting(name=" 北港 ", kind="lore")
+
+    with pytest.raises(ValueError, match="already exists"):
+        store.save_many([first, second])
+
+    assert store.get_by_id(first.setting_id) is None
+    assert store.get_by_id(second.setting_id) is None
+    assert len(store.list_all()) == 1
+    store.close()
+
+
 def test_setting_store_record_mention_increments_hit_count():
     store = WorldSettingStore()
     setting = _setting()

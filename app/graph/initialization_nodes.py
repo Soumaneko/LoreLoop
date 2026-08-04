@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from app.core.llm.token_usage import get_trace_token_usage
+from concurrent.futures import ThreadPoolExecutor
+
+from app.core.llm.token_usage import (
+    bind_token_usage_trace,
+    get_trace_token_usage,
+)
 from app.domain.core_memory import build_initial_current_state
 from app.domain.opening_foundation import OpeningFoundationAgent
+from app.domain.opening_setting import OpeningSettingAgent
 from app.domain.scene_writer.opening import OpeningSceneAgent
+from app.domain.world_setting import WorldSettingCreator
 from app.runtime.initialization import InitializationRecord
 from app.runtime.serialization import model_data
 from app.runtime.session import get_campaign_runtime
@@ -73,5 +80,57 @@ def opening_scene_node(state: InitializationState) -> InitializationState:
         "events": [{
             "step": "opening_scene_done",
             "data": {"opening_scene": model_data(opening_scene)},
+        }],
+    }
+
+
+def opening_setting_node(state: InitializationState) -> InitializationState:
+    runtime = get_campaign_runtime()
+    with state["runtime_services"].stores.world_setting() as store:
+        existing = store.list_all()
+    if existing:
+        return {
+            "opening_settings": existing,
+            "events": [{
+                "step": "opening_settings_done",
+                "data": {"reused": True, "count": len(existing)},
+            }],
+        }
+
+    bind_token_usage_trace(state["settings_trace_id"])
+    gateway = initialization_gateway(state)
+    specs = OpeningSettingAgent(gateway).generate(
+        foundation=state["opening_foundation"],
+        core_memory=state["core_memory"],
+        trace_id=state["settings_trace_id"],
+    ).specs
+
+    def _create(spec):
+        return WorldSettingCreator(gateway).create(
+            kind=spec.kind,
+            guidance=spec.setting_description,
+            core_memory=state["core_memory"],
+            existing_settings=existing,
+            turn_index=0,
+            trace_id=state["settings_trace_id"],
+        )
+
+    with ThreadPoolExecutor(
+        max_workers=min(3, len(specs)),
+        thread_name_prefix="opening-setting",
+    ) as executor:
+        settings = [future.result() for future in [
+            executor.submit(_create, spec) for spec in specs
+        ]]
+    if len({setting.name for setting in settings}) != len(settings):
+        raise RuntimeError("opening settings must have unique names")
+
+    with state["runtime_services"].stores.world_setting() as store:
+        store.save_many(settings)
+    return {
+        "opening_settings": settings,
+        "events": [{
+            "step": "opening_settings_done",
+            "data": {"reused": False, "count": len(settings)},
         }],
     }

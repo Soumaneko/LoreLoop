@@ -106,6 +106,22 @@ class WorldSettingStore:
             self._insert_setting(setting)
         return setting.setting_id
 
+    def save_many(self, settings: list[WorldSetting]) -> list[str]:
+        """Persist several settings atomically.
+
+        All inserts share one transaction; any failure (e.g. a normalized
+        name collision) rolls back the entire batch, so callers never leave
+        a partially-written set of settings behind.
+        """
+        if not settings:
+            return []
+        for setting in settings:
+            self._require_related_settings(setting.related_setting_ids)
+        with transaction(self._conn):
+            for setting in settings:
+                self._insert_setting(setting)
+        return [setting.setting_id for setting in settings]
+
     def _insert_setting(self, setting: WorldSetting) -> None:
         try:
             self._conn.execute(

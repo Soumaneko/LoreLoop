@@ -93,7 +93,40 @@ def prepare_initialization_state(payload: dict[str, Any]) -> InitializationState
         "core_memory": record.core_memory,
         "initialization_record": record,
         "foundation_trace_id": str(uuid.uuid4()),
+        "settings_trace_id": str(uuid.uuid4()),
         "opening_trace_id": str(uuid.uuid4()),
+    }
+
+
+def _combine_token_usage(*usages):
+    """Sum token usage dicts from multiple traces; None-safe.
+
+    Each usage has the shape returned by ``get_trace_token_usage``:
+    ``{input_tokens, output_tokens, total_tokens, calls}``.
+    """
+    present = [usage for usage in usages if usage]
+    if not present:
+        return None
+    input_tokens = sum(
+        int(usage["input_tokens"]) for usage in present
+        if usage.get("input_tokens") is not None
+    ) or None
+    output_tokens = sum(
+        int(usage["output_tokens"]) for usage in present
+        if usage.get("output_tokens") is not None
+    ) or None
+    calls: list[Any] = []
+    for usage in present:
+        calls.extend(usage.get("calls") or [])
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": (
+            input_tokens + output_tokens
+            if input_tokens is not None and output_tokens is not None
+            else None
+        ),
+        "calls": calls,
     }
 
 
@@ -111,7 +144,10 @@ def finalize_initialization_state(
         current_state=state["current_state"],
         scene_result=state["opening_scene"],
         token_usage={
-            "generation": get_trace_token_usage(state["opening_trace_id"]),
+            "generation": _combine_token_usage(
+                get_trace_token_usage(state["opening_trace_id"]),
+                get_trace_token_usage(state["settings_trace_id"]),
+            ),
             "confirmation": None,
         },
     )

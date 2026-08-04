@@ -14,6 +14,7 @@ const TASK_LABELS = {
   narrative_consistency_check: "叙事一致性检查",
   campaign_setup: "公开世界惯例",
   opening_foundation: "私有开局基础",
+  opening_setting_requirements: "世界设定推导",
   opening_scene: "开场生成",
   scene_fact_extract: "场景事实提取",
   state_update: "世界状态更新",
