@@ -38,6 +38,7 @@ def _seed_records():
             role="流浪木偶师",
             core_motivation="找回被窃的木偶。",
             hidden_secret="曾目睹一桩旧案。",
+            name_hit_count=2,
         ))
     with runtime.stores.world_setting() as store:
         store.save(WorldSetting(
@@ -114,6 +115,33 @@ def test_load_player_records_general_view_filters_unappeared_records():
     }
 
 
+def test_load_player_records_general_view_hides_unmentioned_npcs():
+    runtime = get_campaign_runtime()
+    with runtime.stores.npc_profile() as store:
+        store.upsert(NPCProfile(
+            name="沈栖舟",
+            role="北境行商",
+            source_director_npc_id="draft_shen",
+            name_hit_count=0,
+        ))
+        store.upsert(NPCProfile(
+            name="柳听澜",
+            role="镖局掌柜",
+            source_director_npc_id="draft_liu",
+            name_hit_count=2,
+        ))
+
+    data = load_player_records()
+    npc_names = {item["public"]["name"] for item in data["npc_profiles"]}
+    assert "沈栖舟" not in npc_names
+    assert "柳听澜" in npc_names
+
+    advanced = load_player_records(view="advanced")
+    assert {item["public"]["name"] for item in advanced["npc_profiles"]} == {
+        "沈栖舟", "柳听澜",
+    }
+
+
 def test_load_player_records_rejects_unknown_view():
     with pytest.raises(ValueError, match="unknown records view"):
         load_player_records(view="secret")
@@ -144,11 +172,12 @@ def test_update_npc_public_fields_preserves_director_fields_and_absence():
     result = update_player_record(
         "npc",
         npc_id,
-        {"role": "巡回木偶师", "aliases": ["木偶师", "  "]},
+        {"role": "巡回木偶师"},
     )
     assert result["public"]["role"] == "巡回木偶师"
-    assert result["public"]["aliases"] == ["木偶师"]
     assert "director_only" not in result
+    with pytest.raises(ValueError, match="NPC general fields only"):
+        update_player_record("npc", npc_id, {"aliases": ["木偶师"]})
     with runtime.stores.npc_profile() as store:
         assert store.get_by_id(npc_id).absent_turns == 6
 
@@ -193,14 +222,14 @@ def test_update_setting_edits_static_fields():
         "setting",
         setting_id,
         {
-            "kind": "lore",
             "summary": "关于旧时代档案封存制度的通称。",
             "public_facts": ["学者常用这个词。", ""],
         },
     )
-    assert result["fields"]["kind"] == "lore"
     assert result["fields"]["public_facts"] == ["学者常用这个词。"]
     assert "hidden_facts" not in result["fields"]
+    with pytest.raises(ValueError, match="Setting general fields only"):
+        update_player_record("setting", setting_id, {"kind": "lore"})
 
 
 def test_update_setting_advanced_edits_hidden_facts():

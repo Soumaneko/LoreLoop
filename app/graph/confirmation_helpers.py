@@ -130,7 +130,7 @@ def npc_profile_from_director_draft(draft: DirectorNPCDraft) -> NPCProfile:
         created_turn=draft.created_turn,
         introduced_turn=draft.introduced_turn,
         confidence=0.7,
-        name_hit_count=1,
+        name_hit_count=0,
     )
 
 
@@ -160,7 +160,7 @@ def merge_director_draft_into_npc_profile(profile: NPCProfile, draft: DirectorNP
     merged.created_turn = merged.created_turn or draft.created_turn
     merged.introduced_turn = draft.introduced_turn
     merged.confidence = max(merged.confidence, 0.7)
-    merged.name_hit_count = max(merged.name_hit_count, 1)
+    merged.name_hit_count = max(merged.name_hit_count, 0)
     return merged
 
 

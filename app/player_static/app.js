@@ -35,11 +35,13 @@ const els = {
   errorCard: $("errorCard"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
   composerModeBadge: $("composerModeBadge"),
-  drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"), openLeftDrawerBtn: $("openLeftDrawerBtn"), closeLeftDrawerBtn: $("closeLeftDrawerBtn"),
-  recordsDrawer: $("recordsDrawer"), openRecordsDrawerBtn: $("openRecordsDrawerBtn"), closeRecordsDrawerBtn: $("closeRecordsDrawerBtn"),
-  refreshRecordsBtn: $("refreshRecordsBtn"), recordsRefreshState: $("recordsRefreshState"),
+  drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"),
+  recordsDrawer: $("recordsDrawer"),
+  recordsRefreshState: $("recordsRefreshState"),
+  openLeftDrawerRailBtn: $("openLeftDrawerRailBtn"),
   recordsViewGeneralBtn: $("recordsViewGeneralBtn"), recordsViewAdvancedBtn: $("recordsViewAdvancedBtn"),
   recordsContinuityList: $("recordsContinuityList"), recordsNpcList: $("recordsNpcList"), recordsSettingList: $("recordsSettingList"),
+  recordsRail: $("recordsRail"), recordsTabContinuity: $("recordsTabContinuity"), recordsTabNpc: $("recordsTabNpc"), recordsTabSetting: $("recordsTabSetting"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), sceneSummary: $("sceneSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
   closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelApiKey: $("modelApiKey"),
@@ -1720,12 +1722,15 @@ function renderSaveManager() {
 
 function autoExpandTextarea(textarea) {
   if (!textarea) return;
-  textarea.style.height = "auto";
+  textarea.style.height = "0px";
   const scrollHeight = textarea.scrollHeight;
   const computed = window.getComputedStyle(textarea);
   const minHeight = parseFloat(computed.minHeight) || 0;
   const maxHeight = parseFloat(computed.maxHeight) || Infinity;
-  const targetHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+  const lineHeight = parseFloat(computed.lineHeight) || 20;
+  const verticalPadding = (parseFloat(computed.paddingTop) || 0) + (parseFloat(computed.paddingBottom) || 0);
+  const floor = Math.max(minHeight, lineHeight + verticalPadding);
+  const targetHeight = Math.min(Math.max(scrollHeight, floor), maxHeight);
   textarea.style.height = `${targetHeight}px`;
   textarea.style.overflowY = scrollHeight > maxHeight ? "auto" : "hidden";
 }
@@ -2118,6 +2123,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   );
   renderAll();
   cachePlayerShell();
+  if (state.activeSave) refreshRecords({ force: true });
   if (recoverableOperations.length) {
     let reloadAfterRecovery = false;
     for (const operation of recoverableOperations) {
@@ -2155,6 +2161,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
 async function bootstrap() {
   initAutoExpandingTextareas();
   restoreRecordsViewPreference();
+  restoreRecordsTabPreference();
   await readerPreferences.load();
   const modelConfig = await request("/api/player/model-config");
   state.modelConfig = modelConfig;
@@ -2472,7 +2479,7 @@ async function resumeConfirmationOperation(operation) {
     await acknowledgeHandledOperation(operation.operation_id);
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
     showToast("这一回合已经写入旅程");
-    refreshRecordsIfOpen();
+    refreshRecordsAfterTurn();
     return true;
   } catch (error) {
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
@@ -2695,7 +2702,7 @@ async function confirmTurn() {
     await loadAll({ scroll: "smooth" });
     tokenUsage.clearPendingUsage();
     showToast("这一回合已经写入旅程");
-    refreshRecordsIfOpen();
+    refreshRecordsAfterTurn();
   } catch (error) {
     setMode("pending"); renderAll(); showError(error);
     await acknowledgeFailedOperation(error);
@@ -3161,20 +3168,18 @@ async function initialize() {
   }
 }
 
-function openLeftDrawer() {
+async function openLeftDrawer() {
   if (els.leftDrawer) {
+    const closed = await closeRecordsDrawer();
+    if (!closed) return;
     els.leftDrawer.classList.add("open");
     els.leftDrawer.setAttribute("aria-hidden", "false");
-    els.drawerBackdrop.hidden = false;
   }
 }
 function closeLeftDrawer() {
   if (els.leftDrawer) {
     els.leftDrawer.classList.remove("open");
     els.leftDrawer.setAttribute("aria-hidden", "true");
-    if (!els.drawer?.classList.contains("open")) {
-      els.drawerBackdrop.hidden = true;
-    }
   }
 }
 
@@ -3188,7 +3193,6 @@ const CONTINUITY_EDITABLE_FIELDS = [
   ["statement", "陈述", false, "textarea"],
   ["entities", "关联实体", true],
   ["location", "地点", false],
-  ["deadline", "截止", false],
 ];
 
 const NPC_PUBLIC_FIELDS = [
@@ -3216,7 +3220,6 @@ const NPC_ADVANCED_DIRECTOR_FIELDS = [
 ];
 
 const SETTING_FIELDS = [
-  ["kind", "类型", false],
   ["name", "名称", false],
   ["summary", "摘要", false, "textarea"],
   ["public_facts", "公开事实", true, "textarea"],
@@ -3224,6 +3227,83 @@ const SETTING_FIELDS = [
 ];
 
 const RECORDS_VIEW_STORAGE_KEY = "loreloop:records-view";
+
+const RECORDS_TAB_STORAGE_KEY = "loreloop:records-tab";
+let recordsActiveTab = "continuity";
+
+function restoreRecordsTabPreference() {
+  try {
+    const stored = window.localStorage.getItem(RECORDS_TAB_STORAGE_KEY);
+    if (stored === "continuity" || stored === "npc" || stored === "setting") recordsActiveTab = stored;
+  } catch (_error) {
+    // Fall back to the continuity tab.
+  }
+  renderRecordsRail();
+}
+
+function openRecordsTab(tab) {
+  if (!els.recordsDrawer) return;
+  if (els.recordsDrawer.classList.contains("open") && recordsActiveTab === tab) {
+    closeRecordsDrawer();
+    return;
+  }
+  if (recordsDirty || recomputeRecordsDirty()) {
+    showConfirmModal({
+      title: "切换档案分类",
+      message: "当前有未保存的修改，切换分类会丢弃它们。确定继续吗？",
+      eyebrow: "RECORDS TAB",
+      confirmText: "继续切换",
+      cancelText: "取消",
+    }).then((proceed) => {
+      if (!proceed) return;
+      recordsDirty = false;
+      switchRecordsTab(tab);
+    });
+    return;
+  }
+  switchRecordsTab(tab);
+}
+
+function switchRecordsTab(tab) {
+  recordsActiveTab = tab;
+  try {
+    window.localStorage.setItem(RECORDS_TAB_STORAGE_KEY, tab);
+  } catch (_error) {
+    // Preference is per-session only when storage is unavailable.
+  }
+  renderRecordsRail();
+  openRecordsDrawer();
+}
+
+function renderRecordsRail() {
+  const panes = {
+    continuity: els.recordsContinuityList,
+    npc: els.recordsNpcList,
+    setting: els.recordsSettingList,
+  };
+  const counts = {
+    continuity: (state.records?.continuity || []).length,
+    npc: (state.records?.npc_profiles || []).length,
+    setting: (state.records?.world_settings || []).length,
+  };
+  const tabs = {
+    continuity: els.recordsTabContinuity,
+    npc: els.recordsTabNpc,
+    setting: els.recordsTabSetting,
+  };
+    const isOpen = els.recordsDrawer && els.recordsDrawer.classList.contains("open");
+    for (const key of Object.keys(tabs)) {
+      const btn = tabs[key];
+      if (!btn) continue;
+      btn.classList.toggle("is-active", isOpen && key === recordsActiveTab);
+    const countEl = btn.querySelector(".rail-count");
+    if (countEl) countEl.textContent = String(counts[key] ?? 0);
+  }
+  for (const key of Object.keys(panes)) {
+    const pane = panes[key];
+    if (pane) pane.classList.toggle("is-active", key === recordsActiveTab);
+  }
+}
 
 function restoreRecordsViewPreference() {
   let view = "general";
@@ -3274,20 +3354,38 @@ function setRecordsRefreshState(text) {
 
 function openRecordsDrawer() {
   if (!els.recordsDrawer) return;
+  const wasOpen = els.recordsDrawer.classList.contains("open");
   els.recordsDrawer.classList.add("open");
   els.recordsDrawer.setAttribute("aria-hidden", "false");
-  els.drawerBackdrop.hidden = false;
-  recordsDirty = false;
-  refreshRecords({ force: true });
+  closeLeftDrawer();
+  if (!wasOpen) {
+    recordsDirty = false;
+    renderRecordsRail();
+    refreshRecords({ force: true });
+  }
 }
-function closeRecordsDrawer() {
-  if (!els.recordsDrawer) return;
-  els.recordsDrawer.classList.remove("open");
-  els.recordsDrawer.setAttribute("aria-hidden", "true");
-  stopRecordsPoll();
-  recordsDirty = false;
-  if (!els.drawer?.classList.contains("open") && !els.leftDrawer?.classList.contains("open")) {
-    els.drawerBackdrop.hidden = true;
+async function closeRecordsDrawer() {
+  if (!els.recordsDrawer || recordsCloseInFlight) return false;
+  recordsCloseInFlight = true;
+  try {
+    if (els.recordsDrawer.classList.contains("open") && (recordsDirty || recomputeRecordsDirty())) {
+      const proceed = await showConfirmModal({
+        title: "丢弃未保存的修改？",
+        message: "当前档案有未保存的修改，关闭后将丢弃它们。确定继续吗？",
+        eyebrow: "RECORDS",
+        confirmText: "丢弃修改",
+        cancelText: "继续编辑",
+        isDanger: true,
+      });
+      if (!proceed) return false;
+      recordsDirty = false;
+    }
+    els.recordsDrawer.classList.remove("open");
+    els.recordsDrawer.setAttribute("aria-hidden", "true");
+    renderRecordsRail();
+    return true;
+  } finally {
+    recordsCloseInFlight = false;
   }
 }
 function stopRecordsPoll() {
@@ -3304,11 +3402,24 @@ let recordsRefreshGeneration = 0;
 let recordsRefreshPending = false;
 let recordsRefreshPendingForce = false;
 let recordsDirty = false;
+let recordsCloseInFlight = false;
+const recordsExpandedIds = new Set();
+function collectFactValues(editor) {
+  return [...editor.querySelectorAll(".record-fact-input")]
+    .map((input) => input.value.trim())
+    .filter(Boolean);
+}
 function recomputeRecordsDirty() {
   for (const list of [els.recordsContinuityList, els.recordsNpcList, els.recordsSettingList]) {
     if (!list) continue;
+    for (const editor of list.querySelectorAll(".record-fact-editor")) {
+      if (JSON.stringify(collectFactValues(editor)) !== String(editor.dataset.originalValue)) {
+        return true;
+      }
+    }
     for (const control of list.querySelectorAll("input, textarea")) {
       if (control.disabled) continue;
+      if (control.closest(".record-fact-editor")) continue;
       const original = control.dataset.originalValue ?? "";
       const current = control.value;
       if (control.dataset.isList === "1") {
@@ -3323,7 +3434,7 @@ function recomputeRecordsDirty() {
   return false;
 }
 async function refreshRecords({ force = false } = {}) {
-  if (!els.recordsDrawer?.classList.contains("open")) return;
+  if (!els.recordsSettingList) return;
   const generation = ++recordsRefreshGeneration;
   if (recordsRefreshInFlight) {
     recordsRefreshPending = true;
@@ -3369,14 +3480,13 @@ async function refreshRecords({ force = false } = {}) {
   }
 }
 
-function refreshRecordsIfOpen() {
-  if (els.recordsDrawer?.classList.contains("open")) {
-    refreshRecords();
-  }
+function refreshRecordsAfterTurn() {
+  refreshRecords({ force: true });
 }
 
-function _formatListValue(value) {
-  return Array.isArray(value) ? value.join(", ") : "";
+function _formatEditListValue(key, value) {
+  const items = Array.isArray(value) ? value : [];
+  return items.join(RECORD_FACT_KEYS.has(key) ? "\n" : ", ");
 }
 function _splitListValue(value) {
   return String(value || "")
@@ -3385,53 +3495,291 @@ function _splitListValue(value) {
     .filter(Boolean);
 }
 
-function buildRecordCard({ title, statusText = "", statusActive = false, editableFields = [], readonlyFields = [], onSave }) {
+function buildRecordCard({ id = null, title, statusText = "", statusActive = false, fields = [], quoteKey = null, onSave }) {
   const card = node("div", "record-card");
   const head = node("div", "record-card-head");
   head.appendChild(node("div", "record-card-title", title));
+
+  const headActions = node("div", "record-head-actions");
   if (statusText) {
-    head.appendChild(node("span", `record-status-tag${statusActive ? " is-active" : ""}`, statusText));
+    headActions.appendChild(node("span", `codex-kind-tag${statusActive ? " is-active" : ""}`, statusText));
   }
+  const editButton = node("button", "record-edit-button", "✎");
+  editButton.type = "button";
+  editButton.title = "编辑";
+  editButton.setAttribute("aria-label", "编辑档案");
+  headActions.appendChild(editButton);
+  head.appendChild(headActions);
   card.appendChild(head);
+
+  const summaryEl = quoteKey ? node("div", "codex-quote-box") : null;
+  if (summaryEl) card.appendChild(summaryEl);
+
+  const viewContainer = node("div", "record-view");
+  const editContainer = node("div", "record-edit");
+  editContainer.hidden = true;
+  card.appendChild(viewContainer);
+  card.appendChild(editContainer);
+
+  let collapsed = !(id != null && recordsExpandedIds.has(id));
+  let editing = false;
 
   const controls = {};
   const valueSource = {};
+  const factRenderers = {};
 
-  const appendEditable = ([key, label, isList, kind]) => {
+  const syncCollapse = () => {
+    card.classList.toggle("is-collapsed", collapsed);
+    if (summaryEl) {
+      const text = valueSource[quoteKey] == null ? "" : String(valueSource[quoteKey]).trim();
+      summaryEl.textContent = text;
+      summaryEl.hidden = !collapsed || !text;
+    }
+    if (editing) return;
+    viewContainer.hidden = collapsed;
+    editContainer.hidden = true;
+  };
+
+  head.onclick = (event) => {
+    if (event.target.closest(".record-edit-button")) return;
+    if (editing) return;
+    collapsed = !collapsed;
+    if (id != null) {
+      if (collapsed) recordsExpandedIds.delete(id);
+      else recordsExpandedIds.add(id);
+    }
+    syncCollapse();
+  };
+
+
+  const populate = (data) => {
+    fields.forEach(([key]) => { valueSource[key] = data[key]; });
+  };
+
+  const appendViewField = ([key, label, isList]) => {
+    const row = node("div", "codex-field");
+    row.appendChild(node("span", "resource-label", label));
+    const raw = valueSource[key];
+    if (isList) {
+      const values = Array.isArray(raw) ? raw.filter((item) => String(item).trim()) : [];
+      if (values.length) {
+        if (RECORD_FACT_KEYS.has(key)) {
+          const factList = node("ul", "codex-fact-list");
+          values.forEach((item) => factList.appendChild(node("li", "", String(item))));
+          row.appendChild(factList);
+        } else {
+          const pills = node("div", "codex-pills");
+          values.forEach((item) => pills.appendChild(node("span", "codex-pill pill-alias", String(item))));
+          row.appendChild(pills);
+        }
+      } else {
+        row.appendChild(node("p", "", "—"));
+      }
+    } else {
+      const text = raw == null || raw === "" ? "—" : String(raw);
+      row.appendChild(node("p", "", text));
+    }
+    viewContainer.appendChild(row);
+  };
+
+  const renderView = () => {
+    viewContainer.replaceChildren();
+    if (quoteKey && valueSource[quoteKey] != null && valueSource[quoteKey] !== "") {
+      viewContainer.appendChild(node("div", "codex-quote-box", String(valueSource[quoteKey])));
+    }
+    for (const field of fields) {
+      if (field[0] === quoteKey) continue;
+      appendViewField(field);
+    }
+  };
+
+  const appendEditable = ([key, label, isList]) => {
     const row = node("div", "record-field");
-    row.appendChild(node("span", "record-field-label", label));
-    const control = kind === "textarea"
-      ? document.createElement("textarea")
-      : document.createElement("input");
-    if (control.tagName === "INPUT") control.type = "text";
-    control.value = isList ? _formatListValue(valueSource[key]) : (valueSource[key] ?? "");
+    row.appendChild(node("span", "resource-label", label));
+    if (isList && RECORD_FACT_KEYS.has(key)) {
+      const editor = node("div", "record-fact-editor");
+      editor.dataset.originalValue = JSON.stringify(valueSource[key] || []);
+      const factRow = (fact) => {
+        const rowEl = node("div", "record-fact-row");
+        const input = document.createElement("textarea");
+        input.className = "record-fact-input";
+        input.rows = "1";
+        input.value = fact || "";
+        input.addEventListener("input", () => { recordsDirty = recomputeRecordsDirty(); });
+        const removeBtn = node("button", "ability-remove-btn", "×");
+        removeBtn.type = "button";
+        removeBtn.title = "删除该条";
+        removeBtn.setAttribute("aria-label", "删除该条事实");
+        removeBtn.onclick = () => { rowEl.remove(); recordsDirty = recomputeRecordsDirty(); };
+        rowEl.append(input, removeBtn);
+        return rowEl;
+      };
+      const render = () => {
+        editor.replaceChildren();
+        (Array.isArray(valueSource[key]) ? valueSource[key] : [])
+          .forEach((fact) => editor.appendChild(factRow(fact)));
+        const addBtn = node("button", "text-button", "＋ 添加一条");
+        addBtn.type = "button";
+        addBtn.onclick = () => {
+          const newRow = factRow("");
+          editor.insertBefore(newRow, addBtn);
+          const first = newRow.querySelector("textarea");
+          if (first) first.focus();
+          recordsDirty = recomputeRecordsDirty();
+        };
+        editor.appendChild(addBtn);
+      };
+      render();
+      controls[key] = editor;
+      factRenderers[key] = render;
+      row.appendChild(editor);
+      editContainer.appendChild(row);
+      return;
+    }
+    const control = document.createElement("textarea");
+    control.rows = "1";
+    control.value = isList ? _formatEditListValue(key, valueSource[key]) : (valueSource[key] ?? "");
     control.dataset.originalValue = control.value;
     if (isList) control.dataset.isList = "1";
     control.addEventListener("input", () => { recordsDirty = recomputeRecordsDirty(); });
     row.appendChild(control);
-    card.appendChild(row);
+    editContainer.appendChild(row);
     controls[key] = control;
   };
-  const appendReadonly = ([key, label, isList]) => {
-    const row = node("div", "record-field");
-    row.appendChild(node("span", "record-field-label", label));
-    const text = isList ? _formatListValue(valueSource[key]) : (valueSource[key] ?? "");
-    row.appendChild(node("p", "record-field-value is-readonly", text || "—"));
-    card.appendChild(row);
+
+  const applySourceToControls = () => {
+    for (const [key, , isList] of fields) {
+      if (factRenderers[key]) {
+        factRenderers[key]();
+        controls[key].dataset.originalValue = JSON.stringify(valueSource[key] || []);
+        continue;
+      }
+      const control = controls[key];
+      control.value = isList ? _formatEditListValue(key, valueSource[key]) : (valueSource[key] ?? "");
+      control.dataset.originalValue = control.value;
+    }
   };
 
-  const populate = (data) => {
-    editableFields.forEach(([key]) => { valueSource[key] = data[key]; });
-    readonlyFields.forEach(([key]) => { valueSource[key] = data[key]; });
+  const renderEdit = () => {
+    editContainer.replaceChildren();
+    fields.forEach((field) => appendEditable(field));
+    if (!onSave) return;
+
+    const actions = node("div", "record-edit-actions");
+    const cancelBtn = node("button", "text-button", "取消");
+    const saveBtn = node("button", "text-button is-primary", "保存");
+    const message = node("span", "record-edit-message");
+    cancelBtn.type = "button";
+    saveBtn.type = "button";
+
+    cancelBtn.onclick = () => {
+      applySourceToControls();
+      message.textContent = "";
+      message.className = "record-edit-message";
+      recordsDirty = recomputeRecordsDirty();
+      switchToView();
+    };
+
+    saveBtn.onclick = async () => {
+      saveBtn.disabled = true;
+      message.textContent = "保存中…";
+      message.className = "record-edit-message";
+      try {
+        const values = {};
+        for (const [key, , isList] of fields) {
+          const control = controls[key];
+          const original = valueSource[key];
+          if (factRenderers[key]) {
+            const current = collectFactValues(control);
+            const originalList = Array.isArray(original) ? original : [];
+            if (JSON.stringify(current) !== JSON.stringify(originalList)) {
+              values[key] = current;
+            }
+          } else if (isList) {
+            const current = _splitListValue(control.value);
+            const originalList = Array.isArray(original) ? original : [];
+            if (JSON.stringify(current) !== JSON.stringify(originalList)) {
+              values[key] = current;
+            }
+          } else if (control.value !== (original ?? "")) {
+            values[key] = control.value;
+          }
+        }
+        if (!Object.keys(values).length) {
+          message.textContent = "";
+          message.className = "record-edit-message";
+          saveBtn.disabled = false;
+          recordsDirty = recomputeRecordsDirty();
+          renderView();
+          switchToView();
+          showToast("没有需要保存的改动");
+          return;
+        }
+        await onSave(values);
+        Object.assign(valueSource, values);
+        applySourceToControls();
+        renderView();
+        switchToView();
+        recordsDirty = recomputeRecordsDirty();
+        refreshRecords({ force: !recordsDirty });
+      } catch (error) {
+        message.textContent = error?.message || "保存失败";
+        message.className = "record-edit-message is-error";
+      } finally {
+        saveBtn.disabled = false;
+      }
+    };
+
+    actions.append(cancelBtn, saveBtn, message);
+    editContainer.appendChild(actions);
   };
 
-  return { card, head, controls, valueSource, populate, appendEditable, appendReadonly, onSave, editableFields, readonlyFields };
+  const switchToEdit = () => {
+    editing = true;
+    collapsed = false;
+    if (id != null) recordsExpandedIds.add(id);
+    card.classList.remove("is-collapsed");
+    viewContainer.hidden = true;
+    editContainer.hidden = false;
+    editButton.hidden = true;
+    const firstControl = editContainer.querySelector("input, textarea");
+    if (firstControl) firstControl.focus();
+    window.requestAnimationFrame(() => {
+      editContainer.querySelectorAll("textarea").forEach(autoExpandTextarea);
+    });
+  };
+
+  const switchToView = () => {
+    editing = false;
+    editContainer.hidden = true;
+    viewContainer.hidden = false;
+    editButton.hidden = false;
+  };
+
+  editButton.onclick = () => {
+    renderEdit();
+    switchToEdit();
+  };
+
+  const render = () => {
+    renderView();
+    if (onSave) {
+      renderEdit();
+    } else {
+      editButton.hidden = true;
+      editContainer.hidden = true;
+    }
+    syncCollapse();
+  };
+
+  return { card, populate, render };
 }
 
 function renderRecords(records) {
   renderContinuityRecords(records.continuity || []);
   renderNpcRecords(records.npc_profiles || []);
   renderSettingRecords(records.world_settings || []);
+  renderRecordsRail();
 }
 
 function emptyState(message) {
@@ -3445,22 +3793,21 @@ function renderContinuityRecords(items) {
     return;
   }
   for (const item of items) {
+    const active = item.status === "active";
     const builder = buildRecordCard({
+      id: item.id,
       title: item.subject || "（无主题）",
       statusText: item.status,
-      statusActive: item.status === "active",
-      editableFields: CONTINUITY_EDITABLE_FIELDS,
-      onSave: item.status === "active" ? async (values) => {
+      statusActive: active,
+      fields: CONTINUITY_EDITABLE_FIELDS,
+      quoteKey: "statement",
+      onSave: active ? async (values) => {
         await updateRecord("continuity", item.id, values);
         showToast("连续性已更新");
       } : null,
     });
     builder.populate(item);
-    builder.editableFields.forEach(builder.appendEditable.bind(builder));
-    if (item.status !== "active") {
-      builder.card.querySelectorAll("input, textarea").forEach((input) => { input.disabled = true; });
-    }
-    appendSaveActions(builder);
+    builder.render();
     els.recordsContinuityList.appendChild(builder.card);
   }
 }
@@ -3475,6 +3822,9 @@ function _fieldMetaByKey(lists) {
 
 const NPC_FIELD_META = _fieldMetaByKey([NPC_PUBLIC_FIELDS, NPC_ADVANCED_DIRECTOR_FIELDS]);
 const SETTING_FIELD_META = _fieldMetaByKey([SETTING_FIELDS]);
+
+const NPC_HIDDEN_FIELD_KEYS = new Set(["aliases"]);
+const RECORD_FACT_KEYS = new Set(["public_facts", "hidden_facts"]);
 
 function _editableFieldsFor(data, meta) {
   return Object.keys(data)
@@ -3491,17 +3841,19 @@ function renderNpcRecords(profiles) {
   for (const profile of profiles) {
     const data = { ...(profile.public || {}), ...(profile.director_only || {}) };
     const builder = buildRecordCard({
+      id: profile.id,
       title: profile.public?.name || "（未命名）",
       statusText: "人物",
-      editableFields: _editableFieldsFor(data, NPC_FIELD_META),
+      fields: _editableFieldsFor(data, NPC_FIELD_META)
+        .filter(([key]) => !NPC_HIDDEN_FIELD_KEYS.has(key)),
+      quoteKey: "public_summary",
       onSave: async (values) => {
         await updateRecord("npc", profile.id, values, state.recordsView);
         showToast("人物档案已更新");
       },
     });
     builder.populate(data);
-    builder.editableFields.forEach(builder.appendEditable.bind(builder));
-    appendSaveActions(builder);
+    builder.render();
     els.recordsNpcList.appendChild(builder.card);
   }
 }
@@ -3515,66 +3867,20 @@ function renderSettingRecords(settings) {
   for (const setting of settings) {
     const data = setting.fields || {};
     const builder = buildRecordCard({
+      id: setting.id,
       title: data.name || "（未命名）",
-      statusText: data.kind || "Setting",
-      editableFields: _editableFieldsFor(data, SETTING_FIELD_META),
+      statusText: SETTING_KIND_LABELS[data.kind] || data.kind || "Setting",
+      fields: _editableFieldsFor(data, SETTING_FIELD_META),
+      quoteKey: "summary",
       onSave: async (values) => {
         await updateRecord("setting", setting.id, values, state.recordsView);
         showToast("世界设定已更新");
       },
     });
     builder.populate(data);
-    builder.editableFields.forEach(builder.appendEditable.bind(builder));
-    appendSaveActions(builder);
+    builder.render();
     els.recordsSettingList.appendChild(builder.card);
   }
-}
-
-function appendSaveActions(builder) {
-  if (!builder.onSave) return;
-  const actions = node("div", "record-edit-actions");
-  const saveBtn = node("button", "soft-button is-primary", "保存");
-  const message = node("span", "record-edit-message");
-  saveBtn.onclick = async () => {
-    saveBtn.disabled = true;
-    message.textContent = "保存中…";
-    message.className = "record-edit-message";
-    try {
-      const values = {};
-      for (const [key, _label, isList] of builder.editableFields) {
-        const control = builder.controls[key];
-        const original = builder.valueSource[key];
-        if (isList) {
-          const current = _splitListValue(control.value);
-          const originalList = Array.isArray(original) ? original : [];
-          if (JSON.stringify(current) !== JSON.stringify(originalList)) {
-            values[key] = current;
-          }
-        } else if (control.value !== (original ?? "")) {
-          values[key] = control.value;
-        }
-      }
-      if (!Object.keys(values).length) {
-        recordsDirty = recomputeRecordsDirty();
-        message.textContent = "没有需要保存的改动";
-        message.className = "record-edit-message";
-        saveBtn.disabled = false;
-        return;
-      }
-      await builder.onSave(values);
-      message.textContent = "已保存";
-      message.className = "record-edit-message";
-      recordsDirty = false;
-      refreshRecords({ force: true });
-    } catch (error) {
-      message.textContent = error?.message || "保存失败";
-      message.className = "record-edit-message is-error";
-    } finally {
-      saveBtn.disabled = false;
-    }
-  };
-  actions.append(saveBtn, message);
-  builder.card.appendChild(actions);
 }
 
 function openDrawer() { els.drawer.classList.add("open"); els.drawer.setAttribute("aria-hidden", "false"); els.drawerBackdrop.hidden = false; }
@@ -3617,13 +3923,13 @@ els.generateBtn.onclick = generateTurn;
 els.stopGenerationBtn.onclick = stopActiveGeneration;
 els.dismissErrorBtn.onclick = clearError;
 els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer;
-if (els.openLeftDrawerBtn) els.openLeftDrawerBtn.onclick = openLeftDrawer;
-if (els.closeLeftDrawerBtn) els.closeLeftDrawerBtn.onclick = closeLeftDrawer;
-if (els.openRecordsDrawerBtn) els.openRecordsDrawerBtn.onclick = openRecordsDrawer;
-if (els.closeRecordsDrawerBtn) els.closeRecordsDrawerBtn.onclick = closeRecordsDrawer;
-if (els.refreshRecordsBtn) els.refreshRecordsBtn.onclick = () => refreshRecords({ force: true });
+if (els.openLeftDrawerRailBtn) els.openLeftDrawerRailBtn.onclick = () => { if (els.leftDrawer.classList.contains("open")) closeLeftDrawer(); else openLeftDrawer(); };
+
 if (els.recordsViewGeneralBtn) els.recordsViewGeneralBtn.onclick = () => setRecordsView("general");
 if (els.recordsViewAdvancedBtn) els.recordsViewAdvancedBtn.onclick = () => setRecordsView("advanced");
+if (els.recordsTabContinuity) els.recordsTabContinuity.onclick = () => openRecordsTab("continuity");
+if (els.recordsTabNpc) els.recordsTabNpc.onclick = () => openRecordsTab("npc");
+if (els.recordsTabSetting) els.recordsTabSetting.onclick = () => openRecordsTab("setting");
 els.drawerBackdrop.onclick = () => { closeDrawer(); closeLeftDrawer(); closeRecordsDrawer(); };
 els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
 els.newSaveBtn.onclick = () => { els.saveNameInput.value = ""; els.saveDialog.showModal(); window.setTimeout(() => els.saveNameInput.focus(), 0); };
@@ -3639,6 +3945,30 @@ els.modelSettingsBtn.onclick = () => {
   openModelConfig();
 };
 els.closeModelConfigBtn.onclick = () => els.modelConfigDialog.close();
+
+// Global drawer close listeners
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    if (document.querySelector("dialog[open]")) return;
+    let closed = false;
+    if (els.leftDrawer?.classList.contains("open")) { closeLeftDrawer(); closed = true; }
+    if (els.recordsDrawer?.classList.contains("open")) { closeRecordsDrawer(); closed = true; }
+    if (closed && document.activeElement && document.activeElement.blur) {
+      document.activeElement.blur();
+    }
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("dialog") || event.target.closest("[popover]:open")) return;
+  if (event.target.closest("#recordsRail")) return;
+  if (els.leftDrawer?.classList.contains("open") && event.target.closest("#leftDrawer")) return;
+  if (els.recordsDrawer?.classList.contains("open") && event.target.closest("#recordsDrawer")) return;
+  if (event.target.closest(".codex-button")) return; // Prevent interference with other popovers
+
+  if (els.leftDrawer?.classList.contains("open")) closeLeftDrawer();
+  if (els.recordsDrawer?.classList.contains("open")) closeRecordsDrawer();
+});
 els.tokenUsageDialog.addEventListener("click", (e) => {
   if (e.target === els.tokenUsageDialog) {
     if (els.tokenUsageDialog.hidePopover) els.tokenUsageDialog.hidePopover();

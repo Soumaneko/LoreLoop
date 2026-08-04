@@ -154,7 +154,7 @@ class NPCProfile(BaseModel):
     confidence: float = Field(default=0.5, ge=0, le=1)
     updated_at: str = ""
     active: bool = True
-    name_hit_count: int = Field(default=1, ge=0)
+    name_hit_count: int = Field(default=0, ge=0)
     alias_hit_counts: dict[str, int] = Field(default_factory=dict)
 
     def update_view(self) -> NPCProfileUpdateInput:
@@ -202,7 +202,7 @@ def profile_from_update(
     confidence: float = 0.5,
     updated_at: str | None = None,
     active: bool = True,
-    name_hit_count: int = 1,
+    name_hit_count: int = 0,
     alias_hit_counts: dict[str, int] | None = None,
 ) -> NPCProfile:
     return NPCProfile(

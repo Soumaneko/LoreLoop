@@ -17,12 +17,10 @@ _CONTINUITY_EDITABLE_FIELDS = {
     "statement",
     "entities",
     "location",
-    "deadline",
 }
-_CONTINUITY_NULLABLE_FIELDS = {"location", "deadline"}
+_CONTINUITY_NULLABLE_FIELDS = {"location"}
 _NPC_PUBLIC_FIELDS = {
     "name",
-    "aliases",
     "public_summary",
     "role",
     "appearance",
@@ -44,7 +42,7 @@ _NPC_NULLABLE_FIELDS = {
     "attitude_to_player",
     "current_intent",
 }
-_NPC_LIST_FIELDS = {"aliases", "personality_traits", "known_abilities"}
+_NPC_LIST_FIELDS = {"personality_traits", "known_abilities"}
 _NPC_DIRECTOR_FIELDS = {
     "core_motivation",
     "hidden_secret",
@@ -74,13 +72,11 @@ _NPC_ADVANCED_NULLABLE_FIELDS = {
 }
 _NPC_ADVANCED_LIST_FIELDS = {"encounter_potentials"}
 _SETTING_GENERAL_FIELDS = {
-    "kind",
     "name",
     "summary",
     "public_facts",
 }
 _SETTING_ADVANCED_FIELDS = {
-    "kind",
     "name",
     "summary",
     "public_facts",

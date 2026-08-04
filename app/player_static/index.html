@@ -31,12 +31,7 @@
             <span>↷</span>
           </button>
         </div>
-        <button id="openLeftDrawerBtn" class="icon-button codex-button" type="button" aria-label="打开角色典籍" title="角色与局内资产">
-          <span class="codex-icon">📜</span>
-        </button>
-        <button id="openRecordsDrawerBtn" class="icon-button codex-button" type="button" aria-label="打开世界档案" title="连续性 · 人物 · 世界设定">
-          <span class="codex-icon">🗂</span>
-        </button>
+
         <button id="openDrawerBtn" class="icon-button" type="button" aria-label="打开旅程控制" title="系统旅程控制">
           <span></span><span></span><span></span>
         </button>
@@ -100,40 +95,36 @@
 
   <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
 
-  <!-- Records Drawer: World Archive (left) -->
+  <!-- Records Rail: always-on collapsed tabs -->
+  <nav id="recordsRail" class="records-rail" aria-label="世界档案分类">
+    <!-- Hero Button for In-Game Codex -->
+    <button id="openLeftDrawerRailBtn" class="records-rail-hero-btn" type="button" title="角色与局内资产">
+      <span class="codex-icon">📜</span>
+      <span class="hero-label">局内典籍</span>
+    </button>
+    <button id="recordsTabContinuity" class="records-rail-tab is-active" type="button" title="连续性">
+      <span class="rail-label">连续性</span>
+      <span class="rail-count">0</span>
+    </button>
+    <button id="recordsTabNpc" class="records-rail-tab" type="button" title="人物档案">
+      <span class="rail-label">人物档案</span>
+      <span class="rail-count">0</span>
+    </button>
+    <button id="recordsTabSetting" class="records-rail-tab" type="button" title="世界设定">
+      <span class="rail-label">世界设定</span>
+      <span class="rail-count">0</span>
+    </button>
+  </nav>
+
   <aside id="recordsDrawer" class="drawer drawer-left" aria-hidden="true">
-    <div class="drawer-header">
-      <div><p class="eyebrow">WORLD ARCHIVE</p><h2>世界档案</h2></div>
-      <button id="closeRecordsDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
-    </div>
-    <div class="records-toolbar">
-      <div class="records-view-toggle" role="group" aria-label="档案视图">
-        <button id="recordsViewGeneralBtn" class="is-active" type="button" title="只显示已登场 NPC/已出现设定的公开信息">一般</button>
-        <button id="recordsViewAdvancedBtn" type="button" title="显示全部 NPC/设定，含导演信息与私密事实">高级</button>
-      </div>
-      <button id="refreshRecordsBtn" class="soft-button" type="button">刷新</button>
-      <span id="recordsRefreshState" class="records-refresh-state" hidden></span>
-    </div>
-    <section class="drawer-section">
-      <div class="section-title">连续性</div>
-      <div id="recordsContinuityList" class="records-list"></div>
-    </section>
-    <section class="drawer-section">
-      <div class="section-title">人物档案</div>
-      <div id="recordsNpcList" class="records-list"></div>
-    </section>
-    <section class="drawer-section">
-      <div class="section-title">世界设定</div>
-      <div id="recordsSettingList" class="records-list"></div>
-    </section>
+    <span id="recordsRefreshState" class="records-refresh-state" hidden></span>
+    <div id="recordsContinuityList" class="records-list records-pane"></div>
+    <div id="recordsNpcList" class="records-list records-pane"></div>
+    <div id="recordsSettingList" class="records-list records-pane"></div>
   </aside>
 
   <!-- Left Drawer: Character & In-Game Codex -->
-  <aside id="leftDrawer" class="drawer left-drawer" aria-hidden="true">
-    <div class="drawer-header">
-      <div><p class="eyebrow">CHARACTER & CODEX</p><h2>局内典籍</h2></div>
-      <button id="closeLeftDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
-    </div>
+  <aside id="leftDrawer" class="drawer drawer-left" aria-hidden="true">
     <section class="drawer-section">
       <div class="section-title">角色</div>
       <div id="playerSummary" class="summary-card"></div>
@@ -193,6 +184,13 @@
           <input id="tokenUsageSelect" type="checkbox" />
           <span class="toggle-track"></span>
         </label>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">档案视图</span>
+        <div class="records-view-toggle" role="group" aria-label="档案视图">
+          <button id="recordsViewGeneralBtn" class="is-active" type="button" title="只显示已登场 NPC/已出现设定的公开信息">一般</button>
+          <button id="recordsViewAdvancedBtn" type="button" title="显示全部 NPC/设定，含导演信息与私密事实">高级</button>
+        </div>
       </div>
     </section>
     <section class="drawer-section">

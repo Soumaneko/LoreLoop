@@ -26,7 +26,7 @@ class NPCProfileStore:
                 confidence REAL NOT NULL DEFAULT 0.5,
                 updated_at TEXT NOT NULL DEFAULT '',
                 active INTEGER NOT NULL DEFAULT 1,
-                name_hit_count INTEGER NOT NULL DEFAULT 1,
+                name_hit_count INTEGER NOT NULL DEFAULT 0,
                 alias_hit_counts_json TEXT NOT NULL DEFAULT '{}'
             )
             """
