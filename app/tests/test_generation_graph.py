@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import json
+
 from langgraph.graph import END, START, StateGraph
 
 from app.graph import generation_graph, generation_nodes
@@ -1278,3 +1280,140 @@ def test_context_facts_npc_profiles_respect_disclosure_levels(
     assert view.name == "林澈"
     assert view.hidden_secret is None
     assert view.core_motivation is None
+
+
+def test_composer_receives_engaged_events_automatically(
+    tmp_path,
+    monkeypatch,
+):
+    from app.domain.context_facts.schemas import ContextFactSet
+    from app.domain.core_memory.schemas import CoreMemory
+    from app.domain.current_state import (
+        CurrentState,
+        PlayerState,
+        ResourcesState,
+        SceneState,
+        WorldClock,
+    )
+    from app.domain.director_event.schemas import DirectorEvent
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.domain.turn_resolution.schemas import TurnResolutionResult
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.stores import StoreBundle
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile() as store:
+        store.upsert(NPCProfile(name="码头常客"))
+    engaged = DirectorEvent(
+        role="arc",
+        title="商路封锁",
+        subject="河务署",
+        intent="控制渡河通道",
+        method="封锁旧桥",
+        macro_intent="改变商路格局",
+        deadline_clock=WorldClock().advance_phase(3),
+        created_turn=1,
+        updated_turn=1,
+        stage="engaged",
+    )
+    just_engaged_hidden = DirectorEvent(
+        role="ambient",
+        title="无灯船",
+        subject="猎户",
+        intent="查明异动",
+        method="搜山",
+        macro_intent="生存不择手段。",
+        deadline_clock=WorldClock().advance_phase(2),
+        created_turn=1,
+        updated_turn=1,
+        stage="hidden",
+    )
+    unrelated_hidden = DirectorEvent(
+        role="ambient",
+        title="旧巷传闻",
+        subject="镇民",
+        intent="散布流言",
+        method="茶楼闲谈",
+        macro_intent="转移视线。",
+        deadline_clock=WorldClock().advance_phase(2),
+        created_turn=1,
+        updated_turn=1,
+        stage="hidden",
+    )
+    with stores.director_event() as store:
+        store.save(engaged)
+        store.save(just_engaged_hidden)
+        store.save(unrelated_hidden)
+
+    captured = {}
+    streamed = []
+
+    class _FakeComposition:
+        scene_reasoning = "r"
+        scene_text = "t"
+        next_action_directions = []
+
+        def to_outline(self):
+            return SimpleNamespace()
+
+        def to_scene_result(self):
+            return SimpleNamespace()
+
+    class _FakeComposer:
+        def __init__(self, gateway):
+            self.gateway = gateway
+
+        def compose(self, context, **kwargs):
+            captured["context"] = context
+            return _FakeComposition()
+
+    monkeypatch.setattr(generation_nodes, "NarrativeComposerAgent", _FakeComposer)
+    monkeypatch.setattr(generation_nodes, "build_entity_retrieval_anchors", lambda _o: [])
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
+
+    state = {
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: object(),
+        ),
+        "user_input": "观察码头。",
+        "core_memory": CoreMemory(items=[]),
+        "current_state": CurrentState(
+            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
+            player=PlayerState(name="萧云痕"),
+            resources=ResourcesState(inventory=[]),
+        ),
+        "turn_resolution": TurnResolutionResult(),
+        "context_facts": ContextFactSet(turn_focus="围绕码头。", facts=[]),
+        "trace_id": "trace-gen",
+        "short_term_memory": SimpleNamespace(recent_scenes=[]),
+        "action_npc_profiles": [],
+        "context_fact_npc_profiles": [],
+        "pending_engagements": [just_engaged_hidden.event_id],
+    }
+
+    generation_nodes.compose_narrative_node(state)
+
+    injected_ids = {
+        event.event_id for event in captured["context"].engaged_events
+    }
+    assert engaged.event_id in injected_ids
+    assert just_engaged_hidden.event_id in injected_ids
+    assert unrelated_hidden.event_id not in injected_ids
+
+    from app.domain.director_event.views import project_director_events
+
+    projected = json.loads(
+        project_director_events(
+            captured["context"].engaged_events,
+            effective_stage="engaged",
+        )
+    )
+    just_engaged = next(
+        item
+        for item in projected
+        if item["event_id"] == just_engaged_hidden.event_id
+    )
+    assert just_engaged["stage"] == "engaged"
+    assert just_engaged["macro_intent"] == "生存不择手段。"
+    assert "hooks" not in just_engaged

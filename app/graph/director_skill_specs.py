@@ -47,13 +47,12 @@ class PresentEventArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(min_length=1)
-    hook_id: str | None = Field(
-        default=None,
+    hook_id: str = Field(
         min_length=1,
         max_length=80,
         description=(
-            "潜伏期(hidden)事件必须指定要呈现给 Composer 的 hook_id；"
-            "不指定时不呈现任何内容。engaged 事件忽略该字段。"
+            "本技能只服务潜伏期(hidden)事件且只能通过 hook 间接泄露："
+            "必须指定要呈现给 Composer 的 hook_id；不指定即视为非法请求。"
         ),
     )
 
@@ -198,12 +197,12 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="present_event",
         description=(
-            "将一个已存在的活跃事件注入本轮上下文。适用场景："
-            "1.玩家行动直接干预了该事件，或事件后果在此刻爆发。"
-            "2.主角通过传闻、异象、信件、远程通讯或现场遗留痕迹，间接接触到了与该事件相关的信息。"
-            "通过引入事件，确保正文生成引擎能够准确描写出符合该事件发展进度的剧情。"
-            "对潜伏期(hidden)事件，必须用 arguments.hook_id 选择本轮要呈现的 Hook；"
+            "将一个潜伏期(hidden)事件通过间接接触泄露进本轮上下文。适用场景："
+            "1.主角通过传闻、异象、信件、远程通讯或现场遗留痕迹，间接接触到了与该事件相关的信息。"
+            "必须用 arguments.hook_id 选择本轮要呈现的 Hook；"
             "不指定 hook_id 时不呈现任何内容。必须在请求级 guidance 中说明具体表现方式。"
+            "注意：engaged 事件（玩家已积极卷入）会自动送达 Composer，无需也不允许用本技能"
+            "重复引入；本技能仅限 hidden 且本轮未被玩家直接行动触及的事件。"
         ),
         phases=_GENERATION,
         mutates=False,

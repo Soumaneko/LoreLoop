@@ -31,6 +31,7 @@ def assemble_narrative_context(
     context_facts: ContextFactSet | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
     director_stage: DirectorStageResult | None = None,
+    engaged_events: list | None = None,
 ) -> NarrativeComposerContext:
     return NarrativeComposerContext(
         user_input=user_input,
@@ -41,6 +42,7 @@ def assemble_narrative_context(
         or ContextFactSet(turn_focus="No Context Facts", facts=[]),
         npc_profiles=npc_profiles or [],
         director_stage=director_stage,
+        engaged_events=engaged_events or [],
     )
 
 

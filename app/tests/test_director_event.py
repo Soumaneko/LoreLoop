@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 import pytest
@@ -194,6 +195,22 @@ def test_hooks_are_stored_but_hidden_from_consumer_projections():
     assert "hook_sound" in projected
     assert "intent" not in projected
     assert "world_impact" not in projected
+
+
+def test_project_director_events_forces_engaged_view():
+    from app.domain.director_event.views import project_director_events
+
+    event = _event().model_copy(update={"stage": "hidden"})
+
+    projected = json.loads(
+        project_director_events([event], effective_stage="engaged")
+    )[0]
+
+    assert projected["stage"] == "engaged"
+    assert projected["macro_intent"]
+    assert projected["subject"]
+    assert projected["actors"]
+    assert "hooks" not in projected
 
 
 def test_multiple_active_events_allowed_without_role_limit():

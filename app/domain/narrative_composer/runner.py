@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
 from app.domain.context_facts.views import project_context_facts
+from app.domain.director_event.views import project_director_events
 from app.domain.plot_outline.views import project_turn_resolution
 from app.domain.scene_writer.schemas import NextActionDirection
 from app.domain.short_term_memory.schemas import ShortTermScene
@@ -150,6 +151,10 @@ def _base_input(
             ),
             ensure_ascii=False,
             indent=2,
+        ),
+        "engaged_events_json": project_director_events(
+            context.engaged_events,
+            effective_stage="engaged",
         ),
         "recent_scene_json": _project_recent_scene(recent_scene),
     }

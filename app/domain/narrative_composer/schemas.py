@@ -4,6 +4,7 @@ from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director.schemas import DirectorStageResult
+from app.domain.director_event.schemas import DirectorEvent
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
@@ -23,6 +24,7 @@ class NarrativeComposerContext(BaseModel):
     )
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
     director_stage: DirectorStageResult | None = None
+    engaged_events: list[DirectorEvent] = Field(default_factory=list)
 
 
 class NarrativeComposerResult(BaseModel):

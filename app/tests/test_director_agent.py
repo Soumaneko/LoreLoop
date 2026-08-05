@@ -3277,7 +3277,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
         }
 
 
-def test_generation_presents_persisted_engaged_event(tmp_path):
+def test_present_event_rejects_engaged_event(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
@@ -3311,36 +3311,35 @@ def test_generation_presents_persisted_engaged_event(tmp_path):
 
     gateway = _PhaseGateway(
         decision={
-            "reasoning": "继续呈现已接触事件。",
+            "reasoning": "尝试重复呈现已卷入事件。",
             "requests": [
                 {
                     "request_id": "evt_1",
                     "skill": "present_event",
-                    "arguments": {"event_id": event_id},
+                    "arguments": {
+                        "event_id": event_id,
+                        "hook_id": "hook_sound",
+                    },
                     "guidance": "作为背景舞台提示呈现。",
                 }
             ],
         }
     )
 
-    stage, decision = run_generation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=_current_state(),
-        user_input="继续在码头巡查。",
-        context_facts=[],
-        recent_summaries=[],
-        turn_index=3,
-        trace_id="generation-director",
-        npc_profiles=[],
-        pending_engagements=[],
-    )
-
-    assert stage.materials[0].kind == "event"
-    assert stage.materials[0].payload.get("stage") == "engaged"
-    assert "macro_intent" in stage.materials[0].payload
-    assert "hooks" not in stage.materials[0].payload
+    with pytest.raises(ValueError, match="requires a hidden event"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="继续在码头巡查。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+            npc_profiles=[],
+            pending_engagements=[],
+        )
 
 
 def test_self_check_preserves_engaged_event_ids():
@@ -3422,7 +3421,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
         )
 
 
-def test_present_event_hidden_without_hook_id_presents_nothing(tmp_path):
+def test_present_event_requires_hook_id(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
@@ -3463,25 +3462,20 @@ def test_present_event_hidden_without_hook_id_presents_nothing(tmp_path):
         }
     )
 
-    stage, _ = run_generation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=_current_state(),
-        user_input="继续在码头巡查。",
-        context_facts=[],
-        recent_summaries=[],
-        turn_index=3,
-        trace_id="generation-director",
-        npc_profiles=[],
-        pending_engagements=[],
-    )
-
-    payload = stage.materials[0].payload
-    assert payload["stage"] == "hidden"
-    assert "hooks" not in payload
-    assert "hook" not in payload
-    assert "macro_intent" not in payload
+    with pytest.raises(ValidationError, match="hook_id"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="继续在码头巡查。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+            npc_profiles=[],
+            pending_engagements=[],
+        )
 
 
 def test_hidden_review_engages_event(tmp_path):
@@ -4380,3 +4374,80 @@ def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
     )
 
     assert merged.disclosure_level == "intimate"
+
+
+def test_generation_observation_excludes_engaged_events(tmp_path):
+    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    engaged = DirectorEventSelectionResult(
+        current_story_direction="河岸码头出现异常动静。",
+        reason="独立世界事件。",
+        title="无灯船",
+        duration_phases=7,
+        actor_roles=[],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    hidden = DirectorEventSelectionResult(
+        current_story_direction="镇上传出流言。",
+        reason="独立世界事件。",
+        title="旧巷传闻",
+        duration_phases=5,
+        actor_roles=[],
+        subject="镇民",
+        intent="散布流言",
+        method="茶楼闲谈",
+        macro_intent="转移视线。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_rumor",
+                kind="rumor",
+                content="茶楼有人说巷口夜里有响动。",
+                trigger_anchors=["茶楼"],
+            )
+        ],
+        world_impact=WorldImpact(description="镇民人心浮动。"),
+    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    with stores.director_event() as store:
+        engaged_id = store.save(engaged)
+        store.set_stage(engaged_id, "engaged", turn_index=2)
+        hidden_id = store.save(hidden)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []}
+    )
+    run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="观察码头。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+        pending_engagements=[],
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    observed_ids = {
+        item["event_id"] for item in observation["resources"]["events"]
+    }
+    assert observed_ids == {hidden_id}
+    assert hidden_id in observed_ids
+    assert engaged_id not in observed_ids

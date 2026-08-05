@@ -442,6 +442,13 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
         state.get("action_npc_profiles", []),
         state.get("context_fact_npc_profiles") or [],
     )
+    engaged_event_ids = set(state.get("pending_engagements", []))
+    with _store_factory(state, "director_event")() as event_store:
+        engaged_events = [
+            event
+            for event in event_store.list_active()
+            if event.stage == "engaged" or event.event_id in engaged_event_ids
+        ]
     context = assemble_narrative_context(
         user_input=state["user_input"],
         current_state=state["current_state"],
@@ -452,6 +459,7 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
             profile.disclosure_view() for profile in composer_profiles
         ],
         director_stage=state.get("director_stage"),
+        engaged_events=engaged_events,
     )
     return _compose_with_context(
         state,

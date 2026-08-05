@@ -39,9 +39,21 @@ def project_director_event(
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
-def project_director_events(events: list[DirectorEvent]) -> str:
+def project_director_events(
+    events: list[DirectorEvent],
+    *,
+    effective_stage: str | None = None,
+) -> str:
     return json.dumps(
-        [json.loads(project_director_event(event)) for event in events],
+        [
+            json.loads(
+                project_director_event(
+                    event,
+                    effective_stage=effective_stage,
+                )
+            )
+            for event in events
+        ],
         ensure_ascii=False,
         indent=2,
     )

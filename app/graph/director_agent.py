@@ -24,7 +24,6 @@ from app.domain.director_event.schemas import (
     utc_now,
 )
 from app.domain.director_event.selector import DirectorEventSelector
-from app.domain.director_event.views import project_director_event
 from app.domain.director_npc.creator import DirectorNPCCreator
 from app.domain.director_npc.schemas import DirectorNPCDraft, NPCCreationContext
 from app.domain.npc_profile.schemas import (
@@ -355,11 +354,6 @@ def run_generation_director_agent(
     ):
         active_events = event_store.list_active()
         engaged_event_ids = set(pending_engagements)
-        engaged_events = [
-            event
-            for event in active_events
-            if event.event_id in engaged_event_ids or event.stage == "engaged"
-        ]
         hidden_events = [
             event
             for event in active_events
@@ -388,9 +382,10 @@ def run_generation_director_agent(
                 guidance=guidance,
                 engaged_event_ids=engaged_event_ids,
             ),
-            arguments_validator=lambda args: _require_active_event(
+            arguments_validator=lambda args: _require_hidden_event(
                 event_store,
                 args.event_id,
+                engaged_event_ids=engaged_event_ids,
             ),
         )
         _register_skill(
@@ -466,13 +461,6 @@ def run_generation_director_agent(
                         ],
                     }
                     for event in hidden_events
-                ]
-                + [
-                    {
-                        **event.semantic_view(),
-                        "stage": "engaged",
-                    }
-                    for event in engaged_events
                 ],
                 "npcs": [
                     {
@@ -998,41 +986,35 @@ def _present_event(
     engaged_event_ids: set[str] | None = None,
 ) -> DirectorStageMaterial:
     event = store.get_by_id(args.event_id)
-    if event is None or event.stage == "resolved":
-        raise ValueError("present_event requires an active event")
+    if event is None or event.stage != "hidden":
+        raise ValueError(
+            "present_event requires a hidden event (engaged events are "
+            "delivered to the Composer automatically)"
+        )
     engaged_event_ids = engaged_event_ids or set()
-    is_engaged = event.stage == "engaged" or event.event_id in engaged_event_ids
-    if not is_engaged and args.hook_id:
-        hook = next(
-            (hook for hook in event.hook_pool if hook.hook_id == args.hook_id),
-            None,
+    if event.event_id in engaged_event_ids:
+        raise ValueError(
+            "present_event is only for indirect contact; directly engaged "
+            "events are delivered to the Composer automatically"
         )
-        if hook is None:
-            raise ValueError("present_event references an unknown hook_id")
-        if hook.consumed:
-            raise ValueError("present_event references a consumed hook_id")
-        payload = {
-            "event_id": event.event_id,
-            "title": event.title,
-            "stage": "hidden",
-            "hook": {
-                "hook_id": hook.hook_id,
-                "kind": hook.kind,
-                "content": hook.content,
-            },
-        }
-    elif is_engaged:
-        payload = json.loads(
-            project_director_event(
-                event,
-                effective_stage="engaged",
-            )
-        )
-    else:
-        payload = {
-            "event_id": event.event_id,
-            "stage": "hidden",
-        }
+    hook = next(
+        (hook for hook in event.hook_pool if hook.hook_id == args.hook_id),
+        None,
+    )
+    if hook is None:
+        raise ValueError("present_event references an unknown hook_id")
+    if hook.consumed:
+        raise ValueError("present_event references a consumed hook_id")
+    payload = {
+        "event_id": event.event_id,
+        "title": event.title,
+        "stage": "hidden",
+        "hook": {
+            "hook_id": hook.hook_id,
+            "kind": hook.kind,
+            "content": hook.content,
+        },
+    }
     return DirectorStageMaterial(
         kind="event",
         resource_id=event.event_id,
@@ -1134,6 +1116,25 @@ def _require_active_event(store, event_id: str) -> None:
     event = store.get_by_id(event_id)
     if event is None or event.stage == "resolved":
         raise ValueError("director skill requires an active event_id")
+
+
+def _require_hidden_event(
+    store,
+    event_id: str,
+    engaged_event_ids: set[str] | None = None,
+) -> None:
+    event = store.get_by_id(event_id)
+    if event is None or event.stage != "hidden":
+        raise ValueError(
+            "present_event requires a hidden event (engaged events are "
+            "delivered to the Composer automatically)"
+        )
+    engaged_event_ids = engaged_event_ids or set()
+    if event.event_id in engaged_event_ids:
+        raise ValueError(
+            "present_event is only for indirect contact; directly engaged "
+            "events are delivered to the Composer automatically"
+        )
 
 
 def _require_npc(director_npc_store, npc_profile_store, npc_id: str) -> None:
