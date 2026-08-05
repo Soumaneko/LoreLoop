@@ -58,6 +58,11 @@ from .director_skill_specs import (
     UpgradeDisclosureArguments,
     get_director_skill_specs,
 )
+from .generation_profile_helpers import (
+    merge_profile_selections,
+    select_profiles_by_active_events,
+    select_profiles_by_fact_texts,
+)
 
 
 DIRECTOR_WAVE_MAX_WORKERS = 3
@@ -515,7 +520,6 @@ def run_confirmation_director_agent(
     scene_facts: dict,
     recent_summaries: list[SceneSummary],
     selection_summaries: list[SceneSummary],
-    npc_profiles: list,
     turn_index: int,
     trace_id: str,
     new_npc_profiles: list[NPCProfile] | None = None,
@@ -647,7 +651,6 @@ def run_confirmation_director_agent(
                 current_state=current_state,
                 core_memory=core_memory,
                 recent_summaries=selection_summaries,
-                npc_profiles=npc_profiles,
                 settings=settings,
                 required_actors=required_actors,
                 trace_id=trace_id,
@@ -875,6 +878,29 @@ def run_confirmation_director_agent(
                 ),
             )
 
+        active_events = [
+            event
+            for event in event_store.list_all()
+            if event.stage != "resolved"
+        ]
+        scene_fact_texts = (
+            [str(scene_facts.get("scene_focus") or "")]
+            + [str(fact.get("fact") or "") for fact in scene_facts.get("facts", [])]
+            if isinstance(scene_facts, dict)
+            else []
+        )
+        npc_detail_profiles = merge_profile_selections(
+            select_profiles_by_fact_texts(
+                texts=scene_fact_texts,
+                npc_store=npc_profile_store,
+            ),
+            select_profiles_by_active_events(
+                events=active_events,
+                npc_store=npc_profile_store,
+            ),
+            limit=8,
+        )
+
         observation = DirectorObservation(
             phase="confirmation",
             turn_index=turn_index,
@@ -901,10 +927,21 @@ def run_confirmation_director_agent(
                             if not hook.consumed
                         ],
                     }
-                    for event in event_store.list_all()
-                    if event.stage != "resolved"
+                    for event in active_events
                 ],
                 "npcs": [
+                    {
+                        "npc_id": profile.npc_id,
+                        "source": "npc_profile",
+                        "name": profile.name,
+                        "role": profile.role,
+                        "aliases": list(profile.aliases),
+                        "faction": profile.faction,
+                        "public_summary": profile.public_summary,
+                    }
+                    for profile in npc_profile_store.list_all()
+                ],
+                "drafts": [
                     {
                         "npc_id": npc.draft_id,
                         "source": "director_npc",
@@ -912,14 +949,14 @@ def run_confirmation_director_agent(
                     }
                     for npc in director_npc_store.list_all()
                     if npc.status == "prepared"
-                ]
-                + [
+                ],
+                "npc_details": [
                     {
                         "npc_id": profile.npc_id,
                         "source": "npc_profile",
                         **profile.director_view().model_dump(mode="json"),
                     }
-                    for profile in npc_profile_store.list_all()
+                    for profile in npc_detail_profiles
                 ],
                 "settings": [
                     setting.reference_view()

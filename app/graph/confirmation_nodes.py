@@ -271,30 +271,23 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
     decision = cache.get("director_decision")
     executions = cache.get("director_executions")
     if decision is None or executions is None:
-        with _store_factory(state, "npc_profile")() as director_npc_profile_repo:
-            all_director_npc_profiles = director_npc_profile_repo.list_all()
-            director_npc_profiles = [
-                profile.director_view()
-                for profile in all_director_npc_profiles
-            ]
-            new_npc_profiles = state.get("new_npc_profiles", [])
-            decision, executions = run_confirmation_director_agent(
-                gateway=_gateway_for(state),
-                stores=state["runtime_services"].stores,
-                core_memory=state["core_memory"],
-                current_state=state["updated_state"],
-                user_input=pipeline_input.user_input,
-                scene_facts=state["scene_facts"].model_dump(mode="json"),
-                recent_summaries=state.get("recent_summaries", []),
-                selection_summaries=state.get("selection_summaries", []),
-                npc_profiles=director_npc_profiles,
-                turn_index=pipeline_input.turn_index,
-                trace_id=state["trace_id"],
-                new_npc_profiles=new_npc_profiles,
-                scene_text=state["effective_scene_text"],
-                director_log_entry=getattr(
-                    state.get("pending"), "director_log_entry", None
-                ),
+        new_npc_profiles = state.get("new_npc_profiles", [])
+        decision, executions = run_confirmation_director_agent(
+            gateway=_gateway_for(state),
+            stores=state["runtime_services"].stores,
+            core_memory=state["core_memory"],
+            current_state=state["updated_state"],
+            user_input=pipeline_input.user_input,
+            scene_facts=state["scene_facts"].model_dump(mode="json"),
+            recent_summaries=state.get("recent_summaries", []),
+            selection_summaries=state.get("selection_summaries", []),
+            turn_index=pipeline_input.turn_index,
+            trace_id=state["trace_id"],
+            new_npc_profiles=new_npc_profiles,
+            scene_text=state["effective_scene_text"],
+            director_log_entry=getattr(
+                state.get("pending"), "director_log_entry", None
+            ),
             )
     return {
         "director_decision": decision,

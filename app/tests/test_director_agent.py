@@ -832,7 +832,6 @@ def test_confirmation_agent_observation_prepends_current_turn_gen_entry(
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
         director_log_entry=gen_entry,
@@ -1114,7 +1113,6 @@ def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            npc_profiles=[],
             turn_index=3,
             trace_id="confirmation-director",
         )
@@ -1186,7 +1184,6 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1238,7 +1235,6 @@ def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1248,14 +1244,14 @@ def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
     )
     observed_drafts = [
         item
-        for item in observation["resources"]["npcs"]
+        for item in observation["resources"]["drafts"]
         if item.get("source") == "director_npc"
     ]
     assert [item["npc_id"] for item in observed_drafts] == [
         "director_npc_conf_prepared"
     ]
     assert "director_npc_conf_introduced" not in {
-        item["npc_id"] for item in observation["resources"]["npcs"]
+        item["npc_id"] for item in observation["resources"]["drafts"]
     }
 
 
@@ -1310,7 +1306,6 @@ def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            npc_profiles=[],
             turn_index=2,
             trace_id="confirmation-director",
             scene_text=scene_text,
@@ -1456,7 +1451,6 @@ def test_confirmation_agent_creates_missing_setting_then_event_in_same_turn(tmp_
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1528,7 +1522,6 @@ def test_confirmation_agent_replaces_kind_mismatched_setting_before_execution(
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1624,7 +1617,6 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1693,7 +1685,6 @@ def test_confirmation_agent_replaces_unknown_setting_reference(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -1772,7 +1763,6 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
         new_npc_profiles=[new_profile],
@@ -1865,7 +1855,6 @@ def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            npc_profiles=[],
             turn_index=3,
             trace_id="confirmation-director",
             new_npc_profiles=[other_new],
@@ -1986,7 +1975,6 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
         new_npc_profiles=[new_profile],
@@ -2089,7 +2077,6 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -2228,7 +2215,6 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -2307,7 +2293,6 @@ def test_create_event_rejects_missing_required_actor_role(tmp_path):
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            npc_profiles=[],
             turn_index=3,
             trace_id="confirmation-director",
         )
@@ -2364,7 +2349,6 @@ def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            npc_profiles=[],
             turn_index=3,
             trace_id="confirmation-director",
         )
@@ -2452,7 +2436,6 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            npc_profiles=[],
             turn_index=3,
             trace_id="confirmation-director",
         )
@@ -2537,7 +2520,6 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
             scene_facts={"scene_focus": "主角走访社区。", "facts": []},
             recent_summaries=[],
             selection_summaries=[],
-            npc_profiles=[],
             turn_index=3,
             trace_id="confirmation-director",
         )
@@ -2602,7 +2584,6 @@ def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
         scene_facts={"scene_focus": "主角走访社区。", "facts": []},
         recent_summaries=[],
         selection_summaries=[],
-        npc_profiles=[],
         turn_index=3,
         trace_id="confirmation-director",
     )
@@ -4451,3 +4432,114 @@ def test_generation_observation_excludes_engaged_events(tmp_path):
     assert observed_ids == {hidden_id}
     assert hidden_id in observed_ids
     assert engaged_id not in observed_ids
+
+
+def test_confirmation_observation_two_tier_npcs(tmp_path):
+    from app.domain.current_state import WorldClock
+    from app.domain.director import DirectorResourceRef
+    from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile() as store:
+        fact_hit_id = store.upsert(NPCProfile(
+            name="顾晚棠",
+            role="阁主",
+            core_motivation="查明失窃真相。",
+            hidden_secret="暗中资助商会。",
+        ))
+        event_actor_id = store.upsert(NPCProfile(
+            name="柴行简",
+            role="商队执事",
+            core_motivation="保住商路。",
+            hidden_secret="与边境私军有染。",
+        ))
+        unrelated_id = store.upsert(NPCProfile(
+            name="无关路人",
+            role="路人",
+            hidden_secret="没有秘密。",
+        ))
+    prepared_draft = _director_npc().model_copy(
+        update={
+            "draft_id": "director_npc_conf_prepared_2tier",
+            "name": "林澈",
+        }
+    )
+    with stores.director_npc() as store:
+        store.save(prepared_draft)
+    event = DirectorEvent(
+        role="ambient",
+        title="旧桥封锁",
+        subject="河务署",
+        intent="控制渡河通道",
+        method="封锁旧桥",
+        macro_intent="改变商路格局",
+        deadline_clock=WorldClock().advance_phase(3),
+        created_turn=1,
+        updated_turn=1,
+        actors=[
+            DirectorActorRef(
+                name="柴行简",
+                ref=DirectorResourceRef(kind="npc", resource_id=event_actor_id),
+            ),
+        ],
+    )
+    with stores.director_event() as store:
+        store.save(event)
+
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []}
+    )
+    run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={
+            "scene_focus": "顾晚棠在客栈露面。",
+            "facts": [{"fact_id": "f1", "fact": "顾晚棠向主角提及商路失窃。"}],
+        },
+        recent_summaries=[],
+        selection_summaries=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    resources = observation["resources"]
+    index = {
+        item["npc_id"]: item
+        for item in resources["npcs"]
+        if item.get("source") == "npc_profile"
+    }
+    assert fact_hit_id in index
+    assert event_actor_id in index
+    assert unrelated_id in index
+    assert "hidden_secret" not in index[fact_hit_id]
+    assert "core_motivation" not in index[fact_hit_id]
+    assert "director_npc" not in {
+        item.get("source") for item in resources["npcs"]
+    }
+
+    drafts_by_id = {
+        item["npc_id"]: item
+        for item in resources["drafts"]
+        if item.get("source") == "director_npc"
+    }
+    assert "director_npc_conf_prepared_2tier" in drafts_by_id
+    assert drafts_by_id[
+        "director_npc_conf_prepared_2tier"
+    ]["hidden_secret"]
+
+    detail_ids = {
+        item["npc_id"] for item in resources["npc_details"]
+    }
+    assert fact_hit_id in detail_ids
+    assert event_actor_id in detail_ids
+    assert unrelated_id not in detail_ids
+    details_by_id = {
+        item["npc_id"]: item for item in resources["npc_details"]
+    }
+    assert details_by_id[fact_hit_id]["hidden_secret"] == "暗中资助商会。"

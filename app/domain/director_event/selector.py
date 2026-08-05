@@ -4,12 +4,10 @@ from typing import cast
 from app.core.llm import LLMGateway
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
-from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.world_setting.schemas import WorldSetting
 from app.domain.views import (
     project_current_state,
-    project_npc_profiles,
     project_scene_summaries,
 )
 
@@ -40,7 +38,6 @@ class DirectorEventSelector:
         current_state: CurrentState,
         core_memory: CoreMemory,
         recent_summaries: list[SceneSummary] | None = None,
-        npc_profiles: list[NPCProfileDirectorView] | None = None,
         settings: list[WorldSetting] | None = None,
         required_actors: list[dict] | None = None,
         trace_id: str | None = None,
@@ -56,7 +53,6 @@ class DirectorEventSelector:
             "current_state_json": project_current_state(current_state),
             "core_memory_json": core_memory.model_dump_json(indent=2),
             "recent_summaries_json": project_scene_summaries(recent_summaries or []),
-            "npc_profiles_json": project_npc_profiles(npc_profiles or []),
             "settings_json": json.dumps(
                 [setting.director_view() for setting in (settings or [])],
                 ensure_ascii=False,

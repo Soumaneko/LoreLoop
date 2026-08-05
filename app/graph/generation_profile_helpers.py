@@ -71,34 +71,50 @@ def _profile_texts(profile: NPCProfile) -> list[str]:
     ]
 
 
+def select_profiles_by_fact_texts(
+    *,
+    texts: list[str],
+    npc_store: NPCProfileStore,
+    limit: int = 20,
+) -> list[NPCProfile]:
+    """Match NPC profiles against arbitrary text snippets (Method 1 core).
+
+    Names and aliases are matched as substrings against each text so profiles
+    relevant to the current situation stay in scope even when never named.
+    """
+    cleaned = [_norm(text) for text in texts]
+    cleaned = [text for text in cleaned if text]
+    if not cleaned:
+        return []
+    selected: list[NPCProfile] = []
+    for profile in npc_store.list_all():
+        if any(
+            any(variant in text for text in cleaned)
+            for variant in _profile_texts(profile)
+        ):
+            selected.append(profile)
+            if len(selected) >= limit:
+                break
+    return selected
+
+
 def select_profiles_by_context_facts(
     *,
     context_facts: ContextFactSet | None,
     npc_store: NPCProfileStore,
     limit: int = 20,
 ) -> list[NPCProfile]:
-    """Method 1: match NPC profiles against this turn's context facts.
-
-    Names and aliases are matched as substrings against the turn focus and
-    each extracted fact so profiles relevant to the current situation stay
-    in scope even when the player never names them.
-    """
+    """Method 1: match NPC profiles against this turn's context facts."""
     if context_facts is None:
         return []
-    texts = [
-        _norm(context_facts.turn_focus),
-        *(_norm(fact.fact) for fact in context_facts.facts),
-    ]
-    texts = [text for text in texts if text]
-    if not texts:
-        return []
-    selected: list[NPCProfile] = []
-    for profile in npc_store.list_all():
-        if any(any(variant in text for text in texts) for variant in _profile_texts(profile)):
-            selected.append(profile)
-            if len(selected) >= limit:
-                break
-    return selected
+    return select_profiles_by_fact_texts(
+        texts=[
+            context_facts.turn_focus,
+            *(fact.fact for fact in context_facts.facts),
+        ],
+        npc_store=npc_store,
+        limit=limit,
+    )
 
 
 def select_profiles_by_active_events(

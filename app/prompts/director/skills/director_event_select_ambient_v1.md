@@ -32,12 +32,6 @@
 
 非空时，事件的主体、动机、手段和影响必须建立在这些 Setting 上；为空时允许依据 CoreMemory 独立创造。
 
-## NPCProfiles
-
-```json
-{npc_profiles_json}
-```
-
 ## 强制演员
 
 ```json
