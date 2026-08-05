@@ -31,6 +31,7 @@ _ROOT_FILES = {
     "core_memory.json",
     "current_state.db",
     "director_events.db",
+    "director_log.db",
     "director_npcs.db",
     "initialization.json",
     "npc_profiles.db",

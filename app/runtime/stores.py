@@ -5,6 +5,7 @@ from app.domain.continuity import ContinuityStore
 from app.domain.current_state import CurrentStateStore
 from app.domain.director_event.store import DirectorEventStore
 from app.domain.director_npc.store import DirectorNPCStore
+from app.domain.director.log_store import RecentDirectorLogStore
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.short_term_memory import ShortTermMemoryStore
@@ -58,6 +59,10 @@ class StoreBundle:
     def director_npc(self) -> DirectorNPCStore:
         self._ensure_data_dir()
         return DirectorNPCStore(str(self.paths.director_npc_db))
+
+    def director_log(self) -> RecentDirectorLogStore:
+        self._ensure_data_dir()
+        return RecentDirectorLogStore(str(self.paths.director_log_db))
 
     def world_setting(self) -> WorldSettingStore:
         self._ensure_data_dir()

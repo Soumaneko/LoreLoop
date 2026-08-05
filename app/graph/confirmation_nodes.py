@@ -292,6 +292,9 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
                 trace_id=state["trace_id"],
                 new_npc_profiles=new_npc_profiles,
                 scene_text=state["effective_scene_text"],
+                director_log_entry=getattr(
+                    state.get("pending"), "director_log_entry", None
+                ),
             )
     return {
         "director_decision": decision,

@@ -365,6 +365,7 @@ def _pending_context_state(
         "turn_resolution": pending.context.turn_resolution,
         "player_resolution": pending.player_resolution,
         "director_stage": pending.director_stage,
+        "director_log_entry": getattr(pending, "director_log_entry", None),
         "recent_scene": recent_scene,
     }
 

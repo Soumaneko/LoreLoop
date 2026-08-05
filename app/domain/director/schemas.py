@@ -25,6 +25,7 @@ class DirectorObservation(BaseModel):
     recent_summaries: list[dict[str, Any]] = Field(default_factory=list)
     turn_resolution: dict[str, Any] | None = None
     resources: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    recent_director_log: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class DirectorGuidance(BaseModel):

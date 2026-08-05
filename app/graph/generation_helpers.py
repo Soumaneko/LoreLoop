@@ -155,6 +155,7 @@ def finalize_pending_turn(
         turn_index=state["next_turn_index"],
         short_term_memory=state["short_term_memory"],
         token_usage=token_usage,
+        director_log_entry=state.get("director_log_entry"),
     )
     commit_if_not_cancelled(lambda: runtime.pending_turns.add(pending))
     finalized = {

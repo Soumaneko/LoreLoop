@@ -419,6 +419,7 @@ class ConfirmationFinalizer:
         commit_result = self.committer.commit(state)
 
         if state.get("write_db", True):
+            self._write_recent_director_log(state)
             self.runtime.history.record_state_audit(
                 state["turn_id"],
                 state_changes=model_data(state["state_change_set"]),
@@ -455,3 +456,55 @@ class ConfirmationFinalizer:
             *self.event_builder.build(state, commit_result),
         ]
         return state
+
+    def _write_recent_director_log(self, state: ConfirmationState) -> None:
+        """Persist the confirmed turn's generation + confirmation decisions.
+
+        Runs only after the confirmation commit succeeds so rerolls, failed
+        confirmations, and rollbacks never leave stale log entries.
+        """
+        from app.domain.director.log import assemble_director_log_entry
+
+        pipeline_input = state["pipeline_input"]
+        if not getattr(pipeline_input, "run_director_agent", False):
+            return
+        entries: list[dict] = []
+        gen_entry = getattr(state["pending"], "director_log_entry", None)
+        if isinstance(gen_entry, dict) and gen_entry.get("phase") == "generation":
+            entries.append(gen_entry)
+        decision = state.get("director_decision")
+        if decision is not None:
+            entries.append(assemble_director_log_entry(
+                turn_index=pipeline_input.turn_index,
+                phase="confirmation",
+                decision=decision,
+                stores=self.runtime.services.stores,
+                executions=state.get("director_executions"),
+            ))
+        if not entries:
+            return
+        self._write_recent_director_log_with_retry(entries, state)
+
+    def _write_recent_director_log_with_retry(
+        self,
+        entries: list[dict],
+        state: ConfirmationState,
+        *,
+        attempts: int = 3,
+    ) -> None:
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                with self.runtime.services.stores.director_log() as log_store:
+                    log_store.save_entries(entries)
+                return
+            except Exception as exc:
+                last_error = exc
+        self.runtime.services.diagnostics.warning(
+            source="confirmation",
+            code="recent_director_log_write_failed",
+            message=f"recent director log write failed after {attempts} attempts: {last_error}",
+            trace_id=state["trace_id"],
+            operation_type="confirmation",
+            turn_index=_diagnostic_turn_index(state),
+        )

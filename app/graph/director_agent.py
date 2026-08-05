@@ -371,6 +371,8 @@ def run_generation_director_agent(
         ]
         npc_profiles = npc_profile_store.list_all()
         settings = setting_store.list_all()
+        with stores.director_log() as log_store:
+            recent_director_log = log_store.recent()
 
         _register_skill(
             service,
@@ -421,6 +423,7 @@ def run_generation_director_agent(
             core_memory=core_memory.model_dump(mode="json"),
             current_state=current_state.model_dump(mode="json"),
             context_facts=context_facts,
+            recent_director_log=recent_director_log,
             recent_summaries=[
                 summary.model_dump(mode="json")
                 for summary in recent_summaries
@@ -511,9 +514,14 @@ def run_confirmation_director_agent(
     trace_id: str,
     new_npc_profiles: list[NPCProfile] | None = None,
     scene_text: str = "",
+    director_log_entry: dict | None = None,
 ) -> tuple[object, DirectorSkillExecutionBatch]:
     recover_pending_director_mutation(stores)
     service = DirectorSkillService()
+    with stores.director_log() as log_store:
+        recent_director_log = log_store.recent()
+    if director_log_entry:
+        recent_director_log = [director_log_entry, *recent_director_log][:6]
     with (
         stores.director_event() as event_store,
         stores.director_npc() as director_npc_store,
@@ -868,6 +876,7 @@ def run_confirmation_director_agent(
             core_memory=core_memory.model_dump(mode="json"),
             current_state=current_state.model_dump(mode="json"),
             scene_facts=scene_facts,
+            recent_director_log=recent_director_log,
             recent_summaries=[
                 summary.model_dump(mode="json")
                 for summary in recent_summaries

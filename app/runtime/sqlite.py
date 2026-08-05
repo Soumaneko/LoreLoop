@@ -13,6 +13,7 @@ SUPPORTED_SCHEMA_VERSIONS = {
     "continuity": 1,
     "current_state": 4,
     "director_event": 11,
+    "director_log": 1,
     "director_npc": 3,
     "npc_profile": 3,
     "scene_summary": 1,

@@ -762,6 +762,89 @@ def test_generation_agent_observes_only_prepared_director_npcs(tmp_path):
     }
 
 
+def test_generation_agent_observation_includes_recent_director_log(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_log() as log_store:
+        log_store.save_entries([{
+            "turn_index": 2,
+            "phase": "confirmation",
+            "reasoning": "确认端创造了事件。",
+            "measures": "创建事件(arc) 演员0",
+        }])
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []},
+    )
+
+    run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="观察港口。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    assert "recent_director_log" not in observation
+    log_payload = json.loads(
+        gateway.input_data[0]["recent_director_log_json"]
+    )
+    assert log_payload[0]["turn_index"] == 2
+    assert log_payload[0]["phase"] == "confirmation"
+    assert "创建事件" in log_payload[0]["measures"]
+
+
+def test_confirmation_agent_observation_prepends_current_turn_gen_entry(
+    tmp_path,
+):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_log() as log_store:
+        log_store.save_entries([{
+            "turn_index": 1,
+            "phase": "confirmation",
+            "reasoning": "上一回合确认决策。",
+            "measures": "补全NPC「顾晚棠」",
+        }])
+    gen_entry = {
+        "turn_index": 3,
+        "phase": "generation",
+        "reasoning": "本回合引入林澈。",
+        "measures": "引入NPC「林澈」(face_to_face)",
+    }
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []},
+    )
+
+    run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        npc_profiles=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+        director_log_entry=gen_entry,
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    log_payload = json.loads(
+        gateway.input_data[0]["recent_director_log_json"]
+    )
+    assert log_payload[0] == gen_entry
+    assert log_payload[1]["turn_index"] == 1
+
+
 def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     draft = _director_npc()

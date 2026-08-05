@@ -102,6 +102,25 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
         assert db.execute("SELECT value FROM values_for_test").fetchone()[0] == "old"
 
 
+def test_export_accepts_director_log_schema(tmp_path):
+    from app.domain.director.log_store import RecentDirectorLogStore
+
+    source = tmp_path / "source"
+    source.mkdir()
+    SaveManifestRepository(source).create("Beta")
+    with RecentDirectorLogStore(str(source / "director_log.db")) as store:
+        store.save_entries([{
+            "turn_index": 1,
+            "phase": "generation",
+            "reasoning": "r",
+            "measures": "m",
+        }])
+
+    exported = export_save(source, tmp_path / "save.zip")
+
+    assert "director_log.db" in exported.files
+
+
 def test_snapshot_preserves_portable_turn_history_paths(tmp_path):
     source = tmp_path / "old-save"
     snapshots = source / ".snapshots"

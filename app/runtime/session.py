@@ -49,6 +49,7 @@ class PendingTurn:
     confirmation_cache: dict[str, Any] = field(default_factory=dict)
     original_scene_text: str | None = None
     token_usage: dict[str, Any] | None = None
+    director_log_entry: dict[str, Any] | None = None
 
 
 @dataclass
@@ -459,6 +460,7 @@ class CampaignRuntime:
             "short_term_memory": model_data(pending.short_term_memory),
             "original_scene_text": pending.original_scene_text,
             "token_usage": pending.token_usage,
+            "director_log_entry": pending.director_log_entry,
             # Futures and locks in the in-process cache are deliberately not
             # durable. Confirmation will rebuild these values after restart.
             "confirmation_cache": {},
@@ -569,6 +571,7 @@ class CampaignRuntime:
                     ),
                     original_scene_text=data["original_scene_text"],
                     token_usage=data.get("token_usage"),
+                    director_log_entry=data.get("director_log_entry"),
                 ))
             else:
                 self.pending_openings.restore(PendingOpening(

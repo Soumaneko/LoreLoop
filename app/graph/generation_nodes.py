@@ -36,6 +36,7 @@ from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.domain.turn_resolution.views import project_turn_resolution
 from app.runtime.serialization import model_data
+from app.domain.director.log import assemble_director_log_entry
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
 from .generation_helpers import assemble_narrative_context, gateway_for
@@ -322,9 +323,16 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
         pending_engagements=state.get("pending_engagements", []),
     )
+    director_log_entry = assemble_director_log_entry(
+        turn_index=state["turn_index"],
+        phase="generation",
+        decision=decision,
+        stores=state["runtime_services"].stores,
+    )
     return {
         "director_decision": decision,
         "director_stage": stage,
+        "director_log_entry": director_log_entry,
         "events": [{
             "step": "director_agent_staged",
             "data": {

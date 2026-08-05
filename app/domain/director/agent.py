@@ -65,6 +65,12 @@ class DirectorAgent:
                     "director_phase": observation.phase,
                     "director_observation_json": observation.model_dump_json(
                         indent=2,
+                        exclude={"recent_director_log"},
+                    ),
+                    "recent_director_log_json": json.dumps(
+                        observation.recent_director_log,
+                        ensure_ascii=False,
+                        indent=2,
                     ),
                     "available_skills_json": json.dumps(
                         [
