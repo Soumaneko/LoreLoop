@@ -701,6 +701,7 @@ def test_generation_director_observes_setting_without_facts(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
     )
 
     observation = json.loads(
@@ -744,6 +745,7 @@ def test_generation_agent_observes_only_prepared_director_npcs(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
     )
 
     observation = json.loads(
@@ -785,6 +787,7 @@ def test_generation_agent_observation_includes_recent_director_log(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
     )
 
     observation = json.loads(
@@ -877,6 +880,7 @@ def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
     )
 
     assert decision.requests[0].skill == "introduce_npc"
@@ -927,6 +931,7 @@ def test_generation_agent_remote_view_filters_nonexistent_fields_for_director_np
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
     )
 
     assert stage.materials[0].payload["source"] == "director_npc"
@@ -969,6 +974,7 @@ def test_generation_agent_intimate_view_reveals_director_npc_secrets(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
     )
 
     assert stage.materials[0].payload["source"] == "director_npc"
@@ -1017,6 +1023,7 @@ def test_generation_agent_remote_view_keeps_profile_identity_and_drops_nulls(
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
     )
 
     assert stage.materials[0].payload["source"] == "npc_profile"
@@ -1064,6 +1071,7 @@ def test_generation_agent_receives_projected_turn_resolution(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
         turn_resolution_json=turn_resolution_json,
     )
 
@@ -2901,6 +2909,7 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
         pending_engagements=[event_id],
     )
 
@@ -3332,6 +3341,7 @@ def test_generation_presents_persisted_engaged_event(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
         pending_engagements=[],
     )
 
@@ -3415,6 +3425,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
             recent_summaries=[],
             turn_index=3,
             trace_id="generation-director",
+        npc_profiles=[],
             pending_engagements=[],
         )
 
@@ -3470,6 +3481,7 @@ def test_present_event_hidden_without_hook_id_presents_nothing(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
+        npc_profiles=[],
         pending_engagements=[],
     )
 

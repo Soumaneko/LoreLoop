@@ -14,7 +14,7 @@ from app.domain.core_memory.schemas import CoreMemory
 from app.domain.continuity import ContinuitySelection
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director.schemas import DirectorDecisionBatch, DirectorStageResult
-from app.domain.npc_profile.schemas import NPCProfileDirectorView, NPCProfilePublicView
+from app.domain.npc_profile.schemas import NPCProfile, NPCProfileDirectorView, NPCProfilePublicView
 from app.domain.narrative_composer.schemas import (
     NarrativeComposerContext,
     NarrativeComposerResult,
@@ -67,7 +67,9 @@ class GenerationState(TypedDict, total=False):
     scene_summaries: list[SceneSummary]
     recent_summaries: list[SceneSummary]
     matched_anchors: list[Anchor]
+    action_npc_profiles: list[NPCProfile]
     action_npc_director_views: list[NPCProfileDirectorView]
+    context_fact_npc_profiles: list[NPCProfile]
 
     context_facts: ContextFactSet
     context_search_plan: ContextSearchPlan | None

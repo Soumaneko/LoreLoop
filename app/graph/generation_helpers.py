@@ -107,6 +107,7 @@ def prepare_generation_state(
 
     state.update({
         "matched_anchors": selection.anchors,
+        "action_npc_profiles": selection.npc_profiles,
         "action_npc_director_views": [
             profile.director_view()
             for profile in selection.npc_profiles

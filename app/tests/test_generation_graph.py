@@ -726,3 +726,380 @@ def test_feedback_rewrite_retains_started_event_in_generation_state(
         "feedback_rewrite_started",
         "feedback_rewrite_strategy_selected",
     ]
+
+
+def test_director_agent_stage_node_passes_select_plus_context_fact_plus_event_profiles(
+    tmp_path,
+    monkeypatch,
+):
+    from app.domain.context_facts.schemas import ContextFact, ContextFactSet
+    from app.domain.core_memory.schemas import CoreMemory
+    from app.domain.current_state import (
+        CurrentState,
+        PlayerState,
+        ResourcesState,
+        SceneState,
+        WorldClock,
+    )
+    from app.domain.director import DirectorResourceRef
+    from app.domain.director.schemas import DirectorDecisionBatch
+    from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.domain.turn_resolution.schemas import TurnResolutionResult
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.stores import StoreBundle
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    base = NPCProfile(name="码头常客")
+    fact_hit = NPCProfile(name="柴行简")
+    unrelated = NPCProfile(name="无关路人")
+    event_hit = NPCProfile(name="林澈")
+    with stores.npc_profile() as store:
+        for profile in (base, fact_hit, unrelated, event_hit):
+            store.upsert(profile)
+    with stores.director_event() as event_store:
+        event_store.save(DirectorEvent(
+            role="arc",
+            title="商路封锁",
+            subject="河务署",
+            intent="控制渡河通道",
+            method="封锁旧桥",
+            macro_intent="改变商路格局",
+            deadline_clock=WorldClock().advance_phase(3),
+            created_turn=1,
+            updated_turn=1,
+            actors=[
+                DirectorActorRef(
+                    name="林澈",
+                    ref=DirectorResourceRef(
+                        kind="npc",
+                        resource_id=event_hit.npc_id,
+                    ),
+                ),
+            ],
+        ))
+
+    captured = {}
+
+    def _fake_run(gateway=None, stores=None, **kwargs):
+        captured["npc_profiles"] = kwargs.get("npc_profiles")
+        return (
+            SimpleNamespace(),
+            DirectorDecisionBatch(reasoning="本轮无需导演介入。", requests=[]),
+        )
+
+    monkeypatch.setattr(generation_nodes, "run_generation_director_agent", _fake_run)
+
+    state = {
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: object(),
+        ),
+        "user_input": "观察码头。",
+        "core_memory": CoreMemory(items=[]),
+        "current_state": CurrentState(
+            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
+            player=PlayerState(name="萧云痕"),
+            resources=ResourcesState(inventory=[]),
+        ),
+        "context_facts": ContextFactSet(
+            turn_focus="围绕昨夜商路的事展开。",
+            facts=[ContextFact(
+                fact_id="f1",
+                fact="柴行简的商队昨夜通过了旧桥。",
+            )],
+        ),
+        "recent_summaries": [],
+        "turn_index": 3,
+        "trace_id": "trace-gen",
+        "turn_resolution": TurnResolutionResult(),
+        "pending_engagements": [],
+        "action_npc_profiles": [base],
+        "context_fact_npc_profiles": [fact_hit],
+    }
+
+    generation_nodes.director_agent_stage_node(state)
+
+    observed = {profile.name for profile in captured["npc_profiles"]}
+    assert observed == {"码头常客", "柴行简", "林澈"}
+    assert "无关路人" not in observed
+
+
+def test_compose_narrative_uses_select_plus_context_fact_profiles_only(
+    tmp_path,
+    monkeypatch,
+):
+    from app.domain.context_facts.schemas import ContextFact, ContextFactSet
+    from app.domain.core_memory.schemas import CoreMemory
+    from app.domain.current_state import (
+        CurrentState,
+        PlayerState,
+        ResourcesState,
+        SceneState,
+        WorldClock,
+    )
+    from app.domain.director import DirectorResourceRef
+    from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.domain.turn_resolution.schemas import TurnResolutionResult
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.stores import StoreBundle
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    base = NPCProfile(name="码头常客")
+    fact_hit = NPCProfile(name="柴行简")
+    unrelated = NPCProfile(name="无关路人")
+    event_hit = NPCProfile(name="林澈")
+    with stores.npc_profile() as store:
+        for profile in (base, fact_hit, unrelated, event_hit):
+            store.upsert(profile)
+    with stores.director_event() as event_store:
+        event_store.save(DirectorEvent(
+            role="arc",
+            title="商路封锁",
+            subject="河务署",
+            intent="控制渡河通道",
+            method="封锁旧桥",
+            macro_intent="改变商路格局",
+            deadline_clock=WorldClock().advance_phase(3),
+            created_turn=1,
+            updated_turn=1,
+            actors=[
+                DirectorActorRef(
+                    name="林澈",
+                    ref=DirectorResourceRef(
+                        kind="npc",
+                        resource_id=event_hit.npc_id,
+                    ),
+                ),
+            ],
+        ))
+
+    captured = {}
+    streamed = []
+
+    class _FakeComposition:
+        scene_reasoning = "scene reasoning"
+        scene_text = "场景正文。"
+        next_action_directions = []
+
+        def to_outline(self):
+            return SimpleNamespace()
+
+        def to_scene_result(self):
+            return SimpleNamespace()
+
+    class _FakeComposer:
+        def __init__(self, gateway):
+            self.gateway = gateway
+
+        def compose(self, context, **kwargs):
+            captured["context"] = context
+            return _FakeComposition()
+
+    monkeypatch.setattr(generation_nodes, "NarrativeComposerAgent", _FakeComposer)
+    monkeypatch.setattr(generation_nodes, "build_entity_retrieval_anchors", lambda _outline: [])
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
+    monkeypatch.setattr(
+        generation_nodes,
+        "select_profiles_by_context_facts",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("composer must reuse stored selection, not rescan")
+        ),
+    )
+
+    state = {
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: object(),
+        ),
+        "user_input": "观察码头。",
+        "core_memory": CoreMemory(items=[]),
+        "current_state": CurrentState(
+            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
+            player=PlayerState(name="萧云痕"),
+            resources=ResourcesState(inventory=[]),
+        ),
+        "turn_resolution": TurnResolutionResult(),
+        "context_facts": ContextFactSet(
+            turn_focus="围绕昨夜商路的事展开。",
+            facts=[ContextFact(
+                fact_id="f1",
+                fact="柴行简的商队昨夜通过了旧桥。",
+            )],
+        ),
+        "trace_id": "trace-gen",
+        "short_term_memory": SimpleNamespace(recent_scenes=[]),
+        "action_npc_profiles": [base],
+        "context_fact_npc_profiles": [fact_hit],
+    }
+
+    result = generation_nodes.compose_narrative_node(state)
+
+    names = {
+        profile.name for profile in captured["context"].npc_profiles
+    }
+    assert names == {"码头常客", "柴行简"}
+    assert "无关路人" not in names
+    assert "林澈" not in names
+    assert result["context"] is captured["context"]
+
+
+def test_extract_context_facts_preserves_facts_when_npc_selection_fails(
+    tmp_path,
+    monkeypatch,
+):
+    from app.domain.context_facts.schemas import ContextFact, ContextFactSet
+    from app.domain.core_memory.schemas import CoreMemory
+    from app.domain.current_state import (
+        CurrentState,
+        PlayerState,
+        ResourcesState,
+        SceneState,
+    )
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.stores import StoreBundle
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+
+    class _FakeContextFactsService:
+        def __init__(self, gateway, history_store, continuity_store, setting_store):
+            pass
+
+        def build(self, input, trace_id):
+            return SimpleNamespace(
+                context_facts=ContextFactSet(
+                    turn_focus="围绕昨夜码头的事。",
+                    facts=[ContextFact(
+                        fact_id="f1",
+                        fact="顾晚棠藏在客栈上房。",
+                    )],
+                ),
+                search_plan=None,
+                history_evidence=None,
+                continuity=None,
+                settings=SimpleNamespace(settings=[]),
+            )
+
+    def _boom(**kwargs):
+        raise RuntimeError("profile db unavailable")
+
+    monkeypatch.setattr(
+        generation_nodes, "ContextFactsService", _FakeContextFactsService
+    )
+    monkeypatch.setattr(
+        generation_nodes, "select_profiles_by_context_facts", _boom
+    )
+
+    state = {
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: object(),
+        ),
+        "user_input": "去客栈找顾晚棠。",
+        "core_memory": CoreMemory(items=[]),
+        "current_state": CurrentState(
+            scene=SceneState(scene_id="scene_1", location="客栈", participants=[]),
+            player=PlayerState(name="萧云痕"),
+            resources=ResourcesState(inventory=[]),
+        ),
+        "scene_summaries": [],
+        "matched_anchors": [],
+        "action_npc_director_views": [],
+        "next_turn_index": 2,
+        "trace_id": "trace-extract",
+    }
+
+    result = generation_nodes.extract_context_facts_node(state)
+
+    assert result["context_extract_error"] is None
+    assert result["context_facts"].facts[0].fact == "顾晚棠藏在客栈上房。"
+    assert result["context_fact_npc_profiles"] == []
+
+
+def test_director_agent_stage_node_keeps_event_actors_when_action_saturates(
+    tmp_path,
+    monkeypatch,
+):
+    from app.domain.context_facts.schemas import ContextFactSet
+    from app.domain.core_memory.schemas import CoreMemory
+    from app.domain.current_state import (
+        CurrentState,
+        PlayerState,
+        ResourcesState,
+        SceneState,
+        WorldClock,
+    )
+    from app.domain.director import DirectorResourceRef
+    from app.domain.director.schemas import DirectorDecisionBatch
+    from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.domain.turn_resolution.schemas import TurnResolutionResult
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.stores import StoreBundle
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    action_profiles = [NPCProfile(name=f"在场人物{i}") for i in range(20)]
+    event_hit = NPCProfile(name="事件演员")
+    with stores.npc_profile() as store:
+        for profile in (*action_profiles, event_hit):
+            store.upsert(profile)
+    with stores.director_event() as event_store:
+        event_store.save(DirectorEvent(
+            role="arc",
+            title="商路封锁",
+            subject="河务署",
+            intent="控制渡河通道",
+            method="封锁旧桥",
+            macro_intent="改变商路格局",
+            deadline_clock=WorldClock().advance_phase(3),
+            created_turn=1,
+            updated_turn=1,
+            actors=[
+                DirectorActorRef(
+                    name="事件演员",
+                    ref=DirectorResourceRef(
+                        kind="npc",
+                        resource_id=event_hit.npc_id,
+                    ),
+                ),
+            ],
+        ))
+
+    captured = {}
+
+    def _fake_run(gateway=None, stores=None, **kwargs):
+        captured["npc_profiles"] = kwargs.get("npc_profiles")
+        return (
+            SimpleNamespace(),
+            DirectorDecisionBatch(reasoning="本轮无需导演介入。", requests=[]),
+        )
+
+    monkeypatch.setattr(generation_nodes, "run_generation_director_agent", _fake_run)
+
+    state = {
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: object(),
+        ),
+        "user_input": "观察码头。",
+        "core_memory": CoreMemory(items=[]),
+        "current_state": CurrentState(
+            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
+            player=PlayerState(name="萧云痕"),
+            resources=ResourcesState(inventory=[]),
+        ),
+        "context_facts": ContextFactSet(turn_focus="围绕商路。", facts=[]),
+        "recent_summaries": [],
+        "turn_index": 3,
+        "trace_id": "trace-gen",
+        "turn_resolution": TurnResolutionResult(),
+        "pending_engagements": [],
+        "action_npc_profiles": action_profiles,
+        "context_fact_npc_profiles": [],
+    }
+
+    generation_nodes.director_agent_stage_node(state)
+
+    observed = {profile.npc_id for profile in captured["npc_profiles"]}
+    assert event_hit.npc_id in observed

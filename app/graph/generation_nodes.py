@@ -38,6 +38,11 @@ from app.domain.turn_resolution.views import project_turn_resolution
 from app.runtime.serialization import model_data
 from app.domain.director.log import assemble_director_log_entry
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
+from .generation_profile_helpers import (
+    merge_profile_selections,
+    select_profiles_by_active_events,
+    select_profiles_by_context_facts,
+)
 
 from .generation_helpers import assemble_narrative_context, gateway_for
 from .generation_state import GenerationState
@@ -113,30 +118,6 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                 ),
                 trace_id=state["trace_id"],
             )
-        return {
-            "context_facts": result.context_facts,
-            "context_search_plan": result.search_plan,
-            "context_history_evidence": result.history_evidence,
-            "continuity_selection": result.continuity,
-            "context_extract_error": None,
-            "events": [{
-                "step": "context_facts_done",
-                "data": {
-                    "context_facts": model_data(result.context_facts),
-                    "context_search_plan": model_data(result.search_plan),
-                    "context_history_evidence": model_data(
-                        result.history_evidence
-                    ),
-                    "continuity_selection": model_data(
-                        result.continuity
-                    ),
-                    "world_settings": [
-                        match.model_dump(mode="json")
-                        for match in result.settings.settings
-                    ],
-                },
-            }],
-        }
     except CancelledError:
         raise
     except Exception as exc:
@@ -158,6 +139,7 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
             "context_history_evidence": None,
             "continuity_selection": None,
             "context_extract_error": error,
+            "context_fact_npc_profiles": [],
             "events": [{
                 "step": "context_extract_failed",
                 "data": {
@@ -166,6 +148,47 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                 },
             }],
         }
+    try:
+        with _store_factory(state, "npc_profile")() as npc_store:
+            context_fact_npc_profiles = select_profiles_by_context_facts(
+                context_facts=result.context_facts,
+                npc_store=npc_store,
+            )
+    except Exception as exc:
+        _diagnostics(state).warning(
+            source="context_extractor",
+            code="context_fact_npc_selection_failed",
+            message=str(exc),
+            trace_id=state["trace_id"],
+            task="npc_selection",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+        )
+        context_fact_npc_profiles = []
+    return {
+        "context_facts": result.context_facts,
+        "context_search_plan": result.search_plan,
+        "context_history_evidence": result.history_evidence,
+        "continuity_selection": result.continuity,
+        "context_extract_error": None,
+        "context_fact_npc_profiles": context_fact_npc_profiles,
+        "events": [{
+            "step": "context_facts_done",
+            "data": {
+                "context_facts": model_data(result.context_facts),
+                "context_search_plan": model_data(result.search_plan),
+                "context_history_evidence": model_data(
+                    result.history_evidence
+                ),
+                "continuity_selection": model_data(
+                    result.continuity
+                ),
+                "world_settings": [
+                    match.model_dump(mode="json")
+                    for match in result.settings.settings
+                ],
+            },
+        }],
+    }
 
 
 def parse_action_node(state: GenerationState) -> GenerationState:
@@ -308,6 +331,19 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
 
 
 def director_agent_stage_node(state: GenerationState) -> GenerationState:
+    with (
+        _store_factory(state, "npc_profile")() as npc_store,
+        _store_factory(state, "director_event")() as event_store,
+    ):
+        event_npc_profiles = select_profiles_by_active_events(
+            events=event_store.list_active(),
+            npc_store=npc_store,
+        )
+        director_npc_profiles = merge_profile_selections(
+            state.get("action_npc_profiles", []),
+            state.get("context_fact_npc_profiles", []),
+            event_npc_profiles,
+        )
     stage, decision = run_generation_director_agent(
         gateway=gateway_for(state),
         stores=state["runtime_services"].stores,
@@ -322,6 +358,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         trace_id=state["trace_id"],
         turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
         pending_engagements=state.get("pending_engagements", []),
+        npc_profiles=director_npc_profiles,
     )
     director_log_entry = assemble_director_log_entry(
         turn_index=state["turn_index"],
@@ -395,13 +432,19 @@ def _compose_with_context(
 
 
 def compose_narrative_node(state: GenerationState) -> GenerationState:
+    composer_profiles = merge_profile_selections(
+        state.get("action_npc_profiles", []),
+        state.get("context_fact_npc_profiles") or [],
+    )
     context = assemble_narrative_context(
         user_input=state["user_input"],
         current_state=state["current_state"],
         turn_resolution=state["turn_resolution"],
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
-        npc_profiles=state.get("action_npc_director_views", []),
+        npc_profiles=[
+            profile.director_view() for profile in composer_profiles
+        ],
         director_stage=state.get("director_stage"),
     )
     return _compose_with_context(

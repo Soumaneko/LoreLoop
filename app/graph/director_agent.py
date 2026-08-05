@@ -338,6 +338,7 @@ def run_generation_director_agent(
     trace_id: str,
     turn_resolution_json: str = "",
     pending_engagements: list[str] | None = None,
+    npc_profiles: list[NPCProfile],
 ) -> tuple[DirectorStageResult, object]:
     recover_pending_director_mutation(stores)
     service = DirectorSkillService()
@@ -369,7 +370,7 @@ def run_generation_director_agent(
             for npc in director_npc_store.list_all()
             if npc.status == "prepared"
         ]
-        npc_profiles = npc_profile_store.list_all()
+        selected_npc_profiles = npc_profiles
         settings = setting_store.list_all()
         with stores.director_log() as log_store:
             recent_director_log = log_store.recent()
@@ -470,7 +471,7 @@ def run_generation_director_agent(
                         "source": "npc_profile",
                         **profile.director_view().model_dump(mode="json"),
                     }
-                    for profile in npc_profiles
+                    for profile in selected_npc_profiles
                 ],
                 "settings": [
                     setting.reference_view()
