@@ -57,6 +57,7 @@ class NPCProfilePublicView(BaseModel):
 
 
 class NPCProfileDirectorView(NPCProfilePublicView):
+    disclosure_level: NPCDisclosureLevel | None = None
     core_motivation: str | None = None
     hidden_secret: str | None = None
     conflict_style: str | None = None
@@ -208,6 +209,7 @@ class NPCProfile(BaseModel):
     def director_view(self) -> NPCProfileDirectorView:
         return NPCProfileDirectorView(
             **self.public_view().model_dump(mode="json"),
+            disclosure_level=self.disclosure_level,
             core_motivation=self.core_motivation,
             hidden_secret=self.hidden_secret,
             conflict_style=self.conflict_style,
@@ -228,6 +230,7 @@ class NPCProfile(BaseModel):
 
         Only fields granted by ``disclosure_level`` are exposed; everything
         above it is dropped so player-facing modules never see hidden info.
+        ``disclosure_level`` itself is director meta and never carried here.
         """
         data = self.director_view().model_dump(mode="json")
         allowed = DISCLOSED_FIELD_SETS[level or self.disclosure_level]
@@ -237,6 +240,7 @@ class NPCProfile(BaseModel):
                 for key, value in data.items()
                 if key in allowed
             }
+        data.pop("disclosure_level", None)
         return NPCProfileDirectorView.model_validate(data)
 
 

@@ -398,7 +398,6 @@ def run_generation_director_agent(
             "introduce_npc",
             handler=lambda args, guidance=None: _introduce_npc(
                 director_npc_store,
-                npc_profile_store,
                 args,
                 guidance=guidance,
             ),
@@ -419,6 +418,7 @@ def run_generation_director_agent(
                 npc_profile_store,
                 args.npc_id,
                 args.new_disclosure_level,
+                visible_profiles=selected_npc_profiles,
             ),
         )
         _register_skill(
@@ -467,15 +467,15 @@ def run_generation_director_agent(
                     }
                     for event in hidden_events
                 ],
-                "npcs": [
+                "drafts": [
                     {
                         "npc_id": npc.draft_id,
                         "source": "director_npc",
                         **npc.private_view().model_dump(mode="json"),
                     }
                     for npc in director_npcs
-                ]
-                + [
+                ],
+                "npcs": [
                     {
                         "npc_id": profile.npc_id,
                         "source": "npc_profile",
@@ -1062,7 +1062,6 @@ def _present_event(
 
 def _introduce_npc(
     director_npc_store,
-    npc_profile_store,
     args: IntroduceNPCArguments,
     *,
     guidance: str | None,
@@ -1192,10 +1191,19 @@ def _require_disclosure_upgradeable(
     npc_profile_store,
     npc_id: str,
     new_level: str,
+    *,
+    visible_profiles: list[NPCProfile] | None = None,
 ) -> None:
     profile = npc_profile_store.get_by_id(npc_id)
     if profile is None:
         raise ValueError("upgrade_disclosure references an unknown npc_id")
+    if visible_profiles is not None and npc_id not in {
+        item.npc_id for item in visible_profiles
+    }:
+        raise ValueError(
+            "upgrade_disclosure only works on NPCs projected to the "
+            "generation director this turn (resources.npcs)"
+        )
     if NPC_DISCLOSURE_ORDER[new_level] <= NPC_DISCLOSURE_ORDER[
         profile.disclosure_level
     ]:

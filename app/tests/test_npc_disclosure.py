@@ -73,6 +73,22 @@ def test_disclosure_view_uses_profile_level_when_not_specified():
     assert data["hidden_secret"] == "曾目击一宗未结案件。"
 
 
+def test_director_view_includes_current_disclosure_level():
+    profile = _profile().model_copy(
+        update={"disclosure_level": "face_to_face"}
+    )
+    data = profile.director_view().model_dump(mode="json")
+    assert data["disclosure_level"] == "face_to_face"
+
+
+def test_disclosure_view_never_leaks_disclosure_level():
+    for level in ("remote", "face_to_face", "intimate"):
+        data = _profile().disclosure_view(level).model_dump(mode="json")
+        assert data.get("disclosure_level") is None
+    intimate = _profile().disclosure_view("intimate").model_dump(mode="json")
+    assert intimate["hidden_secret"] == "曾目击一宗未结案件。"
+
+
 def test_disclosed_field_sets_cover_all_levels():
     assert DISCLOSED_FIELD_SETS["remote"] is not None
     assert DISCLOSED_FIELD_SETS["face_to_face"] is not None

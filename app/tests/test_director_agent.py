@@ -753,15 +753,64 @@ def test_generation_agent_observes_only_prepared_director_npcs(tmp_path):
     )
     observed_drafts = [
         item
-        for item in observation["resources"]["npcs"]
+        for item in observation["resources"]["drafts"]
         if item.get("source") == "director_npc"
     ]
     assert [item["npc_id"] for item in observed_drafts] == [
         "director_npc_prepared"
     ]
     assert "director_npc_introduced" not in {
+        item["npc_id"] for item in observation["resources"]["drafts"]
+    }
+    assert "director_npc_introduced" not in {
         item["npc_id"] for item in observation["resources"]["npcs"]
     }
+
+
+def test_generation_observation_npcs_carry_disclosure_level(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile() as store:
+        profile_id = store.upsert(NPCProfile(
+            name="顾晚棠",
+            role="阁主",
+            core_motivation="查明失窃真相。",
+            hidden_secret="暗中资助商会。",
+            disclosure_level="face_to_face",
+        ))
+        selected_profile = store.get_by_id(profile_id)
+    prepared = _director_npc().model_copy(
+        update={"draft_id": "director_npc_plain_draft"}
+    )
+    with stores.director_npc() as store:
+        store.save(prepared)
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []},
+    )
+
+    run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="观察港口。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[selected_profile],
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    resources = observation["resources"]
+    profiles = {
+        item["npc_id"]: item for item in resources["npcs"]
+    }
+    assert profiles[profile_id]["disclosure_level"] == "face_to_face"
+    assert profiles[profile_id]["source"] == "npc_profile"
+    assert all("disclosure_level" not in item for item in resources["drafts"])
+    assert all(item.get("source") == "director_npc" for item in resources["drafts"])
 
 
 def test_generation_agent_observation_includes_recent_director_log(tmp_path):
@@ -4044,6 +4093,7 @@ def test_upgrade_disclosure_material_renders_at_new_level(tmp_path):
             hidden_secret="曾目击一宗未结案件。",
             disclosure_level="remote",
         ))
+        selected_profile = store.get_by_id(profile_id)
     gateway = _PhaseGateway(decision={
         "reasoning": "交心后得知其核心动机。",
         "requests": [{
@@ -4067,7 +4117,7 @@ def test_upgrade_disclosure_material_renders_at_new_level(tmp_path):
         recent_summaries=[],
         turn_index=3,
         trace_id="generation-director",
-        npc_profiles=[],
+        npc_profiles=[selected_profile],
     )
 
     material = stage.materials[0]
@@ -4086,6 +4136,7 @@ def test_upgrade_disclosure_rejects_downgrade_or_equal(tmp_path):
             role="社区医生",
             disclosure_level="face_to_face",
         ))
+        selected_profile = store.get_by_id(profile_id)
 
     def run_with(level):
         gateway = _PhaseGateway(decision={
@@ -4110,13 +4161,49 @@ def test_upgrade_disclosure_rejects_downgrade_or_equal(tmp_path):
             recent_summaries=[],
             turn_index=3,
             trace_id="generation-director",
-            npc_profiles=[],
+            npc_profiles=[selected_profile],
         )
 
     with pytest.raises(ValueError, match="only supports raising"):
         run_with("face_to_face")
     with pytest.raises(ValueError, match="only supports raising"):
         run_with("remote")
+
+
+def test_upgrade_disclosure_rejects_unprojected_npc(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile() as store:
+        profile_id = store.upsert(NPCProfile(
+            name="林澈",
+            role="社区医生",
+            disclosure_level="remote",
+        ))
+    gateway = _PhaseGateway(decision={
+        "reasoning": "升级本轮未被投影的档案。",
+        "requests": [{
+            "request_id": "npc_1",
+            "skill": "upgrade_disclosure",
+            "arguments": {
+                "npc_id": profile_id,
+                "new_disclosure_level": "intimate",
+            },
+            "guidance": "使用新等级。",
+        }],
+    })
+
+    with pytest.raises(ValueError, match="only works on NPCs projected"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="继续对话。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+            npc_profiles=[],
+        )
 
 
 def test_upgrade_disclosure_rejects_unknown_npc(tmp_path):

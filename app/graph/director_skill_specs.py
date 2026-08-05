@@ -213,7 +213,8 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         description=(
             "将一名仍未登场的导演 NPC 草稿首次引入本轮场景。适用场景："
             "你规划该草稿在本场景中初次出现（登场或提及）。"
-            "注意：只对 prepared 状态的导演 NPC 草稿有效；已晋升的 NPC 无需再引入."
+            "注意：只对 resources.drafts 中的 导演 NPC 草稿有效；"
+            "resources.npcs 中的已登场 NPC 禁止再引入。"
             "view_mode 是该 NPC 首次披露授权：远程/间接接触选 remote，初次见面/当面选 "
             "face_to_face，深度交心或搜魂等选 intimate。"
         ),
@@ -228,6 +229,7 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
             "提升一个已存在 NPC 档案的披露等级（只能升不能降），使该 NPC 在本回合和未来"
             "按新等级向 Composer 展示更深入的信息（如从 face_to_face 提到 intimate 后，"
             "核心动机与隐藏秘密本回合即可用于正文）。"
+            "只作用于 resources.npcs 中的档案；"
         ),
         phases=_GENERATION,
         mutates=False,
