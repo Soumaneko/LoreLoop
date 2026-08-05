@@ -1,3 +1,4 @@
+from concurrent.futures import CancelledError
 from types import SimpleNamespace
 
 import pytest
@@ -498,6 +499,27 @@ def test_parallel_success_is_cacheable_when_sibling_node_fails():
     assert state["cache"]["action_preview"] is marker
     assert state["node_errors"][0]["node"] == "fails"
     assert str(state["node_errors"][0]["exception"]) == "failed"
+
+
+def test_node_error_wrapper_reraise_cancellation():
+    def cancelled(_state: ConfirmationState) -> ConfirmationState:
+        raise CancelledError("user cancelled")
+
+    graph = StateGraph(ConfirmationState)
+    graph.add_node(
+        "cancelled",
+        capture_confirmation_node_errors("cancelled", cancelled),
+    )
+    graph.add_edge(START, "cancelled")
+    graph.add_edge("cancelled", END)
+
+    state = {"events": [], "node_errors": [], "cache": {}, "write_db": True}
+    with pytest.raises(CancelledError):
+        for update in graph.compile().stream(state, stream_mode="updates"):
+            for node_update in update.values():
+                merge_confirmation_node_update(state, node_update)
+
+    assert state["node_errors"] == []
 
 
 def test_rollback_cache_keeps_pure_results_and_discards_write_markers():

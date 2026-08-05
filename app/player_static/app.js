@@ -2465,6 +2465,15 @@ function handleConfirmationEvent(event) {
     const previews = event.data?.action_preview?.previews;
     if (previews) state.suggestions = previews;
   }
+  if (event.step === "finish") {
+    const warnings = event.data?.state_update_warnings || [];
+    const fallback = warnings.find(
+      (warning) => warning && warning.code === "state_update_fallback",
+    );
+    if (fallback) {
+      showToast("本轮世界状态更新未能生效，其余内容照常写入。");
+    }
+  }
 }
 
 async function resumeConfirmationOperation(operation) {

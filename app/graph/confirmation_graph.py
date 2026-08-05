@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import CancelledError
 from functools import wraps
 from typing import Callable
 
@@ -44,6 +45,8 @@ def capture_confirmation_node_errors(
     def wrapped(state: ConfirmationState) -> ConfirmationState:
         try:
             return node(state)
+        except CancelledError:
+            raise
         except Exception as exc:
             return {
                 "node_errors": [{"node": node_name, "exception": exc}],

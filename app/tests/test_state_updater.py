@@ -1,9 +1,11 @@
 import json
+from concurrent.futures import CancelledError
 from pathlib import Path
 
 import pytest
 
 from app.core.llm import MockLLM
+from app.core.llm.errors import LLMProviderError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import (
     CurrentState,
@@ -14,7 +16,6 @@ from app.domain.current_state import (
     StateUpdater,
     WorldClock,
 )
-from app.domain.current_state.changes import StateChangeError
 from app.domain.current_state.changes import StateChangeSet
 
 
@@ -186,7 +187,7 @@ def test_missing_participant_attitude_target_is_skipped():
     assert updater.last_warnings[0].operation_type == operation["type"]
 
 
-def test_participant_attitude_targeting_player_remains_an_error():
+def test_participant_attitude_targeting_player_is_skipped_with_warning():
     response = json.dumps(
         {
             "decision": "错误地把玩家作为 NPC 态度目标。",
@@ -202,14 +203,90 @@ def test_participant_attitude_targeting_player_remains_an_error():
         ensure_ascii=False,
     )
     mock = MockLLM()
-    mock.set_responses([response, response, response])
+    mock.set_responses([response])
+    updater = StateUpdater(mock.build_gateway())
 
-    with pytest.raises(StateChangeError, match="cannot target the player"):
-        StateUpdater(mock.build_gateway()).update(
-            _state(),
-            _facts(),
-            core_memory=CoreMemory(items=[]),
-        )
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert updater.last_warnings[0].code == "attitude_target_player"
+
+
+def test_participant_add_already_present_is_skipped_with_warning():
+    response = json.dumps(
+        {
+            "decision": "重复添加已在场的米莉。",
+            "operations": [_operation("op1", "participant_add", name="米莉")],
+        },
+        ensure_ascii=False,
+    )
+    mock = MockLLM()
+    mock.set_responses([response])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert updater.last_warnings[0].code == "participant_already_present"
+
+
+def test_participant_remove_missing_is_skipped_with_warning():
+    response = json.dumps(
+        {
+            "decision": "移除不在场的莎拉。",
+            "operations": [_operation("op1", "participant_remove", name="莎拉")],
+        },
+        ensure_ascii=False,
+    )
+    mock = MockLLM()
+    mock.set_responses([response])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert updater.last_warnings[0].code == "participant_not_present"
+
+
+def test_participant_attitude_same_value_is_skipped_with_warning():
+    response = json.dumps(
+        {
+            "decision": "重复设置相同的态度。",
+            "operations": [
+                _operation(
+                    "op1",
+                    "participant_attitude_change",
+                    name="米莉",
+                    attitude_to_player="谨慎",
+                )
+            ],
+        },
+        ensure_ascii=False,
+    )
+    mock = MockLLM()
+    mock.set_responses([response])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert updater.last_warnings[0].code == "attitude_no_change"
 
 
 def test_player_visible_status_change():
@@ -293,7 +370,7 @@ def test_unknown_evidence_retries_with_validation_feedback():
     assert result == _state()
 
 
-def test_illegal_delta_fails_after_semantic_retries():
+def test_illegal_delta_is_skipped_with_warning():
     response = json.dumps(
         {
             "decision": "尝试移除不存在的物品。",
@@ -304,14 +381,146 @@ def test_illegal_delta_fails_after_semantic_retries():
         ensure_ascii=False,
     )
     mock = MockLLM()
-    mock.set_responses([response, response, response])
+    mock.set_responses([response])
+    updater = StateUpdater(mock.build_gateway())
 
-    with pytest.raises(StateChangeError, match="missing inventory item"):
-        StateUpdater(mock.build_gateway()).update(
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert updater.last_warnings[0].code == "inventory_item_missing"
+
+
+def test_fallback_keeps_previous_state_after_retries_exhausted():
+    invalid = json.dumps(
+        {
+            "decision": "引用不存在的证据。",
+            "operations": [
+                {
+                    **_operation("op1", "money_delta", delta=-1),
+                    "evidence_fact_ids": ["missing"],
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+    mock = MockLLM()
+    mock.set_responses([invalid, invalid])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert len(updater.last_warnings) == 1
+    assert updater.last_warnings[0].code == "state_update_fallback"
+    assert "unknown Scene Fact IDs" in updater.last_warnings[0].message
+
+
+class _CancellingGateway:
+    def run(self, **_kwargs):
+        raise CancelledError("user cancelled state update")
+
+
+class _FailingGateway:
+    def run(self, **_kwargs):
+        raise LLMProviderError("provider down")
+
+
+def test_cancellation_is_never_swallowed():
+    updater = StateUpdater(_CancellingGateway())
+
+    with pytest.raises(CancelledError):
+        updater.update(
             _state(),
             _facts(),
             core_memory=CoreMemory(items=[]),
         )
+
+    assert updater.last_warnings == []
+
+
+def test_infrastructure_error_is_never_swallowed():
+    updater = StateUpdater(_FailingGateway())
+
+    with pytest.raises(LLMProviderError):
+        updater.update(
+            _state(),
+            _facts(),
+            core_memory=CoreMemory(items=[]),
+        )
+
+    assert updater.last_warnings == []
+
+
+def test_attitude_before_add_is_applied_in_two_pass():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation(
+                    "op1",
+                    "participant_attitude_change",
+                    name="莎拉",
+                    attitude_to_player="信任",
+                ),
+                _operation("op2", "participant_add", name="莎拉"),
+            ]
+        }
+    )
+
+    assert [(p.name, p.attitude_to_player) for p in result.scene.participants] == [
+        ("主角", None),
+        ("米莉", "谨慎"),
+        ("莎拉", "信任"),
+    ]
+
+
+def test_inventory_consume_before_obtain_keeps_net():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation("op1", "inventory_delta", item="银钥匙", delta=-1),
+                _operation("op2", "inventory_delta", item="银钥匙", delta=2),
+            ]
+        }
+    )
+
+    assert [(item.name, item.quantity) for item in result.resources.inventory] == [
+        ("火把", 2),
+        ("银钥匙", 1),
+    ]
+
+
+def test_money_spend_before_earn_keeps_net():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation("op1", "money_delta", delta=-30),
+                _operation("op2", "money_delta", delta=50),
+            ]
+        }
+    )
+
+    assert result.resources.money == 40
+
+
+def test_asset_remove_before_add_keeps_sequential_order():
+    result, _ = _update(
+        {
+            "operations": [
+                _operation("op1", "fixed_asset_remove", asset="旧宅"),
+                _operation("op2", "fixed_asset_add", asset="旧宅"),
+            ]
+        }
+    )
+
+    assert result.resources.fixed_assets == ["葡萄园", "旧宅"]
 
 
 def test_prompt_defines_incremental_state_contract():

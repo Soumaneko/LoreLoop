@@ -1243,6 +1243,42 @@ def test_player_event_projection_preserves_revision_stream_marker():
     }
 
 
+def test_player_event_projection_exposes_state_update_warnings():
+    event = DebugHandler._player_event({
+        "step": "finish",
+        "data": {
+            "turn_id": "turn-1",
+            "status": "committed",
+            "action_preview": {"previews": []},
+            "state_update_warnings": [{
+                "operation_id": "fallback",
+                "operation_type": "state_update",
+                "target": "",
+                "code": "state_update_fallback",
+                "message": "State update fell back to the previous state: bad",
+            }],
+            "state_before": {"private": True},
+        },
+    })
+
+    assert event == {
+        "step": "finish",
+        "data": {
+            "turn_id": "turn-1",
+            "status": "committed",
+            "action_preview": {"previews": []},
+            "state_update_warnings": [{
+                "operation_id": "fallback",
+                "operation_type": "state_update",
+                "target": "",
+                "code": "state_update_fallback",
+                "message": "State update fell back to the previous state: bad",
+            }],
+        },
+    }
+    assert "state_before" not in str(event)
+
+
 def test_player_event_projection_exposes_only_safe_llm_usage_counts():
     event = DebugHandler._player_event({
         "step": "llm_usage",

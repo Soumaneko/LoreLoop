@@ -28,7 +28,7 @@
 
 {validation_feedback}
 
-若这里指出上一次操作无法应用，必须根据 CurrentState 和 Scene Facts 修正；不得重复非法操作。
+若这里指出上一次操作无法应用，必须根据 CurrentState 和 Scene Facts 修正；不得重复非法操作。引擎不会因单个操作不可应用而中断：无差异或无法应用的操作会被忽略并记录警告，其余操作照常应用；仅当程序校验仍失败时，才会回退到"保持上一状态"继续流程。
 
 
 # 输出规范
@@ -68,6 +68,8 @@
 
 CurrentState 中 participants 是当前在场人物的唯一权威列表。仅被提及、回忆或远程谈论的角色不得加入。
 
+`location_change` 只改变 location 标签，不会清空 participants；已在场者（含跟随玩家的人）无需、且允许重复 `participant_add`——引擎会忽略并记录警告，不会报错重试。
+
 当存在 location_change 时，必须逐一审计除玩家外的所有 participants：
 
 - 明确显示角色抵达新地点、跟随进入新地点或在场景结束时位于新地点：保留。
@@ -78,6 +80,8 @@ CurrentState 中 participants 是当前在场人物的唯一权威列表。仅�
 - `participant_attitude_change`：在场非玩家人物对玩家的公开态度发生明确、持续到场景结束的变化。填写 `name` 和 `attitude_to_player`；设为 null 表示明确清除旧态度。
 
 若人物本回合刚加入，应先输出 `participant_add`，再输出该人物的 attitude 操作。不要记录人物的身体或精神状态、即时动作意图、下一步打算或隐藏心理。
+
+若新态度与 CurrentState 中该人物当前值相同，引擎会忽略该操作并记录警告；请尽量只输出实质变化。
 
 ## 时间
 
@@ -107,7 +111,7 @@ CurrentState 不保存玩家、NPC 或场景 condition。身体状态、精神�
 
 1. 只输出真正发生变化的字段；未变化内容完全不输出。
 2. 绝对忠于 Scene Facts，不根据计划、暗示或常识补写变化。
-3. 操作按故事发生顺序排列；后续操作可以依赖前面的操作。
+3. 操作按故事发生顺序排列；后续操作可以依赖前面的操作。引擎会先应用加入/获得类操作（地点、时间、参与者的加入与移除、正库存、正金钱、资产增删），再应用依赖在场或存量的修改/消耗类操作（attitude、负库存、负金钱），因此同一批次内无依赖的操作无论先后结果一致；为获得清晰日志，仍建议按故事顺序输出。
 4. location 采用稳定、可复用的地点粒度。
 5. money 如果单位不一致，严禁进行 money_delta 操作。
 6. schema 未声明任何 condition 操作；不得用 visible_status、location、attitude 或资源字段代替 condition。

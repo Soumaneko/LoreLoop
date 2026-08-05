@@ -476,6 +476,7 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 "turn_id": data.get("turn_id"),
                 "status": data.get("status"),
                 "action_preview": data.get("action_preview"),
+                "state_update_warnings": data.get("state_update_warnings"),
             }
         else:
             public_data = {}
