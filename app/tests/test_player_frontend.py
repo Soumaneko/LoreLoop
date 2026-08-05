@@ -582,6 +582,7 @@ def test_player_themes_use_semantic_tokens_without_component_overrides():
         "--negative-text:",
             "--highlight-player-text:",
             "--highlight-npc-text:",
+            "--highlight-setting-text:",
             "--backdrop:",
     ):
         assert styles.count(token) == 3
@@ -731,6 +732,7 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'loadAll({ scroll: "instant" })' in source
     assert ".composer-shell:focus-within" in styles
     assert ".story-highlight-npc" in styles
+    assert ".story-highlight-setting" in styles
     assert "inventory-quantity" in source
     assert ".resource-group-inventory .resource-items" in styles
     assert "width: min(1040px" in styles

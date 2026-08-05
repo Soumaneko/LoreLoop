@@ -4,7 +4,7 @@ from app.domain.continuity import ContinuitySelection
 from app.domain.context_facts.schemas import (
     ContextFactSet,
     ContextHistoryEvidenceSet,
-    ContextSearchPlan,
+    SettingSelection,
 )
 
 
@@ -17,10 +17,6 @@ def project_context_facts(context_facts: ContextFactSet) -> str:
         for fact in context_facts.facts
     ]
     return json.dumps(data, ensure_ascii=False, indent=2)
-
-
-def project_context_search_plan(search_plan: ContextSearchPlan) -> str:
-    return search_plan.model_dump_json(indent=2)
 
 
 def project_context_history(
@@ -56,6 +52,23 @@ def project_continuity(selection: ContinuitySelection) -> str:
                 "deadline": match.item.deadline,
             }
             for match in selection.items
+        ],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+def project_settings(selection: SettingSelection) -> str:
+    return json.dumps(
+        [
+            {
+                "setting_id": match.setting_id,
+                "kind": match.kind,
+                "name": match.name,
+                "summary": match.summary,
+                "public_facts": match.public_facts,
+            }
+            for match in selection.settings
         ],
         ensure_ascii=False,
         indent=2,

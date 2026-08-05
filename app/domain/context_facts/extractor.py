@@ -15,8 +15,8 @@ from app.domain.views import (
 
 from .views import (
     project_context_history,
-    project_context_search_plan,
     project_continuity,
+    project_settings,
 )
 
 
@@ -40,14 +40,14 @@ class ContextExtractor:
                     "core_memory_json": input_data.core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(input_data.current_state),
                     "scene_summaries_json": project_scene_summaries(input_data.scene_summaries),
-                    "context_search_plan_json": project_context_search_plan(
-                        input_data.search_plan
-                    ),
                     "confirmed_history_json": project_context_history(
                         input_data.history_evidence
                     ),
                     "continuity_json": project_continuity(
                         input_data.continuity
+                    ),
+                    "settings_json": project_settings(
+                        input_data.settings
                     ),
                     "npc_profiles_json": project_npc_profiles(input_data.npc_profiles),
                     "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),

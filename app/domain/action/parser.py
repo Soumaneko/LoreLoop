@@ -6,13 +6,7 @@ from app.domain.action.schemas import ActionExtractionResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director_event.schemas import DirectorEvent
-from app.domain.npc_profile.schemas import NPCProfileDirectorView
-from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.views import (
-    project_current_state,
-    project_npc_profiles,
-    project_scene_summaries,
-)
+from app.domain.views import project_current_state
 
 
 def _event_hook_view(event: DirectorEvent) -> dict:
@@ -45,8 +39,6 @@ class ActionParser:
         current_state: CurrentState,
         *,
         core_memory: CoreMemory,
-        recent_summaries: list[SceneSummary] | None = None,
-        npc_profiles: list[NPCProfileDirectorView] | None = None,
         events: list[DirectorEvent] | None = None,
         trace_id: str | None = None,
     ) -> ActionExtractionResult:
@@ -58,8 +50,6 @@ class ActionParser:
                     "user_input": user_input,
                     "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "recent_summaries_json": project_scene_summaries(recent_summaries or []),
-                    "npc_profiles_json": project_npc_profiles(npc_profiles or []),
                     "director_events_json": json.dumps(
                         [_event_hook_view(event) for event in (events or [])],
                         ensure_ascii=False,

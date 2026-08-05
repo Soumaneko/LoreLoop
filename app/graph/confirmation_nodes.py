@@ -291,6 +291,7 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
                 turn_index=pipeline_input.turn_index,
                 trace_id=state["trace_id"],
                 new_npc_profiles=new_npc_profiles,
+                scene_text=state["effective_scene_text"],
             )
     return {
         "director_decision": decision,

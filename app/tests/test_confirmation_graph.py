@@ -622,3 +622,91 @@ def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(
 
     assert captured["next_action_directions"] == []
     assert captured["scene_facts"] is scene_facts
+
+
+def test_staged_director_npc_promotes_without_preadding_participants(
+    configure_runtime_services,
+):
+    from app.domain.director import DirectorStageMaterial, DirectorStageResult
+    from app.domain.director_npc import DirectorNPCDraft
+    from app.graph.confirmation_helpers import prepare_confirmation_state
+    from app.graph.confirmation_state import ConfirmationPipelineInput
+    from app.runtime.session import PendingTurn, get_campaign_runtime
+
+    services = configure_runtime_services()
+    state = CurrentState(
+        scene=SceneState(
+            scene_id="scene_001",
+            location="测试地点",
+            participants=["主角"],
+        ),
+        player=PlayerState(name="主角"),
+    )
+    with services.stores.current_state() as store:
+        store.save(state)
+    services.stores.core_memory().save(CoreMemory(items=[]))
+
+    draft = DirectorNPCDraft(
+        name="林澈",
+        role="社区医生",
+        appearance="常穿深色风衣。",
+        personality_traits=["谨慎", "耐心"],
+        known_abilities=["急救"],
+        core_motivation="保护社区居民。",
+        hidden_secret="曾目击一宗未结案件。",
+        conflict_style="先协商后行动。",
+        social_style="克制而友善。",
+        encounter_potentials=["诊所求助", "街区冲突", "旧案线索"],
+        created_turn=1,
+    )
+    with services.stores.director_npc() as store:
+        store.save(draft)
+
+    scene_result = SceneWriterResult(scene_text="林澈走进来。")
+    pending = PendingTurn(
+        turn_id="turn-staged",
+        group_id="turn-staged",
+        version_index=1,
+        user_input="让林澈进来。",
+        difficulty="困难",
+        max_chars=1500,
+        state_before=state,
+        context=SimpleNamespace(turn_resolution=SimpleNamespace()),
+        outline=SimpleNamespace(),
+        scene_result=scene_result,
+        director_stage=DirectorStageResult(
+            reasoning="引入林澈。",
+            materials=[
+                DirectorStageMaterial(
+                    kind="npc",
+                    resource_id=draft.draft_id,
+                    guidance="以林澈视角互动。",
+                    payload={"source": "director_npc", "name": "林澈"},
+                )
+            ],
+        ),
+    )
+    prepared = prepare_confirmation_state(
+        ConfirmationPipelineInput(
+            turn_id="turn-staged",
+            pending=pending,
+            state_before=state,
+            scene_result=scene_result,
+            user_input="让林澈进来。",
+            turn_index=2,
+            stale_message="stale",
+            run_director_agent=True,
+        ),
+        write_db=True,
+    )
+
+    assert prepared["confirmed_director_npc_draft"].draft_id == draft.draft_id
+    assert {p.name for p in prepared["state_before_update"].scene.participants} == {
+        "主角"
+    }
+    assert "林澈" in prepared["confirmation_scene_text"]
+    with services.stores.director_npc() as store:
+        saved = store.get_by_id(draft.draft_id)
+    assert saved.status == "introduced"
+    with services.stores.npc_profile() as store:
+        assert [profile.name for profile in store.list_all()] == ["林澈"]

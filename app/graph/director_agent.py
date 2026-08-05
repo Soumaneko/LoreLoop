@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 
+from app.core.text import eligible_highlight_term
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.creative_brief import draw_creative_brief
@@ -360,10 +361,13 @@ def run_generation_director_agent(
             if event.event_id not in engaged_event_ids
             and event.stage != "engaged"
         ]
+        # Only not-yet-introduced Director NPC drafts are observable during
+        # generation. Introduced Director NPCs are already regular NPC
+        # Profiles and stay visible through the profile channel.
         director_npcs = [
             npc
             for npc in director_npc_store.list_all()
-            if npc.status != "retired"
+            if npc.status == "prepared"
         ]
         npc_profiles = npc_profile_store.list_all()
         settings = setting_store.list_all()
@@ -506,6 +510,7 @@ def run_confirmation_director_agent(
     turn_index: int,
     trace_id: str,
     new_npc_profiles: list[NPCProfile] | None = None,
+    scene_text: str = "",
 ) -> tuple[object, DirectorSkillExecutionBatch]:
     recover_pending_director_mutation(stores)
     service = DirectorSkillService()
@@ -891,7 +896,7 @@ def run_confirmation_director_agent(
                         **npc.private_view().model_dump(mode="json"),
                     }
                     for npc in director_npc_store.list_all()
-                    if npc.status != "retired"
+                    if npc.status == "prepared"
                 ]
                 + [
                     {
@@ -927,6 +932,17 @@ def run_confirmation_director_agent(
             turn_index=turn_index,
             trace_id=trace_id,
         )
+        # A Setting created in this same confirmation may already appear in the
+        # confirmed scene text; the appearance node runs before this stage, so
+        # its first mention would otherwise never be counted and the record
+        # stays hidden from the general archive view.
+        folded_text = scene_text.casefold()
+        for setting in created_settings:
+            if (
+                eligible_highlight_term(setting.name)
+                and setting.name.casefold() in folded_text
+            ):
+                setting.hit_count = 1
         plan.settings.extend(created_settings)
         for setting in created_settings:
             settings_by_id[setting.setting_id] = setting

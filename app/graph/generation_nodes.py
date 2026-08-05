@@ -93,11 +93,13 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
         with (
             _store_factory(state, "confirmed_history")() as history_store,
             _store_factory(state, "continuity")() as continuity_store,
+            _store_factory(state, "world_setting")() as setting_store,
         ):
             result = ContextFactsService(
                 gateway_for(state),
                 history_store,
                 continuity_store,
+                setting_store,
             ).build(
                 ContextFactsInput(
                     user_input=state["user_input"],
@@ -127,6 +129,10 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                     "continuity_selection": model_data(
                         result.continuity
                     ),
+                    "world_settings": [
+                        match.model_dump(mode="json")
+                        for match in result.settings.settings
+                    ],
                 },
             }],
         }
@@ -169,8 +175,6 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         user_input=state["user_input"],
         current_state=state["current_state"],
         core_memory=state["core_memory"],
-        recent_summaries=state.get("recent_summaries", []),
-        npc_profiles=state.get("action_npc_director_views", []),
         events=hidden_events,
         trace_id=state["trace_id"],
     )

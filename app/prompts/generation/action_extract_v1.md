@@ -17,18 +17,6 @@
 {current_state_json}
 ```
 
-## Recent Scene Summaries
-
-```json
-{recent_summaries_json}
-```
-
-## NPC Profiles
-
-```json
-{npc_profiles_json}
-```
-
 ## 潜伏导演事件
 
 ```json
@@ -110,7 +98,7 @@
    - low：安全环境、友善/中立目标、无欺骗/威胁，失败只会浪费时间而无实质惩罚。
    - medium：具备一定不确定性、涉及说服/轻度试探/对抗性对话，失败会导致一定成本或尴尬。
    - high：目标实力远超玩家或具攻击性、涉及战斗、严重欺骗、威胁、极度危险的施法，失败可能导致受伤、暴露或关系彻底破裂。
-   - 判断角度：目标实力与态度、场景氛围与位置、行动类型（attack/hide_or_stealth/cast_or_use_power/defend 基准偏高）、最近剧情摘要中的事件、CoreMemory 的世界反馈规则。信息不足时用 action_type 和当前场景做保守估计。
+   - 判断角度：目标实力与态度、场景氛围与位置、行动类型（attack/hide_or_stealth/cast_or_use_power/defend 基准偏高）、CoreMemory 的世界反馈规则。信息不足时用 action_type 和当前场景做保守估计。
 9. 完成型命令必须完整提取：用户说“完成任务”“快速处理完”“解决这些敌人”“把这件事做完”等，表示要求本回合实际执行直到产生结果。即使未给出具体战术，也必须把用户原话完整保留为一个高层 action，选择最贴切的 action_type；无法归类时使用 other，并根据任务风险设置 likely_needs_roll。不得只提取接取、准备、前往或讨论等前置步骤，也不得替用户停在执行之前。
 10. actor 必须准确表达行动所有权：用户明确表示“一起……”“共同……”等共同执行时，应在同一个 action 的 actor 列表中写入全部实际执行者。仅仅在场、同行、旁观、受益、被保护或作为 target 的角色不是行动者，不得加入 actor。
 

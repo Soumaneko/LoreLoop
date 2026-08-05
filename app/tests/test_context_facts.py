@@ -17,10 +17,13 @@ from app.domain.context_facts import (
     ContextSearchEntity,
     ContextSearchIntent,
     ContextSearchPlan,
+    SettingMatch,
+    SettingRetriever,
+    SettingSelection,
     build_context_search_plan,
 )
 from app.domain.context_facts.schemas import ContextFactSet
-from app.domain.context_facts.views import project_context_facts
+from app.domain.context_facts.views import project_context_facts, project_settings
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
@@ -33,6 +36,7 @@ from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.short_term_memory import ShortTermScene
+from app.domain.world_setting import WorldSetting, WorldSettingStore
 from app.graph.generation_profile_helpers import select_context_profiles
 
 
@@ -277,13 +281,6 @@ def test_context_extractor_receives_raw_history_and_cites_it():
                 }],
             })
 
-    search_plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="顾晚棠")],
-        )
-    ])
     history = ContextHistoryEvidenceSet(hits=[
         ContextHistoryHit(
             evidence_id="turn_2_p003",
@@ -311,20 +308,30 @@ def test_context_extractor_receives_raw_history_and_cites_it():
                     turn_end=2,
                 )
             ],
-                search_plan=search_plan,
                 history_evidence=history,
                 continuity=ContinuitySelection(),
+            settings=SettingSelection(settings=[
+                SettingMatch(
+                    setting_id="setting_001",
+                    kind="faction",
+                    name="盐帮",
+                    summary="掌控漕运与走私路线的江湖帮派。",
+                    public_facts=["盐帮垄断盐路走私。"],
+                    matched_entities=["顾晚棠"],
+                    score=0.5,
+                )
+            ]),
             npc_profiles=[_npc_view()],
         )
     )
 
     assert result.facts[0].evidence_ids == ["turn_2_p003"]
     assert "turn_2_p003" in gateway.input_data["confirmed_history_json"]
-    assert '"intent_id":"i1"' in gateway.input_data[
-        "context_search_plan_json"
-    ].replace(" ", "").replace("\n", "")
+    assert "context_search_plan_json" not in gateway.input_data
     assert "scene_001" in gateway.input_data["current_state_json"]
     assert "director_event_json" not in gateway.input_data
+    assert "盐帮" in gateway.input_data["settings_json"]
+    assert "垄断盐路走私" in gateway.input_data["settings_json"]
     schema = json.loads(gateway.input_data["output_schema_json"])
     draft = next(
         definition
@@ -342,6 +349,7 @@ def test_context_extractor_receives_raw_history_and_cites_it():
     ).read_text(encoding="utf-8").format(**gateway.input_data)
     assert "已确认历史正文" in rendered_prompt
     assert "活跃连续性事项" in rendered_prompt
+    assert "世界设定" in rendered_prompt
     assert "Retrieved Memories" not in rendered_prompt
 
 
@@ -358,14 +366,28 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
             })
 
     gateway = SpyGateway()
-    with ConfirmedHistoryStore() as store, ContinuityStore() as continuity_store:
+    with (
+        ConfirmedHistoryStore() as store,
+        ContinuityStore() as continuity_store,
+        WorldSettingStore() as setting_store,
+    ):
         store.upsert_turn(
             scene_id="scene_003",
             turn_index=3,
             user_input="",
             scene_text="顾阁主说盐帮正在客栈外搜查。",
         )
-        result = ContextFactsService(gateway, store, continuity_store).build(
+        setting_store.save(WorldSetting(
+            kind="location",
+            name="客栈上房",
+            summary="客栈二层临街的上房，面向盐帮搜查的方向。",
+            public_facts=["盐帮暗哨曾在楼下盯防。"],
+            hidden_facts=["房梁暗格里藏着盐路账册摹本。"],
+            created_turn=1,
+        ))
+        result = ContextFactsService(
+            gateway, store, continuity_store, setting_store
+        ).build(
             ContextFactsInput(
                 user_input="我问顾阁主盐帮的最新动向。",
                 core_memory=_core_memory(),
@@ -382,6 +404,11 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
     assert gateway.calls[0]["task"] == "context_extract"
     assert result.search_plan.intents
     assert result.history_evidence.hits
+    assert [match.name for match in result.settings.settings] == ["客栈上房"]
+    assert result.settings.active_count == 1
+    assert "房梁暗格里藏着盐路账册摹本" not in gateway.calls[0][
+        "input_data"
+    ]["settings_json"]
 
 
 def test_context_facts_projection_hides_internal_evidence_ids():
@@ -456,3 +483,95 @@ def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
     assert [profile.name for profile in result.npc_profiles] == [
         "希尔达·布拉斯科特"
     ]
+
+
+def test_setting_retriever_selects_relevant_public_settings():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="location",
+            entities=[ContextSearchEntity(name="客栈上房")],
+        ),
+        ContextSearchIntent(
+            intent_id="i2",
+            focus="entity",
+            entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
+        ),
+    ])
+    with WorldSettingStore() as store:
+        store.save_many([
+            WorldSetting(
+                kind="location",
+                name="客栈上房",
+                summary="客栈二层临街的上房。",
+                public_facts=["入夜后街面有盐帮暗哨。"],
+                created_turn=1,
+            ),
+            WorldSetting(
+                kind="faction",
+                name="盐帮",
+                summary="掌控漕运与走私路线的江湖帮派。",
+                public_facts=["盐帮垄断盐路走私。"],
+                created_turn=1,
+            ),
+            WorldSetting(
+                kind="lore",
+                name="万象阁秘闻",
+                summary="与当前剧情无关的遥远传说。",
+                public_facts=["万象阁藏有古卷。"],
+                created_turn=1,
+            ),
+        ])
+        result = SettingRetriever(store).retrieve(
+            user_input="我问顾阁主盐帮的动向。",
+            current_state=_state(),
+            search_plan=plan,
+        )
+
+    assert result.active_count == 3
+    assert [match.name for match in result.settings] == ["客栈上房", "盐帮"]
+    assert result.settings[0].matched_location is True
+    assert result.settings[1].matched_name_in_input is True
+    assert all(match.kind in {"faction", "location", "item", "lore"}
+               for match in result.settings)
+
+
+def test_setting_retriever_limits_and_never_exposes_hidden_facts():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="顾晚棠")],
+        ),
+        ContextSearchIntent(
+            intent_id="i2",
+            focus="topic",
+            topics=["帮派"],
+        ),
+    ])
+    with WorldSettingStore() as store:
+        store.save_many([
+            WorldSetting(
+                kind="faction",
+                name=f"帮派{index}",
+                summary="与当前剧情相关的江湖帮派。",
+                public_facts=[f"帮派{index}垄断盐路走私。"],
+                hidden_facts=[f"帮派{index}的幕后主人是顾晚棠的生父。"],
+                created_turn=1,
+            )
+            for index in range(1, 7)
+        ])
+        result = SettingRetriever(store).retrieve(
+            user_input="我问顾晚棠这些帮派的情况。",
+            current_state=_state(),
+            search_plan=plan,
+        )
+        projected = project_settings(result)
+
+    assert len(result.settings) == 4
+    assert result.active_count == 6
+    assert all(match.public_facts for match in result.settings)
+    assert "生父" not in projected
+    payload = json.loads(projected)
+    assert len(payload) == 4
+    assert all("hidden_facts" not in item for item in payload)

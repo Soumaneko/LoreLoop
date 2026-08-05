@@ -714,6 +714,54 @@ def test_generation_director_observes_setting_without_facts(tmp_path):
     assert all("hidden_facts" not in item for item in observed_settings)
 
 
+def test_generation_agent_observes_only_prepared_director_npcs(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    prepared = _director_npc().model_copy(
+        update={"draft_id": "director_npc_prepared"}
+    )
+    introduced = _director_npc().model_copy(
+        update={
+            "draft_id": "director_npc_introduced",
+            "name": "顾晚棠",
+            "status": "introduced",
+            "introduced_turn": 2,
+        }
+    )
+    with stores.director_npc() as store:
+        store.save(prepared)
+        store.save(introduced)
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []},
+    )
+
+    run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="观察港口。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    observed_drafts = [
+        item
+        for item in observation["resources"]["npcs"]
+        if item.get("source") == "director_npc"
+    ]
+    assert [item["npc_id"] for item in observed_drafts] == [
+        "director_npc_prepared"
+    ]
+    assert "director_npc_introduced" not in {
+        item["npc_id"] for item in observation["resources"]["npcs"]
+    }
+
+
 def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
     draft = _director_npc()
@@ -1078,6 +1126,131 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
     with stores.director_npc() as store:
         [saved] = store.list_prepared()
     assert saved.source_setting_ids == [setting.setting_id]
+
+
+def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    prepared = _director_npc().model_copy(
+        update={"draft_id": "director_npc_conf_prepared"}
+    )
+    introduced = _director_npc().model_copy(
+        update={
+            "draft_id": "director_npc_conf_introduced",
+            "name": "顾晚棠",
+            "status": "introduced",
+            "introduced_turn": 2,
+        }
+    )
+    with stores.director_npc() as store:
+        store.save(prepared)
+        store.save(introduced)
+    gateway = _PhaseGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []},
+    )
+
+    run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        npc_profiles=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    observed_drafts = [
+        item
+        for item in observation["resources"]["npcs"]
+        if item.get("source") == "director_npc"
+    ]
+    assert [item["npc_id"] for item in observed_drafts] == [
+        "director_npc_conf_prepared"
+    ]
+    assert "director_npc_conf_introduced" not in {
+        item["npc_id"] for item in observation["resources"]["npcs"]
+    }
+
+
+def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
+    from app.domain.world_setting import WorldSettingStore
+
+    def run_with(scene_text, data_dir):
+        stores = StoreBundle(CampaignPaths.from_data_dir(data_dir))
+        gateway = _PhaseGateway(
+            decision={
+                "reasoning": "创建一名以本地航运为生的人物。",
+                "requests": [{
+                    "request_id": "npc_1",
+                    "skill": "create_npc",
+                    "arguments": {
+                        "setting_requirements": [{
+                            "kind": "faction",
+                            "setting_description": "掌控北境商路的商会联盟，对边境贸易影响深远。",
+                            "matched_setting_id": None,
+                        }],
+                    },
+                    "guidance": "创建一名北陆商盟的成员。",
+                }],
+            },
+            setting_output={
+                "name": "北陆商盟",
+                "summary": "掌控北境商路的商会联盟。",
+                "public_facts": ["统一收取过路费。"],
+                "hidden_facts": ["商会暗中资助边境私军。"],
+            },
+            npc_output={
+                "creation_reason": "主角走访北境商路。",
+                "core_motivation": "保住商队往来北境的路权。",
+                "hidden_secret": "北陆商盟暗中资助边境私军。",
+                "conflict_style": "先谈利益，谈不拢就断其商路。",
+                "social_style": "圆滑而强势。",
+                "role": "北境商队执事",
+                "faction": None,
+                "personality_traits": ["精明", "务实"],
+                "known_abilities": ["商事谈判", "押运调度"],
+                "appearance": "常穿厚重皮袍。",
+                "name": "柴行简",
+                "encounter_potentials": ["商路冲突", "会面谈判", "押运同行"],
+            },
+        )
+        run_confirmation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="询问昨夜发生的事。",
+            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+            recent_summaries=[],
+            selection_summaries=[],
+            npc_profiles=[],
+            turn_index=2,
+            trace_id="confirmation-director",
+            scene_text=scene_text,
+        )
+        with stores.world_setting() as store:
+            return store.list_all()
+
+    [counted] = run_with(
+        "柴行简提到北陆商盟的规矩。",
+        tmp_path / "matched",
+    )
+    assert counted.name == "北陆商盟"
+    assert counted.created_turn == 2
+    assert counted.hit_count == 1
+
+    [unmatched] = run_with(
+        "正文没有提到任何新设定。",
+        tmp_path / "unmatched",
+    )
+    assert unmatched.name == "北陆商盟"
+    assert unmatched.hit_count == 0
 
 
 def test_director_skill_specs_cover_every_registered_skill():
@@ -2569,6 +2742,7 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
         "core_memory": CoreMemory(items=[]),
         "updated_state": _current_state(),
         "scene_facts": SceneFactSet(scene_focus="药山。"),
+        "effective_scene_text": "药山上的采药女在采摘药草。",
         "recent_summaries": [],
         "selection_summaries": [],
         "npc_extraction": None,

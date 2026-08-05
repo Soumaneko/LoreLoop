@@ -29,7 +29,6 @@ class ConfirmationPreparationServices:
     npc_profile_store: Callable
     core_memory_store: Callable
     promote_staged_director_npc_profile: Callable
-    state_with_staged_director_npc: Callable
     project_scene_text_with_staged_director_npc: Callable
     runtime_services: RuntimeServices | None = None
 
@@ -88,10 +87,11 @@ class ConfirmationPreparer:
             cache["director_npc_profile_id"] = director_npc_profile_id
             cache["confirmed_director_npc_draft"] = confirmed_director_npc_draft
 
-        state_before_update = services.state_with_staged_director_npc(
-            pipeline_input.state_before,
-            confirmed_director_npc_draft,
-        )
+        # The staged Director NPC is NOT pre-added to CurrentState participants
+        # here: whether they are actually present is decided by StateUpdater
+        # from the confirmed Scene Facts. The confirmation system note still
+        # maps an unnamed in-scene figure to the introduced NPC for extraction.
+        state_before_update = pipeline_input.state_before
         confirmation_scene_text = (
             services.project_scene_text_with_staged_director_npc(
             effective_scene_text,

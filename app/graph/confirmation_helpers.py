@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.domain.current_state import ParticipantState
-from app.domain.current_state.schemas import CurrentState
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
 from app.runtime.serialization import model_data
@@ -175,30 +173,6 @@ def merge_unique_ids(values: list[str]) -> list[str]:
     return merged
 
 
-def state_with_staged_director_npc(
-    state: CurrentState,
-    draft: DirectorNPCDraft | None,
-) -> CurrentState:
-    if draft is None:
-        return state
-
-    participants = list(state.scene.participants)
-    if draft.name.casefold() not in {
-        participant.name.casefold() for participant in participants
-    }:
-        participants.append(
-            ParticipantState(
-                name=draft.name,
-            )
-        )
-
-    return state.model_copy(
-        update={
-            "scene": state.scene.model_copy(update={"participants": participants}),
-        }
-    )
-
-
 def project_scene_text_with_staged_director_npc(
     scene_text: str,
     *,
@@ -267,7 +241,6 @@ def prepare_confirmation_state(
                 stores=stores,
             )
         ),
-        state_with_staged_director_npc=state_with_staged_director_npc,
         project_scene_text_with_staged_director_npc=(
             project_scene_text_with_staged_director_npc
         ),

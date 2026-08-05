@@ -9,6 +9,7 @@ from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.world_setting.schemas import SettingKind
 
 
 class ContextFact(BaseModel):
@@ -140,6 +141,32 @@ class ContextHistoryEvidenceSet(BaseModel):
     indexed_turns: int = Field(default=0, ge=0)
 
 
+class SettingMatch(BaseModel):
+    """A relevant World Setting admitted to Context Facts, public facts only."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    setting_id: str = Field(min_length=1)
+    kind: SettingKind
+    name: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    public_facts: list[str] = Field(default_factory=list)
+    matched_location: bool = False
+    matched_name_in_input: bool = False
+    matched_entities: list[str] = Field(default_factory=list)
+    matched_topics: list[str] = Field(default_factory=list)
+    score: float = Field(ge=0)
+
+
+class SettingSelection(BaseModel):
+    """Bounded selection of relevant public World Settings for the extractor."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    settings: list[SettingMatch] = Field(default_factory=list, max_length=4)
+    active_count: int = Field(default=0, ge=0)
+
+
 class ContextExtractorInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -147,9 +174,9 @@ class ContextExtractorInput(BaseModel):
     core_memory: CoreMemory
     current_state: CurrentState
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
-    search_plan: ContextSearchPlan
     history_evidence: ContextHistoryEvidenceSet
     continuity: ContinuitySelection
+    settings: SettingSelection = Field(default_factory=SettingSelection)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
 
 
@@ -171,4 +198,5 @@ class ContextFactsResult(BaseModel):
     search_plan: ContextSearchPlan
     history_evidence: ContextHistoryEvidenceSet
     continuity: ContinuitySelection
+    settings: SettingSelection = Field(default_factory=SettingSelection)
     context_facts: ContextFactSet

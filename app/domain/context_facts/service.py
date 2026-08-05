@@ -1,10 +1,12 @@
 from app.core.llm import LLMGateway
 from app.domain.confirmed_history import ConfirmedHistoryStore
 from app.domain.continuity import ContinuityRetriever, ContinuityStore
+from app.domain.world_setting import WorldSettingStore
 
 from .extractor import ContextExtractor
 from .intent_builder import build_context_search_plan
 from .retriever import ContextHistoryRetriever
+from .setting_retriever import SettingRetriever
 from .schemas import (
     ContextExtractorInput,
     ContextFactsInput,
@@ -18,10 +20,12 @@ class ContextFactsService:
         llm: LLMGateway,
         history_store: ConfirmedHistoryStore,
         continuity_store: ContinuityStore,
+        setting_store: WorldSettingStore,
     ):
         self.extractor = ContextExtractor(llm)
         self.history_store = history_store
         self.continuity_store = continuity_store
+        self.setting_store = setting_store
 
     def build(
         self,
@@ -48,15 +52,22 @@ class ContextFactsService:
             current_state=input_data.current_state,
             anchors=input_data.matched_anchors,
         )
+        settings = SettingRetriever(
+            self.setting_store
+        ).retrieve(
+            user_input=input_data.user_input,
+            current_state=input_data.current_state,
+            search_plan=search_plan,
+        )
         context_facts = self.extractor.extract(
             ContextExtractorInput(
                 user_input=input_data.user_input,
                 core_memory=input_data.core_memory,
                 current_state=input_data.current_state,
                 scene_summaries=input_data.scene_summaries,
-                search_plan=search_plan,
                 history_evidence=history_evidence,
                 continuity=continuity,
+                settings=settings,
                 npc_profiles=input_data.npc_profiles,
             ),
             trace_id=trace_id,
@@ -65,5 +76,6 @@ class ContextFactsService:
             search_plan=search_plan,
             history_evidence=history_evidence,
             continuity=continuity,
+            settings=settings,
             context_facts=context_facts,
         )

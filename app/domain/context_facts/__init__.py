@@ -14,8 +14,11 @@ from .schemas import (
     ContextSearchEntity,
     ContextSearchIntent,
     ContextSearchPlan,
+    SettingMatch,
+    SettingSelection,
 )
 from .service import ContextFactsService
+from .setting_retriever import SettingRetriever
 
 __all__ = [
     "ContextExtractor",
@@ -33,5 +36,8 @@ __all__ = [
     "ContextSearchEntity",
     "ContextSearchIntent",
     "ContextSearchPlan",
+    "SettingMatch",
+    "SettingRetriever",
+    "SettingSelection",
     "build_context_search_plan",
 ]
