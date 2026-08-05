@@ -54,6 +54,7 @@ _NPC_DIRECTOR_FIELDS = {
     "source_setting_ids",
     "created_turn",
     "introduced_turn",
+    "disclosure_level",
 }
 _NPC_ADVANCED_DIRECTOR_FIELDS = {
     "core_motivation",

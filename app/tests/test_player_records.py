@@ -326,3 +326,22 @@ def test_player_records_update_route_dispatches_by_http_method(monkeypatch):
         "view": "advanced",
     }
     assert results == [{"updated": True}]
+
+
+def test_update_npc_preserves_disclosure_level():
+    _seed_records()
+    runtime = get_campaign_runtime()
+    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
+    with runtime.stores.npc_profile() as store:
+        profile = store.get_by_id(npc_id)
+        profile.disclosure_level = "intimate"
+        store.upsert(profile)
+
+    result = update_player_record(
+        "npc",
+        npc_id,
+        {"role": "巡回木偶师"},
+    )
+    assert result["public"]["role"] == "巡回木偶师"
+    with runtime.stores.npc_profile() as store:
+        assert store.get_by_id(npc_id).disclosure_level == "intimate"

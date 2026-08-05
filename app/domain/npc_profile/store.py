@@ -5,7 +5,11 @@ from app.domain.npc_profile.schemas import (
     NPCProfile,
     utc_now,
 )
-from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version
+from app.runtime.sqlite import (
+    connect_sqlite,
+    ensure_exact_schema_version,
+    transaction,
+)
 
 
 class NPCProfileStore:
@@ -59,8 +63,37 @@ class NPCProfileStore:
             ON npc_profiles(active, name)
             """
         )
-        ensure_exact_schema_version(self._db, "npc_profile", 3)
+        self._migrate_v3_to_v4()
+        ensure_exact_schema_version(self._db, "npc_profile", 4)
         self._db.commit()
+
+    def _migrate_v3_to_v4(self) -> None:
+        """Soft one-time migration: introduce the persistent disclosure level.
+
+        ``disclosure_level`` lives inside ``profile_json`` so no column changes;
+        older rows pick up the ``remote`` default via pydantic. Only the recorded
+        schema version needs to advance so existing saves open cleanly.
+        """
+        row = self._db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ("schema_versions",),
+        ).fetchone()
+        if row is None:
+            return
+        current = self._db.execute(
+            "SELECT version FROM schema_versions WHERE component = ?",
+            ("npc_profile",),
+        ).fetchone()
+        if current is None or int(current["version"]) != 3:
+            return
+        with transaction(self._db):
+            self._db.execute(
+                """
+                UPDATE schema_versions
+                SET version = 4, updated_at = CURRENT_TIMESTAMP
+                WHERE component = 'npc_profile'
+                """
+            )
 
     def _row_to_profile(self, row: sqlite3.Row) -> NPCProfile:
         profile = NPCProfile.model_validate(json.loads(row["profile_json"]))

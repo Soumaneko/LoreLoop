@@ -67,6 +67,10 @@ def test_summarize_decision_covers_every_skill(tmp_path):
                 "introduce_npc",
                 {"npc_id": draft.draft_id, "view_mode": "face_to_face"},
             ),
+            _request(
+                "upgrade_disclosure",
+                {"npc_id": npc_id, "new_disclosure_level": "intimate"},
+            ),
             _request("present_event", {"event_id": "event_x"}),
             _request("foreshadow_setting", {"setting_id": "setting_x"}),
         ],
@@ -111,6 +115,7 @@ def test_summarize_decision_covers_every_skill(tmp_path):
     ])
 
     assert "引入NPC「林澈」(face_to_face)" in measures
+    assert "披露升级「顾晚棠」→intimate" in measures
     assert "呈现事件「event_x」" in measures
     assert "暗示设定「setting_x」" in measures
     assert "创建NPC「柴行简」依托faction" in measures

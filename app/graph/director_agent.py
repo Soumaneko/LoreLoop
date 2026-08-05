@@ -27,7 +27,11 @@ from app.domain.director_event.selector import DirectorEventSelector
 from app.domain.director_event.views import project_director_event
 from app.domain.director_npc.creator import DirectorNPCCreator
 from app.domain.director_npc.schemas import DirectorNPCDraft, NPCCreationContext
-from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.npc_profile.schemas import (
+    DISCLOSED_FIELD_SETS,
+    NPC_DISCLOSURE_ORDER,
+    NPCProfile,
+)
 from app.domain.npc_profile.workflows import (
     attach_transient_alias_for_rename,
     backfill_new_npc_profile,
@@ -51,8 +55,8 @@ from .director_skill_specs import (
     ForeshadowSettingArguments,
     IntroduceNPCArguments,
     NPC_VIEW_ALWAYS_KEPT,
-    NPC_VIEW_MODE_FIELDS,
     PresentEventArguments,
+    UpgradeDisclosureArguments,
     get_director_skill_specs,
 )
 
@@ -398,10 +402,23 @@ def run_generation_director_agent(
                 args,
                 guidance=guidance,
             ),
-            arguments_validator=lambda args: _require_npc(
+            arguments_validator=lambda args: _require_director_draft(
                 director_npc_store,
+                args.npc_id,
+            ),
+        )
+        _register_skill(
+            service,
+            "upgrade_disclosure",
+            handler=lambda args, guidance=None: _upgrade_disclosure(
+                npc_profile_store,
+                args,
+                guidance=guidance,
+            ),
+            arguments_validator=lambda args: _require_disclosure_upgradeable(
                 npc_profile_store,
                 args.npc_id,
+                args.new_disclosure_level,
             ),
         )
         _register_skill(
@@ -1032,36 +1049,58 @@ def _introduce_npc(
     guidance: str | None,
 ) -> DirectorStageMaterial:
     draft = director_npc_store.get_by_id(args.npc_id)
-    if draft is not None and draft.status != "retired":
-        payload = {
-            "source": "director_npc",
-            **draft.private_view().model_dump(
-                mode="json",
-                exclude_none=True,
-            ),
-        }
-    else:
-        profile = npc_profile_store.get_by_id(args.npc_id)
-        if profile is None:
-            raise ValueError("introduce_npc references an unknown NPC")
-        payload = {
-            "source": "npc_profile",
-            "npc_id": profile.npc_id,
-            **profile.director_view().model_dump(
-                mode="json",
-                exclude_none=True,
-            ),
-        }
-    allowed = NPC_VIEW_MODE_FIELDS[args.view_mode]
+    if draft is None or draft.status != "prepared":
+        raise ValueError("introduce_npc requires a prepared director NPC draft")
+    payload = {
+        "source": "director_npc",
+        **draft.private_view().model_dump(
+            mode="json",
+            exclude_none=True,
+        ),
+    }
+    allowed = DISCLOSED_FIELD_SETS[args.view_mode]
     if allowed is not None:
         payload = {
             key: value
             for key, value in payload.items()
             if key in allowed or key in NPC_VIEW_ALWAYS_KEPT
         }
+    payload["view_mode"] = args.view_mode
     return DirectorStageMaterial(
         kind="npc",
         resource_id=args.npc_id,
+        guidance=_require_generation_guidance(guidance),
+        payload=payload,
+    )
+
+
+def _upgrade_disclosure(
+    npc_profile_store,
+    args: UpgradeDisclosureArguments,
+    *,
+    guidance: str | None,
+) -> DirectorStageMaterial:
+    profile = npc_profile_store.get_by_id(args.npc_id)
+    if profile is None:
+        raise ValueError("upgrade_disclosure references an unknown NPC profile")
+    current = profile.disclosure_level
+    if NPC_DISCLOSURE_ORDER[args.new_disclosure_level] <= NPC_DISCLOSURE_ORDER[current]:
+        raise ValueError(
+            "upgrade_disclosure only supports raising the disclosure level"
+        )
+    payload = {
+        "source": "npc_profile",
+        "npc_id": profile.npc_id,
+        "disclosure_upgrade": True,
+        "new_disclosure_level": args.new_disclosure_level,
+        **profile.disclosure_view(args.new_disclosure_level).model_dump(
+            mode="json",
+            exclude_none=True,
+        ),
+    }
+    return DirectorStageMaterial(
+        kind="npc",
+        resource_id=profile.npc_id,
         guidance=_require_generation_guidance(guidance),
         payload=payload,
     )
@@ -1103,6 +1142,28 @@ def _require_npc(director_npc_store, npc_profile_store, npc_id: str) -> None:
         return
     if npc_profile_store.get_by_id(npc_id) is None:
         raise ValueError("director skill references an unknown npc_id")
+
+
+def _require_director_draft(director_npc_store, npc_id: str) -> None:
+    draft = director_npc_store.get_by_id(npc_id)
+    if draft is None or draft.status != "prepared":
+        raise ValueError("introduce_npc requires a prepared director NPC draft")
+
+
+def _require_disclosure_upgradeable(
+    npc_profile_store,
+    npc_id: str,
+    new_level: str,
+) -> None:
+    profile = npc_profile_store.get_by_id(npc_id)
+    if profile is None:
+        raise ValueError("upgrade_disclosure references an unknown npc_id")
+    if NPC_DISCLOSURE_ORDER[new_level] <= NPC_DISCLOSURE_ORDER[
+        profile.disclosure_level
+    ]:
+        raise ValueError(
+            "upgrade_disclosure only supports raising the disclosure level"
+        )
 
 
 def _require_setting(store, setting_id: str) -> None:

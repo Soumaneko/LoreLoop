@@ -29,9 +29,9 @@ class ConfirmationPreparationServices:
     npc_profile_store: Callable
     core_memory_store: Callable
     promote_staged_director_npc_profile: Callable
+    apply_staged_disclosure_upgrades: Callable
     project_scene_text_with_staged_director_npc: Callable
     runtime_services: RuntimeServices | None = None
-
 
 class ConfirmationPreparer:
     """Validate a pending confirmation and assemble its immutable inputs."""
@@ -67,36 +67,40 @@ class ConfirmationPreparer:
             if persisted_state != pipeline_input.state_before:
                 raise ValueError(pipeline_input.stale_message)
 
-        director_npc_profile_id = cache.get("director_npc_profile_id")
-        confirmed_director_npc_draft = cache.get("confirmed_director_npc_draft")
+        director_npc_profile_ids = cache.get("director_npc_profile_ids")
+        confirmed_director_npc_drafts = cache.get("confirmed_director_npc_drafts")
         if (
             pipeline_input.run_director_agent
             and write_db
-            and director_npc_profile_id is None
-            and "director_npc_profile_id" not in cache
+            and director_npc_profile_ids is None
+            and "director_npc_profile_ids" not in cache
         ):
-            director_npc_confirmation = (
-                services.promote_staged_director_npc_profile(
-                    pending,
-                    turn_index=pipeline_input.turn_index,
-                )
+            confirmations = services.promote_staged_director_npc_profile(
+                pending,
+                turn_index=pipeline_input.turn_index,
             )
-            if director_npc_confirmation is not None:
-                director_npc_profile_id = director_npc_confirmation.npc_id
-                confirmed_director_npc_draft = director_npc_confirmation.draft
-            cache["director_npc_profile_id"] = director_npc_profile_id
-            cache["confirmed_director_npc_draft"] = confirmed_director_npc_draft
+            director_npc_profile_ids = [
+                confirmation.npc_id for confirmation in confirmations
+            ]
+            confirmed_director_npc_drafts = [
+                confirmation.draft for confirmation in confirmations
+            ]
+            cache["director_npc_profile_ids"] = director_npc_profile_ids
+            cache["confirmed_director_npc_drafts"] = confirmed_director_npc_drafts
+
+        if pipeline_input.run_director_agent and write_db:
+            services.apply_staged_disclosure_upgrades(pending)
 
         # The staged Director NPC is NOT pre-added to CurrentState participants
         # here: whether they are actually present is decided by StateUpdater
         # from the confirmed Scene Facts. The confirmation system note still
-        # maps an unnamed in-scene figure to the introduced NPC for extraction.
+        # maps an unnamed in-scene figure to the introduced NPCs for extraction.
         state_before_update = pipeline_input.state_before
         confirmation_scene_text = (
             services.project_scene_text_with_staged_director_npc(
             effective_scene_text,
             pending=pending,
-            confirmed_director_npc_draft=confirmed_director_npc_draft,
+            confirmed_director_npc_drafts=confirmed_director_npc_drafts,
             )
         )
 
@@ -126,8 +130,8 @@ class ConfirmationPreparer:
             "trace_id": trace_id,
             "effective_scene_text": effective_scene_text,
             "cache": cache,
-            "director_npc_profile_id": director_npc_profile_id,
-            "confirmed_director_npc_draft": confirmed_director_npc_draft,
+            "director_npc_profile_ids": director_npc_profile_ids,
+            "confirmed_director_npc_drafts": confirmed_director_npc_drafts,
             "state_before_update": state_before_update,
             "confirmation_scene_text": confirmation_scene_text,
             "existing_npc_profiles": existing_npc_profiles,
@@ -321,7 +325,7 @@ class ConfirmationEventBuilder:
         action_preview = state.get("action_preview")
         director_decision = state.get("director_decision")
         director_executions = state.get("director_executions")
-        director_npc_profile_id = state.get("director_npc_profile_id")
+        director_npc_profile_ids = state.get("director_npc_profile_ids", [])
         updated_npc_profile_ids = state.get("updated_npc_profile_ids", [])
         npc_extraction = state.get("npc_extraction")
 
@@ -330,7 +334,7 @@ class ConfirmationEventBuilder:
         }
         if pipeline_input.run_director_agent:
             profile_update_data.update({
-                "director_npc_profile_id": director_npc_profile_id,
+                "director_npc_profile_ids": director_npc_profile_ids,
                 "director_decision": model_data(director_decision),
                 "director_executions": model_data(director_executions),
             })
@@ -370,7 +374,7 @@ class ConfirmationEventBuilder:
         }
         if pipeline_input.run_director_agent:
             finish_data.update({
-                "director_npc_profile_id": director_npc_profile_id,
+                "director_npc_profile_ids": director_npc_profile_ids,
                 "director_decision": model_data(director_decision),
                 "director_executions": model_data(director_executions),
             })

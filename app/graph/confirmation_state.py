@@ -63,8 +63,8 @@ class ConfirmationCache(TypedDict, total=False):
     updated_npc_profile_ids: list[str]
     new_npc_profiles: list[NPCProfile]
     existing_npc_profiles: list[NPCProfile]
-    director_npc_profile_id: str | None
-    confirmed_director_npc_draft: DirectorNPCDraft | None
+    director_npc_profile_ids: list[str]
+    confirmed_director_npc_drafts: list[DirectorNPCDraft]
     turn_summary_saved: bool
     turn_summary_id: str
     state_saved: bool
@@ -90,8 +90,8 @@ class ConfirmationState(TypedDict, total=False):
     trace_id: str
     effective_scene_text: str
     cache: ConfirmationCache
-    director_npc_profile_id: str | None
-    confirmed_director_npc_draft: DirectorNPCDraft | None
+    director_npc_profile_ids: list[str]
+    confirmed_director_npc_drafts: list[DirectorNPCDraft]
     state_before_update: CurrentState
     confirmation_scene_text: str
     existing_npc_profiles: list[NPCProfile]

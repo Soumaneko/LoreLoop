@@ -513,7 +513,7 @@ def test_rollback_cache_keeps_pure_results_and_discards_write_markers():
         "director_decision": marker,
         "director_executions": marker,
         "updated_npc_profile_ids": ["npc_1"],
-        "director_npc_profile_id": "npc_2",
+        "director_npc_profile_ids": ["npc_2"],
         "state_saved": True,
         "short_term_saved": True,
         "confirmed_history_saved": True,
@@ -700,7 +700,7 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         write_db=True,
     )
 
-    assert prepared["confirmed_director_npc_draft"].draft_id == draft.draft_id
+    assert prepared["confirmed_director_npc_drafts"][0].draft_id == draft.draft_id
     assert {p.name for p in prepared["state_before_update"].scene.participants} == {
         "主角"
     }

@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.domain.director_npc.schemas import DirectorNPCDraft
-from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.npc_profile.schemas import (
+    NPC_DISCLOSURE_ORDER,
+    NPCProfile,
+)
 from app.runtime.serialization import model_data
 from app.runtime.session import (
     get_campaign_runtime,
@@ -65,24 +68,68 @@ def promote_staged_director_npc_profile(
     *,
     turn_index: int,
     stores,
-) -> DirectorNPCConfirmation | None:
+) -> list[DirectorNPCConfirmation]:
+    """Promote every staged Director NPC draft (introduce materials) to a
+    profile, in material order, so multi-introduce turns are fully promoted."""
     stage = getattr(pending, "director_stage", None)
-    material = next(
-        (
-            item
-            for item in (stage.materials if stage is not None else [])
-            if item.kind == "npc"
-            and item.payload.get("source") == "director_npc"
-        ),
-        None,
+    materials = (
+        stage.materials
+        if stage is not None
+        else []
     )
-    if material is None:
-        return None
-    return ensure_director_npc_profile(
-        material.resource_id,
-        turn_index=turn_index,
-        stores=stores,
+    confirmations: list[DirectorNPCConfirmation] = []
+    for material in materials:
+        if material.kind != "npc" or material.payload.get("source") != "director_npc":
+            continue
+        confirmation = ensure_director_npc_profile(
+            material.resource_id,
+            turn_index=turn_index,
+            stores=stores,
+            disclosure_level=material.payload.get("view_mode"),
+        )
+        if confirmation is not None:
+            confirmations.append(confirmation)
+    return confirmations
+
+
+def apply_staged_disclosure_upgrades(
+    pending,
+    stores,
+) -> None:
+    """Persist deferred disclosure-level upgrades staged by the generation
+    Director. Runs at confirmation commit, alongside draft promotion."""
+    stage = getattr(pending, "director_stage", None)
+    materials = (
+        stage.materials
+        if stage is not None
+        else []
     )
+
+    with stores.npc_profile() as npc_store:
+        for material in materials:
+            if (
+                material.kind != "npc"
+                or not material.payload.get("disclosure_upgrade")
+            ):
+                continue
+            npc_id = material.resource_id
+            new_level = material.payload.get("new_disclosure_level")
+            profile = npc_store.get_by_id(npc_id)
+            if (
+                profile is None
+                or new_level is None
+                or NPC_DISCLOSURE_ORDER.get(new_level) is None
+            ):
+                continue
+            if NPC_DISCLOSURE_ORDER[new_level] <= NPC_DISCLOSURE_ORDER[
+                profile.disclosure_level
+            ]:
+                continue
+            npc_store.upsert(
+                profile.model_copy(
+                    update={"disclosure_level": new_level}
+                )
+            )
 
 
 def ensure_director_npc_profile(
@@ -90,6 +137,7 @@ def ensure_director_npc_profile(
     *,
     turn_index: int,
     stores,
+    disclosure_level=None,
 ) -> DirectorNPCConfirmation | None:
     with stores.director_npc() as director_store, stores.npc_profile() as npc_store:
         draft = director_store.get_by_id(draft_id)
@@ -102,15 +150,26 @@ def ensure_director_npc_profile(
             )
             if draft is None:
                 return None
-        npc_profile = npc_profile_from_director_draft(draft)
+        npc_profile = npc_profile_from_director_draft(
+            draft,
+            disclosure_level=disclosure_level,
+        )
         existing_npc = npc_store.get_by_source_director_npc_id(draft.draft_id) or npc_store.get_by_name(draft.name)
         if existing_npc is not None:
-            npc_profile = merge_director_draft_into_npc_profile(existing_npc, draft)
+            npc_profile = merge_director_draft_into_npc_profile(
+                existing_npc,
+                draft,
+                disclosure_level=disclosure_level,
+            )
         npc_id = npc_store.upsert(npc_profile)
         return DirectorNPCConfirmation(npc_id=npc_id, draft=draft)
 
 
-def npc_profile_from_director_draft(draft: DirectorNPCDraft) -> NPCProfile:
+def npc_profile_from_director_draft(
+    draft: DirectorNPCDraft,
+    *,
+    disclosure_level=None,
+) -> NPCProfile:
     return NPCProfile(
         name=draft.name,
         public_summary=draft.role,
@@ -127,12 +186,18 @@ def npc_profile_from_director_draft(draft: DirectorNPCDraft) -> NPCProfile:
         source_director_npc_id=draft.draft_id,
         created_turn=draft.created_turn,
         introduced_turn=draft.introduced_turn,
+        disclosure_level=disclosure_level or "remote",
         confidence=0.7,
         name_hit_count=0,
     )
 
 
-def merge_director_draft_into_npc_profile(profile: NPCProfile, draft: DirectorNPCDraft) -> NPCProfile:
+def merge_director_draft_into_npc_profile(
+    profile: NPCProfile,
+    draft: DirectorNPCDraft,
+    *,
+    disclosure_level=None,
+) -> NPCProfile:
     merged = profile.model_copy(deep=True)
     merged.public_summary = merged.public_summary or draft.role
     if merged.source_director_npc_id:
@@ -157,6 +222,11 @@ def merge_director_draft_into_npc_profile(profile: NPCProfile, draft: DirectorNP
     merged.source_director_npc_id = merged.source_director_npc_id or draft.draft_id
     merged.created_turn = merged.created_turn or draft.created_turn
     merged.introduced_turn = draft.introduced_turn
+    if disclosure_level is not None:
+        current = NPC_DISCLOSURE_ORDER.get(merged.disclosure_level, 0)
+        granted = NPC_DISCLOSURE_ORDER.get(disclosure_level, 0)
+        if granted > current:
+            merged.disclosure_level = disclosure_level
     merged.confidence = max(merged.confidence, 0.7)
     merged.name_hit_count = max(merged.name_hit_count, 0)
     return merged
@@ -177,42 +247,49 @@ def project_scene_text_with_staged_director_npc(
     scene_text: str,
     *,
     pending,
-    confirmed_director_npc_draft: DirectorNPCDraft | None,
+    confirmed_director_npc_drafts: list[DirectorNPCDraft] | None,
 ) -> str:
     stage = getattr(pending, "director_stage", None)
-    material = next(
-        (
-            item
-            for item in (stage.materials if stage is not None else [])
-            if item.kind == "npc"
-            and item.payload.get("source") == "director_npc"
-        ),
-        None,
-    )
-    if material is None:
+    materials = [
+        item
+        for item in (stage.materials if stage is not None else [])
+        if item.kind == "npc"
+        and item.payload.get("source") == "director_npc"
+    ]
+    if not materials:
         return scene_text
 
-    name = (
-        confirmed_director_npc_draft.name
-        if confirmed_director_npc_draft is not None
-        else str(material.payload.get("name") or "")
-    )
-    if not name:
+    drafts = confirmed_director_npc_drafts or []
+    entries: list[str] = []
+    for index, material in enumerate(materials):
+        draft = drafts[index] if index < len(drafts) else None
+        name = (
+            draft.name
+            if draft is not None
+            else str(material.payload.get("name") or "")
+        )
+        if not name:
+            continue
+        role = draft.role if draft is not None else None
+        role_note = f"（{role}）" if role else ""
+        selected_id = (
+            draft.draft_id
+            if draft is not None
+            else material.resource_id
+        )
+        entries.append(
+            f"- {name}{role_note}，系统 ID：{selected_id}。"
+        )
+    if not entries:
         return scene_text
-    role = confirmed_director_npc_draft.role if confirmed_director_npc_draft is not None else None
-    role_note = f"（{role}）" if role else ""
-    selected_id = (
-        confirmed_director_npc_draft.draft_id
-        if confirmed_director_npc_draft is not None
-        else material.resource_id
-    )
+    mapping = "；".join(entries)
 
     return (
         "【确认用系统注记】\n"
-        f"本回合 Director Agent 引入了导演 NPC：{name}{role_note}。"
-        f"系统 ID：{selected_id}。\n"
+        f"本回合 Director Agent 引入了以下导演 NPC：{mapping}\n"
         "如果正文中出现未透露姓名、临时称呼、只以外貌/位置描述出现的新增角色，"
-        f"且其出场与本回合导演 NPC 调度相符，确认流程应在内部状态、NPC档案和摘要中将其视为{name}。\n"
+        "且其出场与本回合导演 NPC 调度相符，确认流程应在内部状态、NPC档案和摘要中"
+        "将其视为对应姓名。\n"
         "该注记只用于确认流程；不代表玩家知道TA的姓名；不得写成角色已自报姓名；"
         "不得泄露 hidden_secret、core_motivation 或其他幕后信息。\n"
         "【正文】\n"
@@ -238,6 +315,12 @@ def prepare_confirmation_state(
             promote_staged_director_npc_profile(
                 pending,
                 turn_index=turn_index,
+                stores=stores,
+            )
+        ),
+        apply_staged_disclosure_upgrades=lambda pending: (
+            apply_staged_disclosure_upgrades(
+                pending,
                 stores=stores,
             )
         ),

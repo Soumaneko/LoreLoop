@@ -113,7 +113,10 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                     current_state=state["current_state"],
                     scene_summaries=state["scene_summaries"],
                     matched_anchors=state.get("matched_anchors", []),
-                    npc_profiles=state.get("action_npc_director_views", []),
+                    npc_profiles=[
+                        profile.disclosure_view()
+                        for profile in state.get("action_npc_profiles", [])
+                    ],
                     current_turn_index=state["next_turn_index"],
                 ),
                 trace_id=state["trace_id"],
@@ -316,7 +319,10 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
         roll_results=state["roll_results"],
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
-        npc_profiles=state.get("action_npc_director_views", []),
+        npc_profiles=[
+            profile.disclosure_view()
+            for profile in state.get("action_npc_profiles", [])
+        ],
         trace_id=state["trace_id"],
     )
     return {
@@ -443,7 +449,7 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
         npc_profiles=[
-            profile.director_view() for profile in composer_profiles
+            profile.disclosure_view() for profile in composer_profiles
         ],
         director_stage=state.get("director_stage"),
     )

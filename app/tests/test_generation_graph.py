@@ -1103,3 +1103,178 @@ def test_director_agent_stage_node_keeps_event_actors_when_action_saturates(
 
     observed = {profile.npc_id for profile in captured["npc_profiles"]}
     assert event_hit.npc_id in observed
+
+
+def test_composer_npc_profiles_respect_disclosure_levels(
+    tmp_path,
+    monkeypatch,
+):
+    from app.domain.context_facts.schemas import ContextFactSet
+    from app.domain.core_memory.schemas import CoreMemory
+    from app.domain.current_state import (
+        CurrentState,
+        PlayerState,
+        ResourcesState,
+        SceneState,
+    )
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.domain.turn_resolution.schemas import TurnResolutionResult
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.stores import StoreBundle
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    remote_npc = NPCProfile(
+        name="林澈",
+        role="社区医生",
+        appearance="常穿深色风衣。",
+        core_motivation="保护社区居民。",
+        hidden_secret="曾目击一宗未结案件。",
+        disclosure_level="remote",
+    )
+    intimate_npc = NPCProfile(
+        name="顾晚棠",
+        role="阁主",
+        hidden_secret="暗中资助商会。",
+        disclosure_level="intimate",
+    )
+    with stores.npc_profile() as store:
+        store.upsert(remote_npc)
+        store.upsert(intimate_npc)
+
+    captured = {}
+    streamed = []
+
+    class _FakeComposition:
+        scene_reasoning = "r"
+        scene_text = "t"
+        next_action_directions = []
+
+        def to_outline(self):
+            return SimpleNamespace()
+
+        def to_scene_result(self):
+            return SimpleNamespace()
+
+    class _FakeComposer:
+        def __init__(self, gateway):
+            self.gateway = gateway
+
+        def compose(self, context, **kwargs):
+            captured["context"] = context
+            return _FakeComposition()
+
+    monkeypatch.setattr(generation_nodes, "NarrativeComposerAgent", _FakeComposer)
+    monkeypatch.setattr(generation_nodes, "build_entity_retrieval_anchors", lambda _o: [])
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
+
+    state = {
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: object(),
+        ),
+        "user_input": "观察码头。",
+        "core_memory": CoreMemory(items=[]),
+        "current_state": CurrentState(
+            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
+            player=PlayerState(name="萧云痕"),
+            resources=ResourcesState(inventory=[]),
+        ),
+        "turn_resolution": TurnResolutionResult(),
+        "context_facts": ContextFactSet(turn_focus="围绕码头。", facts=[]),
+        "trace_id": "trace-gen",
+        "short_term_memory": SimpleNamespace(recent_scenes=[]),
+        "action_npc_profiles": [remote_npc, intimate_npc],
+        "context_fact_npc_profiles": [],
+    }
+
+    generation_nodes.compose_narrative_node(state)
+
+    by_name = {
+        profile.name: profile
+        for profile in captured["context"].npc_profiles
+    }
+    assert by_name["林澈"].hidden_secret is None
+    assert by_name["林澈"].core_motivation is None
+    assert by_name["顾晚棠"].hidden_secret == "暗中资助商会。"
+
+
+def test_context_facts_npc_profiles_respect_disclosure_levels(
+    tmp_path,
+    monkeypatch,
+):
+    from app.domain.context_facts.schemas import ContextFactSet
+    from app.domain.core_memory.schemas import CoreMemory
+    from app.domain.current_state import (
+        CurrentState,
+        PlayerState,
+        ResourcesState,
+        SceneState,
+    )
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.stores import StoreBundle
+
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    remote_npc = NPCProfile(
+        name="林澈",
+        role="社区医生",
+        core_motivation="保护社区居民。",
+        hidden_secret="曾目击一宗未结案件。",
+        disclosure_level="remote",
+    )
+    with stores.npc_profile() as store:
+        store.upsert(remote_npc)
+
+    captured = {}
+
+    class _FakeContextFactsService:
+        def __init__(self, gateway, history_store, continuity_store, setting_store):
+            pass
+
+        def build(self, input, trace_id):
+            captured["npc_profiles"] = input.npc_profiles
+            return SimpleNamespace(
+                context_facts=ContextFactSet(
+                    turn_focus="围绕码头。",
+                    facts=[],
+                ),
+                search_plan=None,
+                history_evidence=None,
+                continuity=None,
+                settings=SimpleNamespace(settings=[]),
+            )
+
+    monkeypatch.setattr(
+        generation_nodes, "ContextFactsService", _FakeContextFactsService
+    )
+    monkeypatch.setattr(
+        generation_nodes,
+        "select_profiles_by_context_facts",
+        lambda **_kwargs: [],
+    )
+
+    state = {
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: object(),
+        ),
+        "user_input": "观察码头。",
+        "core_memory": CoreMemory(items=[]),
+        "current_state": CurrentState(
+            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
+            player=PlayerState(name="萧云痕"),
+            resources=ResourcesState(inventory=[]),
+        ),
+        "scene_summaries": [],
+        "matched_anchors": [],
+        "next_turn_index": 2,
+        "trace_id": "trace-extract",
+        "action_npc_profiles": [remote_npc],
+    }
+
+    generation_nodes.extract_context_facts_node(state)
+
+    view = captured["npc_profiles"][0]
+    assert view.name == "林澈"
+    assert view.hidden_secret is None
+    assert view.core_motivation is None

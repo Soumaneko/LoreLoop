@@ -45,6 +45,14 @@ def summarize_executions(executions, stores) -> str:
                 stores, output.get("npc_id")
             )
             lines.append(f"补全NPC「{name}」")
+        elif skill == "upgrade_disclosure":
+            name = _npc_name(stores, output.get("npc_id"))
+            new_level = output.get("new_disclosure_level")
+            lines.append(
+                f"披露升级「{name}」→{new_level}"
+                if new_level
+                else f"披露升级「{name}」"
+            )
         elif skill == "bind_event_actor":
             event = _event_title(stores, output.get("event_id"))
             npc = _npc_name(stores, output.get("npc_id"))
@@ -80,6 +88,10 @@ def _summarize_request(request, stores) -> str:
         name = _npc_name(stores, arguments.get("npc_id"))
         view_mode = arguments.get("view_mode")
         return f"引入NPC「{name}」({view_mode})" if view_mode else f"引入NPC「{name}」"
+    if skill == "upgrade_disclosure":
+        name = _npc_name(stores, arguments.get("npc_id"))
+        new_level = arguments.get("new_disclosure_level")
+        return f"披露升级「{name}」→{new_level}" if new_level else f"披露升级「{name}」"
     if skill == "present_event":
         title = _event_title(stores, arguments.get("event_id"))
         hook = arguments.get("hook_id")

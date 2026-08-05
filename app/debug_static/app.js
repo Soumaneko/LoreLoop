@@ -1263,7 +1263,7 @@ function renderDirectorDebug() {
   const stage = merged("generation").director_stage;
   const confirmationDecision = merged("confirmation").director_decision;
   const executions = merged("confirmation").director_executions;
-  const directorNpcEntityId = merged("confirmation").director_npc_profile_id;
+  const directorNpcEntityIds = merged("confirmation").director_npc_profile_ids || [];
   const server = state.serverState || {};
   const active = sortDirectorEvents(server.active_director_events || []);
   const resolved = server.resolved_director_events || [];
@@ -1281,7 +1281,7 @@ function renderDirectorDebug() {
       metric("Introduced NPC", introducedNpcs.length, introducedNpcs.length ? "ok" : ""),
     ]))}
     ${card("生成决策", generationDecision ? jsonBlock({ decision: generationDecision, stage }) : `<div class="empty">生成回合后展示。</div>`)}
-    ${card("确认决策", confirmationDecision ? jsonBlock({ decision: confirmationDecision, executions, director_npc_profile_id: directorNpcEntityId }) : `<div class="empty">确认后展示。</div>`)}
+    ${card("确认决策", confirmationDecision ? jsonBlock({ decision: confirmationDecision, executions, director_npc_profile_ids: directorNpcEntityIds }) : `<div class="empty">确认后展示。</div>`)}
     ${details("Prepared NPC", preparedNpcs.map(directorNpcCard).join("") || `<div class="empty">暂无 prepared NPC</div>`, true)}
     ${details("Introduced NPC", introducedNpcs.map(directorNpcCard).join("") || `<div class="empty">暂无 introduced NPC</div>`)}
     ${details("Active", active.map(directorCard).join("") || `<div class="empty">暂无 active 事件</div>`, true)}

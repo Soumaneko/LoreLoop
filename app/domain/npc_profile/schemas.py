@@ -13,6 +13,32 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+NPCDisclosureLevel = Literal["remote", "face_to_face", "intimate"]
+
+NPC_DISCLOSURE_ORDER: dict[NPCDisclosureLevel, int] = {
+    "remote": 0,
+    "face_to_face": 1,
+    "intimate": 2,
+}
+
+_DISCLOSURE_IDENTITY_FIELDS = frozenset(
+    {"name", "role", "aliases", "faction", "public_summary"}
+)
+_DISCLOSURE_REMOTE_FIELDS = _DISCLOSURE_IDENTITY_FIELDS | frozenset(
+    {"social_style", "attitude_to_player"}
+)
+_DISCLOSURE_FACE_TO_FACE_FIELDS = _DISCLOSURE_REMOTE_FIELDS | frozenset(
+    {"appearance", "personality_traits", "conflict_style", "known_abilities"}
+)
+
+#: disclosure_level -> 该级允许可见的字段集合；None 表示全量（intimate）。
+DISCLOSED_FIELD_SETS: dict[NPCDisclosureLevel, frozenset[str] | None] = {
+    "remote": _DISCLOSURE_REMOTE_FIELDS,
+    "face_to_face": _DISCLOSURE_FACE_TO_FACE_FIELDS,
+    "intimate": None,
+}
+
+
 class NPCProfilePublicView(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -149,6 +175,7 @@ class NPCProfile(BaseModel):
     source_setting_ids: list[str] = Field(default_factory=list)
     created_turn: int | None = None
     introduced_turn: int | None = None
+    disclosure_level: NPCDisclosureLevel = "remote"
 
     source_scene_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0, le=1)
@@ -192,6 +219,25 @@ class NPCProfile(BaseModel):
             created_turn=self.created_turn,
             introduced_turn=self.introduced_turn,
         )
+
+    def disclosure_view(
+        self,
+        level: NPCDisclosureLevel | None = None,
+    ) -> NPCProfileDirectorView:
+        """Render the profile at its disclosure level (or an explicit level).
+
+        Only fields granted by ``disclosure_level`` are exposed; everything
+        above it is dropped so player-facing modules never see hidden info.
+        """
+        data = self.director_view().model_dump(mode="json")
+        allowed = DISCLOSED_FIELD_SETS[level or self.disclosure_level]
+        if allowed is not None:
+            data = {
+                key: value
+                for key, value in data.items()
+                if key in allowed
+            }
+        return NPCProfileDirectorView.model_validate(data)
 
 
 def profile_from_update(

@@ -27,6 +27,7 @@ from pydantic import (
 
 from app.domain.director.schemas import DirectorPhase
 from app.domain.director_event.schemas import DirectorEventRole
+from app.domain.npc_profile.schemas import NPCDisclosureLevel
 from app.domain.world_setting.schemas import SettingKind
 
 
@@ -35,24 +36,10 @@ from app.domain.world_setting.schemas import SettingKind
 # ---------------------------------------------------------------------------
 
 
-NPCViewMode = Literal["remote", "face_to_face", "intimate"]
+#: 披露等级维度（复用 view_mode 三级语义）：remote < face_to_face < intimate。
+NPCViewMode = NPCDisclosureLevel
 
-_VIEW_IDENTITY_FIELDS = frozenset({"name", "role", "aliases", "faction"})
-_VIEW_REMOTE_FIELDS = _VIEW_IDENTITY_FIELDS | frozenset(
-    {"public_summary", "social_style", "attitude_to_player"}
-)
-_VIEW_FACE_TO_FACE_FIELDS = _VIEW_REMOTE_FIELDS | frozenset(
-    {"appearance", "personality_traits", "conflict_style", "known_abilities"}
-)
-
-#: view_mode -> 允许下发的字段白名单；None 表示全量下发（intimate）。
-NPC_VIEW_MODE_FIELDS: dict[NPCViewMode, frozenset[str] | None] = {
-    "remote": _VIEW_REMOTE_FIELDS,
-    "face_to_face": _VIEW_FACE_TO_FACE_FIELDS,
-    "intimate": None,
-}
-
-#: 无论何种 view_mode 都必须保留的身份/来源键。
+#: 无论何种披露等级都必须保留的身份/来源键。
 NPC_VIEW_ALWAYS_KEPT = frozenset({"source", "npc_id", "draft_id", "name"})
 
 
@@ -77,9 +64,21 @@ class IntroduceNPCArguments(BaseModel):
     npc_id: str = Field(min_length=1)
     view_mode: NPCViewMode = Field(
         description=(
-            "选择引入NPC的视图模式。远程/间接接触选 remote（仅下发身份与传闻信息，"
-            "不含外貌）；初次见面/当面战斗选 face_to_face（额外下发外貌与性格，"
-            "但不含秘密）；深度交心或搜魂选 intimate（全量下发，含核心动机与隐藏秘密）。"
+            "选择该导演 NPC 首次披露的等级。远程/间接接触选 remote；"
+            "初次见面/当面选 face_to_face；深度交心或搜魂选 intimate。"
+        )
+    )
+
+
+class UpgradeDisclosureArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    npc_id: str = Field(min_length=1)
+    new_disclosure_level: NPCViewMode = Field(
+        description=(
+            "将 NPC 的披露等级提升到该等级（只能提升，不能回退）："
+            "remote < face_to_face < intimate。提升后当回合即可使用升级后的信息，"
+            "并会在确认阶段持久化到档案。"
         )
     )
 
@@ -213,17 +212,27 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="introduce_npc",
         description=(
-            "将一名已存在的NPC注入本轮上下文，供正文生成引擎参考其详细设定。适用场景："
-            "1.你规划NPC在本场景中出现。"
-            "2.你规划文中需要描述该角色，需要参考其详细设定。"
-            "注意：只要本轮叙事需要用到该角色的身份信息，就必须将其引入。"
-            "必须根据本轮交互情境选择 view_mode（remote 远程/间接接触、face_to_face 初次见面/"
-            "当面战斗、intimate 深度交心/搜魂），并在请求级 guidance 中说明使用方式；"
-            "后端将按 view_mode 白名单物理隔离敏感字段。"
+            "将一名仍未登场的导演 NPC 草稿首次引入本轮场景。适用场景："
+            "你规划该草稿在本场景中初次出现（登场或提及）。"
+            "注意：只对 prepared 状态的导演 NPC 草稿有效；已晋升的 NPC 无需再引入."
+            "view_mode 是该 NPC 首次披露授权：远程/间接接触选 remote，初次见面/当面选 "
+            "face_to_face，深度交心或搜魂等选 intimate。"
         ),
         phases=_GENERATION,
         mutates=False,
         arguments_model=IntroduceNPCArguments,
+        max_requests_per_batch=5,
+    ),
+    DirectorSkillSpec(
+        name="upgrade_disclosure",
+        description=(
+            "提升一个已存在 NPC 档案的披露等级（只能升不能降），使该 NPC 在本回合和未来"
+            "按新等级向 Composer 展示更深入的信息（如从 face_to_face 提到 intimate 后，"
+            "核心动机与隐藏秘密本回合即可用于正文）。"
+        ),
+        phases=_GENERATION,
+        mutates=False,
+        arguments_model=UpgradeDisclosureArguments,
     ),
     DirectorSkillSpec(
         name="foreshadow_setting",
