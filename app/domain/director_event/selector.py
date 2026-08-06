@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary
@@ -64,11 +65,7 @@ class DirectorEventSelector:
                 indent=2,
             ),
             "director_guidance": guidance or "",
-            "output_schema_json": json.dumps(
-                DirectorEventSelectionResult.model_json_schema(),
-                ensure_ascii=False,
-                indent=2,
-            ),
+            "output_schema_json": schema_json(DirectorEventSelectionResult),
         }
         expected_actor_keys = {
             str(actor["actor_key"])

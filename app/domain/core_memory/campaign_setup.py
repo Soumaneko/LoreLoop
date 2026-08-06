@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Annotated, Literal, cast
 
 from pydantic import (
@@ -12,6 +11,7 @@ from pydantic import (
 )
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 
 from .schemas import CoreMemoryItem
 
@@ -186,10 +186,8 @@ class CampaignSetupAgent:
                 task="campaign_setup",
                 input_data={
                     "init_config_json": config.model_dump_json(indent=2),
-                    "output_schema_json": json.dumps(
-                        CampaignSetupProposal.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
+                    "output_schema_json": schema_json(
+                        CampaignSetupProposal
                     ),
                 },
                 output_schema=CampaignSetupProposal,

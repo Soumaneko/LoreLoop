@@ -6,6 +6,7 @@ from typing import Any, cast
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.context_facts.views import project_context_facts
 from app.domain.director_event.views import project_director_events
 from app.domain.plot_outline.views import project_turn_resolution
@@ -93,10 +94,8 @@ def run_narrative_composition(
 
     input_data = _base_input(context, recent_scene, turn_index)
     input_data.update(extra_input or {})
-    input_data["output_schema_json"] = json.dumps(
-        RuntimeNarrativeComposerResult.model_json_schema(),
-        ensure_ascii=False,
-        indent=2,
+    input_data["output_schema_json"] = schema_json(
+        RuntimeNarrativeComposerResult
     )
     result = cast(
         RuntimeNarrativeComposerResult,

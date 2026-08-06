@@ -7,6 +7,8 @@ from typing import Callable
 
 from pydantic import BaseModel
 
+from app.core.llm.schema import compact_schema
+
 from .schemas import (
     DirectorDecisionBatch,
     DirectorGuidance,
@@ -91,7 +93,7 @@ class DirectorSkillService:
             description=description,
             phases=sorted(phases),
             mutates=mutates,
-            input_schema=arguments_model.model_json_schema(),
+            input_schema=compact_schema(arguments_model.model_json_schema()),
             max_requests_per_batch=max_requests_per_batch,
         )
         self._skills[name] = _RegisteredSkill(

@@ -1,8 +1,8 @@
-import json
 from collections import defaultdict
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -46,11 +46,7 @@ class RollModifierEvaluator:
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(current_state),
                     "action_parse_result_json": project_action_parse(roll_parse_result),
-                    "output_schema_json": json.dumps(
-                        LLMRollModifierBatch.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(LLMRollModifierBatch),
                 },
                 output_schema=LLMRollModifierBatch,
                 trace_id=trace_id,

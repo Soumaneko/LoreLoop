@@ -1,7 +1,7 @@
-import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.narrative_composer.runner import composer_context_input
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.short_term_memory.schemas import ShortTermScene
@@ -27,11 +27,7 @@ class RewriteStrategySelector:
         input_data.update({
             "source_scene_text": source_scene_text,
             "user_feedback": user_feedback,
-            "output_schema_json": json.dumps(
-                RewriteStrategyDecision.model_json_schema(),
-                ensure_ascii=False,
-                indent=2,
-            ),
+            "output_schema_json": schema_json(RewriteStrategyDecision),
         })
         return cast(
             RewriteStrategyDecision,

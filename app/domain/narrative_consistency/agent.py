@@ -7,6 +7,7 @@ from typing import cast
 from pydantic import model_validator
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.canon_evidence.schemas import CanonEvidenceSet
 from app.domain.canon_evidence.views import project_canon_evidence_for_check
 from app.domain.current_state.schemas import CurrentState
@@ -194,10 +195,8 @@ class NarrativeConsistencyAgent:
                         )
                     ),
                     "segmented_scene_text": _render_segments(segments),
-                    "output_schema_json": json.dumps(
-                        RuntimeNarrativeConsistencyReview.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
+                    "output_schema_json": schema_json(
+                        RuntimeNarrativeConsistencyReview
                     ),
                 },
                 output_schema=RuntimeNarrativeConsistencyReview,

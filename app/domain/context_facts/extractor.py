@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.context_facts.schemas import (
     ContextExtractorInput,
     ContextFactDraftSet,
@@ -30,7 +31,7 @@ class ContextExtractor:
         *,
         trace_id: str | None = None,
     ) -> ContextFactSet:
-        schema = ContextFactDraftSet.model_json_schema()
+        schema = schema_json(ContextFactDraftSet)
         result = cast(
             ContextFactDraftSet,
             self.llm.run(
@@ -50,7 +51,7 @@ class ContextExtractor:
                         input_data.settings
                     ),
                     "npc_profiles_json": project_npc_profiles(input_data.npc_profiles),
-                    "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
+                    "output_schema_json": schema,
                 },
                 output_schema=ContextFactDraftSet,
                 temperature=0.2,

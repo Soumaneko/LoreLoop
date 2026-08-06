@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
 
 from .changes import (
@@ -43,7 +44,7 @@ class StateUpdater:
         trace_id: str | None = None,
     ) -> CurrentState:
         self.last_warnings = []
-        schema = StateChangeSet.model_json_schema()
+        schema = schema_json(StateChangeSet)
         valid_fact_ids = _scene_fact_ids(scene_facts)
         validation_feedback = "无；这是首次输出。"
 
@@ -58,11 +59,7 @@ class StateUpdater:
                             "current_state_json": current_state.model_dump_json(indent=2),
                             "scene_facts_json": scene_facts,
                             "validation_feedback": validation_feedback,
-                            "output_schema_json": json.dumps(
-                                schema,
-                                ensure_ascii=False,
-                                indent=2,
-                            ),
+                            "output_schema_json": schema,
                         },
                         output_schema=StateChangeSet,
                         trace_id=trace_id,

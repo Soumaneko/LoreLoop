@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.creative_brief import CreativeBrief
 from app.domain.director_npc.schemas import (
@@ -75,11 +76,7 @@ class DirectorNPCCreator:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "output_schema_json": json.dumps(
-                        DirectorNPCCreateOutput.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(DirectorNPCCreateOutput),
                 },
                 output_schema=DirectorNPCCreateOutput,
                 temperature=0.9,

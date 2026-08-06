@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.core_memory import CoreMemory
 from app.domain.opening_foundation import OpeningFoundation
 
@@ -34,11 +34,7 @@ class OpeningSettingAgent:
                 input_data={
                     "opening_foundation_json": foundation.model_dump_json(indent=2),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "output_schema_json": json.dumps(
-                        OpeningSettingSpecs.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(OpeningSettingSpecs),
                 },
                 output_schema=OpeningSettingSpecs,
                 temperature=0.7,

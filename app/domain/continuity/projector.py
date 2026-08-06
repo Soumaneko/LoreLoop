@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.confirmed_history import HistoryDocument
 
 from .schemas import ContinuityItem, ContinuityProjection
@@ -56,11 +57,7 @@ class ContinuityProjector:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "output_schema_json": json.dumps(
-                        ContinuityProjection.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(ContinuityProjection),
                 },
                 output_schema=ContinuityProjection,
                 temperature=0.1,

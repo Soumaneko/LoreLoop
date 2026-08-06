@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.npc_profile.schemas import NPCExtractionResult
 
 
@@ -26,11 +26,7 @@ class NPCProfileExtractor:
                 task="npc_profile_extract",
                 input_data={
                     "scene_facts_json": scene_facts,
-                    "output_schema_json": json.dumps(
-                        NPCExtractionResult.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(NPCExtractionResult),
                 },
                 output_schema=NPCExtractionResult,
                 trace_id=trace_id,

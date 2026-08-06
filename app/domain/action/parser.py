@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.action.schemas import ActionExtractionResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -55,11 +56,7 @@ class ActionParser:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "output_schema_json": json.dumps(
-                        ActionExtractionResult.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(ActionExtractionResult),
                 },
                 output_schema=ActionExtractionResult,
                 trace_id=trace_id,

@@ -3,6 +3,7 @@ import re
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 
 from .schemas import (
@@ -34,7 +35,7 @@ class NarrativeCanonQueryAgent:
             player_name=player_name,
             npc_profiles=npc_profiles,
         )
-        schema = NarrativeCanonQueryDraftSet.model_json_schema()
+        schema = schema_json(NarrativeCanonQueryDraftSet)
         result = cast(
             NarrativeCanonQueryDraftSet,
             self.llm.run(
@@ -46,11 +47,7 @@ class NarrativeCanonQueryAgent:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "output_schema_json": json.dumps(
-                        schema,
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema,
                 },
                 output_schema=NarrativeCanonQueryDraftSet,
                 temperature=0.2,

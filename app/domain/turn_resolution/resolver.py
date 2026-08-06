@@ -4,6 +4,7 @@ from typing import cast
 from pydantic import BaseModel, Field
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.context_facts.schemas import ContextFactSet
@@ -186,7 +187,7 @@ class TurnResolutionAgent:
                 action_resolutions=[],
             )
 
-        schema = _TurnResolutionOutput.model_json_schema()
+        schema = schema_json(_TurnResolutionOutput)
 
         decision = cast(
             _TurnResolutionOutput,
@@ -205,11 +206,7 @@ class TurnResolutionAgent:
                         context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[])
                     ),
                     "npc_profiles_json": project_npc_profiles(npc_profiles or []),
-                    "output_schema_json": json.dumps(
-                        schema,
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema,
                 },
                 output_schema=_TurnResolutionOutput,
                 temperature=0.6,

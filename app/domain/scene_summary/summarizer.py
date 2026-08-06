@@ -4,6 +4,7 @@ from typing import cast
 from pydantic import Field, create_model
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary, SceneSummaryDraft
@@ -35,11 +36,7 @@ class SceneSummarizer:
                     "scene_text": scene_text,
                     "scene_id": scene_id,
                     "current_state_json": project_current_state(current_state),
-                    "output_schema_json": json.dumps(
-                        runtime_schema.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(runtime_schema),
                 },
                 output_schema=runtime_schema,
                 trace_id=trace_id,
@@ -77,11 +74,7 @@ class SceneSummarizer:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "output_schema_json": json.dumps(
-                        runtime_schema.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(runtime_schema),
                 },
                 output_schema=runtime_schema,
                 trace_id=trace_id,

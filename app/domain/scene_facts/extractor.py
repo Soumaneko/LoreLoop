@@ -1,7 +1,7 @@
-import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.scene_facts.schemas import (
     SceneFactDraftSet,
     SceneFactExtractInput,
@@ -23,7 +23,7 @@ class SceneFactExtractor:
         if not input_data.scene_text.strip():
             return SceneFactSet(scene_focus="空场景正文", facts=[])
 
-        schema = SceneFactDraftSet.model_json_schema()
+        schema = schema_json(SceneFactDraftSet)
         result = cast(
             SceneFactDraftSet,
             self.llm.run(
@@ -32,7 +32,7 @@ class SceneFactExtractor:
                     "core_memory_json": input_data.core_memory.model_dump_json(indent=2),
                     "current_state_json": project_current_state(input_data.current_state),
                     "scene_text": input_data.scene_text,
-                    "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
+                    "output_schema_json": schema,
                 },
                 output_schema=SceneFactDraftSet,
                 temperature=0.2,

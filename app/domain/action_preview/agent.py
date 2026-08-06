@@ -2,6 +2,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -25,7 +26,7 @@ class ActionPreviewAgent:
         scene_facts: SceneFactSet | None = None,
         trace_id: str | None = None,
     ) -> ActionPreviewResult:
-        schema = ActionPreviewResult.model_json_schema()
+        schema = schema_json(ActionPreviewResult)
 
         result = cast(
             ActionPreviewResult,
@@ -48,7 +49,7 @@ class ActionPreviewAgent:
                     "current_state_json": project_current_state(current_state),
                     "core_memory_json": core_memory.model_dump_json(indent=2),
                     "recent_summaries_json": project_scene_summaries(recent_summaries),
-                    "output_schema_json": json.dumps(schema, ensure_ascii=False, indent=2),
+                    "output_schema_json": schema,
                 },
                 output_schema=ActionPreviewResult,
                 temperature=0.8,

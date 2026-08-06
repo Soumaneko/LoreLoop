@@ -4,6 +4,7 @@ import json
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 
 from .schemas import DirectorDecisionBatch, DirectorObservation
 from .skills import DirectorSkillService
@@ -80,11 +81,7 @@ class DirectorAgent:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "output_schema_json": json.dumps(
-                        DirectorDecisionBatch.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(DirectorDecisionBatch),
                 },
                 output_schema=DirectorDecisionBatch,
                 temperature=0.4,

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import cast
 
 from app.core.llm import LLMGateway
+from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.npc_profile.schemas import (
@@ -98,11 +99,7 @@ class NPCProfileUpdater:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "output_schema_json": json.dumps(
-                        NPCProfileUpdateBatch.model_json_schema(),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
+                    "output_schema_json": schema_json(NPCProfileUpdateBatch),
                 },
                 output_schema=NPCProfileUpdateBatch,
                 trace_id=trace_id,
