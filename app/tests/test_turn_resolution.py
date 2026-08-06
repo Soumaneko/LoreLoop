@@ -267,6 +267,7 @@ class TestTurnResolutionAgent:
 
         assert "观察行动" in result.resolution_reasoning
         assert result.action_resolutions[0].outcome_band == "critical_success"
+        assert result.action_resolutions[0].resolution_source == "roll"
         assert "异常" in result.action_resolutions[0].resolved_fact
 
     def test_llm_resolves_action_without_roll(self):
@@ -284,6 +285,7 @@ class TestTurnResolutionAgent:
 
         assert result.total_resolutions == 1
         assert result.action_resolutions[0].outcome_band == "success"
+        assert result.action_resolutions[0].resolution_source == "automatic"
 
     def test_fills_action_resolution_identity_from_roll_judgment(self):
         mock = MockLLM()
@@ -321,3 +323,42 @@ class TestTurnResolutionAgent:
         )
 
         assert result.action_resolutions[0].actor == ["主角", "希尔达"]
+
+
+def test_project_turn_resolution_adds_routine_mode():
+    from app.domain.turn_resolution.views import project_turn_resolution
+
+    result = TurnResolutionResult(action_resolutions=[
+        ActionResolutionFrame(
+            action_id="a1",
+            sequence=1,
+            actor=["主角"],
+            action_type="move",
+            outcome_band="success",
+            resolution_source="automatic",
+            effect_reasoning="常规移动。",
+            resolved_fact="主角向陷空山行进。",
+        ),
+        ActionResolutionFrame(
+            action_id="a2",
+            sequence=2,
+            actor=["主角"],
+            action_type="observe",
+            outcome_band="success",
+            resolution_source="roll",
+            effect_reasoning="警觉观察。",
+            resolved_fact="主角发现远处异动。",
+        ),
+    ])
+
+    projected = json.loads(project_turn_resolution(result))
+    by_id = {
+        item["action_id"]: item for item in projected["action_resolutions"]
+    }
+    assert by_id["a1"]["resolution_source"] == "automatic"
+    assert by_id["a1"]["resolution_mode"] == "routine"
+    assert by_id["a1"]["outcome_band"] == "success"
+    assert by_id["a2"]["resolution_source"] == "roll"
+    assert by_id["a2"]["resolution_mode"] == "roll"
+    assert by_id["a2"]["outcome_band"] == "success"
+    assert "effect_reasoning" not in by_id["a1"]

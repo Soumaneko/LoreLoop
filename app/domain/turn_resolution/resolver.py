@@ -243,6 +243,7 @@ def _validate_action_resolutions(
                 actor=judgment.actor,
                 action_type=judgment.action_type,
                 outcome_band=judgment.outcome_band,
+                resolution_source=judgment.resolution_source,
                 effect_reasoning=resolution.effect_reasoning,
                 resolved_fact=resolution.resolved_fact,
             )

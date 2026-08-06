@@ -36,6 +36,7 @@ class ActionResolutionFrame(BaseModel):
     actor: list[str]
     action_type: str
     outcome_band: OutcomeBand
+    resolution_source: ResolutionSource = "automatic"
     effect_reasoning: str = Field(min_length=1, max_length=120)
     resolved_fact: str = Field(min_length=1, max_length=120)
 
