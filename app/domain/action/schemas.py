@@ -59,11 +59,11 @@ class Anchor(BaseModel):
 class ActionExtractionResult(BaseModel):
     analysis: str = ""
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
-    engaged_event_ids: list[str] = Field(default_factory=list)
+    touched_event_ids: list[str] = Field(default_factory=list)
 
 
 class ActionParseResult(BaseModel):
     analysis: str = ""
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
     anchors: list[Anchor] = Field(default_factory=list)
-    engaged_event_ids: list[str] = Field(default_factory=list)
+    touched_event_ids: list[str] = Field(default_factory=list)

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 DirectorPhase = Literal["generation", "confirmation"]
-DirectorResourceKind = Literal["event", "npc", "setting"]
+DirectorResourceKind = Literal["event", "npc", "setting", "engaged_event"]
 MAX_DIRECTOR_SKILL_REQUESTS = 6
 
 

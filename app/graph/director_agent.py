@@ -53,6 +53,7 @@ from .director_skill_specs import (
     EnrichNPCArguments,
     ForeshadowSettingArguments,
     IntroduceNPCArguments,
+    IntrudeEngagedEventArguments,
     NPC_VIEW_ALWAYS_KEPT,
     PresentEventArguments,
     UpgradeDisclosureArguments,
@@ -345,12 +346,12 @@ def run_generation_director_agent(
     turn_index: int,
     trace_id: str,
     turn_resolution_json: str = "",
-    pending_engagements: list[str] | None = None,
+    touched_event_candidates: list[str] | None = None,
     npc_profiles: list[NPCProfile],
 ) -> tuple[DirectorStageResult, object]:
     recover_pending_director_mutation(stores)
     service = DirectorSkillService()
-    pending_engagements = pending_engagements or []
+    touched_event_candidates = touched_event_candidates or []
     with (
         stores.director_event() as event_store,
         stores.director_npc() as director_npc_store,
@@ -358,12 +359,17 @@ def run_generation_director_agent(
         stores.world_setting() as setting_store,
     ):
         active_events = event_store.list_active()
-        engaged_event_ids = set(pending_engagements)
+        touched_event_ids = set(touched_event_candidates)
         hidden_events = [
             event
             for event in active_events
-            if event.event_id not in engaged_event_ids
+            if event.event_id not in touched_event_ids
             and event.stage != "engaged"
+        ]
+        engaged_events = [
+            event
+            for event in active_events
+            if event.stage == "engaged" or event.event_id in touched_event_ids
         ]
         # Only not-yet-introduced Director NPC drafts are observable during
         # generation. Introduced Director NPCs are already regular NPC
@@ -385,12 +391,12 @@ def run_generation_director_agent(
                 event_store,
                 args,
                 guidance=guidance,
-                engaged_event_ids=engaged_event_ids,
+                touched_event_ids=touched_event_ids,
             ),
             arguments_validator=lambda args: _require_hidden_event(
                 event_store,
                 args.event_id,
-                engaged_event_ids=engaged_event_ids,
+                touched_event_ids=touched_event_ids,
             ),
         )
         _register_skill(
@@ -434,6 +440,21 @@ def run_generation_director_agent(
                 args.setting_id,
             ),
         )
+        _register_skill(
+            service,
+            "intrude_engaged_event",
+            handler=lambda args, guidance=None: _intrude_engaged_event(
+                event_store,
+                args,
+                guidance=guidance,
+                touched_event_ids=touched_event_ids,
+            ),
+            arguments_validator=lambda args: _require_engaged_event(
+                event_store,
+                args.event_id,
+                touched_event_ids=touched_event_ids,
+            ),
+        )
         observation = DirectorObservation(
             phase="generation",
             turn_index=turn_index,
@@ -466,6 +487,21 @@ def run_generation_director_agent(
                         ],
                     }
                     for event in hidden_events
+                ],
+                "engaged_events": [
+                    {
+                        **event.semantic_view(),
+                        "stage": "engaged",
+                        "touched_this_turn": (
+                            event.event_id in touched_event_ids
+                        ),
+                        "world_impact": (
+                            event.world_impact.model_dump(mode="json")
+                            if event.world_impact is not None
+                            else None
+                        ),
+                    }
+                    for event in engaged_events
                 ],
                 "drafts": [
                     {
@@ -1020,19 +1056,19 @@ def _present_event(
     args: PresentEventArguments,
     *,
     guidance: str | None,
-    engaged_event_ids: set[str] | None = None,
+    touched_event_ids: set[str] | None = None,
 ) -> DirectorStageMaterial:
     event = store.get_by_id(args.event_id)
     if event is None or event.stage != "hidden":
         raise ValueError(
             "present_event requires a hidden event (engaged events are "
-            "delivered to the Composer automatically)"
+            "steered via intrude_engaged_event)"
         )
-    engaged_event_ids = engaged_event_ids or set()
-    if event.event_id in engaged_event_ids:
+    touched_event_ids = touched_event_ids or set()
+    if event.event_id in touched_event_ids:
         raise ValueError(
             "present_event is only for indirect contact; directly engaged "
-            "events are delivered to the Composer automatically"
+            "events are steered via intrude_engaged_event"
         )
     hook = next(
         (hook for hook in event.hook_pool if hook.hook_id == args.hook_id),
@@ -1141,6 +1177,35 @@ def _foreshadow_setting(
     )
 
 
+def _intrude_engaged_event(
+    store,
+    args: IntrudeEngagedEventArguments,
+    *,
+    guidance: str | None,
+    touched_event_ids: set[str] | None = None,
+) -> DirectorStageMaterial:
+    event = store.get_by_id(args.event_id)
+    if event is None:
+        raise ValueError("intrude_engaged_event references an unknown event")
+    touched_event_ids = touched_event_ids or set()
+    engaged = event.stage == "engaged" or event.event_id in touched_event_ids
+    if not engaged:
+        raise ValueError(
+            "intrude_engaged_event requires an engaged event (hidden and "
+            "resolved events are not intrudable)"
+        )
+    payload = {
+        **event.semantic_view(),
+        "stage": "engaged",
+    }
+    return DirectorStageMaterial(
+        kind="engaged_event",
+        resource_id=event.event_id,
+        guidance=_require_generation_guidance(guidance),
+        payload=payload,
+    )
+
+
 def _require_generation_guidance(guidance: str | None) -> str:
     clean = str(guidance or "").strip()
     if not clean:
@@ -1157,19 +1222,35 @@ def _require_active_event(store, event_id: str) -> None:
 def _require_hidden_event(
     store,
     event_id: str,
-    engaged_event_ids: set[str] | None = None,
+    touched_event_ids: set[str] | None = None,
 ) -> None:
     event = store.get_by_id(event_id)
     if event is None or event.stage != "hidden":
         raise ValueError(
             "present_event requires a hidden event (engaged events are "
-            "delivered to the Composer automatically)"
+            "steered via intrude_engaged_event)"
         )
-    engaged_event_ids = engaged_event_ids or set()
-    if event.event_id in engaged_event_ids:
+    touched_event_ids = touched_event_ids or set()
+    if event.event_id in touched_event_ids:
         raise ValueError(
             "present_event is only for indirect contact; directly engaged "
-            "events are delivered to the Composer automatically"
+            "events are steered via intrude_engaged_event"
+        )
+
+
+def _require_engaged_event(
+    store,
+    event_id: str,
+    touched_event_ids: set[str] | None = None,
+) -> None:
+    event = store.get_by_id(event_id)
+    if event is None:
+        raise ValueError("intrude_engaged_event references an unknown event")
+    touched_event_ids = touched_event_ids or set()
+    if event.stage != "engaged" and event.event_id not in touched_event_ids:
+        raise ValueError(
+            "intrude_engaged_event requires an engaged event (hidden and "
+            "resolved events are not intrudable)"
         )
 
 

@@ -209,7 +209,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         analysis=action_result.analysis,
         atomic_actions=action_result.atomic_actions,
         anchors=state.get("matched_anchors", []),
-        engaged_event_ids=list(action_result.engaged_event_ids),
+        touched_event_ids=list(action_result.touched_event_ids),
     )
     self_check = ActionSelfCheck()
     action_parse_result = self_check.check(
@@ -223,7 +223,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         "raw_action_parse_result": raw_action_parse_result,
         "action_self_check_result": self_check.last_result,
         "action_parse_result": action_parse_result,
-        "pending_engagements": list(action_parse_result.engaged_event_ids),
+        "touched_event_candidates": list(action_parse_result.touched_event_ids),
         "events": [
             {
                 "step": "action_parsed",
@@ -231,7 +231,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
                     "raw_action_parse_result": model_data(raw_action_parse_result),
                     "action_self_check_result": model_data(self_check.last_result),
                     "action_parse_result": model_data(action_parse_result),
-                    "engaged_event_ids": list(action_parse_result.engaged_event_ids),
+                    "touched_event_ids": list(action_parse_result.touched_event_ids),
                 },
             },
         ],
@@ -363,7 +363,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         turn_index=state["turn_index"],
         trace_id=state["trace_id"],
         turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
-        pending_engagements=state.get("pending_engagements", []),
+        touched_event_candidates=state.get("touched_event_candidates", []),
         npc_profiles=director_npc_profiles,
     )
     director_log_entry = assemble_director_log_entry(
@@ -442,13 +442,26 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
         state.get("action_npc_profiles", []),
         state.get("context_fact_npc_profiles") or [],
     )
-    engaged_event_ids = set(state.get("pending_engagements", []))
+    touched_event_ids = set(state.get("touched_event_candidates", []))
     with _store_factory(state, "director_event")() as event_store:
         engaged_events = [
             event
             for event in event_store.list_active()
-            if event.stage == "engaged" or event.event_id in engaged_event_ids
+            if event.stage == "engaged" or event.event_id in touched_event_ids
         ]
+    director_stage = state.get("director_stage")
+    intrude_ids = {
+        material.resource_id
+        for material in (
+            director_stage.materials if director_stage is not None else []
+        )
+        if material.kind == "engaged_event"
+    }
+    engaged_events = [
+        event
+        for event in engaged_events
+        if event.event_id in intrude_ids
+    ]
     context = assemble_narrative_context(
         user_input=state["user_input"],
         current_state=state["current_state"],

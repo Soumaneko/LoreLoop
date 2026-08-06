@@ -96,6 +96,9 @@ def _summarize_request(request, stores) -> str:
         title = _event_title(stores, arguments.get("event_id"))
         hook = arguments.get("hook_id")
         return f"呈现事件「{title}」" + (f"(hook:{hook})" if hook else "")
+    if skill == "intrude_engaged_event":
+        title = _event_title(stores, arguments.get("event_id"))
+        return f"引入事件「{title}」"
     if skill == "foreshadow_setting":
         return f"暗示设定「{_setting_name(stores, arguments.get('setting_id'))}」"
     if skill == "create_npc":

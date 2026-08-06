@@ -73,6 +73,7 @@ def test_summarize_decision_covers_every_skill(tmp_path):
             ),
             _request("present_event", {"event_id": "event_x"}),
             _request("foreshadow_setting", {"setting_id": "setting_x"}),
+            _request("intrude_engaged_event", {"event_id": "event_x"}),
         ],
     )
     confirmation_decision = DirectorDecisionBatch(
@@ -118,6 +119,7 @@ def test_summarize_decision_covers_every_skill(tmp_path):
     assert "披露升级「顾晚棠」→intimate" in measures
     assert "呈现事件「event_x」" in measures
     assert "暗示设定「setting_x」" in measures
+    assert "引入事件「event_x」" in measures
     assert "创建NPC「柴行简」依托faction" in measures
     assert "创建事件(arc) 演员2 依托location" in measures
     assert "补全NPC「顾晚棠」依托faction" in measures

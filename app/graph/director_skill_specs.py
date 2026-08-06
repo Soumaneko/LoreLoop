@@ -57,6 +57,12 @@ class PresentEventArguments(BaseModel):
     )
 
 
+class IntrudeEngagedEventArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(min_length=1)
+
+
 class IntroduceNPCArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -197,16 +203,28 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="present_event",
         description=(
-            "将一个潜伏期(hidden)事件通过间接接触泄露进本轮上下文。适用场景："
-            "1.主角通过传闻、异象、信件、远程通讯或现场遗留痕迹，间接接触到了与该事件相关的信息。"
+            "将一个 hidden 事件通过间接接触泄露进本轮上下文。适用场景："
+            "主角通过传闻、异象、信件、远程通讯或现场遗留痕迹，间接接触到了与该事件相关的信息。"
             "必须用 arguments.hook_id 选择本轮要呈现的 Hook；"
             "不指定 hook_id 时不呈现任何内容。必须在请求级 guidance 中说明具体表现方式。"
-            "注意：engaged 事件（玩家已积极卷入）会自动送达 Composer，无需也不允许用本技能"
+            "注意：engaged 事件无需也不允许用本技能"
             "重复引入；本技能仅限 hidden 且本轮未被玩家直接行动触及的事件。"
         ),
         phases=_GENERATION,
         mutates=False,
         arguments_model=PresentEventArguments,
+    ),
+    DirectorSkillSpec(
+        name="intrude_engaged_event",
+        description=(
+            "强行引入某个 engaged 事件。"
+            "职责是把事件方正在做的事，落成对主角的**直接影响**。严禁环境/痕迹/传闻之类的间接影响。"
+            "此 skill 是 engaged 事件开始作用于主角的唯一途径，因此只要时机合适，你必须进行事件引入。"
+        ),
+        phases=_GENERATION,
+        mutates=False,
+        arguments_model=IntrudeEngagedEventArguments,
+        max_requests_per_batch=1,
     ),
     DirectorSkillSpec(
         name="introduce_npc",

@@ -81,7 +81,7 @@ class GenerationState(TypedDict, total=False):
     raw_action_parse_result: ActionParseResult
     action_self_check_result: SelfCheckResult | None
     action_parse_result: ActionParseResult
-    pending_engagements: list[str]
+    touched_event_candidates: list[str]
 
     roll_config: RollConfig
     roll_actions: Any

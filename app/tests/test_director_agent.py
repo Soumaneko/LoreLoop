@@ -1388,6 +1388,7 @@ def test_director_skill_specs_cover_every_registered_skill():
         "present_event",
         "introduce_npc",
         "foreshadow_setting",
+        "intrude_engaged_event",
         "create_npc",
         "create_event",
         "bind_event_actor",
@@ -1412,6 +1413,7 @@ def test_director_skill_specs_cover_every_registered_skill():
         "present_event",
         "introduce_npc",
         "foreshadow_setting",
+        "intrude_engaged_event",
         "upgrade_disclosure",
     }
     assert {spec.name for spec in service.specs_for_phase("confirmation")} == {
@@ -2932,7 +2934,7 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
         turn_index=3,
         trace_id="generation-director",
         npc_profiles=[],
-        pending_engagements=[event_id],
+        touched_event_candidates=[event_id],
     )
 
     assert stage.materials[0].kind == "npc"
@@ -3368,11 +3370,314 @@ def test_present_event_rejects_engaged_event(tmp_path):
             turn_index=3,
             trace_id="generation-director",
             npc_profiles=[],
-            pending_engagements=[],
+            touched_event_candidates=[],
         )
 
 
-def test_self_check_preserves_engaged_event_ids():
+def _intrude_event():
+    from app.domain.director_event.schemas import (
+        DirectorEventSelectionResult,
+        EventHook,
+        WorldImpact,
+    )
+
+    return DirectorEventSelectionResult(
+        current_story_direction="商路日益吃紧。",
+        reason="独立世界事件。",
+        title="商路封锁",
+        duration_phases=7,
+        actor_roles=[],
+        subject="河务署",
+        intent="控制渡河通道",
+        method="封锁旧桥",
+        macro_intent="改变商路格局。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_barrier",
+                kind="environment",
+                content="旧桥口设了新的盘查关卡。",
+                trigger_anchors=["旧桥"],
+            )
+        ],
+        world_impact=WorldImpact(description="渡河成本大涨。"),
+    ).to_event(role="arc", turn_index=1, current_clock=WorldClock())
+
+
+def test_intrude_engaged_event_rejects_hidden_resolved_and_unknown(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    hidden = _intrude_event()
+    with stores.director_event() as store:
+        hidden_id = store.save(hidden)
+        engaged_id = store.save(_intrude_event().model_copy(
+            update={"event_id": "director_event_engaged_intrude"}
+        ))
+        store.set_stage(engaged_id, "engaged", turn_index=2)
+        resolved_id = store.save(_intrude_event().model_copy(
+            update={"event_id": "director_event_resolved_intrude"}
+        ))
+        store.resolve_event(
+            resolved_id,
+            turn_index=3,
+            resolved_reason="测试结算。",
+            final_world_impact=None,
+        )
+
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "测试非法调度。",
+            "requests": [
+                {
+                    "request_id": "m1",
+                    "skill": "intrude_engaged_event",
+                    "arguments": {"event_id": hidden_id},
+                    "guidance": "将事件前景化。",
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="requires an engaged event"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="巡查码头。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+            npc_profiles=[],
+            touched_event_candidates=[],
+        )
+
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "测试非法调度。",
+            "requests": [
+                {
+                    "request_id": "m1",
+                    "skill": "intrude_engaged_event",
+                    "arguments": {"event_id": resolved_id},
+                    "guidance": "将事件前景化。",
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="requires an engaged event"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="巡查码头。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+            npc_profiles=[],
+            touched_event_candidates=[],
+        )
+
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "测试未知事件。",
+            "requests": [
+                {
+                    "request_id": "m1",
+                    "skill": "intrude_engaged_event",
+                    "arguments": {"event_id": "director_event_missing"},
+                    "guidance": "将事件前景化。",
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="unknown event"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="巡查码头。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+            npc_profiles=[],
+            touched_event_candidates=[],
+        )
+
+
+def test_intrude_engaged_event_produces_director_material(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    event = _intrude_event()
+    with stores.director_event() as store:
+        event_id = store.save(event)
+        store.set_stage(event_id, "engaged", turn_index=2)
+
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "调度商路封锁事件。",
+            "requests": [
+                {
+                    "request_id": "m1",
+                    "skill": "intrude_engaged_event",
+                    "arguments": {"event_id": event_id},
+                    "guidance": (
+                        "将商路封锁作为本回合的实质干涉：关卡盘查在必经之路设卡，"
+                        "拦下过路商队逐一搜身，主角被迫决定绕路还是上前应对。"
+                    ),
+                }
+            ],
+        }
+    )
+
+    stage, _decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="巡查码头。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+        touched_event_candidates=[],
+    )
+
+    assert len(stage.materials) == 1
+    material = stage.materials[0]
+    assert material.kind == "engaged_event"
+    assert material.resource_id == event_id
+    assert "实质干涉" in material.guidance
+    assert "被迫决定" in material.guidance
+    assert material.payload["stage"] == "engaged"
+    assert material.payload["macro_intent"] == "改变商路格局。"
+    assert "deadline_clock" in material.payload
+    assert "world_impact" not in material.payload
+
+
+def test_intrude_engaged_event_allows_just_engaged_pending_event(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event() as store:
+        event_id = store.save(_intrude_event())
+
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "玩家本回合新卷入，需要调度。",
+            "requests": [
+                {
+                    "request_id": "m1",
+                    "skill": "intrude_engaged_event",
+                    "arguments": {"event_id": event_id},
+                    "guidance": "事件作为本回合前景推进。",
+                }
+            ],
+        }
+    )
+
+    stage, _decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=_current_state(),
+        user_input="主动调查无灯船。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+        touched_event_candidates=[event_id],
+    )
+
+    assert len(stage.materials) == 1
+    assert stage.materials[0].kind == "engaged_event"
+    assert stage.materials[0].resource_id == event_id
+
+
+def test_intrude_engaged_event_requires_guidance(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event() as store:
+        event_id = store.save(_intrude_event())
+        store.set_stage(event_id, "engaged", turn_index=2)
+
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "引入事件但未给指令。",
+            "requests": [
+                {
+                    "request_id": "m1",
+                    "skill": "intrude_engaged_event",
+                    "arguments": {"event_id": event_id},
+                    "guidance": "",
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="require guidance"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="巡查码头。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+            npc_profiles=[],
+            touched_event_candidates=[],
+        )
+
+
+def test_intrude_engaged_event_at_most_one_per_batch(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event() as store:
+        first_id = store.save(_intrude_event().model_copy(
+            update={"event_id": "director_event_first_intrude"}
+        ))
+        store.set_stage(first_id, "engaged", turn_index=2)
+        second_id = store.save(_intrude_event().model_copy(
+            update={"event_id": "director_event_second_intrude"}
+        ))
+        store.set_stage(second_id, "engaged", turn_index=2)
+
+    gateway = _PhaseGateway(
+        decision={
+            "reasoning": "尝试一批调度两个事件。",
+            "requests": [
+                {
+                    "request_id": "m1",
+                    "skill": "intrude_engaged_event",
+                    "arguments": {"event_id": first_id},
+                    "guidance": "前景化。",
+                },
+                {
+                    "request_id": "m2",
+                    "skill": "intrude_engaged_event",
+                    "arguments": {"event_id": second_id},
+                    "guidance": "前景化。",
+                },
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="at most"):
+        run_generation_director_agent(
+            gateway=gateway,
+            stores=stores,
+            core_memory=CoreMemory(items=[]),
+            current_state=_current_state(),
+            user_input="巡查码头。",
+            context_facts=[],
+            recent_summaries=[],
+            turn_index=3,
+            trace_id="generation-director",
+            npc_profiles=[],
+            touched_event_candidates=[],
+        )
+
+
+def test_self_check_preserves_touched_event_ids():
     from app.domain.action.self_check import ActionSelfCheck
     from app.domain.action.schemas import ActionParseResult
 
@@ -3380,14 +3685,14 @@ def test_self_check_preserves_engaged_event_ids():
         analysis="分析。",
         atomic_actions=[],
         anchors=[],
-        engaged_event_ids=["event_1", "event_2"],
+        touched_event_ids=["event_1", "event_2"],
     )
     checked = ActionSelfCheck().check(
         result,
         user_input="去码头看看。",
         current_state=_current_state(),
     )
-    assert checked.engaged_event_ids == ["event_1", "event_2"]
+    assert checked.touched_event_ids == ["event_1", "event_2"]
 
 
 def test_present_event_rejects_already_consumed_hook(tmp_path):
@@ -3447,7 +3752,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
             turn_index=3,
             trace_id="generation-director",
         npc_profiles=[],
-            pending_engagements=[],
+            touched_event_candidates=[],
         )
 
 
@@ -3504,7 +3809,7 @@ def test_present_event_requires_hook_id(tmp_path):
             turn_index=3,
             trace_id="generation-director",
             npc_profiles=[],
-            pending_engagements=[],
+            touched_event_candidates=[],
         )
 
 
@@ -4444,7 +4749,7 @@ def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
     assert merged.disclosure_level == "intimate"
 
 
-def test_generation_observation_excludes_engaged_events(tmp_path):
+def test_generation_observation_exposes_engaged_events_channel(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
@@ -4488,10 +4793,14 @@ def test_generation_observation_excludes_engaged_events(tmp_path):
         ],
         world_impact=WorldImpact(description="镇民人心浮动。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    just_engaged = hidden.model_copy(
+        update={"event_id": "director_event_just_engaged"}
+    )
     with stores.director_event() as store:
         engaged_id = store.save(engaged)
         store.set_stage(engaged_id, "engaged", turn_index=2)
         hidden_id = store.save(hidden)
+        just_engaged_id = store.save(just_engaged)
 
     gateway = _PhaseGateway(
         decision={"reasoning": "本轮无需导演介入。", "requests": []}
@@ -4507,18 +4816,30 @@ def test_generation_observation_excludes_engaged_events(tmp_path):
         turn_index=3,
         trace_id="generation-director",
         npc_profiles=[],
-        pending_engagements=[],
+        touched_event_candidates=[just_engaged_id],
     )
 
     observation = json.loads(
         gateway.input_data[0]["director_observation_json"]
     )
-    observed_ids = {
+    hidden_ids = {
         item["event_id"] for item in observation["resources"]["events"]
     }
-    assert observed_ids == {hidden_id}
-    assert hidden_id in observed_ids
-    assert engaged_id not in observed_ids
+    assert hidden_ids == {hidden_id}
+    engaged_channel = {
+        item["event_id"]: item
+        for item in observation["resources"]["engaged_events"]
+    }
+    assert set(engaged_channel) == {engaged_id, just_engaged_id}
+    assert engaged_channel[engaged_id]["stage"] == "engaged"
+    assert engaged_channel[engaged_id]["touched_this_turn"] is False
+    assert engaged_channel[engaged_id]["world_impact"] == {
+        "description": "外围变为凡人活动区。"
+    }
+    assert engaged_channel[engaged_id]["macro_intent"] == "猎户为了生存不择手段。"
+    assert engaged_channel[just_engaged_id]["stage"] == "engaged"
+    assert engaged_channel[just_engaged_id]["touched_this_turn"] is True
+    assert "hooks" not in engaged_channel[engaged_id]
 
 
 def test_confirmation_observation_two_tier_npcs(tmp_path):

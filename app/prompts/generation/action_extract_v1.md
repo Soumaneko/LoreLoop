@@ -23,7 +23,7 @@
 {director_events_json}
 ```
 
-只有事件在玩家行动意图直接指向其可见痕迹时才视为被接触。空列表 `[]` 表示当前没有潜伏事件，`engaged_event_ids` 必须为空。
+只有事件在玩家行动意图直接指向其可见痕迹时才视为被接触。空列表 `[]` 表示当前没有潜伏事件，`touched_event_ids` 必须为空。
 
 
 # 输入
@@ -58,7 +58,7 @@
   - condition：触发条件，无则填 null。
   - likely_needs_roll：是否可能需要掷骰，按下方规则判断。
   - risk_level：low、medium 或 high 之一，按下方规则结合上下文判断。
-- engaged_event_ids：判定玩家本回合行动是否直接接触了某个潜伏导演事件，只列出明确被接触的事件 event_id。规则：
+- touched_event_ids：判定玩家本回合行动是否直接接触了某个潜伏导演事件，只列出明确被接触的事件 event_id。规则：
   - 只有玩家的行动直接指向事件的可见痕迹（hooks 的 content 或 trigger_anchors、subject 提及的人物/地点/动静）时才列入。
   - 玩家只是身处附近、提及无关人物或普通环境观察不算接触。
   - 没有事件被接触时必须填空列表 `[]`。
