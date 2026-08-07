@@ -1,0 +1,244 @@
+import pytest
+
+import os
+import tempfile
+from app.core.llm.errors import LLMOutputParseError
+from app.core.llm.gateway import LLMGateway
+from app.core.llm.mock import MockLLM
+from app.core.llm.providers import MockProvider
+from app.core.llm.providers import ProviderResult
+from app.core.llm.schemas import EchoResult
+from app.core.llm.tracing import TRACE_LOG_MAX_BYTES
+from app.core.llm.tracing import NullTraceLogger
+from app.core.llm.tracing import TraceLogger
+from app.core.llm.token_usage import bind_token_usage_sink
+from app.core.llm.token_usage import reset_token_usage_sink
+
+
+class TestTraceLogging:
+    def test_trace_log_default_limit_is_fifty_mib(self):
+        assert TRACE_LOG_MAX_BYTES == 50 * 1024 * 1024
+
+    def test_mock_gateway_uses_null_tracer_by_default(self):
+        mock = MockLLM()
+        mock.set_responses(['{"text": "hello", "length": 5}'])
+        gateway = mock.build_gateway()
+
+        gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+            trace_id="mock-trace",
+        )
+
+        assert isinstance(gateway.tracer, NullTraceLogger)
+        assert gateway.tracer.read_traces(trace_id="mock-trace") == []
+
+    def test_trace_written_on_success(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            trace_path = f.name
+
+        try:
+            tracer = TraceLogger(log_path=trace_path)
+            mock = MockLLM()
+            mock.set_responses(['{"text": "hello", "length": 5}'])
+            gateway = LLMGateway(
+                provider=mock.provider,
+                prompt_loader=mock.prompt_loader,
+                tracer=tracer,
+            )
+
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                trace_id="test-trace-123",
+            )
+
+            traces = tracer.read_traces(trace_id="test-trace-123")
+            assert len(traces) == 1
+            trace = traces[0]
+            assert trace["trace_id"] == "test-trace-123"
+            assert trace["task"] == "echo_structured_test"
+            assert trace["schema_valid"] is True
+            assert trace["error"] is None
+            assert trace["parsed_output"] == {"text": "hello", "length": 5}
+            assert trace["input_data"] == {"text": "hello"}
+            assert trace["latency_ms"] >= 0
+            assert len(trace["prompt_fingerprint"]) == 64
+        finally:
+            os.unlink(trace_path)
+
+    def test_trace_publishes_player_usage_without_prompt_or_output(self, tmp_path):
+        class _UsageProvider(MockProvider):
+            def generate(self, *_args, **_kwargs):
+                return ProviderResult(
+                    content='{"text": "hello", "length": 5}',
+                    usage={
+                        "prompt_tokens": 12,
+                        "completion_tokens": 4,
+                        "total_tokens": 16,
+                    },
+                )
+
+        events = []
+        context_token = bind_token_usage_sink(events.append)
+        try:
+            gateway = LLMGateway(
+                provider=_UsageProvider(),
+                prompt_loader=MockLLM().prompt_loader,
+                tracer=TraceLogger(
+                    log_path=str(tmp_path / "llm_traces.jsonl")
+                ),
+            )
+            gateway.set_trace_context(session_type="generation")
+
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "private prompt input"},
+                output_schema=EchoResult,
+            )
+        finally:
+            reset_token_usage_sink(context_token)
+
+        assert len(events) == 1
+        assert events[0] == {
+            "_call_id": events[0]["_call_id"],
+            "task": "echo_structured_test",
+            "call_index": 1,
+            "attempt": 1,
+            "input_tokens": 12,
+            "output_tokens": 4,
+            "total_tokens": 16,
+            "reported": True,
+        }
+        assert events[0]["_call_id"]
+        assert "private prompt input" not in str(events)
+        assert "hello" not in str(events)
+
+    def test_trace_written_on_failure(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            trace_path = f.name
+
+        try:
+            tracer = TraceLogger(log_path=trace_path)
+            mock = MockLLM()
+            mock.set_responses(["not valid json"])
+            gateway = LLMGateway(
+                provider=mock.provider,
+                prompt_loader=mock.prompt_loader,
+                tracer=tracer,
+            )
+
+            with pytest.raises(LLMOutputParseError):
+                gateway.run(
+                    task="echo_structured_test",
+                    input_data={"text": "hello"},
+                    output_schema=EchoResult,
+                    max_retries=0,
+                    trace_id="test-trace-fail",
+                )
+
+            traces = tracer.read_traces(trace_id="test-trace-fail")
+            assert len(traces) == 1
+            trace = traces[0]
+            assert trace["schema_valid"] is False
+            assert trace["error"] is not None
+            diagnostics = tracer.diagnostics.read(trace_id="test-trace-fail")
+            assert len(diagnostics) == 1
+            assert diagnostics[0]["severity"] == "error"
+            assert diagnostics[0]["code"] == "llm_output_parse_failed"
+        finally:
+            os.unlink(trace_path)
+            if os.path.exists(tracer.diagnostics.log_path):
+                os.unlink(tracer.diagnostics.log_path)
+
+    def test_trace_log_keeps_one_bounded_file_and_newest_complete_entries(
+        self,
+        tmp_path,
+    ):
+        trace_path = tmp_path / "llm_traces.jsonl"
+        tracer = TraceLogger(log_path=str(trace_path), max_bytes=4096)
+
+        for index in range(20):
+            tracer.log(
+                trace_id=f"trace-{index}",
+                task="bounded",
+                model="test-model",
+                prompt_version="v1",
+                input_data={"turn": index, "context": "中" * 180},
+                raw_output="out" * 180,
+                parsed_output={"turn": index},
+                schema_valid=True,
+                latency_ms=1.0,
+                error=None,
+            )
+
+        assert trace_path.stat().st_size <= 4096
+        traces = tracer.read_traces()
+        assert traces
+        assert traces[-1]["trace_id"] == "trace-19"
+        assert traces[0]["trace_id"] != "trace-0"
+        assert [
+            path for path in tmp_path.iterdir()
+            if path.name.startswith("llm_traces")
+        ] == [trace_path]
+
+    def test_single_oversized_trace_is_replaced_by_valid_marker(self, tmp_path):
+        trace_path = tmp_path / "llm_traces.jsonl"
+        tracer = TraceLogger(log_path=str(trace_path), max_bytes=1024)
+
+        tracer.log(
+            trace_id="oversized",
+            task="bounded",
+            model="test-model",
+            prompt_version="v1",
+            input_data={"context": "x" * 5000},
+            raw_output="y" * 5000,
+            parsed_output={"result": "z" * 5000},
+            schema_valid=True,
+            latency_ms=1.0,
+            error=None,
+        )
+
+        assert trace_path.stat().st_size <= 1024
+        traces = tracer.read_traces()
+        assert len(traces) == 1
+        marker = traces[0]
+        assert marker == {
+            "trace_id": "oversized",
+            "task": "bounded",
+            "model": "test-model",
+            "prompt_version": "v1",
+            "schema_valid": True,
+            "latency_ms": 1.0,
+            "timestamp": marker["timestamp"],
+            "trace_entry_truncated": True,
+            "original_entry_bytes": marker["original_entry_bytes"],
+        }
+
+    def test_trace_id_auto_generated(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            trace_path = f.name
+
+        try:
+            tracer = TraceLogger(log_path=trace_path)
+            mock = MockLLM()
+            mock.set_responses(['{"text": "hello", "length": 5}'])
+            gateway = LLMGateway(
+                provider=mock.provider,
+                prompt_loader=mock.prompt_loader,
+                tracer=tracer,
+            )
+
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+            )
+
+            traces = tracer.read_traces()
+            assert len(traces) == 1
+            assert len(traces[0]["trace_id"]) == 32
+        finally:
+            os.unlink(trace_path)
