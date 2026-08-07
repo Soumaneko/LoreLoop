@@ -248,16 +248,7 @@ class DirectorConfirmationExecutor:
         draft = DirectorNPCCreator(self._gateway).create(
             core_memory=self._core_memory,
             existing_npcs=self._npc_profile_store.list_all(),
-            reserved_npcs=[
-                {
-                    "name": npc.name,
-                    "role": npc.role,
-                    "core_motivation": npc.core_motivation,
-                    "hidden_secret": npc.hidden_secret,
-                }
-                for npc in self._director_npc_store.list_all()
-                if npc.status != "retired"
-            ],
+            reserved_npcs=self._reserved_npc_names([]),
             creation_context=NPCCreationContext(
                 setting_ids=setting_ids,
             ),
@@ -280,53 +271,9 @@ class DirectorConfirmationExecutor:
         settings = self._dispatch_setting_requirements(args.setting_requirements)
         setting_ids = [setting.setting_id for setting in settings]
         event_guidance = guidance or ""
-        required_actors: list[dict] = []
-        bound_actors: list[DirectorActorRef] = []
-        actor_inputs_by_key = {}
-        for index, actor_input in enumerate(args.actors, start=1):
-            actor_key = f"actor_{index}"
-            actor_inputs_by_key[actor_key] = actor_input
-            if actor_input.source == "new":
-                required_actors.append({
-                    "actor_key": actor_key,
-                    "source": "new",
-                    "guidance": actor_input.guidance,
-                })
-                continue
-
-            draft = self._director_npc_store.get_by_id(actor_input.npc_id)
-            profile = self._npc_profile_store.get_by_id(actor_input.npc_id)
-            if draft is not None and draft.status != "retired":
-                actor_name = draft.name
-                actor_profile = {
-                    "resource_type": "director_npc",
-                    **draft.private_view().model_dump(mode="json"),
-                }
-            elif profile is not None and profile.active:
-                actor_name = profile.name
-                actor_profile = {
-                    "resource_type": "npc_profile",
-                    "npc_id": profile.npc_id,
-                    **profile.director_view().model_dump(mode="json"),
-                }
-            else:
-                raise ValueError("create_event references an unknown active NPC")
-            required_actors.append({
-                "actor_key": actor_key,
-                "source": "existing",
-                "npc_id": actor_input.npc_id,
-                "guidance": actor_input.guidance,
-                "profile": actor_profile,
-            })
-            bound_actors.append(
-                DirectorActorRef(
-                    name=actor_name,
-                    ref=DirectorResourceRef(
-                        kind="npc",
-                        resource_id=actor_input.npc_id,
-                    ),
-                )
-            )
+        required_actors, bound_actors, actor_inputs_by_key = (
+            self._resolve_event_actors(args.actors)
+        )
         selection = DirectorEventSelector(self._gateway).select_or_create(
             role=args.role,
             events=self._event_store.list_all(),
@@ -370,24 +317,7 @@ class DirectorConfirmationExecutor:
             draft = DirectorNPCCreator(self._gateway).create(
                 core_memory=self._core_memory,
                 existing_npcs=self._npc_profile_store.list_all(),
-                reserved_npcs=[
-                    {
-                        "name": npc.name,
-                        "role": npc.role,
-                        "core_motivation": npc.core_motivation,
-                        "hidden_secret": npc.hidden_secret,
-                    }
-                    for npc in self._director_npc_store.list_all()
-                    if npc.status != "retired"
-                ] + [
-                    {
-                        "name": staged.name,
-                        "role": staged.role,
-                        "core_motivation": staged.core_motivation,
-                        "hidden_secret": staged.hidden_secret,
-                    }
-                    for staged in drafts
-                ],
+                reserved_npcs=self._reserved_npc_names(drafts),
                 creation_context=NPCCreationContext(
                     setting_ids=setting_ids
                 ),
@@ -404,37 +334,7 @@ class DirectorConfirmationExecutor:
                 kind="npc",
                 resource_id=draft.draft_id,
             )
-            actors = list(event.actors)
-            clean_name = draft.name.strip()
-            replaced = False
-            for index, existing in enumerate(actors):
-                if existing.ref is not None and existing.ref == actor_ref:
-                    replaced = True
-                    break
-                if clean_name and existing.name == clean_name and existing.ref is None:
-                    actors[index] = DirectorActorRef(
-                        name=clean_name,
-                        ref=actor_ref,
-                    )
-                    replaced = True
-                    break
-            if not replaced and clean_name and not any(
-                existing.name == clean_name and existing.ref == actor_ref
-                for existing in actors
-            ):
-                actors.append(
-                    DirectorActorRef(
-                        name=clean_name,
-                        ref=actor_ref,
-                    )
-                )
-            event = event.model_copy(
-                update={
-                    "actors": actors,
-                    "updated_turn": self._turn_index,
-                    "updated_at": utc_now(),
-                }
-            )
+            event = self._attach_new_actor_ref(event, draft, actor_ref)
             recent_creations[0] = {
                 **event.semantic_view(),
                 "actor_roles": actor_roles_view,
@@ -459,6 +359,117 @@ class DirectorConfirmationExecutor:
             "new_npc_ids": new_npc_ids,
             "actor_names": actor_names,
         }
+
+    def _resolve_event_actors(self, actor_inputs):
+        """Resolve every requested actor into Selector inputs and bound refs.
+
+        ``source=new`` actors enter the Selector as guidance only; existing
+        actors resolve against the Director NPC and profile stores and are
+        bound to the event immediately.
+        """
+        required_actors: list[dict] = []
+        bound_actors: list[DirectorActorRef] = []
+        actor_inputs_by_key = {}
+        for index, actor_input in enumerate(actor_inputs, start=1):
+            actor_key = f"actor_{index}"
+            actor_inputs_by_key[actor_key] = actor_input
+            if actor_input.source == "new":
+                required_actors.append({
+                    "actor_key": actor_key,
+                    "source": "new",
+                    "guidance": actor_input.guidance,
+                })
+                continue
+
+            draft = self._director_npc_store.get_by_id(actor_input.npc_id)
+            profile = self._npc_profile_store.get_by_id(actor_input.npc_id)
+            if draft is not None and draft.status != "retired":
+                actor_name = draft.name
+                actor_profile = {
+                    "resource_type": "director_npc",
+                    **draft.private_view().model_dump(mode="json"),
+                }
+            elif profile is not None and profile.active:
+                actor_name = profile.name
+                actor_profile = {
+                    "resource_type": "npc_profile",
+                    "npc_id": profile.npc_id,
+                    **profile.director_view().model_dump(mode="json"),
+                }
+            else:
+                raise ValueError("create_event references an unknown active NPC")
+            required_actors.append({
+                "actor_key": actor_key,
+                "source": "existing",
+                "npc_id": actor_input.npc_id,
+                "guidance": actor_input.guidance,
+                "profile": actor_profile,
+            })
+            bound_actors.append(
+                DirectorActorRef(
+                    name=actor_name,
+                    ref=DirectorResourceRef(
+                        kind="npc",
+                        resource_id=actor_input.npc_id,
+                    ),
+                )
+            )
+        return required_actors, bound_actors, actor_inputs_by_key
+
+    def _reserved_npc_names(self, staged_drafts):
+        """Names reserved against new-NPC creation for name deduplication."""
+        return [
+            {
+                "name": npc.name,
+                "role": npc.role,
+                "core_motivation": npc.core_motivation,
+                "hidden_secret": npc.hidden_secret,
+            }
+            for npc in self._director_npc_store.list_all()
+            if npc.status != "retired"
+        ] + [
+            {
+                "name": staged.name,
+                "role": staged.role,
+                "core_motivation": staged.core_motivation,
+                "hidden_secret": staged.hidden_secret,
+            }
+            for staged in staged_drafts
+        ]
+
+    def _attach_new_actor_ref(self, event, draft, actor_ref):
+        """Bind a freshly created NPC to the event, replacing a name-only actor."""
+        actors = list(event.actors)
+        clean_name = draft.name.strip()
+        replaced = False
+        for index, existing in enumerate(actors):
+            if existing.ref is not None and existing.ref == actor_ref:
+                replaced = True
+                break
+            if clean_name and existing.name == clean_name and existing.ref is None:
+                actors[index] = DirectorActorRef(
+                    name=clean_name,
+                    ref=actor_ref,
+                )
+                replaced = True
+                break
+        if not replaced and clean_name and not any(
+            existing.name == clean_name and existing.ref == actor_ref
+            for existing in actors
+        ):
+            actors.append(
+                DirectorActorRef(
+                    name=clean_name,
+                    ref=actor_ref,
+                )
+            )
+        return event.model_copy(
+            update={
+                "actors": actors,
+                "updated_turn": self._turn_index,
+                "updated_at": utc_now(),
+            }
+        )
 
     def _bind_actor(
         self,
