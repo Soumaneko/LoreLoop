@@ -218,7 +218,8 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         name="intrude_engaged_event",
         description=(
             "强行引入某个 engaged 事件。"
-            "职责是把事件方正在做的事，落成对主角的**直接影响**。严禁环境/痕迹/传闻之类的间接影响。"
+            "本 skill 用于把事件方正在做的事，强行以直接影响的形式落成于主角，让主角从未接触状态转变为接触状态。"
+            "严禁以‘事件方尚未直接影响主角’为理由拒绝调用，如果类似语句出现在reasoning中，视为非法输出"
             "此 skill 是 engaged 事件开始作用于主角的唯一途径，因此只要时机合适，你必须进行事件引入。"
         ),
         phases=_GENERATION,
