@@ -321,3 +321,29 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
 def get_director_skill_specs() -> tuple[DirectorSkillSpec, ...]:
     """返回全部技能语义规则（新增条目时应同时补充本函数返回值）。"""
     return _DIRECTOR_SKILL_SPECS
+
+
+def register_skill(
+    service,
+    name: str,
+    *,
+    handler,
+    arguments_validator=None,
+) -> None:
+    """Register a skill using its semantic spec declared in this module."""
+    spec = next(
+        (item for item in _DIRECTOR_SKILL_SPECS if item.name == name),
+        None,
+    )
+    if spec is None:
+        raise ValueError(f"unknown director skill spec: {name}")
+    service.register(
+        name=spec.name,
+        description=spec.description,
+        phases=set(spec.phases),
+        mutates=spec.mutates,
+        arguments_model=spec.arguments_model,
+        handler=handler,
+        arguments_validator=arguments_validator,
+        max_requests_per_batch=spec.max_requests_per_batch,
+    )

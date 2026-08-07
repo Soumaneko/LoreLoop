@@ -37,7 +37,7 @@ from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.short_term_memory import ShortTermScene
 from app.domain.world_setting import WorldSetting, WorldSettingStore
-from app.graph.generation_profile_helpers import select_context_profiles
+from app.domain.npc_profile.selection import select_context_profiles
 
 
 def _state() -> CurrentState:

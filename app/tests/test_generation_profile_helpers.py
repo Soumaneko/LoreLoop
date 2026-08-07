@@ -5,7 +5,7 @@ from app.domain.current_state import WorldClock
 from app.domain.director import DirectorResourceRef
 from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
 from app.domain.npc_profile.schemas import NPCProfile
-from app.graph.generation_profile_helpers import (
+from app.domain.npc_profile.selection import (
     merge_profile_selections,
     select_profiles_by_active_events,
     select_profiles_by_context_facts,

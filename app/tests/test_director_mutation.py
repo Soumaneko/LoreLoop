@@ -7,15 +7,13 @@ from app.domain.director_event.store import DirectorEventStore
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.world_setting import WorldSetting
-from app.graph.director_agent import (
-    _DirectorMutationPlan,
-    _PendingActorBinding,
-    _commit_director_mutations,
-)
 from app.runtime.director_mutation import (
     DirectorMutationJournal,
     DirectorMutationJournalStore,
+    DirectorPendingActorBinding,
+    DirectorPendingMutationPlan,
     DirectorProfileBeforeImage,
+    commit_director_mutations,
     recover_pending_director_mutation,
 )
 from app.runtime.paths import CampaignPaths
@@ -57,8 +55,8 @@ def test_commit_failure_restores_existing_npc_profile(tmp_path, monkeypatch):
     monkeypatch.setattr(NPCProfileStore, "upsert", write_then_fail_once)
 
     with pytest.raises(RuntimeError, match="injected profile commit failure"):
-        _commit_director_mutations(
-            _DirectorMutationPlan(profile_upserts=[updated]),
+        commit_director_mutations(
+            DirectorPendingMutationPlan(profile_upserts=[updated]),
             stores,
         )
 
@@ -88,7 +86,7 @@ def test_commit_failure_restores_existing_event_actor_bindings(
         return result
 
     monkeypatch.setattr(DirectorEventStore, "bind_actor", bind_then_fail_once)
-    binding = _PendingActorBinding(
+    binding = DirectorPendingActorBinding(
         event_id=event.event_id,
         actor_name="陆远舟",
         actor_ref=DirectorResourceRef(kind="npc", resource_id="npc_1"),
@@ -96,8 +94,8 @@ def test_commit_failure_restores_existing_event_actor_bindings(
     )
 
     with pytest.raises(RuntimeError, match="injected actor commit failure"):
-        _commit_director_mutations(
-            _DirectorMutationPlan(actor_bindings=[binding]),
+        commit_director_mutations(
+            DirectorPendingMutationPlan(actor_bindings=[binding]),
             stores,
         )
 

@@ -19,7 +19,7 @@ from app.runtime.services import RuntimeServices
 from app.runtime.session import CampaignRuntime, PendingTurn, get_campaign_runtime
 
 from .generation_state import GenerationEvent, GenerationState
-from .generation_profile_helpers import select_context_profiles
+from app.domain.npc_profile.selection import select_context_profiles
 
 
 def assemble_narrative_context(

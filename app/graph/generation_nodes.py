@@ -36,17 +36,17 @@ from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
 from app.domain.turn_resolution.views import project_turn_resolution
 from app.runtime.serialization import model_data
+from app.domain.director.generation import DirectorGenerationExecutor
 from app.domain.director.log import assemble_director_log_entry
-from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
-from .generation_profile_helpers import (
+from app.domain.npc_profile.selection import (
     merge_profile_selections,
     select_profiles_by_active_events,
     select_profiles_by_context_facts,
 )
+from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
 from .generation_helpers import assemble_narrative_context, gateway_for
 from .generation_state import GenerationState
-from .director_agent import run_generation_director_agent
 
 
 def _store_factory(state: GenerationState, name: str):
@@ -350,7 +350,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
             state.get("context_fact_npc_profiles", []),
             event_npc_profiles,
         )
-    stage, decision = run_generation_director_agent(
+    stage, decision = DirectorGenerationExecutor(
         gateway=gateway_for(state),
         stores=state["runtime_services"].stores,
         core_memory=state["core_memory"],
@@ -365,7 +365,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
         touched_event_candidates=state.get("touched_event_candidates", []),
         npc_profiles=director_npc_profiles,
-    )
+    ).run()
     director_log_entry = assemble_director_log_entry(
         turn_index=state["turn_index"],
         phase="generation",

@@ -28,7 +28,7 @@ from app.runtime.serialization import model_data
 
 from .confirmation_helpers import merge_unique_ids
 from .confirmation_state import ConfirmationState
-from .director_agent import run_confirmation_director_agent
+from app.domain.director.confirmation import DirectorConfirmationExecutor
 
 
 def _gateway_for(state: ConfirmationState):
@@ -272,7 +272,7 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
     executions = cache.get("director_executions")
     if decision is None or executions is None:
         new_npc_profiles = state.get("new_npc_profiles", [])
-        decision, executions = run_confirmation_director_agent(
+        decision, executions = DirectorConfirmationExecutor(
             gateway=_gateway_for(state),
             stores=state["runtime_services"].stores,
             core_memory=state["core_memory"],
@@ -288,7 +288,7 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
             director_log_entry=getattr(
                 state.get("pending"), "director_log_entry", None
             ),
-            )
+        ).run()
     return {
         "director_decision": decision,
         "director_executions": executions,

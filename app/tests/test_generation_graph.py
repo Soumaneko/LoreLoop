@@ -783,14 +783,18 @@ def test_director_agent_stage_node_passes_select_plus_context_fact_plus_event_pr
 
     captured = {}
 
-    def _fake_run(gateway=None, stores=None, **kwargs):
-        captured["npc_profiles"] = kwargs.get("npc_profiles")
-        return (
-            SimpleNamespace(),
-            DirectorDecisionBatch(reasoning="本轮无需导演介入。", requests=[]),
-        )
+    class _FakeExecutor:
+        def __init__(self, gateway=None, stores=None, **kwargs):
+            self._kwargs = kwargs
 
-    monkeypatch.setattr(generation_nodes, "run_generation_director_agent", _fake_run)
+        def run(self):
+            captured["npc_profiles"] = self._kwargs.get("npc_profiles")
+            return (
+                SimpleNamespace(),
+                DirectorDecisionBatch(reasoning="本轮无需导演介入。", requests=[]),
+            )
+
+    monkeypatch.setattr(generation_nodes, "DirectorGenerationExecutor", _FakeExecutor)
 
     state = {
         "runtime_services": SimpleNamespace(
@@ -1070,14 +1074,18 @@ def test_director_agent_stage_node_keeps_event_actors_when_action_saturates(
 
     captured = {}
 
-    def _fake_run(gateway=None, stores=None, **kwargs):
-        captured["npc_profiles"] = kwargs.get("npc_profiles")
-        return (
-            SimpleNamespace(),
-            DirectorDecisionBatch(reasoning="本轮无需导演介入。", requests=[]),
-        )
+    class _FakeExecutor:
+        def __init__(self, gateway=None, stores=None, **kwargs):
+            self._kwargs = kwargs
 
-    monkeypatch.setattr(generation_nodes, "run_generation_director_agent", _fake_run)
+        def run(self):
+            captured["npc_profiles"] = self._kwargs.get("npc_profiles")
+            return (
+                SimpleNamespace(),
+                DirectorDecisionBatch(reasoning="本轮无需导演介入。", requests=[]),
+            )
+
+    monkeypatch.setattr(generation_nodes, "DirectorGenerationExecutor", _FakeExecutor)
 
     state = {
         "runtime_services": SimpleNamespace(

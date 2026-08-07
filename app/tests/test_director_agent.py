@@ -22,11 +22,9 @@ from app.domain.npc_profile.schemas import (
     NPCProfile,
 )
 from app.domain.scene_facts.schemas import SceneFactSet
+from app.domain.director.confirmation import run_confirmation_director_agent
+from app.domain.director.generation import run_generation_director_agent
 from app.graph import confirmation_nodes
-from app.graph.director_agent import (
-    run_confirmation_director_agent,
-    run_generation_director_agent,
-)
 from app.runtime.paths import CampaignPaths
 from app.runtime.stores import StoreBundle
 
@@ -180,7 +178,7 @@ def test_generation_skill_requires_request_guidance():
 
 
 def test_introduce_npc_requires_valid_view_mode():
-    from app.graph.director_skill_specs import IntroduceNPCArguments
+    from app.domain.director.skill_specs import IntroduceNPCArguments
 
     with pytest.raises(ValidationError):
         IntroduceNPCArguments(npc_id="npc_1")
@@ -1380,7 +1378,7 @@ def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
 
 def test_director_skill_specs_cover_every_registered_skill():
     from app.domain.director import DirectorSkillService
-    from app.graph.director_skill_specs import get_director_skill_specs
+    from app.domain.director.skill_specs import get_director_skill_specs
 
     specs = get_director_skill_specs()
     spec_names = {spec.name for spec in specs}
@@ -1430,7 +1428,7 @@ def test_director_skill_specs_cover_every_registered_skill():
 
 
 def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
-    from app.graph.director_skill_specs import CreateEventArguments
+    from app.domain.director.skill_specs import CreateEventArguments
 
     validated = CreateEventArguments.model_validate({
         "role": "arc",
@@ -2655,7 +2653,7 @@ def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
 
 
 def test_create_event_rejects_more_than_three_new_actors():
-    from app.graph.director_skill_specs import CreateEventArguments
+    from app.domain.director.skill_specs import CreateEventArguments
 
     with pytest.raises(ValidationError, match="at most 3 new actors"):
         CreateEventArguments(
@@ -2728,7 +2726,7 @@ def test_director_decide_prompt_forbids_quest_wrapping():
 
 
 def test_event_skill_descriptions_forbid_quest_wrapping():
-    from app.graph.director_skill_specs import get_director_skill_specs
+    from app.domain.director.skill_specs import get_director_skill_specs
 
     specs = {
         spec.name: spec
@@ -2830,14 +2828,18 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
     )
     captured = {}
 
-    def fake_run(**kwargs):
-        captured["new_npc_profiles"] = kwargs.get("new_npc_profiles")
-        return object(), object()
+    class _FakeExecutor:
+        def __init__(self, **kwargs):
+            self._kwargs = kwargs
+
+        def run(self):
+            captured["new_npc_profiles"] = self._kwargs.get("new_npc_profiles")
+            return object(), object()
 
     monkeypatch.setattr(
         confirmation_nodes,
-        "run_confirmation_director_agent",
-        fake_run,
+        "DirectorConfirmationExecutor",
+        _FakeExecutor,
     )
     monkeypatch.setattr(
         confirmation_nodes,
@@ -4719,7 +4721,9 @@ def test_introduce_npc_allows_at_most_five_per_batch(tmp_path):
 
 def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
     from app.domain.director_npc.schemas import DirectorNPCDraft
-    from app.graph.confirmation_helpers import merge_director_draft_into_npc_profile
+    from app.domain.npc_profile.director_promotion import (
+        merge_director_draft_into_npc_profile,
+    )
 
     existing = NPCProfile(
         name="林澈",

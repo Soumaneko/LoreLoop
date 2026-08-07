@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.domain.director.schemas import DirectorResourceRef
 from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.world_setting.schemas import WorldSetting
 
 
 class DirectorProfileBeforeImage(BaseModel):
@@ -23,6 +27,34 @@ class DirectorEventBeforeImage(BaseModel):
 
     event_id: str = Field(min_length=1)
     event: DirectorEvent
+
+
+@dataclass(frozen=True)
+class DirectorPendingActorBinding:
+    """A deferred Event actor binding waiting for the batch commit."""
+
+    event_id: str
+    actor_name: str
+    actor_ref: DirectorResourceRef
+    turn_index: int
+
+
+@dataclass
+class DirectorPendingMutationPlan:
+    """Deferred writes accumulated by confirmation handlers.
+
+    Handlers never write to stores directly. All intended mutations are
+    collected here and committed as one recoverable batch only after every
+    request has succeeded.
+    """
+
+    settings: list[WorldSetting] = field(default_factory=list)
+    npc_drafts: list[DirectorNPCDraft] = field(default_factory=list)
+    events: list[DirectorEvent] = field(default_factory=list)
+    profile_upserts: list[NPCProfile] = field(default_factory=list)
+    actor_bindings: list[DirectorPendingActorBinding] = field(
+        default_factory=list
+    )
 
 
 class DirectorMutationJournal(BaseModel):
@@ -119,3 +151,105 @@ def recover_pending_director_mutation(stores) -> bool:
 
     journal_store.clear()
     return True
+
+
+def commit_director_mutations(
+    plan: DirectorPendingMutationPlan,
+    stores,
+) -> None:
+    """Persist one Director batch with durable cross-database rollback data.
+
+    The mirror of :func:`recover_pending_director_mutation`: records new IDs and
+    before-images in a durable journal before the first write, then applies every
+    deferred write in deterministic order. Any failure rolls the whole batch back
+    through the journal before re-raising.
+    """
+    settings = plan.settings
+    npc_drafts = plan.npc_drafts
+    events = plan.events
+    profile_upserts = plan.profile_upserts
+    actor_bindings = plan.actor_bindings
+    recover_pending_director_mutation(stores)
+
+    with stores.world_setting() as store:
+        if any(store.get_by_id(item.setting_id) for item in settings):
+            raise RuntimeError("Director commit would overwrite an existing Setting")
+    with stores.director_npc() as store:
+        if any(store.get_by_id(item.draft_id) for item in npc_drafts):
+            raise RuntimeError("Director commit would overwrite an existing NPC draft")
+    with stores.director_event() as store:
+        if any(store.get_by_id(item.event_id) for item in events):
+            raise RuntimeError("Director commit would overwrite an existing Event")
+        event_before = []
+        seen_event_ids: set[str] = set()
+        for binding in actor_bindings:
+            if binding.event_id in seen_event_ids:
+                continue
+            existing = store.get_by_id(binding.event_id)
+            if existing is None:
+                raise ValueError("actor binding references an unknown DirectorEvent")
+            seen_event_ids.add(binding.event_id)
+            event_before.append(
+                DirectorEventBeforeImage(
+                    event_id=binding.event_id,
+                    event=existing,
+                )
+            )
+
+    with stores.npc_profile() as store:
+        profile_before = []
+        seen_profile_ids: set[str] = set()
+        for profile in profile_upserts:
+            if profile.npc_id in seen_profile_ids:
+                continue
+            seen_profile_ids.add(profile.npc_id)
+            profile_before.append(
+                DirectorProfileBeforeImage(
+                    npc_id=profile.npc_id,
+                    profile=store.get_by_id(profile.npc_id),
+                )
+            )
+
+    journal_store = DirectorMutationJournalStore(
+        stores.paths.director_mutation_journal
+    )
+    journal_store.save(
+        DirectorMutationJournal(
+            new_setting_ids=[item.setting_id for item in settings],
+            new_npc_ids=[item.draft_id for item in npc_drafts],
+            new_event_ids=[item.event_id for item in events],
+            profile_before_images=profile_before,
+            event_before_images=event_before,
+        )
+    )
+
+    try:
+        if settings:
+            with stores.world_setting() as store:
+                for setting in settings:
+                    store.save(setting)
+        if npc_drafts:
+            with stores.director_npc() as store:
+                for draft in npc_drafts:
+                    store.save(draft)
+        if events:
+            with stores.director_event() as store:
+                for event in events:
+                    store.save(event)
+        if profile_upserts:
+            with stores.npc_profile() as store:
+                for profile in profile_upserts:
+                    store.upsert(profile)
+        if actor_bindings:
+            with stores.director_event() as store:
+                for binding in actor_bindings:
+                    store.bind_actor(
+                        binding.event_id,
+                        actor_name=binding.actor_name,
+                        actor_ref=binding.actor_ref,
+                        turn_index=binding.turn_index,
+                    )
+        journal_store.clear()
+    except BaseException:
+        recover_pending_director_mutation(stores)
+        raise
