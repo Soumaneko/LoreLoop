@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from app.core.text import normalize_compact_key
 from app.domain.action.schemas import Anchor
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.current_state.schemas import CurrentState
@@ -21,9 +22,9 @@ def select_context_profiles(
     npc_store: NPCProfileStore,
     limit: int = 20,
 ) -> ContextProfileSelection:
-    text = _norm(user_input)
+    text = normalize_compact_key(user_input)
     explicit_names = {
-        _norm(name)
+        normalize_compact_key(name)
         for name in [
             *current_state.scene.participant_names,
             current_state.player.name,
@@ -58,16 +59,16 @@ def select_context_profiles(
 
 def _profile_mentioned(user_input: str, name: str, aliases: list[str]) -> bool:
     return any(
-        _norm(value) and _norm(value) in user_input
+        normalize_compact_key(value) and normalize_compact_key(value) in user_input
         for value in [name, *aliases]
     )
 
 
 def _profile_texts(profile: NPCProfile) -> list[str]:
     return [
-        _norm(value)
+        normalize_compact_key(value)
         for value in [profile.name, *profile.aliases, *profile.transient_aliases]
-        if _norm(value)
+        if normalize_compact_key(value)
     ]
 
 
@@ -82,7 +83,7 @@ def select_profiles_by_fact_texts(
     Names and aliases are matched as substrings against each text so profiles
     relevant to the current situation stay in scope even when never named.
     """
-    cleaned = [_norm(text) for text in texts]
+    cleaned = [normalize_compact_key(text) for text in texts]
     cleaned = [text for text in cleaned if text]
     if not cleaned:
         return []
@@ -188,9 +189,5 @@ def _profile_in_names(names: set[str], name: str, aliases: list[str]) -> bool:
     return any(
         normalized and normalized in names
         for value in [name, *aliases]
-        if (normalized := _norm(value))
+        if (normalized := normalize_compact_key(value))
     )
-
-
-def _norm(value: str) -> str:
-    return "".join(str(value or "").casefold().split())

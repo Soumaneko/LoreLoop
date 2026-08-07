@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 from app.core.diagnostics import NullDiagnosticLogger
-from app.core.text import eligible_highlight_term
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.continuity import ContinuityProjector
@@ -24,6 +23,7 @@ from app.domain.npc_profile.workflows import (
 from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
 from app.domain.scene_summary.summarizer import SceneSummarizer
 from app.domain.views import project_scene_facts
+from app.domain.world_setting.schemas import setting_appears_in_text
 from app.runtime.serialization import model_data
 
 from .confirmation_helpers import merge_unique_ids
@@ -361,7 +361,7 @@ def setting_appearance_update_node(state: ConfirmationState) -> ConfirmationStat
     if folded_text:
         with _store_factory(state, "world_setting")() as setting_store:
             for setting in setting_store.list_all():
-                if eligible_highlight_term(setting.name) and setting.name.casefold() in folded_text:
+                if setting_appears_in_text(setting.name, folded_text):
                     if setting_store.record_mention(setting.setting_id):
                         recorded_ids.append(setting.setting_id)
     return {

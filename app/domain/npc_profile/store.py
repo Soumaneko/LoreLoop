@@ -1,6 +1,7 @@
 import json
 import sqlite3
 
+from app.core.text import normalize_key
 from app.domain.npc_profile.schemas import (
     NPCProfile,
     utc_now,
@@ -160,7 +161,7 @@ class NPCProfileStore:
         self._db.commit()
 
     def get_by_name(self, name: str) -> NPCProfile | None:
-        term = _norm(name)
+        term = normalize_key(name)
         if not term:
             return None
         for profile in self.list_all():
@@ -195,8 +196,11 @@ class NPCProfileStore:
         clean = str(alias).strip()
         if profile is None or not clean:
             return False
-        alias_keys = {existing.casefold() for existing in profile.aliases}
-        if clean.casefold() in alias_keys or clean.casefold() == profile.name.casefold():
+        alias_keys = {normalize_key(existing) for existing in profile.aliases}
+        if (
+            normalize_key(clean) in alias_keys
+            or normalize_key(clean) == normalize_key(profile.name)
+        ):
             return False
         profile.aliases.append(clean)
         if initial_hit_count > 0:
@@ -213,7 +217,7 @@ class NPCProfileStore:
         clean = str(surface).strip()
         if profile is None or not clean:
             return False
-        if clean.casefold() == profile.name.casefold():
+        if normalize_key(clean) == normalize_key(profile.name):
             profile.name_hit_count += 1
         else:
             alias = _find_alias(profile, clean)
@@ -238,29 +242,29 @@ class NPCProfileStore:
         if given_name == profile.name or not given_name:
             return
         known_names = {
-            _norm(profile.name),
-            *(_norm(alias) for alias in profile.aliases),
-            *(_norm(alias) for alias in profile.transient_aliases),
+            normalize_key(profile.name),
+            *(normalize_key(alias) for alias in profile.aliases),
+            *(normalize_key(alias) for alias in profile.transient_aliases),
         }
-        if _norm(given_name) in known_names or self._name_conflicts(profile, given_name):
+        if normalize_key(given_name) in known_names or self._name_conflicts(profile, given_name):
             return
         profile.aliases.append(given_name)
 
     def _name_conflicts(self, profile: NPCProfile, name: str) -> bool:
-        key = _norm(name)
+        key = normalize_key(name)
         for other in self.list_all():
             if other.npc_id == profile.npc_id:
                 continue
-            if key in {_norm(other.name), *[_norm(alias) for alias in other.aliases]}:
+            if key in {normalize_key(other.name), *[normalize_key(alias) for alias in other.aliases]}:
                 return True
         return False
 
 
 def _name_matches(term: str, profile: NPCProfile) -> bool:
     return (
-        term == _norm(profile.name)
-        or term in {_norm(alias) for alias in profile.aliases}
-        or term in {_norm(alias) for alias in profile.transient_aliases}
+        term == normalize_key(profile.name)
+        or term in {normalize_key(alias) for alias in profile.aliases}
+        or term in {normalize_key(alias) for alias in profile.transient_aliases}
     )
 
 
@@ -270,7 +274,3 @@ def _find_alias(profile: NPCProfile, surface: str) -> str | None:
         if alias.casefold() == key:
             return alias
     return None
-
-
-def _norm(value: str) -> str:
-    return str(value).strip().casefold()

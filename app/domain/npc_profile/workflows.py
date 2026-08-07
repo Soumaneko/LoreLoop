@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.core.llm import LLMGateway
+from app.core.text import normalize_key
 from app.domain.action.schemas import Anchor
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -39,11 +40,11 @@ def attach_transient_alias_for_rename(
     clean = str(old_name).strip()
     if not clean:
         return
-    key = _norm(clean)
+    key = normalize_key(clean)
     known = {
-        _norm(profile.name),
-        *(_norm(alias) for alias in profile.aliases),
-        *(_norm(alias) for alias in profile.transient_aliases),
+        normalize_key(profile.name),
+        *(normalize_key(alias) for alias in profile.aliases),
+        *(normalize_key(alias) for alias in profile.transient_aliases),
     }
     if key in known:
         return
@@ -249,21 +250,21 @@ def update_npc_profiles_workflow(
 
 
 def _matches_profile_name_or_alias(value: str | None, profile: NPCProfile) -> bool:
-    key = _norm(value)
+    key = normalize_key(value)
     if not key:
         return False
     return (
-        key == _norm(profile.name)
-        or key in {_norm(alias) for alias in profile.aliases}
-        or key in {_norm(alias) for alias in profile.transient_aliases}
+        key == normalize_key(profile.name)
+        or key in {normalize_key(alias) for alias in profile.aliases}
+        or key in {normalize_key(alias) for alias in profile.transient_aliases}
     )
 
 
 def _profile_matches_any_name(profile: NPCProfile, names: set[str]) -> bool:
     variants = {
-        _norm(profile.name),
-        *(_norm(alias) for alias in profile.aliases),
-        *(_norm(alias) for alias in profile.transient_aliases),
+        normalize_key(profile.name),
+        *(normalize_key(alias) for alias in profile.aliases),
+        *(normalize_key(alias) for alias in profile.transient_aliases),
     }
     variants.discard("")
     return bool(variants & names)
@@ -272,7 +273,7 @@ def _profile_matches_any_name(profile: NPCProfile, names: set[str]) -> bool:
 def _gather_current_state_npc_names(current_state: CurrentState) -> set[str]:
     names = current_state.scene.participant_names
     return {
-        _norm(name)
+        normalize_key(name)
         for name in names
         if name and name.strip()
     }
@@ -294,12 +295,8 @@ def _merge_unique(values: list[str]) -> list[str]:
     merged: list[str] = []
     for value in values:
         clean = str(value).strip()
-        key = clean.casefold()
+        key = normalize_key(clean)
         if clean and key not in seen:
             seen.add(key)
             merged.append(clean)
     return merged
-
-
-def _norm(value: str | None) -> str:
-    return str(value or "").strip().casefold()

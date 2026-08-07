@@ -6,6 +6,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.text import normalize_key
 from .schemas import CurrentState, InventoryItem, ParticipantState
 
 
@@ -205,7 +206,7 @@ def _apply_state_operation(
 ) -> int:
     """Apply a single operation; returns the number of clock phases advanced."""
     if isinstance(operation, LocationChange):
-        if _norm(operation.location) == _norm(state.scene.location):
+        if normalize_key(operation.location) == normalize_key(state.scene.location):
             _warn(
                 warnings,
                 operation,
@@ -230,7 +231,7 @@ def _apply_state_operation(
                 existing.name,
             )
             return 0
-        canonical_name = aliases.get(_norm(operation.name), operation.name.strip())
+        canonical_name = aliases.get(normalize_key(operation.name), operation.name.strip())
         state.scene.participants.append(ParticipantState(name=canonical_name))
     elif isinstance(operation, ParticipantRemove):
         participant = _find_participant(state, operation.name, aliases)
@@ -243,7 +244,7 @@ def _apply_state_operation(
                 operation.name.strip(),
             )
             return 0
-        if _norm(participant.name) == _norm(state.player.name):
+        if normalize_key(participant.name) == normalize_key(state.player.name):
             _warn(
                 warnings,
                 operation,
@@ -338,7 +339,7 @@ def _apply_inventory_delta(
         (
             item
             for item in state.resources.inventory
-            if _norm(item.name) == _norm(operation.item)
+            if normalize_key(item.name) == normalize_key(operation.item)
         ),
         None,
     )
@@ -414,10 +415,10 @@ def _find_participant(
     name: str,
     aliases: dict[str, str],
 ) -> ParticipantState | None:
-    target = _norm(aliases.get(_norm(name), name))
+    target = normalize_key(aliases.get(normalize_key(name), name))
     for participant in state.scene.participants:
-        canonical = _norm(
-            aliases.get(_norm(participant.name), participant.name)
+        canonical = normalize_key(
+            aliases.get(normalize_key(participant.name), participant.name)
         )
         if canonical == target:
             return participant
@@ -443,7 +444,7 @@ def _resolve_npc_attachment_target(
             ),
         ))
         return None
-    if _norm(participant.name) == _norm(state.player.name):
+    if normalize_key(participant.name) == normalize_key(state.player.name):
         _warn(
             warnings,
             operation,
@@ -458,14 +459,14 @@ def _resolve_npc_attachment_target(
 def _alias_map(npc_aliases: dict[str, list[str]]) -> dict[str, str]:
     result: dict[str, str] = {}
     for name, alias_values in npc_aliases.items():
-        canonical_key = _norm(name)
+        canonical_key = normalize_key(name)
         canonical_name = str(name).strip()
         if not canonical_key:
             continue
         result[canonical_key] = canonical_name
         for alias in alias_values:
-            if _norm(alias):
-                result[_norm(alias)] = canonical_name
+            if normalize_key(alias):
+                result[normalize_key(alias)] = canonical_name
     return result
 
 
@@ -493,7 +494,7 @@ def _add_unique(
     label: str,
 ) -> None:
     clean = value.strip()
-    if any(_norm(existing) == _norm(clean) for existing in values):
+    if any(normalize_key(existing) == normalize_key(clean) for existing in values):
         _warn(
             warnings,
             operation,
@@ -512,7 +513,7 @@ def _remove_existing(
     warnings: list[StateChangeWarning],
     label: str,
 ) -> None:
-    existing = next((item for item in values if _norm(item) == _norm(value)), None)
+    existing = next((item for item in values if normalize_key(item) == normalize_key(value)), None)
     if existing is None:
         _warn(
             warnings,
@@ -528,10 +529,6 @@ def _remove_existing(
 def _clean_optional(value: str | None) -> str | None:
     clean = str(value or "").strip()
     return clean or None
-
-
-def _norm(value: str) -> str:
-    return str(value).strip().casefold()
 
 
 def _increment_scene_id(scene_id: str) -> str:

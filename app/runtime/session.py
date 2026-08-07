@@ -1,7 +1,7 @@
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Generic, Protocol, TypeVar
 
 from app.domain.core_memory import InitConfig
 from app.domain.current_state import CurrentState
@@ -66,11 +66,20 @@ class PendingOpening:
     token_usage: dict[str, Any] | None = None
 
 
-class PendingTurnRepository:
-    """Thread-safe owner of pending generation variants for one campaign."""
+_T = TypeVar("_T", bound="_PendingItem")
+
+
+class _PendingItem(Protocol):
+    turn_id: str
+    group_id: str
+    version_index: int
+
+
+class _PendingRepository(Generic[_T]):
+    """Thread-safe owner of pending items for one campaign."""
 
     def __init__(self) -> None:
-        self._items: dict[str, PendingTurn] = {}
+        self._items: dict[str, _T] = {}
         self._lock = threading.RLock()
         self._on_add = None
         self._on_remove = None
@@ -79,14 +88,14 @@ class PendingTurnRepository:
         self._on_add = on_add
         self._on_remove = on_remove
 
-    def get(self, turn_id: str) -> PendingTurn | None:
+    def get(self, turn_id: str) -> _T | None:
         with self._lock:
             return self._items.get(turn_id)
 
     def __contains__(self, turn_id: str) -> bool:
         return self.get(turn_id) is not None
 
-    def add(self, pending: PendingTurn) -> None:
+    def add(self, pending: _T) -> None:
         with self._lock:
             self._items[pending.turn_id] = pending
         try:
@@ -98,7 +107,7 @@ class PendingTurnRepository:
                     self._items.pop(pending.turn_id, None)
             raise
 
-    def variants(self, group_id: str) -> list[PendingTurn]:
+    def variants(self, group_id: str) -> list[_T]:
         with self._lock:
             return sorted(
                 (
@@ -109,7 +118,7 @@ class PendingTurnRepository:
                 key=lambda pending: pending.version_index,
             )
 
-    def values(self) -> list[PendingTurn]:
+    def values(self) -> list[_T]:
         with self._lock:
             return list(self._items.values())
 
@@ -135,7 +144,7 @@ class PendingTurnRepository:
         if removed is not None and self._on_remove:
             self._on_remove([turn_id])
 
-    def restore(self, pending: PendingTurn) -> None:
+    def restore(self, pending: _T) -> None:
         with self._lock:
             self._items[pending.turn_id] = pending
 
@@ -147,85 +156,18 @@ class PendingTurnRepository:
             self._on_remove(turn_ids)
 
 
-class PendingOpeningRepository:
+class PendingTurnRepository(_PendingRepository[PendingTurn]):
+    """Thread-safe owner of pending generation variants for one campaign."""
+
+
+class PendingOpeningRepository(_PendingRepository[PendingOpening]):
     """Thread-safe owner of pending openings for one campaign."""
-
-    def __init__(self) -> None:
-        self._items: dict[str, PendingOpening] = {}
-        self._lock = threading.RLock()
-        self._on_add = None
-        self._on_remove = None
-
-    def configure_callbacks(self, *, on_add=None, on_remove=None) -> None:
-        self._on_add = on_add
-        self._on_remove = on_remove
-
-    def get(self, turn_id: str) -> PendingOpening | None:
-        with self._lock:
-            return self._items.get(turn_id)
-
-    def __contains__(self, turn_id: str) -> bool:
-        return self.get(turn_id) is not None
-
-    def add(self, pending: PendingOpening) -> None:
-        with self._lock:
-            self._items[pending.turn_id] = pending
-        try:
-            if self._on_add:
-                self._on_add(pending)
-        except BaseException:
-            with self._lock:
-                if self._items.get(pending.turn_id) is pending:
-                    self._items.pop(pending.turn_id, None)
-            raise
-
-    def variants(self, group_id: str) -> list[PendingOpening]:
-        with self._lock:
-            return sorted(
-                (
-                    pending
-                    for pending in self._items.values()
-                    if pending.group_id == group_id
-                ),
-                key=lambda pending: pending.version_index,
-            )
 
     def remove(self, turn_id: str) -> None:
         with self._lock:
             self._items.pop(turn_id, None)
         if self._on_remove:
             self._on_remove([turn_id])
-
-    def discard_group(self, group_id: str) -> None:
-        with self._lock:
-            turn_ids = [
-                pending.turn_id
-                for pending in self._items.values()
-                if pending.group_id == group_id
-            ]
-            for turn_id in turn_ids:
-                self._items.pop(turn_id, None)
-        if self._on_remove:
-            self._on_remove(turn_ids)
-
-    def restore(self, pending: PendingOpening) -> None:
-        with self._lock:
-            self._items[pending.turn_id] = pending
-
-    def values(self) -> list[PendingOpening]:
-        with self._lock:
-            return list(self._items.values())
-
-    def __len__(self) -> int:
-        with self._lock:
-            return len(self._items)
-
-    def clear(self, *, discard: bool = False) -> None:
-        with self._lock:
-            turn_ids = list(self._items)
-            self._items.clear()
-        if discard and self._on_remove:
-            self._on_remove(turn_ids)
 
 
 class CampaignRuntime:
@@ -262,12 +204,7 @@ class CampaignRuntime:
             max_workers=max_workers,
             operation_manager=self.operations,
         )
-        self.services = RuntimeServices(
-            stores=self.stores,
-            gateway_factory=self.gateway_factory,
-            jobs=self.jobs,
-            diagnostics=self.diagnostics,
-        )
+        self._rebuild_runtime_services()
         self._confirmation_lock = threading.RLock()
         self._lifecycle_lock = threading.RLock()
         self._save_task_active = False
@@ -315,12 +252,7 @@ class CampaignRuntime:
                     self.diagnostics,
                 )
                 self.operations.diagnostics = self.diagnostics
-                self.services = RuntimeServices(
-                    stores=self.stores,
-                    gateway_factory=factory,
-                    jobs=self.jobs,
-                    diagnostics=self.diagnostics,
-                )
+                self._rebuild_runtime_services(gateway_factory=factory)
 
     def configure_save_touch(self, callback) -> None:
         self._on_save_played = callback
@@ -641,18 +573,25 @@ class CampaignRuntime:
             self._touch_save_played()
             return result
 
+    def _rebuild_runtime_services(
+        self,
+        *,
+        gateway_factory: Callable | None = None,
+    ) -> None:
+        self.services = RuntimeServices(
+            stores=self.stores,
+            gateway_factory=gateway_factory or self.gateway_factory,
+            jobs=self.jobs,
+            diagnostics=self.diagnostics,
+        )
+
     def _restart_jobs(self) -> None:
         self.jobs.shutdown(wait=True)
         self.jobs = MaintenanceJobCoordinator(
             max_workers=self._max_workers,
             operation_manager=self.operations,
         )
-        self.services = RuntimeServices(
-            stores=self.stores,
-            gateway_factory=self.gateway_factory,
-            jobs=self.jobs,
-            diagnostics=self.diagnostics,
-        )
+        self._rebuild_runtime_services()
 
     def reconfigure(
         self,
@@ -689,12 +628,7 @@ class CampaignRuntime:
                 max_workers=self._max_workers,
                 operation_manager=self.operations,
             )
-            self.services = RuntimeServices(
-                stores=self.stores,
-                gateway_factory=self.gateway_factory,
-                jobs=self.jobs,
-                diagnostics=self.diagnostics,
-            )
+            self._rebuild_runtime_services()
             self.history = CampaignHistory(paths.data_dir)
             self.history.recover_interrupted()
             self._configure_pending_persistence()

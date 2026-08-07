@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
+from app.core.time import utc_datetime_now
 from .paths import validate_save_name
 
 
@@ -18,8 +19,7 @@ SAVE_FORMAT_VERSION = 1
 SAVE_MANIFEST_FILE = "save_manifest.json"
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+_utc_now = utc_datetime_now
 
 
 def _timestamp(value: datetime) -> str:

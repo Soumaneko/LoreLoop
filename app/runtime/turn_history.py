@@ -6,15 +6,15 @@ import sqlite3
 import threading
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from app.core.time import utc_now
 from .sqlite import connect_sqlite, ensure_column
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now()
 
 
 class CampaignHistory:

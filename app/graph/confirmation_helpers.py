@@ -27,6 +27,7 @@ from .confirmation_lifecycle import (
     ConfirmationPreparer,
 )
 from .confirmation_state import ConfirmationEvent, ConfirmationState
+from .fold import fold_node_update
 
 
 _ALWAYS_CACHED_NODE_RESULTS = {
@@ -275,7 +276,6 @@ def merge_confirmation_node_update(
     state: ConfirmationState,
     node_update: ConfirmationState,
 ) -> list[ConfirmationEvent]:
-    events = node_update.get("events", [])
     node_errors = node_update.get("node_errors", [])
     cache = state["cache"]
     cache_keys = set(_ALWAYS_CACHED_NODE_RESULTS)
@@ -284,12 +284,11 @@ def merge_confirmation_node_update(
     for key in cache_keys & node_update.keys():
         cache[key] = node_update[key]
 
-    state.update({
-        key: value
-        for key, value in node_update.items()
-        if key not in {"events", "node_errors"}
-    })
-    state["events"] = [*state.get("events", []), *events]
+    events = fold_node_update(
+        state,
+        node_update,
+        exclude=frozenset(("node_errors",)),
+    )
     state["node_errors"] = [*state.get("node_errors", []), *node_errors]
     return events
 

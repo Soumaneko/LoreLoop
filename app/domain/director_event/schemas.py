@@ -1,9 +1,10 @@
-import uuid
-from datetime import datetime, timezone
+from functools import partial
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.ids import new_hex_id
+from app.core.time import utc_now
 from app.domain.current_state.schemas import WorldClock
 from app.domain.director.schemas import DirectorResourceRef
 
@@ -12,12 +13,7 @@ DirectorEventStage = Literal["hidden", "engaged", "resolved"]
 EventHookKind = Literal["auditory", "visual", "rumor", "item", "environment"]
 
 
-def _new_id() -> str:
-    return f"director_event_{uuid.uuid4().hex[:12]}"
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+_new_id = partial(new_hex_id, prefix="director_event", length=12)
 
 
 class DirectorActorRef(BaseModel):

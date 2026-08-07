@@ -17,7 +17,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from app.core.text import eligible_highlight_term
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.creative_brief import draw_creative_brief
 from app.domain.current_state.schemas import CurrentState
@@ -54,7 +53,7 @@ from app.domain.npc_profile.workflows import (
 )
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.world_setting.creator import WorldSettingCreator
-from app.domain.world_setting.schemas import WorldSetting
+from app.domain.world_setting.schemas import WorldSetting, setting_appears_in_text
 from app.runtime.director_mutation import (
     DirectorPendingActorBinding,
     DirectorPendingMutationPlan,
@@ -171,10 +170,7 @@ class DirectorConfirmationExecutor:
         # stays hidden from the general archive view.
         folded_text = self._scene_text.casefold()
         for setting in created_settings:
-            if (
-                eligible_highlight_term(setting.name)
-                and setting.name.casefold() in folded_text
-            ):
+            if setting_appears_in_text(setting.name, folded_text):
                 setting.hit_count = 1
         self._plan.settings.extend(created_settings)
         for setting in created_settings:

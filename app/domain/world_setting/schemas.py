@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
+from functools import partial
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.core.ids import new_hex_id
+from app.core.text import eligible_highlight_term
+from app.core.time import utc_now
 
 
 SettingKind = Literal["faction", "location", "item", "lore"]
@@ -12,12 +15,13 @@ SettingFact = Annotated[str, Field(min_length=1, max_length=100)]
 SettingID = Annotated[str, Field(min_length=1, max_length=100)]
 
 
-def _new_setting_id() -> str:
-    return f"setting_{uuid.uuid4().hex[:12]}"
+_new_setting_id = partial(new_hex_id, prefix="setting", length=12)
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def setting_appears_in_text(name: str, folded_text: str) -> bool:
+    """What counts as an effective setting mention in folded body text."""
+    term = str(name).strip()
+    return eligible_highlight_term(term) and term.casefold() in folded_text
 
 
 class SettingCreateOutput(BaseModel):

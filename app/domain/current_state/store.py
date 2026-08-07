@@ -1,7 +1,7 @@
 import json
 import sqlite3
-from datetime import datetime, timezone
 
+from app.core.time import utc_now
 from app.domain.current_state.schemas import (
     CurrentState,
     PlayerState,
@@ -72,12 +72,12 @@ class CurrentStateStore:
             """,
             (
                 migrated_json,
-                datetime.now(timezone.utc).isoformat(),
+                utc_now(),
             ),
         )
 
     def save(self, state: CurrentState) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = utc_now()
         self._conn.execute(
             """
             INSERT OR REPLACE INTO current_state (id, state_json, updated_at)

@@ -1,8 +1,8 @@
 import json
 import sqlite3
-from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
+from app.core.time import utc_now
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.turn_resolution.schemas import PlayerTurnResolution
 from app.runtime.sqlite import (
@@ -94,7 +94,7 @@ class ShortTermMemoryStore:
         player_resolution: PlayerTurnResolution | None = None,
         token_usage: dict | None = None,
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = utc_now()
         with transaction(self._conn):
             self._conn.execute(
                 "DELETE FROM short_term_scenes WHERE turn_index = ?",

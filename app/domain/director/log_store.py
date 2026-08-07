@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
+from app.core.time import utc_now
 from app.runtime.sqlite import (
     connect_sqlite,
     ensure_exact_schema_version,
@@ -12,10 +11,6 @@ SCHEMA_VERSION = 1
 KEEP_TURNS = 3
 MAX_RECENT_ENTRIES = 6
 PHASE_ORDER = {"generation": 0, "confirmation": 1}
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 class RecentDirectorLogStore:

@@ -279,3 +279,30 @@ def test_setting_domain_has_no_extraction_or_maintenance_layer():
 
     names = {path.name for path in Path("app/domain/world_setting").glob("*.py")}
     assert names == {"__init__.py", "creator.py", "schemas.py", "store.py"}
+
+
+def test_setting_appears_in_text_strips_surrounding_whitespace():
+    from app.domain.world_setting.schemas import setting_appears_in_text
+
+    folded = "莱尔走进灰烬图书馆。".casefold()
+    assert setting_appears_in_text("灰烬图书馆", folded) is True
+    assert setting_appears_in_text("  灰烬图书馆  ", folded) is True
+
+
+def test_setting_appears_in_text_single_char_and_empty_boundaries():
+    from app.domain.world_setting.schemas import setting_appears_in_text
+
+    folded = "知道大道说道。".casefold()
+    assert setting_appears_in_text("道", folded) is False
+    assert setting_appears_in_text("大道", folded) is True
+    assert setting_appears_in_text("", folded) is False
+    assert setting_appears_in_text("不存在", folded) is False
+
+
+def test_setting_appears_in_text_preserves_unicode_single_char_rule():
+    from app.domain.world_setting.schemas import setting_appears_in_text
+
+    folded = "正午的太阳把桥影投在河面上。".casefold()
+    assert setting_appears_in_text("ß", "大桥下出现 SS 字样。".casefold()) is False
+    assert setting_appears_in_text("ss", "大桥下出现 SS 字样。".casefold()) is True
+    assert setting_appears_in_text("道", "知道大道说道。".casefold()) is False

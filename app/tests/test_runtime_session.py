@@ -7,6 +7,7 @@ from app.domain.current_state import PlayerState, make_default_state
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import (
     CampaignRuntime,
+    PendingOpeningRepository,
     PendingTurnRepository,
     get_campaign_runtime,
 )
@@ -168,3 +169,54 @@ def test_save_task_blocks_new_pipeline_submission(tmp_path):
                     pass
     finally:
         runtime.close()
+
+
+def _pending_item(turn_id, group_id="g", version_index=1):
+    return SimpleNamespace(
+        turn_id=turn_id,
+        group_id=group_id,
+        version_index=version_index,
+    )
+
+
+def test_pending_turn_repository_notifies_remove_only_when_present():
+    repository = PendingTurnRepository()
+    removed = []
+    repository.configure_callbacks(on_remove=removed.append)
+    repository.add(_pending_item("x"))
+    repository.remove("x")
+    repository.remove("missing")
+    assert removed == [["x"]]
+
+
+def test_pending_opening_repository_notifies_remove_even_when_missing():
+    repository = PendingOpeningRepository()
+    removed = []
+    repository.configure_callbacks(on_remove=removed.append)
+    repository.remove("never-added")
+    assert removed == [["never-added"]]
+
+
+def test_pending_turn_repository_rolls_back_add_on_callback_failure():
+    repository = PendingTurnRepository()
+
+    def boom(pending):
+        raise RuntimeError("boom")
+
+    repository.configure_callbacks(on_add=boom)
+    with pytest.raises(RuntimeError, match="boom"):
+        repository.add(_pending_item("t"))
+    assert repository.get("t") is None
+
+
+def test_pending_repositories_discard_group_notifies_removed_turn_ids():
+    for repository_cls in (PendingTurnRepository, PendingOpeningRepository):
+        repository = repository_cls()
+        removed = []
+        repository.configure_callbacks(on_remove=removed.append)
+        repository.add(_pending_item("a", group_id="g"))
+        repository.add(_pending_item("b", group_id="g"))
+        repository.add(_pending_item("c", group_id="other"))
+        repository.discard_group("g")
+        assert removed == [["a", "b"]]
+        assert repository.get("c") is not None

@@ -1,8 +1,10 @@
-import uuid
-from datetime import datetime, timezone
+from functools import partial
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.ids import new_hex_id
+from app.core.time import utc_now
 
 DirectorNPCStatus = Literal["prepared", "introduced", "retired"]
 
@@ -13,12 +15,7 @@ class NPCCreationContext(BaseModel):
     setting_ids: list[str] = Field(default_factory=list, max_length=4)
 
 
-def _new_id() -> str:
-    return f"director_npc_{uuid.uuid4().hex[:12]}"
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+_new_id = partial(new_hex_id, prefix="director_npc", length=12)
 
 
 class DirectorNPCDraft(BaseModel):

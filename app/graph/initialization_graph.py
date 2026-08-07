@@ -7,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
 from app.runtime.session import get_campaign_runtime
 
+from .fold import fold_node_update
 from .initialization_helpers import (
     finalize_initialization_state,
     initialization_result,
@@ -62,13 +63,7 @@ def initialization_stream(payload: dict[str, Any]):
         ):
             foundation_done = "opening_foundation" in update
             for node_update in update.values():
-                state.update({
-                    key: value
-                    for key, value in node_update.items()
-                    if key != "events"
-                })
-                events = node_update.get("events", [])
-                state["events"] = [*state.get("events", []), *events]
+                events = fold_node_update(state, node_update)
                 for event in events:
                     event_count += 1
                     yield event

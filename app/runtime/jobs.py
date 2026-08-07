@@ -5,9 +5,9 @@ import threading
 import uuid
 from collections import Counter, OrderedDict
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
+from app.core.time import utc_now
 from app.runtime.operations import OperationManager
 
 
@@ -22,7 +22,7 @@ JobStatus = Literal[
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now()
 
 
 @dataclass(frozen=True)

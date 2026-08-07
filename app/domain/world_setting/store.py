@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from app.core.text import normalize_compact_key
 from app.runtime.sqlite import (
     connect_sqlite,
     ensure_column,
@@ -138,7 +139,7 @@ class WorldSettingStore:
                     setting.setting_id,
                     setting.kind,
                     setting.name,
-                    _normalize(setting.name),
+                    normalize_compact_key(setting.name),
                     setting.summary,
                     json.dumps(setting.public_facts, ensure_ascii=False),
                     json.dumps(setting.hidden_facts, ensure_ascii=False),
@@ -169,7 +170,7 @@ class WorldSettingStore:
                 (
                     updated.kind,
                     updated.name,
-                    _normalize(updated.name),
+                    normalize_compact_key(updated.name),
                     updated.summary,
                     json.dumps(updated.public_facts, ensure_ascii=False),
                     json.dumps(updated.hidden_facts, ensure_ascii=False),
@@ -265,7 +266,3 @@ class WorldSettingStore:
 
     def __exit__(self, exc_type, exc, tb):
         self.close()
-
-
-def _normalize(value: str) -> str:
-    return "".join(str(value).strip().casefold().split())

@@ -1,16 +1,9 @@
-import uuid
-from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-def _new_id() -> str:
-    return uuid.uuid4().hex
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from app.core.ids import new_hex_id
+from app.core.time import utc_now
 
 
 NPCDisclosureLevel = Literal["remote", "face_to_face", "intimate"]
@@ -148,7 +141,7 @@ class NPCExtractionResult(BaseModel):
 class NPCProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    npc_id: str = Field(default_factory=_new_id)
+    npc_id: str = Field(default_factory=new_hex_id)
     name: str
     aliases: list[str] = Field(default_factory=list)
     transient_aliases: dict[str, int] = Field(default_factory=dict)
@@ -256,7 +249,7 @@ def profile_from_update(
     alias_hit_counts: dict[str, int] | None = None,
 ) -> NPCProfile:
     return NPCProfile(
-        npc_id=npc_id or _new_id(),
+        npc_id=npc_id or new_hex_id(),
         name=profile.name,
         aliases=list(profile.aliases),
         public_summary=profile.public_summary,

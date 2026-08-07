@@ -9,3 +9,16 @@ def eligible_highlight_term(name: str) -> bool:
     count an appearance and expose the setting's public facts.
     """
     return len(str(name).strip()) >= 2
+
+
+def normalize_key(value: str | None) -> str:
+    """Casefold a key while preserving internal whitespace."""
+    return str(value or "").strip().casefold()
+
+
+def normalize_compact_key(value: str | None) -> str:
+    """Casefold a key and collapse internal whitespace entirely.
+
+    Use for name matching where spacing should not separate the same name.
+    """
+    return "".join(str(value or "").casefold().split())

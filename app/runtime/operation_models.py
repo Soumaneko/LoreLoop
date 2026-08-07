@@ -4,8 +4,9 @@ import copy
 import threading
 from collections import deque
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Literal
+
+from app.core.time import utc_now
 
 
 OperationStatus = Literal[
@@ -20,7 +21,7 @@ TERMINAL_OPERATION_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
 
 
 def operation_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now()
 
 
 @dataclass(frozen=True)

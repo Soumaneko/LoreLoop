@@ -6,6 +6,7 @@ from typing import cast
 
 from app.core.llm import LLMGateway
 from app.core.llm.schema import schema_json
+from app.core.text import normalize_key
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.npc_profile.schemas import (
@@ -170,7 +171,7 @@ def _build_update_candidates(
             _append_unique(candidate.mention_names, mention.name)
             continue
 
-        key = _norm(mention.name)
+        key = normalize_key(mention.name)
         candidate = unresolved_by_name.get(key)
         if candidate is None:
             candidate = _NPCUpdateCandidate(
@@ -254,7 +255,7 @@ def _validate_candidate_results(
         elif result.resolution == "new":
             if (
                 result.new_profile is None
-                or _norm(result.new_profile.name) != _norm(candidate.name)
+                or normalize_key(result.new_profile.name) != normalize_key(candidate.name)
             ):
                 continue
             valid.append(result.model_copy(update={
@@ -322,12 +323,12 @@ def _merge_results(
 
 
 def _exact_profile_index(name: str, existing_profiles: list[NPCProfile]) -> int | None:
-    key = _norm(name)
+    key = normalize_key(name)
     for index, profile in enumerate(existing_profiles):
         if (
-            key == _norm(profile.name)
-            or key in {_norm(alias) for alias in profile.aliases}
-            or key in {_norm(alias) for alias in profile.transient_aliases}
+            key == normalize_key(profile.name)
+            or key in {normalize_key(alias) for alias in profile.aliases}
+            or key in {normalize_key(alias) for alias in profile.transient_aliases}
         ):
             return index
     return None
@@ -347,7 +348,3 @@ def _append_unique(values: list[str], value: str) -> None:
     clean = str(value).strip()
     if clean and clean not in values:
         values.append(clean)
-
-
-def _norm(value: str) -> str:
-    return str(value).strip().casefold()

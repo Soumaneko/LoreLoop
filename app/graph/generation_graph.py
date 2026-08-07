@@ -18,6 +18,7 @@ from .generation_helpers import (
     prepare_generation_state,
 )
 from .generation_events import GenerationEventPresenter
+from .fold import fold_state_keys
 from .generation_nodes import (
     check_narrative_consistency_node,
     compose_narrative_node,
@@ -439,14 +440,11 @@ def _stream_generation_graph(
             yield update
             continue
         for node_name, node_update in update.items():
-            events = node_update.get("events", [])
-            state.update({
-                key: value
-                for key, value in node_update.items()
-                if key != "events"
-            })
-
-            for event in event_presenter.present(node_name, events):
+            fold_state_keys(state, node_update)
+            for event in event_presenter.present(
+                node_name,
+                node_update.get("events", []),
+            ):
                 yield from append_and_yield(event)
 
     for event in event_presenter.finish():
