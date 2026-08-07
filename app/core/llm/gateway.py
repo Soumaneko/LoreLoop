@@ -20,7 +20,15 @@ from .errors import (
 )
 from .prompts import PromptLoader
 from .providers import LLMProvider, ProviderResult
+from .schema import output_contract_guidance
 from .tracing import TraceLogger
+
+
+_SCHEMA_COPY_CORRECTION = (
+    "\n\n检测到输出里包含了 JSON Schema 的定义元数据键"
+    "（$defs、properties、type、additionalProperties 等）。这些键不是合法数据。"
+    "请只输出 schema 描述的数据字段本身（instance），不要附带任何 schema 定义键。"
+)
 
 
 class LLMGateway:
@@ -75,6 +83,8 @@ class LLMGateway:
         call_id = uuid.uuid4().hex
 
         base_prompt = self._build_prompt(prompt_template, input_data)
+        if "output_schema_json" in input_data:
+            base_prompt += "\n\n" + output_contract_guidance()
         current_prompt = base_prompt
         last_raw_output = ""
         last_error: str | None = None
@@ -102,7 +112,9 @@ class LLMGateway:
 
                 parsed = self._parse_json(raw_output)
 
-                validated = self._validate_schema(parsed, output_schema)
+                validated, effective_parsed = self._validate_with_salvage(
+                    parsed, output_schema
+                )
                 self._validate_output_contract(validated, output_validator)
 
                 self._tracer.log(
@@ -112,7 +124,7 @@ class LLMGateway:
                     prompt_version=prompt_version,
                     input_data=input_data,
                     raw_output=raw_output,
-                    parsed_output=parsed,
+                    parsed_output=effective_parsed,
                     schema_valid=True,
                     latency_ms=latency_ms,
                     error=None,
@@ -369,6 +381,76 @@ class LLMGateway:
             raise LLMOutputValidationError(
                 f"Schema validation failed for {output_schema.__name__}: {e}"
             ) from e
+
+    def _schema_copy_signature(
+        self, parsed: Any, output_schema: type[BaseModel]
+    ) -> bool:
+        """判断输出是否把 JSON Schema 定义抄进了结果（而非只含数据）。"""
+        if not isinstance(parsed, dict):
+            return False
+        valid = set(output_schema.model_fields)
+        for key in ("$defs", "additionalProperties", "$ref"):
+            if key in parsed and key not in valid:
+                return True
+        if (
+            "properties" in parsed
+            and "properties" not in valid
+            and isinstance(parsed.get("properties"), dict)
+            and "type" in parsed
+            and "type" not in valid
+        ):
+            return True
+        return False
+
+    def _salvage_schema_copy(
+        self, parsed: Any, output_schema: type[BaseModel]
+    ) -> dict | None:
+        """从被 schema 定义污染的输出里提取数据字段候选，供自愈校验。
+
+        按顺序尝试：先取根层与合法字段同名的键（模型在定义后追加数据），
+        再取 ``properties`` 下的数据（模型把定义整体复制后再填数据）。
+        返回首个非空候选，由调用方用校验裁决最终是否成立。
+        """
+        if not isinstance(parsed, dict):
+            return None
+        valid = set(output_schema.model_fields)
+        root = {key: value for key, value in parsed.items() if key in valid}
+        if root:
+            return root
+        properties = parsed.get("properties")
+        if isinstance(properties, dict):
+            nested = {
+                key: value for key, value in properties.items() if key in valid
+            }
+            if nested:
+                return nested
+        return None
+
+    def _validate_with_salvage(
+        self, parsed: Any, output_schema: type[BaseModel]
+    ) -> tuple[BaseModel, Any]:
+        """先程序自愈（剥离 schema 定义再校验），无法解决再抛错进入重试。
+
+        返回 ``(validated, effective_parsed)``：``effective_parsed`` 是实际通过
+        校验的数据（自愈时是被剥离后的候选），供 Trace 记录，避免调试看到被
+        schema 定义污染的原始解析结果。
+        """
+        try:
+            return self._validate_schema(parsed, output_schema), parsed
+        except LLMOutputValidationError as exc:
+            if not self._schema_copy_signature(parsed, output_schema):
+                raise
+            candidate = self._salvage_schema_copy(parsed, output_schema)
+            if candidate is None:
+                raise LLMOutputValidationError(
+                    f"{exc}{_SCHEMA_COPY_CORRECTION}"
+                ) from exc
+            try:
+                return self._validate_schema(candidate, output_schema), candidate
+            except LLMOutputValidationError:
+                raise LLMOutputValidationError(
+                    f"{exc}{_SCHEMA_COPY_CORRECTION}"
+                ) from exc
 
     def _validate_output_contract(
         self,

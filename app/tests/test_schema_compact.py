@@ -2,7 +2,11 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.llm.schema import compact_schema, schema_json
+from app.core.llm.schema import (
+    compact_schema,
+    output_contract_guidance,
+    schema_json,
+)
 from app.domain.current_state.changes import StateChangeSet
 from app.domain.director_event.schemas import DirectorEventSelectionResult
 
@@ -105,3 +109,12 @@ def test_state_update_schema_is_consistent():
         "TemporaryAssetRemove",
         "WorldClockAdvance",
     }
+
+
+def test_output_contract_guidance_contains_anti_copy_ban_only():
+    guidance = output_contract_guidance()
+
+    assert "$defs" in guidance
+    assert "additionalProperties" in guidance
+    assert "数据实例" in guidance
+    assert "```json" not in guidance

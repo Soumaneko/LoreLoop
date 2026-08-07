@@ -55,3 +55,22 @@ def schema_json(model: type[BaseModel]) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+def output_contract_guidance() -> str:
+    """统一的"输出必须是数据实例"限制块。
+
+    由网关在渲染提示后统一追加，覆盖所有注入 ``output_schema_json`` 的任务，
+    避免逐个修改每个 prompt 模板。弱模型容易把 schema 定义键
+    （``$defs``/``properties``/``type``/``additionalProperties``/``$ref`` 等）
+    原样抄进返回结果，这里给出明确禁令加以纠正。不提供任何示例实例——
+    示例本身会诱导模型照抄或错误填充，由校验与自愈兜底兜住真实数据。
+    """
+    return (
+        "# 输出要求\n\n"
+        "上面的 JSON Schema 只是对字段与类型的**定义**，不是你的输出。"
+        "你必须只输出 schema 各字段对应的真实数据本身，严禁把 "
+        "$defs、properties、type、additionalProperties、$ref 等 schema 定义键"
+        "抄进输出——那会导致校验失败。只输出数据实例本身，不要包含 schema "
+        "定义键、注释、代码块或任何解释。"
+    )
