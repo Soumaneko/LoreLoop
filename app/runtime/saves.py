@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from .paths import ACTIVE_SAVE_FILE, SAVES_DIR, CampaignPaths, validate_save_name
+from .paths import (
+    ACTIVE_SAVE_FILE,
+    SAVES_DIR,
+    CampaignPaths,
+    resolve_active_save_id,
+    validate_save_name,
+)
 from .initialization import InitializationStore
 from .save_archive import (
     ArchiveInspection,
@@ -334,20 +340,11 @@ class SaveManager:
         return path
 
     def _configured_active_id(self) -> str:
-        try:
-            save_id = self._validate_save_id(
-                self.active_file.read_text(encoding="utf-8").strip()
-            )
-            self._require_save(save_id)
-            return save_id
-        except (FileNotFoundError, OSError, ValueError):
-            saves = self._save_directories()
-            if not saves:
-                raise RuntimeError("No local save is available")
-            return max(
-                saves,
-                key=lambda path: SaveManifestRepository(path).load().last_played_at,
-            ).name
+        return resolve_active_save_id(
+            root=self.root,
+            active_file=self.active_file,
+            policy="recent",
+        )
 
     def _cleanup_staging(self) -> None:
         for path in self.root.iterdir():
@@ -387,44 +384,54 @@ class SaveManager:
         return clean
 
 
-SAVE_MANAGER = SaveManager()
+_save_manager: SaveManager | None = None
+_save_manager_lock = threading.Lock()
+
+
+def _get_save_manager() -> SaveManager:
+    global _save_manager
+    if _save_manager is None:
+        with _save_manager_lock:
+            if _save_manager is None:
+                _save_manager = SaveManager()
+    return _save_manager
 
 
 def list_saves() -> dict[str, Any]:
-    return SAVE_MANAGER.payload()
+    return _get_save_manager().payload()
 
 
 def create_save(payload: dict[str, Any]) -> dict[str, Any]:
-    save = SAVE_MANAGER.create(
+    save = _get_save_manager().create(
         str(payload.get("name", "")),
         activate=bool(payload.get("activate", True)),
     )
-    return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
+    return {"save": save.as_dict(), **_get_save_manager().payload()}
 
 
 def switch_save(payload: dict[str, Any]) -> dict[str, Any]:
-    save = SAVE_MANAGER.switch(str(payload.get("save_id", "")))
-    return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
+    save = _get_save_manager().switch(str(payload.get("save_id", "")))
+    return {"save": save.as_dict(), **_get_save_manager().payload()}
 
 
 def rename_save(payload: dict[str, Any]) -> dict[str, Any]:
-    save = SAVE_MANAGER.rename(
+    save = _get_save_manager().rename(
         str(payload.get("save_id", "")),
         str(payload.get("name", "")),
     )
-    return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
+    return {"save": save.as_dict(), **_get_save_manager().payload()}
 
 
 def copy_save(payload: dict[str, Any]) -> dict[str, Any]:
-    save = SAVE_MANAGER.copy(
+    save = _get_save_manager().copy(
         str(payload.get("save_id", "")),
         str(payload.get("name", "")),
     )
-    return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
+    return {"save": save.as_dict(), **_get_save_manager().payload()}
 
 
 def delete_save(payload: dict[str, Any]) -> dict[str, Any]:
-    return SAVE_MANAGER.delete(
+    return _get_save_manager().delete(
         str(payload.get("save_id", "")),
         confirmation_name=str(payload.get("confirmation_name", "")),
         replacement_save_id=(
@@ -435,7 +442,7 @@ def delete_save(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def export_save_archive(save_id: str, destination: str | Path) -> dict[str, Any]:
-    inspection = SAVE_MANAGER.export_to(save_id, destination)
+    inspection = _get_save_manager().export_to(save_id, destination)
     return {
         "format_version": inspection.format_version,
         "file_count": len(inspection.files),
@@ -444,5 +451,5 @@ def export_save_archive(save_id: str, destination: str | Path) -> dict[str, Any]
 
 
 def import_save_archive(archive: str | Path, name: str) -> dict[str, Any]:
-    save = SAVE_MANAGER.import_from(archive, name)
-    return {"save": save.as_dict(), **SAVE_MANAGER.payload()}
+    save = _get_save_manager().import_from(archive, name)
+    return {"save": save.as_dict(), **_get_save_manager().payload()}

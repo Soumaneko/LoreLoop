@@ -14,8 +14,7 @@ from app.domain.short_term_memory import ShortTermMemory
 from app.domain.turn_resolution.schemas import PlayerTurnResolution
 from app.runtime.paths import (
     CampaignPaths,
-    DEFAULT_CAMPAIGN_PATHS,
-    configured_save_id,
+    default_campaign_paths,
 )
 from app.runtime.services import RuntimeServices
 from app.runtime.stores import StoreBundle
@@ -183,7 +182,7 @@ class CampaignRuntime:
         max_workers: int = 2,
     ) -> None:
         self.campaign_id = campaign_id
-        self.paths = paths or DEFAULT_CAMPAIGN_PATHS
+        self.paths = paths or default_campaign_paths()
         self.stores = stores or StoreBundle(self.paths)
         recover_pending_director_mutation(self.stores)
         self.gateway_factory = gateway_factory or effective_gateway_factory()
@@ -642,10 +641,15 @@ class CampaignRuntime:
         return self.operations.cancel_active(stop_accepting_new=True)
 
 
-DEFAULT_CAMPAIGN_RUNTIME = CampaignRuntime(
-    configured_save_id(),
-    paths=DEFAULT_CAMPAIGN_PATHS,
-)
+_default_runtime: CampaignRuntime | None = None
+_runtime_lock = threading.Lock()
+
 
 def get_campaign_runtime() -> CampaignRuntime:
-    return DEFAULT_CAMPAIGN_RUNTIME
+    global _default_runtime
+    if _default_runtime is None:
+        with _runtime_lock:
+            if _default_runtime is None:
+                paths = default_campaign_paths()
+                _default_runtime = CampaignRuntime(paths.data_dir.name, paths=paths)
+    return _default_runtime

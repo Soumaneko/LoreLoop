@@ -1,23 +1,29 @@
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
+from typing import Literal
 from uuid import UUID, uuid4
 
 from .app_paths import (
     APP_PATHS,
+    _is_save_id,
     ensure_user_directories,
     migrate_legacy_user_data,
 )
-
-
-migrate_legacy_user_data(APP_PATHS)
-ensure_user_directories(APP_PATHS)
 
 SAVES_DIR = APP_PATHS.saves_dir
 APP_CONFIG_DIR = APP_PATHS.config_dir
 LOGS_DIR = APP_PATHS.logs_dir
 WEBVIEW_DIR = APP_PATHS.webview_dir
 ACTIVE_SAVE_FILE = APP_CONFIG_DIR / "active_save"
+
+_STAGING_DIR_PREFIXES = (".copy-", ".import-", ".trash-")
+
+
+def _ensure_user_data() -> None:
+    migrate_legacy_user_data(APP_PATHS)
+    ensure_user_directories(APP_PATHS)
 
 
 def validate_save_name(name: str) -> str:
@@ -33,20 +39,93 @@ def validate_save_name(name: str) -> str:
     return clean
 
 
-def configured_save_id() -> str:
+def resolve_active_save_id(
+    *,
+    root: Path = SAVES_DIR,
+    active_file: Path = ACTIVE_SAVE_FILE,
+    policy: Literal["recent_then_new", "new", "recent"] = "recent_then_new",
+) -> str:
+    """Resolve which save is active, keeping the active file in sync.
+
+    Priority: the persisted active save, then the most recently played save,
+    then a freshly minted UUID save (when the policy allows). The active file
+    is only rewritten when the persisted value differs from the resolution.
+    """
+    if root == SAVES_DIR and active_file == ACTIVE_SAVE_FILE:
+        _ensure_user_data()
+    active = _read_active_save_id(root, active_file)
+    if active is not None:
+        return active
+    if policy in ("recent_then_new", "recent"):
+        recent = _recent_save_id(root)
+        if recent is not None:
+            _persist_active_save(active_file, recent)
+            return recent
+    if policy in ("recent_then_new", "new"):
+        save_id = str(uuid4())
+        (root / save_id).mkdir(parents=False, exist_ok=False)
+        _persist_active_save(active_file, save_id)
+        return save_id
+    raise RuntimeError("No local save is available")
+
+
+def _read_active_save_id(root: Path, active_file: Path) -> str | None:
     try:
-        raw = ACTIVE_SAVE_FILE.read_text(encoding="utf-8").strip()
+        raw = active_file.read_text(encoding="utf-8").strip()
         save_id = str(UUID(raw))
-        if raw == save_id and (SAVES_DIR / save_id).is_dir():
-            return save_id
+        if raw == save_id and (root / save_id).is_dir():
+            manifest_id = _manifest_save_id(root / save_id)
+            if manifest_id is None or manifest_id == save_id:
+                return save_id
     except (FileNotFoundError, OSError, ValueError):
         pass
-    save_id = str(uuid4())
-    (SAVES_DIR / save_id).mkdir(parents=False, exist_ok=False)
-    temporary = ACTIVE_SAVE_FILE.with_name(f"{ACTIVE_SAVE_FILE.name}.tmp")
+    return None
+
+
+def _manifest_save_id(save_dir: Path) -> str | None:
+    try:
+        data = json.loads(
+            (save_dir / "save_manifest.json").read_text(encoding="utf-8")
+        )
+        raw = str(data.get("save_id") or "")
+        save_id = str(UUID(raw))
+        if raw != save_id:
+            return None
+        return save_id
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+
+
+def _recent_save_id(root: Path) -> str | None:
+    best: tuple[str, str] | None = None
+    for child in root.iterdir():
+        if (
+            not child.is_dir()
+            or not _is_save_id(child.name)
+            or child.name.startswith(_STAGING_DIR_PREFIXES)
+        ):
+            continue
+        try:
+            data = json.loads(
+                (child / "save_manifest.json").read_text(encoding="utf-8")
+            )
+            last_played = str(data.get("last_played_at") or "")
+        except (OSError, ValueError):
+            last_played = ""
+        if best is None or last_played > best[0]:
+            best = (last_played, child.name)
+    return best[1] if best is not None else None
+
+
+def _persist_active_save(active_file: Path, save_id: str) -> None:
+    try:
+        if active_file.read_text(encoding="utf-8").strip() == save_id:
+            return
+    except (FileNotFoundError, OSError):
+        pass
+    temporary = active_file.with_name(f"{active_file.name}.tmp")
     temporary.write_text(save_id, encoding="utf-8")
-    os.replace(temporary, ACTIVE_SAVE_FILE)
-    return save_id
+    os.replace(temporary, active_file)
 
 
 @dataclass(frozen=True)
@@ -118,6 +197,5 @@ class CampaignPaths:
         return self.data_dir / "initialization.json"
 
 
-DEFAULT_CAMPAIGN_PATHS = CampaignPaths.from_data_dir(
-    SAVES_DIR / configured_save_id()
-)
+def default_campaign_paths() -> CampaignPaths:
+    return CampaignPaths.from_data_dir(SAVES_DIR / resolve_active_save_id())

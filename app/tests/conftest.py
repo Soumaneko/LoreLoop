@@ -1,10 +1,15 @@
 import os
 import sys
+import tempfile
 from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Resolve every runtime path against an isolated directory before any runtime
+# module is imported, so importing them can never touch the user's real saves.
+os.environ["LORELOOP_DATA_DIR"] = tempfile.mkdtemp(prefix="loreloop-tests-")
 
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import get_campaign_runtime
@@ -47,11 +52,8 @@ def configure_runtime_services(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolate_default_campaign_runtime(tmp_path):
-    """Never allow a test to read or write the user's active save."""
+    """Keep the shared default runtime scoped to this test's campaign."""
     runtime = get_campaign_runtime()
-    # The default runtime is constructed during module import and may have
-    # restored the user's pending turns. Detach them in memory without firing
-    # persistence callbacks before switching to the isolated test campaign.
     runtime.pending_turns.clear(discard=False)
     runtime.pending_openings.clear(discard=False)
     runtime.reconfigure(
