@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.client_error import ClientValidationError
 from app.domain.continuity.schemas import ContinuityItemDraft
 from app.domain.npc_profile.schemas import (
     NPCProfile,
@@ -11,6 +12,7 @@ from app.domain.npc_profile.schemas import (
 from app.domain.world_setting.schemas import WorldSetting
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, get_campaign_runtime
+from app.runtime.settings import experience_mode
 
 _CONTINUITY_EDITABLE_FIELDS = {
     "subject",
@@ -90,6 +92,18 @@ _SETTING_LIST_FIELDS = {
 }
 
 RECORD_VIEWS = ("general", "advanced")
+
+
+def records_view_for_experience_mode(mode: str) -> str:
+    """Map a product experience mode onto its server-owned record projection tier.
+
+    Player mode always projects the ``general`` tier (appeared-only NPCs /
+    settings and public fields only); creator mode projects ``advanced`` (full
+    archive including Director-only NPC fields and hidden Setting facts). The
+    two axes are locked together server-side so no client request can reach
+    ``advanced`` outside creator mode.
+    """
+    return "advanced" if mode == "creator" else "general"
 
 
 def _normalize_payload(
@@ -180,6 +194,55 @@ def _load_player_records(runtime: CampaignRuntime, *, view: str = "general") -> 
             _setting_record(setting, view=view)
             for setting in world_settings
             if view == "advanced" or setting.hit_count > 0
+        ],
+    }
+
+
+def load_player_events() -> dict[str, Any]:
+    """Creator-mode read-only Director Event browse (full detail, no writes)."""
+    if experience_mode() != "creator":
+        raise ClientValidationError("Director events are only visible in creator mode")
+    runtime = get_campaign_runtime()
+    with runtime.confirmation_lock:
+        with runtime.stores.director_event() as store:
+            events = store.list_all()
+    return {
+        "events": [
+            {
+                "event_id": event.event_id,
+                "role": event.role,
+                "title": event.title,
+                "stage": event.stage,
+                "subject": event.subject,
+                "intent": event.intent,
+                "method": event.method,
+                "macro_intent": event.macro_intent,
+                "hook_pool": [
+                    hook.model_dump(mode="json") for hook in event.hook_pool
+                ],
+                "actors": [
+                    actor.model_dump(mode="json") for actor in event.actors
+                ],
+                "source_setting_ids": list(event.source_setting_ids),
+                "world_impact": (
+                    event.world_impact.model_dump(mode="json")
+                    if event.world_impact is not None
+                    else None
+                ),
+                "deadline_clock": event.deadline_clock.model_dump(mode="json"),
+                "final_world_impact": (
+                    event.final_world_impact.model_dump(mode="json")
+                    if event.final_world_impact is not None
+                    else None
+                ),
+                "resolved_reason": event.resolved_reason,
+                "resolved_turn": event.resolved_turn,
+                "created_turn": event.created_turn,
+                "updated_turn": event.updated_turn,
+                "created_at": event.created_at,
+                "updated_at": event.updated_at,
+            }
+            for event in events
         ],
     }
 

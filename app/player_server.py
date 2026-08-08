@@ -31,6 +31,9 @@ from app.api import (
     load_player_state,
     load_initialization_draft,
     load_reader_preferences,
+    load_player_events,
+    load_core_memory_items,
+    save_core_memory_items,
     model_config_status,
     rename_save,
     redo_last_turn,
@@ -43,6 +46,7 @@ from app.api import (
     save_pending_scene_edit,
     record_player_diagnostic,
     save_reader_preferences,
+    player_records_view,
     start_confirmation_operation,
     start_generation_operation,
     start_feedback_rewrite_operation,
@@ -146,9 +150,15 @@ class PlayerHandler(BaseHTTPRequestHandler):
             self._handle_player_json(lambda: player_saves_payload(list_saves()))
             return
         if path == "/api/player/records":
-            query = parse_qs(parsed_url.query)
-            view = query.get("view", ["general"])[0] or "general"
-            self._handle_player_json(lambda: load_player_records(view=view))
+            self._handle_player_json(
+                lambda: load_player_records(view=player_records_view())
+            )
+            return
+        if path == "/api/player/events":
+            self._handle_player_json(load_player_events)
+            return
+        if path == "/api/player/core-memory":
+            self._handle_player_json(load_core_memory_items)
             return
         if path == "/api/player/saves/export":
             query = parse_qs(parsed_url.query)
@@ -225,6 +235,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
         if path == "/api/player/records/update":
             self._handle_player_json(
                 lambda: self._update_player_record()
+            )
+            return
+        if path == "/api/player/core-memory":
+            self._handle_player_json(
+                lambda: save_core_memory_items(_read_json(self))
             )
             return
         if path == "/api/player/init":
@@ -903,12 +918,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
         payload = _read_json(self)
         kind = str(payload.get("kind", "")).strip()
         record_id = str(payload.get("record_id", "")).strip()
-        view = str(payload.get("view", "general")).strip() or "general"
         return update_player_record(
             kind,
             record_id,
             payload.get("payload"),
-            view=view,
+            view=player_records_view(),
         )
 
 
@@ -930,6 +944,23 @@ class TokenAuthedPlayerHandler(PlayerHandler):
     def _valid_host(self) -> bool:
         expected = f"127.0.0.1:{self.server.server_address[1]}"
         return hmac.compare_digest(self.headers.get("Host", ""), expected)
+
+    def _serve_player_index(self, *, inject_token: bool) -> None:
+        template = (PLAYER_STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        if TOKEN_META not in template:
+            raise RuntimeError("player index is missing the desktop session token marker")
+        token_meta = (
+            '<meta name="loreloop-session-token" content="'
+            + html.escape(self.session_token if inject_token else "", quote=True)
+            + '" />'
+        )
+        payload = template.replace(TOKEN_META, token_meta, 1).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(payload)
 
 
 class DesktopPlayerHandler(TokenAuthedPlayerHandler):
@@ -971,21 +1002,7 @@ class DesktopPlayerHandler(TokenAuthedPlayerHandler):
         return
 
     def _desktop_player_index(self) -> None:
-        template = (PLAYER_STATIC_DIR / "index.html").read_text(encoding="utf-8")
-        if TOKEN_META not in template:
-            raise RuntimeError("player index is missing the desktop session token marker")
-        token_meta = (
-            '<meta name="loreloop-session-token" content="'
-            + html.escape(self.session_token, quote=True)
-            + '" />'
-        )
-        payload = template.replace(TOKEN_META, token_meta, 1).encode("utf-8")
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(payload)
+        self._serve_player_index(inject_token=True)
 
 
 def make_player_handler(session_token: str) -> type[DesktopPlayerHandler]:

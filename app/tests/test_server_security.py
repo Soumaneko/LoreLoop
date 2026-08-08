@@ -93,6 +93,31 @@ def test_player_static_root_does_not_require_token():
     assert handler.recorded_status == 200
 
 
+def test_player_root_injects_token_on_loopback():
+    handler = _make_handler(path="/")
+    handler.do_GET()
+    assert handler.recorded_status == 200
+    body = handler.wfile.getvalue().decode("utf-8")
+    assert 'content="test-token"' in body
+
+
+def test_player_root_does_not_inject_token_external():
+    handler = _make_handler(path="/", bound_host="0.0.0.0")
+    handler.do_GET()
+    assert handler.recorded_status == 200
+    body = handler.wfile.getvalue().decode("utf-8")
+    assert 'content="test-token"' not in body
+    assert 'content=""' in body
+
+
+def test_player_root_rejects_wrong_host_on_loopback():
+    handler = _make_handler(path="/", host="evil.example:8765")
+    handler.do_GET()
+    assert handler.recorded_status == 403
+    body = handler.wfile.getvalue().decode("utf-8")
+    assert 'content="test-token"' not in body
+
+
 def test_debug_index_injects_token_on_loopback():
     handler = _make_handler(path="/debug")
     handler.do_GET()

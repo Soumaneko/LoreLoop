@@ -114,6 +114,10 @@
       <span class="rail-label">世界设定</span>
       <span class="rail-count">0</span>
     </button>
+    <button id="recordsTabEvent" class="records-rail-tab" type="button" title="导演事件" data-creator-only>
+      <span class="rail-label">事件</span>
+      <span class="rail-count">0</span>
+    </button>
   </nav>
 
   <aside id="recordsDrawer" class="drawer drawer-left" aria-hidden="true">
@@ -121,6 +125,7 @@
     <div id="recordsContinuityList" class="records-list records-pane"></div>
     <div id="recordsNpcList" class="records-list records-pane"></div>
     <div id="recordsSettingList" class="records-list records-pane"></div>
+    <div id="recordsEventList" class="records-list records-pane" data-creator-only></div>
   </aside>
 
   <!-- Left Drawer: Character & In-Game Codex -->
@@ -145,6 +150,17 @@
       <div><p class="eyebrow">SYSTEM & CONTROL</p><h2>系统控制</h2></div>
       <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
     </div>
+    <section class="drawer-section">
+      <div class="section-title">体验模式</div>
+      <div class="setting-row">
+        <span class="setting-label">界面</span>
+        <div class="records-view-toggle" role="group" aria-label="体验模式">
+          <button id="experienceModePlayerBtn" class="is-active" type="button" title="只展示故事与公开信息">玩家</button>
+          <button id="experienceModeCreatorBtn" type="button" title="完整世界管理、导演信息与调用细节">创作者</button>
+        </div>
+      </div>
+      <p class="setting-note">创作者模式开放完整档案、导演事件与核心记忆编辑。</p>
+    </section>
     <section class="drawer-section">
       <label for="saveSelect">存档切换</label>
       <div class="inline-control">
@@ -185,12 +201,11 @@
           <span class="toggle-track"></span>
         </label>
       </div>
+    </section>
+    <section class="drawer-section" data-creator-only>
       <div class="setting-row">
-        <span class="setting-label">档案视图</span>
-        <div class="records-view-toggle" role="group" aria-label="档案视图">
-          <button id="recordsViewGeneralBtn" class="is-active" type="button" title="只显示已登场 NPC/已出现设定的公开信息">一般</button>
-          <button id="recordsViewAdvancedBtn" type="button" title="显示全部 NPC/设定，含导演信息与私密事实">高级</button>
-        </div>
+        <span class="setting-label">核心记忆</span>
+        <button id="openCoreMemoryBtn" class="manage-saves-button" type="button">编辑世界基础</button>
       </div>
     </section>
     <section class="drawer-section">
@@ -392,6 +407,22 @@
       <div id="initConfigActions" class="modal-actions"><button id="campaignSetupBtn" class="primary-action" type="button">生成公开世界惯例</button></div>
       <div id="campaignSetupActions" class="modal-actions" hidden><button id="editInitConfigBtn" type="button">返回修改设定</button><button id="regenerateCampaignSetupBtn" type="button">重新生成惯例</button><button id="initSubmitBtn" class="primary-action" value="default">确认惯例并生成开场</button></div>
     </form>
+  </dialog>
+
+  <dialog id="coreMemoryDialog" class="modal core-memory-modal">
+    <section class="core-memory-shell">
+      <header class="core-memory-header">
+        <div><p class="eyebrow">CORE MEMORY</p><h2>核心记忆</h2></div>
+        <button id="closeCoreMemoryBtn" class="close-button" type="button" aria-label="关闭">×</button>
+      </header>
+      <p>核心记忆是长期稳定的世界基础设定，不会被后续剧情覆盖。新增条目来源为「玩家」。</p>
+      <div id="coreMemoryError" class="form-error" role="alert" hidden></div>
+      <div id="coreMemoryList" class="core-memory-list"></div>
+      <div class="modal-actions">
+        <button id="addCoreMemoryBtn" type="button">＋ 添加条目</button>
+        <button id="saveCoreMemoryBtn" class="primary-action" type="button">保存修改</button>
+      </div>
+    </section>
   </dialog>
 
   <div id="tokenUsageDialog" class="token-usage-popover" popover="auto">

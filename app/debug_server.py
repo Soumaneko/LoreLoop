@@ -56,6 +56,12 @@ class DebugHandler(TokenAuthedPlayerHandler):
     def do_GET(self) -> None:
         parsed_url = urlparse(self.path)
         path = parsed_url.path
+        if path == "/":
+            if self._bound_to_loopback() and not self._valid_host():
+                self._forbidden()
+                return
+            self._serve_player_index(inject_token=self._bound_to_loopback())
+            return
         if path in {"/debug", "/debug/"}:
             if self._bound_to_loopback() and not self._valid_host():
                 self._forbidden()

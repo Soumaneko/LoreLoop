@@ -74,6 +74,15 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'request("/api/player/canon-validation"' in source
     assert 'initDirectorEnabled' not in html and "director_enabled" not in source
     assert 'request("/api/player/experience-mode"' not in source
+    assert 'request("/api/player/experience-mode"' in (
+        STATIC_DIR / "api.js"
+    ).read_text(encoding="utf-8")
+    assert "switchExperienceMode" in source
+    assert "experienceModePlayerBtn" in html and "experienceModeCreatorBtn" in html
+    assert "dataset.uiMode" in source
+    assert 'recordsTabEvent' in html and "renderEventRecords" in source
+    assert 'id="coreMemoryDialog"' in html and "openCoreMemoryEditor" in source
+    assert 'data-creator-only' in html
     assert 'version: 4,' in source
     assert 'state.playerState?.initialization?.phase !== "config"' in source
     assert "Promise.all([" not in source

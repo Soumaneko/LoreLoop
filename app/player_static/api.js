@@ -241,22 +241,40 @@ export async function acknowledgeOperation(operationId) {
   );
 }
 
-export async function loadRecords(view = "general") {
-  return request(
-    `/api/player/records?view=${encodeURIComponent(view)}`,
-    { timeoutMs: 30_000 },
-  );
+export async function loadRecords() {
+  return request("/api/player/records", { timeoutMs: 30_000 });
 }
 
-export async function updateRecord(kind, recordId, payload, view = "general") {
+export async function updateRecord(kind, recordId, payload) {
   return request("/api/player/records/update", {
     method: "POST",
     body: JSON.stringify({
       kind,
       record_id: recordId,
       payload: payload || {},
-      view,
     }),
+  });
+}
+
+export async function loadEvents() {
+  return request("/api/player/events", { timeoutMs: 30_000 });
+}
+
+export async function loadCoreMemory() {
+  return request("/api/player/core-memory", { timeoutMs: 30_000 });
+}
+
+export async function saveCoreMemory(items) {
+  return request("/api/player/core-memory", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
+export async function saveExperienceMode(mode) {
+  return request("/api/player/experience-mode", {
+    method: "POST",
+    body: JSON.stringify({ experience_mode: mode }),
   });
 }
 

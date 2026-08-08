@@ -2372,3 +2372,21 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   color: var(--muted);
 }
 .record-edit-message.is-error { color: var(--danger); }
+
+/* Stage 3: experience-mode surfaces */
+body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
+
+.core-memory-modal .core-memory-shell { max-height: 80vh; overflow-y: auto; }
+.core-memory-modal .core-memory-header { display: flex; align-items: center; justify-content: space-between; padding: 22px 26px 0; }
+.core-memory-modal .core-memory-header h2 { margin-bottom: 0; }
+.core-memory-modal .core-memory-shell > p:not(.eyebrow) { margin: 0 26px 14px; color: var(--muted); line-height: 1.7; }
+.core-memory-modal .core-memory-list { padding: 0 26px; display: grid; gap: 12px; }
+.core-memory-modal .modal-actions { padding: 0 26px 26px; }
+
+.core-memory-item { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; background: var(--surface-soft); }
+.core-memory-item-head { display: flex; align-items: center; gap: 8px; }
+.core-memory-item-head select { flex: 1; }
+.core-memory-item-head .remove-core-memory-btn { border: 1px solid var(--line); background: var(--surface-soft); color: var(--muted); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.core-memory-item-head .remove-core-memory-btn:hover { color: var(--danger); border-color: var(--danger); }
+.core-memory-item-source { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); opacity: .75; white-space: nowrap; }
+.core-memory-empty { color: var(--muted); padding: 14px 0; }
