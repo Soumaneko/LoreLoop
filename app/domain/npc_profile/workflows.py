@@ -126,7 +126,6 @@ def update_npc_profiles_from_extraction(
     extraction: NPCExtractionResult,
     recent_summaries: list[SceneSummary] | None = None,
     trace_id: str | None = None,
-    auto_backfill: bool = True,
     turn_index: int | None = None,
 ) -> UpdateNPCProfilesResult:
     updater = NPCProfileUpdater(gateway)
@@ -144,32 +143,14 @@ def update_npc_profiles_from_extraction(
     new_profiles: list[NPCProfile] = []
     existing_ids = {profile.npc_id for profile in existing_profiles}
     for profile in update_result.profiles:
-        if profile.npc_id not in existing_ids and not auto_backfill:
+        if profile.npc_id not in existing_ids:
+            # Newly detected NPCs are candidates, not canonical yet: the
+            # confirmation Director decides which ones to keep via enrich_npc.
+            # Unenriched candidates are intentionally dropped.
             new_profiles.append(profile)
             continue
         saved_id = npc_store.upsert(profile)
         saved_ids.append(saved_id)
-        if auto_backfill and _should_backfill_new_npc(profile, existing_ids):
-            refreshed = npc_store.get_by_id(saved_id) or profile
-            backfilled = backfill_new_npc_profile(
-                profile=refreshed,
-                existing_profiles=[
-                    npc
-                    for npc in npc_store.list_all()
-                    if npc.npc_id != saved_id
-                ],
-                core_memory=core_memory,
-                gateway=gateway,
-                npc_store=npc_store,
-                trace_id=trace_id,
-            )
-            if turn_index is not None and backfilled.name != profile.name:
-                attach_transient_alias_for_rename(
-                    backfilled,
-                    old_name=profile.name,
-                    turn_index=turn_index,
-                )
-            npc_store.upsert(backfilled)
     for npc_id, surface in update_result.exact_mentions:
         npc_store.record_mention(npc_id, surface)
     for npc_id, alias in update_result.aliases_to_add:
@@ -202,21 +183,6 @@ def backfill_new_npc_profile(
         trace_id=trace_id,
         guidance=guidance,
         creative_brief=creative_brief or draw_creative_brief(),
-    )
-
-
-def _should_backfill_new_npc(profile: NPCProfile, existing_ids: set[str]) -> bool:
-    if profile.npc_id in existing_ids:
-        return False
-    if profile.source_director_npc_id:
-        return False
-    return not all(
-        [
-            profile.core_motivation,
-            profile.hidden_secret,
-            profile.conflict_style,
-            profile.social_style,
-        ]
     )
 
 

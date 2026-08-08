@@ -718,7 +718,6 @@ def test_staged_director_npc_promotes_without_preadding_participants(
             user_input="让林澈进来。",
             turn_index=2,
             stale_message="stale",
-            run_director_agent=True,
         ),
         write_db=True,
     )

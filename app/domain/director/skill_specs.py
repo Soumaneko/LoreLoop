@@ -314,6 +314,7 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         phases=_CONFIRMATION,
         mutates=True,
         arguments_model=EnrichNPCArguments,
+        max_requests_per_batch=3,
     ),
 )
 
@@ -329,6 +330,7 @@ def register_skill(
     *,
     handler,
     arguments_validator=None,
+    batch_validator=None,
 ) -> None:
     """Register a skill using its semantic spec declared in this module."""
     spec = next(
@@ -346,4 +348,5 @@ def register_skill(
         handler=handler,
         arguments_validator=arguments_validator,
         max_requests_per_batch=spec.max_requests_per_batch,
+        batch_validator=batch_validator,
     )

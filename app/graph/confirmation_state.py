@@ -39,7 +39,6 @@ class ConfirmationPipelineInput:
     user_input: str
     turn_index: int
     stale_message: str
-    run_director_agent: bool = True
     clear_short_term_before_save: bool = False
     clear_confirmed_history_before_save: bool = False
     clear_continuity_before_save: bool = False

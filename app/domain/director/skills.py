@@ -52,6 +52,8 @@ def _guidance_ok(guidance) -> bool:
 
 DirectorSkillHandler = Callable[[BaseModel, str | None], BaseModel | dict | None]
 DirectorArgumentsValidator = Callable[[BaseModel], None]
+#: Validates the full set of parsed arguments for one skill within a batch.
+DirectorBatchValidator = Callable[[list[BaseModel]], None]
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,7 @@ class _RegisteredSkill:
     arguments_model: type[BaseModel]
     handler: DirectorSkillHandler
     arguments_validator: DirectorArgumentsValidator | None
+    batch_validator: DirectorBatchValidator | None
 
 
 class DirectorSkillService:
@@ -79,6 +82,7 @@ class DirectorSkillService:
         handler: DirectorSkillHandler,
         arguments_validator: DirectorArgumentsValidator | None = None,
         max_requests_per_batch: int | None = None,
+        batch_validator: DirectorBatchValidator | None = None,
     ) -> None:
         if name in self._skills:
             raise ValueError(f"director skill already registered: {name}")
@@ -101,6 +105,7 @@ class DirectorSkillService:
             arguments_model=arguments_model,
             handler=handler,
             arguments_validator=arguments_validator,
+            batch_validator=batch_validator,
         )
 
     def specs_for_phase(self, phase: DirectorPhase) -> list[DirectorSkillSpec]:
@@ -131,6 +136,7 @@ class DirectorSkillService:
         if len(request_keys) != len(set(request_keys)):
             raise ValueError("duplicate director skill request in one batch")
         request_counts: dict[str, int] = {}
+        arguments_by_skill: dict[str, list[BaseModel]] = {}
         for request in batch.requests:
             registered = self._skills.get(request.skill)
             if registered is None:
@@ -153,8 +159,13 @@ class DirectorSkillService:
             arguments = registered.arguments_model.model_validate(
                 request.arguments
             )
+            arguments_by_skill.setdefault(request.skill, []).append(arguments)
             if registered.arguments_validator is not None:
                 registered.arguments_validator(arguments)
+        for skill, arguments in arguments_by_skill.items():
+            batch_validator = self._skills[skill].batch_validator
+            if batch_validator is not None:
+                batch_validator(arguments)
 
     def execute_batch(
         self,

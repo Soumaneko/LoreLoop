@@ -254,7 +254,6 @@ def test_finalizer_writes_gen_and_confirm_entries(configure_runtime_services):
         "write_db": True,
         "trace_id": "trace-log",
         "pipeline_input": SimpleNamespace(
-            run_director_agent=True,
             turn_index=4,
         ),
         "pending": SimpleNamespace(director_log_entry={

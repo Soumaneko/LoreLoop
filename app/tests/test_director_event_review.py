@@ -119,7 +119,7 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
     with stores.director_event() as store:
         node_state = {
             "write_db": False,
-            "pipeline_input": SimpleNamespace(run_director_agent=True),
+            "pipeline_input": SimpleNamespace(),
             "cache": {},
             "events": [],
         }

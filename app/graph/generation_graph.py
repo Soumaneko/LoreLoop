@@ -39,7 +39,6 @@ from .generation_state import GenerationEvent, GenerationState
 
 def build_generation_graph(
     *,
-    director_is_enabled: bool,
     canon_validation_is_enabled: bool,
 ):
     dependencies = (
@@ -58,12 +57,10 @@ def build_generation_graph(
     return get_cached_graph(
         (
             "generation"
-            f":director={int(director_is_enabled)}"
             f":canon={int(canon_validation_is_enabled)}"
         ),
         dependencies,
         lambda: _compile_generation_graph(
-            director_is_enabled=director_is_enabled,
             canon_validation_is_enabled=canon_validation_is_enabled,
         ),
     )
@@ -71,7 +68,6 @@ def build_generation_graph(
 
 def _compile_generation_graph(
     *,
-    director_is_enabled: bool,
     canon_validation_is_enabled: bool,
 ):
     graph = StateGraph(GenerationState)
@@ -85,12 +81,9 @@ def _compile_generation_graph(
     graph.add_edge(START, "parse_action")
     graph.add_edge("parse_action", "evaluate_roll_modifiers")
     graph.add_edge(["extract_context_facts", "evaluate_roll_modifiers"], "resolve_turn")
-    if director_is_enabled:
-        graph.add_node("director_agent_stage", director_agent_stage_node)
-        graph.add_edge("resolve_turn", "director_agent_stage")
-        graph.add_edge("director_agent_stage", "compose_narrative")
-    else:
-        graph.add_edge("resolve_turn", "compose_narrative")
+    graph.add_node("director_agent_stage", director_agent_stage_node)
+    graph.add_edge("resolve_turn", "director_agent_stage")
+    graph.add_edge("director_agent_stage", "compose_narrative")
 
     _add_canon_validation_tail(
         graph,
@@ -410,7 +403,6 @@ def _generate_turn_stream(
     yield from _stream_generation_graph(
         state,
         build_generation_graph(
-            director_is_enabled=(mode == "creator"),
             canon_validation_is_enabled=canon_validation_enabled(),
         ),
         group_id=group_id,

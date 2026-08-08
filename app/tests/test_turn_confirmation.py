@@ -69,76 +69,42 @@ def _opening_initialization(*, experience_mode: str):
     return config, record
 
 
-def test_turn_director_switch_controls_confirmation_agent(monkeypatch):
+def test_turn_confirmation_runs_director_pipeline_for_player_and_creator(monkeypatch):
     runtime = get_campaign_runtime()
-    turn_id = "director-disabled-turn"
-    runtime.pending_turns.add(
-        PendingTurn(
-            turn_id=turn_id,
-            group_id=turn_id,
-            version_index=1,
-            user_input="观察四周",
-            difficulty="困难",
-            max_chars=1500,
-            experience_mode="player",
-            state_before=_state(),
-            context=SimpleNamespace(turn_resolution=SimpleNamespace()),
-            outline=SimpleNamespace(),
-            scene_result=SceneWriterResult(scene_text="场景正文"),
-        )
-    )
-    captured = {}
+    captured_modes = []
 
     def capture(pipeline_input, **_kwargs):
-        captured["input"] = pipeline_input
+        captured_modes.append(pipeline_input.pending.experience_mode)
         return iter(())
 
     monkeypatch.setattr(confirmation_graph, "_confirm_pipeline_locked", capture)
-    try:
-        list(confirmation_graph._confirm_turn_stream_locked(turn_id))
-    finally:
-        runtime.pending_turns.remove(turn_id)
-
-    assert captured["input"].run_director_agent is False
-
-
-def test_turn_confirmation_uses_pending_snapshot_not_current_mode(monkeypatch):
-    from app.runtime.settings import save_experience_mode
-
-    runtime = get_campaign_runtime()
-    turn_id = "creator-snapshot-turn"
-    runtime.pending_turns.add(
-        PendingTurn(
-            turn_id=turn_id,
-            group_id=turn_id,
-            version_index=1,
-            user_input="观察四周",
-            difficulty="困难",
-            max_chars=1500,
-            experience_mode="creator",
-            state_before=_state(),
-            context=SimpleNamespace(turn_resolution=SimpleNamespace()),
-            outline=SimpleNamespace(),
-            scene_result=SceneWriterResult(scene_text="场景正文"),
+    for mode in ("player", "creator"):
+        turn_id = f"turn-{mode}"
+        runtime.pending_turns.add(
+            PendingTurn(
+                turn_id=turn_id,
+                group_id=turn_id,
+                version_index=1,
+                user_input="观察四周",
+                difficulty="困难",
+                max_chars=1500,
+                experience_mode=mode,
+                state_before=_state(),
+                context=SimpleNamespace(turn_resolution=SimpleNamespace()),
+                outline=SimpleNamespace(),
+                scene_result=SceneWriterResult(scene_text="场景正文"),
+            )
         )
-    )
-    save_experience_mode({"experience_mode": "player"})
-    captured = {}
+        try:
+            list(confirmation_graph._confirm_turn_stream_locked(turn_id))
+        finally:
+            runtime.pending_turns.remove(turn_id)
 
-    def capture(pipeline_input, **_kwargs):
-        captured["input"] = pipeline_input
-        return iter(())
-
-    monkeypatch.setattr(confirmation_graph, "_confirm_pipeline_locked", capture)
-    try:
-        list(confirmation_graph._confirm_turn_stream_locked(turn_id))
-    finally:
-        runtime.pending_turns.remove(turn_id)
-
-    assert captured["input"].run_director_agent is True
+    # Both modes reach the full confirmation pipeline; Director always runs.
+    assert captured_modes == ["player", "creator"]
 
 
-def test_opening_uses_saved_director_switch_and_reset_flags(monkeypatch):
+def test_opening_confirmation_always_runs_director_and_reset_flags(monkeypatch):
     runtime = get_campaign_runtime()
     turn_id = "director-disabled-opening"
     config, record = _opening_initialization(experience_mode="player")
@@ -167,19 +133,18 @@ def test_opening_uses_saved_director_switch_and_reset_flags(monkeypatch):
         runtime.pending_openings.remove(turn_id)
 
     pipeline_input = captured["input"]
-    assert pipeline_input.run_director_agent is False
     assert pipeline_input.clear_short_term_before_save is True
     assert pipeline_input.clear_confirmed_history_before_save is True
     assert pipeline_input.clear_continuity_before_save is True
 
 
-def test_director_confirmation_node_does_nothing_when_switch_is_off():
+def test_director_confirmation_node_reuses_cached_executions():
     cached_decision = object()
     cached_executions = object()
     result = director_agent_confirm_node(
         {
             "write_db": True,
-            "pipeline_input": SimpleNamespace(run_director_agent=False),
+            "pipeline_input": SimpleNamespace(),
             "cache": {
                 "director_decision": cached_decision,
                 "director_executions": cached_executions,
@@ -187,17 +152,15 @@ def test_director_confirmation_node_does_nothing_when_switch_is_off():
         }
     )
 
-    assert result == {
-        "director_decision": cached_decision,
-        "director_executions": cached_executions,
-    }
+    assert result["director_decision"] is cached_decision
+    assert result["director_executions"] is cached_executions
 
 
 def test_director_confirmation_node_never_mutates_dry_run():
     result = director_agent_confirm_node(
         {
             "write_db": False,
-            "pipeline_input": SimpleNamespace(run_director_agent=True),
+            "pipeline_input": SimpleNamespace(),
             "cache": {},
         }
     )

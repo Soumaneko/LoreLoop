@@ -70,8 +70,7 @@ class ConfirmationPreparer:
         director_npc_profile_ids = cache.get("director_npc_profile_ids")
         confirmed_director_npc_drafts = cache.get("confirmed_director_npc_drafts")
         if (
-            pipeline_input.run_director_agent
-            and write_db
+            write_db
             and director_npc_profile_ids is None
             and "director_npc_profile_ids" not in cache
         ):
@@ -88,7 +87,7 @@ class ConfirmationPreparer:
             cache["director_npc_profile_ids"] = director_npc_profile_ids
             cache["confirmed_director_npc_drafts"] = confirmed_director_npc_drafts
 
-        if pipeline_input.run_director_agent and write_db:
+        if write_db:
             services.apply_staged_disclosure_upgrades(pending)
 
         # The staged Director NPC is NOT pre-added to CurrentState participants
@@ -331,13 +330,10 @@ class ConfirmationEventBuilder:
 
         profile_update_data = {
             "updated_npc_profile_ids": updated_npc_profile_ids,
+            "director_npc_profile_ids": director_npc_profile_ids,
+            "director_decision": model_data(director_decision),
+            "director_executions": model_data(director_executions),
         }
-        if pipeline_input.run_director_agent:
-            profile_update_data.update({
-                "director_npc_profile_ids": director_npc_profile_ids,
-                "director_decision": model_data(director_decision),
-                "director_executions": model_data(director_executions),
-            })
 
         scene_result_data = model_data(pipeline_input.scene_result)
         if state.get("scene_text") is not None:
@@ -371,13 +367,10 @@ class ConfirmationEventBuilder:
                 else None
             ),
             "status": "committed" if write_db else "dry_run",
+            "director_npc_profile_ids": director_npc_profile_ids,
+            "director_decision": model_data(director_decision),
+            "director_executions": model_data(director_executions),
         }
-        if pipeline_input.run_director_agent:
-            finish_data.update({
-                "director_npc_profile_ids": director_npc_profile_ids,
-                "director_decision": model_data(director_decision),
-                "director_executions": model_data(director_executions),
-            })
 
         return [
             {"step": "npc_profiles_updated", "data": profile_update_data},
@@ -470,8 +463,6 @@ class ConfirmationFinalizer:
         from app.domain.director.log import assemble_director_log_entry
 
         pipeline_input = state["pipeline_input"]
-        if not getattr(pipeline_input, "run_director_agent", False):
-            return
         entries: list[dict] = []
         gen_entry = getattr(state["pending"], "director_log_entry", None)
         if isinstance(gen_entry, dict) and gen_entry.get("phase") == "generation":

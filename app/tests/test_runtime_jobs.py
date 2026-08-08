@@ -89,11 +89,9 @@ def test_job_coordinator_delegates_execution_to_operation_manager():
 def test_compiled_generation_graph_is_cached_and_dependency_aware(monkeypatch):
     clear_compiled_graph_cache("generation")
     first = generation_graph.build_generation_graph(
-        director_is_enabled=True,
         canon_validation_is_enabled=True,
     )
     second = generation_graph.build_generation_graph(
-        director_is_enabled=True,
         canon_validation_is_enabled=True,
     )
     assert first is second
@@ -105,7 +103,6 @@ def test_compiled_generation_graph_is_cached_and_dependency_aware(monkeypatch):
 
     monkeypatch.setattr(generation_graph, "compose_narrative_node", replacement)
     rebuilt = generation_graph.build_generation_graph(
-        director_is_enabled=True,
         canon_validation_is_enabled=True,
     )
     assert rebuilt is not first

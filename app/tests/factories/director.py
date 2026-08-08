@@ -133,7 +133,6 @@ def make_review_node_state(
     return {
         "write_db": True,
         "pipeline_input": SimpleNamespace(
-            run_director_agent=True,
             user_input="深夜去旧码头看看。",
             turn_index=turn_index,
         ),

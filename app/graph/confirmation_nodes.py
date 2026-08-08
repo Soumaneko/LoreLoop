@@ -258,10 +258,7 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
 
 def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
-    if (
-        not state.get("write_db", True)
-        or not pipeline_input.run_director_agent
-    ):
+    if not state.get("write_db", True):
         return {
             "director_decision": state["cache"].get("director_decision"),
             "director_executions": state["cache"].get("director_executions"),
@@ -326,7 +323,6 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 extraction=state["npc_extraction"],
                 recent_summaries=state.get("recent_summaries", []),
                 trace_id=trace_id,
-                auto_backfill=not pipeline_input.run_director_agent,
                 turn_index=pipeline_input.turn_index,
             )
             absence_synced_ids = sync_npc_profile_absence_from_current_state(
@@ -375,10 +371,7 @@ def setting_appearance_update_node(state: ConfirmationState) -> ConfirmationStat
 
 def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
-    if (
-        not state.get("write_db", True)
-        or not pipeline_input.run_director_agent
-    ):
+    if not state.get("write_db", True):
         return {
             "director_event_reviews": state["cache"].get(
                 "director_event_reviews", []

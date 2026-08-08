@@ -278,7 +278,6 @@ def _confirm_turn_stream_locked(
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before confirming.")
 
-    director_is_enabled = pending.experience_mode == "creator"
     yield from _confirm_pipeline_locked(
         ConfirmationPipelineInput(
             turn_id=turn_id,
@@ -291,7 +290,6 @@ def _confirm_turn_stream_locked(
                 "Pending turn is stale because CurrentState changed after generation. "
                 "Generate the turn again before confirming."
             ),
-            run_director_agent=director_is_enabled,
         ),
         write_db=write_db,
         scene_text=scene_text,
@@ -350,7 +348,6 @@ def _confirm_opening_stream_locked(
     if pending is None:
         raise ValueError("Pending opening not found. Initialize again before confirming.")
 
-    director_is_enabled = pending.experience_mode == "creator"
     initialization = runtime.initialization.load()
     if (
         initialization is None
@@ -371,7 +368,6 @@ def _confirm_opening_stream_locked(
                 "Pending opening is stale because initialization state changed. "
                 "Initialize again before confirming."
             ),
-            run_director_agent=director_is_enabled,
             clear_short_term_before_save=True,
             clear_confirmed_history_before_save=True,
             clear_continuity_before_save=True,

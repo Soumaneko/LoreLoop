@@ -56,7 +56,6 @@ def test_generation_captures_experience_mode_snapshot_at_generation(monkeypatch)
 
 def test_generation_graph_compiles():
     graph = generation_graph.build_generation_graph(
-        director_is_enabled=True,
         canon_validation_is_enabled=True,
     )
 
@@ -163,7 +162,6 @@ def test_rewrite_stream_callbacks_share_mode_aware_event_projection(monkeypatch)
 
 def test_director_agent_composer_and_consistency_checker_run_in_order():
     graph = generation_graph.build_generation_graph(
-        director_is_enabled=True,
         canon_validation_is_enabled=True,
     ).get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
@@ -181,19 +179,17 @@ def test_director_agent_composer_and_consistency_checker_run_in_order():
     assert ("extract_context_facts", "director_agent_stage") not in edges
 
 
-def test_compact_generation_graph_skips_director_and_canon_nodes():
+def test_compact_generation_graph_skips_canon_nodes_only():
     graph = generation_graph.build_generation_graph(
-        director_is_enabled=False,
         canon_validation_is_enabled=False,
     ).get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
     node_ids = set(graph.nodes)
 
-    assert ("resolve_turn", "compose_narrative") in edges
+    assert ("resolve_turn", "director_agent_stage") in edges
+    assert ("director_agent_stage", "compose_narrative") in edges
     assert ("compose_narrative", "__end__") in edges
     assert not {
-        "consume_director_events",
-        "maybe_director_npc",
         "generate_canon_queries",
         "retrieve_canon_evidence",
         "check_narrative_consistency",

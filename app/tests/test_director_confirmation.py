@@ -304,7 +304,6 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
         ),
         "pipeline_input": SimpleNamespace(
             turn_index=3,
-            run_director_agent=True,
         ),
         "trace_id": "trace-npc",
         "cache": {},
@@ -356,7 +355,6 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
     state = {
         "write_db": True,
         "pipeline_input": SimpleNamespace(
-            run_director_agent=True,
             user_input="我在药山。",
             turn_index=3,
         ),

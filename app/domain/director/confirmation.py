@@ -220,6 +220,7 @@ class DirectorConfirmationExecutor:
                     self._new_npc_profiles,
                     args.npc_id,
                 ),
+                batch_validator=_validate_unique_enrich_npc_targets,
             )
 
     def _dispatch_setting_requirements(self, requirements) -> list:
@@ -797,6 +798,20 @@ def _get_new_npc(npc_profile_store, new_npc_profiles, npc_id: str):
     if profile is None or profile.source_director_npc_id:
         raise ValueError("enrich_npc references an invalid npc_id")
     return profile
+
+
+def _validate_unique_enrich_npc_targets(arguments) -> None:
+    """Reject duplicate enrich_npc targets within one decision batch.
+
+    Wave B executes requests concurrently, so enriching the same new NPC twice
+    would produce several backfilled variants that overwrite each other in the
+    mutation plan and may leave orphaned Settings behind.
+    """
+    npc_ids = [args.npc_id for args in arguments]
+    if len(npc_ids) != len(set(npc_ids)):
+        raise ValueError(
+            "enrich_npc can only target each new NPC once per batch"
+        )
 
 
 def _require_event_actor_binding(

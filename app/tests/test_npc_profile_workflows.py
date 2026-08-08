@@ -9,6 +9,7 @@ from app.domain.npc_profile.schemas import NPCExtractionResult, NPCMention, NPCP
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.workflows import (
     attach_transient_alias_for_rename,
+    backfill_new_npc_profile,
     prune_expired_transient_aliases,
     sync_npc_profile_absence_from_current_state,
     update_npc_profiles_from_extraction,
@@ -189,7 +190,7 @@ def test_sync_npc_profile_absence_ignores_absent_current_state_npcs():
     assert store.get_by_id(present_id).absent_turns == 0
 
 
-def test_new_non_director_npc_triggers_profile_backfill():
+def test_new_npc_candidate_is_not_saved_or_backfilled():
     store = NPCProfileStore(":memory:")
     gateway = _Gateway(
         [
@@ -219,18 +220,6 @@ def test_new_non_director_npc_triggers_profile_backfill():
                     }
                 ]
             },
-            {
-                "name": "柳莺莺",
-                "role": "醉花楼花魁",
-                "appearance": "青衣抱琵琶，姿态温婉。",
-                "personality_traits": ["温婉", "精明"],
-                "known_abilities": ["琵琶", "察言观色"],
-                "faction": "醉花楼",
-                "core_motivation": "攒够赎身钱，拥有能自主选择客人与去处的生活。",
-                "hidden_secret": "她暗中替城中几家商号传递消息，借此积累人脉。",
-                "conflict_style": "先以言语周旋，必要时借掌柜和熟客施压。",
-                "social_style": "温柔含蓄，习惯用曲意和笑语试探对方。",
-            },
         ]
     )
 
@@ -251,17 +240,14 @@ def test_new_non_director_npc_triggers_profile_backfill():
         ),
     )
 
-    saved = store.get_by_id(result.saved_ids[0])
-    assert [call["task"] for call in gateway.calls] == [
-        "npc_profile_update",
-        "npc_profile_backfill",
-    ]
-    assert saved.core_motivation == "攒够赎身钱，拥有能自主选择客人与去处的生活。"
-    assert saved.hidden_secret == "她暗中替城中几家商号传递消息，借此积累人脉。"
-    assert saved.encounter_potentials == []
+    assert [call["task"] for call in gateway.calls] == ["npc_profile_update"]
+    assert result.saved_ids == []
+    assert len(result.new_profiles) == 1
+    assert result.new_profiles[0].name == "柳莺莺"
+    assert store.list_all() == []
 
 
-def test_new_npc_skips_auto_backfill_when_disabled():
+def test_new_npc_without_enrich_is_dropped():
     store = NPCProfileStore(":memory:")
     gateway = _Gateway(
         [
@@ -309,7 +295,6 @@ def test_new_npc_skips_auto_backfill_when_disabled():
                 )
             ]
         ),
-        auto_backfill=False,
     )
 
     assert [call["task"] for call in gateway.calls] == ["npc_profile_update"]
@@ -323,32 +308,6 @@ def test_backfill_can_promote_placeholder_name_and_preserve_alias():
     store = NPCProfileStore(":memory:")
     gateway = _Gateway(
         [
-            {
-                "results": [
-                    {
-                        "candidate_index": 0,
-                        "resolution": "new",
-                        "matched_npc_index": None,
-                        "persist_alias": False,
-                        "turn_observation": "二楼女子正在参与一笔生意谈判。",
-                        "profile_patch": None,
-                        "new_profile": {
-                            "name": "二楼女子",
-                            "aliases": [],
-                            "public_summary": "醉花楼二楼雅间中参与大额生意谈判的女子。",
-                            "role": "生意谈判方",
-                            "appearance": "声音温婉中带媚。",
-                            "personality_traits": ["从容", "精明"],
-                            "known_abilities": ["商业谈判"],
-                            "faction": None,
-                            "description": None,
-                            "current_location": "醉花楼二楼雅间",
-                            "attitude_to_player": None,
-                            "current_intent": "与李掌柜谈判一笔大生意",
-                        },
-                    }
-                ]
-            },
             {
                 "name": "苏锦屏",
                 "role": "行商出身的生意谈判方",
@@ -364,28 +323,29 @@ def test_backfill_can_promote_placeholder_name_and_preserve_alias():
         ]
     )
 
-    result = update_npc_profiles_from_extraction(
-        scene_facts="二楼女子正在与李掌柜谈一笔大生意。",
-        current_state=_state(),
+    profile = NPCProfile(
+        name="二楼女子",
+        aliases=[],
+        public_summary="醉花楼二楼雅间中参与大额生意谈判的女子。",
+        role="生意谈判方",
+        appearance="声音温婉中带媚。",
+        personality_traits=["从容", "精明"],
+        known_abilities=["商业谈判"],
+        current_location="醉花楼二楼雅间",
+        current_intent="与李掌柜谈判一笔大生意",
+    )
+    backfilled = backfill_new_npc_profile(
+        profile=profile,
+        existing_profiles=[],
         core_memory=CoreMemory(items=[]),
         gateway=gateway,
         npc_store=store,
-        existing_profiles=[],
-        extraction=NPCExtractionResult(
-            mentions=[
-                NPCMention(
-                    name="二楼女子",
-                    context_span="二楼女子正在与李掌柜谈一笔大生意。",
-                )
-            ]
-        ),
-        turn_index=3,
     )
+    attach_transient_alias_for_rename(backfilled, old_name="二楼女子", turn_index=3)
 
-    saved = store.get_by_id(result.saved_ids[0])
-    assert saved.name == "苏锦屏"
-    assert "二楼女子" not in saved.aliases
-    assert saved.transient_aliases["二楼女子"] == 6
+    assert backfilled.name == "苏锦屏"
+    assert "二楼女子" not in backfilled.aliases
+    assert backfilled.transient_aliases["二楼女子"] == 6
 
 
 def test_existing_npc_update_does_not_trigger_profile_backfill():
@@ -528,7 +488,8 @@ def test_similar_name_is_unresolved_and_can_create_distinct_npc():
     )
 
     assert store.get_by_id(existing_id).aliases == []
-    assert store.get_by_name("林川").npc_id in result.saved_ids
+    assert store.get_by_name("林川") is None
+    assert result.new_profiles[0].name == "林川"
     candidates = json.loads(gateway.calls[0]["input_data"]["npc_candidates_json"])
     assert candidates[0]["source"] == "unresolved"
 
