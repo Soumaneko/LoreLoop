@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import html
+import secrets
+import sys
 import traceback
+from http import HTTPStatus
 from http.server import ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -23,7 +27,13 @@ from app.api import (
     undo_last_turn,
 )
 from app.core.llm import TraceLogger
-from app.player_server import PlayerHandler, _json_response, _read_json
+from app.player_server import (
+    PlayerHandler,
+    TOKEN_META,
+    TokenAuthedPlayerHandler,
+    _json_response,
+    _read_json,
+)
 from app.runtime.app_paths import APP_PATHS, validate_debug_resource_paths
 from app.runtime.session import get_campaign_runtime
 
@@ -32,21 +42,34 @@ from app.runtime.session import get_campaign_runtime
 DEBUG_STATIC_DIR = APP_PATHS.debug_static_dir
 validate_debug_resource_paths(APP_PATHS)
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
-class DebugHandler(PlayerHandler):
-    """Development-only routes layered on top of the player HTTP surface."""
+
+class DebugHandler(TokenAuthedPlayerHandler):
+    """Development-only routes layered on top of the player HTTP surface.
+
+    All ``/api/*`` routes require the session token generated at startup; the
+    token is injected into the ``/debug`` console page only when the server is
+    bound to a loopback address.
+    """
 
     def do_GET(self) -> None:
         parsed_url = urlparse(self.path)
         path = parsed_url.path
         if path in {"/debug", "/debug/"}:
-            self._static_file(DEBUG_STATIC_DIR / "index.html", DEBUG_STATIC_DIR)
+            if self._bound_to_loopback() and not self._valid_host():
+                self._forbidden()
+                return
+            self._debug_index()
             return
         if path.startswith("/debug-assets/"):
             self._static_file(
                 DEBUG_STATIC_DIR / path.removeprefix("/debug-assets/"),
                 DEBUG_STATIC_DIR,
             )
+            return
+        if path.startswith("/api/") and not self._authorized():
+            self._forbidden()
             return
         if path == "/api/state":
             self._handle_json(load_debug_state)
@@ -74,6 +97,9 @@ class DebugHandler(PlayerHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path.startswith("/api/") and not self._authorized():
+            self._forbidden()
+            return
         if path.startswith("/api/operations/") and path.endswith("/ack"):
             self._handle_json(lambda: self._acknowledge_operation(path))
             return
@@ -132,17 +158,72 @@ class DebugHandler(PlayerHandler):
     def log_message(self, format: str, *args: Any) -> None:
         print(f"[debug-server] {self.address_string()} - {format % args}")
 
+    def _bound_to_loopback(self) -> bool:
+        server = getattr(self, "server", None)
+        host = getattr(server, "server_address", (None, None))[0]
+        return str(host) in _LOOPBACK_HOSTS
+
+    def _valid_host(self) -> bool:
+        port = self.server.server_address[1]
+        return self.headers.get("Host", "") in {
+            f"127.0.0.1:{port}",
+            f"localhost:{port}",
+            f"[::1]:{port}",
+        }
+
+    def _authorized(self) -> bool:
+        if not self._valid_token():
+            return False
+        if self._bound_to_loopback() and not self._valid_host():
+            return False
+        return True
+
+    def _forbidden(self) -> None:
+        _json_response(
+            self,
+            HTTPStatus.FORBIDDEN,
+            {
+                "ok": False,
+                "error": {
+                    "code": "forbidden",
+                    "message": "未授权的访问。",
+                    "recoverable": False,
+                },
+            },
+        )
+
+    def _debug_index(self) -> None:
+        template = (DEBUG_STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        token = self.session_token if self._bound_to_loopback() else ""
+        token_meta = (
+            '<meta name="loreloop-session-token" content="'
+            + html.escape(token, quote=True)
+            + '" />'
+        )
+        payload = template.replace(TOKEN_META, token_meta, 1).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(payload)
+
     def _handle_json(self, fn) -> None:
         try:
             _json_response(self, 200, {"ok": True, "data": fn()})
         except Exception as exc:
+            print(f"[debug-server] request failed: {exc}", file=sys.stderr)
+            traceback.print_exc()
             _json_response(
                 self,
                 500,
                 {
                     "ok": False,
-                    "error": str(exc),
-                    "traceback": traceback.format_exc(),
+                    "error": {
+                        "code": "internal_error",
+                        "message": "服务器内部错误，详情见服务端日志。",
+                        "recoverable": False,
+                    },
                 },
             )
 
@@ -224,11 +305,38 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run LoreLoop (续章).")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--allow-external",
+        action="store_true",
+        help=(
+            "允许绑定到非回环地址。API 需要访问令牌，且令牌不会注入到 "
+            "Debug 控制台页面，需由客户端手动携带 X-LoreLoop-Token。"
+            "注意：传输为明文 HTTP，仅限可信局域网使用，禁止跨不可信网络。"
+        ),
+    )
     args = parser.parse_args()
+
+    if args.host not in _LOOPBACK_HOSTS and not args.allow_external:
+        parser.error(
+            f"--host {args.host!r} 是非回环地址，需要显式 --allow-external"
+        )
+
+    token = secrets.token_hex(32)
+    DebugHandler.session_token = token
 
     server = ThreadingHTTPServer((args.host, args.port), DebugHandler)
     print(f"LoreLoop / 续章: http://{args.host}:{args.port}")
     print(f"Debug Console: http://{args.host}:{args.port}/debug")
+    if args.host in _LOOPBACK_HOSTS:
+        print("访问令牌已注入到 Debug 控制台页面。")
+    else:
+        print("=" * 60)
+        print("⚠ 已绑定到非回环地址，Debug 控制台不会内置访问令牌。")
+        print(f"  访问令牌: {token}")
+        print("  请在 Debug 控制台首次调用 API 时手动输入，或由客户端携带")
+        print("  X-LoreLoop-Token 请求头访问。")
+        print("  ⚠ 传输为明文 HTTP：仅限可信局域网，禁止跨不可信网络使用。")
+        print("=" * 60)
     server.serve_forever()
 
 

@@ -5,6 +5,7 @@ import hmac
 import html
 import mimetypes
 import os
+import sys
 import tempfile
 import traceback
 from http import HTTPStatus
@@ -54,6 +55,7 @@ from app.api import (
     undo_last_turn,
     update_player_record,
 )
+from app.core.client_error import ClientValidationError
 from app.runtime.session import get_campaign_runtime
 from app.runtime.player_state import player_saves_payload
 from app.runtime.operation_types import (
@@ -80,6 +82,25 @@ def _read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         return {}
     raw = handler.rfile.read(length).decode("utf-8")
     return json.loads(raw)
+
+
+def _project_client_error(exc: Exception, *, label: str) -> tuple[str, str]:
+    """Project an exception into a (code, message) pair safe for the client.
+
+    Only :class:`ClientValidationError` messages (deliberate validation) are
+    surfaced verbatim. Every other exception -- including ``SaveArchiveError``,
+    pydantic/JSON subclasses and unexpected infrastructure failures -- is logged
+    server-side and replaced with a generic ``internal_error``.
+    """
+    if isinstance(exc, ClientValidationError):
+        return "validation_error", str(exc) or "请求参数不合法。"
+    print(f"[player-server] {label} failed: {exc}", file=sys.stderr)
+    traceback.print_exc()
+    return "internal_error", "服务器内部错误，详情见服务端日志。"
+
+
+def _client_error_message(exc: Exception, label: str) -> str:
+    return _project_client_error(exc, label=label)[1]
 
 
 class PlayerHandler(BaseHTTPRequestHandler):
@@ -315,14 +336,15 @@ class PlayerHandler(BaseHTTPRequestHandler):
         try:
             _json_response(self, 200, {"ok": True, "data": fn()})
         except Exception as exc:
+            code, message = _project_client_error(exc, label="player request")
             _json_response(
                 self,
                 500,
                 {
                     "ok": False,
                     "error": {
-                        "code": "request_failed",
-                        "message": str(exc) or "请求没有完成，请稍后重试。",
+                        "code": code,
+                        "message": message,
                         "recoverable": True,
                     },
                 },
@@ -361,7 +383,13 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 _json_response(
                     self,
                     500,
-                    {"ok": False, "error": {"code": "export_failed", "message": str(exc)}},
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "export_failed",
+                            "message": _client_error_message(exc, "save export"),
+                        },
+                    },
                 )
         finally:
             if temporary_path is not None:
@@ -372,10 +400,10 @@ class PlayerHandler(BaseHTTPRequestHandler):
         try:
             content_type = self.headers.get("Content-Type", "").split(";", 1)[0]
             if content_type not in {"application/zip", "application/octet-stream"}:
-                raise ValueError("Import body must be a ZIP archive")
+                raise ClientValidationError("Import body must be a ZIP archive")
             length = int(self.headers.get("Content-Length", "0"))
             if length < 1 or length > 512 * 1024 * 1024:
-                raise ValueError("ZIP archive size must be between 1 byte and 512 MB")
+                raise ClientValidationError("ZIP archive size must be between 1 byte and 512 MB")
             descriptor, raw_path = tempfile.mkstemp(prefix="loreloop-import-", suffix=".zip")
             temporary_path = Path(raw_path)
             remaining = length
@@ -383,7 +411,7 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 while remaining:
                     block = self.rfile.read(min(1024 * 1024, remaining))
                     if not block:
-                        raise ValueError("ZIP upload ended before Content-Length")
+                        raise ClientValidationError("ZIP upload ended before Content-Length")
                     destination.write(block)
                     remaining -= len(block)
             data = player_saves_payload(import_save_archive(temporary_path, name))
@@ -392,7 +420,13 @@ class PlayerHandler(BaseHTTPRequestHandler):
             _json_response(
                 self,
                 500,
-                {"ok": False, "error": {"code": "import_failed", "message": str(exc)}},
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "import_failed",
+                        "message": _client_error_message(exc, "save import"),
+                    },
+                },
             )
         finally:
             if temporary_path is not None:
@@ -524,10 +558,10 @@ class PlayerHandler(BaseHTTPRequestHandler):
         parts = path.strip("/").split("/")
         expected_length = 5 if player else 4
         if len(parts) != expected_length or parts[-1] != action:
-            raise ValueError(f"Invalid Operation {action} path")
+            raise ClientValidationError(f"Invalid Operation {action} path")
         operation_id = parts[-2].strip()
         if not operation_id:
-            raise ValueError("operation_id is required")
+            raise ClientValidationError("operation_id is required")
         return operation_id
 
     def _acknowledge_player_operation(self, path: str) -> dict[str, Any]:
@@ -576,13 +610,19 @@ class PlayerHandler(BaseHTTPRequestHandler):
             operation is None
             or operation.get("operation_type") not in PLAYER_OPERATION_TYPES
         ):
-            raise ValueError("Operation not found")
+            raise ClientValidationError("Operation not found")
         return {"operation": self._player_operation(operation)}
 
     def _handle_operation_start_stream(self, starter, *, player: bool = False) -> None:
         try:
             operation_id = starter()
         except Exception as exc:
+            if not player:
+                print(
+                    f"[player-server] operation start failed: {exc}",
+                    file=sys.stderr,
+                )
+                traceback.print_exc()
             self._write_operation_start_error(exc, player=player)
             return
         self._handle_operation_event_stream(
@@ -594,27 +634,30 @@ class PlayerHandler(BaseHTTPRequestHandler):
 
     def _write_operation_start_error(self, exc: Exception, *, player: bool) -> None:
         self._send_sse_headers()
-        error = (
-            {
-                "ok": False,
-                "error": {
-                    "code": "operation_start_failed",
-                    "message": str(exc) or "本次操作没有开始，请重新尝试。",
-                    "recoverable": True,
-                },
-            }
-            if player
-            else {
-                "ok": False,
-                "error": str(exc),
-                "traceback": traceback.format_exc(),
-            }
-        )
+        code, message = _project_client_error(exc, label="operation start")
+        error = {
+            "ok": False,
+            "error": {
+                "code": code,
+                "message": message,
+                "recoverable": player,
+            },
+        }
         try:
             self._write_sse_payload(error)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
         self.close_connection = True
+
+    @staticmethod
+    def _operation_failure_message(failed) -> str:
+        if (
+            failed is not None
+            and failed.error_type == "ClientValidationError"
+            and failed.error_message
+        ):
+            return failed.error_message
+        return "服务器内部错误，详情见服务端日志。"
 
     def _handle_operation_event_stream(
         self,
@@ -700,21 +743,14 @@ class PlayerHandler(BaseHTTPRequestHandler):
                     break
                 if batch.status == "failed":
                     failed = runtime.operations.get(operation_id)
-                    message = (
-                        failed.error_message if failed is not None else None
-                    ) or "本次操作没有完成，请重新尝试。"
-                    error = (
-                        {
-                            "ok": False,
-                            "error": {
-                                "code": "operation_failed",
-                                "message": message,
-                                "recoverable": True,
-                            },
-                        }
-                        if player
-                        else {"ok": False, "error": message}
-                    )
+                    error = {
+                        "ok": False,
+                        "error": {
+                            "code": "operation_failed",
+                            "message": self._operation_failure_message(failed),
+                            "recoverable": player,
+                        },
+                    }
                     self._write_sse_payload(error)
                     break
                 if not batch.events:
@@ -723,18 +759,15 @@ class PlayerHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
         except Exception as exc:
-            error = (
-                {
-                    "ok": False,
-                    "error": {
-                        "code": "operation_stream_failed",
-                        "message": str(exc) or "任务状态读取失败。",
-                        "recoverable": True,
-                    },
-                }
-                if player
-                else {"ok": False, "error": str(exc)}
-            )
+            code, message = _project_client_error(exc, label="operation stream")
+            error = {
+                "ok": False,
+                "error": {
+                    "code": code,
+                    "message": message,
+                    "recoverable": player,
+                },
+            }
             try:
                 self._write_sse_payload(error)
             except Exception:
@@ -758,7 +791,7 @@ class PlayerHandler(BaseHTTPRequestHandler):
         payload = _read_json(self)
         user_input = str(payload.get("user_input", "")).strip()
         if not user_input:
-            raise ValueError("user_input is required")
+            raise ClientValidationError("user_input is required")
         difficulty = str(payload.get("difficulty", "困难")).strip()
         if difficulty not in ("简单", "普通", "困难"):
             difficulty = "困难"
@@ -779,7 +812,7 @@ class PlayerHandler(BaseHTTPRequestHandler):
         payload = _read_json(self)
         turn_id = str(payload.get("turn_id", "")).strip()
         if not turn_id:
-            raise ValueError("turn_id is required")
+            raise ClientValidationError("turn_id is required")
         scene_text = payload.get("scene_text")
         if scene_text is not None:
             scene_text = str(scene_text).strip()
@@ -805,7 +838,7 @@ class PlayerHandler(BaseHTTPRequestHandler):
         payload = _read_json(self)
         turn_id = str(payload.get("turn_id", "")).strip()
         if not turn_id:
-            raise ValueError("turn_id is required")
+            raise ClientValidationError("turn_id is required")
         request_id = str(payload.get("request_id", "")).strip() or None
         return turn_id, request_id
 
@@ -830,11 +863,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
         source_scene_text = str(payload.get("source_scene_text", "")).strip()
         user_feedback = str(payload.get("user_feedback", "")).strip()
         if not turn_id:
-            raise ValueError("turn_id is required")
+            raise ClientValidationError("turn_id is required")
         if not source_scene_text:
-            raise ValueError("source_scene_text is required")
+            raise ClientValidationError("source_scene_text is required")
         if not user_feedback:
-            raise ValueError("user_feedback is required")
+            raise ClientValidationError("user_feedback is required")
         request_id = str(payload.get("request_id", "")).strip() or None
         return start_feedback_rewrite_operation(
             turn_id,
@@ -847,17 +880,17 @@ class PlayerHandler(BaseHTTPRequestHandler):
         payload = _read_json(self)
         turn_id = str(payload.get("turn_id", "")).strip()
         if not turn_id:
-            raise ValueError("turn_id is required")
+            raise ClientValidationError("turn_id is required")
         return discard_pending_turn(turn_id)
 
     def _save_pending_scene_edit(self):
         payload = _read_json(self)
         turn_id = str(payload.get("turn_id", "")).strip()
         if not turn_id:
-            raise ValueError("turn_id is required")
+            raise ClientValidationError("turn_id is required")
         scene_text = payload.get("scene_text")
         if scene_text is not None and not isinstance(scene_text, str):
-            raise ValueError("scene_text must be a string or null")
+            raise ClientValidationError("scene_text must be a string or null")
         return save_pending_scene_edit(turn_id, scene_text)
 
     def _update_player_record(self):
@@ -876,10 +909,25 @@ class PlayerHandler(BaseHTTPRequestHandler):
 TOKEN_META = '<meta name="loreloop-session-token" content="" />'
 
 
-class DesktopPlayerHandler(PlayerHandler):
-    """Authenticated loopback-only player surface used by the desktop shell."""
+class TokenAuthedPlayerHandler(PlayerHandler):
+    """Player surface that requires a session token (and a loopback Host)."""
 
     session_token = ""
+
+    def _valid_token(self) -> bool:
+        supplied = self.headers.get("X-LoreLoop-Token", "")
+        return bool(self.session_token) and hmac.compare_digest(
+            supplied,
+            self.session_token,
+        )
+
+    def _valid_host(self) -> bool:
+        expected = f"127.0.0.1:{self.server.server_address[1]}"
+        return hmac.compare_digest(self.headers.get("Host", ""), expected)
+
+
+class DesktopPlayerHandler(TokenAuthedPlayerHandler):
+    """Authenticated loopback-only player surface used by the desktop shell."""
 
     def do_GET(self) -> None:
         if not self._valid_host():
@@ -915,17 +963,6 @@ class DesktopPlayerHandler(PlayerHandler):
 
     def log_message(self, format: str, *args: Any) -> None:
         return
-
-    def _valid_host(self) -> bool:
-        expected = f"127.0.0.1:{self.server.server_address[1]}"
-        return hmac.compare_digest(self.headers.get("Host", ""), expected)
-
-    def _valid_token(self) -> bool:
-        supplied = self.headers.get("X-LoreLoop-Token", "")
-        return bool(self.session_token) and hmac.compare_digest(
-            supplied,
-            self.session_token,
-        )
 
     def _desktop_player_index(self) -> None:
         template = (PLAYER_STATIC_DIR / "index.html").read_text(encoding="utf-8")

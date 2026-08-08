@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from app.core.client_error import ClientValidationError
 from app.graph.confirmation_graph import confirm_stream
 from app.graph.generation_graph import (
     feedback_rewrite_stream,
@@ -116,7 +117,7 @@ def _start_pending_variant_operation(
     runtime = get_campaign_runtime()
     pending = runtime.pending_turns.get(turn_id)
     if pending is None:
-        raise ValueError("Pending turn not found. Generate a scene before retrying.")
+        raise ClientValidationError("Pending turn not found. Generate a scene before retrying.")
     return _submit_managed_operation(
         operation_type,
         stream_factory,
@@ -167,7 +168,7 @@ def start_feedback_rewrite_operation(
     runtime = get_campaign_runtime()
     pending = runtime.pending_turns.get(turn_id)
     if pending is None:
-        raise ValueError("Pending turn not found. Generate a scene before rewriting.")
+        raise ClientValidationError("Pending turn not found. Generate a scene before rewriting.")
     return _submit_managed_operation(
         "feedback_rewrite",
         feedback_rewrite_stream,
@@ -191,7 +192,7 @@ def start_opening_rewrite_operation(
     runtime = get_campaign_runtime()
     pending = runtime.pending_openings.get(turn_id)
     if pending is None:
-        raise ValueError("Pending opening not found.")
+        raise ClientValidationError("Pending opening not found.")
     variants = runtime.pending_openings.variants(pending.group_id)
     version_index = max(item.version_index for item in variants) + 1
     return _submit_managed_operation(
@@ -221,7 +222,7 @@ def start_confirmation_operation(
     opening = runtime.pending_openings.get(turn_id)
     selected = pending or opening
     if selected is None:
-        raise ValueError("Pending turn not found. Generate a scene before confirming.")
+        raise ClientValidationError("Pending turn not found. Generate a scene before confirming.")
     return _submit_managed_operation(
         "confirmation",
         confirm_stream,
@@ -264,13 +265,13 @@ def update_player_record(
 def record_player_diagnostic(payload: dict[str, Any]) -> dict[str, bool]:
     severity = str(payload.get("severity", "error")).strip().lower()
     if severity not in {"warning", "error"}:
-        raise ValueError("severity must be warning or error")
+        raise ClientValidationError("severity must be warning or error")
     code = str(payload.get("code", "player_frontend_error")).strip()
     if not code or len(code) > 120:
-        raise ValueError("diagnostic code must contain 1-120 characters")
+        raise ClientValidationError("diagnostic code must contain 1-120 characters")
     message = str(payload.get("message", "")).strip()
     if not message:
-        raise ValueError("diagnostic message is required")
+        raise ClientValidationError("diagnostic message is required")
     runtime = get_campaign_runtime()
     logger = runtime.diagnostics
     log = logger.warning if severity == "warning" else logger.error
@@ -329,10 +330,10 @@ def cancel_operation(operation_id: str) -> dict:
     runtime = get_campaign_runtime()
     operation = runtime.operations.get(operation_id)
     if operation is None:
-        raise ValueError("Operation not found")
+        raise ClientValidationError("Operation not found")
     policy = operation_policy(operation.operation_type)
     if not policy.player_visible or not policy.cancellable:
-        raise ValueError("This operation cannot be cancelled")
+        raise ClientValidationError("This operation cannot be cancelled")
     return runtime.operations.cancel(operation_id).as_dict()
 
 

@@ -180,11 +180,42 @@ function inventory(items) {
   }));
 }
 
+let sessionToken =
+  document
+    .querySelector('meta[name="loreloop-session-token"]')
+    ?.getAttribute("content") ||
+  sessionStorage.getItem("loreloop-debug-token") ||
+  "";
+
+function requestSessionToken() {
+  if (sessionToken) return true;
+  const entered = window.prompt("请输入 Debug 服务器访问令牌：");
+  if (!entered) return false;
+  sessionToken = entered;
+  sessionStorage.setItem("loreloop-debug-token", entered);
+  return true;
+}
+
+function tokenFetch(path, options = {}) {
+  if (String(path).startsWith("/api/") && !sessionToken) {
+    requestSessionToken();
+  }
+  const headers = {
+    ...(options.headers || {}),
+    ...(sessionToken ? { "X-LoreLoop-Token": sessionToken } : {}),
+  };
+  return fetch(path, { ...options, headers });
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+  const response = await tokenFetch(path, { headers: { "Content-Type": "application/json" }, ...options });
   const payload = await response.json();
   if (!payload.ok) {
-    const err = new Error(payload.error || "请求失败");
+    const message =
+      typeof payload.error === "string"
+        ? payload.error
+        : (payload.error && payload.error.message) || "请求失败";
+    const err = new Error(message);
     err.payload = payload;
     throw err;
   }
@@ -208,7 +239,19 @@ async function loadTrace(traceId) {
 }
 
 async function readEventStream(response, scope, onEvent) {
-  if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const parsed = JSON.parse(detail);
+      detail =
+        typeof parsed.error === "string"
+          ? parsed.error
+          : (parsed.error && parsed.error.message) || detail;
+    } catch (_ignore) {
+      /* not JSON; show the raw HTTP error text */
+    }
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -717,7 +760,7 @@ async function applyInit() {
   try {
     const proposal = JSON.parse($("initSetupJson").value);
     if (!state.initConfigSnapshot || !proposal) throw new Error("请先生成并确认公开世界惯例");
-    const response = await fetch("/api/init/apply", {
+    const response = await tokenFetch("/api/init/apply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -747,7 +790,7 @@ async function generateInitSetup() {
   const btn = $("initSetupBtn");
   btn.disabled = true;
   try {
-    const response = await fetch("/api/init/campaign-setup", {
+    const response = await tokenFetch("/api/init/campaign-setup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1878,7 +1921,7 @@ function handleConfirmationPipelineEvent(event) {
 }
 
 async function replayOperation(operation, scope, onEvent) {
-  const response = await fetch(
+  const response = await tokenFetch(
     `/api/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
   );
   await readEventStream(response, scope, onEvent);
@@ -2006,7 +2049,7 @@ async function generateTurn() {
   state.activeTab = "overview";
   renderDebug();
   try {
-    const response = await fetch("/api/generate", {
+    const response = await tokenFetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2047,7 +2090,7 @@ async function retryTurn() {
   state.activeTab = "overview";
   renderDebug();
   try {
-    const response = await fetch("/api/retry", {
+    const response = await tokenFetch("/api/retry", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2119,7 +2162,7 @@ async function confirmTurn() {
     body.request_id = newRequestId();
     const sceneText = getSceneText();
     if (sceneText != null) body.scene_text = sceneText;
-    const response = await fetch("/api/confirm", {
+    const response = await tokenFetch("/api/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -2142,7 +2185,12 @@ async function confirmTurn() {
 
 function renderError(err) {
   state.activeTab = "raw";
-  els.debugBody.innerHTML = card("错误", `<div class="empty">${esc(err.message || err.error || "Unknown")}</div>${err.traceback ? jsonBlock(err.traceback) : ""}`, "bad");
+  const error = (err && typeof err === "object" && err.error) || err;
+  const message =
+    typeof error === "string"
+      ? error
+      : (error && (error.message || error.code)) || "Unknown";
+  els.debugBody.innerHTML = card("错误", `<div class="empty">${esc(message)}</div>`, "bad");
 }
 
 els.generateBtn.onclick = generateTurn;
