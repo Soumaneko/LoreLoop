@@ -12,6 +12,7 @@ const DEFAULTS = {
   font_family: "serif",
   theme: "dark",
   show_token_usage: false,
+  one_click_confirm: false,
 };
 
 function normalized(preferences = {}) {
@@ -20,6 +21,7 @@ function normalized(preferences = {}) {
     font_family: preferences.font_family || DEFAULTS.font_family,
     theme: preferences.theme || DEFAULTS.theme,
     show_token_usage: preferences.show_token_usage === true,
+    one_click_confirm: preferences.one_click_confirm === true,
   };
 }
 
@@ -66,6 +68,9 @@ export function createReaderPreferencesController({
     if (elements.tokenUsage) {
       elements.tokenUsage.checked = current.show_token_usage;
     }
+    if (elements.oneClickConfirm) {
+      elements.oneClickConfirm.checked = current.one_click_confirm;
+    }
     if (onTokenUsageVisibilityChange) {
       onTokenUsageVisibilityChange(current.show_token_usage);
     }
@@ -86,8 +91,10 @@ export function createReaderPreferencesController({
       font_family: elements.fontFamily.value || DEFAULTS.font_family,
       theme: elements.theme.value || DEFAULTS.theme,
       show_token_usage: elements.tokenUsage ? elements.tokenUsage.checked : false,
+      one_click_confirm: elements.oneClickConfirm ? elements.oneClickConfirm.checked : false,
     };
     apply(requested);
+    state.readerPreferences = normalized(requested);
     const sequence = ++saveSequence;
     const job = saveQueue
       .catch(() => undefined)
@@ -99,8 +106,8 @@ export function createReaderPreferencesController({
     try {
       const saved = normalized(await job);
       confirmed = saved;
-      state.readerPreferences = saved;
       if (sequence === saveSequence) {
+        state.readerPreferences = saved;
         apply(saved);
         if (!silent) showToast("沉浸阅读偏好已保存");
       }

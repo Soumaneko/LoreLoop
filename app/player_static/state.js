@@ -17,6 +17,8 @@ export const state = {
     font_size: "16.5",
     font_family: "serif",
     theme: "dark",
+    show_token_usage: false,
+    one_click_confirm: false,
   },
 };
 
@@ -61,4 +63,10 @@ export function applySavedDraft(variant, payload) {
   if (!variant || !payload) return;
   variant.scene_text = payload.scene_text ?? variant.scene_text;
   variant.saved_scene_text = payload.saved_scene_text ?? null;
+}
+
+export function shouldAutoConfirmTurn({ enabled, pendingKind }) {
+  if (enabled !== true) return false;
+  if (pendingKind === "opening") return false;
+  return pendingKind === "turn" || pendingKind === undefined;
 }

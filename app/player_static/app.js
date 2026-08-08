@@ -18,6 +18,7 @@ import {
   readDraft,
   selectedVariant,
   setMode,
+  shouldAutoConfirmTurn,
   state,
 } from "./state.js";
 import { migrateStorageKey } from "./storage_migration.js";
@@ -51,7 +52,7 @@ const els = {
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
-  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), canonValidationBtn: $("canonValidationBtn"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
+  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), canonValidationBtn: $("canonValidationBtn"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), oneClickConfirm: $("oneClickConfirm"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), closeCodexBtn: $("closeCodexBtn"),
   codexConfirmDialog: $("codexConfirmDialog"), codexConfirmEyebrow: $("codexConfirmEyebrow"), codexConfirmTitle: $("codexConfirmTitle"), codexConfirmMessage: $("codexConfirmMessage"), codexConfirmCancelBtn: $("codexConfirmCancelBtn"), codexConfirmOkBtn: $("codexConfirmOkBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
@@ -170,6 +171,7 @@ const readerPreferences = createReaderPreferencesController({
     fontFamily: els.fontFamilySelect,
     theme: els.themeSelect,
     tokenUsage: els.tokenUsageSelect,
+    oneClickConfirm: els.oneClickConfirm,
   },
   request,
   state,
@@ -2130,6 +2132,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   if (state.activeSave) refreshRecords({ force: true });
   if (recoverableOperations.length) {
     let reloadAfterRecovery = false;
+    let autoConfirmAfterRecovery = false;
     for (const operation of recoverableOperations) {
       if (operation.recovery_kind === "initialization") {
         reloadAfterRecovery = (
@@ -2140,9 +2143,11 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
           await resumeConfirmationOperation(operation)
         ) || reloadAfterRecovery;
       } else if (operation.recovery_kind === "generation") {
-        reloadAfterRecovery = (
-          await resumeGenerationOperation(operation)
-        ) || reloadAfterRecovery;
+        const resumed = await resumeGenerationOperation(operation);
+        reloadAfterRecovery = resumed || reloadAfterRecovery;
+        if (resumed && operation.operation_type === "generation") {
+          autoConfirmAfterRecovery = true;
+        }
         if (!reloadAfterRecovery) {
           const pendingAfterResume = activePending();
           if (pendingAfterResume) {
@@ -2154,6 +2159,9 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     }
     if (reloadAfterRecovery) {
       await loadAll({ scroll: scroll || "smooth", resumeOperation: false });
+    }
+    if (autoConfirmAfterRecovery) {
+      await maybeAutoConfirm();
     }
     return;
   }
@@ -2586,6 +2594,7 @@ async function generateTurn() {
       const latest = pendingAfterGen.variants[pendingAfterGen.variants.length - 1];
       if (latest) tokenUsage.saveVariantGenerationUsage(latest.turn_id);
     }
+    await maybeAutoConfirm();
   } catch (error) {
     stopStreaming(); showActivePlayerAction("");
     els.playerInput.value = userInput; autoSizeInput();
@@ -2687,6 +2696,16 @@ function feedbackNoRewriteMessage(reasonCode) {
     return "没有识别到明确可执行的修改要求";
   }
   return "这项意见不适用于正文重写，原版本保持不变";
+}
+
+async function maybeAutoConfirm() {
+  const preferences = state.readerPreferences || {};
+  if (!shouldAutoConfirmTurn({
+    enabled: preferences.one_click_confirm,
+    pendingKind: activePending()?.kind,
+  })) return;
+  if (sessionStorage.getItem(CONFIRMATION_IN_FLIGHT_KEY) === "1") return;
+  await confirmTurn();
 }
 
 async function confirmTurn() {
@@ -4255,6 +4274,7 @@ els.fontSizeSelect.onchange = readerPreferences.save;
 els.fontFamilySelect.onchange = readerPreferences.save;
 els.themeSelect.onchange = readerPreferences.save;
 els.tokenUsageSelect.onchange = () => readerPreferences.save({ silent: true });
+els.oneClickConfirm.onchange = () => readerPreferences.save({ silent: true });
 els.undoBtn.onclick = () => changeHistory("undo"); els.redoBtn.onclick = () => changeHistory("redo");
 els.turnNavigatorLatest.onclick = jumpToLatestTurn;
 els.initAbilitySystem.onchange = toggleCustomAbilityField;

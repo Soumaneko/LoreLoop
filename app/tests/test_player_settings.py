@@ -101,20 +101,24 @@ def test_reader_preferences_are_application_global_and_normalized(tmp_path):
         "font_family": "kaiti",
         "theme": "sepia",
         "show_token_usage": True,
+        "one_click_confirm": True,
     }, store=store) == {
         "font_size": "18",
         "font_family": "kaiti",
         "theme": "sepia",
         "show_token_usage": True,
+        "one_click_confirm": True,
     }
     assert load_reader_preferences(store=store) == {
         "font_size": "18",
         "font_family": "kaiti",
         "theme": "sepia",
         "show_token_usage": True,
+        "one_click_confirm": True,
     }
     assert not {
         "font_size", "font_family", "theme", "show_token_usage",
+        "one_click_confirm",
     } & load_settings().keys()
     assert save_reader_preferences({
         "font_size": "invalid",
@@ -125,4 +129,11 @@ def test_reader_preferences_are_application_global_and_normalized(tmp_path):
         "font_family": "serif",
         "theme": "dark",
         "show_token_usage": False,
+        "one_click_confirm": False,
     }
+
+
+def test_one_click_confirm_defaults_to_off(tmp_path):
+    store = ReaderPreferencesStore(tmp_path / ".app" / "reader_preferences.json")
+    assert load_reader_preferences(store=store)["one_click_confirm"] is False
+    assert ReaderPreferencesStore(store.path).load().one_click_confirm is False

@@ -72,6 +72,127 @@ if (module.hasDraft(variant) || module.readDraft(variant) !== "原始正文") {{
     assert result.returncode == 0, result.stderr
 
 
+def test_one_click_confirm_guard_only_allows_turn_kind_when_enabled():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "state.js").resolve().as_uri()
+    script = f"""
+const {{ shouldAutoConfirmTurn }} = await import("{module_url}");
+if (shouldAutoConfirmTurn({{ enabled: false, pendingKind: "turn" }})) {{
+  throw new Error("disabled preference must never auto-confirm");
+}}
+if (shouldAutoConfirmTurn({{ enabled: true, pendingKind: "opening" }})) {{
+  throw new Error("opening pending must never auto-confirm");
+}}
+if (!shouldAutoConfirmTurn({{ enabled: true, pendingKind: "turn" }})) {{
+  throw new Error("turn pending with enabled preference should auto-confirm");
+}}
+if (!shouldAutoConfirmTurn({{ enabled: true }})) {{
+  throw new Error("missing pending kind should be treated as a regular turn");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_one_click_confirm_save_updates_state_optimistically():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "reader_preferences.js").resolve().as_uri()
+    script = f"""
+globalThis.document = {{
+  documentElement: {{
+    style: {{ setProperty() {{}}, removeAttribute() {{}} }},
+    dataset: {{}},
+    removeAttribute() {{}},
+  }},
+  querySelector() {{ return null; }},
+}};
+globalThis.localStorage = {{ setItem() {{}}, getItem() {{ return null; }} }};
+
+function stubElement() {{
+  return {{ value: "16.5", checked: false, nextElementSibling: null }};
+}}
+const elements = {{
+  fontSize: stubElement(),
+  fontFamily: stubElement(),
+  theme: stubElement(),
+  tokenUsage: stubElement(),
+  oneClickConfirm: stubElement(),
+}};
+
+const resolvers = [];
+let requestCount = 0;
+function request() {{
+  return new Promise((resolve) => {{
+    resolvers.push({{ resolve, index: requestCount++ }});
+  }});
+}}
+
+const state = {{
+  readerPreferences: {{
+    font_size: "16.5", font_family: "serif", theme: "dark",
+    show_token_usage: false, one_click_confirm: false,
+  }},
+}};
+
+const {{ createReaderPreferencesController }} = await import("{module_url}");
+const controller = createReaderPreferencesController({{
+  elements, request, state,
+  showToast() {{}}, showError() {{}},
+}});
+
+function echo(one_click_confirm) {{
+  return {{
+    font_size: "16.5", font_family: "serif", theme: "dark",
+    show_token_usage: false, one_click_confirm,
+  }};
+}}
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+elements.oneClickConfirm.checked = true;
+const saveOn = controller.save({{ silent: true }});
+if (state.readerPreferences.one_click_confirm !== true) {{
+  throw new Error("save() must update state optimistically before the server responds");
+}}
+
+elements.oneClickConfirm.checked = false;
+const saveOff = controller.save({{ silent: true }});
+if (state.readerPreferences.one_click_confirm !== false) {{
+  throw new Error("a newer optimistic save must win immediately");
+}}
+
+while (resolvers.length < 1) await tick();
+resolvers[0].resolve(echo(true));
+while (resolvers.length < 2) await tick();
+if (state.readerPreferences.one_click_confirm !== false) {{
+  throw new Error("stale echo from an older save must not clobber the newer value");
+}}
+resolvers[1].resolve(echo(false));
+await saveOn;
+await saveOff;
+if (state.readerPreferences.one_click_confirm !== false) {{
+  throw new Error("final saved state must reflect the latest toggle");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_pending_footer_mode_keeps_version_control_when_token_usage_is_missing():
     node = shutil.which("node")
     if node is None:

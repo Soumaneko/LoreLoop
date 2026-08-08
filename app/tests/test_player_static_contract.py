@@ -45,6 +45,16 @@ def test_player_themes_use_semantic_tokens_without_component_overrides():
     assert "let saveQueue = Promise.resolve()" in preferences_source
     assert "themeColorMeta.content = themeColor" in preferences_source
     assert 'request("/api/player/reader-preferences")' in preferences_source
+    assert "one_click_confirm" in preferences_source
+    assert "oneClickConfirm: els.oneClickConfirm" in source
+    assert "autoConfirmAfterRecovery" in source
+    assert "shouldAutoConfirmTurn" in (STATIC_DIR / "state.js").read_text(encoding="utf-8")
+    assert "maybeAutoConfirm" in source
+    assert 'id="oneClickConfirm"' in html
+    assert "一键确认" in html
+    assert "可能增加 Token 消耗" in html
+    assert "LLM 随机性可能导致正文质量波动" in html
+    assert "生成结果会直接进入确认流程" in html
     assert 'localStorage.getItem(cacheKey)' in prepaint_source
     assert 'src="/assets/prepaint.js"' in html
     assert 'meta name="theme-color" content="#11110e"' in html

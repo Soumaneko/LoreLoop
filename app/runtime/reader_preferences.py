@@ -23,6 +23,7 @@ class ReaderPreferences:
     font_family: str = "serif"
     theme: str = "dark"
     show_token_usage: bool = False
+    one_click_confirm: bool = False
 
     @classmethod
     def from_dict(cls, payload: object) -> "ReaderPreferences":
@@ -33,6 +34,7 @@ class ReaderPreferences:
             font_family=normalize_font_family(payload.get("font_family")),
             theme=normalize_theme(payload.get("theme")),
             show_token_usage=payload.get("show_token_usage") is True,
+            one_click_confirm=payload.get("one_click_confirm") is True,
         )
 
     def public_payload(self) -> dict[str, Any]:
