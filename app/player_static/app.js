@@ -5,6 +5,8 @@ import {
   syncCustomSelects,
 } from "./custom_select.js";
 import { createReaderPreferencesController } from "./reader_preferences.js";
+import { bindPopoverFallbackDismiss } from "./popover_fallback.js";
+import { bindSettingInfoButtons, bindSettingInfoDismiss } from "./setting_info.js";
 import {
   installClientDiagnostics,
   reportClientError,
@@ -52,7 +54,7 @@ const els = {
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
-  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), canonValidationBtn: $("canonValidationBtn"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), oneClickConfirm: $("oneClickConfirm"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
+  difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), canonValidationBtn: $("canonValidationBtn"), canonInfoBtn: $("canonInfoBtn"), tokenUsageInfoBtn: $("tokenUsageInfoBtn"), oneClickInfoBtn: $("oneClickInfoBtn"), settingInfoDialog: $("settingInfoDialog"), settingInfoTitle: $("settingInfoTitle"), settingInfoContent: $("settingInfoContent"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), oneClickConfirm: $("oneClickConfirm"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), closeCodexBtn: $("closeCodexBtn"),
   codexConfirmDialog: $("codexConfirmDialog"), codexConfirmEyebrow: $("codexConfirmEyebrow"), codexConfirmTitle: $("codexConfirmTitle"), codexConfirmMessage: $("codexConfirmMessage"), codexConfirmCancelBtn: $("codexConfirmCancelBtn"), codexConfirmOkBtn: $("codexConfirmOkBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
@@ -4184,9 +4186,38 @@ document.addEventListener("click", (event) => {
 els.tokenUsageDialog.addEventListener("click", (e) => {
   if (e.target === els.tokenUsageDialog) {
     if (els.tokenUsageDialog.hidePopover) els.tokenUsageDialog.hidePopover();
-    else els.tokenUsageDialog.close();
+    else els.tokenUsageDialog.removeAttribute("open");
   }
 });
+bindPopoverFallbackDismiss(els.tokenUsageDialog, () => {
+  if (els.tokenUsageDialog.hidePopover) els.tokenUsageDialog.hidePopover();
+  else els.tokenUsageDialog.removeAttribute("open");
+});
+const settingInfo = bindSettingInfoButtons({
+  dialog: els.settingInfoDialog,
+  titleEl: els.settingInfoTitle,
+  contentEl: els.settingInfoContent,
+  buttons: {
+    canonInfoBtn: els.canonInfoBtn,
+    tokenUsageInfoBtn: els.tokenUsageInfoBtn,
+    oneClickInfoBtn: els.oneClickInfoBtn,
+  },
+  specs: {
+    canonInfoBtn: {
+      title: "Canon 后校验",
+      body: "校验正文与已确定事实的一致性。关闭后可能产生与已确定事实冲突的内容，但可大幅节省 Token 和等待时间。",
+    },
+    tokenUsageInfoBtn: {
+      title: "Token 用量显示",
+      body: "显示 Token 消耗。关闭后不影响生成质量或实际成本。",
+    },
+    oneClickInfoBtn: {
+      title: "一键确认",
+      body: "正文生成后自动确认。开启后若 LLM 随机性导致正文质量波动，可能会因此增加 Token 消耗。",
+    },
+  },
+});
+bindSettingInfoDismiss(els.settingInfoDialog, () => settingInfo.hide());
 els.testModelBtn.onclick = testModelConnection;
 els.modelConfigForm.addEventListener("submit", (event) => {
   event.preventDefault();

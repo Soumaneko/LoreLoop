@@ -187,28 +187,31 @@
           <option value="full">显示骰点、修正与结果</option>
         </select>
       </div>
+    </section>
+    <section class="drawer-section">
+      <div class="section-title">成本与质量</div>
       <div class="setting-row">
-        <span class="setting-label">后校验<span class="setting-note">（关闭可节省 token）</span></span>
+        <span class="setting-label">后校验<span class="setting-inline-note">校验正文与已确定事实的一致性</span><button type="button" id="canonInfoBtn" class="setting-info-btn" aria-label="后校验说明">ⓘ</button></span>
         <label class="toggle-switch">
           <input id="canonValidationBtn" type="checkbox" />
           <span class="toggle-track"></span>
         </label>
       </div>
       <div class="setting-row">
-        <span class="setting-label">用量</span>
+        <span class="setting-label">用量显示<span class="setting-inline-note">显示 Token 消耗</span><button type="button" id="tokenUsageInfoBtn" class="setting-info-btn" aria-label="用量显示说明">ⓘ</button></span>
         <label class="toggle-switch">
           <input id="tokenUsageSelect" type="checkbox" />
           <span class="toggle-track"></span>
         </label>
       </div>
       <div class="setting-row">
-        <span class="setting-label">一键确认</span>
+        <span class="setting-label">一键确认<span class="setting-inline-note">正文生成后自动确认</span><button type="button" id="oneClickInfoBtn" class="setting-info-btn" aria-label="一键确认说明">ⓘ</button></span>
         <label class="toggle-switch">
           <input id="oneClickConfirm" type="checkbox" />
           <span class="toggle-track"></span>
         </label>
       </div>
-      <p class="setting-note">开启后，输入行动生成的正文会自动确认默认候选，跳过待确认编辑界面。可能增加 Token 消耗；LLM 随机性可能导致正文质量波动；生成结果会直接进入确认流程。</p>
+      <p class="setting-note">NPC/Setting 基础连续性维护始终运行，无开关。</p>
     </section>
     <section class="drawer-section" data-creator-only>
       <div class="setting-row">
@@ -437,6 +440,13 @@
     <section class="token-usage-dialog-shell">
 
       <div id="tokenUsageDialogContent"></div>
+    </section>
+  </div>
+
+  <div id="settingInfoDialog" class="token-usage-popover setting-info-popover" popover="auto">
+    <section class="token-usage-dialog-shell">
+      <div id="settingInfoTitle" class="setting-info-title"></div>
+      <p id="settingInfoContent" class="setting-info-content"></p>
     </section>
   </div>
 

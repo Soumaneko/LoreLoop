@@ -52,9 +52,26 @@ def test_player_themes_use_semantic_tokens_without_component_overrides():
     assert "maybeAutoConfirm" in source
     assert 'id="oneClickConfirm"' in html
     assert "一键确认" in html
-    assert "可能增加 Token 消耗" in html
-    assert "LLM 随机性可能导致正文质量波动" in html
-    assert "生成结果会直接进入确认流程" in html
+    assert "成本与质量" in html
+    assert 'id="canonInfoBtn"' in html
+    assert 'id="tokenUsageInfoBtn"' in html
+    assert 'id="oneClickInfoBtn"' in html
+    assert 'id="settingInfoDialog"' in html
+    assert 'from "./setting_info.js"' in source
+    assert "bindSettingInfoButtons" in source
+    assert "bindSettingInfoDismiss" in source
+    assert "setting-inline-note" in html
+    assert "setting-inline-note" in styles
+    assert "校验正文与已确定事实的一致性" in html
+    assert "显示 Token 消耗" in html
+    assert "正文生成后自动确认" in html
+    assert "NPC/Setting 基础连续性维护始终运行" in html
+    assert "可能产生与已确定事实冲突的内容" in source
+    assert "不影响生成质量或实际成本" in source
+    assert "增加 Token 消耗" in source
+    assert "LLM 随机性导致正文质量波动" in source
+    assert ".token-usage-popover:not([open])" in styles
+    assert "@supports (selector(:popover-open))" in styles
     assert 'localStorage.getItem(cacheKey)' in prepaint_source
     assert 'src="/assets/prepaint.js"' in html
     assert 'meta name="theme-color" content="#11110e"' in html
@@ -189,7 +206,11 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'id="tokenUsageDialog"' in html
     assert "createTokenUsageController" in source
     assert "tokenUsage.handleEvent(event)" in source
-    assert "_openPipelineDialog" in (
+    assert "bindPopoverFallbackDismiss" in source
+    assert "openTokenUsagePipelineDialog" in (
+        STATIC_DIR / "token_usage.js"
+    ).read_text(encoding="utf-8")
+    assert 'else dialog.setAttribute("open", "")' in (
         STATIC_DIR / "token_usage.js"
     ).read_text(encoding="utf-8")
     assert "show_token_usage" in (

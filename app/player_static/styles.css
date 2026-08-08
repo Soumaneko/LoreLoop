@@ -1038,11 +1038,54 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   font-weight: 500;
   opacity: 0.9;
 }
+.setting-info-btn {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1;
+  opacity: .45;
+  cursor: pointer;
+  vertical-align: 1px;
+  transition: opacity .15s ease;
+}
+.setting-info-btn:hover { opacity: .9; }
+.setting-inline-note {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: .02em;
+  opacity: .55;
+  margin-left: 6px;
+}
+.setting-info-popover { width: 300px; max-width: min(84vw, 300px); }
+.setting-info-title {
+  color: var(--gold-bright);
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  opacity: .9;
+  margin-bottom: 8px;
+}
+.setting-info-content {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.7;
+  opacity: .85;
+}
 .setting-note {
   text-transform: none;
-  letter-spacing: .04em;
-  opacity: .55;
+  letter-spacing: .02em;
+  opacity: .6;
   font-weight: 400;
+  font-size: 12px;
+  line-height: 1.65;
+  margin: 6px 0 4px;
+}
+.setting-note + .setting-note {
+  margin-top: 2px;
 }
 .setting-row .codex-custom-select-wrapper {
   width: auto;
@@ -1258,6 +1301,10 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   border-radius: 8px;
   box-shadow: var(--shadow-focus);
   padding: 0;
+}
+.token-usage-popover:not([open]) { display: none; }
+@supports (selector(:popover-open)) {
+  .token-usage-popover:not([open]) { display: revert; }
 }
 .token-usage-popover::backdrop {
   background: transparent;

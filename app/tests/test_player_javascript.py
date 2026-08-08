@@ -18,7 +18,9 @@ def test_player_frontend_javascript_is_syntactically_valid():
         "client_diagnostics.js",
         "custom_select.js",
         "prepaint.js",
+        "popover_fallback.js",
         "reader_preferences.js",
+        "setting_info.js",
         "state.js",
         "storage_migration.js",
     ):
@@ -412,6 +414,208 @@ if (headers.Accept !== "application/json") {{
 if ("X-LoreLoop-Token" in headers) {{
   throw new Error("web mode must not send an empty desktop token");
 }}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_setting_info_popover_shows_switches_and_closes_with_native_and_fallback():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "setting_info.js").resolve().as_uri()
+    script = f"""
+globalThis.window = {{ innerWidth: 1280, innerHeight: 720 }};
+const docListeners = {{}};
+globalThis.document = {{
+  addEventListener(type, handler) {{ docListeners[type] = handler; }},
+}};
+
+function stubElement(rect) {{
+  const attrs = {{}};
+  const listeners = {{}};
+  return {{
+    textContent: "",
+    style: {{}},
+    attrs,
+    listeners,
+    addEventListener(name, handler) {{ listeners[name] = handler; }},
+    setAttribute(name, value) {{ attrs[name] = value; }},
+    removeAttribute(name) {{ delete attrs[name]; }},
+    hasAttribute(name) {{ return name in attrs; }},
+    contains(other) {{ return other === this; }},
+    getBoundingClientRect() {{
+      return rect || {{ top: 0, bottom: 24, left: 10, width: 20, height: 20 }};
+    }},
+  }};
+}}
+
+const {{ bindSettingInfoButtons, bindSettingInfoDismiss }} = await import("{module_url}");
+
+function makeNativeDialog() {{
+  const calls = [];
+  const dialog = stubElement({{ top: 0, bottom: 0, left: 0, width: 120, height: 60 }});
+  dialog.showPopover = () => calls.push("show");
+  dialog.hidePopover = () => calls.push("hide");
+  return {{ dialog, calls }};
+}}
+
+const titleEl = stubElement();
+const contentEl = stubElement();
+const buttons = {{ canon: stubElement(), usage: stubElement(), oneClick: stubElement() }};
+const specs = {{
+  canon: {{ title: "Canon 后校验", body: "关闭后可能产生与已确定事实冲突的内容。" }},
+  usage: {{ title: "Token 用量显示", body: "关闭后不影响生成质量或实际成本。" }},
+  oneClick: {{ title: "一键确认", body: "正文生成后自动确认。" }},
+}};
+
+const native = makeNativeDialog();
+const controller = bindSettingInfoButtons({{
+  dialog: native.dialog, titleEl, contentEl, buttons, specs,
+}});
+bindSettingInfoDismiss(native.dialog, () => controller.hide());
+
+// 1) clicking an info button shows its content and opens the popover
+buttons.canon.onclick();
+if (titleEl.textContent !== "Canon 后校验") throw new Error("title was not set");
+if (contentEl.textContent !== specs.canon.body) throw new Error("body was not shown");
+if (!native.calls.includes("show")) throw new Error("native showPopover was not called");
+if (!native.dialog.style.top) throw new Error("popover was not positioned");
+
+// 2) switching between buttons updates content and re-opens
+buttons.oneClick.onclick();
+if (contentEl.textContent !== specs.oneClick.body) throw new Error("switch did not update content");
+buttons.canon.onclick();
+if (contentEl.textContent !== specs.canon.body) throw new Error("re-open did not restore previous content");
+if (native.calls.filter((c) => c === "show").length !== 3) throw new Error("re-show was not triggered per click");
+
+// 3) close behavior via backdrop click and explicit hide
+native.dialog.listeners.click({{ target: native.dialog }});
+if (!native.calls.includes("hide")) throw new Error("backdrop click did not hide");
+controller.hide();
+if (native.calls.filter((c) => c === "hide").length < 2) throw new Error("hide did not call hidePopover");
+
+// 4) fallback without Popover API uses [open] and closes by removing it
+const fallbackDialog = stubElement({{ top: 0, bottom: 0, left: 0, width: 120, height: 60 }});
+const fbTitle = stubElement();
+const fbContent = stubElement();
+const fbButtons = {{ one: stubElement() }};
+const fbController = bindSettingInfoButtons({{
+  dialog: fallbackDialog, titleEl: fbTitle, contentEl: fbContent,
+  buttons: fbButtons, specs: {{ one: specs.oneClick }},
+}});
+bindSettingInfoDismiss(fallbackDialog, () => fbController.hide());
+fbButtons.one.onclick();
+if (fallbackDialog.attrs.open !== "") throw new Error("fallback must set [open] to show");
+if (fbTitle.textContent !== "一键确认") throw new Error("fallback content was not set");
+fbController.hide();
+if ("open" in fallbackDialog.attrs) throw new Error("fallback hide must remove [open]");
+
+// 5) fallback closes on outside click and on Escape
+fbButtons.one.onclick();
+if (!fallbackDialog.hasAttribute("open")) throw new Error("fallback did not reopen");
+docListeners.click({{ target: {{ outside: true }} }});
+if (fallbackDialog.hasAttribute("open")) throw new Error("fallback outside click did not close");
+fbButtons.one.onclick();
+docListeners.keydown({{ key: "Escape" }});
+if (fallbackDialog.hasAttribute("open")) throw new Error("fallback Escape did not close");
+
+// 6) regression: the opening click must not be seen as an outside click
+const openEvent = {{ target: fbButtons.one, stopped: false, stopPropagation() {{ this.stopped = true; }} }};
+fbButtons.one.onclick(openEvent);
+if (!openEvent.stopped) throw new Error("info button click must stop propagation");
+if (!fallbackDialog.hasAttribute("open")) throw new Error("opening click must keep the popover open");
+const nativeOpenEvent = {{ target: buttons.canon, stopped: false, stopPropagation() {{ this.stopped = true; }} }};
+buttons.canon.onclick(nativeOpenEvent);
+if (!nativeOpenEvent.stopped) throw new Error("native info button click must stop propagation");
+if (titleEl.textContent !== "Canon 后校验") throw new Error("native button content was not set");
+const hideCountBefore = native.calls.filter((c) => c === "hide").length;
+docListeners.click(nativeOpenEvent);
+const hideCountAfter = native.calls.filter((c) => c === "hide").length;
+if (hideCountAfter !== hideCountBefore) throw new Error("native outside click while closed must not fire");
+
+// 7) plain outside click still closes the fallback after an explicit hide/reopen cycle
+fbController.hide();
+fbButtons.one.onclick();
+if (!fallbackDialog.hasAttribute("open")) throw new Error("fallback did not reopen for outside close");
+docListeners.click({{ target: {{ outside: true }} }});
+if (fallbackDialog.hasAttribute("open")) throw new Error("outside click must close the reopened fallback");
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_token_usage_dialog_opens_natively_and_via_open_fallback():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "token_usage.js").resolve().as_uri()
+    script = f"""
+globalThis.window = {{ innerWidth: 1280, innerHeight: 720 }};
+function stubEl(rect) {{
+  const attrs = {{}};
+  const children = [];
+  return {{
+    textContent: "",
+    className: "",
+    style: {{}},
+    children,
+    attrs,
+    setAttribute(name, value) {{ attrs[name] = value; }},
+    removeAttribute(name) {{ delete attrs[name]; }},
+    hasAttribute(name) {{ return name in attrs; }},
+    replaceChildren() {{ children.length = 0; }},
+    appendChild(child) {{ children.push(child); }},
+    append(...items) {{ children.push(...items); }},
+    getBoundingClientRect() {{
+      return rect || {{ top: 0, bottom: 0, left: 0, width: 120, height: 60 }};
+    }},
+  }};
+}}
+globalThis.document = {{ createElement() {{ return stubEl(); }} }};
+
+const {{ openTokenUsagePipelineDialog }} = await import("{module_url}");
+
+const usage = {{
+  generation: {{ calls: [{{ task: "generation", input_tokens: 10, output_tokens: 5 }}] }},
+  confirmation: {{ calls: [] }},
+}};
+
+// native Popover API: showPopover is called, [open] is never set, content renders
+const nativeDialog = stubEl();
+const nativeCalls = [];
+nativeDialog.showPopover = () => nativeCalls.push("show");
+const nativeContent = stubEl();
+openTokenUsagePipelineDialog({{
+  dialog: nativeDialog, contentEl: nativeContent,
+  usageData: usage, pipeline: "generation", anchorEl: stubEl(),
+}});
+if (!nativeCalls.includes("show")) throw new Error("native showPopover was not called");
+if (nativeDialog.hasAttribute("open")) throw new Error("native mode must not set [open]");
+if (nativeContent.children.length === 0) throw new Error("usage rows were not rendered");
+
+// fallback without Popover API: [open] is set, empty-calls branch does not throw
+const fallbackDialog = stubEl();
+const fallbackContent = stubEl();
+openTokenUsagePipelineDialog({{
+  dialog: fallbackDialog, contentEl: fallbackContent,
+  usageData: usage, pipeline: "confirmation", anchorEl: null,
+}});
+if (fallbackDialog.attrs.open !== "") throw new Error("fallback must set [open] to show");
+fallbackDialog.removeAttribute("open");
+if (fallbackDialog.hasAttribute("open")) throw new Error("fallback close must remove [open]");
 """
     result = subprocess.run(
         [node, "--input-type=module", "--eval", script],

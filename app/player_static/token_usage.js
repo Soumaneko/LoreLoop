@@ -349,9 +349,16 @@ export function createTokenUsageController({ node }) {
 }
 
 function _openPipelineDialog(usageData, pipeline, anchorEl) {
-  const dialog = document.getElementById("tokenUsageDialog");
-  const contentEl = document.getElementById("tokenUsageDialogContent");
+  openTokenUsagePipelineDialog({
+    dialog: document.getElementById("tokenUsageDialog"),
+    contentEl: document.getElementById("tokenUsageDialogContent"),
+    usageData,
+    pipeline,
+    anchorEl,
+  });
+}
 
+export function openTokenUsagePipelineDialog({ dialog, contentEl, usageData, pipeline, anchorEl }) {
   if (!dialog || !contentEl) return;
 
   const calls = usageData?.[pipeline]?.calls || [];
@@ -361,7 +368,6 @@ function _openPipelineDialog(usageData, pipeline, anchorEl) {
     contentEl.appendChild(
       _el("div", "token-usage-dialog-empty", "当前凭证无记录调用明细"),
     );
-    totalEl.textContent = "";
   } else {
     let totalInput = 0;
     let totalOutput = 0;
@@ -394,6 +400,7 @@ function _openPipelineDialog(usageData, pipeline, anchorEl) {
   }
 
   if (dialog.showPopover) dialog.showPopover();
+  else dialog.setAttribute("open", "");
 
   if (anchorEl) {
     const rect = anchorEl.getBoundingClientRect();
