@@ -44,8 +44,7 @@ class ProtagonistAbility(BaseModel):
 class InitConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[3] = 3
-    director_enabled: bool = True
+    version: Literal[4] = 4
 
     world_name: str = Field(min_length=1, max_length=120)
     ability_system: AbilitySystemPreset

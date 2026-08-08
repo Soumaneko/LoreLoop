@@ -59,7 +59,7 @@ const els = {
   saveManagerError: $("saveManagerError"),
   initDialog: $("initDialog"), initForm: $("initForm"), closeInitDialogBtn: $("closeInitDialogBtn"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
   initConfigFields: $("initConfigFields"), initOriginalFields: $("initOriginalFields"),
-  initDirectorEnabled: $("initDirectorEnabled"), initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
+  initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
   initWorldStyle: $("initWorldStyle"), initCustomWorldStyleWrap: $("initCustomWorldStyleWrap"),
   initConfigActions: $("initConfigActions"), campaignSetupActions: $("campaignSetupActions"), campaignSetupStage: $("campaignSetupStage"),
   campaignSetupBtn: $("campaignSetupBtn"), regenerateCampaignSetupBtn: $("regenerateCampaignSetupBtn"), editInitConfigBtn: $("editInitConfigBtn"),
@@ -281,9 +281,6 @@ function renderControls({ updateNavigation = true } = {}) {
   els.difficultySelect.disabled = busy;
   els.diceDisplaySelect.disabled = busy;
   els.canonValidationBtn.disabled = busy;
-  els.initDirectorEnabled.disabled = (
-    state.playerState?.initialization?.phase !== "config"
-  );
   els.continueInitBtn.disabled = state.mode === "switching";
   syncCustomSelects([
     els.saveSelect,
@@ -2785,7 +2782,6 @@ async function createSave(name) {
     method: "POST",
     body: JSON.stringify({ name, activate: true }),
   });
-  els.initDirectorEnabled.checked = true;
   state.suggestions = []; await loadAll({ scroll: "instant" });
 }
 
@@ -2814,8 +2810,7 @@ function readInitConfig(form) {
     ? customWorldStyle
     : worldStyleValue;
   return {
-    version: 3,
-    director_enabled: els.initDirectorEnabled.checked,
+    version: 4,
     world_name: formValue(form, "world_name") || null,
     world_style,
     ability_system: abilitySystem,
@@ -2833,12 +2828,10 @@ function readInitConfig(form) {
 function captureInitializationForm() {
   const fields = {};
   for (const control of els.initForm.querySelectorAll("[name]")) {
-    if (control.name === "director_enabled") continue;
     fields[control.name] = control.value;
   }
   const rows = [...els.abilityRows.querySelectorAll(".ability-row")];
   return {
-    director_enabled: els.initDirectorEnabled.checked,
     fields,
     protagonist_abilities: rows.map((row) => ({
       name: row.querySelector(".ability-name").value,
@@ -2849,7 +2842,6 @@ function captureInitializationForm() {
 
 function restoreInitializationForm(form = {}) {
   els.initForm.reset();
-  els.initDirectorEnabled.checked = form.director_enabled !== false;
   for (const [name, value] of Object.entries(form.fields || {})) {
     const control = els.initForm.elements[name];
     if (control) control.value = value ?? "";
@@ -2931,7 +2923,7 @@ function readCampaignSetupLines(control, label, {
 
 function initializationDraftPayload() {
   return {
-    version: 3,
+    version: 4,
     stage: initConfigSnapshot ? "campaign_setup" : "config",
     form: captureInitializationForm(),
     config: initConfigSnapshot,

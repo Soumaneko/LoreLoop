@@ -12,6 +12,46 @@ from app.graph.generation_state import GenerationState
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory.schemas import ShortTermMemory
 from app.runtime.session import PendingTurn, get_campaign_runtime
+from app.runtime.settings import save_experience_mode
+
+
+def test_generation_captures_experience_mode_snapshot_at_generation(monkeypatch):
+    class _FakeGraph:
+        def stream(self, _state, stream_mode):
+            yield "updates", {}
+
+    captured = {}
+
+    def _prepare(user_input, difficulty, max_chars):
+        return {
+            "events": [],
+            "user_input": user_input,
+            "difficulty": difficulty,
+            "max_chars": max_chars,
+        }
+
+    def _finalize(state, **_kwargs):
+        captured["state"] = state
+        return {**state, "events": []}
+
+    monkeypatch.setattr(
+        generation_graph, "prepare_generation_state", _prepare
+    )
+    monkeypatch.setattr(
+        generation_graph, "build_generation_graph", lambda **_kwargs: _FakeGraph()
+    )
+    monkeypatch.setattr(generation_graph, "finalize_pending_turn", _finalize)
+
+    save_experience_mode({"experience_mode": "creator"})
+    list(generation_graph.generate_turn_stream("观察"))
+
+    assert captured["state"]["experience_mode"] == "creator"
+    assert captured["state"]["difficulty"] == "困难"
+
+    save_experience_mode({"experience_mode": "player"})
+    list(generation_graph.generate_turn_stream("观察"))
+
+    assert captured["state"]["experience_mode"] == "player"
 
 
 def test_generation_graph_compiles():
@@ -446,6 +486,7 @@ def test_reroll_creates_next_version_in_same_group(
         user_input="观察门外",
         difficulty="普通",
         max_chars=900,
+        experience_mode="creator",
         state_before=state_before,
         context=SimpleNamespace(),
         outline=SimpleNamespace(),
@@ -520,6 +561,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
         user_input="观察门外",
         difficulty="普通",
         max_chars=900,
+        experience_mode="creator",
         state_before=state_before,
         context=context,
         outline=SimpleNamespace(),
@@ -579,6 +621,88 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     assert events[-1]["data"]["turn_id"] == "turn_v2"
 
 
+def test_rephrase_inherits_source_experience_mode(
+    monkeypatch,
+    configure_runtime_services,
+):
+    turn_id = "turn_v1"
+    group_id = "group_1"
+    state_before = object()
+    context = SimpleNamespace(turn_resolution=object())
+    director_stage = object()
+    short_term = ShortTermMemory()
+    runtime = get_campaign_runtime()
+
+    def _stream(state, selected_graph, **kwargs):
+        captured.update({"state": state, "graph": selected_graph, **kwargs})
+        yield {"step": "scene_written", "data": {"turn_id": "turn_v2"}}
+
+    captured = {}
+    graph = object()
+
+    class _StateStore:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def load_or_default(self):
+            return state_before
+
+    configure_runtime_services(current_state=_StateStore)
+    monkeypatch.setattr(
+        generation_graph,
+        "build_rephrase_graph",
+        lambda **_kwargs: graph,
+    )
+    monkeypatch.setattr(generation_graph, "_stream_generation_graph", _stream)
+
+    def run(source_kwargs):
+        runtime.pending_turns.add(PendingTurn(
+            turn_id=turn_id,
+            group_id=group_id,
+            version_index=1,
+            user_input="观察门外",
+            difficulty="普通",
+            max_chars=900,
+            state_before=state_before,
+            context=context,
+            outline=SimpleNamespace(),
+            scene_result=SceneWriterResult(scene_text="版本一"),
+            turn_index=3,
+            short_term_memory=short_term,
+            **source_kwargs,
+        ))
+        try:
+            list(generation_graph.rephrase_turn_stream(turn_id))
+        finally:
+            runtime.pending_turns.remove(turn_id)
+        return captured["state"]
+
+    # Creator source stays a full Creator pipeline even when the current mode
+    # was switched to player: a derived rewrite never re-runs the generation
+    # Director stage, so it keeps the source's mode and materials.
+    save_experience_mode({"experience_mode": "player"})
+    state = run({
+        "experience_mode": "creator",
+        "director_stage": director_stage,
+        "director_log_entry": {"decision": "creator-material"},
+    })
+    assert state["experience_mode"] == "creator"
+    assert state["director_stage"] is director_stage
+    assert state["director_log_entry"] == {"decision": "creator-material"}
+
+    # Player source never grows a half Creator pipeline even after switching
+    # the current mode to creator: the variant inherits player mode and has no
+    # Director materials, so confirmation will not run the Director agent.
+    save_experience_mode({"experience_mode": "creator"})
+    state = run({"experience_mode": "player"})
+    assert state["experience_mode"] == "player"
+    assert state["director_stage"] is None
+    assert state["director_log_entry"] is None
+
+
 def test_feedback_no_rewrite_does_not_create_or_stream_a_variant(
     monkeypatch,
     configure_runtime_services,
@@ -594,6 +718,7 @@ def test_feedback_no_rewrite_does_not_create_or_stream_a_variant(
         user_input="观察门外",
         difficulty="普通",
         max_chars=900,
+        experience_mode="creator",
         state_before=state_before,
         context=context,
         outline=SimpleNamespace(),
@@ -664,6 +789,7 @@ def test_feedback_rewrite_retains_started_event_in_generation_state(
         user_input="观察门外",
         difficulty="普通",
         max_chars=900,
+        experience_mode="creator",
         state_before=state_before,
         context=context,
         outline=SimpleNamespace(),

@@ -77,6 +77,7 @@ def _pending_opening(
         version_index=version_index,
         initialization_fingerprint=fingerprint,
         config=config,
+        experience_mode="creator",
         current_state=build_initial_current_state(
             config,
             location="白塔港",

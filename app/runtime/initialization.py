@@ -17,7 +17,6 @@ from app.domain.core_memory import (
 from app.domain.opening_foundation import OpeningFoundation
 
 from .serialization import model_data
-from .settings import save_initialization_settings
 
 
 InitializationPhase = Literal[
@@ -116,9 +115,6 @@ def commit_campaign_setup(
         elif saved_core != existing.core_memory:
             raise RuntimeError("Committed CoreMemory does not match initialization")
         if existing.phase == "proposal_committing":
-            save_initialization_settings(
-                director_is_enabled=existing.config.director_enabled
-            )
             existing = existing.model_copy(
                 update={"phase": "core_memory_committed"}
             )
@@ -138,7 +134,6 @@ def commit_campaign_setup(
     )
     store.save(record)
     runtime.stores.core_memory().save(core_memory)
-    save_initialization_settings(director_is_enabled=config.director_enabled)
     record = record.model_copy(update={"phase": "core_memory_committed"})
     store.save(record)
     _clear_draft_without_invalidating_commit(runtime)

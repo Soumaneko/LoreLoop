@@ -65,16 +65,16 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert 'const saves = await request("/api/player/saves")' in source
     assert 'await request("/api/player/state")' in source
     assert 'id="canonValidationBtn"' in html
-    assert 'id="initDirectorEnabled"' in html
     assert 'id="closeInitDialogBtn"' in html
     assert 'id="continueInitBtn"' in html
     assert 'request("/api/player/init/draft")' in source
     assert 'stream("/api/player/opening/rewrite"' in source
     assert '"重新生成开场"' in source
     assert "pending.kind === \"opening\"" in source
-    assert 'name="director_enabled" type="checkbox" checked' in html
     assert 'request("/api/player/canon-validation"' in source
-    assert "director_enabled: els.initDirectorEnabled.checked" in source
+    assert 'initDirectorEnabled' not in html and "director_enabled" not in source
+    assert 'request("/api/player/experience-mode"' not in source
+    assert 'version: 4,' in source
     assert 'state.playerState?.initialization?.phase !== "config"' in source
     assert "Promise.all([" not in source
     assert "/api/player/history?before_turn=" in source
@@ -212,7 +212,7 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     ).read_text(encoding="utf-8")
     assert "playerState.action_preview?.previews" in source
     assert "fanfic: false" not in source
-    assert "version: 3" in source
+    assert "version: 4" in source
     for field in (
         'name="world_name"',
         'name="world_style"',

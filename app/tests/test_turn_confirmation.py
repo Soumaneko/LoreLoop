@@ -21,7 +21,7 @@ def _state() -> CurrentState:
     )
 
 
-def _opening_initialization(*, director_enabled: bool):
+def _opening_initialization(*, experience_mode: str):
     runtime = get_campaign_runtime()
     config = InitConfig(
         world_name="测试世界",
@@ -29,7 +29,6 @@ def _opening_initialization(*, director_enabled: bool):
         ability_system="魔法",
         protagonist_name="主角",
         story_expectation="探索并逐步成长。",
-        director_enabled=director_enabled,
     )
     proposal = CampaignSetupProposal(
         currency_unit="金币",
@@ -81,6 +80,7 @@ def test_turn_director_switch_controls_confirmation_agent(monkeypatch):
             user_input="观察四周",
             difficulty="困难",
             max_chars=1500,
+            experience_mode="player",
             state_before=_state(),
             context=SimpleNamespace(turn_resolution=SimpleNamespace()),
             outline=SimpleNamespace(),
@@ -93,7 +93,6 @@ def test_turn_director_switch_controls_confirmation_agent(monkeypatch):
         captured["input"] = pipeline_input
         return iter(())
 
-    monkeypatch.setattr(confirmation_graph, "director_enabled", lambda: False)
     monkeypatch.setattr(confirmation_graph, "_confirm_pipeline_locked", capture)
     try:
         list(confirmation_graph._confirm_turn_stream_locked(turn_id))
@@ -103,10 +102,46 @@ def test_turn_director_switch_controls_confirmation_agent(monkeypatch):
     assert captured["input"].run_director_agent is False
 
 
+def test_turn_confirmation_uses_pending_snapshot_not_current_mode(monkeypatch):
+    from app.runtime.settings import save_experience_mode
+
+    runtime = get_campaign_runtime()
+    turn_id = "creator-snapshot-turn"
+    runtime.pending_turns.add(
+        PendingTurn(
+            turn_id=turn_id,
+            group_id=turn_id,
+            version_index=1,
+            user_input="观察四周",
+            difficulty="困难",
+            max_chars=1500,
+            experience_mode="creator",
+            state_before=_state(),
+            context=SimpleNamespace(turn_resolution=SimpleNamespace()),
+            outline=SimpleNamespace(),
+            scene_result=SceneWriterResult(scene_text="场景正文"),
+        )
+    )
+    save_experience_mode({"experience_mode": "player"})
+    captured = {}
+
+    def capture(pipeline_input, **_kwargs):
+        captured["input"] = pipeline_input
+        return iter(())
+
+    monkeypatch.setattr(confirmation_graph, "_confirm_pipeline_locked", capture)
+    try:
+        list(confirmation_graph._confirm_turn_stream_locked(turn_id))
+    finally:
+        runtime.pending_turns.remove(turn_id)
+
+    assert captured["input"].run_director_agent is True
+
+
 def test_opening_uses_saved_director_switch_and_reset_flags(monkeypatch):
     runtime = get_campaign_runtime()
     turn_id = "director-disabled-opening"
-    config, record = _opening_initialization(director_enabled=False)
+    config, record = _opening_initialization(experience_mode="player")
     runtime.pending_openings.add(
         PendingOpening(
             turn_id=turn_id,
@@ -114,6 +149,7 @@ def test_opening_uses_saved_director_switch_and_reset_flags(monkeypatch):
             version_index=1,
             initialization_fingerprint=record.fingerprint,
             config=config,
+            experience_mode="player",
             current_state=_state(),
             scene_result=SceneWriterResult(scene_text="开场正文"),
         )

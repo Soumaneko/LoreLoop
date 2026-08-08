@@ -194,6 +194,7 @@ def test_pending_turn_persists_director_log_entry():
         user_input="观察四周",
         difficulty="普通",
         max_chars=900,
+        experience_mode="creator",
         state_before=state,
         context=NarrativeComposerContext(
             user_input="观察四周",

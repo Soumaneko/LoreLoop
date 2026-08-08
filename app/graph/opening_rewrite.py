@@ -54,6 +54,7 @@ def rewrite_opening_stream(turn_id: str):
             version_index=version_index,
             initialization_fingerprint=source.initialization_fingerprint,
             config=source.config,
+            experience_mode=source.experience_mode,
             current_state=source.current_state,
             scene_result=scene_result,
             token_usage={

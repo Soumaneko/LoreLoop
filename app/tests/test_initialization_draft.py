@@ -15,12 +15,12 @@ from app.runtime.session import get_campaign_runtime
 
 def _draft():
     return {
-        "version": 3,
+        "version": 4,
         "stage": "campaign_setup",
         "form": {
             "fields": {"world_name": "艾兰"},
         },
-        "config": {"version": 3, "world_name": "艾兰"},
+        "config": {"version": 4, "world_name": "艾兰"},
         "campaign_setup": {
             "version": 2,
             "currency_unit": "银币",
@@ -62,6 +62,44 @@ def test_corrupted_initialization_json_is_not_treated_as_missing(tmp_path):
 def test_initialization_draft_rejects_unknown_contract_fields():
     with pytest.raises(ValueError):
         save_initialization_draft({**_draft(), "unexpected_stage": "old"})
+
+
+def test_stale_config_version_draft_is_cleared_on_load():
+    runtime = get_campaign_runtime()
+    stale = {**_draft(), "config": {"version": 3, "world_name": "艾兰"}}
+    path = runtime.paths.initialization_draft_json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(stale, ensure_ascii=False), encoding="utf-8")
+
+    assert load_initialization_draft() is None
+    assert not runtime.paths.initialization_draft_json.exists()
+
+
+def test_old_top_level_version_draft_is_cleared_on_load():
+    runtime = get_campaign_runtime()
+    old = {
+        "version": 3,
+        "stage": "campaign_setup",
+        "form": {"world_name": "艾兰"},
+        "config": {
+            "version": 3,
+            "director_enabled": True,
+            "world_name": "艾兰",
+        },
+        "campaign_setup": None,
+    }
+    path = runtime.paths.initialization_draft_json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
+
+    assert load_initialization_draft() is None
+    assert not runtime.paths.initialization_draft_json.exists()
+
+
+def test_stale_config_version_draft_is_rejected_on_save():
+    stale = {**_draft(), "config": {"version": 3, "world_name": "艾兰"}}
+    with pytest.raises(ValueError, match="version"):
+        save_initialization_draft(stale)
 
 
 def test_initialization_draft_cannot_be_written_after_initialization():

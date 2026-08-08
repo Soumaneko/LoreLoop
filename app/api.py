@@ -26,6 +26,7 @@ from app.runtime.settings import (
     save_canon_validation,
     save_dice_display,
     save_difficulty,
+    save_experience_mode,
     save_max_chars,
 )
 from app.runtime.reader_preferences import (
@@ -417,6 +418,7 @@ __all__ = [
     "save_dice_display",
     "save_canon_validation",
     "save_difficulty",
+    "save_experience_mode",
     "save_initialization_draft",
     "save_max_chars",
     "save_model_config",

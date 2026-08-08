@@ -41,6 +41,7 @@ def _pending_turn(
         user_input="推开门",
         difficulty="普通",
         max_chars=900,
+        experience_mode="player",
         state_before=state_before,
         context=context,
         outline=PlotOutlineResult(
@@ -217,6 +218,7 @@ def test_create_and_activate_preserves_pending_opening_in_source_save(tmp_path):
             version_index=1,
             initialization_fingerprint="fingerprint-1",
             config=config,
+            experience_mode="player",
             current_state=build_initial_current_state(
                 config,
                 location="泰瑞大陆",

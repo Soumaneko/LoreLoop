@@ -149,6 +149,7 @@ def finalize_pending_turn(
         user_input=state["user_input"],
         difficulty=state["difficulty"],
         max_chars=state["max_chars"],
+        experience_mode=state["experience_mode"],
         state_before=state["current_state"],
         context=state["context"],
         outline=state["outline"],

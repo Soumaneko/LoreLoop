@@ -48,7 +48,6 @@ def test_init_config_contains_only_player_layer_and_keeps_dropdown_contracts():
     config = make_config()
     assert set(config.model_dump()) == {
         "version",
-        "director_enabled",
         "world_name",
         "ability_system",
         "custom_ability_system",

@@ -37,6 +37,7 @@ from app.api import (
     save_dice_display,
     save_canon_validation,
     save_difficulty,
+    save_experience_mode,
     save_initialization_draft,
     save_model_config,
     save_pending_scene_edit,
@@ -254,6 +255,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
         if path == "/api/player/canon-validation":
             self._handle_player_json(
                 lambda: save_canon_validation(_read_json(self))
+            )
+            return
+        if path == "/api/player/experience-mode":
+            self._handle_player_json(
+                lambda: save_experience_mode(_read_json(self))
             )
             return
         if path == "/api/player/reader-preferences":

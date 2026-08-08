@@ -27,8 +27,7 @@ from app.domain.opening_setting import OpeningSettingAgent
 from app.domain.world_setting import WorldSetting, WorldSettingCreator
 
 DEFAULT_CONFIG = {
-    "version": 3,
-    "director_enabled": True,
+    "version": 4,
     "world_name": "艾兰",
     "world_style": "西幻",
     "ability_system": "魔法",

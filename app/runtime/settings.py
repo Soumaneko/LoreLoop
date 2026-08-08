@@ -7,13 +7,14 @@ from typing import Any
 DICE_DISPLAY_MODES = {"hidden", "outcome", "full"}
 DEFAULT_DICE_DISPLAY = "outcome"
 DEFAULT_CANON_VALIDATION_ENABLED = False
-DEFAULT_DIRECTOR_ENABLED = True
+EXPERIENCE_MODES = {"player", "creator"}
+DEFAULT_EXPERIENCE_MODE = "player"
 CAMPAIGN_SETTING_KEYS = {
     "difficulty",
     "dice_display",
     "max_chars",
     "canon_validation_enabled",
-    "director_enabled",
+    "experience_mode",
 }
 _SETTINGS_LOCK = threading.RLock()
 
@@ -35,12 +36,14 @@ def canon_validation_enabled(settings: dict[str, Any] | None = None) -> bool:
     )
 
 
-def director_enabled(settings: dict[str, Any] | None = None) -> bool:
+def normalize_experience_mode(value: Any) -> str:
+    mode = str(value or "").strip()
+    return mode if mode in EXPERIENCE_MODES else DEFAULT_EXPERIENCE_MODE
+
+
+def experience_mode(settings: dict[str, Any] | None = None) -> str:
     payload = load_settings() if settings is None else settings
-    return normalize_boolean(
-        payload.get("director_enabled"),
-        default=DEFAULT_DIRECTOR_ENABLED,
-    )
+    return normalize_experience_mode(payload.get("experience_mode"))
 
 
 def _settings_path():
@@ -135,14 +138,10 @@ def save_canon_validation(payload: dict[str, Any]) -> dict[str, bool]:
     return {"canon_validation_enabled": enabled}
 
 
-def save_initialization_settings(*, director_is_enabled: bool) -> None:
-    """Persist immutable-at-runtime initialization choices.
-
-    The lifecycle guard serializes this write against save management, while
-    the shared settings lock makes its read-modify-write merge atomic with
-    public setting updates.
-    """
-    _update_settings({"director_enabled": bool(director_is_enabled)})
+def save_experience_mode(payload: dict[str, Any]) -> dict[str, str]:
+    mode = normalize_experience_mode(payload.get("experience_mode"))
+    _update_settings({"experience_mode": mode})
+    return {"experience_mode": mode}
 
 
 def save_max_chars(payload: dict[str, Any]) -> dict[str, int]:

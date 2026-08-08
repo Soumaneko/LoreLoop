@@ -14,8 +14,7 @@ from app.runtime.session import get_campaign_runtime
 def _payload():
     return {
         "config": {
-            "version": 3,
-            "director_enabled": True,
+            "version": 4,
             "world_name": "艾兰",
             "world_style": "西幻",
             "ability_system": "魔法",
@@ -302,7 +301,7 @@ def test_submitting_setup_clears_public_draft(
     configure_runtime_services,
 ):
     save_initialization_draft({
-        "version": 3,
+        "version": 4,
         "stage": "campaign_setup",
         "form": {"world_name": "艾兰"},
         "config": _payload()["config"],

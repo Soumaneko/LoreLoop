@@ -38,6 +38,7 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
         version_index=1,
         initialization_fingerprint="fingerprint-1",
         config=config,
+        experience_mode="player",
         current_state=build_initial_current_state(
             config,
             location="泰瑞大陆",
@@ -63,6 +64,7 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
         assert restored is not None
         assert restored.group_id == "opening-group-1"
         assert restored.version_index == 1
+        assert restored.experience_mode == "player"
         assert restored.config.world_name == "泰瑞大陆"
         assert restored.current_state.player.name == "莱尔"
         assert restored.scene_result.scene_text == "莱尔在晨雾中醒来。"
@@ -92,7 +94,7 @@ def test_pending_opening_requires_the_current_storage_contract(tmp_path):
         RuntimeError,
         match=(
             r"current storage contract; missing fields: "
-            r"group_id, initialization_fingerprint, version_index"
+            r"experience_mode, group_id, initialization_fingerprint, version_index"
         ),
     ):
         CampaignRuntime("invalid-pending-opening", paths=paths)
@@ -298,6 +300,7 @@ def test_runtime_undo_restores_edited_opening_as_pending_and_redo_clears_it(tmp_
         version_index=1,
         initialization_fingerprint="fingerprint-1",
         config=config,
+        experience_mode="player",
         current_state=build_initial_current_state(
             config,
             location="泰瑞大陆",

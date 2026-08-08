@@ -692,6 +692,7 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         user_input="让林澈进来。",
         difficulty="困难",
         max_chars=1500,
+        experience_mode="creator",
         state_before=state,
         context=SimpleNamespace(turn_resolution=SimpleNamespace()),
         outline=SimpleNamespace(),

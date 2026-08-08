@@ -35,6 +35,7 @@ class PendingTurn:
     user_input: str
     difficulty: Difficulty
     max_chars: int
+    experience_mode: str
     state_before: CurrentState
     context: NarrativeComposerContext
     outline: PlotOutlineResult
@@ -58,6 +59,7 @@ class PendingOpening:
     version_index: int
     initialization_fingerprint: str
     config: InitConfig
+    experience_mode: str
     current_state: CurrentState
     scene_result: SceneWriterResult
     confirmation_cache: dict[str, Any] = field(default_factory=dict)
@@ -381,6 +383,7 @@ class CampaignRuntime:
             "user_input": pending.user_input,
             "difficulty": model_data(pending.difficulty),
             "max_chars": pending.max_chars,
+            "experience_mode": pending.experience_mode,
             "state_before": model_data(pending.state_before),
             "context": model_data(pending.context),
             "outline": model_data(pending.outline),
@@ -419,6 +422,7 @@ class CampaignRuntime:
             "version_index": pending.version_index,
             "initialization_fingerprint": pending.initialization_fingerprint,
             "config": model_data(pending.config),
+            "experience_mode": pending.experience_mode,
             "current_state": model_data(pending.current_state),
             "scene_result": model_data(pending.scene_result),
             "original_scene_text": pending.original_scene_text,
@@ -448,6 +452,7 @@ class CampaignRuntime:
                     "user_input",
                     "difficulty",
                     "max_chars",
+                    "experience_mode",
                     "state_before",
                     "context",
                     "outline",
@@ -462,6 +467,7 @@ class CampaignRuntime:
                     "version_index",
                     "initialization_fingerprint",
                     "config",
+                    "experience_mode",
                     "current_state",
                     "scene_result",
                     "original_scene_text",
@@ -484,6 +490,7 @@ class CampaignRuntime:
                     user_input=data["user_input"],
                     difficulty=data["difficulty"],
                     max_chars=data["max_chars"],
+                    experience_mode=data["experience_mode"],
                     state_before=CurrentState.model_validate(data["state_before"]),
                     context=NarrativeComposerContext.model_validate(data["context"]),
                     outline=PlotOutlineResult.model_validate(data["outline"]),
@@ -511,6 +518,7 @@ class CampaignRuntime:
                     version_index=data["version_index"],
                     initialization_fingerprint=data["initialization_fingerprint"],
                     config=InitConfig.model_validate(data["config"]),
+                    experience_mode=data["experience_mode"],
                     current_state=CurrentState.model_validate(data["current_state"]),
                     scene_result=SceneWriterResult.model_validate(data["scene_result"]),
                     original_scene_text=data["original_scene_text"],

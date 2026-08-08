@@ -673,8 +673,7 @@ function readInitConfig() {
   }).filter(Boolean).slice(0, 3);
   const age = $("initAge")?.value.trim();
   return {
-    version: 3,
-    director_enabled: true,
+    version: 4,
     world_name: $("initWorldName")?.value.trim() || null,
     world_style: $("initWorldStyle")?.value.trim() || null,
     ability_system: $("initAbilitySystem")?.value || null,

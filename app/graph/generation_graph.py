@@ -5,7 +5,7 @@ import uuid
 
 from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
-from app.runtime.settings import canon_validation_enabled, director_enabled
+from app.runtime.settings import canon_validation_enabled, experience_mode
 
 from app.domain.roll.schemas import Difficulty
 from app.domain.short_term_memory import ShortTermMemory
@@ -350,6 +350,10 @@ def _pending_context_state(
         if short_term_memory.recent_scenes
         else None
     )
+    # A derived rewrite (rephrase/feedback rewrite) refines an existing variant,
+    # so it inherits that variant's experience_mode and Director materials. Mode
+    # switching only affects brand-new generations (new turn, reroll), which run
+    # the full generation graph including the Director stage.
     return {
         "events": events,
         "runtime_services": runtime.services,
@@ -357,6 +361,7 @@ def _pending_context_state(
         "user_input": pending.user_input,
         "difficulty": pending.difficulty,
         "max_chars": pending.max_chars,
+        "experience_mode": pending.experience_mode,
         "trace_id": trace_id,
         "current_state": pending.state_before,
         "short_term_memory": short_term_memory,
@@ -399,11 +404,13 @@ def _generate_turn_stream(
     group_id: str | None = None,
     version_index: int = 1,
 ):
+    mode = experience_mode()
     state: dict[str, Any] = prepare_generation_state(user_input, difficulty, max_chars)
+    state["experience_mode"] = mode
     yield from _stream_generation_graph(
         state,
         build_generation_graph(
-            director_is_enabled=director_enabled(),
+            director_is_enabled=(mode == "creator"),
             canon_validation_is_enabled=canon_validation_enabled(),
         ),
         group_id=group_id,

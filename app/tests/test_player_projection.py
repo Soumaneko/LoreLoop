@@ -145,7 +145,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "save", "needs_init", "difficulty", "campaign", "history",
         "history_navigation", "history_pagination", "highlights", "pending",
         "history_controls", "action_preview", "dice_display",
-        "canon_validation_enabled", "director_enabled",
+        "canon_validation_enabled", "experience_mode",
         "initialization",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
@@ -183,7 +183,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     }]
     assert payload["dice_display"] == "outcome"
     assert payload["canon_validation_enabled"] is False
-    assert payload["director_enabled"] is True
+    assert payload["experience_mode"] == "player"
 
 
 def test_text_highlights_exclude_single_char_settings_and_prefer_npc_on_collision():

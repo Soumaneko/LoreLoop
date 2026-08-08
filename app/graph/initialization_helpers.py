@@ -15,6 +15,7 @@ from app.domain.core_memory import (
 from app.runtime.initialization import commit_campaign_setup
 from app.runtime.serialization import model_data
 from app.runtime.session import PendingOpening, get_campaign_runtime
+from app.runtime.settings import experience_mode
 
 from .initialization_state import InitializationState
 
@@ -141,6 +142,7 @@ def finalize_initialization_state(
         version_index=1,
         initialization_fingerprint=state["initialization_record"].fingerprint,
         config=state["config"],
+        experience_mode=experience_mode(),
         current_state=state["current_state"],
         scene_result=state["opening_scene"],
         token_usage={

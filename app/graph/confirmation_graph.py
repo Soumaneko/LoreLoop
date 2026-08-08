@@ -10,7 +10,6 @@ from app.runtime.graph_cache import get_cached_graph
 from app.runtime.session import (
     get_campaign_runtime,
 )
-from app.runtime.settings import director_enabled
 
 from .confirmation_helpers import (
     finalize_confirmation_state,
@@ -279,7 +278,7 @@ def _confirm_turn_stream_locked(
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before confirming.")
 
-    director_is_enabled = director_enabled()
+    director_is_enabled = pending.experience_mode == "creator"
     yield from _confirm_pipeline_locked(
         ConfirmationPipelineInput(
             turn_id=turn_id,
@@ -351,7 +350,7 @@ def _confirm_opening_stream_locked(
     if pending is None:
         raise ValueError("Pending opening not found. Initialize again before confirming.")
 
-    director_is_enabled = getattr(pending.config, "director_enabled", True)
+    director_is_enabled = pending.experience_mode == "creator"
     initialization = runtime.initialization.load()
     if (
         initialization is None

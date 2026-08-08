@@ -52,6 +52,7 @@ class GenerationState(TypedDict, total=False):
     user_input: str
     difficulty: Difficulty
     max_chars: int
+    experience_mode: str
     trace_id: str
     turn_id: str
     group_id: str
