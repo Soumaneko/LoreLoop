@@ -264,6 +264,787 @@ def test_history_retriever_does_not_cap_evidence_at_fact_limit():
     assert len(result.hits) == 15
 
 
+def test_history_retriever_merges_multi_intent_alias_and_topic_hits_on_one_evidence():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
+        ),
+        ContextSearchIntent(
+            intent_id="i2",
+            focus="topic",
+            topics=["账册摹本"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                scene_text="顾阁主手持账册摹本走入厅堂。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=2,
+        )
+
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert sorted(hit.matched_intent_ids) == ["i1", "i2"]
+    assert hit.matched_entities == ["顾晚棠"]
+    assert hit.matched_topics == ["账册摹本"]
+    assert hit.supporting_evidence_ids == []
+
+
+def test_adjacent_paragraph_hit_does_not_create_duplicate_candidate():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                scene_text=(
+                    "顾阁主承认账册摹本并不在她身上。\n\n"
+                    "她拒绝透露具体藏匿地点。"
+                ),
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=2,
+        )
+
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert hit.evidence_id == "turn_1_p001"
+    assert hit.context_after and "藏匿地点" in hit.context_after[0].text
+    assert hit.context_after[0].evidence_id == "turn_1_p002"
+
+
+def test_identical_text_across_adjacent_turns_is_not_merged():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id=f"scene_{turn_index:02d}",
+                turn_index=turn_index,
+                scene_text="艾琳向玩家点头。",
+            )
+            for turn_index in (30, 31)
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=32,
+        )
+
+    assert len(result.hits) == 2
+    assert {hit.turn_index for hit in result.hits} == {30, 31}
+    assert all(hit.supporting_evidence_ids == [] for hit in result.hits)
+
+
+def test_identical_adjacent_paragraphs_in_same_turn_merge():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳向玩家点头。\n\n艾琳向玩家点头。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert len(hit.supporting_evidence_ids) == 1
+    assert hit.supporting_evidence_ids == ["turn_30_p001"]
+
+
+def test_non_adjacent_identical_paragraphs_do_not_merge():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text=(
+                    "艾琳向玩家点头。\n\n"
+                    "艾琳走出门去。\n\n"
+                    "艾琳向玩家点头。"
+                ),
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 3
+    assert all(hit.supporting_evidence_ids == [] for hit in result.hits)
+
+
+def test_numeric_and_negation_differences_block_merge():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳在第30回合点头。\n\n艾琳在第31回合点头。",
+            ),
+        ])
+        numeric = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=32,
+        )
+    assert len(numeric.hits) == 2
+
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳已获得钥匙。\n\n艾琳未获得钥匙。",
+            ),
+        ])
+        negation = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=32,
+        )
+    assert len(negation.hits) == 2
+
+
+def test_clustered_evidence_ids_remain_valid_for_context_facts():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳向玩家点头。\n\n艾琳向玩家点头。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 1
+    supporting = result.hits[0].supporting_evidence_ids[0]
+    known = {
+        evidence_id
+        for hit in result.hits
+        for evidence_id in [
+            hit.evidence_id,
+            *hit.supporting_evidence_ids,
+            *(item.evidence_id for item in hit.context_before),
+            *(item.evidence_id for item in hit.context_after),
+        ]
+    }
+    facts = ContextFactSet.from_drafts(
+        turn_focus="focus",
+        facts=[
+            {
+                "holder": "艾琳",
+                "source": "史",
+                "fact": "艾琳向玩家点头。",
+                "evidence_ids": [supporting],
+            },
+        ],
+        known_evidence_ids=known,
+    )
+    assert facts.facts[0].evidence_ids == [supporting]
+
+
+def test_adjacent_context_ids_remain_valid_for_context_facts():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                scene_text=(
+                    "顾阁主承认账册摹本并不在她身上。\n\n"
+                    "她拒绝透露具体藏匿地点。"
+                ),
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=2,
+        )
+
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert hit.context_after
+    adjacent_id = hit.context_after[0].evidence_id
+    known = {
+        evidence_id
+        for item in hit.context_before + hit.context_after
+        for evidence_id in [item.evidence_id]
+    } | {hit.evidence_id, *hit.supporting_evidence_ids}
+    facts = ContextFactSet.from_drafts(
+        turn_focus="focus",
+        facts=[
+            {
+                "holder": "萧云痕",
+                "source": "史",
+                "fact": "顾晚棠拒绝透露藏匿地点。",
+                "evidence_ids": [adjacent_id],
+            },
+        ],
+        known_evidence_ids=known,
+    )
+    assert facts.facts[0].evidence_ids == [adjacent_id]
+
+
+def test_cluster_representative_merges_member_metadata_and_max_score():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="i2",
+            focus="topic",
+            topics=["点头示意"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳点头示意。\n\n艾琳点头示意。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert sorted(hit.matched_intent_ids) == ["i1", "i2"]
+    assert hit.matched_entities == ["艾琳"]
+    assert hit.matched_topics == ["点头示意"]
+    assert len(hit.supporting_evidence_ids) == 1
+    assert hit.score > 0
+
+
+def test_disjoint_topics_do_not_merge():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="i2",
+            focus="topic",
+            topics=["账册", "盐帮"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text=(
+                    "艾琳负责处理账册方面的事务。\n\n"
+                    "艾琳负责处理盐帮方面的事务。"
+                ),
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 2
+    assert {hit.paragraph_index for hit in result.hits} == {1, 2}
+
+
+def test_state_change_and_time_differences_do_not_merge():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    pairs = (
+        ("艾琳持有那把钥匙站在门口。", "艾琳交出那把钥匙站在门口。"),
+        ("艾琳仍然存活于地牢之中。", "艾琳已然死亡于地牢之中。"),
+        ("艾琳清晨来到客栈。", "艾琳黄昏来到客栈。"),
+    )
+    for first, second in pairs:
+        with ConfirmedHistoryStore() as store:
+            _upsert_scenes(store, [
+                ShortTermScene(
+                    scene_id="scene_030",
+                    turn_index=30,
+                    scene_text=f"{first}\n\n{second}",
+                ),
+            ])
+            result = ContextHistoryRetriever(store).retrieve(
+                plan,
+                current_turn_index=31,
+            )
+        assert len(result.hits) == 2, (
+            f"expected no merge for {first!r} / {second!r}"
+        )
+
+
+def test_negated_content_difference_blocks_merge():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="i2",
+            focus="topic",
+            topics=["盐帮", "万象阁"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳不是盐帮成员。\n\n艾琳不是万象阁成员。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 2
+    assert {hit.paragraph_index for hit in result.hits} == {1, 2}
+
+
+def test_numeric_quantity_differences_block_merge():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="i2",
+            focus="topic",
+            topics=["钥匙"],
+        ),
+    ])
+    pairs = (
+        ("艾琳携带 2 把钥匙。", "艾琳携带钥匙。"),
+        ("艾琳携带两把钥匙。", "艾琳携带三把钥匙。"),
+    )
+    for first, second in pairs:
+        with ConfirmedHistoryStore() as store:
+            _upsert_scenes(store, [
+                ShortTermScene(
+                    scene_id="scene_030",
+                    turn_index=30,
+                    scene_text=f"{first}\n\n{second}",
+                ),
+            ])
+            result = ContextHistoryRetriever(store).retrieve(
+                plan,
+                current_turn_index=31,
+            )
+        assert len(result.hits) == 2, (
+            f"expected no merge for {first!r} / {second!r}"
+        )
+
+
+def test_different_subject_entities_do_not_merge():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[
+                ContextSearchEntity(name="艾琳"),
+                ContextSearchEntity(name="萧云痕"),
+            ],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳走向门口。\n\n萧云痕走向门口。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 2
+    assert {hit.paragraph_index for hit in result.hits} == {1, 2}
+
+
+def test_distant_identical_text_is_not_merged():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id=f"scene_{turn_index:03d}",
+                turn_index=turn_index,
+                scene_text="艾琳向玩家点头。",
+            )
+            for turn_index in (1, 100)
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=101,
+        )
+
+    assert len(result.hits) == 2
+    assert {hit.turn_index for hit in result.hits} == {1, 100}
+    assert all(hit.supporting_evidence_ids == [] for hit in result.hits)
+
+
+def test_adjacent_identical_pair_merges_and_non_adjacent_stays_separate():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text=(
+                    "艾琳向玩家点头。\n\n"
+                    "艾琳向玩家点头。\n\n"
+                    "艾琳走出门去。"
+                ),
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    merged = [hit for hit in result.hits if hit.supporting_evidence_ids]
+    standalone = [hit for hit in result.hits if not hit.supporting_evidence_ids]
+    assert len(merged) == 1
+    assert len(standalone) == 1
+    assert standalone[0].paragraph_index == 3
+
+
+def test_supporting_evidence_ids_match_provided_texts():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳向玩家点头。\n\n艾琳向玩家点头。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert set(hit.supporting_evidence_ids) == {
+        item.evidence_id for item in hit.supporting_evidence
+    }
+
+
+def test_supporting_evidence_carries_member_full_text():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳向玩家点头。\n\n艾琳向玩家点头。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert len(hit.supporting_evidence) == 1
+    assert hit.supporting_evidence[0].evidence_id == "turn_30_p001"
+    assert hit.supporting_evidence[0].text == "艾琳向玩家点头。"
+
+
+def test_merge_conflict_detects_semantic_differences():
+    from app.domain.context_facts.clustering import merge_conflict
+
+    assert merge_conflict("不是盐帮成员。", "不是万象阁成员。")
+    assert not merge_conflict("不是盐帮成员。", "不是盐帮成员。")
+    assert merge_conflict("携带 2 把钥匙。", "携带钥匙。")
+    assert merge_conflict("携带两把钥匙。", "携带三把钥匙。")
+    assert not merge_conflict("携带两把钥匙。", "携带两把钥匙。")
+    assert merge_conflict("艾琳持有钥匙。", "艾琳交出钥匙。")
+    assert merge_conflict("艾琳清晨前来。", "艾琳黄昏前来。")
+    assert not merge_conflict("艾琳清晨前来。", "艾琳清晨前来。")
+
+
+def test_entity_sets_must_be_identical_for_merge():
+    from app.domain.context_facts.clustering import cluster_near_duplicates
+
+    class StubDocument:
+        def __init__(self, document_id, paragraph_index, text):
+            self.document_id = document_id
+            self.turn_index = 1
+            self.scene_id = "scene_001"
+            self.paragraph_index = paragraph_index
+            self.text = text
+
+    class StubCandidate:
+        def __init__(self, document, entities, topics):
+            self.document = document
+            self.matched_entities = set(entities)
+            self.matched_topics = set(topics)
+            self.matched_intent_ids = {"i1"}
+            self.score = 1.0
+
+    def make(first_entities, second_entities):
+        return [
+            StubCandidate(
+                StubDocument("turn_1_p001", 1, "艾琳站在客栈门口。"),
+                first_entities,
+                [],
+            ),
+            StubCandidate(
+                StubDocument("turn_1_p002", 2, "艾琳站在客栈门口。"),
+                second_entities,
+                [],
+            ),
+        ]
+
+    assert len(cluster_near_duplicates(
+        make(["艾琳", "客栈"], ["贝拉", "客栈"])
+    )) == 2
+    assert len(cluster_near_duplicates(make(["艾琳"], ["艾琳"]))) == 1
+    assert len(cluster_near_duplicates(make([], []))) == 2
+
+
+def test_cluster_members_are_excluded_from_adjacent_context():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="\n\n".join("艾琳向玩家点头。" for _ in range(3)),
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert any(hit.supporting_evidence_ids for hit in result.hits)
+    for hit in result.hits:
+        context_ids = {
+            item.evidence_id for item in hit.context_before + hit.context_after
+        }
+        assert not (set(hit.supporting_evidence_ids) & context_ids), (
+            "cluster members must not also appear as adjacent context"
+        )
+        all_ids = [hit.evidence_id, *hit.supporting_evidence_ids, *context_ids]
+        assert len(all_ids) == len(set(all_ids)), (
+            "evidence IDs must be unique within a hit"
+        )
+
+
+def test_evidence_documents_are_globally_unique_across_hits():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_030",
+                turn_index=30,
+                scene_text="艾琳走向门口。\n\n艾琳检查账册。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=31,
+        )
+
+    assert {hit.evidence_id for hit in result.hits} == {
+        "turn_30_p001",
+        "turn_30_p002",
+    }
+    seen = set()
+    for hit in result.hits:
+        ids = [
+            hit.evidence_id,
+            *hit.supporting_evidence_ids,
+            *(item.evidence_id for item in hit.context_before),
+            *(item.evidence_id for item in hit.context_after),
+        ]
+        for evidence_id in ids:
+            assert evidence_id not in seen, f"duplicate evidence: {evidence_id}"
+            seen.add(evidence_id)
+
+
+def test_context_history_evidence_set_validates_global_uniqueness():
+    def make_hit(evidence_id, context_after=None):
+        return ContextHistoryHit(
+            evidence_id=evidence_id,
+            source_type="scene_paragraph",
+            turn_index=1,
+            scene_id="scene_001",
+            paragraph_index=1,
+            text="艾琳点头。",
+            matched_intent_ids=["i1"],
+            score=0.5,
+            context_after=context_after or [],
+        )
+
+    with pytest.raises(ValueError):
+        ContextHistoryEvidenceSet(hits=[
+            make_hit(
+                "turn_1_p001",
+                context_after=[{
+                    "evidence_id": "turn_1_p002",
+                    "text": "x",
+                }],
+            ),
+            make_hit("turn_1_p002"),
+        ])
+
+    ContextHistoryEvidenceSet(hits=[
+        make_hit("turn_1_p001"),
+        make_hit("turn_1_p002"),
+    ])
+
+
+def test_context_history_hit_validates_evidence_consistency():
+    def make_hit(supporting_ids, supporting):
+        return ContextHistoryHit(
+            evidence_id="turn_1_p001",
+            source_type="scene_paragraph",
+            turn_index=1,
+            scene_id="scene_001",
+            paragraph_index=1,
+            text="艾琳点头。",
+            matched_intent_ids=["i1"],
+            score=0.5,
+            supporting_evidence_ids=supporting_ids,
+            supporting_evidence=supporting,
+        )
+
+    valid = make_hit(
+        ["turn_1_p002"],
+        [{"evidence_id": "turn_1_p002", "text": "艾琳点头。"}],
+    )
+    assert valid.supporting_evidence[0].text == "艾琳点头。"
+
+    with pytest.raises(ValueError):
+        make_hit(["turn_1_p002"], [])
+    with pytest.raises(ValueError):
+        make_hit(
+            ["turn_1_p001"],
+            [{"evidence_id": "turn_1_p001", "text": "x"}],
+        )
+    with pytest.raises(ValueError):
+        make_hit(
+            ["turn_1_p002", "turn_1_p002"],
+            [{"evidence_id": "turn_1_p002", "text": "x"}],
+        )
+
+
 def test_context_extractor_receives_raw_history_and_cites_it():
     class SpyGateway:
         def __init__(self):

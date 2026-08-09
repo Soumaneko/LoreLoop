@@ -62,6 +62,13 @@ class ContextExtractor:
             turn_focus=result.turn_focus,
             facts=result.facts,
             known_evidence_ids={
-                hit.evidence_id for hit in input_data.history_evidence.hits
+                evidence_id
+                for hit in input_data.history_evidence.hits
+                for evidence_id in [
+                    hit.evidence_id,
+                    *hit.supporting_evidence_ids,
+                    *(item.evidence_id for item in hit.context_before),
+                    *(item.evidence_id for item in hit.context_after),
+                ]
             },
         )

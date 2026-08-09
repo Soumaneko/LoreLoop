@@ -6,17 +6,21 @@ from dataclasses import dataclass, field
 from app.domain.confirmed_history import (
     ConfirmedHistoryStore,
     HistoryDocument,
-    adjacent_context,
     best_trigram_match,
     document_window,
 )
 
+from .clustering import SUPPORTING_EVIDENCE_MAX, cluster_near_duplicates
 from .schemas import (
+    AdjacentEvidence,
     ContextHistoryEvidenceSet,
     ContextHistoryHit,
     ContextSearchIntent,
     ContextSearchPlan,
+    SupportingEvidence,
 )
+
+DIRECT_TOPIC_GATE = 0.2
 
 
 @dataclass
@@ -67,19 +71,66 @@ class ContextHistoryRetriever:
                 existing.matched_entities.update(candidate.matched_entities)
                 existing.matched_topics.update(candidate.matched_topics)
 
+        representative_candidates, member_clusters, representative_for = (
+            _cluster_candidates(candidates)
+        )
+        by_intent_clustered = _remap_to_representatives(
+            by_intent,
+            representative_for,
+        )
+
         selected = _rank_diverse(
             search_plan,
-            by_intent=by_intent,
-            candidates=candidates,
+            by_intent=by_intent_clustered,
+            candidates=representative_candidates,
         )
         hits = []
         for candidate in selected:
-            before, after = adjacent_context(
+            members = member_clusters[candidate.document.document_id]
+            cluster_ids = {
+                member.document.document_id for member in members
+            }
+            window = document_window(
                 candidate.document,
                 by_turn[candidate.document.turn_index],
                 before=1,
                 after=1,
             )
+            context_before = [
+                AdjacentEvidence(evidence_id=item.document_id, text=item.text)
+                for item in window
+                if (
+                    item.document_id not in cluster_ids
+                    and item.paragraph_index is not None
+                    and candidate.document.paragraph_index is not None
+                    and item.paragraph_index < candidate.document.paragraph_index
+                )
+            ]
+            context_after = [
+                AdjacentEvidence(evidence_id=item.document_id, text=item.text)
+                for item in window
+                if (
+                    item.document_id not in cluster_ids
+                    and item.paragraph_index is not None
+                    and candidate.document.paragraph_index is not None
+                    and item.paragraph_index > candidate.document.paragraph_index
+                )
+            ]
+            supporting_members = [
+                member
+                for member in members
+                if member.document.document_id != candidate.document.document_id
+            ][:SUPPORTING_EVIDENCE_MAX]
+            supporting_evidence_ids = sorted(
+                member.document.document_id for member in supporting_members
+            )
+            supporting_evidence = [
+                SupportingEvidence(
+                    evidence_id=member.document.document_id,
+                    text=member.document.text,
+                )
+                for member in supporting_members
+            ]
             hits.append(ContextHistoryHit(
                 evidence_id=candidate.document.document_id,
                 source_type=candidate.document.source_type,
@@ -87,15 +138,17 @@ class ContextHistoryRetriever:
                 scene_id=candidate.document.scene_id,
                 paragraph_index=candidate.document.paragraph_index,
                 text=candidate.document.text,
-                context_before=before,
-                context_after=after,
+                context_before=context_before,
+                context_after=context_after,
                 matched_intent_ids=sorted(candidate.matched_intent_ids),
                 matched_entities=sorted(candidate.matched_entities),
                 matched_topics=sorted(candidate.matched_topics),
                 score=round(candidate.score, 6),
+                supporting_evidence_ids=supporting_evidence_ids,
+                supporting_evidence=supporting_evidence,
             ))
         return ContextHistoryEvidenceSet(
-            hits=hits,
+            hits=_deduplicate_evidence_across_hits(hits),
             indexed_documents=self.store.count(),
             indexed_turns=self.store.turn_count(),
         )
@@ -121,24 +174,34 @@ class ContextHistoryRetriever:
 
         scored: list[_Candidate] = []
         for document in documents:
+            direct_text = document.text
+            direct_matched_entities = _matched_entities(intent, direct_text)
+            direct_has_fts = document.document_id in fts_hits
+            direct_topic_score, _ = best_trigram_match(
+                intent.topics,
+                direct_text,
+            )
+            if (
+                not direct_matched_entities
+                and not direct_has_fts
+                and direct_topic_score < DIRECT_TOPIC_GATE
+            ):
+                continue
+
             window = document_window(
                 document,
                 by_turn[document.turn_index],
             )
             window_text = "\n\n".join(item.text for item in window)
-            matched_entities = _matched_entities(intent, window_text)
             matched_topics = {
                 topic
                 for topic in intent.topics
-                if topic.casefold() in window_text.casefold()
+                if topic.casefold() in direct_text.casefold()
             }
             topic_score, _ = best_trigram_match(intent.topics, window_text)
             has_fts = any(item.document_id in fts_hits for item in window)
-            if not matched_entities and not has_fts and topic_score < 0.2:
-                continue
-
             entity_score = (
-                len(matched_entities) / len(intent.entities)
+                len(direct_matched_entities) / len(intent.entities)
                 if intent.entities
                 else 0.0
             )
@@ -157,7 +220,7 @@ class ContextHistoryRetriever:
                     + (0.14 if has_fts else 0.0)
                     + 0.14 * recency_score
                 )
-            if intent.focus == "relationship" and len(matched_entities) >= 2:
+            if intent.focus == "relationship" and len(direct_matched_entities) >= 2:
                 score += 0.12
             if document.source_type == "player_input":
                 score *= 0.72
@@ -166,7 +229,7 @@ class ContextHistoryRetriever:
                 document=document,
                 score=score,
                 matched_intent_ids={intent.intent_id},
-                matched_entities=matched_entities,
+                matched_entities=direct_matched_entities,
                 matched_topics=matched_topics,
             ))
 
@@ -179,6 +242,92 @@ class ContextHistoryRetriever:
             reverse=True,
         )
         return scored
+
+
+def _cluster_candidates(
+    candidates: dict[str, _Candidate],
+) -> tuple[
+    dict[str, _Candidate],
+    dict[str, list[_Candidate]],
+    dict[str, _Candidate],
+]:
+    """Group near-duplicate scene paragraphs and expose cluster membership.
+
+    Returns representative candidates keyed by representative document ID, the
+    member list for every representative, and a member-to-representative map.
+    player_input documents are never merged and stay as single-member clusters.
+    """
+    clusters = cluster_near_duplicates([
+        candidate
+        for candidate in candidates.values()
+        if candidate.document.source_type == "scene_paragraph"
+    ])
+    representative_for: dict[str, _Candidate] = {}
+    for candidate in candidates.values():
+        representative_for[candidate.document.document_id] = candidate
+
+    representative_candidates: dict[str, _Candidate] = {}
+    member_clusters: dict[str, list[_Candidate]] = {}
+    for cluster in clusters:
+        representative = _merged_representative(cluster)
+        representative_candidates[
+            representative.document.document_id
+        ] = representative
+        member_clusters[representative.document.document_id] = cluster
+        for member in cluster:
+            representative_for[member.document.document_id] = representative
+    for candidate in candidates.values():
+        if candidate.document.source_type != "scene_paragraph":
+            representative_candidates[candidate.document.document_id] = candidate
+            member_clusters[candidate.document.document_id] = [candidate]
+
+    return representative_candidates, member_clusters, representative_for
+
+
+def _merged_representative(cluster: list[_Candidate]) -> _Candidate:
+    """Merge a cluster's metadata onto its strongest member.
+
+    The representative keeps the strongest member's document (score first) but
+    carries the union of every member's matched intents/entities/topics and the
+    highest member score, so ranking and hits reflect the whole cluster.
+    """
+    representative = cluster[0]
+    return _Candidate(
+        document=representative.document,
+        score=max(member.score for member in cluster),
+        matched_intent_ids=set().union(
+            *(member.matched_intent_ids for member in cluster)
+        ),
+        matched_entities=set().union(
+            *(member.matched_entities for member in cluster)
+        ),
+        matched_topics=set().union(
+            *(member.matched_topics for member in cluster)
+        ),
+    )
+
+
+def _remap_to_representatives(
+    by_intent: dict[str, list[_Candidate]],
+    representative_for: dict[str, _Candidate],
+) -> dict[str, list[_Candidate]]:
+    """Rewrite per-intent candidate lists so merged members point at their
+    cluster representative, de-duplicating each intent's list."""
+    remapped: dict[str, list[_Candidate]] = {}
+    for intent_id, intent_candidates in by_intent.items():
+        seen: set[str] = set()
+        grouped: list[_Candidate] = []
+        for candidate in intent_candidates:
+            representative = representative_for.get(
+                candidate.document.document_id,
+                candidate,
+            )
+            if representative.document.document_id in seen:
+                continue
+            seen.add(representative.document.document_id)
+            grouped.append(representative)
+        remapped[intent_id] = grouped
+    return remapped
 
 
 def _query_terms(intent: ContextSearchIntent) -> list[str]:
@@ -252,3 +401,42 @@ def _rank_diverse(
     for candidate in remaining:
         add(candidate)
     return selected
+
+
+def _deduplicate_evidence_across_hits(
+    hits: list[ContextHistoryHit],
+) -> list[ContextHistoryHit]:
+    """Keep every HistoryDocument at most once in the projected evidence set.
+
+    Main hits and supporting evidence keep priority; adjacent context is only
+    kept when its document has not appeared anywhere yet, claimed in hit order
+    (higher-ranked hits first). This makes the LLM projection match the SPEC
+    invariant that a document never appears twice.
+    """
+    reserved: set[str] = set()
+    for hit in hits:
+        reserved.add(hit.evidence_id)
+        reserved.update(hit.supporting_evidence_ids)
+
+    deduped: list[ContextHistoryHit] = []
+    for hit in hits:
+        context_before = [
+            item
+            for item in hit.context_before
+            if item.evidence_id not in reserved
+        ]
+        context_after = [
+            item
+            for item in hit.context_after
+            if item.evidence_id not in reserved
+        ]
+        reserved.update(item.evidence_id for item in context_before)
+        reserved.update(item.evidence_id for item in context_after)
+        if context_before == hit.context_before and context_after == hit.context_after:
+            deduped.append(hit)
+            continue
+        deduped.append(hit.model_copy(update={
+            "context_before": context_before,
+            "context_after": context_after,
+        }))
+    return deduped

@@ -116,6 +116,20 @@ class ContextSearchPlan(BaseModel):
     intents: list[ContextSearchIntent] = Field(default_factory=list)
 
 
+class SupportingEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+
+
+class AdjacentEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+
+
 class ContextHistoryHit(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -125,12 +139,36 @@ class ContextHistoryHit(BaseModel):
     scene_id: str = Field(min_length=1)
     paragraph_index: int | None = Field(default=None, ge=1)
     text: str = Field(min_length=1)
-    context_before: str | None = None
-    context_after: str | None = None
+    context_before: list[AdjacentEvidence] = Field(default_factory=list)
+    context_after: list[AdjacentEvidence] = Field(default_factory=list)
     matched_intent_ids: list[str] = Field(min_length=1)
     matched_entities: list[str] = Field(default_factory=list)
     matched_topics: list[str] = Field(default_factory=list)
     score: float = Field(ge=0)
+    supporting_evidence_ids: list[str] = Field(default_factory=list)
+    supporting_evidence: list[SupportingEvidence] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_evidence_consistency(self):
+        supporting_ids = set(self.supporting_evidence_ids)
+        provided_ids = {item.evidence_id for item in self.supporting_evidence}
+        if supporting_ids != provided_ids:
+            raise ValueError(
+                "supporting_evidence_ids must match supporting_evidence exactly"
+            )
+        if len(self.supporting_evidence_ids) != len(supporting_ids):
+            raise ValueError("supporting_evidence_ids must not contain duplicates")
+        if self.evidence_id in supporting_ids:
+            raise ValueError("supporting evidence must not duplicate the main evidence")
+        if len(self.context_before) != len({
+            item.evidence_id for item in self.context_before
+        }):
+            raise ValueError("context_before must not contain duplicate evidence IDs")
+        if len(self.context_after) != len({
+            item.evidence_id for item in self.context_after
+        }):
+            raise ValueError("context_after must not contain duplicate evidence IDs")
+        return self
 
 
 class ContextHistoryEvidenceSet(BaseModel):
@@ -139,6 +177,24 @@ class ContextHistoryEvidenceSet(BaseModel):
     hits: list[ContextHistoryHit] = Field(default_factory=list)
     indexed_documents: int = Field(default=0, ge=0)
     indexed_turns: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _validate_global_evidence_uniqueness(self):
+        seen: set[str] = set()
+        for hit in self.hits:
+            evidence_ids = [
+                hit.evidence_id,
+                *hit.supporting_evidence_ids,
+                *(item.evidence_id for item in hit.context_before),
+                *(item.evidence_id for item in hit.context_after),
+            ]
+            for evidence_id in evidence_ids:
+                if evidence_id in seen:
+                    raise ValueError(
+                        f"evidence ID appears more than once: {evidence_id}"
+                    )
+                seen.add(evidence_id)
+        return self
 
 
 class SettingMatch(BaseModel):

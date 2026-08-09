@@ -27,12 +27,25 @@ def project_context_history(
             "evidence_id": hit.evidence_id,
             "source_type": hit.source_type,
             "turn_index": hit.turn_index,
-            "context_before": hit.context_before,
+            "context_before": [
+                {"evidence_id": item.evidence_id, "text": item.text}
+                for item in hit.context_before
+            ],
             "text": hit.text,
-            "context_after": hit.context_after,
+            "context_after": [
+                {"evidence_id": item.evidence_id, "text": item.text}
+                for item in hit.context_after
+            ],
             "matched_intent_ids": hit.matched_intent_ids,
             "matched_entities": hit.matched_entities,
             "matched_topics": hit.matched_topics,
+            "supporting_evidence": [
+                {
+                    "evidence_id": item.evidence_id,
+                    "text": item.text,
+                }
+                for item in hit.supporting_evidence
+            ],
         }
         for hit in evidence.hits
     ]
