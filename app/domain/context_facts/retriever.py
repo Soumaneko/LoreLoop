@@ -11,6 +11,7 @@ from app.domain.confirmed_history import (
 )
 
 from .clustering import SUPPORTING_EVIDENCE_MAX, cluster_near_duplicates
+from .diversity import HistoryDiversityPolicy, select_diverse_candidates
 from .schemas import (
     AdjacentEvidence,
     ContextHistoryEvidenceSet,
@@ -30,13 +31,21 @@ class _Candidate:
     matched_intent_ids: set[str] = field(default_factory=set)
     matched_entities: set[str] = field(default_factory=set)
     matched_topics: set[str] = field(default_factory=set)
+    intent_scores: dict[str, float] = field(default_factory=dict)
+    intent_matched_entities: dict[str, set[str]] = field(default_factory=dict)
 
 
 class ContextHistoryRetriever:
     """High-recall confirmed-history retrieval for Context Facts assembly."""
 
-    def __init__(self, store: ConfirmedHistoryStore):
+    def __init__(
+        self,
+        store: ConfirmedHistoryStore,
+        *,
+        diversity_policy: HistoryDiversityPolicy | None = None,
+    ):
         self.store = store
+        self.diversity_policy = diversity_policy or HistoryDiversityPolicy()
 
     def retrieve(
         self,
@@ -70,6 +79,10 @@ class ContextHistoryRetriever:
                 existing.matched_intent_ids.update(candidate.matched_intent_ids)
                 existing.matched_entities.update(candidate.matched_entities)
                 existing.matched_topics.update(candidate.matched_topics)
+                existing.intent_scores.update(candidate.intent_scores)
+                existing.intent_matched_entities.update(
+                    candidate.intent_matched_entities
+                )
 
         representative_candidates, member_clusters, representative_for = (
             _cluster_candidates(candidates)
@@ -79,76 +92,38 @@ class ContextHistoryRetriever:
             representative_for,
         )
 
-        selected = _rank_diverse(
+        hits: list[ContextHistoryHit] = []
+
+        def admit(
+            candidate: _Candidate,
+            _owner_intent_id: str,
+        ) -> tuple[bool, bool]:
+            hit = _build_history_hit(
+                candidate,
+                members=member_clusters[candidate.document.document_id],
+                turn_documents=by_turn[candidate.document.turn_index],
+            )
+            fitted = _fit_hit_to_payload_budget(
+                hits,
+                hit,
+                policy=self.diversity_policy,
+            )
+            if fitted is None:
+                return False, False
+            previous_size = _projected_history_chars(hits)
+            fitted_size = _projected_history_chars(fitted)
+            hits[:] = fitted
+            return True, fitted_size < previous_size
+
+        select_diverse_candidates(
             search_plan,
             by_intent=by_intent_clustered,
             candidates=representative_candidates,
+            policy=self.diversity_policy,
+            admit=admit,
         )
-        hits = []
-        for candidate in selected:
-            members = member_clusters[candidate.document.document_id]
-            cluster_ids = {
-                member.document.document_id for member in members
-            }
-            window = document_window(
-                candidate.document,
-                by_turn[candidate.document.turn_index],
-                before=1,
-                after=1,
-            )
-            context_before = [
-                AdjacentEvidence(evidence_id=item.document_id, text=item.text)
-                for item in window
-                if (
-                    item.document_id not in cluster_ids
-                    and item.paragraph_index is not None
-                    and candidate.document.paragraph_index is not None
-                    and item.paragraph_index < candidate.document.paragraph_index
-                )
-            ]
-            context_after = [
-                AdjacentEvidence(evidence_id=item.document_id, text=item.text)
-                for item in window
-                if (
-                    item.document_id not in cluster_ids
-                    and item.paragraph_index is not None
-                    and candidate.document.paragraph_index is not None
-                    and item.paragraph_index > candidate.document.paragraph_index
-                )
-            ]
-            supporting_members = [
-                member
-                for member in members
-                if member.document.document_id != candidate.document.document_id
-            ][:SUPPORTING_EVIDENCE_MAX]
-            supporting_evidence_ids = sorted(
-                member.document.document_id for member in supporting_members
-            )
-            supporting_evidence = [
-                SupportingEvidence(
-                    evidence_id=member.document.document_id,
-                    text=member.document.text,
-                )
-                for member in supporting_members
-            ]
-            hits.append(ContextHistoryHit(
-                evidence_id=candidate.document.document_id,
-                source_type=candidate.document.source_type,
-                turn_index=candidate.document.turn_index,
-                scene_id=candidate.document.scene_id,
-                paragraph_index=candidate.document.paragraph_index,
-                text=candidate.document.text,
-                context_before=context_before,
-                context_after=context_after,
-                matched_intent_ids=sorted(candidate.matched_intent_ids),
-                matched_entities=sorted(candidate.matched_entities),
-                matched_topics=sorted(candidate.matched_topics),
-                score=round(candidate.score, 6),
-                supporting_evidence_ids=supporting_evidence_ids,
-                supporting_evidence=supporting_evidence,
-            ))
         return ContextHistoryEvidenceSet(
-            hits=_deduplicate_evidence_across_hits(hits),
+            hits=hits,
             indexed_documents=self.store.count(),
             indexed_turns=self.store.turn_count(),
         )
@@ -176,6 +151,7 @@ class ContextHistoryRetriever:
         for document in documents:
             direct_text = document.text
             direct_matched_entities = _matched_entities(intent, direct_text)
+            direct_matched_topics = _matched_topics(intent, direct_text)
             direct_has_fts = document.document_id in fts_hits
             direct_topic_score, _ = best_trigram_match(
                 intent.topics,
@@ -183,6 +159,7 @@ class ContextHistoryRetriever:
             )
             if (
                 not direct_matched_entities
+                and not direct_matched_topics
                 and not direct_has_fts
                 and direct_topic_score < DIRECT_TOPIC_GATE
             ):
@@ -193,12 +170,10 @@ class ContextHistoryRetriever:
                 by_turn[document.turn_index],
             )
             window_text = "\n\n".join(item.text for item in window)
-            matched_topics = {
-                topic
-                for topic in intent.topics
-                if topic.casefold() in direct_text.casefold()
-            }
+            matched_topics = direct_matched_topics
             topic_score, _ = best_trigram_match(intent.topics, window_text)
+            if direct_matched_topics:
+                topic_score = max(topic_score, 1.0)
             has_fts = any(item.document_id in fts_hits for item in window)
             entity_score = (
                 len(direct_matched_entities) / len(intent.entities)
@@ -231,6 +206,10 @@ class ContextHistoryRetriever:
                 matched_intent_ids={intent.intent_id},
                 matched_entities=direct_matched_entities,
                 matched_topics=matched_topics,
+                intent_scores={intent.intent_id: score},
+                intent_matched_entities={
+                    intent.intent_id: set(direct_matched_entities)
+                },
             ))
 
         scored.sort(
@@ -304,6 +283,24 @@ def _merged_representative(cluster: list[_Candidate]) -> _Candidate:
         matched_topics=set().union(
             *(member.matched_topics for member in cluster)
         ),
+        intent_scores={
+            intent_id: max(
+                member.intent_scores.get(intent_id, 0.0)
+                for member in cluster
+            )
+            for intent_id in set().union(
+                *(set(member.intent_scores) for member in cluster)
+            )
+        },
+        intent_matched_entities={
+            intent_id: set().union(*(
+                member.intent_matched_entities.get(intent_id, set())
+                for member in cluster
+            ))
+            for intent_id in set().union(
+                *(set(member.intent_matched_entities) for member in cluster)
+            )
+        },
     )
 
 
@@ -367,40 +364,163 @@ def _matched_entities(
     }
 
 
-def _rank_diverse(
-    search_plan: ContextSearchPlan,
+def _matched_topics(
+    intent: ContextSearchIntent,
+    text: str,
+) -> set[str]:
+    folded_text = text.casefold()
+    return {
+        clean
+        for topic in intent.topics
+        if (clean := topic.strip()) and clean.casefold() in folded_text
+    }
+
+
+def _build_history_hit(
+    candidate: _Candidate,
     *,
-    by_intent: dict[str, list[_Candidate]],
-    candidates: dict[str, _Candidate],
-) -> list[_Candidate]:
-    selected: list[_Candidate] = []
-    selected_ids: set[str] = set()
-
-    def add(candidate: _Candidate) -> bool:
-        document = candidate.document
-        if document.document_id in selected_ids:
-            return False
-        selected.append(candidates[document.document_id])
-        selected_ids.add(document.document_id)
-        return True
-
-    for intent in search_plan.intents:
-        for candidate in by_intent.get(intent.intent_id, []):
-            if add(candidate):
-                break
-
-    remaining = sorted(
-        candidates.values(),
-        key=lambda candidate: (
-            candidate.score,
-            len(candidate.matched_intent_ids),
-            candidate.document.turn_index,
-        ),
-        reverse=True,
+    members: list[_Candidate],
+    turn_documents: list[HistoryDocument],
+) -> ContextHistoryHit:
+    cluster_ids = {member.document.document_id for member in members}
+    window = document_window(
+        candidate.document,
+        turn_documents,
+        before=1,
+        after=1,
     )
-    for candidate in remaining:
-        add(candidate)
-    return selected
+    context_before = [
+        AdjacentEvidence(evidence_id=item.document_id, text=item.text)
+        for item in window
+        if (
+            item.document_id not in cluster_ids
+            and item.paragraph_index is not None
+            and candidate.document.paragraph_index is not None
+            and item.paragraph_index < candidate.document.paragraph_index
+        )
+    ]
+    context_after = [
+        AdjacentEvidence(evidence_id=item.document_id, text=item.text)
+        for item in window
+        if (
+            item.document_id not in cluster_ids
+            and item.paragraph_index is not None
+            and candidate.document.paragraph_index is not None
+            and item.paragraph_index > candidate.document.paragraph_index
+        )
+    ]
+    supporting_members = [
+        member
+        for member in members
+        if member.document.document_id != candidate.document.document_id
+    ][:SUPPORTING_EVIDENCE_MAX]
+    supporting_evidence_ids = sorted(
+        member.document.document_id for member in supporting_members
+    )
+    supporting_evidence = [
+        SupportingEvidence(
+            evidence_id=member.document.document_id,
+            text=member.document.text,
+        )
+        for member in supporting_members
+    ]
+    return ContextHistoryHit(
+        evidence_id=candidate.document.document_id,
+        source_type=candidate.document.source_type,
+        turn_index=candidate.document.turn_index,
+        scene_id=candidate.document.scene_id,
+        paragraph_index=candidate.document.paragraph_index,
+        text=candidate.document.text,
+        context_before=context_before,
+        context_after=context_after,
+        matched_intent_ids=sorted(candidate.matched_intent_ids),
+        matched_entities=sorted(candidate.matched_entities),
+        matched_topics=sorted(candidate.matched_topics),
+        score=round(candidate.score, 6),
+        supporting_evidence_ids=supporting_evidence_ids,
+        supporting_evidence=supporting_evidence,
+    )
+
+
+def _fit_hit_to_payload_budget(
+    existing_hits: list[ContextHistoryHit],
+    hit: ContextHistoryHit,
+    *,
+    policy: HistoryDiversityPolicy,
+) -> list[ContextHistoryHit] | None:
+    """Return the exact globally de-duplicated payload if the hit can fit."""
+    if len(hit.text) > policy.max_evidence_text_chars:
+        hit = _truncate_hit(hit, policy.max_evidence_text_chars)
+
+    def materialize(candidate_hit: ContextHistoryHit) -> list[ContextHistoryHit]:
+        return _deduplicate_evidence_across_hits([*existing_hits, candidate_hit])
+
+    def fits(candidate_hits: list[ContextHistoryHit]) -> bool:
+        return _projected_history_chars(candidate_hits) <= policy.max_payload_chars
+
+    full = materialize(hit)
+    if fits(full):
+        return full
+
+    stripped = hit.model_copy(update={
+        "context_before": [],
+        "context_after": [],
+        "supporting_evidence_ids": [],
+        "supporting_evidence": [],
+    })
+    stripped_hits = materialize(stripped)
+    if fits(stripped_hits):
+        return stripped_hits
+
+    max_excerpt = min(len(hit.text) - 1, policy.max_evidence_text_chars)
+    if max_excerpt < policy.min_excerpt_chars:
+        return None
+    minimum = _truncate_hit(stripped, policy.min_excerpt_chars)
+    minimum_hits = materialize(minimum)
+    if not fits(minimum_hits):
+        return None
+
+    best = minimum_hits
+    low = policy.min_excerpt_chars
+    high = max_excerpt
+    while low <= high:
+        middle = (low + high) // 2
+        excerpt_hits = materialize(_truncate_hit(stripped, middle))
+        if fits(excerpt_hits):
+            best = excerpt_hits
+            low = middle + 1
+        else:
+            high = middle - 1
+    return best
+
+
+def _projected_history_chars(hits: list[ContextHistoryHit]) -> int:
+    from .views import project_context_history
+
+    evidence = ContextHistoryEvidenceSet(hits=hits)
+    return len(project_context_history(evidence))
+
+
+def _truncate_hit(hit: ContextHistoryHit, char_limit: int) -> ContextHistoryHit:
+    original_chars = hit.original_text_chars or len(hit.text)
+    text = _bounded_excerpt(hit.text, char_limit)
+    return hit.model_copy(update={
+        "text": text,
+        "text_truncated": True,
+        "original_text_chars": original_chars,
+    })
+
+
+def _bounded_excerpt(text: str, char_limit: int) -> str:
+    marker = "\n…[bounded excerpt]…\n"
+    if len(text) <= char_limit:
+        return text
+    if char_limit <= len(marker) + 2:
+        return text[:char_limit]
+    remaining = char_limit - len(marker)
+    head = (remaining + 1) // 2
+    tail = remaining // 2
+    return f"{text[:head]}{marker}{text[-tail:]}"
 
 
 def _deduplicate_evidence_across_hits(

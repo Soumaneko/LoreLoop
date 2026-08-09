@@ -139,6 +139,8 @@ class ContextHistoryHit(BaseModel):
     scene_id: str = Field(min_length=1)
     paragraph_index: int | None = Field(default=None, ge=1)
     text: str = Field(min_length=1)
+    text_truncated: bool = False
+    original_text_chars: int | None = Field(default=None, ge=1)
     context_before: list[AdjacentEvidence] = Field(default_factory=list)
     context_after: list[AdjacentEvidence] = Field(default_factory=list)
     matched_intent_ids: list[str] = Field(min_length=1)
@@ -150,6 +152,18 @@ class ContextHistoryHit(BaseModel):
 
     @model_validator(mode="after")
     def _validate_evidence_consistency(self):
+        if self.text_truncated:
+            if (
+                self.original_text_chars is None
+                or self.original_text_chars <= len(self.text)
+            ):
+                raise ValueError(
+                    "truncated evidence requires a larger original_text_chars"
+                )
+        elif self.original_text_chars is not None:
+            raise ValueError(
+                "original_text_chars is only valid for truncated evidence"
+            )
         supporting_ids = set(self.supporting_evidence_ids)
         provided_ids = {item.evidence_id for item in self.supporting_evidence}
         if supporting_ids != provided_ids:

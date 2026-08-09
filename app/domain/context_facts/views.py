@@ -32,6 +32,8 @@ def project_context_history(
                 for item in hit.context_before
             ],
             "text": hit.text,
+            "text_truncated": hit.text_truncated,
+            "original_text_chars": hit.original_text_chars,
             "context_after": [
                 {"evidence_id": item.evidence_id, "text": item.text}
                 for item in hit.context_after

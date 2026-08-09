@@ -1,4 +1,5 @@
 from .extractor import ContextExtractor
+from .diversity import HistoryDiversityPolicy
 from .intent_builder import build_context_search_plan
 from .retriever import ContextHistoryRetriever
 from .schemas import (
@@ -33,6 +34,7 @@ __all__ = [
     "ContextHistoryEvidenceSet",
     "ContextHistoryHit",
     "ContextHistoryRetriever",
+    "HistoryDiversityPolicy",
     "ContextSearchEntity",
     "ContextSearchIntent",
     "ContextSearchPlan",

@@ -14,6 +14,7 @@ from app.domain.context_facts import (
     ContextHistoryEvidenceSet,
     ContextHistoryHit,
     ContextHistoryRetriever,
+    HistoryDiversityPolicy,
     ContextSearchEntity,
     ContextSearchIntent,
     ContextSearchPlan,
@@ -23,7 +24,11 @@ from app.domain.context_facts import (
     build_context_search_plan,
 )
 from app.domain.context_facts.schemas import ContextFactSet
-from app.domain.context_facts.views import project_context_facts, project_settings
+from app.domain.context_facts.views import (
+    project_context_facts,
+    project_context_history,
+    project_settings,
+)
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
@@ -239,7 +244,7 @@ def test_history_retriever_allows_single_alias_and_diversifies_turns():
     assert all(hit.matched_intent_ids for hit in result.hits)
 
 
-def test_history_retriever_does_not_cap_evidence_at_fact_limit():
+def test_history_retriever_caps_entity_owned_hits_independently_of_fact_limit():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
             intent_id="i1",
@@ -261,7 +266,273 @@ def test_history_retriever_does_not_cap_evidence_at_fact_limit():
             current_turn_index=16,
         )
 
-    assert len(result.hits) == 15
+    assert len(result.hits) == 3
+    assert [hit.turn_index for hit in result.hits] == [15, 14, 13]
+
+
+def test_history_diversity_uses_quota_then_global_fill():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="entity_ailin",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="topic_tower",
+            focus="topic",
+            topics=["黑塔"],
+        ),
+        ContextSearchIntent(
+            intent_id="location_inn",
+            focus="location",
+            entities=[ContextSearchEntity(name="河湾旅店")],
+        ),
+    ])
+    scenes = [
+        ShortTermScene(
+            scene_id=f"scene_{turn:03d}",
+            turn_index=turn,
+            scene_text=f"艾琳整理了第{turn}份无关记录。",
+        )
+        for turn in range(1, 7)
+    ] + [
+        ShortTermScene(
+            scene_id="scene_007",
+            turn_index=7,
+            scene_text="黑塔北门仍然封闭。",
+        ),
+        ShortTermScene(
+            scene_id="scene_008",
+            turn_index=8,
+            scene_text="黑塔顶层昨夜出现灯光。",
+        ),
+        ShortTermScene(
+            scene_id="scene_009",
+            turn_index=9,
+            scene_text="河湾旅店的后门通向码头。",
+        ),
+    ]
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, scenes)
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=6),
+        ).retrieve(plan, current_turn_index=10)
+
+    assert len(result.hits) == 6
+    assert sum("艾琳" in hit.text for hit in result.hits) == 3
+    assert sum("黑塔" in hit.text for hit in result.hits) == 2
+    assert sum("河湾旅店" in hit.text for hit in result.hits) == 1
+
+
+def test_one_hit_updates_three_intent_coverages_without_duplicate_payload():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="entity_ailin",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="topic_tower",
+            focus="topic",
+            topics=["黑塔"],
+        ),
+        ContextSearchIntent(
+            intent_id="location_inn",
+            focus="location",
+            entities=[ContextSearchEntity(name="河湾旅店")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [ShortTermScene(
+            scene_id="scene_001",
+            turn_index=1,
+            scene_text="艾琳在河湾旅店画出了黑塔的入口。",
+        )])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=2,
+        )
+
+    assert len(result.hits) == 1
+    assert result.hits[0].matched_intent_ids == [
+        "entity_ailin",
+        "location_inn",
+        "topic_tower",
+    ]
+    assert project_context_history(result).count(result.hits[0].evidence_id) == 1
+
+
+def test_topic_can_own_hit_after_entity_owner_cap_is_full():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="entity_ailin",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="topic_tower",
+            focus="topic",
+            topics=["黑塔"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id=f"scene_{turn:03d}",
+                turn_index=turn,
+                scene_text=f"艾琳记录了黑塔第{turn}层的门锁。",
+            )
+            for turn in range(1, 6)
+        ])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=5, entity_cap=2),
+        ).retrieve(plan, current_turn_index=6)
+
+    assert len(result.hits) == 5
+    assert all("艾琳" in hit.text and "黑塔" in hit.text for hit in result.hits)
+
+
+def test_relationship_intent_cannot_bypass_entity_cap_with_one_entity_match():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="entity_ailin",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="relationship_player_ailin",
+            focus="relationship",
+            entities=[
+                ContextSearchEntity(name="玩家"),
+                ContextSearchEntity(name="艾琳"),
+            ],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id=f"scene_{turn:03d}",
+                turn_index=turn,
+                scene_text=f"艾琳整理了第{turn}份个人记录。",
+            )
+            for turn in range(1, 7)
+        ])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=6, entity_cap=2),
+        ).retrieve(plan, current_turn_index=7)
+
+    assert len(result.hits) == 2
+
+
+def test_genuine_relationship_match_can_own_hits_after_entity_cap():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="entity_ailin",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="relationship_player_ailin",
+            focus="relationship",
+            entities=[
+                ContextSearchEntity(name="玩家"),
+                ContextSearchEntity(name="艾琳"),
+            ],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id=f"scene_{turn:03d}",
+                turn_index=turn,
+                scene_text=f"玩家与艾琳共同处理了第{turn}份记录。",
+            )
+            for turn in range(1, 5)
+        ])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=4, entity_cap=2),
+        ).retrieve(plan, current_turn_index=5)
+
+    assert len(result.hits) == 4
+    assert all(
+        set(hit.matched_entities) == {"玩家", "艾琳"}
+        for hit in result.hits
+    )
+
+
+def test_short_exact_topic_receives_direct_match_score():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="topic_tower",
+            focus="topic",
+            topics=["黑塔"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [ShortTermScene(
+            scene_id="scene_001",
+            turn_index=1,
+            scene_text="艾琳谈起黑塔北门。",
+        )])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=2,
+        )
+
+    assert len(result.hits) == 1
+    assert result.hits[0].matched_topics == ["黑塔"]
+    assert result.hits[0].score > 0.7
+
+
+def test_high_priority_intents_exhaust_max_hits_deterministically():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="low_location",
+            focus="location",
+            entities=[ContextSearchEntity(name="河湾旅店")],
+        ),
+        *[
+            ContextSearchIntent(
+                intent_id=f"high_entity_{index}",
+                focus="entity",
+                entities=[ContextSearchEntity(name=f"人物{index}")],
+            )
+            for index in range(1, 4)
+        ],
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                scene_text="河湾旅店今日照常营业。",
+            ),
+            *[
+                ShortTermScene(
+                    scene_id=f"scene_{index + 1:03d}",
+                    turn_index=index + 1,
+                    scene_text=f"人物{index}留下了自己的线索。",
+                )
+                for index in range(1, 4)
+            ],
+        ])
+        retriever = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=2),
+        )
+        first = retriever.retrieve(plan, current_turn_index=5)
+        second = retriever.retrieve(plan, current_turn_index=5)
+
+    first_ids = [hit.evidence_id for hit in first.hits]
+    assert first_ids == [hit.evidence_id for hit in second.hits]
+    assert [hit.matched_intent_ids for hit in first.hits] == [
+        ["high_entity_1"],
+        ["high_entity_2"],
+    ]
 
 
 def test_history_retriever_merges_multi_intent_alias_and_topic_hits_on_one_evidence():
@@ -403,7 +674,10 @@ def test_non_adjacent_identical_paragraphs_do_not_merge():
                 ),
             ),
         ])
-        result = ContextHistoryRetriever(store).retrieve(
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(turn_cap=3),
+        ).retrieve(
             plan,
             current_turn_index=31,
         )
@@ -850,6 +1124,169 @@ def test_supporting_evidence_carries_member_full_text():
     assert len(hit.supporting_evidence) == 1
     assert hit.supporting_evidence[0].evidence_id == "turn_30_p001"
     assert hit.supporting_evidence[0].text == "艾琳向玩家点头。"
+
+
+def test_history_payload_budget_drops_optional_context_before_main_text():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [ShortTermScene(
+            scene_id="scene_001",
+            turn_index=1,
+            scene_text=(
+                "艾琳向玩家点头。\n\n"
+                "艾琳向玩家点头。\n\n"
+                f"没有检索词的邻接说明：{'很长。' * 300}"
+            ),
+        )])
+        full = ContextHistoryRetriever(store).retrieve(plan, current_turn_index=2)
+        assert full.hits[0].supporting_evidence
+        assert full.hits[0].context_after
+        stripped_hit = full.hits[0].model_copy(update={
+            "context_before": [],
+            "context_after": [],
+            "supporting_evidence_ids": [],
+            "supporting_evidence": [],
+        })
+        stripped_payload = ContextHistoryEvidenceSet(hits=[stripped_hit])
+        budget = len(project_context_history(stripped_payload))
+        bounded = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(
+                max_payload_chars=budget,
+            ),
+        ).retrieve(plan, current_turn_index=2)
+
+    assert len(project_context_history(bounded)) <= budget
+    assert bounded.hits[0].text == "艾琳向玩家点头。"
+    assert not bounded.hits[0].text_truncated
+    assert bounded.hits[0].context_before == []
+    assert bounded.hits[0].context_after == []
+    assert bounded.hits[0].supporting_evidence == []
+
+
+def test_history_payload_budget_uses_marked_bounded_excerpt():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    original = f"艾琳开始陈述。{'这是一段很长的历史证据。' * 300}陈述结束。"
+    policy = HistoryDiversityPolicy(
+        max_payload_chars=900,
+        max_evidence_text_chars=240,
+        min_excerpt_chars=80,
+    )
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [ShortTermScene(
+            scene_id="scene_001",
+            turn_index=1,
+            scene_text=original,
+        )])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=policy,
+        ).retrieve(plan, current_turn_index=2)
+
+    assert len(result.hits) == 1
+    hit = result.hits[0]
+    assert hit.text_truncated
+    assert hit.original_text_chars == len(original)
+    assert "[bounded excerpt]" in hit.text
+    assert len(project_context_history(result)) <= policy.max_payload_chars
+
+
+def test_history_payload_budget_skips_evidence_when_minimum_excerpt_cannot_fit():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="i1",
+            focus="entity",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+    ])
+    policy = HistoryDiversityPolicy(
+        max_payload_chars=100,
+        max_evidence_text_chars=80,
+        min_excerpt_chars=40,
+    )
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [ShortTermScene(
+            scene_id="scene_001",
+            turn_index=1,
+            scene_text=f"艾琳记录：{'内容。' * 100}",
+        )])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=policy,
+        ).retrieve(plan, current_turn_index=2)
+
+    assert result.hits == []
+    assert project_context_history(result) == "[]"
+
+
+def test_history_payload_budget_retries_after_global_dedup_frees_space():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="entity_alpha",
+            focus="entity",
+            entities=[ContextSearchEntity(name="阿尔法")],
+        ),
+        ContextSearchIntent(
+            intent_id="topic_clue",
+            focus="topic",
+            topics=["线索丙"],
+        ),
+        ContextSearchIntent(
+            intent_id="location_beta",
+            focus="location",
+            entities=[ContextSearchEntity(name="贝塔")],
+        ),
+    ])
+    policy = HistoryDiversityPolicy(max_hits=3, max_payload_chars=6_400)
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                scene_text=(
+                    "阿尔法留下短记录。\n\n"
+                    f"贝塔{'长内容。' * 1400}"
+                ),
+            ),
+            ShortTermScene(
+                scene_id="scene_002",
+                turn_index=2,
+                scene_text="线索丙是一条短记录。",
+            ),
+        ])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=policy,
+        ).retrieve(plan, current_turn_index=3)
+
+    assert [hit.evidence_id for hit in result.hits] == [
+        "turn_1_p001",
+        "turn_1_p002",
+        "turn_2_p001",
+    ]
+    assert len(project_context_history(result)) <= policy.max_payload_chars
+
+
+def test_context_extractor_prompt_explains_truncated_history_semantics():
+    prompt = Path("app/prompts/generation/context_extract_v1.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "`text_truncated=true`" in prompt
+    assert "只能使用摘录里直接可见的内容" in prompt
+    assert "不得把未展示的中段当作不存在" in prompt
 
 
 def test_merge_conflict_detects_semantic_differences():
