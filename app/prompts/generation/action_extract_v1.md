@@ -46,6 +46,8 @@
 按以下顺序为每个字段产出期望内容：
 
 - analysis：3-6 句中文意图分析摘要，依次覆盖核心规则中要求的五点。
+- retrieval_topics：完整覆盖 user input 的 0-8 个供历史检索使用的短主题。每项只填写：
+  - text：适合检索历史的简短语义词，包括全部的人物/地点/行动/概念等，2-8 个字；保留专名，不要写事件摘要句。topic 不与 action 绑定，也不依赖是否存在对应 action。
 - atomic_actions：拆解出的原子行动列表，至少一个。每个 AtomicAction 按以下字段填写：
   - action_id：行动唯一标识，如 A1、A2。
   - sequence：行动发生顺序，从 1 开始递增。
@@ -101,6 +103,7 @@
    - 判断角度：目标实力与态度、场景氛围与位置、行动类型（attack/hide_or_stealth/cast_or_use_power/defend 基准偏高）、CoreMemory 的世界反馈规则。信息不足时用 action_type 和当前场景做保守估计。
 9. 完成型命令必须完整提取：用户说“完成任务”“快速处理完”“解决这些敌人”“把这件事做完”等，表示要求本回合实际执行直到产生结果。即使未给出具体战术，也必须把用户原话完整保留为一个高层 action，选择最贴切的 action_type；无法归类时使用 other，并根据任务风险设置 likely_needs_roll。不得只提取接取、准备、前往或讨论等前置步骤，也不得替用户停在执行之前。
 10. actor 必须准确表达行动所有权：用户明确表示“一起……”“共同……”等共同执行时，应在同一个 action 的 actor 列表中写入全部实际执行者。仅仅在场、同行、旁观、受益、被保护或作为 target 的角色不是行动者，不得加入 actor。
+11. retrieval_topics 必须是检索词，不是剧情总结。必须覆盖全部的人物/地点/行动/概念等，不要遗漏。允许根据 CurrentState 或 CoreMemory 使用更稳定的规范名；topic 独立于 atomic_actions，即使没有对应行动也必须提取。
 
 
 # 禁止事项
@@ -122,6 +125,7 @@
 ```json
 {{
   "analysis": "用户想推开石门进入密室，再举火查看室内。结合 CurrentState，艾伦正位于石门前且持有火把，行动在物理与逻辑上可行，不违反 CoreMemory。把连续姿态合并解析为两个行动：先推门进入，再举火观察。",
+  "retrieval_topics": [],
   "atomic_actions": [
     {{
       "action_id": "A1",
@@ -149,6 +153,7 @@
       "likely_needs_roll": false,
       "risk_level": "low"
     }}
-  ]
+  ],
+  "touched_event_ids": []
 }}
 ```

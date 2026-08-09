@@ -1,7 +1,12 @@
 import re
 from dataclasses import dataclass, field
 
-from app.domain.action.schemas import ActionParseResult, Anchor, AtomicAction
+from app.domain.action.schemas import (
+    ActionParseResult,
+    ActionRetrievalTopic,
+    Anchor,
+    AtomicAction,
+)
 from app.domain.current_state.schemas import CurrentState
 
 
@@ -9,8 +14,10 @@ from app.domain.current_state.schemas import CurrentState
 class SelfCheckResult:
     original_action_count: int
     original_anchor_count: int
+    original_topic_count: int
     final_action_count: int = 0
     final_anchor_count: int = 0
+    final_topic_count: int = 0
     fixes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -35,6 +42,7 @@ class ActionSelfCheck:
         sc_result = SelfCheckResult(
             original_action_count=len(result.atomic_actions),
             original_anchor_count=len(result.anchors),
+            original_topic_count=len(result.retrieval_topics),
         )
 
         actions = self._check_actions(
@@ -45,14 +53,20 @@ class ActionSelfCheck:
         )
         anchors = self._check_anchors(result.anchors, sc_result)
         anchors = self._ensure_viewpoint_anchor(anchors, actions, current_state, sc_result)
+        retrieval_topics = self._check_retrieval_topics(
+            result.retrieval_topics,
+            sc_result,
+        )
 
         sc_result.final_action_count = len(actions)
         sc_result.final_anchor_count = len(anchors)
+        sc_result.final_topic_count = len(retrieval_topics)
         self.last_result = sc_result
 
         return ActionParseResult(
             atomic_actions=actions,
             anchors=anchors,
+            retrieval_topics=retrieval_topics,
             analysis=result.analysis,
             touched_event_ids=list(result.touched_event_ids),
         )
@@ -160,6 +174,29 @@ class ActionSelfCheck:
                 fixed_anchors.append(anchor)
 
         return fixed_anchors
+
+    def _check_retrieval_topics(
+        self,
+        topics: list[ActionRetrievalTopic],
+        result: SelfCheckResult,
+    ) -> list[ActionRetrievalTopic]:
+        seen: set[str] = set()
+        checked: list[ActionRetrievalTopic] = []
+        for topic in topics:
+            clean = " ".join(topic.text.split()).strip()
+            key = clean.casefold()
+            if not clean or key in seen:
+                if key in seen:
+                    result.fixes.append(
+                        f"retrieval topic '{clean}' duplicate removed"
+                    )
+                continue
+            updates: dict = {}
+            if clean != topic.text:
+                updates["text"] = clean
+            checked.append(topic.model_copy(update=updates) if updates else topic)
+            seen.add(key)
+        return checked
 
     def _ensure_viewpoint_anchor(
         self,

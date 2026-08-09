@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.domain.action.schemas import Anchor
+from app.domain.action.schemas import ActionRetrievalTopic, Anchor
 from app.domain.confirmed_history.schemas import HistorySource
 from app.domain.continuity import ContinuitySelection
 from app.domain.core_memory.schemas import CoreMemory
@@ -264,6 +264,7 @@ class ContextFactsInput(BaseModel):
     current_state: CurrentState
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
     matched_anchors: list[Anchor] = Field(default_factory=list)
+    retrieval_topics: list[ActionRetrievalTopic] = Field(default_factory=list)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
     current_turn_index: int = Field(ge=0)
 

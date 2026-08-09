@@ -77,8 +77,8 @@ def _compile_generation_graph(
     graph.add_node("resolve_turn", resolve_turn_node)
     graph.add_node("compose_narrative", compose_narrative_node)
 
-    graph.add_edge(START, "extract_context_facts")
     graph.add_edge(START, "parse_action")
+    graph.add_edge("parse_action", "extract_context_facts")
     graph.add_edge("parse_action", "evaluate_roll_modifiers")
     graph.add_edge(["extract_context_facts", "evaluate_roll_modifiers"], "resolve_turn")
     graph.add_node("director_agent_stage", director_agent_stage_node)

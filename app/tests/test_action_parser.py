@@ -3,7 +3,12 @@ from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.action.parser import ActionParser
-from app.domain.action.schemas import ActionExtractionResult, ActionParseResult, AtomicAction
+from app.domain.action.schemas import (
+    ActionExtractionResult,
+    ActionParseResult,
+    ActionRetrievalTopic,
+    AtomicAction,
+)
 from app.domain.action.self_check import ActionSelfCheck
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
@@ -23,6 +28,41 @@ def test_prompt_requires_complete_explicit_action_coverage():
     assert "行动者姓名列表" in prompt
     assert "多人共同执行同一个原子行动" in prompt
     assert "仅仅在场、同行、旁观、受益、被保护或作为 target" in prompt
+    assert "retrieval_topics 必须是检索词，不是剧情总结" in prompt
+    assert "允许根据 CurrentState 或 CoreMemory 使用更稳定的规范名" in prompt
+
+
+def test_action_parser_returns_retrieval_topics():
+    parser = _make_parser([
+        json.dumps({
+            "atomic_actions": [{
+                "action_id": "A1",
+                "sequence": 1,
+                "actor": ["主角"],
+                "action_type": "hide_or_stealth",
+                "raw_text": "埋伏在山脚下的必经之路",
+                "verb": "埋伏",
+                "target": "山脚下的必经之路",
+                "method": None,
+                "condition": None,
+                "likely_needs_roll": True,
+                "risk_level": "medium",
+            }],
+            "retrieval_topics": [{
+                "text": "埋伏在山脚下",
+            }],
+        }, ensure_ascii=False)
+    ])
+
+    result = parser.parse(
+        "我埋伏在山脚下的必经之路。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert result.retrieval_topics == [ActionRetrievalTopic(
+        text="埋伏在山脚下",
+    )]
 
 
 def test_action_parse_contract_omits_removed_metadata_fields():
@@ -33,6 +73,11 @@ def test_action_parse_contract_omits_removed_metadata_fields():
 
     assert "turn_intent" not in extraction_fields
     assert "turn_intent" not in parse_fields
+    assert "source_action_ids" not in ActionRetrievalTopic.model_json_schema()[
+        "properties"
+    ]
+    assert list(extraction_fields)[:2] == ["analysis", "retrieval_topics"]
+    assert list(parse_fields)[:2] == ["analysis", "retrieval_topics"]
     assert "goal" not in action_fields
     assert "roll_hint" not in action_fields
     assert "confidence" not in action_fields
@@ -345,6 +390,56 @@ class TestComplexAction:
 # ══════════════════════════════════════════════════════════════════
 
 class TestActionSelfCheck:
+    def test_retrieval_topics_are_only_trimmed_and_deduplicated(self):
+        sc = ActionSelfCheck()
+        result = ActionParseResult(
+            atomic_actions=[AtomicAction_model(
+                action_id="A1",
+                sequence=1,
+                actor=["主角"],
+                action_type="hide_or_stealth",
+                raw_text="埋伏在山脚下的必经之路",
+                verb="埋伏",
+                target="山脚下的必经之路",
+                likely_needs_roll=True,
+            )],
+            retrieval_topics=[
+                ActionRetrievalTopic(
+                    text="埋伏在山脚下",
+                ),
+                ActionRetrievalTopic(
+                    text="埋伏在山脚下",
+                ),
+                ActionRetrievalTopic(
+                    text="山脚埋伏",
+                ),
+                ActionRetrievalTopic(
+                    text="陷空山",
+                ),
+            ],
+        )
+
+        cleaned = sc.check(
+            result,
+            "我埋伏在山脚下的必经之路。",
+            _make_current_state(),
+        )
+
+        assert cleaned.retrieval_topics == [
+            ActionRetrievalTopic(
+                text="埋伏在山脚下",
+            ),
+            ActionRetrievalTopic(
+                text="山脚埋伏",
+            ),
+            ActionRetrievalTopic(
+                text="陷空山",
+            ),
+        ]
+        assert sc.last_result is not None
+        assert sc.last_result.original_topic_count == 4
+        assert sc.last_result.final_topic_count == 3
+
     def test_joint_actor_list_is_deduplicated_without_losing_ownership(self):
         sc = ActionSelfCheck()
         result = ActionParseResult(

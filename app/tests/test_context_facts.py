@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.action.schemas import Anchor
+from app.domain.action.schemas import ActionRetrievalTopic, Anchor
 from app.domain.confirmed_history import ConfirmedHistoryStore
 from app.domain.continuity import ContinuitySelection, ContinuityStore
 from app.domain.context_facts import (
@@ -177,6 +177,115 @@ def test_deterministic_intents_use_location_participants_aliases_and_topics():
         if "解决方法" in intent.topics
     )
     assert topic.origin == "explicit_input"
+
+
+def test_parser_topics_replace_rule_extraction_and_remain_explicit():
+    plan = build_context_search_plan(
+        user_input=(
+            "第一位弟子安顿好了，接下去要处理山脚下的老鼠们了，"
+            "我选择离开护山大阵，埋伏在山脚下的必经之路，"
+            "查看刚刚的周姓修士是否会前来刺探我宗情报。"
+        ),
+        current_state=_state(),
+        matched_anchors=[],
+        npc_profiles=[],
+        retrieval_topics=[
+            ActionRetrievalTopic(
+                text="埋伏在山脚下",
+            ),
+            ActionRetrievalTopic(
+                text="刺探我宗情报",
+            ),
+        ],
+    )
+
+    topic_intents = [
+        intent
+        for intent in plan.intents
+        if intent.focus == "topic"
+    ]
+    assert [intent.topics for intent in topic_intents] == [
+        ["埋伏在山脚下"],
+        ["刺探我宗情报"],
+    ]
+    assert all(intent.origin == "explicit_input" for intent in topic_intents)
+
+
+def test_known_entity_topic_deduplicates_into_explicit_entity():
+    plan = build_context_search_plan(
+        user_input="我询问顾阁主。",
+        current_state=_state(),
+        matched_anchors=[],
+        npc_profiles=[_npc_view()],
+        retrieval_topics=[ActionRetrievalTopic(text="顾阁主")],
+    )
+
+    entity = next(
+        intent
+        for intent in plan.intents
+        if intent.focus == "entity"
+        and intent.entities[0].name == "顾晚棠"
+    )
+    assert entity.origin == "explicit_input"
+    assert not any(
+        intent.focus == "topic" and "顾阁主" in intent.topics
+        for intent in plan.intents
+    )
+
+
+def test_unknown_explicit_names_remain_topics():
+    plan = build_context_search_plan(
+        user_input="离开护山大阵，查看周姓修士。",
+        current_state=_state(),
+        matched_anchors=[],
+        npc_profiles=[],
+        retrieval_topics=[
+            ActionRetrievalTopic(text="护山大阵"),
+            ActionRetrievalTopic(text="周姓修士"),
+        ],
+    )
+
+    topics = {
+        topic
+        for intent in plan.intents
+        if intent.focus == "topic"
+        for topic in intent.topics
+    }
+    assert {"护山大阵", "周姓修士"} <= topics
+
+
+def test_contiguous_parser_topics_retrieve_natural_history_wording():
+    plan = build_context_search_plan(
+        user_input="埋伏在山脚下，查看是否有人刺探我宗情报。",
+        current_state=_state(),
+        matched_anchors=[],
+        npc_profiles=[],
+        retrieval_topics=[
+            ActionRetrievalTopic(text="埋伏在山脚下"),
+            ActionRetrievalTopic(text="刺探我宗情报"),
+        ],
+    )
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_history_1",
+                turn_index=1,
+                scene_text="有人在山脚下埋伏，盯着必经之路。",
+            ),
+            ShortTermScene(
+                scene_id="scene_history_2",
+                turn_index=2,
+                scene_text="周姓修士试图刺探我宗情报。",
+            ),
+        ])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=3,
+        )
+
+    hit_text = "\n".join(hit.text for hit in result.hits)
+    assert "山脚下埋伏" in hit_text
+    assert "刺探我宗情报" in hit_text
 
 
 def test_deterministic_intents_keep_all_matched_anchors():

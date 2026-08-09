@@ -1,6 +1,7 @@
 from .schemas import (
     ActionExtractionResult,
     ActionParseResult,
+    ActionRetrievalTopic,
     ActionType,
     Anchor,
     AnchorKind,
@@ -10,6 +11,7 @@ from .schemas import (
 __all__ = [
     "ActionExtractionResult",
     "ActionParseResult",
+    "ActionRetrievalTopic",
     "ActionType",
     "Anchor",
     "AnchorKind",

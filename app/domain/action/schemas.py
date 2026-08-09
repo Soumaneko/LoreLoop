@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 ActionType = Literal[
     "move",
@@ -56,14 +56,30 @@ class Anchor(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
+class ActionRetrievalTopic(BaseModel):
+    """A compact semantic hint used for history retrieval."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=2, max_length=24)
+
+
 class ActionExtractionResult(BaseModel):
     analysis: str = ""
+    retrieval_topics: list[ActionRetrievalTopic] = Field(
+        default_factory=list,
+        max_length=8,
+    )
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
     touched_event_ids: list[str] = Field(default_factory=list)
 
 
 class ActionParseResult(BaseModel):
     analysis: str = ""
+    retrieval_topics: list[ActionRetrievalTopic] = Field(
+        default_factory=list,
+        max_length=8,
+    )
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
     anchors: list[Anchor] = Field(default_factory=list)
     touched_event_ids: list[str] = Field(default_factory=list)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from app.domain.action.schemas import Anchor
+from app.domain.action.schemas import ActionRetrievalTopic, Anchor
 from app.domain.current_state.schemas import CurrentState
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 
@@ -28,6 +28,7 @@ def build_context_search_plan(
     current_state: CurrentState,
     matched_anchors: list[Anchor],
     npc_profiles: list[NPCProfileDirectorView],
+    retrieval_topics: list[ActionRetrievalTopic] | None = None,
 ) -> ContextSearchPlan:
     profile_entities = _profile_entities(npc_profiles)
     intents: list[ContextSearchIntent] = []
@@ -79,6 +80,28 @@ def build_context_search_plan(
             origin=origin,
             topics=[clean],
         ))
+
+    def promote_matching_entity(topic: str) -> bool:
+        """Prefer entity semantics for an exact known name or alias."""
+        key = topic.strip().casefold()
+        if not key:
+            return False
+        for index, intent in enumerate(intents):
+            if intent.focus not in {"entity", "location"}:
+                continue
+            if not any(
+                key == surface.strip().casefold()
+                for entity in intent.entities
+                for surface in [entity.name, *entity.aliases]
+                if surface.strip()
+            ):
+                continue
+            if intent.origin != "explicit_input":
+                intents[index] = intent.model_copy(update={
+                    "origin": "explicit_input",
+                })
+            return True
+        return False
 
     location = _resolve_entity(current_state.scene.location, profile_entities)
     if location is not None:
@@ -157,15 +180,21 @@ def build_context_search_plan(
             entities=relationship_entities,
         ))
 
-    topics = _extract_topics(
-        user_input,
-        surfaces=[
-            surface
-            for entity in profile_entities
-            for surface in [entity.name, *entity.aliases]
-        ],
+    topics = (
+        [topic.text for topic in retrieval_topics]
+        if retrieval_topics
+        else _extract_topics(
+            user_input,
+            surfaces=[
+                surface
+                for entity in profile_entities
+                for surface in [entity.name, *entity.aliases]
+            ],
+        )
     )
     for topic in topics:
+        if promote_matching_entity(topic):
+            continue
         add_or_promote_topic_intent(topic, origin="explicit_input")
 
     return ContextSearchPlan(intents=intents)

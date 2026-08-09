@@ -38,6 +38,7 @@ class ContextFactsService:
             current_state=input_data.current_state,
             matched_anchors=input_data.matched_anchors,
             npc_profiles=input_data.npc_profiles,
+            retrieval_topics=input_data.retrieval_topics,
         )
         history_evidence = ContextHistoryRetriever(
             self.history_store

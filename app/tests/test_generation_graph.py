@@ -62,6 +62,18 @@ def test_generation_graph_compiles():
     assert graph is not None
 
 
+def test_action_parser_precedes_parallel_context_and_roll_branches():
+    graph = generation_graph.build_generation_graph(
+        canon_validation_is_enabled=True,
+    ).get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+
+    assert ("__start__", "parse_action") in edges
+    assert ("parse_action", "extract_context_facts") in edges
+    assert ("parse_action", "evaluate_roll_modifiers") in edges
+    assert ("__start__", "extract_context_facts") not in edges
+
+
 def test_rephrase_graph_runs_only_composer_and_consistency_tail():
     graph = generation_graph.build_rephrase_graph(
         canon_validation_is_enabled=True,
@@ -1077,6 +1089,10 @@ def test_extract_context_facts_preserves_facts_when_npc_selection_fails(
     tmp_path,
     monkeypatch,
 ):
+    from app.domain.action.schemas import (
+        ActionParseResult,
+        ActionRetrievalTopic,
+    )
     from app.domain.context_facts.schemas import ContextFact, ContextFactSet
     from app.domain.core_memory.schemas import CoreMemory
     from app.domain.current_state import (
@@ -1089,12 +1105,14 @@ def test_extract_context_facts_preserves_facts_when_npc_selection_fails(
     from app.runtime.stores import StoreBundle
 
     stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    captured = {}
 
     class _FakeContextFactsService:
         def __init__(self, gateway, history_store, continuity_store, setting_store):
             pass
 
         def build(self, input, trace_id):
+            captured["retrieval_topics"] = input.retrieval_topics
             return SimpleNamespace(
                 context_facts=ContextFactSet(
                     turn_focus="围绕昨夜码头的事。",
@@ -1133,6 +1151,11 @@ def test_extract_context_facts_preserves_facts_when_npc_selection_fails(
         ),
         "scene_summaries": [],
         "matched_anchors": [],
+        "action_parse_result": ActionParseResult(
+            retrieval_topics=[ActionRetrievalTopic(
+                text="码头追踪",
+            )],
+        ),
         "action_npc_director_views": [],
         "next_turn_index": 2,
         "trace_id": "trace-extract",
@@ -1143,6 +1166,9 @@ def test_extract_context_facts_preserves_facts_when_npc_selection_fails(
     assert result["context_extract_error"] is None
     assert result["context_facts"].facts[0].fact == "顾晚棠藏在客栈上房。"
     assert result["context_fact_npc_profiles"] == []
+    assert captured["retrieval_topics"] == [ActionRetrievalTopic(
+        text="码头追踪",
+    )]
 
 
 def test_director_agent_stage_node_keeps_event_actors_when_action_saturates(

@@ -95,6 +95,7 @@ def _composition_output_state(
 
 
 def extract_context_facts_node(state: GenerationState) -> GenerationState:
+    action_parse_result = state.get("action_parse_result")
     try:
         with (
             _store_factory(state, "confirmed_history")() as history_store,
@@ -113,6 +114,11 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
                     current_state=state["current_state"],
                     scene_summaries=state["scene_summaries"],
                     matched_anchors=state.get("matched_anchors", []),
+                    retrieval_topics=(
+                        action_parse_result.retrieval_topics
+                        if action_parse_result is not None
+                        else []
+                    ),
                     npc_profiles=[
                         profile.disclosure_view()
                         for profile in state.get("action_npc_profiles", [])
@@ -209,6 +215,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         analysis=action_result.analysis,
         atomic_actions=action_result.atomic_actions,
         anchors=state.get("matched_anchors", []),
+        retrieval_topics=list(action_result.retrieval_topics),
         touched_event_ids=list(action_result.touched_event_ids),
     )
     self_check = ActionSelfCheck()
