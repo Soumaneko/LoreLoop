@@ -5,7 +5,12 @@ import pytest
 
 from app.domain.action.schemas import ActionRetrievalTopic, Anchor
 from app.domain.confirmed_history import ConfirmedHistoryStore
-from app.domain.continuity import ContinuitySelection, ContinuityStore
+from app.domain.continuity import (
+    ContinuityItem,
+    ContinuityMatch,
+    ContinuitySelection,
+    ContinuityStore,
+)
 from app.domain.context_facts import (
     ContextExtractor,
     ContextExtractorInput,
@@ -27,7 +32,11 @@ from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.context_facts.views import (
     project_context_facts,
     project_context_history,
+    project_context_history_payload,
+    project_continuity,
+    project_continuity_payload,
     project_settings,
+    project_settings_payload,
 )
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
@@ -89,6 +98,154 @@ def _upsert_scenes(
             user_input=scene.user_input,
             scene_text=scene.scene_text,
         )
+
+
+def test_context_history_projection_omits_empty_and_internal_fields():
+    evidence = ContextHistoryEvidenceSet(hits=[ContextHistoryHit(
+        evidence_id="turn_1_p001",
+        source_type="scene_paragraph",
+        turn_index=1,
+        scene_id="scene_001",
+        paragraph_index=1,
+        text="顾晚棠点头。",
+        matched_intent_ids=["i1"],
+        score=0.8,
+    )])
+
+    payload = project_context_history_payload(evidence)
+
+    assert payload == [{
+        "evidence_id": "turn_1_p001",
+        "source_type": "scene_paragraph",
+        "turn_index": 1,
+        "text": "顾晚棠点头。",
+    }]
+    assert json.loads(project_context_history(evidence)) == payload
+
+
+def test_context_history_projection_keeps_nonempty_evidence_context():
+    evidence = ContextHistoryEvidenceSet(hits=[ContextHistoryHit(
+        evidence_id="turn_1_p002",
+        source_type="scene_paragraph",
+        turn_index=1,
+        scene_id="scene_001",
+        paragraph_index=2,
+        text="……有界摘录……",
+        text_truncated=True,
+        original_text_chars=500,
+        context_before=[{
+            "evidence_id": "turn_1_p001",
+            "text": "前文。",
+        }],
+        context_after=[{
+            "evidence_id": "turn_1_p003",
+            "text": "后文。",
+        }],
+        matched_intent_ids=["i1", "i2"],
+        matched_entities=["顾晚棠"],
+        matched_topics=["账册"],
+        score=0.8,
+        supporting_evidence_ids=["turn_2_p001"],
+        supporting_evidence=[{
+            "evidence_id": "turn_2_p001",
+            "text": "另一处直接证据。",
+        }],
+    )])
+
+    record = project_context_history_payload(evidence)[0]
+
+    assert record["text_truncated"] is True
+    assert record["original_text_chars"] == 500
+    assert record["context_before"] == [{
+        "evidence_id": "turn_1_p001",
+        "text": "前文。",
+    }]
+    assert record["context_after"] == [{
+        "evidence_id": "turn_1_p003",
+        "text": "后文。",
+    }]
+    assert record["matched_entities"] == ["顾晚棠"]
+    assert record["matched_topics"] == ["账册"]
+    assert record["supporting_evidence"] == [{
+        "evidence_id": "turn_2_p001",
+        "text": "另一处直接证据。",
+    }]
+    assert "matched_intent_ids" not in record
+
+
+def test_continuity_and_setting_projections_omit_empty_optional_fields():
+    continuity = ContinuitySelection(items=[ContinuityMatch(
+        item=ContinuityItem(
+            id="thread_1",
+            kind="open_thread",
+            subject="外围探子",
+            statement="探子威胁仍在。",
+            created_turn=1,
+            updated_turn=2,
+        ),
+        score=0.9,
+    )])
+    settings = SettingSelection(settings=[SettingMatch(
+        setting_id="setting_1",
+        kind="location",
+        name="陷空山",
+        summary="合欢宗驻地所在灵山。",
+        score=0.8,
+    )])
+
+    continuity_payload = project_continuity_payload(continuity)
+    settings_payload = project_settings_payload(settings)
+
+    assert continuity_payload == [{
+        "id": "thread_1",
+        "kind": "open_thread",
+        "subject": "外围探子",
+        "statement": "探子威胁仍在。",
+    }]
+    assert settings_payload == [{
+        "setting_id": "setting_1",
+        "kind": "location",
+        "name": "陷空山",
+        "summary": "合欢宗驻地所在灵山。",
+    }]
+    assert json.loads(project_continuity(continuity)) == continuity_payload
+    assert json.loads(project_settings(settings)) == settings_payload
+    assert project_context_history(ContextHistoryEvidenceSet()) == "[]"
+    assert project_continuity(ContinuitySelection()) == "[]"
+    assert project_settings(SettingSelection()) == "[]"
+
+
+def test_continuity_and_setting_projections_keep_nonempty_optional_fields():
+    continuity = ContinuitySelection(items=[ContinuityMatch(
+        item=ContinuityItem(
+            id="thread_1",
+            kind="commitment",
+            subject="拜师",
+            statement="明日正式拜师。",
+            entities=["萧欢", "苏念薇"],
+            location="陷空山",
+            deadline="明日一早",
+            created_turn=10,
+            updated_turn=11,
+        ),
+        score=0.9,
+    )])
+    settings = SettingSelection(settings=[SettingMatch(
+        setting_id="setting_1",
+        kind="location",
+        name="陷空山",
+        summary="合欢宗驻地所在灵山。",
+        public_facts=["山中存在灵脉。"],
+        score=0.8,
+    )])
+
+    continuity_record = project_continuity_payload(continuity)[0]
+    assert continuity_record["entities"] == ["萧欢", "苏念薇"]
+    assert continuity_record["location"] == "陷空山"
+    assert continuity_record["deadline"] == "明日一早"
+    assert project_settings_payload(settings)[0]["public_facts"] == [
+        "山中存在灵脉。"
+    ]
 
 
 def test_context_fact_set_assigns_fact_ids_and_keeps_internal_evidence():
@@ -1717,7 +1874,10 @@ def test_history_payload_budget_retries_after_global_dedup_frees_space():
             entities=[ContextSearchEntity(name="贝塔")],
         ),
     ])
-    policy = HistoryDiversityPolicy(max_hits=3, max_payload_chars=6_400)
+    # Calibrated against the compact final projection: the clue initially
+    # cannot fit beside alpha's large adjacent paragraph, then fits after beta
+    # becomes a main hit and global evidence de-duplication removes that copy.
+    policy = HistoryDiversityPolicy(max_hits=3, max_payload_chars=6_000)
     with ConfirmedHistoryStore() as store:
         _upsert_scenes(store, [
             ShortTermScene(
@@ -1754,6 +1914,9 @@ def test_context_extractor_prompt_explains_truncated_history_semantics():
 
     assert "`text_truncated=true`" in prompt
     assert "只能使用摘录里直接可见的内容" in prompt
+    assert "下游无法从本回合输入直接得到的增量上下文" in prompt
+    assert "默认不要把其中已经明确写出的内容原样复述" in prompt
+    assert "软约束，不是禁止引用这些来源" in prompt
     assert "不得把未展示的中段当作不存在" in prompt
 
 
