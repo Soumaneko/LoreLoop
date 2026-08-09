@@ -14,6 +14,7 @@ from .schemas import (
 
 
 _TOPIC_STOPWORDS = (
+    "这件事情", "这件事", "那件事情", "那件事", "有关", "关于", "针对",
     "有没有", "是否", "我们", "自己", "这个", "那个", "这些", "那些",
     "然后", "接着", "继续", "尝试", "想要", "打算", "决定", "开始",
     "进行", "一下", "向", "对", "和", "与", "把", "让", "告诉",
@@ -30,17 +31,66 @@ def build_context_search_plan(
 ) -> ContextSearchPlan:
     profile_entities = _profile_entities(npc_profiles)
     intents: list[ContextSearchIntent] = []
-    seen_entities: set[str] = set()
-    relevant_entities: list[ContextSearchEntity] = []
+    entity_intent_indexes: dict[str, int] = {}
+    topic_intent_indexes: dict[str, int] = {}
+    relevant_characters: list[ContextSearchEntity] = []
+    normalized_input = user_input.casefold()
+
+    def add_or_promote_entity_intent(
+        entity: ContextSearchEntity,
+        *,
+        focus: str,
+        origin: str,
+    ) -> None:
+        key = entity.name.casefold()
+        existing_index = entity_intent_indexes.get(key)
+        if existing_index is not None:
+            existing = intents[existing_index]
+            if _ORIGIN_PRIORITY[origin] < _ORIGIN_PRIORITY[existing.origin]:
+                intents[existing_index] = existing.model_copy(update={
+                    "origin": origin,
+                })
+            return
+        entity_intent_indexes[key] = len(intents)
+        intents.append(ContextSearchIntent(
+            intent_id=f"i{len(intents) + 1}",
+            focus=focus,
+            origin=origin,
+            entities=[entity],
+        ))
+
+    def add_or_promote_topic_intent(topic: str, *, origin: str) -> None:
+        clean = topic.strip()
+        if not clean:
+            return
+        key = clean.casefold()
+        existing_index = topic_intent_indexes.get(key)
+        if existing_index is not None:
+            existing = intents[existing_index]
+            if _ORIGIN_PRIORITY[origin] < _ORIGIN_PRIORITY[existing.origin]:
+                intents[existing_index] = existing.model_copy(update={
+                    "origin": origin,
+                })
+            return
+        topic_intent_indexes[key] = len(intents)
+        intents.append(ContextSearchIntent(
+            intent_id=f"i{len(intents) + 1}",
+            focus="topic",
+            origin=origin,
+            topics=[clean],
+        ))
 
     location = _resolve_entity(current_state.scene.location, profile_entities)
     if location is not None:
-        intents.append(ContextSearchIntent(
-            intent_id="i1",
+        add_or_promote_entity_intent(
+            location,
             focus="location",
-            entities=[location],
-        ))
-        seen_entities.add(location.name.casefold())
+            origin=(
+                "explicit_input"
+                if _entity_mentioned(normalized_input, location)
+                else "current_context"
+            ),
+        )
 
     player_name = current_state.player.name.strip()
     for participant in current_state.scene.participant_names:
@@ -50,59 +100,60 @@ def build_context_search_plan(
         entity = _resolve_entity(clean, profile_entities)
         if entity is None:
             continue
-        relevant_entities.append(entity)
-        key = entity.name.casefold()
-        if key in seen_entities:
-            continue
-        intents.append(ContextSearchIntent(
-            intent_id=f"i{len(intents) + 1}",
+        relevant_characters.append(entity)
+        add_or_promote_entity_intent(
+            entity,
             focus="entity",
-            entities=[entity],
-        ))
-        seen_entities.add(key)
+            origin=(
+                "explicit_input"
+                if _entity_mentioned(normalized_input, entity)
+                else "current_context"
+            ),
+        )
 
-    normalized_input = user_input.casefold()
     for entity in profile_entities:
         if not _entity_mentioned(normalized_input, entity):
             continue
-        relevant_entities.append(entity)
-        key = entity.name.casefold()
-        if key in seen_entities:
-            continue
-        intents.append(ContextSearchIntent(
-            intent_id=f"i{len(intents) + 1}",
+        relevant_characters.append(entity)
+        add_or_promote_entity_intent(
+            entity,
             focus="entity",
-            entities=[entity],
-        ))
-        seen_entities.add(key)
+            origin="explicit_input",
+        )
 
     for anchor in matched_anchors:
         clean = (anchor.normalized or anchor.text).strip()
         if not clean:
             continue
+        origin = (
+            "explicit_input"
+            if anchor.source == "explicit"
+            else "matched_anchor"
+        )
+        if anchor.kind in {"concept", "action_keyword", "unknown"}:
+            add_or_promote_topic_intent(clean, origin=origin)
+            continue
         entity = _resolve_entity(clean, profile_entities)
         if entity is None:
             entity = ContextSearchEntity(name=clean)
-        relevant_entities.append(entity)
-        key = entity.name.casefold()
-        if key in seen_entities:
-            continue
-        intents.append(ContextSearchIntent(
-            intent_id=f"i{len(intents) + 1}",
-            focus="entity",
-            entities=[entity],
-        ))
-        seen_entities.add(key)
+        add_or_promote_entity_intent(
+            entity,
+            focus="location" if anchor.kind == "location" else "entity",
+            origin=origin,
+        )
+        if anchor.kind == "character":
+            relevant_characters.append(entity)
 
     relationship_entities = _unique_entities([
         _resolve_entity(player_name, profile_entities)
         or ContextSearchEntity(name=player_name),
-        *relevant_entities,
+        *relevant_characters,
     ])[:5]
     if len(relationship_entities) >= 2:
         intents.append(ContextSearchIntent(
             intent_id=f"i{len(intents) + 1}",
             focus="relationship",
+            origin="relationship",
             entities=relationship_entities,
         ))
 
@@ -114,14 +165,18 @@ def build_context_search_plan(
             for surface in [entity.name, *entity.aliases]
         ],
     )
-    if topics:
-        intents.append(ContextSearchIntent(
-            intent_id=f"i{len(intents) + 1}",
-            focus="topic",
-            topics=topics,
-        ))
+    for topic in topics:
+        add_or_promote_topic_intent(topic, origin="explicit_input")
 
     return ContextSearchPlan(intents=intents)
+
+
+_ORIGIN_PRIORITY = {
+    "explicit_input": 0,
+    "matched_anchor": 1,
+    "current_context": 2,
+    "relationship": 3,
+}
 
 
 def _profile_entities(
@@ -154,10 +209,26 @@ def _resolve_entity(
 
 
 def _entity_mentioned(text: str, entity: ContextSearchEntity) -> bool:
-    return any(
-        surface.strip() and surface.strip().casefold() in text
-        for surface in [entity.name, *entity.aliases]
-    )
+    folded_text = text.casefold()
+    for surface in [entity.name, *entity.aliases]:
+        clean = surface.strip().casefold()
+        if not clean:
+            continue
+        if re.search(r"[\u4e00-\u9fff]", clean):
+            if len(clean) >= 2 and clean in folded_text:
+                return True
+            if len(clean) == 1 and any(
+                f"{left}{clean}{right}" in folded_text
+                for left, right in (("“", "”"), ('"', '"'), ("《", "》"))
+            ):
+                return True
+            continue
+        if re.search(
+            rf"(?<![A-Za-z0-9_]){re.escape(clean)}(?![A-Za-z0-9_])",
+            folded_text,
+        ):
+            return True
+    return False
 
 
 def _unique_entities(
@@ -188,7 +259,7 @@ def _extract_topics(user_input: str, *, surfaces: list[str]) -> list[str]:
     candidates: list[str] = []
     for quoted in re.findall(r"[《“\"]([^》”\"]{2,16})[》”\"]", user_input):
         candidates.append(quoted.strip())
-    for segment in re.findall(r"[A-Za-z0-9_\u4e00-\u9fff]{3,}", text):
+    for segment in re.findall(r"[A-Za-z0-9_\u4e00-\u9fff]{2,}", text):
         if len(segment) <= 8:
             candidates.append(segment)
             continue
@@ -202,7 +273,8 @@ def _extract_topics(user_input: str, *, surfaces: list[str]) -> list[str]:
     for candidate in candidates:
         clean = candidate.strip()
         key = clean.casefold()
-        if len(clean) < 3 or key in seen:
+        minimum_length = 2 if re.search(r"[\u4e00-\u9fff]", clean) else 3
+        if len(clean) < minimum_length or key in seen:
             continue
         seen.add(key)
         result.append(clean)

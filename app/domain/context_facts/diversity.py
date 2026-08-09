@@ -57,6 +57,13 @@ _FOCUS_PRIORITY = {
     "relationship": 2,
 }
 
+_ORIGIN_PRIORITY = {
+    "explicit_input": 0,
+    "matched_anchor": 1,
+    "current_context": 2,
+    "relationship": 3,
+}
+
 
 def select_diverse_candidates(
     search_plan: ContextSearchPlan,
@@ -153,95 +160,131 @@ def select_diverse_candidates(
             intent_coverage[intent_id] += 1
         return True, payload_shrank
 
-    priorities = sorted(set(_FOCUS_PRIORITY.values()))
-    for priority in priorities:
-        priority_intents = [
-            intent
-            for intent in search_plan.intents
-            if _FOCUS_PRIORITY[intent.focus] == priority
-        ]
-        for target in range(1, policy.intent_target + 1):
-            for intent in priority_intents:
-                if len(selected) >= policy.max_hits:
-                    return selected
-                if intent_coverage[intent.intent_id] >= target:
-                    continue
-                eligible = [
-                    candidate
-                    for candidate in by_intent.get(intent.intent_id, [])
-                    if (
-                        document_id(candidate) not in selected_ids
-                        and turn_counts[turn_index(candidate)] < policy.turn_cap
-                        and owner_available(intent, candidate)
-                    )
-                ]
-                if not eligible:
-                    continue
-
-                def phase_one_key(candidate: CandidateT):
-                    new_coverage = sum(
-                        1
-                        for intent_id in covered_intent_ids(candidate)
-                        if (
-                            intent_id in intents
-                            and intent_coverage[intent_id] < policy.intent_target
-                        )
-                    )
-                    return (
-                        -candidate.intent_scores.get(
-                            intent.intent_id,
-                            candidate.score,
-                        ),
-                        -new_coverage,
-                        -turn_index(candidate),
-                        document_id(candidate),
-                    )
-
-                for candidate in sorted(eligible, key=phase_one_key):
-                    accepted, _ = accept(candidate, intent)
-                    if accepted:
-                        break
-
-    remaining = sorted(
-        candidates.values(),
-        key=lambda candidate: (
-            -candidate.score,
-            -turn_index(candidate),
-            document_id(candidate),
-        ),
-    )
-    retry_after_shrink = True
-    while retry_after_shrink and len(selected) < policy.max_hits:
-        retry_after_shrink = False
-        prior_failure = False
-        for candidate in remaining:
-            if len(selected) >= policy.max_hits:
-                break
-            if (
-                document_id(candidate) in selected_ids
-                or turn_counts[turn_index(candidate)] >= policy.turn_cap
-            ):
-                continue
-            owner_ids = sorted(
-                covered_intent_ids(candidate),
-                key=lambda intent_id: (
-                    -candidate.intent_scores.get(intent_id, 0.0),
-                    _FOCUS_PRIORITY[intents[intent_id].focus],
-                    intent_order[intent_id],
-                    intent_id,
-                ),
-            )
-            accepted = False
-            for owner_id in owner_ids:
-                accepted, payload_shrank = accept(
-                    candidate,
-                    intents[owner_id],
+    def tier_owner_ids(candidate: CandidateT, origin_priority: int) -> list[str]:
+        return sorted(
+            (
+                intent_id
+                for intent_id in covered_intent_ids(candidate)
+                if (
+                    _ORIGIN_PRIORITY[intents[intent_id].origin]
+                    == origin_priority
                 )
-                if accepted:
-                    if payload_shrank and prior_failure:
-                        retry_after_shrink = True
+            ),
+            key=lambda intent_id: (
+                -candidate.intent_scores.get(intent_id, 0.0),
+                _FOCUS_PRIORITY[intents[intent_id].focus],
+                intent_order[intent_id],
+                intent_id,
+            ),
+        )
+
+    def fill_origin_tier(origin_priority: int) -> None:
+        remaining = sorted(
+            candidates.values(),
+            key=lambda candidate: (
+                -max(
+                    (
+                        candidate.intent_scores.get(intent_id, 0.0)
+                        for intent_id in tier_owner_ids(
+                            candidate,
+                            origin_priority,
+                        )
+                    ),
+                    default=0.0,
+                ),
+                -turn_index(candidate),
+                document_id(candidate),
+            ),
+        )
+        retry_after_shrink = True
+        while retry_after_shrink and len(selected) < policy.max_hits:
+            retry_after_shrink = False
+            prior_failure = False
+            for candidate in remaining:
+                if len(selected) >= policy.max_hits:
                     break
-            if not accepted:
-                prior_failure = True
+                if (
+                    document_id(candidate) in selected_ids
+                    or turn_counts[turn_index(candidate)] >= policy.turn_cap
+                ):
+                    continue
+                owner_ids = tier_owner_ids(candidate, origin_priority)
+                if not owner_ids:
+                    continue
+                accepted = False
+                for owner_id in owner_ids:
+                    accepted, payload_shrank = accept(
+                        candidate,
+                        intents[owner_id],
+                    )
+                    if accepted:
+                        if payload_shrank and prior_failure:
+                            retry_after_shrink = True
+                        break
+                if not accepted:
+                    prior_failure = True
+
+    origin_priorities = sorted({
+        _ORIGIN_PRIORITY[intent.origin]
+        for intent in search_plan.intents
+    })
+    for origin_priority in origin_priorities:
+        focus_priorities = sorted({
+            _FOCUS_PRIORITY[intent.focus]
+            for intent in search_plan.intents
+            if _ORIGIN_PRIORITY[intent.origin] == origin_priority
+        })
+        for focus_priority in focus_priorities:
+            priority_intents = [
+                intent
+                for intent in search_plan.intents
+                if (
+                    _ORIGIN_PRIORITY[intent.origin] == origin_priority
+                    and _FOCUS_PRIORITY[intent.focus] == focus_priority
+                )
+            ]
+            for target in range(1, policy.intent_target + 1):
+                for intent in priority_intents:
+                    if len(selected) >= policy.max_hits:
+                        return selected
+                    if intent_coverage[intent.intent_id] >= target:
+                        continue
+                    eligible = [
+                        candidate
+                        for candidate in by_intent.get(intent.intent_id, [])
+                        if (
+                            document_id(candidate) not in selected_ids
+                            and turn_counts[turn_index(candidate)] < policy.turn_cap
+                            and owner_available(intent, candidate)
+                        )
+                    ]
+                    if not eligible:
+                        continue
+
+                    def phase_one_key(candidate: CandidateT):
+                        new_coverage = sum(
+                            1
+                            for intent_id in covered_intent_ids(candidate)
+                            if (
+                                intent_id in intents
+                                and intent_coverage[intent_id]
+                                < policy.intent_target
+                            )
+                        )
+                        return (
+                            -candidate.intent_scores.get(
+                                intent.intent_id,
+                                candidate.score,
+                            ),
+                            -new_coverage,
+                            -turn_index(candidate),
+                            document_id(candidate),
+                        )
+
+                    for candidate in sorted(eligible, key=phase_one_key):
+                        accepted, _ = accept(candidate, intent)
+                        if accepted:
+                            break
+        fill_origin_tier(origin_priority)
 
     return selected

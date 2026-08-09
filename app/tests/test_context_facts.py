@@ -153,23 +153,30 @@ def test_deterministic_intents_use_location_participants_aliases_and_topics():
     assert any(
         intent.focus == "location"
         and intent.entities[0].name == "客栈上房"
+        and intent.origin == "current_context"
         for intent in plan.intents
     )
     assert any(
         intent.focus == "entity"
         and intent.entities[0].name == "顾晚棠"
         and "顾阁主" in intent.entities[0].aliases
+        and intent.origin == "explicit_input"
         for intent in plan.intents
     )
     relationship = next(
         intent for intent in plan.intents if intent.focus == "relationship"
     )
+    assert relationship.origin == "relationship"
     assert {entity.name for entity in relationship.entities} >= {
         "萧云痕",
         "顾晚棠",
     }
-    topic = next(intent for intent in plan.intents if intent.focus == "topic")
-    assert "解决方法" in topic.topics
+    topic = next(
+        intent
+        for intent in plan.intents
+        if "解决方法" in intent.topics
+    )
+    assert topic.origin == "explicit_input"
 
 
 def test_deterministic_intents_keep_all_matched_anchors():
@@ -191,13 +198,218 @@ def test_deterministic_intents_keep_all_matched_anchors():
         npc_profiles=[],
     )
 
-    entity_names = {
-        intent.entities[0].name
+    anchor_topics = {
+        intent.topics[0]
         for intent in plan.intents
-        if intent.focus == "entity"
+        if intent.focus == "topic" and intent.topics
     }
-    assert {f"目标{i}" for i in range(18)} <= entity_names
+    assert {f"目标{i}" for i in range(18)} <= anchor_topics
+    assert all(
+        intent.origin == "explicit_input"
+        for intent in plan.intents
+        if intent.topics and intent.topics[0].startswith("目标")
+    )
     assert len(plan.intents) > 16
+
+
+def test_explicit_anchor_promotes_existing_context_entity_intent():
+    plan = build_context_search_plan(
+        user_input="我继续观察。",
+        current_state=_state(),
+        matched_anchors=[Anchor(
+            text="顾阁主",
+            normalized="顾晚棠",
+            kind="character",
+            source="explicit",
+            confidence=1.0,
+        )],
+        npc_profiles=[_npc_view()],
+    )
+
+    matching = [
+        intent
+        for intent in plan.intents
+        if intent.entities and intent.entities[0].name == "顾晚棠"
+    ]
+    assert len(matching) == 1
+    assert matching[0].origin == "explicit_input"
+
+
+def test_implicit_anchor_promotes_context_entity_below_explicit_input():
+    plan = build_context_search_plan(
+        user_input="我继续观察。",
+        current_state=_state(),
+        matched_anchors=[Anchor(
+            text="顾阁主",
+            normalized="顾晚棠",
+            kind="character",
+            source="implicit_from_scene",
+            confidence=0.8,
+        )],
+        npc_profiles=[_npc_view()],
+    )
+
+    matching = next(
+        intent
+        for intent in plan.intents
+        if intent.entities and intent.entities[0].name == "顾晚棠"
+    )
+    assert matching.origin == "matched_anchor"
+
+
+def test_explicit_two_character_event_from_player_input_is_retrievable():
+    state = CurrentState(
+        scene=SceneState(
+            scene_id="scene_001",
+            location="河湾旅店",
+            participants=["萧云痕", "艾琳"],
+        ),
+        player=PlayerState(name="萧云痕"),
+        resources=ResourcesState(),
+    )
+    ailin = NPCProfile(
+        name="艾琳",
+        aliases=[],
+        role="旅店住客",
+        attitude_to_player="谨慎",
+    ).director_view()
+    plan = build_context_search_plan(
+        user_input="问艾琳关于黑塔的事",
+        current_state=state,
+        matched_anchors=[],
+        npc_profiles=[ailin],
+    )
+
+    explicit_topic = next(
+        intent
+        for intent in plan.intents
+        if intent.focus == "topic" and "黑塔" in intent.topics
+    )
+    assert explicit_topic.origin == "explicit_input"
+
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [ShortTermScene(
+            scene_id="scene_history",
+            turn_index=1,
+            scene_text="黑塔北门一直处于封闭状态。",
+        )])
+        result = ContextHistoryRetriever(store).retrieve(
+            plan,
+            current_turn_index=2,
+        )
+
+    assert len(result.hits) == 1
+    assert result.hits[0].matched_topics == ["黑塔"]
+
+
+def test_anchor_kind_routes_events_away_from_relationship_entities():
+    anchors = [
+        Anchor(
+            text="艾琳",
+            normalized="艾琳",
+            kind="character",
+            source="explicit",
+            confidence=1.0,
+        ),
+        Anchor(
+            text="黑塔",
+            normalized="黑塔",
+            kind="location",
+            source="explicit",
+            confidence=1.0,
+        ),
+        Anchor(
+            text="灰钥匙",
+            normalized="灰钥匙",
+            kind="item",
+            source="explicit",
+            confidence=1.0,
+        ),
+        Anchor(
+            text="黑塔密约",
+            normalized="黑塔密约",
+            kind="concept",
+            source="explicit",
+            confidence=1.0,
+        ),
+        Anchor(
+            text="调查失踪案",
+            normalized="调查失踪案",
+            kind="action_keyword",
+            source="explicit",
+            confidence=1.0,
+        ),
+    ]
+    plan = build_context_search_plan(
+        user_input="我询问艾琳并调查失踪案。",
+        current_state=_state(),
+        matched_anchors=anchors,
+        npc_profiles=[],
+    )
+
+    assert any(
+        intent.focus == "location"
+        and intent.entities[0].name == "黑塔"
+        for intent in plan.intents
+    )
+    assert any(
+        intent.focus == "entity"
+        and intent.entities[0].name == "灰钥匙"
+        for intent in plan.intents
+    )
+    assert {"黑塔密约", "调查失踪案"} <= {
+        topic
+        for intent in plan.intents
+        if intent.focus == "topic"
+        for topic in intent.topics
+    }
+    relationship = next(
+        intent for intent in plan.intents if intent.focus == "relationship"
+    )
+    relationship_names = {entity.name for entity in relationship.entities}
+    assert "艾琳" in relationship_names
+    assert relationship_names.isdisjoint({
+        "黑塔", "灰钥匙", "黑塔密约", "调查失踪案",
+    })
+
+
+def test_single_character_entity_substrings_are_not_promoted_without_anchor():
+    profile = NPCProfile(
+        name="安",
+        aliases=["白"],
+        role="路人",
+        attitude_to_player="中立",
+    ).director_view()
+    plan = build_context_search_plan(
+        user_input="我检查安全出口，现在已经明白了。",
+        current_state=_state(),
+        matched_anchors=[],
+        npc_profiles=[profile],
+    )
+
+    assert not any(
+        intent.entities and intent.entities[0].name == "安"
+        for intent in plan.intents
+    )
+
+    anchored = build_context_search_plan(
+        user_input="我继续检查。",
+        current_state=_state(),
+        matched_anchors=[Anchor(
+            text="安",
+            normalized="安",
+            kind="character",
+            source="explicit",
+            confidence=1.0,
+        )],
+        npc_profiles=[profile],
+    )
+    explicit = next(
+        intent
+        for intent in anchored.intents
+        if intent.entities and intent.entities[0].name == "安"
+    )
+    assert explicit.origin == "explicit_input"
 
 
 def test_history_retriever_allows_single_alias_and_diversifies_turns():
@@ -325,16 +537,119 @@ def test_history_diversity_uses_quota_then_global_fill():
     assert sum("河湾旅店" in hit.text for hit in result.hits) == 1
 
 
+def test_explicit_entity_and_event_outrank_higher_scored_context_intent():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="context_npc",
+            focus="entity",
+            origin="current_context",
+            entities=[ContextSearchEntity(name="背景人物")],
+        ),
+        ContextSearchIntent(
+            intent_id="explicit_npc",
+            focus="entity",
+            origin="explicit_input",
+            entities=[ContextSearchEntity(name="艾琳")],
+        ),
+        ContextSearchIntent(
+            intent_id="explicit_event",
+            focus="topic",
+            origin="explicit_input",
+            topics=["黑塔密约"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            ShortTermScene(
+                scene_id="scene_001",
+                turn_index=1,
+                scene_text="艾琳曾经留下口信。",
+            ),
+            ShortTermScene(
+                scene_id="scene_002",
+                turn_index=2,
+                scene_text="黑塔密约约定在月末执行。",
+            ),
+            *[
+                ShortTermScene(
+                    scene_id=f"scene_{turn:03d}",
+                    turn_index=turn,
+                    scene_text=f"背景人物在第{turn}回合留下高相关记录。",
+                )
+                for turn in range(3, 8)
+            ],
+        ])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=2),
+        ).retrieve(plan, current_turn_index=8)
+
+    assert [hit.matched_intent_ids for hit in result.hits] == [
+        ["explicit_npc"],
+        ["explicit_event"],
+    ]
+
+
+def test_explicit_origin_fill_finishes_before_context_quota():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="context_npc",
+            focus="entity",
+            origin="current_context",
+            entities=[ContextSearchEntity(name="背景人物")],
+        ),
+        ContextSearchIntent(
+            intent_id="explicit_event",
+            focus="topic",
+            origin="explicit_input",
+            topics=["显式事件"],
+        ),
+    ])
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [
+            *[
+                ShortTermScene(
+                    scene_id=f"explicit_{turn}",
+                    turn_index=turn,
+                    scene_text=f"显式事件留下第{turn}条旧记录。",
+                )
+                for turn in range(1, 5)
+            ],
+            *[
+                ShortTermScene(
+                    scene_id=f"context_{turn}",
+                    turn_index=turn,
+                    scene_text=f"背景人物留下第{turn}条近期记录。",
+                )
+                for turn in range(97, 101)
+            ],
+        ])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=5),
+        ).retrieve(plan, current_turn_index=101)
+
+    assert [hit.matched_intent_ids for hit in result.hits] == [
+        ["explicit_event"],
+        ["explicit_event"],
+        ["explicit_event"],
+        ["explicit_event"],
+        ["context_npc"],
+    ]
+
+
 def test_one_hit_updates_three_intent_coverages_without_duplicate_payload():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
             intent_id="entity_ailin",
             focus="entity",
+            origin="explicit_input",
             entities=[ContextSearchEntity(name="艾琳")],
         ),
         ContextSearchIntent(
             intent_id="topic_tower",
             focus="topic",
+            origin="explicit_input",
             topics=["黑塔"],
         ),
         ContextSearchIntent(
@@ -493,12 +808,14 @@ def test_high_priority_intents_exhaust_max_hits_deterministically():
         ContextSearchIntent(
             intent_id="low_location",
             focus="location",
+            origin="current_context",
             entities=[ContextSearchEntity(name="河湾旅店")],
         ),
         *[
             ContextSearchIntent(
                 intent_id=f"high_entity_{index}",
                 focus="entity",
+                origin="explicit_input",
                 entities=[ContextSearchEntity(name=f"人物{index}")],
             )
             for index in range(1, 4)
@@ -1168,6 +1485,48 @@ def test_history_payload_budget_drops_optional_context_before_main_text():
     assert bounded.hits[0].context_before == []
     assert bounded.hits[0].context_after == []
     assert bounded.hits[0].supporting_evidence == []
+
+
+def test_history_payload_budget_retains_explicit_main_before_context_candidate():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="context_npc",
+            focus="entity",
+            origin="current_context",
+            entities=[ContextSearchEntity(name="背景人物")],
+        ),
+        ContextSearchIntent(
+            intent_id="explicit_event",
+            focus="topic",
+            origin="explicit_input",
+            topics=["黑塔密约"],
+        ),
+    ])
+    policy = HistoryDiversityPolicy(
+        max_hits=2,
+        max_payload_chars=800,
+        max_evidence_text_chars=240,
+        min_excerpt_chars=80,
+    )
+    with ConfirmedHistoryStore() as store:
+        _upsert_scenes(store, [ShortTermScene(
+            scene_id="scene_001",
+            turn_index=1,
+            scene_text=(
+                "黑塔密约将在月末执行。\n\n"
+                f"背景人物记录：{'冗长背景。' * 500}"
+            ),
+        )])
+        result = ContextHistoryRetriever(
+            store,
+            diversity_policy=policy,
+        ).retrieve(plan, current_turn_index=2)
+
+    assert result.hits
+    assert result.hits[0].matched_intent_ids == ["explicit_event"]
+    assert "黑塔密约" in result.hits[0].text
+    assert result.hits[0].context_after == []
+    assert len(project_context_history(result)) <= policy.max_payload_chars
 
 
 def test_history_payload_budget_uses_marked_bounded_excerpt():

@@ -100,6 +100,12 @@ class ContextSearchIntent(BaseModel):
 
     intent_id: str = Field(min_length=1)
     focus: Literal["entity", "relationship", "location", "topic"]
+    origin: Literal[
+        "explicit_input",
+        "matched_anchor",
+        "current_context",
+        "relationship",
+    ] = "current_context"
     entities: list[ContextSearchEntity] = Field(default_factory=list, max_length=5)
     topics: list[str] = Field(default_factory=list, max_length=16)
 
