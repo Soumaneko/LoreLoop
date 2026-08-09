@@ -18,6 +18,7 @@ class HistoryDiversityPolicy:
     turn_cap: int = 2
     max_evidence_text_chars: int = 2_400
     min_excerpt_chars: int = 160
+    relation_hit_limit: int = 3
 
     def __post_init__(self) -> None:
         positive = {
@@ -36,6 +37,8 @@ class HistoryDiversityPolicy:
             raise ValueError(
                 "min_excerpt_chars must not exceed max_evidence_text_chars"
             )
+        if self.relation_hit_limit < 0:
+            raise ValueError("relation_hit_limit must be non-negative")
 
 
 class DiversityCandidate(Protocol):
@@ -72,6 +75,10 @@ def select_diverse_candidates(
     candidates: dict[str, CandidateT],
     policy: HistoryDiversityPolicy,
     admit: AdmitCandidate[CandidateT],
+    supplements_by_origin: dict[
+        str,
+        list[tuple[CandidateT, str]],
+    ] | None = None,
 ) -> list[CandidateT]:
     """Select candidates with quota coverage first, then global score fill.
 
@@ -91,6 +98,8 @@ def select_diverse_candidates(
     intent_coverage: dict[str, int] = defaultdict(int)
     entity_owner_counts: dict[str, int] = defaultdict(int)
     turn_counts: dict[int, int] = defaultdict(int)
+    supplement_count = 0
+    supplements_by_origin = supplements_by_origin or {}
 
     def document_id(candidate: CandidateT) -> str:
         return str(getattr(candidate.document, "document_id"))
@@ -224,11 +233,42 @@ def select_diverse_candidates(
                 if not accepted:
                     prior_failure = True
 
+    def accept_supplements(origin: str) -> None:
+        nonlocal supplement_count
+        for candidate, owner_id in supplements_by_origin.get(origin, []):
+            if (
+                supplement_count >= policy.relation_hit_limit
+                or len(selected) >= policy.max_hits
+            ):
+                return
+            candidate_id = document_id(candidate)
+            turn = turn_index(candidate)
+            owner = intents.get(owner_id)
+            if (
+                owner is None
+                or owner.origin != origin
+                or candidate_id in selected_ids
+                or turn_counts[turn] >= policy.turn_cap
+            ):
+                continue
+            admitted, _payload_shrank = admit(candidate, owner_id)
+            if not admitted:
+                continue
+            selected.append(candidate)
+            selected_ids.add(candidate_id)
+            turn_counts[turn] += 1
+            supplement_count += 1
+
     origin_priorities = sorted({
         _ORIGIN_PRIORITY[intent.origin]
         for intent in search_plan.intents
     })
     for origin_priority in origin_priorities:
+        origin = next(
+            intent.origin
+            for intent in search_plan.intents
+            if _ORIGIN_PRIORITY[intent.origin] == origin_priority
+        )
         focus_priorities = sorted({
             _FOCUS_PRIORITY[intent.focus]
             for intent in search_plan.intents
@@ -285,6 +325,7 @@ def select_diverse_candidates(
                         accepted, _ = accept(candidate, intent)
                         if accepted:
                             break
+        accept_supplements(origin)
         fill_origin_tier(origin_priority)
 
     return selected

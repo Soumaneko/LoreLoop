@@ -8,7 +8,9 @@ from app.domain.confirmed_history import (
     HistoryDocument,
     best_trigram_match,
     document_window,
+    history_document_text_hash,
 )
+from app.domain.continuity import ContinuityHistoryLink
 
 from .clustering import SUPPORTING_EVIDENCE_MAX, cluster_near_duplicates
 from .diversity import HistoryDiversityPolicy, select_diverse_candidates
@@ -33,6 +35,11 @@ class _Candidate:
     matched_topics: set[str] = field(default_factory=set)
     intent_scores: dict[str, float] = field(default_factory=dict)
     intent_matched_entities: dict[str, set[str]] = field(default_factory=dict)
+    relation_intent_ids: set[str] = field(default_factory=set)
+    linked_continuity_ids: set[str] = field(default_factory=set)
+    linked_operations: set[str] = field(default_factory=set)
+    relation_match_reasons: set[str] = field(default_factory=set)
+    relation_order: int = 1_000_000_000
 
 
 class ContextHistoryRetriever:
@@ -52,6 +59,9 @@ class ContextHistoryRetriever:
         search_plan: ContextSearchPlan,
         *,
         current_turn_index: int,
+        continuity_links: list[ContinuityHistoryLink] | None = None,
+        matched_active_continuities: int = 0,
+        matched_archived_continuities: int = 0,
     ) -> ContextHistoryEvidenceSet:
         documents = self.store.list_documents()
         by_turn: dict[int, list[HistoryDocument]] = defaultdict(list)
@@ -84,6 +94,40 @@ class ContextHistoryRetriever:
                     candidate.intent_matched_entities
                 )
 
+        documents_by_id = {
+            document.document_id: document for document in documents
+        }
+        relation_document_ids: set[str] = set()
+        stale_relation_links = 0
+        valid_relation_links = 0
+        for relation_order, link in enumerate(continuity_links or []):
+            document = documents_by_id.get(link.evidence_id)
+            if (
+                document is None
+                or document.source_type != "scene_paragraph"
+                or (
+                    link.evidence_hash is not None
+                    and history_document_text_hash(document)
+                    != link.evidence_hash
+                )
+            ):
+                stale_relation_links += 1
+                continue
+            valid_relation_links += 1
+            relation_document_ids.add(document.document_id)
+            candidate = candidates.get(document.document_id)
+            if candidate is None:
+                candidate = _Candidate(document=document, score=0.0)
+                candidates[document.document_id] = candidate
+            candidate.relation_intent_ids.update(link.triggering_intent_ids)
+            candidate.linked_continuity_ids.add(link.continuity_id)
+            candidate.linked_operations.add(link.operation)
+            candidate.relation_match_reasons.update(link.match_reasons)
+            candidate.relation_order = min(
+                candidate.relation_order,
+                relation_order,
+            )
+
         representative_candidates, member_clusters, representative_for = (
             _cluster_candidates(candidates)
         )
@@ -91,6 +135,56 @@ class ContextHistoryRetriever:
             by_intent,
             representative_for,
         )
+        direct_representatives = {
+            document_id: candidate
+            for document_id, candidate in representative_candidates.items()
+            if candidate.matched_intent_ids
+        }
+        relation_representatives: dict[str, _Candidate] = {}
+        for document_id in relation_document_ids:
+            representative = representative_for[document_id]
+            if representative.matched_intent_ids:
+                continue
+            relation_representatives[
+                representative.document.document_id
+            ] = representative
+
+        intents = {intent.intent_id: intent for intent in search_plan.intents}
+        intent_order = {
+            intent.intent_id: index
+            for index, intent in enumerate(search_plan.intents)
+        }
+        origin_priority = {
+            "explicit_input": 0,
+            "matched_anchor": 1,
+            "current_context": 2,
+            "relationship": 3,
+        }
+        supplements_by_origin: dict[str, list[tuple[_Candidate, str]]] = (
+            defaultdict(list)
+        )
+        for candidate in relation_representatives.values():
+            owner_ids = [
+                intent_id
+                for intent_id in candidate.relation_intent_ids
+                if intent_id in intents
+            ]
+            if not owner_ids:
+                continue
+            owner_id = min(owner_ids, key=lambda intent_id: (
+                origin_priority[intents[intent_id].origin],
+                intent_order[intent_id],
+                intent_id,
+            ))
+            supplements_by_origin[intents[owner_id].origin].append(
+                (candidate, owner_id)
+            )
+        for supplements in supplements_by_origin.values():
+            supplements.sort(key=lambda entry: (
+                entry[0].relation_order,
+                -entry[0].document.turn_index,
+                entry[0].document.document_id,
+            ))
 
         hits: list[ContextHistoryHit] = []
 
@@ -118,14 +212,25 @@ class ContextHistoryRetriever:
         select_diverse_candidates(
             search_plan,
             by_intent=by_intent_clustered,
-            candidates=representative_candidates,
+            candidates=direct_representatives,
             policy=self.diversity_policy,
             admit=admit,
+            supplements_by_origin=dict(supplements_by_origin),
         )
         return ContextHistoryEvidenceSet(
             hits=hits,
             indexed_documents=self.store.count(),
             indexed_turns=self.store.turn_count(),
+            matched_active_continuities=matched_active_continuities,
+            matched_archived_continuities=matched_archived_continuities,
+            valid_relation_links=valid_relation_links,
+            relation_candidates_considered=len(relation_representatives),
+            relation_hits_added=sum(
+                1
+                for hit in hits
+                if hit.relation_intent_ids and not hit.matched_intent_ids
+            ),
+            stale_relation_links=stale_relation_links,
         )
 
     def _retrieve_intent(
@@ -301,6 +406,19 @@ def _merged_representative(cluster: list[_Candidate]) -> _Candidate:
                 *(set(member.intent_matched_entities) for member in cluster)
             )
         },
+        relation_intent_ids=set().union(
+            *(member.relation_intent_ids for member in cluster)
+        ),
+        linked_continuity_ids=set().union(
+            *(member.linked_continuity_ids for member in cluster)
+        ),
+        linked_operations=set().union(
+            *(member.linked_operations for member in cluster)
+        ),
+        relation_match_reasons=set().union(
+            *(member.relation_match_reasons for member in cluster)
+        ),
+        relation_order=min(member.relation_order for member in cluster),
     )
 
 
@@ -434,12 +552,18 @@ def _build_history_hit(
         context_before=context_before,
         context_after=context_after,
         matched_intent_ids=sorted(candidate.matched_intent_ids),
+        relation_intent_ids=sorted(candidate.relation_intent_ids),
+        linked_continuity_ids=sorted(candidate.linked_continuity_ids),
+        linked_operations=sorted(candidate.linked_operations),
+        relation_match_reasons=sorted(candidate.relation_match_reasons),
         matched_entities=sorted(candidate.matched_entities),
         matched_topics=sorted(candidate.matched_topics),
         score=round(candidate.score, 6),
         supporting_evidence_ids=supporting_evidence_ids,
         supporting_evidence=supporting_evidence,
     )
+
+
 
 
 def _fit_hit_to_payload_budget(

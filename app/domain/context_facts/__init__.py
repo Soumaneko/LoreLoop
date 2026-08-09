@@ -1,4 +1,5 @@
 from .extractor import ContextExtractor
+from .continuity_bridge import ContinuityHistoryBridge
 from .diversity import HistoryDiversityPolicy
 from .intent_builder import build_context_search_plan
 from .retriever import ContextHistoryRetriever
@@ -33,6 +34,7 @@ __all__ = [
     "ContextFactsService",
     "ContextHistoryEvidenceSet",
     "ContextHistoryHit",
+    "ContinuityHistoryBridge",
     "ContextHistoryRetriever",
     "HistoryDiversityPolicy",
     "ContextSearchEntity",

@@ -87,8 +87,10 @@ def project_continuity_payload(
             "id": item.id,
             "kind": item.kind,
             "subject": item.subject,
-            "statement": item.statement,
+            "premise": item.premise,
         }
+        if item.current_state:
+            record["current_state"] = item.current_state
         if item.entities:
             record["entities"] = item.entities
         if item.location:

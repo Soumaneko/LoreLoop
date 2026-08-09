@@ -179,7 +179,8 @@ def test_continuity_and_setting_projections_omit_empty_optional_fields():
             id="thread_1",
             kind="open_thread",
             subject="外围探子",
-            statement="探子威胁仍在。",
+            premise="探子威胁仍在。",
+            current_state=None,
             created_turn=1,
             updated_turn=2,
         ),
@@ -200,7 +201,7 @@ def test_continuity_and_setting_projections_omit_empty_optional_fields():
         "id": "thread_1",
         "kind": "open_thread",
         "subject": "外围探子",
-        "statement": "探子威胁仍在。",
+        "premise": "探子威胁仍在。",
     }]
     assert settings_payload == [{
         "setting_id": "setting_1",
@@ -221,7 +222,8 @@ def test_continuity_and_setting_projections_keep_nonempty_optional_fields():
             id="thread_1",
             kind="commitment",
             subject="拜师",
-            statement="明日正式拜师。",
+            premise="明日正式拜师。",
+            current_state="已约定明日一早完成拜师。",
             entities=["萧欢", "苏念薇"],
             location="陷空山",
             deadline="明日一早",
@@ -240,6 +242,7 @@ def test_continuity_and_setting_projections_keep_nonempty_optional_fields():
     )])
 
     continuity_record = project_continuity_payload(continuity)[0]
+    assert continuity_record["current_state"] == "已约定明日一早完成拜师。"
     assert continuity_record["entities"] == ["萧欢", "苏念薇"]
     assert continuity_record["location"] == "陷空山"
     assert continuity_record["deadline"] == "明日一早"
@@ -1914,9 +1917,8 @@ def test_context_extractor_prompt_explains_truncated_history_semantics():
 
     assert "`text_truncated=true`" in prompt
     assert "只能使用摘录里直接可见的内容" in prompt
-    assert "下游无法从本回合输入直接得到的增量上下文" in prompt
-    assert "默认不要把其中已经明确写出的内容原样复述" in prompt
-    assert "软约束，不是禁止引用这些来源" in prompt
+    assert "下游无法直接得到的增量上下文" in prompt
+    assert "不要把其中明确的内容复述为 fact" in prompt
     assert "不得把未展示的中段当作不存在" in prompt
 
 

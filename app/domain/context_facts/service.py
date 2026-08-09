@@ -4,6 +4,7 @@ from app.domain.continuity import ContinuityRetriever, ContinuityStore
 from app.domain.world_setting import WorldSettingStore
 
 from .extractor import ContextExtractor
+from .continuity_bridge import ContinuityHistoryBridge
 from .intent_builder import build_context_search_plan
 from .retriever import ContextHistoryRetriever
 from .setting_retriever import SettingRetriever
@@ -40,11 +41,21 @@ class ContextFactsService:
             npc_profiles=input_data.npc_profiles,
             retrieval_topics=input_data.retrieval_topics,
         )
+        continuity_history_links = ContinuityHistoryBridge(
+            self.continuity_store
+        ).retrieve(search_plan)
         history_evidence = ContextHistoryRetriever(
             self.history_store
         ).retrieve(
             search_plan,
             current_turn_index=input_data.current_turn_index,
+            continuity_links=continuity_history_links.links,
+            matched_active_continuities=(
+                continuity_history_links.matched_active_continuities
+            ),
+            matched_archived_continuities=(
+                continuity_history_links.matched_archived_continuities
+            ),
         )
         continuity = ContinuityRetriever(
             self.continuity_store

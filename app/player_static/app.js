@@ -3219,9 +3219,13 @@ let recordsPollTimer = null;
 
 const CONTINUITY_EDITABLE_FIELDS = [
   ["subject", "主题", false],
-  ["statement", "陈述", false, "textarea"],
   ["entities", "关联实体", true],
   ["location", "地点", false],
+];
+const CONTINUITY_VIEW_FIELDS = [
+  ["premise", "原始事项", false],
+  ["current_state_text", "当前状态", false],
+  ...CONTINUITY_EDITABLE_FIELDS,
 ];
 
 const NPC_PUBLIC_FIELDS = [
@@ -3541,7 +3545,7 @@ function _splitListValue(value) {
     .filter(Boolean);
 }
 
-function buildRecordCard({ id = null, title, statusText = "", statusActive = false, fields = [], quoteKey = null, onSave }) {
+function buildRecordCard({ id = null, title, statusText = "", statusActive = false, fields = [], editableFields = fields, quoteKey = null, onSave }) {
   const card = node("div", "record-card");
   const head = node("div", "record-card-head");
   head.appendChild(node("div", "record-card-title", title));
@@ -3600,6 +3604,7 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
 
   const populate = (data) => {
     fields.forEach(([key]) => { valueSource[key] = data[key]; });
+    editableFields.forEach(([key]) => { valueSource[key] = data[key]; });
   };
 
   const appendViewField = ([key, label, isList]) => {
@@ -3694,7 +3699,7 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
   };
 
   const applySourceToControls = () => {
-    for (const [key, , isList] of fields) {
+    for (const [key, , isList] of editableFields) {
       if (factRenderers[key]) {
         factRenderers[key]();
         controls[key].dataset.originalValue = JSON.stringify(valueSource[key] || []);
@@ -3708,7 +3713,7 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
 
   const renderEdit = () => {
     editContainer.replaceChildren();
-    fields.forEach((field) => appendEditable(field));
+    editableFields.forEach((field) => appendEditable(field));
     if (!onSave) return;
 
     const actions = node("div", "record-edit-actions");
@@ -3732,7 +3737,7 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
       message.className = "record-edit-message";
       try {
         const values = {};
-        for (const [key, , isList] of fields) {
+        for (const [key, , isList] of editableFields) {
           const control = controls[key];
           const original = valueSource[key];
           if (factRenderers[key]) {
@@ -3843,8 +3848,9 @@ function renderContinuityRecords(items) {
       title: item.subject || "（无主题）",
       statusText: item.status,
       statusActive: active,
-      fields: CONTINUITY_EDITABLE_FIELDS,
-      quoteKey: "statement",
+      fields: CONTINUITY_VIEW_FIELDS,
+      editableFields: CONTINUITY_EDITABLE_FIELDS,
+      quoteKey: "premise",
       onSave: active ? async (values) => {
         await updateRecord("continuity", item.id, values);
         showToast("连续性已更新");

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from app.domain.confirmed_history import HistoryDocument
+from app.domain.confirmed_history import (
+    HistoryDocument,
+    history_document_text_hash,
+)
 
 from .projector import ContinuityProjector
 from .schemas import (
@@ -39,15 +42,15 @@ class ContinuityService:
         projection: ContinuityProjection,
         *,
         turn_index: int,
-        available_evidence_ids: set[str],
+        evidence_documents: dict[str, HistoryDocument],
     ) -> ContinuityApplyResult:
         if self.store.turn_processed(turn_index):
             return ContinuityApplyResult()
 
         referenced_item_ids = [
-            operation.item_id
+            item_id
             for operation in projection.operations
-            if operation.item_id is not None
+            if (item_id := getattr(operation, "item_id", None)) is not None
         ]
         if len(referenced_item_ids) != len(set(referenced_item_ids)):
             raise ValueError(
@@ -58,12 +61,30 @@ class ContinuityService:
         with self.store.transaction():
             for operation in projection.operations:
                 unknown_evidence = (
-                    set(operation.evidence_ids) - available_evidence_ids
+                    set(operation.evidence_ids) - set(evidence_documents)
                 )
                 if unknown_evidence:
                     raise ValueError(
                         "unknown continuity evidence IDs: "
                         + ", ".join(sorted(unknown_evidence))
+                    )
+                invalid_evidence = [
+                    evidence_id
+                    for evidence_id in operation.evidence_ids
+                    if (
+                        evidence_documents[evidence_id].source_type
+                        != "scene_paragraph"
+                        or evidence_documents[evidence_id].turn_index
+                        != turn_index
+                        or evidence_documents[evidence_id].document_id
+                        != evidence_id
+                    )
+                ]
+                if invalid_evidence:
+                    raise ValueError(
+                        "continuity evidence must be the identified scene "
+                        f"paragraph from turn {turn_index}: "
+                        + ", ".join(sorted(invalid_evidence))
                     )
 
                 if operation.operation == "create":
@@ -73,6 +94,7 @@ class ContinuityService:
                         continue
                     item = ContinuityItem(
                         **operation.item.model_dump(),
+                        current_state=None,
                         created_turn=turn_index,
                         updated_turn=turn_index,
                     )
@@ -82,7 +104,7 @@ class ContinuityService:
                 elif operation.operation == "update":
                     self.store.update_active(
                         operation.item_id,
-                        operation.item,
+                        operation.to_draft(),
                         turn_index=turn_index,
                     )
                     item_id = operation.item_id
@@ -107,11 +129,25 @@ class ContinuityService:
                         ),
                     ).append(item_id)
 
-                self.store.add_evidence(
+                self.store.add_lifecycle_log(
                     item_id=item_id,
-                    evidence_ids=operation.evidence_ids,
                     operation=operation.operation,
                     turn_index=turn_index,
+                    state_delta=(
+                        operation.state_delta
+                        if operation.operation == "update"
+                        else None
+                    ),
+                    reason=operation.reason,
+                    evidence=[
+                        (
+                            evidence_id,
+                            history_document_text_hash(
+                                evidence_documents[evidence_id]
+                            ),
+                        )
+                        for evidence_id in operation.evidence_ids
+                    ],
                 )
             self.store.mark_turn_processed(turn_index)
         return result

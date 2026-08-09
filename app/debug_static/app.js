@@ -1228,6 +1228,12 @@ function renderContextFacts(g) {
       metric("事实", facts.length, "ok"),
       metric("检索意图", intents.length, "info"),
       metric("正文证据", evidence.hits?.length || 0, "info"),
+      metric("命中活跃事项", evidence.matched_active_continuities || 0, "info"),
+      metric("命中归档事项", evidence.matched_archived_continuities || 0, "info"),
+      metric("有效关系", evidence.valid_relation_links || 0, "info"),
+      metric("关系候选", evidence.relation_candidates_considered || 0, "info"),
+      metric("关系补充", evidence.relation_hits_added || 0, evidence.relation_hits_added ? "ok" : ""),
+      metric("失效关系", evidence.stale_relation_links || 0, evidence.stale_relation_links ? "warn" : ""),
       metric("连续性事项", continuity.items?.length || 0, "info"),
       metric("索引回合", evidence.indexed_turns || 0, "info"),
     ])}
@@ -1782,10 +1788,11 @@ function sceneSummaryCard(summary) {
 function continuityItemCard(item) {
   return `<div class="section-card">
     <div class="card-title"><span>${esc(item.subject || item.id || "未命名")}</span>${metric(continuityKindLabels[item.kind] || item.kind || "kind", item.status || "")}</div>
-    <div style="margin-bottom:8px">${esc(text(item.statement))}</div>
+    <div style="margin-bottom:8px">${esc(text(item.premise))}</div>
     ${kv([
       ["ID", esc(text(item.id))],
       ["实体", chips(item.entities)],
+      ["当前状态", item.current_state ? esc(text(item.current_state)) : `<span class="empty">无</span>`],
       ["地点", esc(text(item.location))],
       ["期限", esc(text(item.deadline))],
       ["状态", esc(text(item.status))],
@@ -1798,13 +1805,13 @@ function continuityItemCard(item) {
 function renderContinuityProjection(projection) {
   const operations = projection?.operations || [];
   return operations.map((operation) => `<div class="section-card">
-    <div class="card-title"><span>${esc(operation.item?.subject || operation.item_id || "operation")}</span>${metric(operation.operation || "op", operation.item?.kind || "")}</div>
-    <div style="margin-bottom:8px">${esc(text(operation.item?.statement || operation.reason))}</div>
+    <div class="card-title"><span>${esc(operation.item?.subject || operation.subject || operation.item_id || "operation")}</span>${metric(operation.operation || "op", operation.item?.kind || "")}</div>
+    <div style="margin-bottom:8px">${esc(text(operation.item?.premise || operation.new_current_state || operation.state_delta || operation.reason))}</div>
     ${kv([
       ["Item ID", esc(text(operation.item_id))],
-      ["实体", chips(operation.item?.entities)],
-      ["地点", esc(text(operation.item?.location))],
-      ["期限", esc(text(operation.item?.deadline))],
+      ["实体", chips(operation.item?.entities || operation.entities)],
+      ["地点", esc(text(operation.item?.location ?? operation.location))],
+      ["期限", esc(text(operation.item?.deadline ?? operation.deadline))],
       ["证据", chips(operation.evidence_ids)],
       ["理由", esc(text(operation.reason))],
     ])}

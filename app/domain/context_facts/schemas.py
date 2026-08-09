@@ -149,7 +149,13 @@ class ContextHistoryHit(BaseModel):
     original_text_chars: int | None = Field(default=None, ge=1)
     context_before: list[AdjacentEvidence] = Field(default_factory=list)
     context_after: list[AdjacentEvidence] = Field(default_factory=list)
-    matched_intent_ids: list[str] = Field(min_length=1)
+    matched_intent_ids: list[str] = Field(default_factory=list)
+    relation_intent_ids: list[str] = Field(default_factory=list)
+    linked_continuity_ids: list[str] = Field(default_factory=list)
+    linked_operations: list[
+        Literal["create", "update", "resolve", "cancel"]
+    ] = Field(default_factory=list)
+    relation_match_reasons: list[str] = Field(default_factory=list)
     matched_entities: list[str] = Field(default_factory=list)
     matched_topics: list[str] = Field(default_factory=list)
     score: float = Field(ge=0)
@@ -158,6 +164,10 @@ class ContextHistoryHit(BaseModel):
 
     @model_validator(mode="after")
     def _validate_evidence_consistency(self):
+        if not self.matched_intent_ids and not self.relation_intent_ids:
+            raise ValueError(
+                "history hit requires direct or continuity-relation intent IDs"
+            )
         if self.text_truncated:
             if (
                 self.original_text_chars is None
@@ -197,6 +207,12 @@ class ContextHistoryEvidenceSet(BaseModel):
     hits: list[ContextHistoryHit] = Field(default_factory=list)
     indexed_documents: int = Field(default=0, ge=0)
     indexed_turns: int = Field(default=0, ge=0)
+    matched_active_continuities: int = Field(default=0, ge=0)
+    matched_archived_continuities: int = Field(default=0, ge=0)
+    valid_relation_links: int = Field(default=0, ge=0)
+    relation_candidates_considered: int = Field(default=0, ge=0)
+    relation_hits_added: int = Field(default=0, ge=0)
+    stale_relation_links: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def _validate_global_evidence_uniqueness(self):

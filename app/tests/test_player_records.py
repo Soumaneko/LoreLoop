@@ -25,7 +25,8 @@ def _seed_records():
             store.insert(ContinuityItem(
                 kind="commitment",
                 subject="找回木偶",
-                statement="帮助埃利奥找回被窃的木偶。",
+                premise="帮助埃利奥找回被窃的木偶。",
+                current_state=None,
                 entities=["埃利奥"],
                 location="老橡树镇",
                 created_turn=1,
@@ -158,6 +159,31 @@ def test_update_continuity_preserves_status_and_normalizes_null():
     assert result["subject"] == "找回失窃木偶"
     assert result["location"] is None
     assert result["status"] == "active"
+
+
+def test_update_continuity_can_remove_an_entity_from_archive_metadata():
+    _seed_records()
+    item = load_player_records()["continuity"][0]
+    runtime = get_campaign_runtime()
+    with runtime.stores.continuity() as store:
+        store.edit_active_metadata(
+            item["id"],
+            subject=item["subject"],
+            entities=["埃利奥", "旧木偶"],
+            location=item["location"],
+            deadline=item["deadline"],
+            turn_index=item["updated_turn"],
+        )
+
+    result = update_player_record(
+        "continuity",
+        item["id"],
+        {"entities": ["埃利奥", "  "]},
+    )
+
+    assert result["entities"] == ["埃利奥"]
+    with runtime.stores.continuity() as store:
+        assert store.get(item["id"]).entities == ["埃利奥"]
 
 
 def test_update_npc_public_fields_preserves_director_fields_and_absence():

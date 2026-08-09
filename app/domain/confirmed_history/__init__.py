@@ -1,4 +1,5 @@
 from .schemas import HistoryDocument, HistorySource
+from .hashing import history_document_text_hash
 from .store import ConfirmedHistoryStore, build_turn_documents
 from .text import best_trigram_match, trigrams
 from .windows import adjacent_context, document_window
@@ -11,5 +12,6 @@ __all__ = [
     "best_trigram_match",
     "build_turn_documents",
     "document_window",
+    "history_document_text_hash",
     "trigrams",
 ]

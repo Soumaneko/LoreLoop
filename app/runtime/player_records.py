@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.client_error import ClientValidationError
-from app.domain.continuity.schemas import ContinuityItemDraft
 from app.domain.npc_profile.schemas import (
     NPCProfile,
     NPCProfileUpdateInput,
@@ -16,7 +15,6 @@ from app.runtime.settings import experience_mode
 
 _CONTINUITY_EDITABLE_FIELDS = {
     "subject",
-    "statement",
     "entities",
     "location",
 }
@@ -173,7 +171,9 @@ def _load_player_records(runtime: CampaignRuntime, *, view: str = "general") -> 
                 "updated_turn": item.updated_turn,
                 "closed_turn": item.closed_turn,
                 "subject": item.subject,
-                "statement": item.statement,
+                "premise": item.premise,
+                "current_state": item.current_state,
+                "current_state_text": item.current_state or "",
                 "entities": list(item.entities),
                 "location": item.location,
                 "deadline": item.deadline,
@@ -335,18 +335,18 @@ def _update_continuity(
         payload = _normalize_payload(
             payload,
             nullable=_CONTINUITY_NULLABLE_FIELDS,
-        )
-        draft = ContinuityItemDraft(
-            kind=current.kind,
-            subject=payload.get("subject", current.subject),
-            statement=payload.get("statement", current.statement),
-            entities=payload.get("entities", current.entities),
-            location=payload.get("location", current.location),
-            deadline=payload.get("deadline", current.deadline),
+            list_fields={"entities"},
         )
         turn_index = _latest_confirmed_turn(runtime)
         with store.transaction():
-            updated = store.update_active(item_id, draft, turn_index=turn_index)
+            updated = store.edit_active_metadata(
+                item_id,
+                subject=payload.get("subject", current.subject),
+                entities=payload.get("entities", current.entities),
+                location=payload.get("location", current.location),
+                deadline=current.deadline,
+                turn_index=turn_index,
+            )
     return {
         "id": updated.id,
         "status": updated.status,
@@ -354,7 +354,9 @@ def _update_continuity(
         "updated_turn": updated.updated_turn,
         "closed_turn": updated.closed_turn,
         "subject": updated.subject,
-        "statement": updated.statement,
+        "premise": updated.premise,
+        "current_state": updated.current_state,
+        "current_state_text": updated.current_state or "",
         "entities": list(updated.entities),
         "location": updated.location,
         "deadline": updated.deadline,

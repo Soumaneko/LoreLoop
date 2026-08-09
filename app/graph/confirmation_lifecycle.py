@@ -238,17 +238,18 @@ class ConfirmationCommitter:
             documents = history_store.documents_for_turn(
                 pipeline_input.turn_index
             )
+            evidence_documents = {
+                document.document_id: document
+                for document in documents
+                if document.source_type == "scene_paragraph"
+            }
             continuity_result = ContinuityService(
                 None,
                 continuity_store,
             ).apply(
                 state["continuity_projection"],
                 turn_index=pipeline_input.turn_index,
-                available_evidence_ids={
-                    document.document_id
-                    for document in documents
-                    if document.source_type == "scene_paragraph"
-                },
+                evidence_documents=evidence_documents,
             )
             continuity_total = continuity_store.count()
 
