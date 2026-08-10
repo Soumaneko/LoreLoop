@@ -1,0 +1,388 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "case_id": "direct_exact_answer",
+      "description": "An explicit entity query keeps the exact historical answer.",
+      "current_turn_index": 4,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "守门人曾在清晨更换岗哨。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "艾琳第一次见面时穿着蓝色披风。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "河面上的雾直到正午才散去。"
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "first_meeting_appearance",
+          "importance": "must",
+          "acceptable_evidence_ids": ["turn_2_p001"]
+        }
+      ],
+      "provenance_expectations": [
+        {"evidence_id": "turn_2_p001", "direct": true, "relation": false}
+      ]
+    },
+    {
+      "case_id": "direct_multi_intent_coverage",
+      "description": "One document can satisfy entity and event intents without duplication.",
+      "current_turn_index": 5,
+      "policy": {"max_hits": 2},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": []
+          },
+          {
+            "intent_id": "explicit_tower",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["黑塔密约"]
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "艾琳曾在渡口留下口信。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "黑塔密约规定月末关闭北门。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "艾琳确认黑塔密约的见证人仍然活着。"
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "combined_entity_event_fact",
+          "importance": "must",
+          "acceptable_evidence_ids": ["turn_3_p001"]
+        },
+        {
+          "group_id": "deadline_rule",
+          "importance": "should",
+          "acceptable_evidence_ids": ["turn_2_p001"]
+        }
+      ],
+      "provenance_expectations": [
+        {"evidence_id": "turn_3_p001", "direct": true, "relation": false}
+      ]
+    },
+    {
+      "case_id": "dual_route_document_merge",
+      "description": "A document found directly and through Continuity occupies one seat and keeps both routes.",
+      "current_turn_index": 4,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "艾琳答应在三天内调查黑塔。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "商队在雨后离开了城门。"
+        }
+      ],
+      "continuity_items": [
+        {
+          "id": "promise-ailin",
+          "kind": "commitment",
+          "subject": "艾琳调查黑塔的承诺",
+          "premise": "艾琳答应在三天内调查黑塔。",
+          "entities": ["艾琳"],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
+      ],
+      "continuity_logs": [
+        {
+          "item_id": "promise-ailin",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": ["turn_1_p001"]
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "promise",
+          "importance": "must",
+          "acceptable_evidence_ids": ["turn_1_p001"]
+        }
+      ],
+      "provenance_expectations": [
+        {"evidence_id": "turn_1_p001", "direct": true, "relation": true}
+      ]
+    },
+    {
+      "case_id": "relation_fourth_is_critical",
+      "description": "Four different Continuity matters each carry necessary indirect evidence.",
+      "current_turn_index": 10,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她答应查明北门为何封闭。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她收下了刻有月纹的钥匙。"},
+        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "她确认失踪信使最后去了钟楼。"},
+        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "她承诺在满月前归还借来的地图。"},
+        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "码头工人谈起了昨夜的暴雨。"}
+      ],
+      "continuity_items": [
+        {"id": "a-north-gate", "subject": "艾琳调查北门", "premise": "查明北门封闭原因。", "entities": ["艾琳"], "created_turn": 1, "updated_turn": 1},
+        {"id": "b-moon-key", "subject": "艾琳保管月纹钥匙", "premise": "确认钥匙的用途。", "entities": ["艾琳"], "created_turn": 2, "updated_turn": 2},
+        {"id": "c-messenger", "subject": "艾琳追查失踪信使", "premise": "找到信使在钟楼留下的线索。", "entities": ["艾琳"], "created_turn": 3, "updated_turn": 3},
+        {"id": "d-map", "kind": "commitment", "subject": "艾琳归还地图", "premise": "在满月前归还地图。", "entities": ["艾琳"], "created_turn": 4, "updated_turn": 4}
+      ],
+      "continuity_logs": [
+        {"item_id": "a-north-gate", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "b-moon-key", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]},
+        {"item_id": "c-messenger", "operation": "create", "turn_index": 3, "evidence_ids": ["turn_3_p001"]},
+        {"item_id": "d-map", "operation": "create", "turn_index": 4, "evidence_ids": ["turn_4_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "north_gate", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
+        {"group_id": "moon_key", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]},
+        {"group_id": "messenger", "importance": "must", "acceptable_evidence_ids": ["turn_3_p001"]},
+        {"group_id": "map_deadline", "importance": "must", "acceptable_evidence_ids": ["turn_4_p001"]}
+      ]
+    },
+    {
+      "case_id": "single_continuity_item_flood",
+      "description": "Many paraphrased evidence seeds from one matter should expose duplicate payload pressure.",
+      "current_turn_index": 8,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她表示会调查钟楼的异常灯光。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她承诺查清钟楼夜间亮灯的原因。"},
+        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "她再次确认不会放弃钟楼调查。"},
+        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "她说钟楼的事情仍由自己负责。"}
+      ],
+      "continuity_items": [
+        {"id": "tower-light", "subject": "艾琳调查钟楼灯光", "premise": "查清钟楼夜间亮灯的原因。", "entities": ["艾琳"], "created_turn": 1, "updated_turn": 1}
+      ],
+      "continuity_logs": [
+        {"item_id": "tower-light", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001", "turn_2_p001", "turn_3_p001", "turn_4_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "tower_investigation_commitment", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001", "turn_2_p001", "turn_3_p001", "turn_4_p001"], "max_useful_evidence": 1}
+      ]
+    },
+    {
+      "case_id": "explicit_direct_vs_context_relation",
+      "description": "Explicit direct evidence is protected before a current-context relation supplement.",
+      "current_turn_index": 7,
+      "policy": {"max_hits": 2},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "current_companion",
+            "focus": "entity",
+            "origin": "current_context",
+            "entities": [{"name": "背景人物", "aliases": []}],
+            "topics": []
+          },
+          {
+            "intent_id": "explicit_tower_pact",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["黑塔密约"]
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "黑塔密约规定只有持印者可以开启石门。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "那个人曾把备用药品放在马车底层。"},
+        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "黑塔密约的见证仪式在冬至举行。"}
+      ],
+      "continuity_items": [
+        {"id": "companion-supplies", "subject": "背景人物保管补给", "premise": "备用药品放在马车底层。", "entities": ["背景人物"], "created_turn": 2, "updated_turn": 2}
+      ],
+      "continuity_logs": [
+        {"item_id": "companion-supplies", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "tower_access_rule", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
+        {"group_id": "companion_supplies", "importance": "should", "acceptable_evidence_ids": ["turn_2_p001"]}
+      ]
+    },
+    {
+      "case_id": "archived_eligibility",
+      "description": "Archived Continuity requires a strong explicit trigger; location alone cannot route evidence.",
+      "current_turn_index": 9,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_pact",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["黑塔密约"]
+          },
+          {
+            "intent_id": "current_old_port",
+            "focus": "location",
+            "origin": "current_context",
+            "entities": [{"name": "旧港", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "当时有人在木箱上留下记号。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "参与者最终确认事情已经解决。"},
+        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "潮水冲走了堤岸边的旧木板。"},
+        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "巡逻队后来结束了那次搜查。"}
+      ],
+      "continuity_items": [
+        {"id": "a-strong-pact", "status": "resolved", "subject": "黑塔密约后续", "premise": "确认密约参与者的结局。", "current_state": "黑塔密约相关事项已经解决。", "entities": ["见证人"], "created_turn": 1, "updated_turn": 2, "closed_turn": 2},
+        {"id": "b-weak-location", "status": "resolved", "subject": "旧港木箱旧事", "premise": "调查旧港发现的木箱记号。", "current_state": "搜查已经结束。", "entities": ["巡逻队"], "location": "旧港", "created_turn": 3, "updated_turn": 4, "closed_turn": 4}
+      ],
+      "continuity_logs": [
+        {"item_id": "a-strong-pact", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "a-strong-pact", "operation": "resolve", "turn_index": 2, "evidence_ids": ["turn_2_p001"]},
+        {"item_id": "b-weak-location", "operation": "create", "turn_index": 3, "evidence_ids": ["turn_3_p001"]},
+        {"item_id": "b-weak-location", "operation": "resolve", "turn_index": 4, "evidence_ids": ["turn_4_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "pact_resolution", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]},
+        {"group_id": "pact_origin", "importance": "should", "acceptable_evidence_ids": ["turn_1_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_3_p001", "turn_4_p001"]
+    },
+    {
+      "case_id": "short_critical_vs_long_background",
+      "description": "A constrained payload reveals whether long recent background displaces a short critical fact.",
+      "current_turn_index": 10,
+      "policy": {"max_hits": 2, "max_payload_chars": 520, "max_evidence_text_chars": 360, "min_excerpt_chars": 120},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_key",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["旧钥匙"]
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "旧钥匙藏在钟楼第三层的松动砖缝里。"},
+        {"turn_index": 9, "scene_id": "scene_009", "scene_text": "旧钥匙相关的泛泛背景说明反复提到城门、街道、天气和无关行人的往来，但没有说明钥匙的位置或用途。旧钥匙相关的泛泛背景说明继续描述市场开门、船只靠岸、钟声响起以及守卫换班，却仍然没有给出可行动的具体线索。旧钥匙相关的泛泛背景说明又列举许多已经知道的环境细节，包括石墙颜色、路面积水和远处灯火，但这些内容对寻找钥匙没有新增帮助。旧钥匙相关的泛泛背景说明最后重复了此前的城市气氛与人群动向，依旧没有说明钥匙在哪里。"}
+      ],
+      "gold_groups": [
+        {"group_id": "key_location", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
+        {"group_id": "recent_background", "importance": "should", "acceptable_evidence_ids": ["turn_9_p001"]}
+      ]
+    },
+    {
+      "case_id": "semantic_alternative_group",
+      "description": "Paraphrased documents count as one semantic fact group and expose duplicate selection.",
+      "current_turn_index": 6,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_tower_investigation",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["调查黑塔"]
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "守卫答应调查黑塔的异常灯光。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "守卫承诺查清黑塔为何在夜间亮灯。"},
+        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "商人决定调查黑塔附近失踪的货车。"}
+      ],
+      "gold_groups": [
+        {"group_id": "guard_light_investigation", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001", "turn_2_p001"], "max_useful_evidence": 1},
+        {"group_id": "merchant_wagon_investigation", "importance": "should", "acceptable_evidence_ids": ["turn_3_p001"]}
+      ]
+    },
+    {
+      "case_id": "turn_cap_preserves_diversity",
+      "description": "At most two main hits from one turn preserve room for evidence from another turn.",
+      "current_turn_index": 5,
+      "policy": {"max_hits": 3},
+      "search_plan": {
+        "intents": [
+          {"intent_id": "topic_alpha", "focus": "topic", "origin": "explicit_input", "entities": [], "topics": ["赤印"]},
+          {"intent_id": "topic_beta", "focus": "topic", "origin": "explicit_input", "entities": [], "topics": ["蓝印"]},
+          {"intent_id": "topic_gamma", "focus": "topic", "origin": "explicit_input", "entities": [], "topics": ["银印"]}
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "赤印允许进入东门。\n\n蓝印允许开启仓库。\n\n银印允许查阅旧档案。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "银印后来被交给了档案管理员。"}
+      ],
+      "gold_groups": [
+        {"group_id": "red_seal", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
+        {"group_id": "blue_seal", "importance": "must", "acceptable_evidence_ids": ["turn_1_p002"]},
+        {"group_id": "silver_seal", "importance": "should", "acceptable_evidence_ids": ["turn_1_p003", "turn_2_p001"]}
+      ]
+    }
+  ]
+}
