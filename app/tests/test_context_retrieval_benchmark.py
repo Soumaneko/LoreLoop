@@ -60,6 +60,60 @@ def test_context_retrieval_benchmark_captures_current_quality_signals(
     assert budget["must_recalled"] == 0
     assert budget["payload_chars"] <= 520
 
+    late_delta = cases["late_state_delta_evidence"]
+    assert late_delta["must_recalled"] == 0
+    assert late_delta["must_total"] == 1
+    assert late_delta["turn_contributions"] == {"1": 1, "5": 2}
+    assert late_delta["relation_candidates_considered"] == 6
+
+    shared = cases["shared_evidence_across_continuities"]
+    assert shared["visible_evidence_ids"].count("turn_1_p001") == 1
+    assert shared["continuity_contributions"] == {
+        "a-recruitment": 2,
+        "b-signal": 2,
+    }
+
+    action_outcome = cases["player_input_vs_scene_outcome"]
+    assert action_outcome["selected_main_ids"] == ["turn_1_p001"]
+    assert action_outcome["forbidden_visible_ids"] == []
+
+    mirrored_origin = cases["explicit_relation_vs_context_direct"]
+    assert mirrored_origin["must_recalled"] == 1
+    assert mirrored_origin["route_counts"] == {
+        "direct_only": 1,
+        "relation_only": 1,
+        "dual": 0,
+    }
+
+    relation_answer = cases["direct_noise_vs_relation_exact"]
+    assert relation_answer["must_recalled"] == 0
+    assert relation_answer["must_total"] == 1
+    assert relation_answer["relation_candidates_considered"] == 1
+    assert relation_answer["relation_hits_added"] == 0
+
+    zero_relation = cases["direct_exact_vs_relation_noise_and_zero"]
+    assert zero_relation["must_recalled"] == 1
+    assert zero_relation["relation_candidates_considered"] == 2
+    assert zero_relation["relation_hits_added"] == 0
+    assert zero_relation["forbidden_visible_ids"] == []
+
+    long_relation = cases["cross_channel_long_relation_critical"]
+    assert long_relation["must_recalled"] == 1
+    assert long_relation["must_total"] == 1
+    assert long_relation["route_counts"] == {
+        "direct_only": 1,
+        "relation_only": 1,
+        "dual": 0,
+    }
+    assert long_relation["payload_chars"] <= 430
+
+    long_direct = cases["cross_channel_long_direct_critical"]
+    assert long_direct["must_recalled"] == 1
+    assert long_direct["selected_main_ids"] == ["turn_6_p001"]
+    assert long_direct["relation_candidates_considered"] == 2
+    assert long_direct["relation_hits_added"] == 0
+    assert long_direct["forbidden_visible_ids"] == []
+
     assert benchmark_report["aggregate"]["forbidden_visible_count"] == 0
     assert benchmark_report["aggregate"]["invariant_violation_count"] == 0
 

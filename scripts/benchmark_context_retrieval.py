@@ -93,6 +93,10 @@ class ProvenanceExpectation(BaseModel):
     evidence_id: str = Field(min_length=1)
     direct: bool
     relation: bool
+    linked_continuity_ids: list[str] | None = None
+    linked_operations: list[
+        Literal["create", "update", "resolve", "cancel"]
+    ] | None = None
 
 
 class BenchmarkCase(BaseModel):
@@ -205,6 +209,26 @@ def _score_case(case: BenchmarkCase, evidence, payload: str) -> dict:
                 f"{expectation.evidence_id}: expected direct={expectation.direct} "
                 f"relation={expectation.relation}, got direct={direct} "
                 f"relation={relation}"
+            )
+        if (
+            expectation.linked_continuity_ids is not None
+            and sorted(hit.linked_continuity_ids)
+            != sorted(expectation.linked_continuity_ids)
+        ):
+            provenance_violations.append(
+                f"{expectation.evidence_id}: expected linked continuities "
+                f"{sorted(expectation.linked_continuity_ids)}, got "
+                f"{sorted(hit.linked_continuity_ids)}"
+            )
+        if (
+            expectation.linked_operations is not None
+            and sorted(hit.linked_operations)
+            != sorted(expectation.linked_operations)
+        ):
+            provenance_violations.append(
+                f"{expectation.evidence_id}: expected linked operations "
+                f"{sorted(expectation.linked_operations)}, got "
+                f"{sorted(hit.linked_operations)}"
             )
 
     route_counts = Counter()

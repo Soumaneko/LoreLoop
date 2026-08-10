@@ -383,6 +383,327 @@
         {"group_id": "blue_seal", "importance": "must", "acceptable_evidence_ids": ["turn_1_p002"]},
         {"group_id": "silver_seal", "importance": "should", "acceptable_evidence_ids": ["turn_1_p003", "turn_2_p001"]}
       ]
+    },
+    {
+      "case_id": "late_state_delta_evidence",
+      "description": "A real-save-derived multi-paragraph update places the decisive state change after setup evidence from the same turn.",
+      "current_turn_index": 7,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_linzhou",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "林舟", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "最初在边境发现了陌生脚印。"},
+        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "众人目送陌生商队离开官道。\n\n那些人问的是行情，观察的却是守卫人数。\n\n现有迹象表明他们很可能是外围探子。\n\n旧堡的防御足以遮蔽仓库中的物资。\n\n队长决定暂不追查探子，先护送伤员返回旧堡。"}
+      ],
+      "continuity_items": [
+        {
+          "id": "border-scouts",
+          "subject": "林舟处理边境探子",
+          "premise": "调查边境出现的陌生脚印。",
+          "current_state": "林舟确认商队可疑，但决定暂不追查，先护送伤员返回旧堡。",
+          "entities": ["林舟"],
+          "created_turn": 1,
+          "updated_turn": 5
+        }
+      ],
+      "continuity_logs": [
+        {"item_id": "border-scouts", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "border-scouts", "operation": "update", "turn_index": 5, "state_delta": "确认可疑但暂不追查。", "evidence_ids": ["turn_5_p001", "turn_5_p002", "turn_5_p003", "turn_5_p004", "turn_5_p005"]}
+      ],
+      "gold_groups": [
+        {"group_id": "latest_decision", "importance": "must", "acceptable_evidence_ids": ["turn_5_p005"]},
+        {"group_id": "scout_assessment", "importance": "should", "acceptable_evidence_ids": ["turn_5_p002", "turn_5_p003"], "max_useful_evidence": 1},
+        {"group_id": "thread_origin", "importance": "should", "acceptable_evidence_ids": ["turn_1_p001"]}
+      ]
+    },
+    {
+      "case_id": "shared_evidence_across_continuities",
+      "description": "A real-save-derived History document can support different lifecycle operations on two Continuity matters and must remain one hit.",
+      "current_turn_index": 4,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_linzhou",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "林舟", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 0, "scene_id": "scene_000", "scene_text": "那枚联络玉牌短暂闪了一下。\n\n他握着玉牌思考下一步安排。"},
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "回信确认已经有人接受邀请。"}
+      ],
+      "continuity_items": [
+        {"id": "a-recruitment", "subject": "林舟等待招募回应", "premise": "确认是否有人接受邀请。", "current_state": "已经收到接受邀请的回信。", "entities": ["林舟"], "created_turn": 0, "updated_turn": 1},
+        {"id": "b-signal", "status": "resolved", "subject": "林舟确认玉牌闪光来源", "premise": "查明联络玉牌为何闪光。", "entities": ["林舟"], "created_turn": 0, "updated_turn": 1, "closed_turn": 1}
+      ],
+      "continuity_logs": [
+        {"item_id": "a-recruitment", "operation": "create", "turn_index": 0, "evidence_ids": ["turn_0_p002"]},
+        {"item_id": "b-signal", "operation": "create", "turn_index": 0, "evidence_ids": ["turn_0_p001"]},
+        {"item_id": "b-signal", "operation": "resolve", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "a-recruitment", "operation": "update", "turn_index": 1, "state_delta": "收到招募回应。", "evidence_ids": ["turn_1_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "shared_reply", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
+        {"group_id": "signal_origin", "importance": "should", "acceptable_evidence_ids": ["turn_0_p001"]},
+        {"group_id": "recruitment_context", "importance": "should", "acceptable_evidence_ids": ["turn_0_p002"]}
+      ],
+      "provenance_expectations": [
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": false,
+          "relation": true,
+          "linked_continuity_ids": ["a-recruitment", "b-signal"],
+          "linked_operations": ["update", "resolve"]
+        }
+      ]
+    },
+    {
+      "case_id": "player_input_vs_scene_outcome",
+      "description": "A real-save-derived action/outcome pair keeps confirmed scene evidence ahead of contradictory player intent.",
+      "current_turn_index": 3,
+      "policy": {"max_hits": 1},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_box",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["铜盒"]
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "user_input": "我把铜盒交给守门人，要求他今夜送出。",
+          "scene_text": "守门人接过铜盒，却说明城门已经封闭，今晚无法送出。"
+        }
+      ],
+      "gold_groups": [
+        {"group_id": "confirmed_delivery_outcome", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_1_input"],
+      "provenance_expectations": [
+        {"evidence_id": "turn_1_p001", "direct": true, "relation": false}
+      ]
+    },
+    {
+      "case_id": "explicit_relation_vs_context_direct",
+      "description": "Explicit-input Continuity evidence keeps a seat ahead of plentiful current-context direct matches.",
+      "current_turn_index": 8,
+      "policy": {"max_hits": 2},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": []
+          },
+          {
+            "intent_id": "current_capital",
+            "focus": "location",
+            "origin": "current_context",
+            "entities": [{"name": "王都", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她曾答应在钟楼关闭前，把黑塔密钥交给北门守卫。"},
+        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "王都广场的鸽群被钟声惊起。"},
+        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "王都的商铺在雨后重新开门。"},
+        {"turn_index": 7, "scene_id": "scene_007", "scene_text": "王都巡逻队沿着城墙更换岗哨。"}
+      ],
+      "continuity_items": [
+        {
+          "id": "ailin-key-promise",
+          "kind": "commitment",
+          "subject": "艾琳交付黑塔密钥的承诺",
+          "premise": "艾琳答应把黑塔密钥交给北门守卫。",
+          "entities": ["艾琳"],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
+      ],
+      "continuity_logs": [
+        {"item_id": "ailin-key-promise", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "explicit_key_promise", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
+        {"group_id": "current_capital_context", "importance": "should", "acceptable_evidence_ids": ["turn_5_p001", "turn_6_p001", "turn_7_p001"], "max_useful_evidence": 1}
+      ],
+      "provenance_expectations": [
+        {"evidence_id": "turn_1_p001", "direct": false, "relation": true}
+      ]
+    },
+    {
+      "case_id": "direct_noise_vs_relation_exact",
+      "description": "Surface mentions of an explicit entity must not crowd out indirect Continuity evidence that actually answers the question.",
+      "current_turn_index": 7,
+      "policy": {"max_hits": 2},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "那份仍未履行的承诺，是在满月前把解药送到北门诊所。"},
+        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "艾琳从市场旁经过，停下来听了一会儿钟声。"},
+        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "艾琳在旅店门口和马夫谈论明天的天气。"},
+        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "艾琳沿着河岸散步，随后回到了住处。"}
+      ],
+      "continuity_items": [
+        {
+          "id": "ailin-antidote-promise",
+          "kind": "commitment",
+          "subject": "艾琳送达解药的承诺",
+          "premise": "艾琳需要在满月前把解药送到北门诊所。",
+          "entities": ["艾琳"],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
+      ],
+      "continuity_logs": [
+        {"item_id": "ailin-antidote-promise", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "antidote_promise", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+      ]
+    },
+    {
+      "case_id": "direct_exact_vs_relation_noise_and_zero",
+      "description": "An exact direct answer leaves zero seats for same-entity Continuity links that do not answer the question.",
+      "current_turn_index": 6,
+      "policy": {"max_hits": 1},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_first_meeting",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": ["第一次见面穿什么"]
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她把一封没有署名的信留在旧港仓库。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她答应下次经过北门时归还借来的地图。"},
+        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "艾琳第一次见面穿什么？她当时穿着一件蓝色披风。"}
+      ],
+      "continuity_items": [
+        {"id": "ailin-unsigned-letter", "subject": "艾琳留下的无名信", "premise": "查明旧港仓库里那封信的收件人。", "entities": ["艾琳"], "created_turn": 1, "updated_turn": 1},
+        {"id": "ailin-map-return", "kind": "commitment", "subject": "艾琳归还地图", "premise": "艾琳答应经过北门时归还地图。", "entities": ["艾琳"], "created_turn": 2, "updated_turn": 2}
+      ],
+      "continuity_logs": [
+        {"item_id": "ailin-unsigned-letter", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "ailin-map-return", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "first_meeting_clothes", "importance": "must", "acceptable_evidence_ids": ["turn_4_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001", "turn_2_p001"],
+      "provenance_expectations": [
+        {"evidence_id": "turn_4_p001", "direct": true, "relation": false}
+      ]
+    },
+    {
+      "case_id": "cross_channel_long_relation_critical",
+      "description": "A long critical relation evidence item competes with short ordinary direct mentions under one payload budget.",
+      "current_turn_index": 8,
+      "policy": {"max_hits": 3, "max_payload_chars": 430, "intent_target": 1, "max_evidence_text_chars": 360, "min_excerpt_chars": 120},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "在议会争论结束后，她逐项核对了药瓶封口、北门换岗时间和诊所值夜名单，又说明沿途可能遇到封路、宵禁和临时盘查。尽管这些准备十分繁琐，真正决定后续行动的事实只有一个：她已经承诺亲自携带解药，并且必须在满月升起以前把它送到北门诊所，否则伤者将错过最后的救治窗口。"},
+        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "艾琳在市场买了一袋苹果。"},
+        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "艾琳经过喷泉时看了看天空。"},
+        {"turn_index": 7, "scene_id": "scene_007", "scene_text": "艾琳回旅店取走了自己的手套。"}
+      ],
+      "continuity_items": [
+        {
+          "id": "ailin-long-antidote",
+          "kind": "commitment",
+          "subject": "艾琳送解药的紧急承诺",
+          "premise": "艾琳必须在满月前亲自把解药送到北门诊所。",
+          "entities": ["艾琳"],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
+      ],
+      "continuity_logs": [
+        {"item_id": "ailin-long-antidote", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "critical_delivery_deadline", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+      ]
+    },
+    {
+      "case_id": "cross_channel_long_direct_critical",
+      "description": "A long critical direct answer competes with short but irrelevant relation evidence under one payload budget.",
+      "current_turn_index": 8,
+      "policy": {"max_hits": 3, "max_payload_chars": 430, "intent_target": 1, "max_evidence_text_chars": 360, "min_excerpt_chars": 120},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_black_tower_route",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [{"name": "艾琳", "aliases": []}],
+            "topics": ["黑塔密道路线"]
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她曾把备用火石放进旧港仓库的木箱。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她答应替旅店老板寻找丢失的账本。"},
+        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "艾琳解释黑塔密道路线时，先排除了正门和塌陷的西侧台阶，又提醒众人避开会触发警铃的红砖区域。路线必须从旧水渠入口向北走到第二处分岔，在刻着双月图案的墙前右转，穿过低矮石廊后再沿铁梯上行。最关键的是，抵达封死的拱门时不要推门，而要按下左侧第三块松动石砖，隐藏通道才会开启。"}
+      ],
+      "continuity_items": [
+        {"id": "ailin-firestone", "subject": "艾琳存放备用火石", "premise": "记住旧港仓库中备用火石的位置。", "entities": ["艾琳"], "created_turn": 1, "updated_turn": 1},
+        {"id": "ailin-ledger", "kind": "commitment", "subject": "艾琳寻找旅店账本", "premise": "艾琳答应寻找丢失的账本。", "entities": ["艾琳"], "created_turn": 2, "updated_turn": 2}
+      ],
+      "continuity_logs": [
+        {"item_id": "ailin-firestone", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "ailin-ledger", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "hidden_route_instruction", "importance": "must", "acceptable_evidence_ids": ["turn_6_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001", "turn_2_p001"],
+      "provenance_expectations": [
+        {"evidence_id": "turn_6_p001", "direct": true, "relation": false}
+      ]
     }
   ]
 }

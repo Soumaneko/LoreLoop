@@ -1,15 +1,15 @@
 {
   "benchmark_version": 1,
-  "cases_sha256": "1b8562df8bb5ef024b0e11762aa72d1368ddc2a7724b97e1787d929b84efe8b5",
+  "cases_sha256": "5a49d8841302f74488cbc3039dabc87d2f252484ade4c0f34a21c5057ab4b471",
   "aggregate": {
-    "must_recalled": 12,
-    "must_total": 14,
-    "weighted_recalled": 40,
-    "weighted_total": 48,
+    "must_recalled": 18,
+    "must_total": 22,
+    "weighted_recalled": 63,
+    "weighted_total": 77,
     "forbidden_visible_count": 0,
-    "duplicate_visible_count": 3,
+    "duplicate_visible_count": 4,
     "invariant_violation_count": 0,
-    "payload_chars": 3503
+    "payload_chars": 6274
   },
   "cases": [
     {
@@ -392,6 +392,305 @@
         "2": 1
       },
       "relation_candidates_considered": 0,
+      "relation_hits_added": 0,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "late_state_delta_evidence",
+      "selected_main_ids": [
+        "turn_5_p001",
+        "turn_5_p002",
+        "turn_1_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_5_p001",
+        "turn_5_p002",
+        "turn_5_p003",
+        "turn_1_p001"
+      ],
+      "recalled_groups": [
+        "scout_assessment",
+        "thread_origin"
+      ],
+      "missed_groups": [
+        "latest_decision"
+      ],
+      "must_recalled": 0,
+      "must_total": 1,
+      "weighted_recalled": 2,
+      "weighted_total": 5,
+      "forbidden_visible_ids": [],
+      "duplicate_visible_count": 1,
+      "payload_chars": 518,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 3,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "border-scouts": 3
+      },
+      "turn_contributions": {
+        "1": 1,
+        "5": 2
+      },
+      "relation_candidates_considered": 6,
+      "relation_hits_added": 3,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "shared_evidence_across_continuities",
+      "selected_main_ids": [
+        "turn_1_p001",
+        "turn_0_p002",
+        "turn_0_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_1_p001",
+        "turn_0_p002",
+        "turn_0_p001"
+      ],
+      "recalled_groups": [
+        "shared_reply",
+        "signal_origin",
+        "recruitment_context"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 5,
+      "weighted_total": 5,
+      "forbidden_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 392,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 3,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "a-recruitment": 2,
+        "b-signal": 2
+      },
+      "turn_contributions": {
+        "0": 2,
+        "1": 1
+      },
+      "relation_candidates_considered": 3,
+      "relation_hits_added": 3,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "player_input_vs_scene_outcome",
+      "selected_main_ids": [
+        "turn_1_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_1_p001"
+      ],
+      "recalled_groups": [
+        "confirmed_delivery_outcome"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 186,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 0,
+        "dual": 0
+      },
+      "continuity_contributions": {},
+      "turn_contributions": {
+        "1": 1
+      },
+      "relation_candidates_considered": 0,
+      "relation_hits_added": 0,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "explicit_relation_vs_context_direct",
+      "selected_main_ids": [
+        "turn_1_p001",
+        "turn_7_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_1_p001",
+        "turn_7_p001"
+      ],
+      "recalled_groups": [
+        "explicit_key_promise",
+        "current_capital_context"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 4,
+      "weighted_total": 4,
+      "forbidden_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 317,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "ailin-key-promise": 1
+      },
+      "turn_contributions": {
+        "1": 1,
+        "7": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "direct_noise_vs_relation_exact",
+      "selected_main_ids": [
+        "turn_6_p001",
+        "turn_5_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_6_p001",
+        "turn_5_p001"
+      ],
+      "recalled_groups": [],
+      "missed_groups": [
+        "antidote_promise"
+      ],
+      "must_recalled": 0,
+      "must_total": 1,
+      "weighted_recalled": 0,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 359,
+      "route_counts": {
+        "direct_only": 2,
+        "relation_only": 0,
+        "dual": 0
+      },
+      "continuity_contributions": {},
+      "turn_contributions": {
+        "5": 1,
+        "6": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 0,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "direct_exact_vs_relation_noise_and_zero",
+      "selected_main_ids": [
+        "turn_4_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_4_p001"
+      ],
+      "recalled_groups": [
+        "first_meeting_clothes"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 234,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 0,
+        "dual": 0
+      },
+      "continuity_contributions": {},
+      "turn_contributions": {
+        "4": 1
+      },
+      "relation_candidates_considered": 2,
+      "relation_hits_added": 0,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "cross_channel_long_relation_critical",
+      "selected_main_ids": [
+        "turn_7_p001",
+        "turn_1_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_7_p001",
+        "turn_1_p001"
+      ],
+      "recalled_groups": [
+        "critical_delivery_deadline"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 422,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "ailin-long-antidote": 1
+      },
+      "turn_contributions": {
+        "1": 1,
+        "7": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "cross_channel_long_direct_critical",
+      "selected_main_ids": [
+        "turn_6_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_6_p001"
+      ],
+      "recalled_groups": [
+        "hidden_route_instruction"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 343,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 0,
+        "dual": 0
+      },
+      "continuity_contributions": {},
+      "turn_contributions": {
+        "6": 1
+      },
+      "relation_candidates_considered": 2,
       "relation_hits_added": 0,
       "stale_relation_links": 0,
       "invariant_violations": []
