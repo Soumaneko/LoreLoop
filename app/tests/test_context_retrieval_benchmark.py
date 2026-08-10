@@ -114,8 +114,40 @@ def test_context_retrieval_benchmark_captures_current_quality_signals(
     assert long_direct["relation_hits_added"] == 0
     assert long_direct["forbidden_visible_ids"] == []
 
-    assert benchmark_report["aggregate"]["forbidden_visible_count"] == 0
-    assert benchmark_report["aggregate"]["invariant_violation_count"] == 0
+    # Known gaps (encoded in the accepted baseline; the next selector iteration
+    # is expected to close them without redefining the other cases).
+    noise = cases["relation_node_evidence_noise"]
+    assert noise["must_recalled"] == 1
+    assert noise["forbidden_visible_ids"] == []
+    assert noise["forbidden_main_visible_ids"] == ["turn_5_p003"]
+
+    link_specific = cases["shared_evidence_link_specific_validity"]
+    assert link_specific["must_recalled"] == 1
+    assert len(link_specific["invariant_violations"]) == 1
+
+    entity_overlap = cases["entity_overlap_without_predicate_support"]
+    assert entity_overlap["must_recalled"] == 1
+    assert entity_overlap["forbidden_visible_ids"] == ["turn_1_p001"]
+
+    spy = cases["anonymized_spy_regression"]
+    assert spy["must_recalled"] == 1
+    assert spy["forbidden_visible_ids"] == ["turn_1_p001"]
+
+    # Regression guards that must keep passing.
+    implicit = cases["implicit_evidence_with_adjacent_context"]
+    assert implicit["must_recalled"] == 1
+    assert implicit["forbidden_visible_ids"] == []
+    assert implicit["invariant_violations"] == []
+
+    legacy = cases["legacy_null_hash_fail_open"]
+    assert legacy["must_recalled"] == 1
+    assert legacy["relation_candidates_considered"] == 1
+    assert legacy["relation_hits_added"] == 1
+    assert legacy["forbidden_visible_ids"] == []
+
+    assert benchmark_report["aggregate"]["forbidden_visible_count"] == 2
+    assert benchmark_report["aggregate"]["forbidden_main_visible_count"] == 1
+    assert benchmark_report["aggregate"]["invariant_violation_count"] == 2
 
 
 def test_context_retrieval_benchmark_check_command(capsys):

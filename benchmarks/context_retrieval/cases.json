@@ -704,6 +704,220 @@
       "provenance_expectations": [
         {"evidence_id": "turn_6_p001", "direct": true, "relation": false}
       ]
+    },
+    {
+      "case_id": "relation_node_evidence_noise",
+      "description": "A generalised noise sentence mounted on the same lifecycle node as two strong evidence sentences must not become a selected main hit.",
+      "current_turn_index": 8,
+      "policy": {"turn_cap": 5},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "那女人", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "那女人在码头把一枚铜牌交到阿九手中。"},
+        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "阿九确认三日后在青岩镇按刻痕接头。\n\n那女人点头应下，约定以铜牌为凭。\n\n对岸灯火在薄雾里明灭。"}
+      ],
+      "continuity_items": [
+        {"id": "handoff", "subject": "码头铜牌交接", "premise": "约定三日后在青岩镇以铜牌暗记接头。", "entities": ["那女人"], "created_turn": 1, "updated_turn": 5}
+      ],
+      "continuity_logs": [
+        {"item_id": "handoff", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "handoff", "operation": "update", "turn_index": 5, "state_delta": "阿九确认三日后在青岩镇按刻痕接头。", "evidence_ids": ["turn_5_p001", "turn_5_p002", "turn_5_p003"]}
+      ],
+      "gold_groups": [
+        {"group_id": "handoff_agreed", "importance": "must", "acceptable_evidence_ids": ["turn_5_p001", "turn_5_p002"], "max_useful_evidence": 2},
+        {"group_id": "handoff_origin", "importance": "should", "acceptable_evidence_ids": ["turn_1_p001"]}
+      ],
+      "forbidden_main_evidence_ids": ["turn_5_p003"]
+    },
+    {
+      "case_id": "shared_evidence_link_specific_validity",
+      "description": "A paragraph that supports one matter but not another must only be dropped for the unsupported link, not for the supported one.",
+      "current_turn_index": 5,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ajiu",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "阿九", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "把一枚铜牌交到那女人手中，约定三日后在青岩镇接头。"}
+      ],
+      "continuity_items": [
+        {"id": "copper-handoff", "subject": "铜牌交接", "premise": "约定三日后在青岩镇交接铜牌。", "entities": ["阿九"], "created_turn": 1, "updated_turn": 1},
+        {"id": "gate-rebuild", "subject": "重建山门", "premise": "筹备重建山门的材料与人力。", "entities": ["阿九"], "created_turn": 1, "updated_turn": 1}
+      ],
+      "continuity_logs": [
+        {"item_id": "copper-handoff", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "gate-rebuild", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "handoff_basis", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+      ],
+      "provenance_expectations": [
+        {"evidence_id": "turn_1_p001", "direct": false, "relation": true, "linked_continuity_ids": ["copper-handoff"]}
+      ]
+    },
+    {
+      "case_id": "implicit_evidence_with_adjacent_context",
+      "description": "An implicit paragraph whose meaning comes from the adjacent paragraph must survive semantic validation.",
+      "current_turn_index": 6,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_token",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["铜牌接头"]
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "他点头应下。\n\n约定三日后在青岩镇以铜牌接头。"}
+      ],
+      "continuity_items": [
+        {"id": "token-appointment", "subject": "青岩镇接头", "premise": "约定三日后在青岩镇以铜牌接头。", "entities": [], "created_turn": 2, "updated_turn": 2}
+      ],
+      "continuity_logs": [
+        {"item_id": "token-appointment", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "implicit_agreement", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]},
+        {"group_id": "adjacent_semantics", "importance": "should", "acceptable_evidence_ids": ["turn_2_p002"]}
+      ],
+      "provenance_expectations": [
+        {"evidence_id": "turn_2_p001", "direct": false, "relation": true}
+      ]
+    },
+    {
+      "case_id": "legacy_null_hash_fail_open",
+      "description": "Legacy saves with a null node evidence hash must fail open and keep their evidence instead of deleting it.",
+      "current_turn_index": 6,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "那女人", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "在旧港确认了接头暗记与三日后时间。"}
+      ],
+      "continuity_items": [
+        {"id": "legacy-handoff", "subject": "旧港接头", "premise": "确认接头暗记与时间。", "entities": ["那女人"], "created_turn": 3, "updated_turn": 3}
+      ],
+      "continuity_logs": [
+        {"item_id": "legacy-handoff", "operation": "create", "turn_index": 3, "evidence_ids": ["turn_3_p001"], "hash_mode": "legacy"}
+      ],
+      "gold_groups": [
+        {"group_id": "legacy_basis", "importance": "must", "acceptable_evidence_ids": ["turn_3_p001"]}
+      ]
+    },
+    {
+      "case_id": "entity_overlap_without_predicate_support",
+      "description": "Shared entity mentions without predicate support for the matter's state change must not pass semantic validation.",
+      "current_turn_index": 6,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_ajiu",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "阿九", "aliases": []}],
+            "topics": []
+          },
+          {
+            "intent_id": "explicit_ailin",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "那女人", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "他在青岩镇的库房盘点存货，核对往来账目。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "阿九与那女人约定三日后在青岩镇以铜牌接头。"}
+      ],
+      "continuity_items": [
+        {"id": "agreement", "subject": "青岩镇接头", "premise": "约定三日后在青岩镇以铜牌接头。", "entities": ["阿九", "那女人"], "created_turn": 1, "updated_turn": 1}
+      ],
+      "continuity_logs": [
+        {"item_id": "agreement", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "real_agreement", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001"]
+    },
+    {
+      "case_id": "anonymized_spy_regression",
+      "description": "An archived matter matched through its later current_state must not inherit strong relevance onto unrelated create evidence.",
+      "current_turn_index": 8,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_spy",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["外乡客", "刺探"]
+          },
+          {
+            "intent_id": "explicit_village",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "青岩镇", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "那人握着信物，摩挲暗记，盘算下一步。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "外乡客在青岩镇向茶客打听护院布防。"},
+        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "众人合议后确认重振宗派已有眉目，以信物为记推进并留意刺探。"}
+      ],
+      "continuity_items": [
+        {
+          "id": "revive-sect",
+          "kind": "commitment",
+          "status": "resolved",
+          "subject": "重振宗派",
+          "premise": "清点护院人手并重整班次。",
+          "current_state": "确认以信物为记推进，并留意刺探。",
+          "entities": ["青岩镇", "外乡客"],
+          "location": "青岩镇",
+          "created_turn": 1,
+          "updated_turn": 6,
+          "closed_turn": 6
+        }
+      ],
+      "continuity_logs": [
+        {"item_id": "revive-sect", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "revive-sect", "operation": "resolve", "turn_index": 6, "evidence_ids": ["turn_6_p001"]}
+      ],
+      "gold_groups": [
+        {"group_id": "spy_answer", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001"]
     }
   ]
 }

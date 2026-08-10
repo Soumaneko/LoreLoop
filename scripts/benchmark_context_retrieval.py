@@ -77,6 +77,18 @@ class ContinuityLogFixture(BaseModel):
     reason: str = "benchmark evidence"
     hash_mode: Literal["valid", "legacy", "stale"] = "valid"
 
+    @model_validator(mode="after")
+    def validate_state_delta_by_operation(self):
+        if self.operation == "update" and not self.state_delta:
+            raise ValueError(
+                "update continuity logs require a real state_delta"
+            )
+        if self.operation != "update" and self.state_delta is not None:
+            raise ValueError(
+                f"{self.operation} continuity logs cannot carry state_delta"
+            )
+        return self
+
 
 class GoldGroup(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -113,6 +125,7 @@ class BenchmarkCase(BaseModel):
     continuity_logs: list[ContinuityLogFixture] = Field(default_factory=list)
     gold_groups: list[GoldGroup] = Field(default_factory=list)
     forbidden_evidence_ids: list[str] = Field(default_factory=list)
+    forbidden_main_evidence_ids: list[str] = Field(default_factory=list)
     provenance_expectations: list[ProvenanceExpectation] = Field(
         default_factory=list
     )
@@ -260,6 +273,14 @@ def _score_case(case: BenchmarkCase, evidence, payload: str) -> dict:
     forbidden_visible = sorted(
         visible_set.intersection(case.forbidden_evidence_ids)
     )
+    forbidden_main_visible = sorted(
+        set(selected_ids).intersection(case.forbidden_main_evidence_ids)
+    )
+    if forbidden_main_visible:
+        invariant_violations.append(
+            "forbidden main evidence visible: "
+            + ", ".join(forbidden_main_visible)
+        )
     return {
         "case_id": case.case_id,
         "selected_main_ids": selected_ids,
@@ -271,6 +292,7 @@ def _score_case(case: BenchmarkCase, evidence, payload: str) -> dict:
         "weighted_recalled": weighted_recalled,
         "weighted_total": weighted_total,
         "forbidden_visible_ids": forbidden_visible,
+        "forbidden_main_visible_ids": forbidden_main_visible,
         "duplicate_visible_count": duplicate_visible_count,
         "payload_chars": len(payload),
         "route_counts": {
@@ -351,6 +373,9 @@ def run_suite(suite: BenchmarkSuite, *, fingerprint: str) -> dict:
         "weighted_total": sum(case["weighted_total"] for case in case_results),
         "forbidden_visible_count": sum(
             len(case["forbidden_visible_ids"]) for case in case_results
+        ),
+        "forbidden_main_visible_count": sum(
+            len(case["forbidden_main_visible_ids"]) for case in case_results
         ),
         "duplicate_visible_count": sum(
             case["duplicate_visible_count"] for case in case_results
@@ -447,6 +472,7 @@ def main(argv: list[str] | None = None) -> int:
         f"must={aggregate['must_recalled']}/{aggregate['must_total']} "
         f"weighted={aggregate['weighted_recalled']}/{aggregate['weighted_total']} "
         f"forbidden={aggregate['forbidden_visible_count']} "
+        f"forbidden_main={aggregate['forbidden_main_visible_count']} "
         f"duplicates={aggregate['duplicate_visible_count']} "
         f"payload={aggregate['payload_chars']}"
     )

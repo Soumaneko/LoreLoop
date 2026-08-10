@@ -1,15 +1,16 @@
 {
   "benchmark_version": 1,
-  "cases_sha256": "5a49d8841302f74488cbc3039dabc87d2f252484ade4c0f34a21c5057ab4b471",
+  "cases_sha256": "1db774158ac74b94aa20964ded0eb55055958588e982c575f6b62d27cadac2e3",
   "aggregate": {
-    "must_recalled": 21,
-    "must_total": 22,
-    "weighted_recalled": 72,
-    "weighted_total": 77,
-    "forbidden_visible_count": 0,
+    "must_recalled": 27,
+    "must_total": 28,
+    "weighted_recalled": 92,
+    "weighted_total": 97,
+    "forbidden_visible_count": 2,
+    "forbidden_main_visible_count": 1,
     "duplicate_visible_count": 4,
-    "invariant_violation_count": 0,
-    "payload_chars": 6182
+    "invariant_violation_count": 2,
+    "payload_chars": 8266
   },
   "cases": [
     {
@@ -29,6 +30,7 @@
       "weighted_recalled": 3,
       "weighted_total": 3,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 178,
       "route_counts": {
@@ -65,6 +67,7 @@
       "weighted_recalled": 4,
       "weighted_total": 4,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 398,
       "route_counts": {
@@ -99,6 +102,7 @@
       "weighted_recalled": 3,
       "weighted_total": 3,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 176,
       "route_counts": {
@@ -143,6 +147,7 @@
       "weighted_recalled": 12,
       "weighted_total": 12,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 523,
       "route_counts": {
@@ -188,6 +193,7 @@
       "weighted_recalled": 3,
       "weighted_total": 3,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 2,
       "payload_chars": 396,
       "route_counts": {
@@ -229,6 +235,7 @@
       "weighted_recalled": 3,
       "weighted_total": 4,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 357,
       "route_counts": {
@@ -266,6 +273,7 @@
       "weighted_recalled": 4,
       "weighted_total": 4,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 263,
       "route_counts": {
@@ -304,6 +312,7 @@
       "weighted_recalled": 3,
       "weighted_total": 4,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 179,
       "route_counts": {
@@ -340,6 +349,7 @@
       "weighted_recalled": 4,
       "weighted_total": 4,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 354,
       "route_counts": {
@@ -381,6 +391,7 @@
       "weighted_recalled": 7,
       "weighted_total": 7,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 1,
       "payload_chars": 624,
       "route_counts": {
@@ -423,6 +434,7 @@
       "weighted_recalled": 2,
       "weighted_total": 5,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 1,
       "payload_chars": 518,
       "route_counts": {
@@ -465,6 +477,7 @@
       "weighted_recalled": 5,
       "weighted_total": 5,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 392,
       "route_counts": {
@@ -502,6 +515,7 @@
       "weighted_recalled": 3,
       "weighted_total": 3,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 186,
       "route_counts": {
@@ -538,6 +552,7 @@
       "weighted_recalled": 4,
       "weighted_total": 4,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 317,
       "route_counts": {
@@ -576,6 +591,7 @@
       "weighted_recalled": 3,
       "weighted_total": 3,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 322,
       "route_counts": {
@@ -612,6 +628,7 @@
       "weighted_recalled": 3,
       "weighted_total": 3,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 234,
       "route_counts": {
@@ -647,6 +664,7 @@
       "weighted_recalled": 3,
       "weighted_total": 3,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 422,
       "route_counts": {
@@ -683,6 +701,7 @@
       "weighted_recalled": 3,
       "weighted_total": 3,
       "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 343,
       "route_counts": {
@@ -696,6 +715,253 @@
       },
       "relation_candidates_considered": 2,
       "relation_hits_added": 0,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "relation_node_evidence_noise",
+      "selected_main_ids": [
+        "turn_5_p001",
+        "turn_5_p002",
+        "turn_5_p003",
+        "turn_1_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_5_p001",
+        "turn_5_p002",
+        "turn_5_p003",
+        "turn_1_p001"
+      ],
+      "recalled_groups": [
+        "handoff_agreed",
+        "handoff_origin"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 4,
+      "weighted_total": 4,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [
+        "turn_5_p003"
+      ],
+      "duplicate_visible_count": 0,
+      "payload_chars": 622,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 2,
+        "dual": 2
+      },
+      "continuity_contributions": {
+        "handoff": 4
+      },
+      "turn_contributions": {
+        "1": 1,
+        "5": 3
+      },
+      "relation_candidates_considered": 2,
+      "relation_hits_added": 2,
+      "stale_relation_links": 0,
+      "invariant_violations": [
+        "forbidden main evidence visible: turn_5_p003"
+      ]
+    },
+    {
+      "case_id": "shared_evidence_link_specific_validity",
+      "selected_main_ids": [
+        "turn_1_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_1_p001"
+      ],
+      "recalled_groups": [
+        "handoff_basis"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 144,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "copper-handoff": 1,
+        "gate-rebuild": 1
+      },
+      "turn_contributions": {
+        "1": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invariant_violations": [
+        "turn_1_p001: expected linked continuities ['copper-handoff'], got ['copper-handoff', 'gate-rebuild']"
+      ]
+    },
+    {
+      "case_id": "implicit_evidence_with_adjacent_context",
+      "selected_main_ids": [
+        "turn_2_p001",
+        "turn_2_p002"
+      ],
+      "visible_evidence_ids": [
+        "turn_2_p001",
+        "turn_2_p002"
+      ],
+      "recalled_groups": [
+        "implicit_agreement",
+        "adjacent_semantics"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 4,
+      "weighted_total": 4,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 301,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "token-appointment": 1
+      },
+      "turn_contributions": {
+        "2": 2
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "legacy_null_hash_fail_open",
+      "selected_main_ids": [
+        "turn_3_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_3_p001"
+      ],
+      "recalled_groups": [
+        "legacy_basis"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 136,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "legacy-handoff": 1
+      },
+      "turn_contributions": {
+        "3": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "entity_overlap_without_predicate_support",
+      "selected_main_ids": [
+        "turn_1_p001",
+        "turn_2_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_1_p001",
+        "turn_2_p001"
+      ],
+      "recalled_groups": [
+        "real_agreement"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [
+        "turn_1_p001"
+      ],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 334,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "agreement": 1
+      },
+      "turn_contributions": {
+        "1": 1,
+        "2": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invariant_violations": []
+    },
+    {
+      "case_id": "anonymized_spy_regression",
+      "selected_main_ids": [
+        "turn_2_p001",
+        "turn_1_p001",
+        "turn_6_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_2_p001",
+        "turn_1_p001",
+        "turn_6_p001"
+      ],
+      "recalled_groups": [
+        "spy_answer"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [
+        "turn_1_p001"
+      ],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 547,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 1,
+        "dual": 1
+      },
+      "continuity_contributions": {
+        "revive-sect": 2
+      },
+      "turn_contributions": {
+        "1": 1,
+        "2": 1,
+        "6": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
       "stale_relation_links": 0,
       "invariant_violations": []
     }
