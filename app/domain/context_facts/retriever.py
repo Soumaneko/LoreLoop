@@ -13,7 +13,12 @@ from app.domain.confirmed_history import (
 from app.domain.continuity import ContinuityHistoryLink
 
 from .clustering import SUPPORTING_EVIDENCE_MAX, cluster_near_duplicates
-from .diversity import HistoryDiversityPolicy, select_diverse_candidates
+from .diversity import (
+    AdmissionPreview,
+    HistoryDiversityPolicy,
+    SelectionProposal,
+    select_diverse_candidates,
+)
 from .schemas import (
     AdjacentEvidence,
     ContextHistoryEvidenceSet,
@@ -35,6 +40,7 @@ class _Candidate:
     matched_topics: set[str] = field(default_factory=set)
     intent_scores: dict[str, float] = field(default_factory=dict)
     intent_matched_entities: dict[str, set[str]] = field(default_factory=dict)
+    intent_matched_topics: dict[str, set[str]] = field(default_factory=dict)
     relation_intent_ids: set[str] = field(default_factory=set)
     linked_continuity_ids: set[str] = field(default_factory=set)
     linked_operations: set[str] = field(default_factory=set)
@@ -93,6 +99,9 @@ class ContextHistoryRetriever:
                 existing.intent_matched_entities.update(
                     candidate.intent_matched_entities
                 )
+                existing.intent_matched_topics.update(
+                    candidate.intent_matched_topics
+                )
 
         documents_by_id = {
             document.document_id: document for document in documents
@@ -135,11 +144,6 @@ class ContextHistoryRetriever:
             by_intent,
             representative_for,
         )
-        direct_representatives = {
-            document_id: candidate
-            for document_id, candidate in representative_candidates.items()
-            if candidate.matched_intent_ids
-        }
         relation_representatives: dict[str, _Candidate] = {}
         for document_id in relation_document_ids:
             representative = representative_for[document_id]
@@ -150,48 +154,45 @@ class ContextHistoryRetriever:
             ] = representative
 
         intents = {intent.intent_id: intent for intent in search_plan.intents}
-        intent_order = {
-            intent.intent_id: index
-            for index, intent in enumerate(search_plan.intents)
-        }
-        origin_priority = {
-            "explicit_input": 0,
-            "matched_anchor": 1,
-            "current_context": 2,
-            "relationship": 3,
-        }
-        supplements_by_origin: dict[str, list[tuple[_Candidate, str]]] = (
-            defaultdict(list)
-        )
+        proposals: list[SelectionProposal[_Candidate]] = []
+        for intent in search_plan.intents:
+            for channel_rank, candidate in enumerate(
+                by_intent_clustered.get(intent.intent_id, [])
+            ):
+                proposals.append(SelectionProposal(
+                    candidate=candidate,
+                    owner_intent_id=intent.intent_id,
+                    route="direct",
+                    channel_rank=channel_rank,
+                    signal_rank=_direct_signal_rank(candidate, intent),
+                ))
+
+        relation_by_intent: dict[str, list[_Candidate]] = defaultdict(list)
         for candidate in relation_representatives.values():
-            owner_ids = [
-                intent_id
-                for intent_id in candidate.relation_intent_ids
-                if intent_id in intents
-            ]
-            if not owner_ids:
-                continue
-            owner_id = min(owner_ids, key=lambda intent_id: (
-                origin_priority[intents[intent_id].origin],
-                intent_order[intent_id],
-                intent_id,
-            ))
-            supplements_by_origin[intents[owner_id].origin].append(
-                (candidate, owner_id)
+            for intent_id in candidate.relation_intent_ids:
+                if intent_id in intents:
+                    relation_by_intent[intent_id].append(candidate)
+        for intent in search_plan.intents:
+            relation_candidates = sorted(
+                relation_by_intent.get(intent.intent_id, []),
+                key=lambda candidate: (
+                    candidate.relation_order,
+                    -candidate.document.turn_index,
+                    candidate.document.document_id,
+                ),
             )
-        for supplements in supplements_by_origin.values():
-            supplements.sort(key=lambda entry: (
-                entry[0].relation_order,
-                -entry[0].document.turn_index,
-                entry[0].document.document_id,
-            ))
+            for channel_rank, candidate in enumerate(relation_candidates):
+                proposals.append(SelectionProposal(
+                    candidate=candidate,
+                    owner_intent_id=intent.intent_id,
+                    route="relation",
+                    channel_rank=channel_rank,
+                    signal_rank=_relation_signal_rank(candidate),
+                ))
 
         hits: list[ContextHistoryHit] = []
 
-        def admit(
-            candidate: _Candidate,
-            _owner_intent_id: str,
-        ) -> tuple[bool, bool]:
+        def preview(candidate: _Candidate) -> AdmissionPreview | None:
             hit = _build_history_hit(
                 candidate,
                 members=member_clusters[candidate.document.document_id],
@@ -203,19 +204,21 @@ class ContextHistoryRetriever:
                 policy=self.diversity_policy,
             )
             if fitted is None:
-                return False, False
-            previous_size = _projected_history_chars(hits)
-            fitted_size = _projected_history_chars(fitted)
-            hits[:] = fitted
-            return True, fitted_size < previous_size
+                return None
+            return AdmissionPreview(
+                state=fitted,
+                payload_chars=_projected_history_chars(fitted),
+            )
+
+        def commit(candidate_preview: AdmissionPreview) -> None:
+            hits[:] = candidate_preview.state
 
         select_diverse_candidates(
             search_plan,
-            by_intent=by_intent_clustered,
-            candidates=direct_representatives,
+            proposals=proposals,
             policy=self.diversity_policy,
-            admit=admit,
-            supplements_by_origin=dict(supplements_by_origin),
+            preview=preview,
+            commit=commit,
         )
         return ContextHistoryEvidenceSet(
             hits=hits,
@@ -315,6 +318,9 @@ class ContextHistoryRetriever:
                 intent_matched_entities={
                     intent.intent_id: set(direct_matched_entities)
                 },
+                intent_matched_topics={
+                    intent.intent_id: set(direct_matched_topics)
+                },
             ))
 
         scored.sort(
@@ -406,6 +412,15 @@ def _merged_representative(cluster: list[_Candidate]) -> _Candidate:
                 *(set(member.intent_matched_entities) for member in cluster)
             )
         },
+        intent_matched_topics={
+            intent_id: set().union(*(
+                member.intent_matched_topics.get(intent_id, set())
+                for member in cluster
+            ))
+            for intent_id in set().union(
+                *(set(member.intent_matched_topics) for member in cluster)
+            )
+        },
         relation_intent_ids=set().union(
             *(member.relation_intent_ids for member in cluster)
         ),
@@ -492,6 +507,48 @@ def _matched_topics(
         for topic in intent.topics
         if (clean := topic.strip()) and clean.casefold() in folded_text
     }
+
+
+def _direct_signal_rank(
+    candidate: _Candidate,
+    intent: ContextSearchIntent,
+) -> int:
+    """Return a categorical direct-match tier, never a cross-route score."""
+    matched_entities = candidate.intent_matched_entities.get(
+        intent.intent_id,
+        set(),
+    )
+    matched_topics = candidate.intent_matched_topics.get(
+        intent.intent_id,
+        set(),
+    )
+    if matched_topics or (
+        intent.focus == "relationship" and len(matched_entities) >= 2
+    ):
+        category = 0
+    elif matched_entities:
+        category = 1
+    else:
+        category = 2
+    source_penalty = candidate.document.source_type == "player_input"
+    return category * 2 + int(source_penalty)
+
+
+def _relation_signal_rank(candidate: _Candidate) -> int:
+    """Return a categorical structural-link tier for final selection."""
+    reasons = candidate.relation_match_reasons
+    if reasons.intersection({
+        "two_entity_match",
+        "subject_topic_match",
+        "premise_topic_match",
+        "current_state_topic_match",
+    }):
+        return 0
+    if reasons.intersection({"exact_entity_match", "alias_match"}):
+        return 2
+    if "location_match" in reasons:
+        return 4
+    return 6
 
 
 def _build_history_hit(

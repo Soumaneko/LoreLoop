@@ -300,7 +300,7 @@ def test_bridge_emits_every_evidence_seed_in_persisted_position_order():
     assert [link.evidence_position for link in result.links] == [0, 1, 2]
 
 
-def test_relation_hit_supplements_direct_quota_without_claiming_direct_match():
+def test_relation_hit_competes_with_direct_without_claiming_direct_match():
     relation_text = "那女人提醒他，姓周的看人不像是在看行情。"
     direct_text = "苏念薇决定继续调查山路。"
     with ConfirmedHistoryStore() as history_store:
@@ -351,7 +351,7 @@ def test_relation_hit_supplements_direct_quota_without_claiming_direct_match():
     assert "linked_continuity_ids" not in projected[1]
 
 
-def test_relation_only_hits_are_capped_and_hash_mismatch_is_skipped():
+def test_relation_only_hits_are_not_globally_capped_and_hash_mismatch_is_skipped():
     links = []
     with ConfirmedHistoryStore() as history_store:
         for turn in range(1, 6):
@@ -384,9 +384,48 @@ def test_relation_only_hits_are_capped_and_hash_mismatch_is_skipped():
         ))
         result = ContextHistoryRetriever(
             history_store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=10),
+        ).retrieve(
+            _explicit_entity_plan(),
+            current_turn_index=6,
+            continuity_links=links,
+        )
+
+    assert len(result.hits) == 5
+    assert all(not hit.matched_intent_ids for hit in result.hits)
+    assert result.relation_candidates_considered == 5
+    assert result.valid_relation_links == 5
+    assert result.relation_hits_added == 5
+    assert result.stale_relation_links == 1
+
+
+def test_relation_only_hits_are_capped_per_continuity_item():
+    links = []
+    with ConfirmedHistoryStore() as history_store:
+        for turn in range(1, 6):
+            text = f"那女人留下了第{turn}条同一事项的证据。"
+            history_store.upsert_turn(
+                scene_id=f"scene_{turn:03d}",
+                turn_index=turn,
+                user_input="",
+                scene_text=text,
+            )
+            links.append(ContinuityHistoryLink(
+                continuity_id="one-thread",
+                continuity_status="active",
+                operation="update",
+                evidence_id=f"turn_{turn}_p001",
+                evidence_hash=_hash(text),
+                triggering_intent_ids=["explicit_npc"],
+                match_reasons=["exact_entity_match"],
+                evidence_position=turn - 1,
+            ))
+
+        result = ContextHistoryRetriever(
+            history_store,
             diversity_policy=HistoryDiversityPolicy(
                 max_hits=10,
-                relation_hit_limit=3,
+                continuity_item_cap=3,
             ),
         ).retrieve(
             _explicit_entity_plan(),
@@ -394,12 +433,71 @@ def test_relation_only_hits_are_capped_and_hash_mismatch_is_skipped():
             continuity_links=links,
         )
 
-    assert len(result.hits) == 3
-    assert all(not hit.matched_intent_ids for hit in result.hits)
+    assert [hit.evidence_id for hit in result.hits] == [
+        "turn_1_p001",
+        "turn_2_p001",
+        "turn_3_p001",
+    ]
     assert result.relation_candidates_considered == 5
-    assert result.valid_relation_links == 5
     assert result.relation_hits_added == 3
-    assert result.stale_relation_links == 1
+
+
+def test_shared_relation_evidence_counts_against_every_linked_item_cap():
+    texts = {
+        "turn_1_p001": "共同证据。",
+        "turn_2_p001": "甲事项自己的第一条证据。",
+        "turn_3_p001": "甲事项自己的第二条证据。",
+        "turn_4_p001": "乙事项自己的第一条证据。",
+        "turn_5_p001": "乙事项自己的第二条证据。",
+    }
+    with ConfirmedHistoryStore() as history_store:
+        for turn, text in enumerate(texts.values(), start=1):
+            history_store.upsert_turn(
+                scene_id=f"scene_{turn:03d}",
+                turn_index=turn,
+                user_input="",
+                scene_text=text,
+            )
+
+        def link(item_id: str, evidence_id: str, position: int):
+            return ContinuityHistoryLink(
+                continuity_id=item_id,
+                continuity_status="active",
+                operation="update",
+                evidence_id=evidence_id,
+                evidence_hash=_hash(texts[evidence_id]),
+                triggering_intent_ids=["explicit_npc"],
+                match_reasons=["exact_entity_match"],
+                evidence_position=position,
+            )
+
+        result = ContextHistoryRetriever(
+            history_store,
+            diversity_policy=HistoryDiversityPolicy(
+                max_hits=10,
+                continuity_item_cap=2,
+            ),
+        ).retrieve(
+            _explicit_entity_plan(),
+            current_turn_index=6,
+            continuity_links=[
+                link("thread-a", "turn_1_p001", 0),
+                link("thread-b", "turn_1_p001", 0),
+                link("thread-a", "turn_2_p001", 1),
+                link("thread-a", "turn_3_p001", 2),
+                link("thread-b", "turn_4_p001", 1),
+                link("thread-b", "turn_5_p001", 2),
+            ],
+        )
+
+    assert [hit.evidence_id for hit in result.hits] == [
+        "turn_1_p001",
+        "turn_2_p001",
+        "turn_4_p001",
+    ]
+    assert result.hits[0].linked_continuity_ids == ["thread-a", "thread-b"]
+    assert result.relation_candidates_considered == 5
+    assert result.relation_hits_added == 3
 
 
 def test_context_facts_service_wires_forward_bridge_into_history_retrieval():

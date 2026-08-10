@@ -9,23 +9,22 @@ stores. It does not call an LLM or touch a real save.
 
 Accepted on 2026-08-10 with 18 cases:
 
-- must recall: `18/22`
-- weighted recall: `63/77`
+- must recall: `21/22`
+- weighted recall: `72/77`
 - forbidden evidence visible: `0`
 - invariant violations: `0`
 
-The accepted checkpoint deliberately preserves four known quality gaps so a
-selector change can demonstrate an improvement instead of silently redefining
-the expected output:
+The unified final selector closes three gaps recorded by the preceding
+checkpoint:
 
-- `relation_fourth_is_critical`: the fourth necessary relation-only fact is
-  blocked by the current global relation cap.
-- `short_critical_vs_long_background`: long recent background displaces the
-  short critical fact under a tight payload budget.
-- `late_state_delta_evidence`: the decisive late paragraph in a Continuity
-  update is not selected.
-- `direct_noise_vs_relation_exact`: irrelevant direct entity mentions crowd out
-  relation evidence that answers the question.
+- `relation_fourth_is_critical` now recalls all four independent matters.
+- `short_critical_vs_long_background` now retains the short critical fact.
+- `direct_noise_vs_relation_exact` now admits the relation evidence that
+  answers the question after one direct entity mention.
+
+One known must-recall gap remains: `late_state_delta_evidence`. It concerns
+evidence ordering inside one lifecycle node and is outside final-selector
+scope.
 
 The five newest cases cover the missing explicit-relation/current-context
 mirror, direct-noise versus relation-answer competition, zero relation

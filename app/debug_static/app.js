@@ -1232,7 +1232,7 @@ function renderContextFacts(g) {
       metric("命中归档事项", evidence.matched_archived_continuities || 0, "info"),
       metric("有效关系", evidence.valid_relation_links || 0, "info"),
       metric("关系候选", evidence.relation_candidates_considered || 0, "info"),
-      metric("关系补充", evidence.relation_hits_added || 0, evidence.relation_hits_added ? "ok" : ""),
+      metric("关系入选", evidence.relation_hits_added || 0, evidence.relation_hits_added ? "ok" : ""),
       metric("失效关系", evidence.stale_relation_links || 0, evidence.stale_relation_links ? "warn" : ""),
       metric("连续性事项", continuity.items?.length || 0, "info"),
       metric("索引回合", evidence.indexed_turns || 0, "info"),

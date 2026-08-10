@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, Protocol, TypeVar
+from typing import Any, Callable, Generic, Literal, Protocol, TypeVar
 
 from .schemas import ContextSearchIntent, ContextSearchPlan
 
 
 @dataclass(frozen=True)
 class HistoryDiversityPolicy:
-    """Deterministic quotas and payload bounds for history retrieval."""
+    """Deterministic selection and payload bounds for history retrieval."""
 
     max_hits: int = 10
     max_payload_chars: int = 12_000
@@ -18,7 +18,7 @@ class HistoryDiversityPolicy:
     turn_cap: int = 2
     max_evidence_text_chars: int = 2_400
     min_excerpt_chars: int = 160
-    relation_hit_limit: int = 3
+    continuity_item_cap: int = 3
 
     def __post_init__(self) -> None:
         positive = {
@@ -29,6 +29,7 @@ class HistoryDiversityPolicy:
             "turn_cap": self.turn_cap,
             "max_evidence_text_chars": self.max_evidence_text_chars,
             "min_excerpt_chars": self.min_excerpt_chars,
+            "continuity_item_cap": self.continuity_item_cap,
         }
         invalid = [name for name, value in positive.items() if value < 1]
         if invalid:
@@ -37,20 +38,40 @@ class HistoryDiversityPolicy:
             raise ValueError(
                 "min_excerpt_chars must not exceed max_evidence_text_chars"
             )
-        if self.relation_hit_limit < 0:
-            raise ValueError("relation_hit_limit must be non-negative")
 
 
 class DiversityCandidate(Protocol):
-    score: float
     matched_intent_ids: set[str]
-    intent_scores: dict[str, float]
+    relation_intent_ids: set[str]
     intent_matched_entities: dict[str, set[str]]
+    linked_continuity_ids: set[str]
     document: object
 
 
 CandidateT = TypeVar("CandidateT", bound=DiversityCandidate)
-AdmitCandidate = Callable[[CandidateT, str], tuple[bool, bool]]
+
+
+@dataclass(frozen=True)
+class SelectionProposal(Generic[CandidateT]):
+    """One route by which a candidate can own a final selection seat."""
+
+    candidate: CandidateT
+    owner_intent_id: str
+    route: Literal["direct", "relation"]
+    channel_rank: int
+    signal_rank: int
+
+
+@dataclass(frozen=True)
+class AdmissionPreview:
+    """Exact payload state produced if a candidate is selected."""
+
+    state: Any
+    payload_chars: int
+
+
+PreviewCandidate = Callable[[CandidateT], AdmissionPreview | None]
+CommitPreview = Callable[[AdmissionPreview], None]
 
 
 _FOCUS_PRIORITY = {
@@ -67,27 +88,28 @@ _ORIGIN_PRIORITY = {
     "relationship": 3,
 }
 
+_ROUTE_PRIORITY = {
+    "direct": 0,
+    "relation": 1,
+}
+
 
 def select_diverse_candidates(
     search_plan: ContextSearchPlan,
     *,
-    by_intent: dict[str, list[CandidateT]],
-    candidates: dict[str, CandidateT],
+    proposals: list[SelectionProposal[CandidateT]],
     policy: HistoryDiversityPolicy,
-    admit: AdmitCandidate[CandidateT],
-    supplements_by_origin: dict[
-        str,
-        list[tuple[CandidateT, str]],
-    ] | None = None,
+    preview: PreviewCandidate[CandidateT],
+    commit: CommitPreview,
 ) -> list[CandidateT]:
-    """Select candidates with quota coverage first, then global score fill.
+    """Select one shared pool without comparing route-specific raw scores.
 
-    ``admit`` owns payload materialization and returns ``(accepted, shrank)``.
-    Counters are only changed after acceptance, so quota accounting always
-    matches the final payload; a later shrink permits one deterministic retry.
-    Entity caps apply to the entity intent chosen as the selection owner, not to
-    every entity mentioned by a document.
+    Every iteration previews the exact globally de-duplicated payload for each
+    eligible document. Consequently serialized marginal cost is comparable
+    across routes, and a candidate rejected under an earlier payload state is
+    naturally retried after any later selection shrinks that payload.
     """
+
     intents = {intent.intent_id: intent for intent in search_plan.intents}
     intent_order = {
         intent.intent_id: index
@@ -96,10 +118,11 @@ def select_diverse_candidates(
     selected: list[CandidateT] = []
     selected_ids: set[str] = set()
     intent_coverage: dict[str, int] = defaultdict(int)
+    route_coverage: dict[tuple[str, str], int] = defaultdict(int)
     entity_owner_counts: dict[str, int] = defaultdict(int)
+    continuity_item_counts: dict[str, int] = defaultdict(int)
     turn_counts: dict[int, int] = defaultdict(int)
-    supplement_count = 0
-    supplements_by_origin = supplements_by_origin or {}
+    current_payload_chars = 2  # Compact projection of an empty evidence set.
 
     def document_id(candidate: CandidateT) -> str:
         return str(getattr(candidate.document, "document_id"))
@@ -107,7 +130,21 @@ def select_diverse_candidates(
     def turn_index(candidate: CandidateT) -> int:
         return int(getattr(candidate.document, "turn_index"))
 
-    def owner_entity(intent: ContextSearchIntent, candidate: CandidateT) -> str | None:
+    def owner_supported(
+        intent: ContextSearchIntent,
+        candidate: CandidateT,
+        route: str,
+    ) -> bool:
+        if route == "relation" or intent.focus != "relationship":
+            return True
+        return len(
+            candidate.intent_matched_entities.get(intent.intent_id, set())
+        ) >= 2
+
+    def owner_entity(
+        intent: ContextSearchIntent,
+        candidate: CandidateT,
+    ) -> str | None:
         if intent.focus != "entity" or not intent.entities:
             return None
         matched = {
@@ -122,210 +159,121 @@ def select_diverse_candidates(
                 return entity.name.casefold()
         return intent.entities[0].name.casefold()
 
-    def owner_supported(intent: ContextSearchIntent, candidate: CandidateT) -> bool:
-        if intent.focus != "relationship":
-            return True
-        return len(candidate.intent_matched_entities.get(intent.intent_id, set())) >= 2
-
-    def owner_available(intent: ContextSearchIntent, candidate: CandidateT) -> bool:
-        if not owner_supported(intent, candidate):
-            return False
-        entity = owner_entity(intent, candidate)
-        return entity is None or entity_owner_counts[entity] < policy.entity_cap
-
-    def covered_intent_ids(candidate: CandidateT) -> set[str]:
-        return {
+    def selectable_intent_ids(candidate: CandidateT) -> set[str]:
+        direct_ids = {
             intent_id
             for intent_id in candidate.matched_intent_ids
             if (
                 intent_id in intents
-                and owner_supported(intents[intent_id], candidate)
+                and owner_supported(intents[intent_id], candidate, "direct")
             )
         }
+        return direct_ids.union(
+            intent_id
+            for intent_id in candidate.relation_intent_ids
+            if intent_id in intents
+        )
 
-    def accept(
-        candidate: CandidateT,
-        owner: ContextSearchIntent,
-    ) -> tuple[bool, bool]:
+    def eligible(proposal: SelectionProposal[CandidateT]) -> bool:
+        candidate = proposal.candidate
         candidate_id = document_id(candidate)
-        turn = turn_index(candidate)
+        owner = intents.get(proposal.owner_intent_id)
         if (
-            candidate_id in selected_ids
-            or len(selected) >= policy.max_hits
-            or turn_counts[turn] >= policy.turn_cap
-            or not owner_available(owner, candidate)
+            owner is None
+            or candidate_id in selected_ids
+            or turn_counts[turn_index(candidate)] >= policy.turn_cap
+            or not owner_supported(owner, candidate, proposal.route)
         ):
-            return False, False
-        admitted, payload_shrank = admit(candidate, owner.intent_id)
-        if not admitted:
-            return False, False
-        selected.append(candidate)
-        selected_ids.add(candidate_id)
-        turn_counts[turn] += 1
-        entity = owner_entity(owner, candidate)
-        if entity is not None:
-            entity_owner_counts[entity] += 1
-        for intent_id in covered_intent_ids(candidate):
-            intent_coverage[intent_id] += 1
-        return True, payload_shrank
-
-    def tier_owner_ids(candidate: CandidateT, origin_priority: int) -> list[str]:
-        return sorted(
-            (
-                intent_id
-                for intent_id in covered_intent_ids(candidate)
-                if (
-                    _ORIGIN_PRIORITY[intents[intent_id].origin]
-                    == origin_priority
-                )
-            ),
-            key=lambda intent_id: (
-                -candidate.intent_scores.get(intent_id, 0.0),
-                _FOCUS_PRIORITY[intents[intent_id].focus],
-                intent_order[intent_id],
-                intent_id,
-            ),
+            return False
+        if proposal.route == "direct":
+            entity = owner_entity(owner, candidate)
+            return (
+                entity is None
+                or entity_owner_counts[entity] < policy.entity_cap
+            )
+        return bool(candidate.linked_continuity_ids) and all(
+            continuity_item_counts[item_id] < policy.continuity_item_cap
+            for item_id in candidate.linked_continuity_ids
         )
 
-    def fill_origin_tier(origin_priority: int) -> None:
-        remaining = sorted(
-            candidates.values(),
-            key=lambda candidate: (
-                -max(
-                    (
-                        candidate.intent_scores.get(intent_id, 0.0)
-                        for intent_id in tier_owner_ids(
-                            candidate,
-                            origin_priority,
-                        )
-                    ),
-                    default=0.0,
-                ),
-                -turn_index(candidate),
-                document_id(candidate),
-            ),
-        )
-        retry_after_shrink = True
-        while retry_after_shrink and len(selected) < policy.max_hits:
-            retry_after_shrink = False
-            prior_failure = False
-            for candidate in remaining:
-                if len(selected) >= policy.max_hits:
-                    break
-                if (
-                    document_id(candidate) in selected_ids
-                    or turn_counts[turn_index(candidate)] >= policy.turn_cap
-                ):
-                    continue
-                owner_ids = tier_owner_ids(candidate, origin_priority)
-                if not owner_ids:
-                    continue
-                accepted = False
-                for owner_id in owner_ids:
-                    accepted, payload_shrank = accept(
-                        candidate,
-                        intents[owner_id],
-                    )
-                    if accepted:
-                        if payload_shrank and prior_failure:
-                            retry_after_shrink = True
-                        break
-                if not accepted:
-                    prior_failure = True
-
-    def accept_supplements(origin: str) -> None:
-        nonlocal supplement_count
-        for candidate, owner_id in supplements_by_origin.get(origin, []):
-            if (
-                supplement_count >= policy.relation_hit_limit
-                or len(selected) >= policy.max_hits
-            ):
-                return
+    while len(selected) < policy.max_hits:
+        previews: dict[str, AdmissionPreview | None] = {}
+        choices: list[
+            tuple[tuple, SelectionProposal[CandidateT], AdmissionPreview]
+        ] = []
+        for proposal in proposals:
+            if not eligible(proposal):
+                continue
+            candidate = proposal.candidate
             candidate_id = document_id(candidate)
-            turn = turn_index(candidate)
-            owner = intents.get(owner_id)
+            if candidate_id not in previews:
+                previews[candidate_id] = preview(candidate)
+            candidate_preview = previews[candidate_id]
+            if candidate_preview is None:
+                continue
+
+            owner = intents[proposal.owner_intent_id]
+            coverage = intent_coverage[owner.intent_id]
+            covered_ids = selectable_intent_ids(candidate)
+            new_coverage = sum(
+                intent_coverage[intent_id] < policy.intent_target
+                for intent_id in covered_ids
+            )
+            route_is_new = (
+                route_coverage[(owner.intent_id, proposal.route)] == 0
+            )
+            marginal_chars = (
+                candidate_preview.payload_chars - current_payload_chars
+            )
+            marginal_cost_band = marginal_chars // 128
+            key = (
+                _ORIGIN_PRIORITY[owner.origin],
+                coverage >= policy.intent_target,
+                coverage,
+                _FOCUS_PRIORITY[owner.focus],
+                -new_coverage,
+                proposal.signal_rank,
+                not route_is_new,
+                marginal_cost_band,
+                proposal.channel_rank,
+                intent_order[owner.intent_id],
+                -turn_index(candidate),
+                marginal_chars,
+                _ROUTE_PRIORITY[proposal.route],
+                candidate_id,
+            )
+            choices.append((key, proposal, candidate_preview))
+
+        if not choices:
+            break
+
+        _, chosen, chosen_preview = min(choices, key=lambda choice: choice[0])
+        candidate = chosen.candidate
+        owner = intents[chosen.owner_intent_id]
+        commit(chosen_preview)
+        current_payload_chars = chosen_preview.payload_chars
+        selected.append(candidate)
+        selected_ids.add(document_id(candidate))
+        turn_counts[turn_index(candidate)] += 1
+
+        for intent_id in selectable_intent_ids(candidate):
+            intent_coverage[intent_id] += 1
+        for intent_id in candidate.matched_intent_ids:
             if (
-                owner is None
-                or owner.origin != origin
-                or candidate_id in selected_ids
-                or turn_counts[turn] >= policy.turn_cap
+                intent_id in intents
+                and owner_supported(intents[intent_id], candidate, "direct")
             ):
-                continue
-            admitted, _payload_shrank = admit(candidate, owner_id)
-            if not admitted:
-                continue
-            selected.append(candidate)
-            selected_ids.add(candidate_id)
-            turn_counts[turn] += 1
-            supplement_count += 1
+                route_coverage[(intent_id, "direct")] += 1
+        for intent_id in candidate.relation_intent_ids:
+            if intent_id in intents:
+                route_coverage[(intent_id, "relation")] += 1
 
-    origin_priorities = sorted({
-        _ORIGIN_PRIORITY[intent.origin]
-        for intent in search_plan.intents
-    })
-    for origin_priority in origin_priorities:
-        origin = next(
-            intent.origin
-            for intent in search_plan.intents
-            if _ORIGIN_PRIORITY[intent.origin] == origin_priority
-        )
-        focus_priorities = sorted({
-            _FOCUS_PRIORITY[intent.focus]
-            for intent in search_plan.intents
-            if _ORIGIN_PRIORITY[intent.origin] == origin_priority
-        })
-        for focus_priority in focus_priorities:
-            priority_intents = [
-                intent
-                for intent in search_plan.intents
-                if (
-                    _ORIGIN_PRIORITY[intent.origin] == origin_priority
-                    and _FOCUS_PRIORITY[intent.focus] == focus_priority
-                )
-            ]
-            for target in range(1, policy.intent_target + 1):
-                for intent in priority_intents:
-                    if len(selected) >= policy.max_hits:
-                        return selected
-                    if intent_coverage[intent.intent_id] >= target:
-                        continue
-                    eligible = [
-                        candidate
-                        for candidate in by_intent.get(intent.intent_id, [])
-                        if (
-                            document_id(candidate) not in selected_ids
-                            and turn_counts[turn_index(candidate)] < policy.turn_cap
-                            and owner_available(intent, candidate)
-                        )
-                    ]
-                    if not eligible:
-                        continue
-
-                    def phase_one_key(candidate: CandidateT):
-                        new_coverage = sum(
-                            1
-                            for intent_id in covered_intent_ids(candidate)
-                            if (
-                                intent_id in intents
-                                and intent_coverage[intent_id]
-                                < policy.intent_target
-                            )
-                        )
-                        return (
-                            -candidate.intent_scores.get(
-                                intent.intent_id,
-                                candidate.score,
-                            ),
-                            -new_coverage,
-                            -turn_index(candidate),
-                            document_id(candidate),
-                        )
-
-                    for candidate in sorted(eligible, key=phase_one_key):
-                        accepted, _ = accept(candidate, intent)
-                        if accepted:
-                            break
-        accept_supplements(origin)
-        fill_origin_tier(origin_priority)
+        if chosen.route == "direct":
+            entity = owner_entity(owner, candidate)
+            if entity is not None:
+                entity_owner_counts[entity] += 1
+        else:
+            for item_id in candidate.linked_continuity_ids:
+                continuity_item_counts[item_id] += 1
 
     return selected

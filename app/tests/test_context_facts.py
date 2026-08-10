@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,6 +30,11 @@ from app.domain.context_facts import (
     build_context_search_plan,
 )
 from app.domain.context_facts.schemas import ContextFactSet
+from app.domain.context_facts.diversity import (
+    AdmissionPreview,
+    SelectionProposal,
+    select_diverse_candidates,
+)
 from app.domain.context_facts.views import (
     project_context_facts,
     project_context_history,
@@ -98,6 +104,41 @@ def _upsert_scenes(
             user_input=scene.user_input,
             scene_text=scene.scene_text,
         )
+
+
+def test_unified_history_selector_breaks_exact_ties_by_evidence_id():
+    plan = ContextSearchPlan(intents=[ContextSearchIntent(
+        intent_id="i1",
+        focus="entity",
+        origin="explicit_input",
+        entities=[ContextSearchEntity(name="艾琳")],
+    )])
+
+    def candidate(document_id: str):
+        return SimpleNamespace(
+            document=SimpleNamespace(document_id=document_id, turn_index=1),
+            matched_intent_ids={"i1"},
+            relation_intent_ids=set(),
+            intent_matched_entities={"i1": {"艾琳"}},
+            linked_continuity_ids=set(),
+        )
+
+    later_id = candidate("turn_1_p002")
+    earlier_id = candidate("turn_1_p001")
+    selected = select_diverse_candidates(
+        plan,
+        proposals=[
+            SelectionProposal(later_id, "i1", "direct", 0, 2),
+            SelectionProposal(earlier_id, "i1", "direct", 0, 2),
+        ],
+        policy=HistoryDiversityPolicy(max_hits=1),
+        preview=lambda _candidate: AdmissionPreview(state=[], payload_chars=100),
+        commit=lambda _preview: None,
+    )
+
+    assert [item.document.document_id for item in selected] == [
+        "turn_1_p001"
+    ]
 
 
 def test_context_history_projection_omits_empty_and_internal_fields():
@@ -751,7 +792,7 @@ def test_history_retriever_caps_entity_owned_hits_independently_of_fact_limit():
     assert [hit.turn_index for hit in result.hits] == [15, 14, 13]
 
 
-def test_history_diversity_uses_quota_then_global_fill():
+def test_history_diversity_balances_intent_coverage_then_fills():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
             intent_id="entity_ailin",
@@ -853,13 +894,15 @@ def test_explicit_entity_and_event_outrank_higher_scored_context_intent():
             diversity_policy=HistoryDiversityPolicy(max_hits=2),
         ).retrieve(plan, current_turn_index=8)
 
-    assert [hit.matched_intent_ids for hit in result.hits] == [
-        ["explicit_npc"],
-        ["explicit_event"],
-    ]
+    assert {
+        tuple(hit.matched_intent_ids) for hit in result.hits
+    } == {
+        ("explicit_npc",),
+        ("explicit_event",),
+    }
 
 
-def test_explicit_origin_fill_finishes_before_context_quota():
+def test_explicit_origin_candidates_finish_before_context_candidates():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
             intent_id="context_npc",
@@ -1864,16 +1907,19 @@ def test_history_payload_budget_retries_after_global_dedup_frees_space():
         ContextSearchIntent(
             intent_id="entity_alpha",
             focus="entity",
+            origin="explicit_input",
             entities=[ContextSearchEntity(name="阿尔法")],
         ),
         ContextSearchIntent(
             intent_id="topic_clue",
             focus="topic",
+            origin="matched_anchor",
             topics=["线索丙"],
         ),
         ContextSearchIntent(
             intent_id="location_beta",
             focus="location",
+            origin="matched_anchor",
             entities=[ContextSearchEntity(name="贝塔")],
         ),
     ])

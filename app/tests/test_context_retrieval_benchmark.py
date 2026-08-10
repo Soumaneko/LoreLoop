@@ -47,17 +47,17 @@ def test_context_retrieval_benchmark_captures_current_quality_signals(
     assert cases["dual_route_document_merge"]["route_counts"]["dual"] == 1
 
     relation_cap = cases["relation_fourth_is_critical"]
-    assert relation_cap["must_recalled"] == 3
+    assert relation_cap["must_recalled"] == 4
     assert relation_cap["must_total"] == 4
     assert relation_cap["relation_candidates_considered"] == 4
-    assert relation_cap["relation_hits_added"] == 3
+    assert relation_cap["relation_hits_added"] == 4
 
     flood = cases["single_continuity_item_flood"]
     assert flood["duplicate_visible_count"] == 2
     assert flood["continuity_contributions"] == {"tower-light": 3}
 
     budget = cases["short_critical_vs_long_background"]
-    assert budget["must_recalled"] == 0
+    assert budget["must_recalled"] == 1
     assert budget["payload_chars"] <= 520
 
     late_delta = cases["late_state_delta_evidence"]
@@ -86,10 +86,10 @@ def test_context_retrieval_benchmark_captures_current_quality_signals(
     }
 
     relation_answer = cases["direct_noise_vs_relation_exact"]
-    assert relation_answer["must_recalled"] == 0
+    assert relation_answer["must_recalled"] == 1
     assert relation_answer["must_total"] == 1
     assert relation_answer["relation_candidates_considered"] == 1
-    assert relation_answer["relation_hits_added"] == 0
+    assert relation_answer["relation_hits_added"] == 1
 
     zero_relation = cases["direct_exact_vs_relation_noise_and_zero"]
     assert zero_relation["must_recalled"] == 1
