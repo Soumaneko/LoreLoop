@@ -1646,12 +1646,9 @@ function npcProfileCard(profile) {
       ["性格", chips(profile.personality_traits)],
       ["能力", chips(profile.known_abilities)],
       ["派系", esc(text(profile.faction))],
-      ["所在地", esc(text(profile.current_location))],
+      ["最近已知地点", esc(text(profile.last_known_location))],
       ["态度", esc(text(profile.attitude_to_player))],
       ["意图", esc(text(profile.current_intent))],
-      ["缺席回合", esc(text(profile.absent_turns))],
-      ["描述", esc(text(profile.description))],
-      ["信心", esc(fmt(profile.confidence))],
       ["来源场景", chips(profile.source_scene_ids)],
       ["来源导演NPC", esc(text(profile.source_director_npc_id))],
       ["创建回合", esc(text(profile.created_turn))],
@@ -1664,7 +1661,6 @@ function npcProfileCard(profile) {
         ["秘密", esc(text(profile.hidden_secret))],
         ["冲突风格", esc(text(profile.conflict_style))],
         ["社交风格", esc(text(profile.social_style))],
-        ["出场潜力", chips(profile.encounter_potentials)],
         ["导演备注", esc(text(profile.director_notes))],
       ])}
     `) : ""}
@@ -1708,7 +1704,6 @@ function directorNpcCard(npc) {
       ["秘密", esc(text(npc.hidden_secret))],
       ["冲突风格", esc(text(npc.conflict_style))],
       ["社交风格", esc(text(npc.social_style))],
-      ["出场潜力", chips(npc.encounter_potentials)],
     ])}
   </div>`;
 }
@@ -1816,11 +1811,6 @@ function renderContinuityProjection(projection) {
       ["理由", esc(text(operation.reason))],
     ])}
   </div>`).join("") || `<div class="empty">本轮无 Continuity 变化</div>`;
-}
-
-function fmt(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "0";
-  return Number(value).toFixed(4);
 }
 
 async function refreshState({ preserveStatus = false } = {}) {

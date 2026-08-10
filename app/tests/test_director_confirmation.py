@@ -89,7 +89,6 @@ def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
             "known_abilities": ["急救"],
             "appearance": "常穿深色风衣。",
             "name": "林澈",
-            "encounter_potentials": ["诊所求助", "街区冲突", "旧案线索"],
         },
     )
 
@@ -161,7 +160,6 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
             "known_abilities": ["辨潮", "操舟"],
             "appearance": "皮肤被海风晒得黝黑。",
             "name": "周汐",
-            "encounter_potentials": ["雇船", "避风", "港口纠纷"],
         },
     )
 
@@ -275,8 +273,7 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
                                 "personality_traits": ["谨慎", "坚韧"],
                                 "known_abilities": ["采药", "辨识药草"],
                                 "faction": None,
-                                "description": None,
-                                "current_location": "药山",
+                                "last_known_location": "药山",
                                 "attitude_to_player": None,
                                 "current_intent": None,
                             },

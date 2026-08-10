@@ -56,7 +56,6 @@ def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
                 "known_abilities": ["商事谈判", "押运调度"],
                 "appearance": "常穿厚重皮袍。",
                 "name": "柴行简",
-                "encounter_potentials": ["商路冲突", "会面谈判", "押运同行"],
             },
         )
         run_confirmation_director_agent(
@@ -316,7 +315,6 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
             "hidden_secret": "私下追查一批失踪货物。",
             "conflict_style": "先谈条件，再切断补给。",
             "social_style": "言简意赅，重视信用。",
-            "encounter_potentials": ["货路求援", "账目争议", "失货调查"],
         },
         event_selection_output=make_event_selection_output(),
     )
@@ -385,7 +383,6 @@ def test_confirmation_agent_replaces_unknown_setting_reference(tmp_path):
             "hidden_secret": "私下追查一批失踪货物。",
             "conflict_style": "先谈条件，再切断补给。",
             "social_style": "言简意赅，重视信用。",
-            "encounter_potentials": ["货路求援", "账目争议", "失货调查"],
         },
     )
 

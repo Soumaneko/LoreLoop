@@ -678,7 +678,6 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         hidden_secret="曾目击一宗未结案件。",
         conflict_style="先协商后行动。",
         social_style="克制而友善。",
-        encounter_potentials=["诊所求助", "街区冲突", "旧案线索"],
         created_turn=1,
     )
     with services.stores.director_npc() as store:

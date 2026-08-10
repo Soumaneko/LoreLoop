@@ -1,12 +1,7 @@
-import json
-
-import pytest
-
 from app.domain.npc_profile.schemas import (
     DISCLOSED_FIELD_SETS,
     NPCProfile,
 )
-from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version
 
 
 def _profile():
@@ -24,7 +19,6 @@ def _profile():
         core_motivation="保护社区居民。",
         hidden_secret="曾目击一宗未结案件。",
         conflict_style="先协商后行动。",
-        encounter_potentials=["诊所求助"],
         director_notes="导演笔记。",
     )
 
@@ -64,7 +58,6 @@ def test_disclosure_view_intimate_reveals_everything():
 
     assert data["core_motivation"] == "保护社区居民。"
     assert data["hidden_secret"] == "曾目击一宗未结案件。"
-    assert data["encounter_potentials"] == ["诊所求助"]
 
 
 def test_disclosure_view_uses_profile_level_when_not_specified():
@@ -94,61 +87,3 @@ def test_disclosed_field_sets_cover_all_levels():
     assert DISCLOSED_FIELD_SETS["face_to_face"] is not None
     assert DISCLOSED_FIELD_SETS["intimate"] is None
     assert DISCLOSED_FIELD_SETS["remote"] < DISCLOSED_FIELD_SETS["face_to_face"]
-
-
-def test_npc_profile_store_migrates_v3_to_v4(tmp_path):
-    db_path = str(tmp_path / "npc_profiles.db")
-    conn = connect_sqlite(db_path)
-    conn.execute(
-        "CREATE TABLE npc_profiles ("
-        "id TEXT PRIMARY KEY, name TEXT NOT NULL, aliases_json TEXT NOT NULL, "
-        "profile_json TEXT NOT NULL, source_scene_ids_json TEXT NOT NULL, "
-        "confidence REAL NOT NULL, updated_at TEXT NOT NULL, "
-        "active INTEGER NOT NULL, name_hit_count INTEGER NOT NULL, "
-        "alias_hit_counts_json TEXT NOT NULL)"
-    )
-    profile = _profile().model_copy(
-        update={"npc_id": "legacy", "disclosure_level": "remote"}
-    )
-    legacy_json = profile.model_dump(mode="json")
-    legacy_json.pop("disclosure_level", None)
-    conn.execute(
-        "INSERT INTO npc_profiles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            "legacy",
-            "林澈",
-            "[]",
-            json.dumps(legacy_json, ensure_ascii=False),
-            "[]",
-            0.5,
-            "",
-            1,
-            0,
-            "{}",
-        ),
-    )
-    conn.execute(
-        "CREATE TABLE schema_versions ("
-        "component TEXT PRIMARY KEY, version INTEGER NOT NULL, "
-        "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
-    )
-    conn.execute(
-        "INSERT INTO schema_versions (component, version) VALUES "
-        "('npc_profile', 3)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_npc_profiles_name "
-        "ON npc_profiles(active, name)"
-    )
-    conn.commit()
-    conn.close()
-
-    from app.domain.npc_profile.store import NPCProfileStore
-
-    store = NPCProfileStore(db_path)
-    try:
-        loaded = store.get_by_id("legacy")
-        assert loaded is not None
-        assert loaded.disclosure_level == "remote"
-    finally:
-        store.close()

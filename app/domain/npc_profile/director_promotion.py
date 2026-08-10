@@ -23,12 +23,10 @@ def npc_profile_from_director_draft(
         hidden_secret=draft.hidden_secret,
         conflict_style=draft.conflict_style,
         social_style=draft.social_style,
-        encounter_potentials=list(draft.encounter_potentials),
         source_director_npc_id=draft.draft_id,
         created_turn=draft.created_turn,
         introduced_turn=draft.introduced_turn,
         disclosure_level=disclosure_level or "remote",
-        confidence=0.7,
         name_hit_count=0,
     )
 
@@ -59,7 +57,6 @@ def merge_director_draft_into_npc_profile(
     merged.hidden_secret = draft.hidden_secret
     merged.conflict_style = draft.conflict_style
     merged.social_style = draft.social_style
-    merged.encounter_potentials = list(draft.encounter_potentials)
     merged.source_director_npc_id = merged.source_director_npc_id or draft.draft_id
     merged.created_turn = merged.created_turn or draft.created_turn
     merged.introduced_turn = draft.introduced_turn
@@ -68,6 +65,5 @@ def merge_director_draft_into_npc_profile(
         granted = NPC_DISCLOSURE_ORDER.get(disclosure_level, 0)
         if granted > current:
             merged.disclosure_level = disclosure_level
-    merged.confidence = max(merged.confidence, 0.7)
     merged.name_hit_count = max(merged.name_hit_count, 0)
     return merged

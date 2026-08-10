@@ -9,7 +9,6 @@ from app.domain.npc_profile.schemas import (
 from app.runtime.sqlite import (
     connect_sqlite,
     ensure_exact_schema_version,
-    transaction,
 )
 
 
@@ -28,7 +27,6 @@ class NPCProfileStore:
                 aliases_json TEXT NOT NULL DEFAULT '[]',
                 profile_json TEXT NOT NULL,
                 source_scene_ids_json TEXT NOT NULL DEFAULT '[]',
-                confidence REAL NOT NULL DEFAULT 0.5,
                 updated_at TEXT NOT NULL DEFAULT '',
                 active INTEGER NOT NULL DEFAULT 1,
                 name_hit_count INTEGER NOT NULL DEFAULT 0,
@@ -42,7 +40,6 @@ class NPCProfileStore:
             "aliases_json",
             "profile_json",
             "source_scene_ids_json",
-            "confidence",
             "updated_at",
             "active",
             "name_hit_count",
@@ -64,43 +61,13 @@ class NPCProfileStore:
             ON npc_profiles(active, name)
             """
         )
-        self._migrate_v3_to_v4()
-        ensure_exact_schema_version(self._db, "npc_profile", 4)
+        ensure_exact_schema_version(self._db, "npc_profile", 5)
         self._db.commit()
-
-    def _migrate_v3_to_v4(self) -> None:
-        """Soft one-time migration: introduce the persistent disclosure level.
-
-        ``disclosure_level`` lives inside ``profile_json`` so no column changes;
-        older rows pick up the ``remote`` default via pydantic. Only the recorded
-        schema version needs to advance so existing saves open cleanly.
-        """
-        row = self._db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-            ("schema_versions",),
-        ).fetchone()
-        if row is None:
-            return
-        current = self._db.execute(
-            "SELECT version FROM schema_versions WHERE component = ?",
-            ("npc_profile",),
-        ).fetchone()
-        if current is None or int(current["version"]) != 3:
-            return
-        with transaction(self._db):
-            self._db.execute(
-                """
-                UPDATE schema_versions
-                SET version = 4, updated_at = CURRENT_TIMESTAMP
-                WHERE component = 'npc_profile'
-                """
-            )
 
     def _row_to_profile(self, row: sqlite3.Row) -> NPCProfile:
         profile = NPCProfile.model_validate(json.loads(row["profile_json"]))
         profile.npc_id = row["id"]
         profile.source_scene_ids = json.loads(row["source_scene_ids_json"])
-        profile.confidence = float(row["confidence"])
         profile.updated_at = row["updated_at"]
         profile.active = bool(row["active"])
         profile.name_hit_count = int(row["name_hit_count"])
@@ -117,14 +84,13 @@ class NPCProfileStore:
             """
             INSERT INTO npc_profiles (
                 id, name, aliases_json, profile_json, source_scene_ids_json,
-                confidence, updated_at, active, name_hit_count, alias_hit_counts_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                updated_at, active, name_hit_count, alias_hit_counts_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 aliases_json = excluded.aliases_json,
                 profile_json = excluded.profile_json,
                 source_scene_ids_json = excluded.source_scene_ids_json,
-                confidence = excluded.confidence,
                 updated_at = excluded.updated_at,
                 active = excluded.active,
                 name_hit_count = excluded.name_hit_count,
@@ -136,7 +102,6 @@ class NPCProfileStore:
                 json.dumps(profile.aliases, ensure_ascii=False),
                 profile.model_dump_json(),
                 json.dumps(profile.source_scene_ids, ensure_ascii=False),
-                profile.confidence,
                 now,
                 int(profile.active),
                 profile.name_hit_count,

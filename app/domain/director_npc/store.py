@@ -44,7 +44,7 @@ class DirectorNPCStore:
             raise RuntimeError(
                 "director_npcs.db does not match the current Director Agent contract"
             )
-        ensure_exact_schema_version(self._conn, "director_npc", 3)
+        ensure_exact_schema_version(self._conn, "director_npc", 4)
         self._conn.commit()
 
     def save(self, draft: DirectorNPCDraft) -> str:

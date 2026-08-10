@@ -68,7 +68,6 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
             "known_abilities": ["盘货", "相人"],
             "appearance": "左臂有一道旧疤。",
             "name": "沈二爷",
-            "encounter_potentials": ["码头冲突", "账本线索", "旧案求助"],
         },
     )
 
@@ -206,7 +205,6 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
             "known_abilities": ["潜水", "辨认船货"],
             "appearance": "总穿着防水短衣。",
             "name": "闻潮",
-            "encounter_potentials": ["沉船调查", "货单争议", "码头冲突"],
         },
     )
 
@@ -415,7 +413,6 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
             "known_abilities": ["盘货", "相人"],
             "appearance": "左臂有一道旧疤。",
             "name": "沈二爷",
-            "encounter_potentials": ["码头冲突", "账本线索", "旧案求助"],
         },
     )
 
@@ -505,7 +502,6 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
             "hidden_secret": "私下追查一批失踪货物。",
             "conflict_style": "先谈条件，再切断补给。",
             "social_style": "言简意赅，重视信用。",
-            "encounter_potentials": ["货路求援", "账目争议", "失货调查"],
         },
     )
 

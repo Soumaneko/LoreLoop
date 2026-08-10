@@ -35,7 +35,6 @@ def _draft() -> DirectorNPCDraft:
         hidden_secret="曾目击一宗未结案件。",
         conflict_style="先协商后行动。",
         social_style="克制而友善。",
-        encounter_potentials=["诊所求助", "街区冲突", "旧案线索"],
         source_setting_ids=[],
         created_turn=3,
     )
@@ -65,7 +64,6 @@ def test_creator_uses_general_context_without_setting_prerequisite():
             "known_abilities": ["急救"],
             "appearance": "常穿深色风衣。",
             "name": "林澈",
-            "encounter_potentials": ["诊所求助", "街区冲突", "旧案线索"],
         }
     )
 
@@ -158,7 +156,6 @@ def test_creator_includes_recent_creations_in_prompt():
             "known_abilities": ["盘货"],
             "appearance": "左臂旧疤。",
             "name": "沈二爷",
-            "encounter_potentials": ["码头冲突", "账本线索", "旧案求助"],
         }
     )
     recent_creations = [
@@ -197,7 +194,6 @@ def test_creator_brief_hides_social_dimensions_from_prompt():
             "known_abilities": ["盘货"],
             "appearance": "左臂旧疤。",
             "name": "沈二爷",
-            "encounter_potentials": ["码头冲突", "账本线索", "旧案求助"],
         }
     )
 

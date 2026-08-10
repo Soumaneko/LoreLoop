@@ -94,7 +94,7 @@ class NPCProfileUpdater:
                                 "public_summary": None,
                                 "appearance": None,
                                 "faction": None,
-                                "current_location": None,
+                                "last_known_location": None,
                             },
                         ],
                         ensure_ascii=False,
@@ -134,10 +134,8 @@ def apply_existing_npc_update(
     target: NPCProfile,
     patch: ExistingNPCProfilePatch,
 ) -> None:
-    if patch.public_summary is not None:
-        target.public_summary = patch.public_summary
-    if patch.current_location is not None:
-        target.current_location = patch.current_location
+    if patch.last_known_location is not None:
+        target.last_known_location = patch.last_known_location
     if patch.attitude_to_player is not None:
         target.attitude_to_player = patch.attitude_to_player
     if patch.current_intent is not None:
@@ -216,7 +214,7 @@ def _existing_option_for_prompt(index: int, profile: NPCProfile) -> dict:
         "public_summary": profile.public_summary,
         "appearance": profile.appearance,
         "faction": profile.faction,
-        "current_location": profile.current_location,
+        "last_known_location": profile.last_known_location,
     }
 
 
@@ -294,7 +292,6 @@ def _merge_results(
                 profile_from_update(
                     cast(NPCProfileUpdateInput, result.new_profile),
                     source_scene_ids=[scene_id],
-                    confidence=0.5,
                     updated_at=now,
                 )
             )
@@ -315,7 +312,6 @@ def _merge_results(
         apply_existing_npc_update(merged, result.profile_patch)
         if scene_id not in merged.source_scene_ids:
             merged.source_scene_ids.append(scene_id)
-        merged.confidence = min(1.0, merged.confidence + 0.05)
         merged.updated_at = now
         updated_existing[target.npc_id] = merged
 

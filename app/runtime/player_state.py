@@ -75,8 +75,7 @@ def _project_text_highlights(
                 "personality_traits": list(profile.personality_traits),
                 "known_abilities": list(profile.known_abilities),
                 "faction": profile.faction,
-                "description": profile.description,
-                "current_location": profile.current_location,
+                "last_known_location": profile.last_known_location,
             }
             candidates.extend(
                 (surface, "npc", public_profile)

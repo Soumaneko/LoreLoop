@@ -32,7 +32,6 @@ class DirectorNPCDraft(BaseModel):
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     appearance: str = Field(min_length=1)
     name: str = Field(min_length=1)
-    encounter_potentials: list[str] = Field(min_length=3, max_length=5)
     source_setting_ids: list[str] = Field(default_factory=list, max_length=4)
     status: DirectorNPCStatus = "prepared"
     created_turn: int = Field(ge=0)
@@ -53,7 +52,6 @@ class DirectorNPCDraft(BaseModel):
             hidden_secret=self.hidden_secret,
             conflict_style=self.conflict_style,
             social_style=self.social_style,
-            encounter_potentials=list(self.encounter_potentials),
             source_setting_ids=list(self.source_setting_ids),
             created_turn=self.created_turn,
             introduced_turn=self.introduced_turn,
@@ -74,7 +72,6 @@ class DirectorNPCCreateOutput(BaseModel):
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     appearance: str = Field(min_length=1)
     name: str = Field(min_length=1)
-    encounter_potentials: list[str] = Field(min_length=3, max_length=5)
 
 
 class DirectorNPCPrivateProfile(BaseModel):
@@ -91,7 +88,6 @@ class DirectorNPCPrivateProfile(BaseModel):
     known_abilities: list[str] = Field(default_factory=list)
     appearance: str
     name: str
-    encounter_potentials: list[str] = Field(default_factory=list)
     source_setting_ids: list[str] = Field(default_factory=list)
     created_turn: int
     introduced_turn: int | None = None

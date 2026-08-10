@@ -186,15 +186,10 @@ def test_update_continuity_can_remove_an_entity_from_archive_metadata():
         assert store.get(item["id"]).entities == ["埃利奥"]
 
 
-def test_update_npc_public_fields_preserves_director_fields_and_absence():
+def test_update_npc_public_fields_preserves_director_fields():
     _seed_records()
     runtime = get_campaign_runtime()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    with runtime.stores.npc_profile() as store:
-        profile = store.get_by_id(npc_id)
-        profile.absent_turns = 6
-        store.upsert(profile)
-
     result = update_player_record(
         "npc",
         npc_id,
@@ -204,10 +199,6 @@ def test_update_npc_public_fields_preserves_director_fields_and_absence():
     assert "director_only" not in result
     with pytest.raises(ValueError, match="NPC general fields only"):
         update_player_record("npc", npc_id, {"aliases": ["木偶师"]})
-    with runtime.stores.npc_profile() as store:
-        assert store.get_by_id(npc_id).absent_turns == 6
-
-
 def test_update_npc_advanced_edits_director_content_fields():
     _seed_records()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
@@ -218,14 +209,12 @@ def test_update_npc_advanced_edits_director_content_fields():
             "core_motivation": "查明木偶失窃的真相。",
             "hidden_secret": "",
             "conflict_style": "迂回试探",
-            "encounter_potentials": ["货路求援", "  ", "账目争议"],
         },
         view="advanced",
     )
     assert result["director_only"]["core_motivation"] == "查明木偶失窃的真相。"
     assert result["director_only"]["hidden_secret"] is None
     assert result["director_only"]["conflict_style"] == "迂回试探"
-    assert result["director_only"]["encounter_potentials"] == ["货路求援", "账目争议"]
 
 
 def test_update_npc_rejects_director_fields_in_general_and_blank_name():

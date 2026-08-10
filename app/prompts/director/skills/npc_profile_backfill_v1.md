@@ -86,5 +86,4 @@
 1. 不要写“为了让主角……”这类元叙述。
 2. 不要把 hidden_secret 或 core_motivation 写成玩家已知信息。
 3. 不要写时间锚点、倒计时或必须在某日发生的事件。
-4. 不要输出 `npc_id`、`source_scene_ids`、`confidence`、`active`、`created_turn`、`introduced_turn` 等程序字段。
-5. 不要输出 `encounter_potentials` 字段。
+4. 不要输出 `npc_id`、`source_scene_ids`、`active`、`created_turn`、`introduced_turn` 等程序字段。

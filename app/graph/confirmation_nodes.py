@@ -17,7 +17,7 @@ from app.domain.director_event.workflows import (
 )
 from app.domain.npc_profile.extractor import NPCProfileExtractor
 from app.domain.npc_profile.workflows import (
-    sync_npc_profile_absence_from_current_state,
+    prune_npc_transient_aliases_from_current_state,
     update_npc_profiles_from_extraction,
 )
 from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
@@ -325,12 +325,11 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 trace_id=trace_id,
                 turn_index=pipeline_input.turn_index,
             )
-            absence_synced_ids = sync_npc_profile_absence_from_current_state(
+            alias_pruned_ids = prune_npc_transient_aliases_from_current_state(
                 npc_store=npc_store,
-                current_state=state["updated_state"],
                 turn_index=pipeline_input.turn_index,
             )
-            updated_npc_profile_ids = merge_unique_ids([*npc_result.saved_ids, *absence_synced_ids])
+            updated_npc_profile_ids = merge_unique_ids([*npc_result.saved_ids, *alias_pruned_ids])
             new_npc_profiles = npc_result.new_profiles
             cache["new_npc_profiles"] = new_npc_profiles
     return {

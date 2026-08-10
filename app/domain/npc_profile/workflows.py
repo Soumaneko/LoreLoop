@@ -67,20 +67,13 @@ def prune_expired_transient_aliases(
     return bool(expired)
 
 
-def sync_npc_profile_absence_from_current_state(
+def prune_npc_transient_aliases_from_current_state(
     *,
     npc_store: NPCProfileStore,
-    current_state: CurrentState,
     turn_index: int | None = None,
 ) -> list[str]:
-    matched_names = _gather_current_state_npc_names(current_state)
     saved_ids: list[str] = []
     for profile in npc_store.list_all():
-        previous_absent_turns = profile.absent_turns
-        if _profile_matches_any_name(profile, matched_names):
-            profile.absent_turns = 0
-        else:
-            profile.absent_turns += 1
         aliases_pruned = (
             prune_expired_transient_aliases(
                 profile,
@@ -89,7 +82,7 @@ def sync_npc_profile_absence_from_current_state(
             if turn_index is not None
             else False
         )
-        if profile.absent_turns != previous_absent_turns or aliases_pruned:
+        if aliases_pruned:
             saved_ids.append(npc_store.upsert(profile))
     return saved_ids
 
@@ -224,25 +217,6 @@ def _matches_profile_name_or_alias(value: str | None, profile: NPCProfile) -> bo
         or key in {normalize_key(alias) for alias in profile.aliases}
         or key in {normalize_key(alias) for alias in profile.transient_aliases}
     )
-
-
-def _profile_matches_any_name(profile: NPCProfile, names: set[str]) -> bool:
-    variants = {
-        normalize_key(profile.name),
-        *(normalize_key(alias) for alias in profile.aliases),
-        *(normalize_key(alias) for alias in profile.transient_aliases),
-    }
-    variants.discard("")
-    return bool(variants & names)
-
-
-def _gather_current_state_npc_names(current_state: CurrentState) -> set[str]:
-    names = current_state.scene.participant_names
-    return {
-        normalize_key(name)
-        for name in names
-        if name and name.strip()
-    }
 
 
 def _gather_names(current_state: CurrentState, anchors: list[Anchor]) -> list[str]:

@@ -27,8 +27,7 @@ _NPC_PUBLIC_FIELDS = {
     "personality_traits",
     "known_abilities",
     "faction",
-    "description",
-    "current_location",
+    "last_known_location",
     "attitude_to_player",
     "current_intent",
 }
@@ -37,8 +36,7 @@ _NPC_NULLABLE_FIELDS = {
     "role",
     "appearance",
     "faction",
-    "description",
-    "current_location",
+    "last_known_location",
     "attitude_to_player",
     "current_intent",
 }
@@ -48,7 +46,6 @@ _NPC_DIRECTOR_FIELDS = {
     "hidden_secret",
     "conflict_style",
     "social_style",
-    "encounter_potentials",
     "director_notes",
     "source_director_npc_id",
     "source_setting_ids",
@@ -61,7 +58,6 @@ _NPC_ADVANCED_DIRECTOR_FIELDS = {
     "hidden_secret",
     "conflict_style",
     "social_style",
-    "encounter_potentials",
     "director_notes",
 }
 _NPC_ADVANCED_NULLABLE_FIELDS = {
@@ -71,7 +67,6 @@ _NPC_ADVANCED_NULLABLE_FIELDS = {
     "social_style",
     "director_notes",
 }
-_NPC_ADVANCED_LIST_FIELDS = {"encounter_potentials"}
 _SETTING_GENERAL_FIELDS = {
     "name",
     "summary",
@@ -386,9 +381,7 @@ def _update_npc_profile(
         nullable = _NPC_NULLABLE_FIELDS | (
             _NPC_ADVANCED_NULLABLE_FIELDS if view == "advanced" else set()
         )
-        list_fields = _NPC_LIST_FIELDS | (
-            _NPC_ADVANCED_LIST_FIELDS if view == "advanced" else set()
-        )
+        list_fields = _NPC_LIST_FIELDS
         payload = _normalize_payload(
             payload,
             nullable=nullable,
@@ -405,13 +398,11 @@ def _update_npc_profile(
             validated,
             npc_id=current.npc_id,
             source_scene_ids=list(current.source_scene_ids),
-            confidence=current.confidence,
             updated_at=None,
             active=current.active,
             name_hit_count=current.name_hit_count,
             alias_hit_counts=dict(current.alias_hit_counts),
         )
-        merged.absent_turns = current.absent_turns
         _preserve_npc_director_fields(merged, current)
         if view == "advanced":
             for field in _NPC_ADVANCED_DIRECTOR_FIELDS:

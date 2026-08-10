@@ -43,8 +43,7 @@ class NPCProfilePublicView(BaseModel):
     personality_traits: list[str] = Field(default_factory=list)
     known_abilities: list[str] = Field(default_factory=list)
     faction: str | None = None
-    description: str | None = None
-    current_location: str | None = None
+    last_known_location: str | None = None
     attitude_to_player: str | None = None
     current_intent: str | None = None
 
@@ -55,7 +54,6 @@ class NPCProfileDirectorView(NPCProfilePublicView):
     hidden_secret: str | None = None
     conflict_style: str | None = None
     social_style: str | None = None
-    encounter_potentials: list[str] = Field(default_factory=list)
     director_notes: str | None = None
     source_director_npc_id: str | None = None
     source_setting_ids: list[str] = Field(default_factory=list)
@@ -74,8 +72,7 @@ class NPCProfileUpdateInput(BaseModel):
     personality_traits: list[str] = Field(default_factory=list, max_length=3)
     known_abilities: list[str] = Field(default_factory=list, max_length=5)
     faction: str | None = None
-    description: str | None = None
-    current_location: str | None = None
+    last_known_location: str | None = None
     attitude_to_player: str | None = None
     current_intent: str | None = None
 
@@ -86,8 +83,7 @@ NPCResolution = Literal["existing", "alias_match", "new", "ignore"]
 class ExistingNPCProfilePatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    public_summary: str | None = None
-    current_location: str | None = None
+    last_known_location: str | None = None
     attitude_to_player: str | None = None
     current_intent: str | None = None
 
@@ -152,18 +148,14 @@ class NPCProfile(BaseModel):
     personality_traits: list[str] = Field(default_factory=list)
     known_abilities: list[str] = Field(default_factory=list)
     faction: str | None = None
-    description: str | None = None
-
-    current_location: str | None = None
+    last_known_location: str | None = None
     attitude_to_player: str | None = None
     current_intent: str | None = None
-    absent_turns: int = Field(default=0, ge=0)
 
     core_motivation: str | None = None
     hidden_secret: str | None = None
     conflict_style: str | None = None
     social_style: str | None = None
-    encounter_potentials: list[str] = Field(default_factory=list)
     director_notes: str | None = None
     source_director_npc_id: str | None = None
     source_setting_ids: list[str] = Field(default_factory=list)
@@ -172,7 +164,6 @@ class NPCProfile(BaseModel):
     disclosure_level: NPCDisclosureLevel = "remote"
 
     source_scene_ids: list[str] = Field(default_factory=list)
-    confidence: float = Field(default=0.5, ge=0, le=1)
     updated_at: str = ""
     active: bool = True
     name_hit_count: int = Field(default=0, ge=0)
@@ -188,8 +179,7 @@ class NPCProfile(BaseModel):
             personality_traits=list(self.personality_traits),
             known_abilities=list(self.known_abilities),
             faction=self.faction,
-            description=self.description,
-            current_location=self.current_location,
+            last_known_location=self.last_known_location,
             attitude_to_player=self.attitude_to_player,
             current_intent=self.current_intent,
         )
@@ -207,7 +197,6 @@ class NPCProfile(BaseModel):
             hidden_secret=self.hidden_secret,
             conflict_style=self.conflict_style,
             social_style=self.social_style,
-            encounter_potentials=list(self.encounter_potentials),
             director_notes=self.director_notes,
             source_director_npc_id=self.source_director_npc_id,
             source_setting_ids=list(self.source_setting_ids),
@@ -242,7 +231,6 @@ def profile_from_update(
     *,
     npc_id: str | None = None,
     source_scene_ids: list[str] | None = None,
-    confidence: float = 0.5,
     updated_at: str | None = None,
     active: bool = True,
     name_hit_count: int = 0,
@@ -258,12 +246,10 @@ def profile_from_update(
         personality_traits=list(profile.personality_traits),
         known_abilities=list(profile.known_abilities),
         faction=profile.faction,
-        description=profile.description,
-        current_location=profile.current_location,
+        last_known_location=profile.last_known_location,
         attitude_to_player=profile.attitude_to_player,
         current_intent=profile.current_intent,
         source_scene_ids=source_scene_ids or [],
-        confidence=confidence,
         updated_at=updated_at or utc_now(),
         active=active,
         name_hit_count=name_hit_count,

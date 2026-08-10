@@ -43,7 +43,6 @@ def make_director_npc() -> DirectorNPCDraft:
         hidden_secret="曾目击一宗未结案件。",
         conflict_style="先协商后行动。",
         social_style="克制而友善。",
-        encounter_potentials=["诊所求助", "街区冲突", "旧案线索"],
         created_turn=2,
     )
 

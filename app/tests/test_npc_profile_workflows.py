@@ -11,7 +11,7 @@ from app.domain.npc_profile.workflows import (
     attach_transient_alias_for_rename,
     backfill_new_npc_profile,
     prune_expired_transient_aliases,
-    sync_npc_profile_absence_from_current_state,
+    prune_npc_transient_aliases_from_current_state,
     update_npc_profiles_from_extraction,
 )
 
@@ -93,7 +93,7 @@ def test_npc_updater_prompt_treats_new_hints_as_optional_candidates():
 
     assert '`source="existing"`' in prompt
     assert '`source="unresolved"`' in prompt
-    assert "拒绝是默认行为，创建是例外" in prompt
+    assert "ignore" in prompt
     assert "“林川”和“陆川”默认是两个不同 NPC" in prompt
     assert "`turn_observation`" in prompt
     assert "每一个 `candidate_index`" in prompt
@@ -114,7 +114,6 @@ def test_backfill_prompt_requires_proper_name_for_descriptor_npcs():
     assert "筑基初期女修" in prompt
     assert "练气巅峰采药女" in prompt
     assert "不得沿用代称作为姓名" in prompt
-    assert "原代称会由系统自动保留为临时别名" in prompt
     assert "不要改名" not in prompt
 
 
@@ -136,58 +135,23 @@ def test_store_skips_conflicting_given_name_alias():
     assert "希尔达" not in saved.aliases
 
 
-def test_sync_npc_profile_absence_resets_current_state_hits_and_increments_misses():
+def test_prune_npc_transient_aliases_from_current_state():
     store = NPCProfileStore(":memory:")
-    present_id = store.upsert(
-        NPCProfile(name="裴玉奴", aliases=["裴姑娘"], role="琵琶名手", absent_turns=2)
+    expired_id = store.upsert(
+        NPCProfile(name="裴玉奴", transient_aliases={"裴姑娘": 2})
     )
-    missing_id = store.upsert(
-        NPCProfile(name="周泰", role="巡检司都头", absent_turns=1)
-    )
-    state = CurrentState(
-        scene=SceneState(
-            scene_id="scene_005",
-            location="鸣玉坊里间",
-            participants=["萧云痕", "裴姑娘"],
-        ),
-        player=PlayerState(name="萧云痕"),
+    retained_id = store.upsert(
+        NPCProfile(name="周泰", transient_aliases={"周都头": 5})
     )
 
-    saved_ids = sync_npc_profile_absence_from_current_state(
+    saved_ids = prune_npc_transient_aliases_from_current_state(
         npc_store=store,
-        current_state=state,
+        turn_index=3,
     )
 
-    assert set(saved_ids) == {present_id, missing_id}
-    assert store.get_by_id(present_id).absent_turns == 0
-    assert store.get_by_id(missing_id).absent_turns == 2
-
-
-def test_sync_npc_profile_absence_ignores_absent_current_state_npcs():
-    store = NPCProfileStore(":memory:")
-    absent_id = store.upsert(
-        NPCProfile(name="裴玉奴", aliases=["裴姑娘"], role="琵琶名手", absent_turns=1)
-    )
-    present_id = store.upsert(
-        NPCProfile(name="花想容", role="胭脂铺掌柜", absent_turns=2)
-    )
-    state = CurrentState(
-        scene=SceneState(
-            scene_id="scene_008",
-            location="白鹤巷第三进院外墙下",
-            participants=["萧云痕", "花想容"],
-        ),
-        player=PlayerState(name="萧云痕"),
-    )
-
-    saved_ids = sync_npc_profile_absence_from_current_state(
-        npc_store=store,
-        current_state=state,
-    )
-
-    assert set(saved_ids) == {absent_id, present_id}
-    assert store.get_by_id(absent_id).absent_turns == 2
-    assert store.get_by_id(present_id).absent_turns == 0
+    assert saved_ids == [expired_id]
+    assert store.get_by_id(expired_id).transient_aliases == {}
+    assert store.get_by_id(retained_id).transient_aliases == {"周都头": 5}
 
 
 def test_new_npc_candidate_is_not_saved_or_backfilled():
@@ -212,8 +176,7 @@ def test_new_npc_candidate_is_not_saved_or_backfilled():
                             "personality_traits": ["温婉", "谨慎"],
                             "known_abilities": ["琵琶"],
                             "faction": "醉花楼",
-                            "description": None,
-                            "current_location": "醉花楼",
+                            "last_known_location": "醉花楼",
                             "attitude_to_player": None,
                             "current_intent": "在大堂演奏",
                         },
@@ -269,8 +232,7 @@ def test_new_npc_without_enrich_is_dropped():
                             "personality_traits": ["从容", "精明"],
                             "known_abilities": ["商业谈判"],
                             "faction": None,
-                            "description": None,
-                            "current_location": "醉花楼二楼雅间",
+                            "last_known_location": "醉花楼二楼雅间",
                             "attitude_to_player": None,
                             "current_intent": "与李掌柜谈判一笔大生意",
                         },
@@ -331,7 +293,7 @@ def test_backfill_can_promote_placeholder_name_and_preserve_alias():
         appearance="声音温婉中带媚。",
         personality_traits=["从容", "精明"],
         known_abilities=["商业谈判"],
-        current_location="醉花楼二楼雅间",
+        last_known_location="醉花楼二楼雅间",
         current_intent="与李掌柜谈判一笔大生意",
     )
     backfilled = backfill_new_npc_profile(
@@ -360,8 +322,7 @@ def test_existing_npc_update_does_not_trigger_profile_backfill():
             personality_traits=["清冷"],
             known_abilities=["琵琶"],
             faction="鸣玉坊",
-            description="常在鸣玉坊演奏。",
-            current_location="鸣玉坊",
+            last_known_location="鸣玉坊",
         )
     )
     existing = store.get_by_id(existing_id)
@@ -376,8 +337,7 @@ def test_existing_npc_update_does_not_trigger_profile_backfill():
                         "persist_alias": False,
                         "turn_observation": "裴玉奴本回合在醉花楼观察萧云痕。",
                         "profile_patch": {
-                            "public_summary": "裴玉奴是鸣玉坊琵琶名手，已公开与萧云痕保持谨慎往来。",
-                            "current_location": "醉花楼",
+                            "last_known_location": "醉花楼",
                             "attitude_to_player": "谨慎",
                             "current_intent": "观察萧云痕",
                         },
@@ -409,14 +369,13 @@ def test_existing_npc_update_does_not_trigger_profile_backfill():
     assert [call["task"] for call in gateway.calls] == ["npc_profile_update"]
     assert updated.name == "裴玉奴"
     assert updated.aliases == ["裴姑娘"]
-    assert updated.public_summary == "裴玉奴是鸣玉坊琵琶名手，已公开与萧云痕保持谨慎往来。"
+    assert updated.public_summary == "鸣玉坊琵琶名手。"
     assert updated.role == "琵琶名手"
     assert updated.appearance == "白衣抱琵琶。"
     assert updated.personality_traits == ["清冷"]
     assert updated.known_abilities == ["琵琶"]
     assert updated.faction == "鸣玉坊"
-    assert updated.description == "常在鸣玉坊演奏。"
-    assert updated.current_location == "醉花楼"
+    assert updated.last_known_location == "醉花楼"
     assert updated.attitude_to_player == "谨慎"
     assert updated.current_intent == "观察萧云痕"
     assert updated.core_motivation is None
@@ -426,7 +385,7 @@ def test_existing_npc_update_does_not_trigger_profile_backfill():
 def test_similar_name_is_unresolved_and_can_create_distinct_npc():
     store = NPCProfileStore(":memory:")
     existing_id = store.upsert(
-        NPCProfile(name="陆川", role="青云门弟子", current_location="山门")
+        NPCProfile(name="陆川", role="青云门弟子", last_known_location="山门")
     )
     existing = store.get_by_id(existing_id)
     gateway = _Gateway(
@@ -449,8 +408,7 @@ def test_similar_name_is_unresolved_and_can_create_distinct_npc():
                             "personality_traits": [],
                             "known_abilities": [],
                             "faction": "白鹤书院",
-                            "description": None,
-                            "current_location": "醉花楼",
+                            "last_known_location": "醉花楼",
                             "attitude_to_player": "友善",
                             "current_intent": "向萧云痕请教",
                         },
@@ -513,7 +471,7 @@ def test_exact_match_and_updater_identity_resolution_share_one_update_call():
                     "persist_alias": False,
                     "turn_observation": "裴姑娘本回合出现在醉花楼。",
                     "profile_patch": {
-                        "current_location": "醉花楼",
+                        "last_known_location": "醉花楼",
                     },
                     "new_profile": None,
                 },
@@ -547,7 +505,7 @@ def test_exact_match_and_updater_identity_resolution_share_one_update_call():
     )
 
     assert [call["task"] for call in gateway.calls] == ["npc_profile_update"]
-    assert store.get_by_id(exact_id).current_location == "醉花楼"
+    assert store.get_by_id(exact_id).last_known_location == "醉花楼"
     assert store.get_by_id(exact_id).alias_hit_counts["裴姑娘"] == 1
     assert "远舟镖头" in store.get_by_id(alias_target_id).aliases
 
@@ -556,11 +514,10 @@ def test_existing_no_op_patch_keeps_observation_without_profile_update():
     existing = NPCProfile(
         name="苏云袖",
         public_summary="水木双灵根的合欢宗弟子。",
-        current_location="合欢殿",
+        last_known_location="合欢殿",
         attitude_to_player="信任",
         current_intent="修习水系治愈术",
         source_scene_ids=["scene_008"],
-        confidence=0.7,
     )
     gateway = _Gateway(
         [{
@@ -571,8 +528,7 @@ def test_existing_no_op_patch_keeps_observation_without_profile_update():
                 "persist_alias": False,
                 "turn_observation": "萧云痕本回合提到了苏云袖。",
                 "profile_patch": {
-                    "public_summary": "水木双灵根的合欢宗弟子。",
-                    "current_location": "合欢殿",
+                        "last_known_location": "合欢殿",
                     "attitude_to_player": "信任",
                     "current_intent": "修习水系治愈术",
                 },
@@ -638,9 +594,8 @@ def test_prune_expired_transient_aliases_on_turn_advance():
     )
     assert store.get_by_name("筑基初期女修") is not None
 
-    saved_ids = sync_npc_profile_absence_from_current_state(
+    saved_ids = prune_npc_transient_aliases_from_current_state(
         npc_store=store,
-        current_state=_state(),
         turn_index=7,
     )
 

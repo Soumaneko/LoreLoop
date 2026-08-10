@@ -30,7 +30,6 @@ def test_director_npc_output_rejects_blank_name():
             personality_traits=["谨慎", "果断"],
             appearance="穿着防水短衣。",
             name="   ",
-            encounter_potentials=["现场调查", "旧案冲突", "身份暴露"],
         )
 
 
@@ -385,7 +384,6 @@ def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
         hidden_secret="曾目击旧案。",
         conflict_style="先协商后行动。",
         social_style="克制而友善。",
-        encounter_potentials=["诊所求助", "街区冲突", "旧案线索"],
         created_turn=2,
     )
 

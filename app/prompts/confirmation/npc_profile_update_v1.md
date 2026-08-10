@@ -69,7 +69,7 @@
 - `persist_alias`：仅 alias_match 可为 true。只有稳定外号、固定称号、化名或姓名变体才可保存；临时描述性指代必须为 false。
 - `turn_observation`：概括该候选在本回合值得注意的即时表现、动作、短暂情绪、一次性物品信号或其他当前场景信息；没有则填 null。保持简洁，不要重复整段 Scene Facts。
 - `profile_patch`：
-  - existing / alias_match：只有 NPC 的长期公开摘要或最新确定的地点、对玩家态度、当前持续意图发生变化时才填写相应字段；其他字段保持 null。
+  - existing / alias_match：只有 NPC 的最近已知地点、对玩家态度、当前持续意图发生变化时才填写相应字段；`public_summary` 不在本次更新中修改，其他字段保持 null。
   - new / ignore：必须为 null。
 - `new_profile`：
   - new：必须填写完整公开档案，name 必须保持候选原始 name。
@@ -94,9 +94,9 @@ source=unresolved 只有同时满足以下条件才使用 new：
 # 档案更新规则
 
 1. 公开档案只能记录 Scene Facts 明示的信息，禁止把任何导演幕后信息写入公开档案。
-2. `profile_patch.public_summary` 是完整、紧凑的最新摘要，不是对旧摘要不断追加本轮事件。只有稳定公开身份、关系、长期处境、持续目标、归属或长期认知发生变化时才填写。
-3. 本回合动作、短暂情绪、单次对话、一次性物品信号等即时信息写入 `turn_observation`，不要放进 `profile_patch.public_summary`。
-4. `current_location` 只写本回合结束时仍然成立的最新位置；角色已经离开某处时，不要继续把该处作为当前位置。
+2. `public_summary` 是已有档案的只读字段，本次 updater 不修改它；新建 NPC 时仍可填写初始摘要。
+3. 本回合动作、短暂情绪、单次对话、一次性物品信号等即时信息写入 `turn_observation`，不要尝试写入 `public_summary`。
+4. `last_known_location` 记录最近一次确认的位置；即使角色之后已经离开，也保留该最近已知位置。
 5. `attitude_to_player` 和 `current_intent` 只写场景结束后仍在持续的公开态度与意图。
 6. 没有档案字段变化时，`profile_patch` 填 null；仍然正常输出该候选的 resolution 与 turn_observation。
 7. 不要创建与已有档案重复的新 NPC。

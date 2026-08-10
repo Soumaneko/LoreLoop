@@ -1472,7 +1472,7 @@ function openCodexProfile(profile, triggerElement) {
   if (profile.public_summary && profile.public_summary !== quoteText) {
     appendDetailText("详细信息", profile.public_summary);
   }
-  if (profile.current_location) appendDetailText("最后活动地点", profile.current_location);
+  if (profile.last_known_location) appendDetailText("最后活动地点", profile.last_known_location);
 
   if (detailsPanel.childNodes.length > 0) {
     els.codexContent.appendChild(detailsPanel);
@@ -3237,8 +3237,7 @@ const NPC_PUBLIC_FIELDS = [
   ["personality_traits", "性格特质", true],
   ["known_abilities", "已知能力", true],
   ["faction", "阵营", false],
-  ["description", "描述", false, "textarea"],
-  ["current_location", "当前地点", false],
+  ["last_known_location", "最近已知地点", false],
   ["attitude_to_player", "对玩家态度", false],
   ["current_intent", "当前意图", false],
 ];
@@ -3248,7 +3247,6 @@ const NPC_ADVANCED_DIRECTOR_FIELDS = [
   ["hidden_secret", "隐藏秘密", false],
   ["conflict_style", "冲突风格", false],
   ["social_style", "社交风格", false],
-  ["encounter_potentials", "相遇潜能", true],
   ["director_notes", "导演备注", false],
 ];
 

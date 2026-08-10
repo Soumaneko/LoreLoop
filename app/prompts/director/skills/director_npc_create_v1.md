@@ -79,6 +79,5 @@
 5. 不得假定人物已经认识主角、参与当前事件或位于当前场景。
 6. 不得为满足 `director_guidance` 编造已经发生的历史；`director_guidance` 只决定人物的可用方向，不构成已确认事实。
 7. 能力、身份、秘密和社会地位必须符合 CoreMemory 的文明与能力基准。
-8. `encounter_potentials` 提供 3-5 种不同的未来接触可能，但不得预写具体剧情结果。
 
 只输出符合 Schema 的 JSON。
