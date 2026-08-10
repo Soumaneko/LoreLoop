@@ -156,6 +156,8 @@ class ContextHistoryHit(BaseModel):
         Literal["create", "update", "resolve", "cancel"]
     ] = Field(default_factory=list)
     relation_match_reasons: list[str] = Field(default_factory=list)
+    relation_evidence_quality: float | None = Field(default=None, ge=0)
+    relation_evidence_class: str | None = Field(default=None)
     matched_entities: list[str] = Field(default_factory=list)
     matched_topics: list[str] = Field(default_factory=list)
     score: float = Field(ge=0)
@@ -213,6 +215,8 @@ class ContextHistoryEvidenceSet(BaseModel):
     relation_candidates_considered: int = Field(default=0, ge=0)
     relation_hits_added: int = Field(default=0, ge=0)
     stale_relation_links: int = Field(default=0, ge=0)
+    invalid_relation_links: int = Field(default=0, ge=0)
+    degraded_relation_links: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def _validate_global_evidence_uniqueness(self):

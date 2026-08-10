@@ -305,6 +305,8 @@ def _score_case(case: BenchmarkCase, evidence, payload: str) -> dict:
         "relation_candidates_considered": evidence.relation_candidates_considered,
         "relation_hits_added": evidence.relation_hits_added,
         "stale_relation_links": evidence.stale_relation_links,
+        "invalid_relation_links": evidence.invalid_relation_links,
+        "degraded_relation_links": evidence.degraded_relation_links,
         "invariant_violations": invariant_violations,
     }
 
@@ -382,6 +384,12 @@ def run_suite(suite: BenchmarkSuite, *, fingerprint: str) -> dict:
         ),
         "invariant_violation_count": sum(
             len(case["invariant_violations"]) for case in case_results
+        ),
+        "invalid_relation_links": sum(
+            case["invalid_relation_links"] for case in case_results
+        ),
+        "degraded_relation_links": sum(
+            case["degraded_relation_links"] for case in case_results
         ),
         "payload_chars": sum(case["payload_chars"] for case in case_results),
     }

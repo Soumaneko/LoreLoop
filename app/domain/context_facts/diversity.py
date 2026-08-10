@@ -94,6 +94,32 @@ _ROUTE_PRIORITY = {
 }
 
 
+def degraded_rescue_allowed(
+    owner_intent_id: str,
+    direct_covered_intents: set[str],
+) -> bool:
+    """A degraded relation proposal may only rescue an intent that has no
+    direct hit yet, judged by its own owner intent (never another intent's
+    coverage)."""
+    return owner_intent_id not in direct_covered_intents
+
+
+def partition_served(
+    direct_intents: set[str],
+    relation_intents: set[str],
+    degraded_relation_intents: set[str],
+) -> tuple[set[str], set[str]]:
+    """Split a selected document's served intents into normal vs degraded.
+
+    Normal coverage is any direct intent plus any non-degraded relation
+    intent. A degraded relation intent that is also directly served counts as
+    normal coverage and is not a rescue.
+    """
+    normal = direct_intents | (relation_intents - degraded_relation_intents)
+    degraded = degraded_relation_intents - normal
+    return normal, degraded
+
+
 def select_diverse_candidates(
     search_plan: ContextSearchPlan,
     *,
@@ -118,6 +144,7 @@ def select_diverse_candidates(
     selected: list[CandidateT] = []
     selected_ids: set[str] = set()
     intent_coverage: dict[str, int] = defaultdict(int)
+    degraded_rescue_count: dict[str, int] = defaultdict(int)
     route_coverage: dict[tuple[str, str], int] = defaultdict(int)
     entity_owner_counts: dict[str, int] = defaultdict(int)
     continuity_item_counts: dict[str, int] = defaultdict(int)
@@ -129,6 +156,23 @@ def select_diverse_candidates(
 
     def turn_index(candidate: CandidateT) -> int:
         return int(getattr(candidate.document, "turn_index"))
+
+    def per_intent_degraded(
+        intent_id: str,
+        candidate: CandidateT,
+    ) -> bool:
+        per_intent = getattr(candidate, "relation_intent_degraded", None)
+        if per_intent:
+            return per_intent.get(intent_id, False)
+        return bool(getattr(candidate, "relation_degraded", False))
+
+    def degraded(proposal: SelectionProposal[CandidateT]) -> bool:
+        """Per-owner degraded status so a strong link on one intent never
+        promotes a weak link on another intent of the same document."""
+        return per_intent_degraded(
+            proposal.owner_intent_id,
+            proposal.candidate,
+        )
 
     def owner_supported(
         intent: ContextSearchIntent,
@@ -191,10 +235,28 @@ def select_diverse_candidates(
                 entity is None
                 or entity_owner_counts[entity] < policy.entity_cap
             )
-        return bool(candidate.linked_continuity_ids) and all(
+        if not candidate.linked_continuity_ids or not all(
             continuity_item_counts[item_id] < policy.continuity_item_cap
             for item_id in candidate.linked_continuity_ids
-        )
+        ):
+            return False
+        # Degraded relation evidence may only rescue an intent that has no
+        # direct hit yet, capped per intent at the normal coverage depth; it
+        # must never pad a covered intent or flood a seat. Judged per owner so
+        # a proposal cannot borrow another intent's direct coverage.
+        if degraded(proposal):
+            if degraded_rescue_count[owner.intent_id] >= policy.intent_target:
+                return False
+            direct_covered = {
+                intent_id
+                for (intent_id, route) in route_coverage
+                if route == "direct" and route_coverage[(intent_id, route)] > 0
+            }
+            return degraded_rescue_allowed(
+                owner.intent_id,
+                direct_covered,
+            )
+        return True
 
     while len(selected) < policy.max_hits:
         previews: dict[str, AdmissionPreview | None] = {}
@@ -215,9 +277,16 @@ def select_diverse_candidates(
             owner = intents[proposal.owner_intent_id]
             coverage = intent_coverage[owner.intent_id]
             covered_ids = selectable_intent_ids(candidate)
-            new_coverage = sum(
-                intent_coverage[intent_id] < policy.intent_target
-                for intent_id in covered_ids
+            is_degraded_rescue = (
+                proposal.route == "relation" and degraded(proposal)
+            )
+            new_coverage = (
+                0
+                if is_degraded_rescue
+                else sum(
+                    intent_coverage[intent_id] < policy.intent_target
+                    for intent_id in covered_ids
+                )
             )
             route_is_new = (
                 route_coverage[(owner.intent_id, proposal.route)] == 0
@@ -256,8 +325,31 @@ def select_diverse_candidates(
         selected_ids.add(document_id(candidate))
         turn_counts[turn_index(candidate)] += 1
 
-        for intent_id in selectable_intent_ids(candidate):
+        served = selectable_intent_ids(candidate)
+        direct_served = {
+            intent_id
+            for intent_id in served
+            if intent_id in candidate.matched_intent_ids
+        }
+        relation_served = {
+            intent_id
+            for intent_id in served
+            if intent_id in candidate.relation_intent_ids
+        }
+        degraded_relation_served = {
+            intent_id
+            for intent_id in relation_served
+            if per_intent_degraded(intent_id, candidate)
+        }
+        normal_served, degraded_served = partition_served(
+            direct_served,
+            relation_served,
+            degraded_relation_served,
+        )
+        for intent_id in normal_served:
             intent_coverage[intent_id] += 1
+        for intent_id in degraded_served:
+            degraded_rescue_count[intent_id] += 1
         for intent_id in candidate.matched_intent_ids:
             if (
                 intent_id in intents

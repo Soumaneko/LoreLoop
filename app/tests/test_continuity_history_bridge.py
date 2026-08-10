@@ -325,6 +325,8 @@ def test_relation_hit_competes_with_direct_without_claiming_direct_match():
             triggering_intent_ids=["explicit_npc"],
             match_reasons=["exact_entity_match"],
             evidence_position=0,
+            evidence_basis_primary="确认周姓男子看人不像在看行情。",
+            basis_complete=True,
         )
         result = ContextHistoryRetriever(
             history_store,
@@ -351,6 +353,120 @@ def test_relation_hit_competes_with_direct_without_claiming_direct_match():
     assert "linked_continuity_ids" not in projected[1]
 
 
+def test_degraded_rescue_capped_per_intent_at_intent_target():
+    links = []
+    with ConfirmedHistoryStore() as history_store:
+        for turn in range(1, 4):
+            text = f"那女人在第{turn}次会面留下了线索。"
+            history_store.upsert_turn(
+                scene_id=f"scene_{turn:03d}",
+                turn_index=turn,
+                user_input="",
+                scene_text=text,
+            )
+            links.append(ContinuityHistoryLink(
+                continuity_id=f"thread-{turn}",
+                continuity_status="active",
+                operation="create",
+                evidence_id=f"turn_{turn}_p001",
+                evidence_hash=_hash(text),
+                triggering_intent_ids=["explicit_npc"],
+                match_reasons=["exact_entity_match"],
+                evidence_position=0,
+                evidence_basis_primary="约定三日后在青岩镇以铜牌接头。",
+                basis_complete=True,
+            ))
+
+        result = ContextHistoryRetriever(
+            history_store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=10),
+        ).retrieve(
+            _explicit_entity_plan(),
+            current_turn_index=6,
+            continuity_links=links,
+        )
+
+    assert result.relation_candidates_considered == 3
+    assert result.relation_hits_added == 2
+    assert len(result.hits) == 2
+
+
+def test_strong_link_carries_degraded_attribution_beyond_rescue_cap():
+    plan = ContextSearchPlan(intents=[
+        ContextSearchIntent(
+            intent_id="intent_a",
+            focus="entity",
+            origin="explicit_input",
+            entities=[ContextSearchEntity(name="甲")],
+        ),
+        ContextSearchIntent(
+            intent_id="intent_b",
+            focus="entity",
+            origin="explicit_input",
+            entities=[ContextSearchEntity(name="乙")],
+        ),
+    ])
+    links = []
+    with ConfirmedHistoryStore() as history_store:
+        for turn in range(1, 4):
+            text = f"那女人在第{turn}次会面留下了线索。"
+            history_store.upsert_turn(
+                scene_id=f"scene_{turn:03d}",
+                turn_index=turn,
+                user_input="",
+                scene_text=text,
+            )
+            links.append(ContinuityHistoryLink(
+                continuity_id=f"item-a-{turn}",
+                continuity_status="active",
+                operation="create",
+                evidence_id=f"turn_{turn}_p001",
+                evidence_hash=_hash(text),
+                triggering_intent_ids=["intent_a"],
+                match_reasons=["exact_entity_match"],
+                evidence_position=0,
+                evidence_basis_primary=text,
+                basis_complete=True,
+            ))
+            links.append(ContinuityHistoryLink(
+                continuity_id=f"item-b-{turn}",
+                continuity_status="active",
+                operation="create",
+                evidence_id=f"turn_{turn}_p001",
+                evidence_hash=_hash(text),
+                triggering_intent_ids=["intent_b"],
+                match_reasons=["exact_entity_match"],
+                evidence_position=0,
+                evidence_basis_primary="他们稍后会面。",
+                basis_complete=True,
+            ))
+
+        result = ContextHistoryRetriever(
+            history_store,
+            diversity_policy=HistoryDiversityPolicy(max_hits=10),
+        ).retrieve(
+            plan,
+            current_turn_index=6,
+            continuity_links=links,
+        )
+
+    assert result.relation_hits_added == 3
+    assert len(result.hits) == 3
+    assert all(
+        any(hit.evidence_id == f"turn_{turn}_p001" for hit in result.hits)
+        for turn in range(1, 4)
+    )
+    for hit in result.hits:
+        assert any(
+            item_id.startswith("item-a-")
+            for item_id in hit.linked_continuity_ids
+        )
+        assert any(
+            item_id.startswith("item-b-")
+            for item_id in hit.linked_continuity_ids
+        )
+
+
 def test_relation_only_hits_are_not_globally_capped_and_hash_mismatch_is_skipped():
     links = []
     with ConfirmedHistoryStore() as history_store:
@@ -371,6 +487,8 @@ def test_relation_only_hits_are_not_globally_capped_and_hash_mismatch_is_skipped
                 triggering_intent_ids=["explicit_npc"],
                 match_reasons=["exact_entity_match"],
                 evidence_position=0,
+                evidence_basis_primary=text,
+                basis_complete=True,
             ))
         links.append(ContinuityHistoryLink(
             continuity_id="stale",
@@ -381,6 +499,8 @@ def test_relation_only_hits_are_not_globally_capped_and_hash_mismatch_is_skipped
             triggering_intent_ids=["explicit_npc"],
             match_reasons=["exact_entity_match"],
             evidence_position=0,
+            evidence_basis_primary="那女人在第五次会面留下了线索。",
+            basis_complete=True,
         ))
         result = ContextHistoryRetriever(
             history_store,
@@ -419,6 +539,8 @@ def test_relation_only_hits_are_capped_per_continuity_item():
                 triggering_intent_ids=["explicit_npc"],
                 match_reasons=["exact_entity_match"],
                 evidence_position=turn - 1,
+                evidence_basis_primary=text,
+                basis_complete=True,
             ))
 
         result = ContextHistoryRetriever(
@@ -469,6 +591,8 @@ def test_shared_relation_evidence_counts_against_every_linked_item_cap():
                 triggering_intent_ids=["explicit_npc"],
                 match_reasons=["exact_entity_match"],
                 evidence_position=position,
+                evidence_basis_primary=texts[evidence_id],
+                basis_complete=True,
             )
 
         result = ContextHistoryRetriever(

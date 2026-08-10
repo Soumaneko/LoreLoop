@@ -202,7 +202,13 @@ class ContinuityLifecycleLog(BaseModel):
 
 
 class ContinuityHistoryLink(BaseModel):
-    """A structural pointer into Confirmed History, never a fact source."""
+    """A structural pointer into Confirmed History, never a fact source.
+
+    The node-specific semantic basis is derived from the persisted lifecycle
+    log and the immutable item fields at bridge time. It lets the retriever
+    judge node -> evidence support per link instead of trusting the whole
+    evidence group of a matched item.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -217,6 +223,9 @@ class ContinuityHistoryLink(BaseModel):
         default_factory=list
     )
     evidence_position: int = Field(ge=0)
+    evidence_basis_primary: str | None = Field(default=None, max_length=512)
+    evidence_basis_context: str | None = Field(default=None, max_length=900)
+    basis_complete: bool = True
 
 
 class ContinuityHistoryBridgeResult(BaseModel):

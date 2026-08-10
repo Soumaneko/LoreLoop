@@ -142,6 +142,9 @@ class ContinuityHistoryBridge:
                 match.eligibility_reasons
             )
             for log in logs_by_item[match.item.id]:
+                basis_primary, basis_context, basis_complete = (
+                    _evidence_basis(match.item, log)
+                )
                 for evidence in log.evidence:
                     links.append(ContinuityHistoryLink(
                         continuity_id=match.item.id,
@@ -153,6 +156,9 @@ class ContinuityHistoryBridge:
                         match_reasons=reasons,
                         eligibility_reasons=eligibility_reasons,
                         evidence_position=evidence.position,
+                        evidence_basis_primary=basis_primary,
+                        evidence_basis_context=basis_context,
+                        basis_complete=basis_complete,
                     ))
 
         return ContinuityHistoryBridgeResult(
@@ -165,6 +171,43 @@ class ContinuityHistoryBridge:
                 match.item.status != "active" for match in selected
             ),
         )
+
+
+def _evidence_basis(
+    item: ContinuityItem,
+    log,
+) -> tuple[str | None, str | None, bool]:
+    """Derive the node-specific semantic basis from persisted lifecycle data.
+
+    ``create`` uses the immutable premise as its primary basis; ``update`` uses
+    the per-operation state delta plus reason; resolve/cancel use the closing
+    reason. The full current_state is deliberately excluded: it is the latest
+    aggregated snapshot and would back-fill later information into older nodes.
+    """
+
+    def _join(parts: list[str | None]) -> str | None:
+        cleaned = [part.strip() for part in parts if part and part.strip()]
+        return "\n".join(cleaned) if cleaned else None
+
+    if log.operation == "create":
+        primary = _join([item.premise])
+        # The current subject is excluded: it is mutable metadata that may have
+        # been rewritten after creation and would back-fill a later title onto
+        # the create node. Only the immutable premise acts as its basis.
+        context = None
+        complete = not log.migration_created and primary is not None
+    elif log.operation == "update":
+        primary = _join([log.state_delta, log.reason])
+        context = _join([item.subject, item.premise])
+        complete = (
+            not log.migration_created
+            and bool(log.state_delta and log.state_delta.strip())
+        )
+    else:
+        primary = _join([log.reason])
+        context = None
+        complete = not log.migration_created and primary is not None
+    return primary, context, complete
 
 
 def _match_item(

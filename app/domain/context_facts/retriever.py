@@ -19,6 +19,11 @@ from .diversity import (
     SelectionProposal,
     select_diverse_candidates,
 )
+from .evidence_support import (
+    LinkSupport,
+    classify_link_support,
+    link_window_text,
+)
 from .schemas import (
     AdjacentEvidence,
     ContextHistoryEvidenceSet,
@@ -46,6 +51,32 @@ class _Candidate:
     linked_operations: set[str] = field(default_factory=set)
     relation_match_reasons: set[str] = field(default_factory=set)
     relation_order: int = 1_000_000_000
+    relation_intent_quality: dict[str, float] = field(default_factory=dict)
+    relation_intent_class: dict[str, str] = field(default_factory=dict)
+    relation_intent_degraded: dict[str, bool] = field(default_factory=dict)
+
+    @property
+    def relation_evidence_quality(self) -> float:
+        return max(self.relation_intent_quality.values(), default=0.0)
+
+    @property
+    def relation_evidence_class(self) -> str | None:
+        from .evidence_support import CLASS_RANK
+
+        qualities = self.relation_intent_quality
+        if not qualities:
+            return None
+        best_intent = max(
+            qualities,
+            key=lambda intent_id: (
+                qualities[intent_id],
+                CLASS_RANK.get(
+                    self.relation_intent_class.get(intent_id, ""),
+                    -1,
+                ),
+            ),
+        )
+        return self.relation_intent_class.get(best_intent)
 
 
 class ContextHistoryRetriever:
@@ -106,9 +137,18 @@ class ContextHistoryRetriever:
         documents_by_id = {
             document.document_id: document for document in documents
         }
+
+        node_supports, strong_documents = _compute_link_supports(
+            continuity_links or [],
+            documents_by_id=documents_by_id,
+            by_turn=by_turn,
+        )
+
         relation_document_ids: set[str] = set()
         stale_relation_links = 0
         valid_relation_links = 0
+        invalid_relation_links = 0
+        degraded_relation_links = 0
         for relation_order, link in enumerate(continuity_links or []):
             document = documents_by_id.get(link.evidence_id)
             if (
@@ -123,6 +163,22 @@ class ContextHistoryRetriever:
                 stale_relation_links += 1
                 continue
             valid_relation_links += 1
+            support = node_supports.get(
+                (link.continuity_id, link.operation),
+                {},
+            ).get(link.evidence_id)
+            if support is None:
+                continue
+            if _suppress_attribution(
+                link,
+                support,
+                node_supports,
+                strong_documents,
+            ):
+                invalid_relation_links += 1
+                continue
+            if support.degraded:
+                degraded_relation_links += 1
             relation_document_ids.add(document.document_id)
             candidate = candidates.get(document.document_id)
             if candidate is None:
@@ -136,6 +192,19 @@ class ContextHistoryRetriever:
                 candidate.relation_order,
                 relation_order,
             )
+            for intent_id in link.triggering_intent_ids:
+                current = candidate.relation_intent_quality.get(intent_id)
+                if current is None or support.quality > current:
+                    candidate.relation_intent_quality[intent_id] = (
+                        support.quality
+                    )
+                    candidate.relation_intent_class[intent_id] = (
+                        support.support_class
+                    )
+                candidate.relation_intent_degraded[intent_id] = (
+                    candidate.relation_intent_degraded.get(intent_id, True)
+                    and support.degraded
+                )
 
         representative_candidates, member_clusters, representative_for = (
             _cluster_candidates(candidates)
@@ -176,6 +245,10 @@ class ContextHistoryRetriever:
             relation_candidates = sorted(
                 relation_by_intent.get(intent.intent_id, []),
                 key=lambda candidate: (
+                    -candidate.relation_intent_quality.get(
+                        intent.intent_id,
+                        0.0,
+                    ),
                     candidate.relation_order,
                     -candidate.document.turn_index,
                     candidate.document.document_id,
@@ -234,6 +307,8 @@ class ContextHistoryRetriever:
                 if hit.relation_intent_ids and not hit.matched_intent_ids
             ),
             stale_relation_links=stale_relation_links,
+            invalid_relation_links=invalid_relation_links,
+            degraded_relation_links=degraded_relation_links,
         )
 
     def _retrieve_intent(
@@ -332,6 +407,83 @@ class ContextHistoryRetriever:
             reverse=True,
         )
         return scored
+
+
+def _compute_link_supports(
+    links: list[ContinuityHistoryLink],
+    *,
+    documents_by_id: dict[str, HistoryDocument],
+    by_turn: dict[int, list[HistoryDocument]],
+) -> tuple[
+    dict[tuple[str, str], dict[str, LinkSupport]],
+    set[str],
+]:
+    """Score every lifecycle link against its node basis.
+
+    Returns a node-keyed map of per-evidence LinkSupport plus the set of
+    documents that carry at least one strong link (used to decide whether a
+    zero-support link can be safely de-attributed).
+    """
+    nodes: dict[tuple[str, str], list[ContinuityHistoryLink]] = defaultdict(list)
+    for link in links:
+        nodes[(link.continuity_id, link.operation)].append(link)
+
+    node_supports: dict[tuple[str, str], dict[str, LinkSupport]] = {}
+    strong_documents: set[str] = set()
+    for node_key, node_links in nodes.items():
+        node_evidence_ids = {link.evidence_id for link in node_links}
+        for link in node_links:
+            document = documents_by_id.get(link.evidence_id)
+            if (
+                document is None
+                or document.source_type != "scene_paragraph"
+                or (
+                    link.evidence_hash is not None
+                    and history_document_text_hash(document)
+                    != link.evidence_hash
+                )
+            ):
+                continue
+            window_text = link_window_text(
+                document,
+                by_turn[document.turn_index],
+                node_evidence_ids,
+            )
+            support = classify_link_support(
+                basis_primary=link.evidence_basis_primary,
+                basis_context=link.evidence_basis_context,
+                basis_complete=link.basis_complete,
+                window_text=window_text,
+            )
+            node_supports.setdefault(node_key, {})[link.evidence_id] = support
+            if support.support_class == "strong":
+                strong_documents.add(link.evidence_id)
+    return node_supports, strong_documents
+
+
+def _suppress_attribution(
+    link: ContinuityHistoryLink,
+    support: LinkSupport,
+    node_supports: dict[tuple[str, str], dict[str, LinkSupport]],
+    strong_documents: set[str],
+) -> bool:
+    """Correct a misleading relation attribution without deleting evidence.
+
+    A zero-support link may be de-attributed only when it is provably
+    redundant: either the same lifecycle node carries another strong evidence,
+    or the same document is already represented by a strong link on another
+    node. Everything else fails open.
+    """
+    if not support.basis_complete or support.support_class != "zero":
+        return False
+    node_has_other_strong = any(
+        other.support_class == "strong"
+        for other in node_supports.get(
+            (link.continuity_id, link.operation),
+            {},
+        ).values()
+    )
+    return node_has_other_strong or link.evidence_id in strong_documents
 
 
 def _cluster_candidates(
@@ -434,7 +586,69 @@ def _merged_representative(cluster: list[_Candidate]) -> _Candidate:
             *(member.relation_match_reasons for member in cluster)
         ),
         relation_order=min(member.relation_order for member in cluster),
+        relation_intent_quality=_merge_intent_quality(cluster),
+        relation_intent_class=_merge_intent_class(cluster),
+        relation_intent_degraded=_merge_intent_degraded(cluster),
     )
+
+
+def _merged_intent_keys(
+    members: list[_Candidate],
+) -> set[str]:
+    return set().union(*(set(member.relation_intent_quality) for member in members))
+
+
+def _merge_intent_quality(members: list[_Candidate]) -> dict[str, float]:
+    return {
+        intent_id: max(
+            member.relation_intent_quality.get(intent_id, 0.0)
+            for member in members
+        )
+        for intent_id in _merged_intent_keys(members)
+    }
+
+
+def _merge_intent_class(members: list[_Candidate]) -> dict[str, str]:
+    from .evidence_support import CLASS_RANK
+
+    quality = _merge_intent_quality(members)
+    merged: dict[str, str] = {}
+    for intent_id, best in quality.items():
+        best_class: str | None = None
+        best_rank = -1
+        for member in members:
+            member_quality = member.relation_intent_quality.get(intent_id)
+            member_class = member.relation_intent_class.get(intent_id)
+            if (
+                member_quality is None
+                or member_class is None
+                or member_quality != best
+            ):
+                continue
+            rank = CLASS_RANK.get(member_class, -1)
+            if rank > best_rank:
+                best_rank = rank
+                best_class = member_class
+        if best_class is not None:
+            merged[intent_id] = best_class
+    return merged
+
+
+def _merge_intent_degraded(members: list[_Candidate]) -> dict[str, bool]:
+    # Only relation-bearing members that actually serve an intent decide its
+    # degraded status; a direct-only member must not un-degrade it.
+    merged: dict[str, bool] = {}
+    for intent_id in _merged_intent_keys(members):
+        serving = [
+            member
+            for member in members
+            if intent_id in member.relation_intent_quality
+        ]
+        merged[intent_id] = all(
+            member.relation_intent_degraded.get(intent_id, True)
+            for member in serving
+        )
+    return merged
 
 
 def _remap_to_representatives(
@@ -613,6 +827,12 @@ def _build_history_hit(
         linked_continuity_ids=sorted(candidate.linked_continuity_ids),
         linked_operations=sorted(candidate.linked_operations),
         relation_match_reasons=sorted(candidate.relation_match_reasons),
+        relation_evidence_quality=(
+            round(candidate.relation_evidence_quality, 6)
+            if candidate.relation_evidence_class is not None
+            else None
+        ),
+        relation_evidence_class=candidate.relation_evidence_class,
         matched_entities=sorted(candidate.matched_entities),
         matched_topics=sorted(candidate.matched_topics),
         score=round(candidate.score, 6),
