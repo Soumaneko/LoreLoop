@@ -138,7 +138,7 @@ class ContextHistoryRetriever:
             document.document_id: document for document in documents
         }
 
-        node_supports, strong_documents = _compute_link_supports(
+        node_supports = _compute_link_supports(
             continuity_links or [],
             documents_by_id=documents_by_id,
             by_turn=by_turn,
@@ -169,12 +169,7 @@ class ContextHistoryRetriever:
             ).get(link.evidence_id)
             if support is None:
                 continue
-            if _suppress_attribution(
-                link,
-                support,
-                node_supports,
-                strong_documents,
-            ):
+            if _suppress_attribution(link, support):
                 invalid_relation_links += 1
                 continue
             if support.degraded:
@@ -414,22 +409,16 @@ def _compute_link_supports(
     *,
     documents_by_id: dict[str, HistoryDocument],
     by_turn: dict[int, list[HistoryDocument]],
-) -> tuple[
-    dict[tuple[str, str], dict[str, LinkSupport]],
-    set[str],
-]:
+) -> dict[tuple[str, str], dict[str, LinkSupport]]:
     """Score every lifecycle link against its node basis.
 
-    Returns a node-keyed map of per-evidence LinkSupport plus the set of
-    documents that carry at least one strong link (used to decide whether a
-    zero-support link can be safely de-attributed).
+    Returns a node-keyed map of per-evidence LinkSupport.
     """
     nodes: dict[tuple[str, str], list[ContinuityHistoryLink]] = defaultdict(list)
     for link in links:
         nodes[(link.continuity_id, link.operation)].append(link)
 
     node_supports: dict[tuple[str, str], dict[str, LinkSupport]] = {}
-    strong_documents: set[str] = set()
     for node_key, node_links in nodes.items():
         node_evidence_ids = {link.evidence_id for link in node_links}
         for link in node_links:
@@ -456,34 +445,21 @@ def _compute_link_supports(
                 window_text=window_text,
             )
             node_supports.setdefault(node_key, {})[link.evidence_id] = support
-            if support.support_class == "strong":
-                strong_documents.add(link.evidence_id)
-    return node_supports, strong_documents
+    return node_supports
 
 
 def _suppress_attribution(
     link: ContinuityHistoryLink,
     support: LinkSupport,
-    node_supports: dict[tuple[str, str], dict[str, LinkSupport]],
-    strong_documents: set[str],
 ) -> bool:
-    """Correct a misleading relation attribution without deleting evidence.
+    """Strip a relation attribution that has no support at all.
 
-    A zero-support link may be de-attributed only when it is provably
-    redundant: either the same lifecycle node carries another strong evidence,
-    or the same document is already represented by a strong link on another
-    node. Everything else fails open.
+    A link with a complete basis whose evidence scores zero support is an
+    error mount (the same class of failure as the original p009) and never
+    claims the matter, even when it is the node's only evidence. Incomplete
+    bases fail open; every other class keeps its attribution.
     """
-    if not support.basis_complete or support.support_class != "zero":
-        return False
-    node_has_other_strong = any(
-        other.support_class == "strong"
-        for other in node_supports.get(
-            (link.continuity_id, link.operation),
-            {},
-        ).values()
-    )
-    return node_has_other_strong or link.evidence_id in strong_documents
+    return support.basis_complete and support.support_class == "zero"
 
 
 def _cluster_candidates(

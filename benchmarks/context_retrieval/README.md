@@ -7,16 +7,16 @@ stores. It does not call an LLM or touch a real save.
 
 ## Current checkpoint
 
-Accepted on 2026-08-10 with 24 cases:
+Accepted on 2026-08-10 with 25 cases:
 
 - must recall: `27/28`
-- weighted recall: `92/97`
+- weighted recall: `90/95`
 - forbidden evidence visible: `0`
 - forbidden main evidence visible: `0`
 - invariant violations: `0`
 
-The six newest cases are benchmark-first contracts for per-evidence semantic
-validation. They are now closed by the node-evidence quality layer (see
+The newest cases are benchmark-first contracts for per-evidence semantic
+validation. They are closed by the node-evidence quality layer (see
 `app/domain/context_facts/evidence_support.py`); two are regression guards that
 keep passing:
 
@@ -30,19 +30,30 @@ Closed contracts:
   siblings remain. It may still legitimately appear as adjacent context.
 - `shared_evidence_link_specific_validity`: a paragraph shared by two matters is
   de-attributed per link; the unsupported matter (`gate-rebuild`) has a
-  zero-support link suppressed because the same document already carries a
-  strong link to the supported matter (`copper-handoff`).
-- `entity_overlap_without_predicate_support`: entity-only noun overlap no longer
-  passes. The create evidence supports neither the premise nor the predicate,
-  scores zero support and, as degraded evidence, is barred from rescuing an
-  intent that already has direct coverage.
+  zero-support link suppressed while the supported matter (`copper-handoff`)
+  keeps its attribution on the same document.
+- `entity_overlap_without_predicate_support`: shared entity/location mentions
+  without predicate support no longer pass. The create evidence overlaps the
+  premise only through the location 青岩镇, which scores as weak support, so it
+  stays degraded and is barred from rescuing an intent that already has direct
+  coverage. (A genuinely zero-overlap mount would instead be stripped by
+  complete-basis attribution suppression, as in
+  `complete_zero_single_current_context`.)
 - `anonymized_spy_regression`: an archived matter matched through its later
   `current_state` no longer inherits strong relevance onto unrelated create
   evidence. The create `premise` describes a different concrete event
   (清点护院人手并重整班次), so the generic-action create evidence ("握着信物，摩挲暗记，
-  盘算下一步") is unsupported and degraded. This is an anonymised reproduction of a
-  real save; the case uses only generic terms (青岩镇 / 外乡客 / 信物 / 暗记 /
-  重振宗派). Production rules must never hardcode story-specific vocabulary.
+  盘算下一步") is unsupported and its attribution is stripped. This is an
+  anonymised reproduction of a real save; the case uses only generic terms
+  (青岩镇 / 外乡客 / 信物 / 暗记 / 重振宗派). Production rules must never
+  hardcode story-specific vocabulary.
+- `complete_zero_single_current_context`: a complete-basis zero-support link is
+  stripped even when it is the node's only evidence and its current-context
+  intent has no direct hit. Previously such a link failed open and could claim
+  a rescue seat; unconditional stripping treats it as an error mount.
+  `archived_eligibility` (pact origin) and `shared_evidence_across_continuities`
+  (recruitment context) carried the same class of wrongly mounted create
+  evidence, which is now stripped and no longer kept as a gold group.
 
 Regression guards:
 
@@ -54,8 +65,6 @@ Regression guards:
 - `legacy_null_hash_fail_open`: legacy saves with a null node evidence hash must
   fail open and keep their evidence, not delete it. A null hash passes pointer
   integrity; the premise basis is strong, so the evidence keeps a normal seat.
-  (A true "incomplete lifecycle semantic basis" case will be added once node
-  snapshots exist.)
 
 The earlier `late_state_delta_evidence` gap is unchanged; it concerns evidence
 ordering inside one lifecycle node and is outside final-selector scope. Its
@@ -108,9 +117,10 @@ not inherently better.
 the node-evidence quality layer:
 
 - `invalid_relation_links`: lifecycle links whose relation attribution was
-  suppressed because the evidence scored zero support against a complete basis
-  while an alternative strong sibling or strong link existed. Suppression never
-  removes a document; it only stops a false link from claiming that matter.
+  suppressed because the evidence scored zero support against a complete basis.
+  A complete basis with zero support is an error mount and is stripped
+  unconditionally, even when it is the node's only evidence; it never removes a
+  document, only stops a false link from claiming that matter.
 - `degraded_relation_links`: links whose evidence did not reach `strong` but
   stay selectable. Each intent is capped at `intent_target` rescue admissions
   dominated by that intent's own degraded proposal; degraded relation

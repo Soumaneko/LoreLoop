@@ -161,31 +161,8 @@ class TestLinkWindowText:
 
 
 class TestSuppressAttribution:
-    def test_zero_with_strong_sibling_is_suppressed(self):
-        from app.domain.context_facts.retriever import _suppress_attribution
-
-        strong = _support("确认接头暗记与时间。", "在旧港确认了接头暗记与三日后时间。")
-        zero = _support("确认接头暗记与时间。", "对岸灯火在薄雾里明灭。")
-        node_supports = {("item", "update"): {"p1": strong, "p2": zero}}
-        link = ContinuityHistoryLink(
-            continuity_id="item",
-            continuity_status="active",
-            operation="update",
-            evidence_id="p2",
-            evidence_hash=None,
-            triggering_intent_ids=["i1"],
-            match_reasons=["exact_entity_match"],
-            evidence_position=1,
-            basis_complete=True,
-        )
-        assert _suppress_attribution(link, zero, node_supports, set())
-
-    def test_zero_single_evidence_fails_open(self):
-        from app.domain.context_facts.retriever import _suppress_attribution
-
-        zero = _support("确认接头暗记与时间。", "对岸灯火在薄雾里明灭。")
-        node_supports = {("item", "create"): {"p1": zero}}
-        link = ContinuityHistoryLink(
+    def _link(self, *, basis_complete: bool = True):
+        return ContinuityHistoryLink(
             continuity_id="item",
             continuity_status="active",
             operation="create",
@@ -194,49 +171,46 @@ class TestSuppressAttribution:
             triggering_intent_ids=["i1"],
             match_reasons=["exact_entity_match"],
             evidence_position=0,
-            basis_complete=True,
+            basis_complete=basis_complete,
         )
-        assert not _suppress_attribution(link, zero, node_supports, set())
 
-    def test_zero_with_strong_link_on_another_node_is_suppressed(self):
-        from app.domain.context_facts.retriever import _suppress_attribution
-
-        strong = _support("约定三日后在青岩镇交接铜牌。", "把一枚铜牌交到那女人手中，约定三日后在青岩镇接头。")
-        zero = _support("筹备重建山门的材料与人力。", "把一枚铜牌交到那女人手中，约定三日后在青岩镇接头。")
-        node_supports = {
-            ("copper", "create"): {"p1": strong},
-            ("gate", "create"): {"p1": zero},
-        }
-        link = ContinuityHistoryLink(
-            continuity_id="gate",
-            continuity_status="active",
-            operation="create",
-            evidence_id="p1",
-            evidence_hash=None,
-            triggering_intent_ids=["i1"],
-            match_reasons=["exact_entity_match"],
-            evidence_position=0,
-            basis_complete=True,
-        )
-        assert _suppress_attribution(link, zero, node_supports, {"p1"})
-
-    def test_incomplete_basis_never_suppressed(self):
+    def test_complete_zero_is_suppressed_unconditionally(self):
         from app.domain.context_facts.retriever import _suppress_attribution
 
         zero = _support("确认接头暗记与时间。", "对岸灯火在薄雾里明灭。")
-        node_supports = {("item", "create"): {"p1": zero}}
-        link = ContinuityHistoryLink(
-            continuity_id="item",
-            continuity_status="active",
-            operation="create",
-            evidence_id="p1",
-            evidence_hash=None,
-            triggering_intent_ids=["i1"],
-            match_reasons=["exact_entity_match"],
-            evidence_position=0,
+        assert _suppress_attribution(self._link(), zero)
+
+    def test_complete_zero_is_suppressed_even_when_single_evidence(self):
+        from app.domain.context_facts.retriever import _suppress_attribution
+
+        zero = _support("确认接头暗记与时间。", "对岸灯火在薄雾里明灭。")
+        link = self._link()
+        assert _suppress_attribution(link, zero)
+
+    def test_incomplete_zero_fails_open(self):
+        from app.domain.context_facts.retriever import _suppress_attribution
+        from app.domain.context_facts.evidence_support import (
+            classify_link_support,
+        )
+
+        support = classify_link_support(
+            basis_primary="确认接头暗记与时间。",
+            basis_context=None,
             basis_complete=False,
+            window_text="对岸灯火在薄雾里明灭。",
         )
-        assert not _suppress_attribution(link, zero, node_supports, set())
+        assert support.support_class == "incomplete"
+        link = self._link(basis_complete=False)
+        assert not _suppress_attribution(link, support)
+
+    def test_weak_or_strong_never_suppressed(self):
+        from app.domain.context_facts.retriever import _suppress_attribution
+
+        weak = _support("确认接头暗记与时间。", "确认了接头。")
+        strong = _support("确认接头暗记与时间。", "在旧港确认了接头暗记与三日后时间。")
+        link = self._link()
+        assert not _suppress_attribution(link, weak)
+        assert not _suppress_attribution(link, strong)
 
 
 class TestCandidatePerIntent:

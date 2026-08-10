@@ -302,13 +302,12 @@
       ],
       "continuity_logs": [
         {"item_id": "a-strong-pact", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "a-strong-pact", "operation": "resolve", "turn_index": 2, "evidence_ids": ["turn_2_p001"]},
+        {"item_id": "a-strong-pact", "operation": "resolve", "turn_index": 2, "evidence_ids": ["turn_2_p001"], "reason": "确认密约事项已经解决。"},
         {"item_id": "b-weak-location", "operation": "create", "turn_index": 3, "evidence_ids": ["turn_3_p001"]},
-        {"item_id": "b-weak-location", "operation": "resolve", "turn_index": 4, "evidence_ids": ["turn_4_p001"]}
+        {"item_id": "b-weak-location", "operation": "resolve", "turn_index": 4, "evidence_ids": ["turn_4_p001"], "reason": "确认搜查已经结束。"}
       ],
       "gold_groups": [
-        {"group_id": "pact_resolution", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]},
-        {"group_id": "pact_origin", "importance": "should", "acceptable_evidence_ids": ["turn_1_p001"]}
+        {"group_id": "pact_resolution", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]}
       ],
       "forbidden_evidence_ids": ["turn_3_p001", "turn_4_p001"]
     },
@@ -441,7 +440,7 @@
       },
       "turns": [
         {"turn_index": 0, "scene_id": "scene_000", "scene_text": "那枚联络玉牌短暂闪了一下。\n\n他握着玉牌思考下一步安排。"},
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "回信确认已经有人接受邀请。"}
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "回信确认，先前玉牌闪光正是有人接受邀请时发出的联络信号。"}
       ],
       "continuity_items": [
         {"id": "a-recruitment", "subject": "林舟等待招募回应", "premise": "确认是否有人接受邀请。", "current_state": "已经收到接受邀请的回信。", "entities": ["林舟"], "created_turn": 0, "updated_turn": 1},
@@ -450,13 +449,12 @@
       "continuity_logs": [
         {"item_id": "a-recruitment", "operation": "create", "turn_index": 0, "evidence_ids": ["turn_0_p002"]},
         {"item_id": "b-signal", "operation": "create", "turn_index": 0, "evidence_ids": ["turn_0_p001"]},
-        {"item_id": "b-signal", "operation": "resolve", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
+        {"item_id": "b-signal", "operation": "resolve", "turn_index": 1, "evidence_ids": ["turn_1_p001"], "reason": "确认玉牌闪光来源已查明。"},
         {"item_id": "a-recruitment", "operation": "update", "turn_index": 1, "state_delta": "收到招募回应。", "evidence_ids": ["turn_1_p001"]}
       ],
       "gold_groups": [
         {"group_id": "shared_reply", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
-        {"group_id": "signal_origin", "importance": "should", "acceptable_evidence_ids": ["turn_0_p001"]},
-        {"group_id": "recruitment_context", "importance": "should", "acceptable_evidence_ids": ["turn_0_p002"]}
+        {"group_id": "signal_origin", "importance": "should", "acceptable_evidence_ids": ["turn_0_p001"]}
       ],
       "provenance_expectations": [
         {
@@ -912,10 +910,36 @@
       ],
       "continuity_logs": [
         {"item_id": "revive-sect", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "revive-sect", "operation": "resolve", "turn_index": 6, "evidence_ids": ["turn_6_p001"]}
+        {"item_id": "revive-sect", "operation": "resolve", "turn_index": 6, "evidence_ids": ["turn_6_p001"], "reason": "合议确认重振宗派已有眉目，以信物为记推进并留意刺探。"}
       ],
       "gold_groups": [
         {"group_id": "spy_answer", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001"]
+    },
+    {
+      "case_id": "complete_zero_single_current_context",
+      "description": "A complete-basis zero-support link is stripped even when it is the node's only evidence and its current-context intent has no direct hit.",
+      "current_turn_index": 5,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "current_qingyan",
+            "focus": "entity",
+            "origin": "current_context",
+            "entities": [{"name": "青岩镇", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "他在库房盘点存货，核对往来账目。"}
+      ],
+      "continuity_items": [
+        {"id": "mis-hung", "subject": "青岩镇接头", "premise": "约定三日后在青岩镇以铜牌接头。", "entities": ["青岩镇"], "created_turn": 1, "updated_turn": 1}
+      ],
+      "continuity_logs": [
+        {"item_id": "mis-hung", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
       ],
       "forbidden_evidence_ids": ["turn_1_p001"]
     }

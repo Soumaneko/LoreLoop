@@ -64,12 +64,12 @@ def test_context_retrieval_benchmark_captures_current_quality_signals(
     assert late_delta["must_recalled"] == 0
     assert late_delta["must_total"] == 1
     assert late_delta["turn_contributions"] == {"1": 1, "5": 2}
-    assert late_delta["relation_candidates_considered"] == 6
+    assert late_delta["relation_candidates_considered"] == 4
 
     shared = cases["shared_evidence_across_continuities"]
     assert shared["visible_evidence_ids"].count("turn_1_p001") == 1
     assert shared["continuity_contributions"] == {
-        "a-recruitment": 2,
+        "a-recruitment": 1,
         "b-signal": 2,
     }
 
@@ -114,8 +114,9 @@ def test_context_retrieval_benchmark_captures_current_quality_signals(
     assert long_direct["relation_hits_added"] == 0
     assert long_direct["forbidden_visible_ids"] == []
 
-    # Per-link node evidence support (closed by the soft-rank attribution
-    # suppression + one-time rescue; the other cases stay untouched).
+    # Per-link node evidence support: complete-basis zero links are stripped
+    # before the selector (attribution suppression); weak links stay degraded
+    # and may only rescue uncovered intents (one-time, per-intent cap).
     noise = cases["relation_node_evidence_noise"]
     assert noise["must_recalled"] == 1
     assert noise["forbidden_visible_ids"] == []
@@ -132,6 +133,12 @@ def test_context_retrieval_benchmark_captures_current_quality_signals(
     spy = cases["anonymized_spy_regression"]
     assert spy["must_recalled"] == 1
     assert spy["forbidden_visible_ids"] == []
+
+    zero_single = cases["complete_zero_single_current_context"]
+    assert zero_single["forbidden_visible_ids"] == []
+    assert zero_single["relation_hits_added"] == 0
+    assert zero_single["relation_candidates_considered"] == 0
+    assert zero_single["invalid_relation_links"] == 1
 
     # Regression guards that must keep passing.
     implicit = cases["implicit_evidence_with_adjacent_context"]

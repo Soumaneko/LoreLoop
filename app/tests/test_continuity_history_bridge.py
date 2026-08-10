@@ -373,7 +373,7 @@ def test_degraded_rescue_capped_per_intent_at_intent_target():
                 triggering_intent_ids=["explicit_npc"],
                 match_reasons=["exact_entity_match"],
                 evidence_position=0,
-                evidence_basis_primary="约定三日后在青岩镇以铜牌接头。",
+                evidence_basis_primary="他们稍后会面。",
                 basis_complete=True,
             ))
 
@@ -644,7 +644,11 @@ def test_context_facts_service_wires_forward_bridge_into_history_retrieval():
             user_input="",
             scene_text=text,
         )
-        continuity_store.insert(_item("thread", entities=["苏念薇"]))
+        continuity_store.insert(_item(
+            "thread",
+            premise="确认周姓男子看人不像在看行情。",
+            entities=["苏念薇"],
+        ))
         _add_log(
             continuity_store,
             item_id="thread",
