@@ -118,9 +118,8 @@ def test_unified_history_selector_breaks_exact_ties_by_evidence_id():
         return SimpleNamespace(
             document=SimpleNamespace(document_id=document_id, turn_index=1),
             matched_intent_ids={"i1"},
-            relation_intent_ids=set(),
             intent_matched_entities={"i1": {"艾琳"}},
-            linked_continuity_ids=set(),
+            relation_admission=None,
         )
 
     later_id = candidate("turn_1_p002")

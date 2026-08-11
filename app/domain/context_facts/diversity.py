@@ -4,6 +4,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Callable, Generic, Literal, Protocol, TypeVar
 
+from .relation_admission import (
+    RelationAdmission,
+    degraded_rescue_allowed,
+    partition_served,
+)
 from .schemas import ContextSearchIntent, ContextSearchPlan
 
 
@@ -42,10 +47,10 @@ class HistoryDiversityPolicy:
 
 class DiversityCandidate(Protocol):
     matched_intent_ids: set[str]
-    relation_intent_ids: set[str]
     intent_matched_entities: dict[str, set[str]]
-    linked_continuity_ids: set[str]
-    document: object
+    relation_admission: RelationAdmission | None
+    # Only document_id/turn_index are duck-typed off the opaque document.
+    document: Any
 
 
 CandidateT = TypeVar("CandidateT", bound=DiversityCandidate)
@@ -94,32 +99,6 @@ _ROUTE_PRIORITY = {
 }
 
 
-def degraded_rescue_allowed(
-    owner_intent_id: str,
-    direct_covered_intents: set[str],
-) -> bool:
-    """A degraded relation proposal may only rescue an intent that has no
-    direct hit yet, judged by its own owner intent (never another intent's
-    coverage)."""
-    return owner_intent_id not in direct_covered_intents
-
-
-def partition_served(
-    direct_intents: set[str],
-    relation_intents: set[str],
-    degraded_relation_intents: set[str],
-) -> tuple[set[str], set[str]]:
-    """Split a selected document's served intents into normal vs degraded.
-
-    Normal coverage is any direct intent plus any non-degraded relation
-    intent. A degraded relation intent that is also directly served counts as
-    normal coverage and is not a rescue.
-    """
-    normal = direct_intents | (relation_intents - degraded_relation_intents)
-    degraded = degraded_relation_intents - normal
-    return normal, degraded
-
-
 def select_diverse_candidates(
     search_plan: ContextSearchPlan,
     *,
@@ -152,19 +131,19 @@ def select_diverse_candidates(
     current_payload_chars = 2  # Compact projection of an empty evidence set.
 
     def document_id(candidate: CandidateT) -> str:
-        return str(getattr(candidate.document, "document_id"))
+        return candidate.document.document_id
 
     def turn_index(candidate: CandidateT) -> int:
-        return int(getattr(candidate.document, "turn_index"))
+        return candidate.document.turn_index
 
     def per_intent_degraded(
         intent_id: str,
         candidate: CandidateT,
     ) -> bool:
-        per_intent = getattr(candidate, "relation_intent_degraded", None)
-        if per_intent:
-            return per_intent.get(intent_id, False)
-        return bool(getattr(candidate, "relation_degraded", False))
+        admission = candidate.relation_admission
+        if admission is None:
+            return False
+        return admission.degraded_for(intent_id)
 
     def degraded(proposal: SelectionProposal[CandidateT]) -> bool:
         """Per-owner degraded status so a strong link on one intent never
@@ -212,10 +191,14 @@ def select_diverse_candidates(
                 and owner_supported(intents[intent_id], candidate, "direct")
             )
         }
+        admission = candidate.relation_admission
+        relation_ids = (
+            set(admission.served_intent_ids)
+            if admission is not None
+            else set()
+        )
         return direct_ids.union(
-            intent_id
-            for intent_id in candidate.relation_intent_ids
-            if intent_id in intents
+            intent_id for intent_id in relation_ids if intent_id in intents
         )
 
     def eligible(proposal: SelectionProposal[CandidateT]) -> bool:
@@ -235,9 +218,15 @@ def select_diverse_candidates(
                 entity is None
                 or entity_owner_counts[entity] < policy.entity_cap
             )
-        if not candidate.linked_continuity_ids or not all(
+        admission = candidate.relation_admission
+        linked_continuity_ids = (
+            set(admission.matched_continuity_ids)
+            if admission is not None
+            else set()
+        )
+        if not linked_continuity_ids or not all(
             continuity_item_counts[item_id] < policy.continuity_item_cap
-            for item_id in candidate.linked_continuity_ids
+            for item_id in linked_continuity_ids
         ):
             return False
         # Degraded relation evidence may only rescue an intent that has no
@@ -331,11 +320,16 @@ def select_diverse_candidates(
             for intent_id in served
             if intent_id in candidate.matched_intent_ids
         }
-        relation_served = {
-            intent_id
-            for intent_id in served
-            if intent_id in candidate.relation_intent_ids
-        }
+        admission = candidate.relation_admission
+        relation_served = (
+            {
+                intent_id
+                for intent_id in served
+                if intent_id in admission.served_intent_ids
+            }
+            if admission is not None
+            else set()
+        )
         degraded_relation_served = {
             intent_id
             for intent_id in relation_served
@@ -356,7 +350,10 @@ def select_diverse_candidates(
                 and owner_supported(intents[intent_id], candidate, "direct")
             ):
                 route_coverage[(intent_id, "direct")] += 1
-        for intent_id in candidate.relation_intent_ids:
+        relation_intent_ids = (
+            admission.served_intent_ids if admission is not None else set()
+        )
+        for intent_id in relation_intent_ids:
             if intent_id in intents:
                 route_coverage[(intent_id, "relation")] += 1
 
@@ -365,7 +362,11 @@ def select_diverse_candidates(
             if entity is not None:
                 entity_owner_counts[entity] += 1
         else:
-            for item_id in candidate.linked_continuity_ids:
+            for item_id in (
+                admission.matched_continuity_ids
+                if admission is not None
+                else ()
+            ):
                 continuity_item_counts[item_id] += 1
 
     return selected
