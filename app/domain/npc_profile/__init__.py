@@ -1,6 +1,7 @@
 from .extractor import NPCProfileExtractor
 from .schemas import (
-    ExistingNPCProfilePatch,
+    ExistingNPCProfileLongTermPatch,
+    ExistingNPCProfileTemporaryPatch,
     NPCExtractionResult,
     NPCMention,
     NPCProfile,
@@ -15,7 +16,8 @@ from .store import NPCProfileStore
 from .updater import NPCProfileUpdater
 
 __all__ = [
-    "ExistingNPCProfilePatch",
+    "ExistingNPCProfileLongTermPatch",
+    "ExistingNPCProfileTemporaryPatch",
     "NPCExtractionResult",
     "NPCMention",
     "NPCProfile",

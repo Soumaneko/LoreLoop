@@ -10,6 +10,7 @@ from app.domain.current_state.schemas import CurrentState
 from app.domain.director import DirectorDecisionBatch, DirectorSkillExecutionBatch
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
+from app.domain.npc_profile.updater import NPCProfileUpdateWarning
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 
@@ -37,6 +38,7 @@ _SLOT_CATEGORIES: dict[str, frozenset[str]] = {
         "turn_summary",
         "action_preview",
         "continuity_projection",
+        "npc_update_warnings",
     }),
     "write_result": frozenset({
         "npc_extraction",
@@ -122,6 +124,7 @@ class ConfirmationCacheData(TypedDict, total=False):
     scene_summary_scheduled: bool
     continuity_projection: ContinuityProjection
     recorded_setting_ids: list[str]
+    npc_update_warnings: list[NPCProfileUpdateWarning]
 
 
 class ConfirmationCache:

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from app.domain.confirmed_history import HistoryDocument
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.npc_profile.extractor import NPCProfileExtractor
@@ -36,6 +37,21 @@ def _state() -> CurrentState:
         scene=SceneState(scene_id="scene_001", location="醉花楼", participants=["萧云痕"]),
         player=PlayerState(name="萧云痕"),
     )
+
+
+def _evidence_documents(scene_text: str) -> dict[str, HistoryDocument]:
+    from app.domain.confirmed_history import HistoryDocument, build_turn_documents
+
+    return {
+        document.document_id: document
+        for document in build_turn_documents(
+            scene_id="scene_001",
+            turn_index=0,
+            user_input="",
+            scene_text=scene_text,
+        )
+        if document.source_type == "scene_paragraph"
+    }
 
 
 def test_backfill_core_memory_projection_excludes_protagonist_profile():
@@ -304,7 +320,7 @@ def test_new_npc_candidate_is_not_saved_or_backfilled():
                         "matched_npc_index": None,
                         "persist_alias": False,
                         "turn_observation": "柳莺莺正在醉花楼大堂弹奏琵琶。",
-                        "profile_patch": None,
+                        "temporary_patch": None,
                         "new_profile": {
                             "name": "柳莺莺",
                             "aliases": [],
@@ -362,7 +378,7 @@ def test_new_npc_without_enrich_is_dropped():
                         "matched_npc_index": None,
                         "persist_alias": False,
                         "turn_observation": "二楼女子正在参与一笔生意谈判。",
-                        "profile_patch": None,
+                        "temporary_patch": None,
                         "new_profile": {
                             "name": "二楼女子",
                             "aliases": [],
@@ -484,7 +500,7 @@ def test_existing_npc_update_does_not_trigger_profile_backfill():
                         "matched_npc_index": 0,
                         "persist_alias": False,
                         "turn_observation": "裴玉奴本回合在醉花楼观察萧云痕。",
-                        "profile_patch": {
+                        "temporary_patch": {
                             "last_known_location": "醉花楼",
                             "attitude_to_player": "谨慎",
                             "current_intent": "观察萧云痕",
@@ -548,7 +564,7 @@ def test_similar_name_is_unresolved_and_can_create_distinct_npc():
                         "matched_npc_index": None,
                         "persist_alias": False,
                         "turn_observation": "林川向萧云痕说明自己的书院来历。",
-                        "profile_patch": None,
+                        "temporary_patch": None,
                         "new_profile": {
                             "name": "林川",
                             "aliases": [],
@@ -626,7 +642,7 @@ def test_exact_match_and_updater_identity_resolution_share_one_update_call():
                     "matched_npc_index": exact_index,
                     "persist_alias": False,
                     "turn_observation": "裴姑娘本回合出现在醉花楼。",
-                    "profile_patch": {
+                    "temporary_patch": {
                         "last_known_location": "醉花楼",
                     },
                     "new_profile": None,
@@ -637,7 +653,7 @@ def test_exact_match_and_updater_identity_resolution_share_one_update_call():
                     "matched_npc_index": alias_index,
                     "persist_alias": True,
                     "turn_observation": "远舟镖头向裴姑娘抱拳。",
-                    "profile_patch": None,
+                    "temporary_patch": None,
                     "new_profile": None,
                 },
             ]
@@ -683,7 +699,7 @@ def test_existing_no_op_patch_keeps_observation_without_profile_update():
                 "matched_npc_index": 0,
                 "persist_alias": False,
                 "turn_observation": "萧云痕本回合提到了苏云袖。",
-                "profile_patch": {
+                "temporary_patch": {
                         "last_known_location": "合欢殿",
                     "attitude_to_player": "信任",
                     "current_intent": "修习水系治愈术",
@@ -765,3 +781,887 @@ def test_transient_alias_still_matches_before_expiry():
     profile = NPCProfile(name="沈青萝", transient_aliases={"筑基初期女修": 6})
     assert prune_expired_transient_aliases(profile, turn_index=6) is False
     assert "筑基初期女修" in profile.transient_aliases
+
+
+def test_updater_prompt_defines_temporary_and_long_term_channels():
+    prompt = Path("app/prompts/confirmation/npc_profile_update_v1.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "`temporary_patch`" in prompt
+    assert "`long_term_patch`" in prompt
+    assert "`field_evidence`" in prompt
+    assert "Scene Paragraph Evidence" in prompt
+    assert "scene_paragraph_evidence_json" in prompt
+    assert "每回合状态更新通道" in prompt
+    assert "不会过期" in prompt
+    assert "极高风险字段" in prompt
+    assert "document_id" in prompt
+    assert "profile_patch" not in prompt
+
+
+def test_long_term_patch_updates_existing_profile_fields():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            public_summary="鸣玉坊琵琶名手。",
+            role="琵琶名手",
+            personality_trait="登台前反复试弦",
+            faction="鸣玉坊",
+            core_motivation="守住鸣玉坊的牌面",
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴如今常驻醉花楼献艺。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "public_summary": "鸣玉坊琵琶名手，如今常驻醉花楼献艺。",
+                    "role": "醉花楼琵琶名手",
+                    "personality_trait": "登台前反复试弦，不合意绝不开口",
+                    "faction": "醉花楼",
+                    "field_evidence": {
+                        "public_summary": ["turn_0_p001"],
+                        "role": ["turn_0_p001"],
+                        "personality_trait": ["turn_0_p001"],
+                        "faction": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴如今常驻醉花楼献艺。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴常驻醉花楼献艺。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert updated.public_summary == "鸣玉坊琵琶名手，如今常驻醉花楼献艺。"
+    assert updated.role == "醉花楼琵琶名手"
+    assert updated.personality_trait == "登台前反复试弦，不合意绝不开口"
+    assert updated.faction == "醉花楼"
+    assert updated.core_motivation == "守住鸣玉坊的牌面"
+
+
+def test_high_risk_field_without_evidence_is_dropped():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            public_summary="鸣玉坊琵琶名手。",
+            faction="鸣玉坊",
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴出现在醉花楼。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "public_summary": "被推断改写后的身份描述。",
+                    "faction": "青云门",
+                    "field_evidence": {
+                        "faction": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    result = update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴出现在醉花楼。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴出现在醉花楼。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert updated.public_summary == "鸣玉坊琵琶名手。"
+    assert updated.faction == "青云门"
+    assert [(w.field_name, w.code) for w in result.warnings] == [
+        ("public_summary", "long_term_field_evidence_missing")
+    ]
+
+
+def test_field_evidence_unknown_key_raises():
+    from pydantic import ValidationError
+
+    from app.domain.npc_profile.schemas import ExistingNPCProfileLongTermPatch
+
+    with pytest.raises(ValidationError, match="unknown long-term field evidence keys"):
+        ExistingNPCProfileLongTermPatch.model_validate({
+            "role": "名手",
+            "field_evidence": {"typo_field": ["turn_0_p001"]},
+        })
+
+
+def test_field_evidence_empty_list_raises():
+    from pydantic import ValidationError
+
+    from app.domain.npc_profile.schemas import ExistingNPCProfileLongTermPatch
+
+    with pytest.raises(ValidationError, match="must not be empty"):
+        ExistingNPCProfileLongTermPatch.model_validate({
+            "role": "名手",
+            "field_evidence": {"role": []},
+        })
+
+
+def test_field_evidence_duplicate_ids_raise():
+    from pydantic import ValidationError
+
+    from app.domain.npc_profile.schemas import ExistingNPCProfileLongTermPatch
+
+    with pytest.raises(ValidationError, match="must not repeat"):
+        ExistingNPCProfileLongTermPatch.model_validate({
+            "role": "名手",
+            "field_evidence": {"role": ["turn_0_p001", "turn_0_p001"]},
+        })
+
+
+def test_long_term_fabricated_evidence_drops_field_and_warns():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            public_summary="鸣玉坊琵琶名手。",
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴出现在醉花楼。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "public_summary": "被编造证据改写的描述。",
+                    "field_evidence": {
+                        "public_summary": ["fabricated_document_id"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    result = update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴出现在醉花楼。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴出现在醉花楼。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert updated.public_summary == "鸣玉坊琵琶名手。"
+    assert result.saved_ids == []
+    assert len(result.warnings) == 1
+    warning = result.warnings[0]
+    assert warning.npc_name == "裴玉奴"
+    assert warning.field_name == "public_summary"
+    assert warning.code == "long_term_field_evidence_dropped"
+    assert warning.evidence_ids == ("fabricated_document_id",)
+
+
+def test_long_term_evidence_must_be_scene_paragraph_of_this_turn():
+    from app.domain.confirmed_history import HistoryDocument
+
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            public_summary="鸣玉坊琵琶名手。",
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "public_summary": "改写的描述。",
+                    "field_evidence": {
+                        "public_summary": ["turn_0_input"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    player_input_document = HistoryDocument(
+        document_id="turn_0_input",
+        source_type="player_input",
+        turn_index=0,
+        scene_id="scene_001",
+        text="裴玉奴改写了描述。",
+    )
+    result = update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴出现在醉花楼。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents={"turn_0_input": player_input_document},
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴出现在醉花楼。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert updated.public_summary == "鸣玉坊琵琶名手。"
+    assert result.saved_ids == []
+    assert result.warnings[0].evidence_ids == ("turn_0_input",)
+
+
+def test_long_term_evidence_from_other_turn_is_dropped():
+    from app.domain.confirmed_history import HistoryDocument
+
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            public_summary="鸣玉坊琵琶名手。",
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "public_summary": "改写的描述。",
+                    "field_evidence": {
+                        "public_summary": ["turn_1_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    other_turn_document = HistoryDocument(
+        document_id="turn_1_p001",
+        source_type="scene_paragraph",
+        turn_index=1,
+        scene_id="scene_001",
+        text="裴玉奴改写了描述。",
+    )
+    result = update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴出现在醉花楼。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents={"turn_1_p001": other_turn_document},
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴出现在醉花楼。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert updated.public_summary == "鸣玉坊琵琶名手。"
+    assert result.saved_ids == []
+    assert result.warnings[0].code == "long_term_field_evidence_dropped"
+    assert result.warnings[0].evidence_ids == ("turn_1_p001",)
+
+
+def test_long_term_evidence_without_turn_index_raises():
+    store = NPCProfileStore(":memory:")
+    existing = store.upsert(NPCProfile(name="裴玉奴"))
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "role": "名手",
+                    "field_evidence": {"role": ["turn_0_p001"]},
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+    scene_text = "裴玉奴是醉花楼名手。"
+
+    with pytest.raises(ValueError, match="turn_index is required"):
+        update_npc_profiles_from_extraction(
+            scene_facts="裴玉奴是醉花楼名手。",
+            current_state=_state(),
+            core_memory=CoreMemory(items=[]),
+            gateway=gateway,
+            npc_store=store,
+            existing_profiles=[store.get_by_id(existing)],
+            evidence_documents=_evidence_documents(scene_text),
+            extraction=NPCExtractionResult(
+                mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴是醉花楼名手。")]
+            ),
+        )
+
+
+def test_long_term_drop_warning_order_is_deterministic():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            public_summary="鸣玉坊琵琶名手。",
+            faction="鸣玉坊",
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴出现在醉花楼。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "public_summary": "被改写。",
+                    "faction": "青云门",
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    result = update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴出现在醉花楼。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴出现在醉花楼。")]
+        ),
+    )
+
+    assert [w.field_name for w in result.warnings] == [
+        "public_summary",
+        "faction",
+    ]
+
+
+def test_long_term_blank_string_does_not_clear_field():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            role="琵琶名手",
+            public_summary="鸣玉坊琵琶名手。",
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴出现在醉花楼。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "role": "",
+                    "field_evidence": {
+                        "role": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴出现在醉花楼。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴出现在醉花楼。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert updated.role == "琵琶名手"
+
+
+def test_long_term_known_abilities_skip_duplicates_without_wasting_capacity():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            known_abilities=[
+                {"name": "琵琶", "description": "a"},
+                {"name": "唱曲", "description": "b"},
+                {"name": "读账", "description": "c"},
+                {"name": "待客", "description": "d"},
+            ],
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴新学了轻功。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "known_abilities": {
+                        "add": [
+                            {"name": "琵琶", "description": "a"},
+                            {"name": "轻功", "description": "e"},
+                        ]
+                    },
+                    "field_evidence": {
+                        "known_abilities": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴新学了轻功。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴新学了轻功。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert len(updated.known_abilities) == 5
+    assert [a.name for a in updated.known_abilities] == [
+        "琵琶",
+        "唱曲",
+        "读账",
+        "待客",
+        "轻功",
+    ]
+
+
+def test_long_term_known_abilities_append_delta_dedup_and_cap():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            known_abilities=[{"name": "琵琶", "description": "以曲调应和现场气氛"}],
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴能唱曲、读账。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "known_abilities": {
+                        "add": [
+                            {"name": "琵琶", "description": "以曲调应和现场气氛"},
+                            {"name": "唱曲", "description": "以婉转唱腔吸引宾客"},
+                            {"name": "读账", "description": "能快速核对流水账目"},
+                        ]
+                    },
+                    "field_evidence": {
+                        "known_abilities": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴能唱曲、读账。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴能唱曲、读账。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert [(a.name, a.description) for a in updated.known_abilities] == [
+        ("琵琶", "以曲调应和现场气氛"),
+        ("唱曲", "以婉转唱腔吸引宾客"),
+        ("读账", "能快速核对流水账目"),
+    ]
+
+
+def test_long_term_known_abilities_cap_at_five():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            known_abilities=[
+                {"name": "琵琶", "description": "a"},
+                {"name": "唱曲", "description": "b"},
+                {"name": "读账", "description": "c"},
+                {"name": "待客", "description": "d"},
+            ],
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴也会剑术和轻功。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "known_abilities": {
+                        "add": [
+                            {"name": "剑术", "description": "e"},
+                            {"name": "轻功", "description": "f"},
+                        ]
+                    },
+                    "field_evidence": {
+                        "known_abilities": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴也会剑术和轻功。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴也会剑术和轻功。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert len(updated.known_abilities) == 5
+    assert [a.name for a in updated.known_abilities] == [
+        "琵琶",
+        "唱曲",
+        "读账",
+        "待客",
+        "剑术",
+    ]
+
+
+def test_long_term_known_abilities_cap_respects_full_abilities():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            known_abilities=[
+                {"name": "琵琶", "description": "a"},
+                {"name": "唱曲", "description": "b"},
+                {"name": "读账", "description": "c"},
+                {"name": "待客", "description": "d"},
+                {"name": "奉茶", "description": "e"},
+            ],
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴也会剑术。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "known_abilities": {
+                        "add": [
+                            {"name": "剑术", "description": "f"},
+                        ]
+                    },
+                    "field_evidence": {
+                        "known_abilities": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴也会剑术。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴也会剑术。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert len(updated.known_abilities) == 5
+    assert [a.name for a in updated.known_abilities] == [
+        "琵琶",
+        "唱曲",
+        "读账",
+        "待客",
+        "奉茶",
+    ]
+
+
+def test_long_term_no_op_patch_is_skipped():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            public_summary="鸣玉坊琵琶名手。",
+            source_scene_ids=["scene_008"],
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴出现在醉花楼。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": None,
+                "long_term_patch": {
+                    "public_summary": "鸣玉坊琵琶名手。",
+                    "field_evidence": {
+                        "public_summary": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴出现在醉花楼。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴出现在醉花楼。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert updated.public_summary == "鸣玉坊琵琶名手。"
+    assert updated.source_scene_ids == ["scene_008"]
+
+
+def test_temporary_and_long_term_patch_combine_in_one_result():
+    store = NPCProfileStore(":memory:")
+    existing_id = store.upsert(
+        NPCProfile(
+            name="裴玉奴",
+            public_summary="鸣玉坊琵琶名手。",
+            last_known_location="鸣玉坊",
+        )
+    )
+    existing = store.get_by_id(existing_id)
+    scene_text = "裴玉奴如今为醉花楼献艺。"
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "existing",
+                "matched_npc_index": 0,
+                "persist_alias": False,
+                "turn_observation": "裴玉奴在醉花楼弹了一曲。",
+                "temporary_patch": {
+                    "last_known_location": "醉花楼",
+                    "current_intent": "为醉花楼献艺",
+                },
+                "long_term_patch": {
+                    "role": "醉花楼琵琶名手",
+                    "field_evidence": {
+                        "role": ["turn_0_p001"],
+                    },
+                },
+                "new_profile": None,
+            }]
+        }]
+    )
+
+    update_npc_profiles_from_extraction(
+        scene_facts="裴玉奴如今为醉花楼献艺。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[existing],
+        evidence_documents=_evidence_documents(scene_text),
+        turn_index=0,
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="裴玉奴", context_span="裴玉奴为醉花楼献艺。")]
+        ),
+    )
+
+    updated = store.get_by_id(existing_id)
+    assert updated.last_known_location == "醉花楼"
+    assert updated.current_intent == "为醉花楼献艺"
+    assert updated.role == "醉花楼琵琶名手"
+
+
+def test_new_resolution_strips_temporary_and_long_term_patches():
+    store = NPCProfileStore(":memory:")
+    gateway = _Gateway(
+        [{
+            "results": [{
+                "candidate_index": 0,
+                "resolution": "new",
+                "matched_npc_index": None,
+                "persist_alias": False,
+                "turn_observation": None,
+                "temporary_patch": {
+                    "last_known_location": "醉花楼",
+                },
+                "long_term_patch": {
+                    "role": "书生",
+                    "field_evidence": {"role": ["turn_0_p001"]},
+                },
+                "new_profile": {
+                    "name": "林川",
+                    "aliases": [],
+                    "public_summary": "来自白鹤书院的年轻书生。",
+                    "role": "白鹤书院书生",
+                    "appearance": None,
+                    "personality_trait": None,
+                    "known_abilities": [],
+                    "faction": "白鹤书院",
+                    "last_known_location": "醉花楼",
+                    "attitude_to_player": "友善",
+                    "current_intent": "向萧云痕请教",
+                },
+            }]
+        }]
+    )
+
+    result = update_npc_profiles_from_extraction(
+        scene_facts="林川是来自白鹤书院的年轻书生。",
+        current_state=_state(),
+        core_memory=CoreMemory(items=[]),
+        gateway=gateway,
+        npc_store=store,
+        existing_profiles=[],
+        extraction=NPCExtractionResult(
+            mentions=[NPCMention(name="林川", context_span="林川是白鹤书院书生。")]
+        ),
+    )
+
+    assert result.saved_ids == []
+    assert len(result.new_profiles) == 1
+    assert result.new_profiles[0].role == "白鹤书院书生"

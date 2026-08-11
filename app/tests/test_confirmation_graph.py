@@ -889,13 +889,17 @@ def test_state_update_node_reuses_complete_triple(monkeypatch):
 
 def test_npc_profile_update_node_recomputes_pair_when_cache_partial(monkeypatch):
     state = {
-        "pipeline_input": SimpleNamespace(turn_index=1),
+        "pipeline_input": SimpleNamespace(turn_index=1, user_input=""),
         "trace_id": "trace-1",
         "cache": {"updated_npc_profile_ids": ["stale"], "key": "正文"},
         "write_db": True,
         "npc_extraction": object(),
         "scene_facts_json": "{}",
-        "updated_state": object(),
+        "updated_state": CurrentState(
+            scene=SceneState(scene_id="scene_001", location="醉花楼", participants=["萧云痕"]),
+            player=PlayerState(name="萧云痕"),
+        ),
+        "effective_scene_text": "裴玉奴出现在醉花楼。",
         "core_memory": CoreMemory(items=[]),
         "existing_npc_profiles": [],
         "recent_summaries": [],
@@ -905,7 +909,7 @@ def test_npc_profile_update_node_recomputes_pair_when_cache_partial(monkeypatch)
 
     def _update(**kwargs):
         update_calls.append("update")
-        return SimpleNamespace(saved_ids=["npc_fresh"], new_profiles=["profile_new"])
+        return SimpleNamespace(saved_ids=["npc_fresh"], new_profiles=["profile_new"], warnings=[])
 
     monkeypatch.setattr(
         confirmation_nodes,
@@ -930,6 +934,76 @@ def test_npc_profile_update_node_recomputes_pair_when_cache_partial(monkeypatch)
     assert result["new_npc_profiles"] == ["profile_new"]
 
 
+def test_npc_profile_update_node_emits_dropped_field_event(monkeypatch):
+    from app.domain.npc_profile.updater import NPCProfileUpdateWarning
+
+    state = {
+        "pipeline_input": SimpleNamespace(turn_index=1, user_input=""),
+        "trace_id": "trace-1",
+        "cache": {"key": "正文"},
+        "write_db": True,
+        "npc_extraction": object(),
+        "scene_facts_json": "{}",
+        "updated_state": CurrentState(
+            scene=SceneState(scene_id="scene_001", location="醉花楼", participants=["萧云痕"]),
+            player=PlayerState(name="萧云痕"),
+        ),
+        "effective_scene_text": "裴玉奴出现在醉花楼。",
+        "core_memory": CoreMemory(items=[]),
+        "existing_npc_profiles": [],
+        "recent_summaries": [],
+        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
+    }
+    warnings = [
+        NPCProfileUpdateWarning(
+            npc_name="裴玉奴",
+            field_name="public_summary",
+            code="long_term_field_evidence_missing",
+            message="dropped",
+        )
+    ]
+
+    def _update(**kwargs):
+        return SimpleNamespace(
+            saved_ids=["npc_fresh"],
+            new_profiles=[],
+            warnings=warnings,
+        )
+
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "update_npc_profiles_from_extraction",
+        _update,
+    )
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "prune_npc_transient_aliases_from_current_state",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, _name: _FakeStore,
+    )
+
+    result = confirmation_nodes.npc_profile_update_node(state)
+
+    assert result["npc_update_warnings"] == warnings
+    assert result["events"] == [{
+        "step": "npc_long_term_fields_dropped",
+        "data": {
+            "count": 1,
+            "warnings": [{
+                "npc_name": "裴玉奴",
+                "field": "public_summary",
+                "code": "long_term_field_evidence_missing",
+                "evidence_ids": [],
+            }],
+        },
+    }]
+    assert state["cache"]["npc_update_warnings"] == warnings
+
+
 def test_npc_profile_update_node_reuses_complete_pair(monkeypatch):
     state = {
         "pipeline_input": SimpleNamespace(turn_index=1),
@@ -937,6 +1011,7 @@ def test_npc_profile_update_node_reuses_complete_pair(monkeypatch):
         "cache": {
             "updated_npc_profile_ids": ["cached"],
             "new_npc_profiles": ["profile_cached"],
+            "npc_update_warnings": [],
             "key": "正文",
         },
         "write_db": True,
@@ -951,7 +1026,7 @@ def test_npc_profile_update_node_reuses_complete_pair(monkeypatch):
 
     def _update(**kwargs):
         update_calls.append("update")
-        return SimpleNamespace(saved_ids=["npc_fresh"], new_profiles=["profile_new"])
+        return SimpleNamespace(saved_ids=["npc_fresh"], new_profiles=["profile_new"], warnings=[])
 
     monkeypatch.setattr(
         confirmation_nodes,
@@ -964,3 +1039,54 @@ def test_npc_profile_update_node_reuses_complete_pair(monkeypatch):
     assert update_calls == []
     assert result["updated_npc_profile_ids"] == ["cached"]
     assert result["new_npc_profiles"] == ["profile_cached"]
+    assert result["events"] == []
+
+
+def test_npc_profile_update_node_cache_hit_skips_diagnostics(monkeypatch):
+    from app.domain.npc_profile.updater import NPCProfileUpdateWarning
+
+    logged = []
+
+    class _Recorder:
+        def warning(self, **fields):
+            logged.append(fields)
+
+    state = {
+        "pipeline_input": SimpleNamespace(turn_index=1),
+        "trace_id": "trace-1",
+        "cache": {
+            "updated_npc_profile_ids": ["cached"],
+            "new_npc_profiles": [],
+            "npc_update_warnings": [
+                NPCProfileUpdateWarning(
+                    npc_name="裴玉奴",
+                    field_name="faction",
+                    code="long_term_field_evidence_missing",
+                    message="dropped",
+                )
+            ],
+            "key": "正文",
+        },
+        "write_db": True,
+        "npc_extraction": object(),
+        "scene_facts_json": "{}",
+        "updated_state": object(),
+        "core_memory": CoreMemory(items=[]),
+        "existing_npc_profiles": [],
+        "recent_summaries": [],
+        "runtime_services": SimpleNamespace(diagnostics=_Recorder()),
+    }
+
+    def _update(**kwargs):
+        raise AssertionError("factory must not run on a cache hit")
+
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "update_npc_profiles_from_extraction",
+        _update,
+    )
+
+    result = confirmation_nodes.npc_profile_update_node(state)
+
+    assert result["events"] == []
+    assert logged == []

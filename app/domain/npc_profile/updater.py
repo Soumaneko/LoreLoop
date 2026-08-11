@@ -7,10 +7,17 @@ from typing import cast
 from app.core.llm import LLMGateway
 from app.core.llm.schema import schema_json
 from app.core.text import normalize_key
+from app.domain.confirmed_history import HistoryDocument
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.npc_profile.schemas import (
-    ExistingNPCProfilePatch,
+    HIGH_RISK_LONG_TERM_FIELDS,
+    LONG_TERM_FIELD_ORDER,
+    TEMPORARY_PROFILE_FIELDS,
+    ExistingNPCProfileLongTermPatch,
+    ExistingNPCProfileTemporaryPatch,
+    KnownAbility,
+    LLMKnownAbility,
     NPCExtractionResult,
     NPCMention,
     NPCNewProfileOutput,
@@ -24,12 +31,22 @@ from app.domain.npc_profile.schemas import (
 from app.domain.scene_summary.schemas import SceneSummary
 
 
+@dataclass(frozen=True)
+class NPCProfileUpdateWarning:
+    npc_name: str
+    field_name: str
+    code: str
+    message: str
+    evidence_ids: tuple[str, ...] = field(default_factory=tuple)
+
+
 @dataclass
 class NPCProfileUpdateResult:
     profiles: list[NPCProfile] = field(default_factory=list)
     exact_mentions: list[tuple[str, str]] = field(default_factory=list)
     aliases_to_add: list[tuple[str, str]] = field(default_factory=list)
     turn_observations: list[tuple[str, str]] = field(default_factory=list)
+    long_term_warnings: list[NPCProfileUpdateWarning] = field(default_factory=list)
 
 
 @dataclass
@@ -54,13 +71,29 @@ class NPCProfileUpdater:
         extraction: NPCExtractionResult,
         *,
         core_memory: CoreMemory,
+        evidence_documents: dict[str, HistoryDocument] | None = None,
+        turn_index: int | None = None,
         recent_summaries: list[SceneSummary] | None = None,
         trace_id: str | None = None,
     ) -> NPCProfileUpdateResult:
         if not scene_facts.strip() or not extraction.mentions:
             return NPCProfileUpdateResult()
+        if evidence_documents is not None and turn_index is None:
+            raise ValueError(
+                "turn_index is required when evidence_documents are provided"
+            )
 
         from app.domain.views import project_current_state, project_scene_summaries
+
+        scene_paragraph_evidence = [
+            document
+            for document in (evidence_documents or {}).values()
+            if document.source_type == "scene_paragraph"
+        ]
+        valid_evidence = {
+            document.document_id: document
+            for document in scene_paragraph_evidence
+        }
 
         candidates = _build_update_candidates(existing_profiles, extraction.mentions)
         exact_mentions = [
@@ -79,6 +112,17 @@ class NPCProfileUpdater:
                     "scene_facts_json": scene_facts,
                     "current_state_summary_json": project_current_state(current_state),
                     "recent_summaries_json": project_scene_summaries(recent_summaries or []),
+                    "scene_paragraph_evidence_json": json.dumps(
+                        [
+                            {
+                                "document_id": document.document_id,
+                                "text": document.text,
+                            }
+                            for document in scene_paragraph_evidence
+                        ],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                     "npc_candidates_json": json.dumps(
                         [_candidate_for_prompt(candidate) for candidate in candidates],
                         ensure_ascii=False,
@@ -112,11 +156,15 @@ class NPCProfileUpdater:
             candidates,
             existing_profiles,
         )
+        long_term_warnings: list[NPCProfileUpdateWarning] = []
         profiles, aliases_to_add = _merge_results(
             candidates,
             existing_profiles,
             validated,
             current_state.scene.scene_id,
+            valid_evidence=valid_evidence,
+            turn_index=turn_index,
+            warnings=long_term_warnings,
         )
         turn_observations = [
             (candidates[result.candidate_index].name, result.turn_observation)
@@ -128,12 +176,13 @@ class NPCProfileUpdater:
             exact_mentions=exact_mentions,
             aliases_to_add=aliases_to_add,
             turn_observations=turn_observations,
+            long_term_warnings=long_term_warnings,
         )
 
 
 def apply_existing_npc_update(
     target: NPCProfile,
-    patch: ExistingNPCProfilePatch,
+    patch: ExistingNPCProfileTemporaryPatch,
 ) -> None:
     if patch.last_known_location is not None:
         target.last_known_location = patch.last_known_location
@@ -141,6 +190,166 @@ def apply_existing_npc_update(
         target.attitude_to_player = patch.attitude_to_player
     if patch.current_intent is not None:
         target.current_intent = patch.current_intent
+
+
+def apply_existing_npc_long_term_update(
+    target: NPCProfile,
+    patch: ExistingNPCProfileLongTermPatch,
+    *,
+    valid_evidence: dict[str, HistoryDocument],
+    turn_index: int | None,
+    warnings: list[NPCProfileUpdateWarning],
+) -> None:
+    """Apply a long-term patch, gating every high-risk field on its evidence.
+
+    A high-risk field written without a matching ``field_evidence`` entry, or
+    citing a document id that is not a confirmed scene paragraph of the current
+    turn, is dropped. The gate is structural only: whether the paragraph truly
+    supports the field is the LLM's instruction-level responsibility.
+    ``known_abilities`` is an append-only delta; it merges new abilities by
+    name and never removes existing ones.
+    """
+    for field_name in LONG_TERM_FIELD_ORDER:
+        if field_name == "known_abilities":
+            delta = patch.known_abilities
+            if delta is None or not delta.add:
+                continue
+            valid, invalid = _field_evidence_refs(
+                patch,
+                field_name,
+                valid_evidence,
+                turn_index=turn_index,
+            )
+            if invalid:
+                _drop_field_warning(
+                    target,
+                    field_name,
+                    invalid,
+                    "known_abilities",
+                    warnings,
+                )
+                continue
+            if not valid:
+                _missing_evidence_warning(
+                    target,
+                    field_name,
+                    warnings,
+                )
+                continue
+            _merge_known_abilities(target, delta.add)
+            continue
+        value = getattr(patch, field_name)
+        if value is None:
+            continue
+        valid, invalid = _field_evidence_refs(
+            patch,
+            field_name,
+            valid_evidence,
+            turn_index=turn_index,
+        )
+        if invalid:
+            _drop_field_warning(
+                target,
+                field_name,
+                invalid,
+                str(value),
+                warnings,
+            )
+            continue
+        if not valid:
+            _missing_evidence_warning(
+                target,
+                field_name,
+                warnings,
+            )
+            continue
+        if value != getattr(target, field_name):
+            setattr(target, field_name, value)
+
+
+def _field_evidence_refs(
+    patch: ExistingNPCProfileLongTermPatch,
+    field_name: str,
+    valid_evidence: dict[str, HistoryDocument],
+    *,
+    turn_index: int | None,
+) -> tuple[list[str], list[str]]:
+    """Split the field's cited evidence into (valid, invalid) document ids.
+
+    A citation is invalid when the id is unknown, is not a scene paragraph, or
+    belongs to a different turn. The interface guarantees ``turn_index`` is set
+    whenever evidence is provided, so the comparison fails closed instead of
+    accepting documents from an unknown turn.
+    """
+    cited = patch.field_evidence.get(field_name)
+    if not cited:
+        return [], []
+    valid: list[str] = []
+    invalid: list[str] = []
+    for evidence_id in cited:
+        document = valid_evidence.get(evidence_id)
+        if (
+            document is not None
+            and document.source_type == "scene_paragraph"
+            and document.turn_index == turn_index
+        ):
+            valid.append(evidence_id)
+        else:
+            invalid.append(evidence_id)
+    return valid, invalid
+
+
+def _drop_field_warning(
+    target: NPCProfile,
+    field_name: str,
+    invalid: list[str],
+    attempted_value: str,
+    warnings: list[NPCProfileUpdateWarning],
+) -> None:
+    warnings.append(NPCProfileUpdateWarning(
+        npc_name=target.name,
+        field_name=field_name,
+        code="long_term_field_evidence_dropped",
+        message=(
+            "long-term field update dropped: evidence references are not "
+            f"confirmed scene paragraphs of this turn: {sorted(set(invalid))}"
+        ),
+        evidence_ids=tuple(sorted(set(invalid))),
+    ))
+
+
+def _missing_evidence_warning(
+    target: NPCProfile,
+    field_name: str,
+    warnings: list[NPCProfileUpdateWarning],
+) -> None:
+    warnings.append(NPCProfileUpdateWarning(
+        npc_name=target.name,
+        field_name=field_name,
+        code="long_term_field_evidence_missing",
+        message=(
+            "long-term field update dropped: field was written without any "
+            "field_evidence entry"
+        ),
+    ))
+
+
+def _merge_known_abilities(
+    target: NPCProfile,
+    additions: list[LLMKnownAbility],
+) -> None:
+    existing = list(target.known_abilities)
+    existing_keys = {normalize_key(ability.name) for ability in existing}
+    for ability in additions:
+        if len(existing) >= 5:
+            break
+        persisted = KnownAbility.model_validate(ability.model_dump())
+        key = normalize_key(persisted.name)
+        if not key or key in existing_keys:
+            continue
+        existing_keys.add(key)
+        existing.append(persisted)
+    target.known_abilities = existing
 
 
 def _build_update_candidates(
@@ -248,7 +457,8 @@ def _validate_candidate_results(
             valid.append(result.model_copy(update={
                 "matched_npc_index": None,
                 "persist_alias": False,
-                "profile_patch": None,
+                "temporary_patch": None,
+                "long_term_patch": None,
                 "new_profile": None,
             }))
         elif result.resolution == "new":
@@ -260,7 +470,8 @@ def _validate_candidate_results(
             valid.append(result.model_copy(update={
                 "matched_npc_index": None,
                 "persist_alias": False,
-                "profile_patch": None,
+                "temporary_patch": None,
+                "long_term_patch": None,
             }))
         elif result.resolution == "alias_match":
             index = result.matched_npc_index
@@ -278,6 +489,10 @@ def _merge_results(
     existing_profiles: list[NPCProfile],
     returned: list[NPCProfileCandidateResult],
     scene_id: str,
+    *,
+    valid_evidence: dict[str, HistoryDocument],
+    turn_index: int | None,
+    warnings: list[NPCProfileUpdateWarning],
 ) -> tuple[list[NPCProfile], list[tuple[str, str]]]:
     updated_existing: dict[str, NPCProfile] = {}
     created: list[NPCProfile] = []
@@ -303,14 +518,24 @@ def _merge_results(
             if result.resolution == "existing"
             else existing_profiles[cast(int, result.matched_npc_index)]
         )
+        assert target is not None
         if result.resolution == "alias_match" and result.persist_alias:
             aliases_to_add.append((target.npc_id, candidate.name))
-        if result.profile_patch is None:
+        if result.temporary_patch is None and result.long_term_patch is None:
             continue
         merged = updated_existing.get(target.npc_id) or target.model_copy(deep=True)
-        if not _patch_changes_profile(merged, result.profile_patch):
+        if result.temporary_patch is not None:
+            apply_existing_npc_update(merged, result.temporary_patch)
+        if result.long_term_patch is not None:
+            apply_existing_npc_long_term_update(
+                merged,
+                result.long_term_patch,
+                valid_evidence=valid_evidence,
+                turn_index=turn_index,
+                warnings=warnings,
+            )
+        if not _patch_changes_profile(merged, target):
             continue
-        apply_existing_npc_update(merged, result.profile_patch)
         if scene_id not in merged.source_scene_ids:
             merged.source_scene_ids.append(scene_id)
         merged.updated_at = now
@@ -332,12 +557,18 @@ def _exact_profile_index(name: str, existing_profiles: list[NPCProfile]) -> int 
 
 
 def _patch_changes_profile(
-    profile: NPCProfile,
-    patch: ExistingNPCProfilePatch,
+    merged: NPCProfile,
+    original: NPCProfile,
 ) -> bool:
+    """Model-to-model change detection over every updater-modifiable field.
+
+    Compares Pydantic objects directly; never mixes ``model_dump()`` dicts with
+    model instances (e.g. ``known_abilities``), which would misjudge no-ops.
+    """
+    fields = set(TEMPORARY_PROFILE_FIELDS) | set(HIGH_RISK_LONG_TERM_FIELDS)
     return any(
-        value is not None and value != getattr(profile, field_name)
-        for field_name, value in patch.model_dump().items()
+        getattr(merged, field) != getattr(original, field)
+        for field in fields
     )
 
 

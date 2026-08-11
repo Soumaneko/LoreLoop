@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from app.core.llm import LLMGateway
 from app.core.text import normalize_key
 from app.domain.action.schemas import Anchor
+from app.domain.confirmed_history import HistoryDocument
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.creative_brief import CreativeBrief, draw_creative_brief
@@ -12,7 +13,7 @@ from app.domain.npc_profile.backfiller import NPCProfileBackfiller
 from app.domain.npc_profile.extractor import NPCProfileExtractor
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
-from app.domain.npc_profile.updater import NPCProfileUpdater
+from app.domain.npc_profile.updater import NPCProfileUpdateWarning, NPCProfileUpdater
 from app.domain.scene_summary.schemas import SceneSummary
 
 TRANSIENT_ALIAS_TURNS = 3
@@ -23,6 +24,7 @@ class UpdateNPCProfilesResult:
     extraction: NPCExtractionResult
     saved_ids: list[str]
     new_profiles: list[NPCProfile] = field(default_factory=list)
+    warnings: list[NPCProfileUpdateWarning] = field(default_factory=list)
 
 
 def attach_transient_alias_for_rename(
@@ -117,6 +119,7 @@ def update_npc_profiles_from_extraction(
     npc_store: NPCProfileStore,
     existing_profiles: list[NPCProfile],
     extraction: NPCExtractionResult,
+    evidence_documents: dict[str, HistoryDocument] | None = None,
     recent_summaries: list[SceneSummary] | None = None,
     trace_id: str | None = None,
     turn_index: int | None = None,
@@ -128,6 +131,8 @@ def update_npc_profiles_from_extraction(
         existing_profiles=existing_profiles,
         extraction=extraction,
         core_memory=core_memory,
+        evidence_documents=evidence_documents,
+        turn_index=turn_index,
         recent_summaries=recent_summaries,
         trace_id=trace_id,
     )
@@ -152,6 +157,7 @@ def update_npc_profiles_from_extraction(
         extraction=extraction,
         saved_ids=saved_ids,
         new_profiles=new_profiles,
+        warnings=list(update_result.long_term_warnings),
     )
 
 
@@ -186,6 +192,8 @@ def update_npc_profiles_workflow(
     core_memory: CoreMemory,
     gateway: LLMGateway,
     npc_store: NPCProfileStore,
+    evidence_documents: dict[str, HistoryDocument] | None = None,
+    turn_index: int | None = None,
     recent_summaries: list[SceneSummary] | None = None,
     trace_id: str | None = None,
 ) -> UpdateNPCProfilesResult:
@@ -203,6 +211,8 @@ def update_npc_profiles_workflow(
         npc_store=npc_store,
         existing_profiles=existing,
         extraction=extraction,
+        evidence_documents=evidence_documents,
+        turn_index=turn_index,
         recent_summaries=recent_summaries,
         trace_id=trace_id,
     )

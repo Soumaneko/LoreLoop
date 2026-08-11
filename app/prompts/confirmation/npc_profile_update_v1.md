@@ -48,6 +48,16 @@
 {scene_facts_json}
 ```
 
+## Scene Paragraph Evidence
+
+这是本轮已确认正文按段落切分后的文档列表。`document_id` 是程序校验长期档案
+更新的唯一证据标识：`long_term_patch` 里每个被写入的字段，都必须在这里引用
+支持它的段落 `document_id`。
+
+```json
+{scene_paragraph_evidence_json}
+```
+
 
 # 输出规范
 
@@ -68,9 +78,15 @@
 - `matched_npc_index`：alias_match 时必填 Existing NPC Options 的 npc_index；其他情况填 null。
 - `persist_alias`：仅 alias_match 可为 true。只有稳定外号、固定称号、化名或姓名变体才可保存；临时描述性指代必须为 false。
 - `turn_observation`：概括该候选在本回合值得注意的即时表现、动作、短暂情绪、一次性物品信号或其他当前场景信息；没有则填 null。保持简洁，不要重复整段 Scene Facts。
-- `profile_patch`：
-  - existing / alias_match：只有 NPC 的最近已知地点、对玩家态度、当前持续意图发生变化时才填写相应字段；`public_summary` 不在本次更新中修改，其他字段保持 null。
+- `temporary_patch`：
+  - existing / alias_match：每回合状态更新通道，记录最近已知地点、对玩家态度、当前持续意图；发生变化时才填写相应字段。这些字段照常持久化在档案中，不会过期，「temporary」仅指更新通道语义。
   - new / ignore：必须为 null。
+- `long_term_patch`：
+  - existing / alias_match：稳定身份字段（public_summary、role、appearance、personality_trait、faction、known_abilities）发生变化时才填写相应字段。
+  - new / ignore：必须为 null。
+- `field_evidence`：
+  - 位于 long_term_patch 内。每个被写入的高风险字段（public_summary、role、appearance、personality_trait、known_abilities、faction）必须同时给出对应条目：`{"<字段名>": ["<Scene Paragraph Evidence 的 document_id>", ...]}`。每个 `document_id` 必须来自上文的 Scene Paragraph Evidence，且该段落必须明确提及该 NPC 并支持对应字段。
+  - 没有写入的字段不需要条目；缺条目或引用无效 `document_id` 的字段更新会被程序丢弃。
 - `new_profile`：
   - new：必须填写完整公开档案，name 必须保持候选原始 name。
   - existing / alias_match / ignore：必须为 null。
@@ -94,9 +110,9 @@ source=unresolved 只有同时满足以下条件才使用 new：
 # 档案更新规则
 
 1. 公开档案只能记录 Scene Facts 明示的信息，禁止把任何导演幕后信息写入公开档案。
-2. `public_summary` 是已有档案的只读字段，本次 updater 不修改它；新建 NPC 时仍可填写初始摘要。
-3. 本回合动作、短暂情绪、单次对话、一次性物品信号等即时信息写入 `turn_observation`，不要尝试写入 `public_summary`。
-4. `last_known_location` 记录最近一次确认的位置；即使角色之后已经离开，也保留该最近已知位置。
-5. `attitude_to_player` 和 `current_intent` 只写场景结束后仍在持续的公开态度与意图。
-6. 没有档案字段变化时，`profile_patch` 填 null；仍然正常输出该候选的 resolution 与 turn_observation。
+2. 本回合动作、短暂情绪、单次对话、一次性物品信号等即时信息写入 `turn_observation`，不要尝试写入 `public_summary`。
+3. `last_known_location` 记录最近一次确认的位置；即使角色之后已经离开，也保留该最近已知位置。`attitude_to_player` 和 `current_intent` 只写场景结束后仍在持续的公开态度与意图。这些字段经 `temporary_patch` 写入并照常持久化，不会过期。
+4. `long_term_patch` 只写稳定的身份/性格/外观字段。`public_summary`、`role`、`appearance`、`personality_trait`、`known_abilities`、`faction` 都是极高风险字段，只有在正文段落直接、明确支持时才修改；严禁推断或改写。每个被写入的字段必须在 `field_evidence` 中引用支持它的正文段落 `document_id`（必须来自 Scene Paragraph Evidence），否则该字段更新会被程序丢弃。
+5. `known_abilities` 只允许通过 `add` 追加新能力（每条 description 必填）；不得移除或改写已有能力。
+6. 没有档案字段变化时，`temporary_patch` 和 `long_term_patch` 填 null；仍然正常输出该候选的 resolution 与 turn_observation。
 7. 不要创建与已有档案重复的新 NPC。

@@ -5,6 +5,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 from app.core.ids import new_hex_id
@@ -55,6 +56,64 @@ DISCLOSED_FIELD_SETS: dict[NPCDisclosureLevel, frozenset[str] | None] = {
     "face_to_face": _DISCLOSURE_FACE_TO_FACE_FIELDS,
     "intimate": None,
 }
+
+#: 临时状态更新通道：每回合「最近已知」快照。这些字段照常持久化在
+#: NPCProfile 中，不会自动过期；「temporary」指更新通道语义，而非存储语义。
+TEMPORARY_PROFILE_FIELDS = frozenset(
+    {"last_known_location", "attitude_to_player", "current_intent"}
+)
+
+#: 长期状态更新通道：稳定身份字段，写入必须携带逐字段 evidence。
+LONG_TERM_PROFILE_FIELDS = frozenset(
+    {
+        "public_summary",
+        "role",
+        "appearance",
+        "personality_trait",
+        "known_abilities",
+        "faction",
+    }
+)
+
+#: 极高风险长期字段：当前所有长期字段均属极高风险，缺 evidence 的字段更新会被丢弃。
+HIGH_RISK_LONG_TERM_FIELDS = LONG_TERM_PROFILE_FIELDS
+
+#: 长期字段的固定处理顺序（迭代用）。frozenset 只用于 membership 检查；
+#: 遍历必须走此 tuple，保证 warning/diagnostics/event 顺序跨进程稳定。
+LONG_TERM_FIELD_ORDER = (
+    "public_summary",
+    "role",
+    "appearance",
+    "personality_trait",
+    "faction",
+    "known_abilities",
+)
+
+_TEMPORARY_STRING_FIELDS = frozenset(
+    {"last_known_location", "attitude_to_player", "current_intent"}
+)
+_LONG_TERM_STRING_FIELDS = frozenset(
+    {"public_summary", "role", "appearance", "personality_trait", "faction"}
+)
+
+
+def _blank_to_none(
+    values: dict,
+    fields: frozenset[str],
+) -> dict:
+    """Map whitespace-only strings to None so the patch cannot clear a field.
+
+    ``None`` means "unchanged" in the patch contract, so a blank string must
+    never be written through as an empty value that wipes stored content.
+    """
+    return {
+        key: (
+            None
+            if key in fields and isinstance(value, str) and not value.strip()
+            else value
+        )
+        for key, value in values.items()
+    }
 
 
 class NPCProfilePublicView(BaseModel):
@@ -126,12 +185,83 @@ class NPCNewProfileOutput(NPCProfileUpdateInput):
 NPCResolution = Literal["existing", "alias_match", "new", "ignore"]
 
 
-class ExistingNPCProfilePatch(BaseModel):
+class ExistingNPCProfileTemporaryPatch(BaseModel):
+    """临时状态更新通道：每回合「最近已知」快照。
+
+    ``temporary`` 指更新通道语义，不表示字段只短暂存在：这些字段照常持久化在
+    NPCProfile 中，不会自动过期。None = 不修改；空白字符串会被归一化为 None，
+    因此本通道无法清空字段。
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     last_known_location: str | None = None
     attitude_to_player: str | None = None
     current_intent: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_strings_to_none(cls, values):
+        if isinstance(values, dict):
+            return _blank_to_none(values, _TEMPORARY_STRING_FIELDS)
+        return values
+
+
+class KnownAbilitiesDelta(BaseModel):
+    """known_abilities 的 patch 增量：仅支持追加；移除能力不开放。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    add: list[LLMKnownAbility] = Field(default_factory=list, max_length=5)
+
+
+class ExistingNPCProfileLongTermPatch(BaseModel):
+    """长期状态更新通道：稳定身份字段。
+
+    None = 不修改（无法经此通道清空字段；空白字符串会被归一化为 None，未来清空
+    需引入显式语义，不复用 None）。每个被写入的高风险字段必须携带对应的
+    ``field_evidence`` 条目，条目值是本轮已确认正文段落（``build_turn_documents``
+    产出、``source_type == "scene_paragraph"``、``turn_index`` 匹配当前轮）的
+    ``document_id`` 列表。当前门禁只做结构校验：ID 存在、属本轮正文段落、回合
+    匹配；段落↔字段的语义正确性由 LLM 指令保证，程序不做语义判定。hash 与逐字段
+    provenance 随 Confirmed History 桥（需求 2）落地。缺少条目或引用无效文档的
+    字段更新会被丢弃并记录诊断。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    public_summary: str | None = None
+    role: str | None = None
+    appearance: str | None = None
+    personality_trait: str | None = Field(default=None, max_length=40)
+    faction: str | None = None
+    known_abilities: KnownAbilitiesDelta | None = None
+    field_evidence: dict[str, list[str]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_strings_to_none(cls, values):
+        if isinstance(values, dict):
+            return _blank_to_none(values, _LONG_TERM_STRING_FIELDS)
+        return values
+
+    @model_validator(mode="after")
+    def _field_evidence_keys_must_be_known(self):
+        unknown = set(self.field_evidence) - HIGH_RISK_LONG_TERM_FIELDS
+        if unknown:
+            raise ValueError(
+                f"unknown long-term field evidence keys: {sorted(unknown)}"
+            )
+        for field, evidence_ids in self.field_evidence.items():
+            if not evidence_ids:
+                raise ValueError(
+                    f"long-term field evidence must not be empty: {field!r}"
+                )
+            if len(evidence_ids) != len(set(evidence_ids)):
+                raise ValueError(
+                    f"long-term field evidence ids must not repeat: {field!r}"
+                )
+        return self
 
 
 class NPCProfileCandidateResult(BaseModel):
@@ -142,7 +272,8 @@ class NPCProfileCandidateResult(BaseModel):
     matched_npc_index: int | None = None
     persist_alias: bool = False
     turn_observation: str | None = None
-    profile_patch: ExistingNPCProfilePatch | None = None
+    temporary_patch: ExistingNPCProfileTemporaryPatch | None = None
+    long_term_patch: ExistingNPCProfileLongTermPatch | None = None
     new_profile: NPCNewProfileOutput | None = None
 
 

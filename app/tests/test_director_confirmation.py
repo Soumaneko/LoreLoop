@@ -278,7 +278,8 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
                             "matched_npc_index": None,
                             "persist_alias": False,
                             "turn_observation": None,
-                            "profile_patch": None,
+                            "temporary_patch": None,
+                            "long_term_patch": None,
                             "new_profile": {
                                 "name": "练气巅峰采药女",
                                 "aliases": [],
@@ -319,10 +320,12 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
         ),
         "pipeline_input": SimpleNamespace(
             turn_index=3,
+            user_input="",
         ),
         "trace_id": "trace-npc",
         "cache": {},
         "scene_facts_json": '{"scene_focus": "药山。", "facts": []}',
+        "effective_scene_text": "药山上有个练气巅峰的采药女。",
         "updated_state": make_current_state(),
         "core_memory": CoreMemory(items=[]),
         "existing_npc_profiles": [],

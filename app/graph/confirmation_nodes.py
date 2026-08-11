@@ -329,10 +329,23 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
     cache = ConfirmationCache(state["cache"])
+    computed = False
 
     def compute_npc_update():
+        nonlocal computed
+        computed = True
         with _store_factory(state, "npc_profile")() as npc_store:
             gateway = _gateway_for(state)
+            evidence_documents = {
+                document.document_id: document
+                for document in build_turn_documents(
+                    scene_id=state["updated_state"].scene.scene_id,
+                    turn_index=pipeline_input.turn_index,
+                    user_input=pipeline_input.user_input,
+                    scene_text=state["effective_scene_text"],
+                )
+                if document.source_type == "scene_paragraph"
+            }
             npc_result = update_npc_profiles_from_extraction(
                 scene_facts=state["scene_facts_json"],
                 current_state=state["updated_state"],
@@ -341,6 +354,7 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 npc_store=npc_store,
                 existing_profiles=state["existing_npc_profiles"],
                 extraction=state["npc_extraction"],
+                evidence_documents=evidence_documents,
                 recent_summaries=state.get("recent_summaries", []),
                 trace_id=trace_id,
                 turn_index=pipeline_input.turn_index,
@@ -350,16 +364,61 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 turn_index=pipeline_input.turn_index,
             )
             updated_npc_profile_ids = merge_unique_ids([*npc_result.saved_ids, *alias_pruned_ids])
-            return updated_npc_profile_ids, npc_result.new_profiles
+            return (
+                updated_npc_profile_ids,
+                npc_result.new_profiles,
+                npc_result.warnings,
+            )
 
-    updated_npc_profile_ids, new_npc_profiles = cache.atomic(
+    updated_npc_profile_ids, new_npc_profiles, npc_update_warnings = cache.atomic(
         "updated_npc_profile_ids",
         "new_npc_profiles",
+        "npc_update_warnings",
         factory=compute_npc_update,
     )
+    services = state.get("runtime_services")
+    diagnostics = (
+        getattr(services, "diagnostics", None)
+        if services is not None
+        else None
+    ) or NullDiagnosticLogger()
+    dropped_events = []
+    if computed:
+        for warning in npc_update_warnings:
+            diagnostics.warning(
+                source="npc_profile_update",
+                code=warning.code,
+                message=warning.message,
+                trace_id=trace_id,
+                task="npc_profile_update",
+                turn_index=getattr(pipeline_input, "turn_index", None),
+                details={
+                    "npc_name": warning.npc_name,
+                    "field": warning.field_name,
+                    "evidence_ids": list(warning.evidence_ids),
+                },
+            )
+        if npc_update_warnings:
+            dropped_events = [{
+                "step": "npc_long_term_fields_dropped",
+                "data": {
+                    "count": len(npc_update_warnings),
+                    "warnings": [
+                        {
+                            "npc_name": warning.npc_name,
+                            "field": warning.field_name,
+                            "code": warning.code,
+                            "evidence_ids": list(warning.evidence_ids),
+                        }
+                        for warning in npc_update_warnings
+                    ],
+                },
+            }]
     return {
         "updated_npc_profile_ids": updated_npc_profile_ids,
         "new_npc_profiles": new_npc_profiles,
+        "npc_update_warnings": npc_update_warnings,
+        "events": dropped_events,
     }
 
 

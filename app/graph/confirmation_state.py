@@ -12,6 +12,7 @@ from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
 from app.domain.director import DirectorDecisionBatch, DirectorSkillExecutionBatch
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
+from app.domain.npc_profile.updater import NPCProfileUpdateWarning
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
@@ -82,6 +83,7 @@ class ConfirmationState(TypedDict, total=False):
     continuity_projection: ContinuityProjection
     updated_npc_profile_ids: list[str]
     new_npc_profiles: list[NPCProfile]
+    npc_update_warnings: list[NPCProfileUpdateWarning]
     director_decision: DirectorDecisionBatch
     director_executions: DirectorSkillExecutionBatch
     director_event_reviews: list[dict[str, Any]]
