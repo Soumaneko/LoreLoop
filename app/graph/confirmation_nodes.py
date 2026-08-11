@@ -26,6 +26,7 @@ from app.domain.views import project_scene_facts
 from app.domain.world_setting.schemas import setting_appears_in_text
 from app.runtime.serialization import model_data
 
+from .confirmation_cache import ConfirmationCache
 from .confirmation_helpers import merge_unique_ids
 from .confirmation_state import ConfirmationState
 from app.domain.director.confirmation import DirectorConfirmationExecutor
@@ -45,6 +46,7 @@ def _store_factory(state: ConfirmationState, name: str):
 
 def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
+    cache = ConfirmationCache(state["cache"])
     documents = build_turn_documents(
         scene_id=state["updated_state"].scene.scene_id,
         turn_index=pipeline_input.turn_index,
@@ -57,12 +59,19 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
             if pipeline_input.clear_continuity_before_save
             else continuity_store.list_active()
         )
-        projection = ContinuityProjector(_gateway_for(state)).project(
+        active_count = len(active_items)
+
+    def compute_projection():
+        return ContinuityProjector(_gateway_for(state)).project(
             current_documents=documents,
             active_items=active_items,
             trace_id=state["trace_id"],
         )
-        active_count = len(active_items)
+
+    projection = cache.compute_if_missing(
+        "continuity_projection",
+        compute_projection,
+    )
     return {
         "continuity_projection": projection,
         "events": [{
@@ -78,12 +87,11 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
-    cache = state["cache"]
+    cache = ConfirmationCache(state["cache"])
     core_memory = state["core_memory"]
-    scene_facts = cache.get("scene_facts")
-    if scene_facts is None:
-        gateway = _gateway_for(state)
-        scene_facts = SceneFactExtractor(gateway).extract(
+
+    def compute_scene_facts():
+        return SceneFactExtractor(_gateway_for(state)).extract(
             SceneFactExtractInput(
                 scene_text=state["effective_scene_text"],
                 current_state=state["state_before_update"],
@@ -91,6 +99,8 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
             ),
             trace_id=trace_id,
         )
+
+    scene_facts = cache.compute_if_missing("scene_facts", compute_scene_facts)
     return {
         "scene_facts": scene_facts,
         "scene_facts_json": project_scene_facts(scene_facts),
@@ -106,12 +116,12 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
 def state_update_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
-    cache = state["cache"]
-    updated_state = cache.get("updated_state")
-    state_change_set = cache.get("state_change_set")
-    state_update_warnings = cache.get("state_update_warnings")
-    update_executed = updated_state is None
-    if updated_state is None:
+    cache = ConfirmationCache(state["cache"])
+    computed = False
+
+    def compute_update():
+        nonlocal computed
+        computed = True
         gateway = _gateway_for(state)
         updater = StateUpdater(gateway)
         npc_aliases = {
@@ -136,19 +146,21 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
             StateChangeSet(decision="State update produced no change set."),
         )
         state_update_warnings = list(getattr(updater, "last_warnings", []))
-    elif state_change_set is None:
-        state_change_set = StateChangeSet(
-            decision="State update failed; no operations were applied."
-        )
-    if state_update_warnings is None:
-        state_update_warnings = []
+        return updated_state, state_change_set, state_update_warnings
+
+    updated_state, state_change_set, state_update_warnings = cache.atomic(
+        "updated_state",
+        "state_change_set",
+        "state_update_warnings",
+        factory=compute_update,
+    )
     services = state.get("runtime_services")
     diagnostics = (
         getattr(services, "diagnostics", None)
         if services is not None
         else None
     ) or NullDiagnosticLogger()
-    if update_executed:
+    if computed:
         for warning in state_update_warnings:
             warning_data = model_data(warning)
             diagnostics.warning(
@@ -177,10 +189,10 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
 
 def scene_summarize_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
-    cache = state["cache"]
-    turn_summary = cache.get("turn_summary")
-    if turn_summary is None:
-        turn_summary = SceneSummarizer(_gateway_for(state)).summarize_turn(
+    cache = ConfirmationCache(state["cache"])
+
+    def compute_turn_summary():
+        return SceneSummarizer(_gateway_for(state)).summarize_turn(
             scene_text=state["confirmation_scene_text"],
             current_state=state["updated_state"],
             core_memory=state["core_memory"],
@@ -188,6 +200,8 @@ def scene_summarize_node(state: ConfirmationState) -> ConfirmationState:
             turn_index=pipeline_input.turn_index,
             trace_id=state["trace_id"],
         )
+
+    turn_summary = cache.compute_if_missing("turn_summary", compute_turn_summary)
     return {
         "turn_summary": turn_summary,
         "events": [{
@@ -202,15 +216,15 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
         return {"npc_extraction": None}
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
-    cache = state["cache"]
-    npc_extraction = cache.get("npc_extraction")
-    if npc_extraction is None:
-        gateway = _gateway_for(state)
-        extractor = NPCProfileExtractor(gateway)
-        npc_extraction = extractor.extract(
+    cache = ConfirmationCache(state["cache"])
+
+    def compute_npc_extraction():
+        return NPCProfileExtractor(_gateway_for(state)).extract(
             scene_facts=state["scene_facts_json"],
             trace_id=trace_id,
         )
+
+    npc_extraction = cache.compute_if_missing("npc_extraction", compute_npc_extraction)
     return {
         "npc_extraction": npc_extraction,
         "events": [{
@@ -225,15 +239,14 @@ def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
 def action_preview_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
-    cache = state["cache"]
-    action_preview = cache.get("action_preview")
-    if action_preview is None:
+    cache = ConfirmationCache(state["cache"])
+
+    def compute_action_preview():
         scene_was_edited = (
             state["effective_scene_text"]
             != pipeline_input.scene_result.scene_text
         )
-        gateway = _gateway_for(state)
-        action_preview = ActionPreviewAgent(gateway).generate(
+        return ActionPreviewAgent(_gateway_for(state)).generate(
             current_state=state["updated_state"],
             core_memory=state["core_memory"],
             recent_summaries=state.get("recent_summaries", []),
@@ -245,6 +258,8 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
             scene_facts=state["scene_facts"],
             trace_id=trace_id,
         )
+
+    action_preview = cache.compute_if_missing("action_preview", compute_action_preview)
     return {
         "action_preview": action_preview,
         "events": [{
@@ -259,17 +274,16 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
 def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     if not state.get("write_db", True):
+        cache = ConfirmationCache(state["cache"])
         return {
-            "director_decision": state["cache"].get("director_decision"),
-            "director_executions": state["cache"].get("director_executions"),
+            "director_decision": cache.result("director_decision"),
+            "director_executions": cache.result("director_executions"),
         }
 
-    cache = state["cache"]
-    decision = cache.get("director_decision")
-    executions = cache.get("director_executions")
-    if decision is None or executions is None:
-        new_npc_profiles = state.get("new_npc_profiles", [])
-        decision, executions = DirectorConfirmationExecutor(
+    cache = ConfirmationCache(state["cache"])
+
+    def compute_decision():
+        return DirectorConfirmationExecutor(
             gateway=_gateway_for(state),
             stores=state["runtime_services"].stores,
             core_memory=state["core_memory"],
@@ -280,12 +294,18 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
             selection_summaries=state.get("selection_summaries", []),
             turn_index=pipeline_input.turn_index,
             trace_id=state["trace_id"],
-            new_npc_profiles=new_npc_profiles,
+            new_npc_profiles=state.get("new_npc_profiles", []),
             scene_text=state["effective_scene_text"],
             director_log_entry=getattr(
                 state.get("pending"), "director_log_entry", None
             ),
         ).run()
+
+    decision, executions = cache.atomic(
+        "director_decision",
+        "director_executions",
+        factory=compute_decision,
+    )
     return {
         "director_decision": decision,
         "director_executions": executions,
@@ -301,16 +321,16 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
 
 def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     if not state.get("write_db", True) or state.get("npc_extraction") is None:
+        cache = ConfirmationCache(state["cache"])
         return {
-            "updated_npc_profile_ids": state["cache"].get("updated_npc_profile_ids", []),
-            "new_npc_profiles": state["cache"].get("new_npc_profiles", []),
+            "updated_npc_profile_ids": cache.result("updated_npc_profile_ids") or [],
+            "new_npc_profiles": cache.result("new_npc_profiles") or [],
         }
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
-    cache = state["cache"]
-    updated_npc_profile_ids = cache.get("updated_npc_profile_ids", [])
-    new_npc_profiles = cache.get("new_npc_profiles", [])
-    if "updated_npc_profile_ids" not in cache:
+    cache = ConfirmationCache(state["cache"])
+
+    def compute_npc_update():
         with _store_factory(state, "npc_profile")() as npc_store:
             gateway = _gateway_for(state)
             npc_result = update_npc_profiles_from_extraction(
@@ -330,8 +350,13 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 turn_index=pipeline_input.turn_index,
             )
             updated_npc_profile_ids = merge_unique_ids([*npc_result.saved_ids, *alias_pruned_ids])
-            new_npc_profiles = npc_result.new_profiles
-            cache["new_npc_profiles"] = new_npc_profiles
+            return updated_npc_profile_ids, npc_result.new_profiles
+
+    updated_npc_profile_ids, new_npc_profiles = cache.atomic(
+        "updated_npc_profile_ids",
+        "new_npc_profiles",
+        factory=compute_npc_update,
+    )
     return {
         "updated_npc_profile_ids": updated_npc_profile_ids,
         "new_npc_profiles": new_npc_profiles,
@@ -347,10 +372,9 @@ def setting_appearance_update_node(state: ConfirmationState) -> ConfirmationStat
     """
     if not state.get("write_db", True):
         return {"recorded_setting_ids": []}
-    cache = state["cache"]
-    recorded = cache.get("recorded_setting_ids")
-    if recorded is not None:
-        return {"recorded_setting_ids": recorded}
+    cache = ConfirmationCache(state["cache"])
+    if cache.produced("recorded_setting_ids"):
+        return {"recorded_setting_ids": cache.result("recorded_setting_ids")}
     folded_text = state["effective_scene_text"].casefold()
     recorded_ids: list[str] = []
     if folded_text:
@@ -372,15 +396,15 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     if not state.get("write_db", True):
         return {
-            "director_event_reviews": state["cache"].get(
-                "director_event_reviews", []
-            ),
+            "director_event_reviews": ConfirmationCache(
+                state["cache"]
+            ).result("director_event_reviews")
+            or [],
         }
 
-    cache = state["cache"]
-    reviews = cache.get("director_event_reviews")
-    if reviews is not None:
-        return {"director_event_reviews": reviews}
+    cache = ConfirmationCache(state["cache"])
+    if cache.produced("director_event_reviews"):
+        return {"director_event_reviews": cache.result("director_event_reviews")}
 
     gateway = _gateway_for(state)
     turn_index = pipeline_input.turn_index
@@ -447,7 +471,6 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
                 )
             )
 
-    cache["director_event_reviews"] = reviews
     return {
         "director_event_reviews": reviews,
         "events": [{

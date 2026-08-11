@@ -5,6 +5,7 @@ import pytest
 from langgraph.graph import END, START, StateGraph
 
 from app.core.diagnostics import DiagnosticLogger
+from app.domain.continuity import ContinuityProjection
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
@@ -18,9 +19,9 @@ from app.graph.confirmation_graph import (
     capture_confirmation_node_errors,
 )
 from app.graph import confirmation_graph
+from app.graph.confirmation_cache import ConfirmationCache
 from app.graph.confirmation_helpers import merge_confirmation_node_update
 from app.graph.confirmation_helpers import prepare_confirmation_second_wave
-from app.graph.confirmation_helpers import reset_confirmation_cache_after_rollback
 from app.graph.confirmation_state import ConfirmationState
 from app.graph.confirmation_lifecycle import (
     ConfirmationFinalizer,
@@ -542,7 +543,7 @@ def test_rollback_cache_keeps_pure_results_and_discards_write_markers():
         "scene_summary_scheduled": True,
     })
 
-    reset_confirmation_cache_after_rollback(pending)
+    ConfirmationCache(pending.confirmation_cache).reset_for_rollback()
 
     assert pending.confirmation_cache == {
         "key": "scene text",
@@ -731,3 +732,235 @@ def test_staged_director_npc_promotes_without_preadding_participants(
     assert saved.status == "introduced"
     with services.stores.npc_profile() as store:
         assert [profile.name for profile in store.list_all()] == ["林澈"]
+
+
+class _FakeStore:
+    def __init__(self, active=None):
+        self._active = active or []
+
+    def list_active(self):
+        return self._active
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+def _continuity_node_state(*, cache, scene_text="正文", clear=False):
+    return {
+        "pipeline_input": SimpleNamespace(
+            turn_index=1,
+            user_input="",
+            clear_continuity_before_save=clear,
+        ),
+        "updated_state": SimpleNamespace(
+            scene=SimpleNamespace(scene_id="scene_001")
+        ),
+        "effective_scene_text": scene_text,
+        "trace_id": "trace-1",
+        "cache": cache,
+        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
+    }
+
+
+def test_continuity_project_node_reuses_cached_projection(monkeypatch):
+    cached = ContinuityProjection(operations=[])
+    state = _continuity_node_state(cache={"continuity_projection": cached})
+    calls = []
+
+    class _Projector:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def project(self, **_kwargs):
+            calls.append("project")
+            return ContinuityProjection(operations=[])
+
+    monkeypatch.setattr(confirmation_nodes, "ContinuityProjector", _Projector)
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, _name: _FakeStore,
+    )
+
+    result = confirmation_nodes.continuity_project_node(state)
+
+    assert result["continuity_projection"] is cached
+    assert calls == []
+    assert result["events"][0]["data"]["active_count"] == 0
+
+
+def test_continuity_project_node_computes_and_caches_projection(monkeypatch):
+    state = _continuity_node_state(cache={"key": "正文"})
+    fresh = ContinuityProjection(operations=[])
+
+    class _Projector:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def project(self, **_kwargs):
+            return fresh
+
+    monkeypatch.setattr(confirmation_nodes, "ContinuityProjector", _Projector)
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, _name: _FakeStore,
+    )
+
+    result = confirmation_nodes.continuity_project_node(state)
+
+    assert result["continuity_projection"] is fresh
+    assert state["cache"]["continuity_projection"] is fresh
+
+
+def _state_update_node_state(*, cache):
+    return {
+        "pipeline_input": SimpleNamespace(turn_index=1),
+        "trace_id": "trace-1",
+        "cache": cache,
+        "state_before_update": SimpleNamespace(),
+        "scene_facts_json": "{}",
+        "core_memory": CoreMemory(items=[]),
+        "existing_npc_profiles": [],
+        "events": [],
+        "node_errors": [],
+        "write_db": True,
+        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
+    }
+
+
+def test_state_update_node_recomputes_all_fields_when_cache_partial(monkeypatch):
+    cached_state = "cached-state"
+    state = _state_update_node_state(cache={"updated_state": cached_state})
+    update_calls = []
+
+    class _Updater:
+        def __init__(self, *_args, **_kwargs):
+            self.last_change_set = StateChangeSet(decision="fresh set")
+            self.last_warnings = [StateChangeWarning(
+                operation_id="op1",
+                operation_type="participant_attitude_change",
+                target="米莉",
+                code="w1",
+                message="fresh",
+            )]
+
+        def update(self, *_args, **_kwargs):
+            update_calls.append("update")
+            return "fresh-state"
+
+    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _Updater)
+
+    result = confirmation_nodes.state_update_node(state)
+
+    assert update_calls == ["update"]
+    assert result["updated_state"] == "fresh-state"
+    assert result["state_change_set"].decision == "fresh set"
+    assert result["state_update_warnings"][0].message == "fresh"
+
+
+def test_state_update_node_reuses_complete_triple(monkeypatch):
+    state = _state_update_node_state(cache={
+        "updated_state": "cached-state",
+        "state_change_set": StateChangeSet(decision="cached set"),
+        "state_update_warnings": [],
+    })
+    update_calls = []
+
+    class _Updater:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def update(self, *_args, **_kwargs):
+            update_calls.append("update")
+            return "fresh-state"
+
+    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _Updater)
+
+    result = confirmation_nodes.state_update_node(state)
+
+    assert update_calls == []
+    assert result["updated_state"] == "cached-state"
+    assert result["state_change_set"].decision == "cached set"
+
+
+def test_npc_profile_update_node_recomputes_pair_when_cache_partial(monkeypatch):
+    state = {
+        "pipeline_input": SimpleNamespace(turn_index=1),
+        "trace_id": "trace-1",
+        "cache": {"updated_npc_profile_ids": ["stale"], "key": "正文"},
+        "write_db": True,
+        "npc_extraction": object(),
+        "scene_facts_json": "{}",
+        "updated_state": object(),
+        "core_memory": CoreMemory(items=[]),
+        "existing_npc_profiles": [],
+        "recent_summaries": [],
+        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
+    }
+    update_calls = []
+
+    def _update(**kwargs):
+        update_calls.append("update")
+        return SimpleNamespace(saved_ids=["npc_fresh"], new_profiles=["profile_new"])
+
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "update_npc_profiles_from_extraction",
+        _update,
+    )
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "prune_npc_transient_aliases_from_current_state",
+        lambda **kwargs: ["npc_pruned"],
+    )
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, _name: _FakeStore,
+    )
+
+    result = confirmation_nodes.npc_profile_update_node(state)
+
+    assert update_calls == ["update"]
+    assert result["updated_npc_profile_ids"] == ["npc_fresh", "npc_pruned"]
+    assert result["new_npc_profiles"] == ["profile_new"]
+
+
+def test_npc_profile_update_node_reuses_complete_pair(monkeypatch):
+    state = {
+        "pipeline_input": SimpleNamespace(turn_index=1),
+        "trace_id": "trace-1",
+        "cache": {
+            "updated_npc_profile_ids": ["cached"],
+            "new_npc_profiles": ["profile_cached"],
+            "key": "正文",
+        },
+        "write_db": True,
+        "npc_extraction": object(),
+        "scene_facts_json": "{}",
+        "updated_state": object(),
+        "core_memory": CoreMemory(items=[]),
+        "existing_npc_profiles": [],
+        "recent_summaries": [],
+    }
+    update_calls = []
+
+    def _update(**kwargs):
+        update_calls.append("update")
+        return SimpleNamespace(saved_ids=["npc_fresh"], new_profiles=["profile_new"])
+
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "update_npc_profiles_from_extraction",
+        _update,
+    )
+
+    result = confirmation_nodes.npc_profile_update_node(state)
+
+    assert update_calls == []
+    assert result["updated_npc_profile_ids"] == ["cached"]
+    assert result["new_npc_profiles"] == ["profile_cached"]

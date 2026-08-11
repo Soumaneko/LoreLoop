@@ -26,38 +26,10 @@ from .confirmation_lifecycle import (
     ConfirmationPreparationServices,
     ConfirmationPreparer,
 )
+from .confirmation_cache import ConfirmationCache
 from .confirmation_state import ConfirmationEvent, ConfirmationState
 from .fold import fold_node_update
 
-
-_ALWAYS_CACHED_NODE_RESULTS = {
-    "scene_facts",
-    "updated_state",
-    "state_change_set",
-    "state_update_warnings",
-    "turn_summary",
-    "action_preview",
-    "continuity_projection",
-}
-_WRITE_CACHED_NODE_RESULTS = {
-    "npc_extraction",
-    "director_decision",
-    "director_executions",
-    "director_event_reviews",
-    "updated_npc_profile_ids",
-    "new_npc_profiles",
-    "recorded_setting_ids",
-}
-_ROLLBACK_SAFE_CACHE_KEYS = {
-    "key",
-    "scene_facts",
-    "updated_state",
-    "state_change_set",
-    "state_update_warnings",
-    "turn_summary",
-    "action_preview",
-    "continuity_projection",
-}
 
 @dataclass
 class DirectorNPCConfirmation:
@@ -277,12 +249,10 @@ def merge_confirmation_node_update(
     node_update: ConfirmationState,
 ) -> list[ConfirmationEvent]:
     node_errors = node_update.get("node_errors", [])
-    cache = state["cache"]
-    cache_keys = set(_ALWAYS_CACHED_NODE_RESULTS)
-    if state.get("write_db", True):
-        cache_keys.update(_WRITE_CACHED_NODE_RESULTS)
-    for key in cache_keys & node_update.keys():
-        cache[key] = node_update[key]
+    ConfirmationCache(state["cache"]).admit(
+        node_update,
+        write_db=state.get("write_db", True),
+    )
 
     events = fold_node_update(
         state,
@@ -291,18 +261,6 @@ def merge_confirmation_node_update(
     )
     state["node_errors"] = [*state.get("node_errors", []), *node_errors]
     return events
-
-
-def reset_confirmation_cache_after_rollback(pending) -> None:
-    """Keep pure LLM results but discard every cache entry tied to DB writes."""
-    cache = pending.confirmation_cache
-    retained = {
-        key: cache[key]
-        for key in _ROLLBACK_SAFE_CACHE_KEYS
-        if key in cache
-    }
-    cache.clear()
-    cache.update(retained)
 
 
 def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationState:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import Future
 from dataclasses import dataclass, field
 from operator import add
 from typing import Annotated, Any, TypedDict
@@ -18,6 +17,8 @@ from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.runtime.session import PendingOpening, PendingTurn
 from app.runtime.services import RuntimeServices
+
+from .confirmation_cache import ConfirmationCacheData
 
 
 class ConfirmationEvent(TypedDict, total=False):
@@ -47,34 +48,6 @@ class ConfirmationPipelineInput:
     complete_initialization: bool = False
 
 
-class ConfirmationCache(TypedDict, total=False):
-    key: str
-    scene_facts: SceneFactSet
-    updated_state: CurrentState
-    state_change_set: StateChangeSet
-    state_update_warnings: list[StateChangeWarning]
-    turn_summary: SceneSummary
-    npc_extraction: NPCExtractionResult | None
-    action_preview: ActionPreviewResult
-    director_decision: DirectorDecisionBatch
-    director_executions: DirectorSkillExecutionBatch
-    director_event_reviews: list[dict[str, Any]]
-    updated_npc_profile_ids: list[str]
-    new_npc_profiles: list[NPCProfile]
-    existing_npc_profiles: list[NPCProfile]
-    director_npc_profile_ids: list[str]
-    confirmed_director_npc_drafts: list[DirectorNPCDraft]
-    turn_summary_saved: bool
-    turn_summary_id: str
-    state_saved: bool
-    short_term_saved: bool
-    confirmed_history_saved: bool
-    scene_summary_future: Future[Any]
-    scene_summary_job_id: str | None
-    scene_summary_operation_id: str | None
-    scene_summary_scheduled: bool
-
-
 class ConfirmationState(TypedDict, total=False):
     runtime_services: RuntimeServices
     events: Annotated[list[ConfirmationEvent], add]
@@ -88,7 +61,7 @@ class ConfirmationState(TypedDict, total=False):
     turn_id: str
     trace_id: str
     effective_scene_text: str
-    cache: ConfirmationCache
+    cache: ConfirmationCacheData
     director_npc_profile_ids: list[str]
     confirmed_director_npc_drafts: list[DirectorNPCDraft]
     state_before_update: CurrentState

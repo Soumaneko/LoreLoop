@@ -11,6 +11,7 @@ from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, PendingTurn
 from app.runtime.services import RuntimeServices
 
+from .confirmation_cache import ConfirmationCache
 from .confirmation_state import ConfirmationState
 
 
@@ -56,24 +57,18 @@ class ConfirmationPreparer:
             if scene_text is not None
             else pipeline_input.scene_result.scene_text
         )
-        cache = pending.confirmation_cache
-        if cache.get("key") != effective_scene_text:
-            cache.clear()
-            cache["key"] = effective_scene_text
+        cache = ConfirmationCache(pending.confirmation_cache)
+        cache.begin(effective_scene_text)
 
-        if write_db and not cache.get("state_saved"):
+        if write_db and not cache.completed("state_saved"):
             with services.current_state_store() as state_store:
                 persisted_state = state_store.load_or_default()
             if persisted_state != pipeline_input.state_before:
                 raise ValueError(pipeline_input.stale_message)
 
-        director_npc_profile_ids = cache.get("director_npc_profile_ids")
-        confirmed_director_npc_drafts = cache.get("confirmed_director_npc_drafts")
-        if (
-            write_db
-            and director_npc_profile_ids is None
-            and "director_npc_profile_ids" not in cache
-        ):
+        director_npc_profile_ids = cache.result("director_npc_profile_ids")
+        confirmed_director_npc_drafts = cache.result("confirmed_director_npc_drafts")
+        if write_db and not cache.produced("director_npc_profile_ids"):
             confirmations = services.promote_staged_director_npc_profile(
                 pending,
                 turn_index=pipeline_input.turn_index,
@@ -84,8 +79,8 @@ class ConfirmationPreparer:
             confirmed_director_npc_drafts = [
                 confirmation.draft for confirmation in confirmations
             ]
-            cache["director_npc_profile_ids"] = director_npc_profile_ids
-            cache["confirmed_director_npc_drafts"] = confirmed_director_npc_drafts
+            cache.set_result("director_npc_profile_ids", director_npc_profile_ids)
+            cache.set_result("confirmed_director_npc_drafts", confirmed_director_npc_drafts)
 
         if write_db:
             services.apply_staged_disclosure_upgrades(pending)
@@ -103,11 +98,11 @@ class ConfirmationPreparer:
             )
         )
 
-        existing_npc_profiles = cache.get("existing_npc_profiles", [])
-        if write_db and "existing_npc_profiles" not in cache:
+        existing_npc_profiles = cache.result("existing_npc_profiles") or []
+        if write_db and not cache.produced("existing_npc_profiles"):
             with services.npc_profile_store() as npc_store:
                 existing_npc_profiles = npc_store.list_all()
-            cache["existing_npc_profiles"] = existing_npc_profiles
+            cache.set_result("existing_npc_profiles", existing_npc_profiles)
 
         core_memory = services.core_memory_store().load_required()
         return {
@@ -128,7 +123,7 @@ class ConfirmationPreparer:
             "turn_id": turn_id,
             "trace_id": trace_id,
             "effective_scene_text": effective_scene_text,
-            "cache": cache,
+            "cache": pending.confirmation_cache,
             "director_npc_profile_ids": director_npc_profile_ids,
             "confirmed_director_npc_drafts": confirmed_director_npc_drafts,
             "state_before_update": state_before_update,
@@ -164,7 +159,7 @@ class ConfirmationCommitter:
         services = self.services
         write_db = state.get("write_db", True)
         pipeline_input = state["pipeline_input"]
-        cache = state["cache"]
+        cache = ConfirmationCache(state["cache"])
         updated_state = state["updated_state"]
 
         if not write_db:
@@ -178,20 +173,20 @@ class ConfirmationCommitter:
                 continuity_total=continuity_total,
             )
 
-        if not cache.get("state_saved"):
+        if not cache.completed("state_saved"):
             with services.current_state_store() as state_store:
                 state_store.save(updated_state)
-            cache["state_saved"] = True
+            cache.mark_completed("state_saved")
 
-        if not cache.get("turn_summary_saved"):
+        if not cache.completed("turn_summary_saved"):
             with services.scene_summary_store() as summary_store:
-                cache["turn_summary_id"] = summary_store.save_one(
+                cache.set_result("turn_summary_id", summary_store.save_one(
                     state["turn_summary"]
-                )
-            cache["turn_summary_saved"] = True
+                ))
+            cache.mark_completed("turn_summary_saved")
 
         with services.short_term_memory_store() as short_store:
-            if not cache.get("short_term_saved"):
+            if not cache.completed("short_term_saved"):
                 if pipeline_input.clear_short_term_before_save:
                     short_store.clear()
                 short_store.add_turn(
@@ -214,10 +209,10 @@ class ConfirmationCommitter:
                         "confirmation": get_trace_token_usage(state["trace_id"]),
                     },
                 )
-                cache["short_term_saved"] = True
+                cache.mark_completed("short_term_saved")
             short_term_after = short_store.get_recent()
 
-        if not cache.get("confirmed_history_saved"):
+        if not cache.completed("confirmed_history_saved"):
             with services.confirmed_history_store() as history_store:
                 if pipeline_input.clear_confirmed_history_before_save:
                     history_store.clear()
@@ -227,7 +222,7 @@ class ConfirmationCommitter:
                     user_input=pipeline_input.user_input,
                     scene_text=state["effective_scene_text"],
                 )
-            cache["confirmed_history_saved"] = True
+            cache.mark_completed("confirmed_history_saved")
 
         with (
             services.confirmed_history_store() as history_store,
@@ -277,14 +272,13 @@ class ConfirmationMaintenanceScheduler:
         self.services = services
 
     def schedule_scene_summary(self, state: ConfirmationState) -> None:
-        cache = state["cache"]
+        cache = ConfirmationCache(state["cache"])
         if not state.get("write_db", True):
             return
 
         pipeline_input = state["pipeline_input"]
         updated_state = state["updated_state"]
-        summary_future = cache.get("scene_summary_future")
-        if not cache.get("scene_summary_scheduled"):
+        if not cache.completed("scene_summary_scheduled"):
             summary_future = self.runtime.jobs.submit_job(
                 "scene_summary",
                 self.services.run_scene_summary_maintenance,
@@ -298,18 +292,18 @@ class ConfirmationMaintenanceScheduler:
                 },
                 core_memory=state["core_memory"],
             )
-            cache["scene_summary_future"] = summary_future
-            cache["scene_summary_job_id"] = getattr(
+            cache.set_result("scene_summary_future", summary_future)
+            cache.set_result("scene_summary_job_id", getattr(
                 summary_future,
                 "job_id",
                 None,
-            )
-            cache["scene_summary_operation_id"] = getattr(
+            ))
+            cache.set_result("scene_summary_operation_id", getattr(
                 summary_future,
                 "operation_id",
                 None,
-            )
-            cache["scene_summary_scheduled"] = True
+            ))
+            cache.mark_completed("scene_summary_scheduled")
 
 
 class ConfirmationEventBuilder:

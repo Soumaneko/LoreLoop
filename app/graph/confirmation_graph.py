@@ -11,12 +11,12 @@ from app.runtime.session import (
     get_campaign_runtime,
 )
 
+from .confirmation_cache import ConfirmationCache
 from .confirmation_helpers import (
     finalize_confirmation_state,
     merge_confirmation_node_update,
     prepare_confirmation_second_wave,
     prepare_confirmation_state,
-    reset_confirmation_cache_after_rollback,
 )
 from .confirmation_nodes import (
     action_preview_node,
@@ -320,7 +320,9 @@ def _confirm_pipeline_locked(
             try:
                 runtime.history.fail_confirmation(pipeline_input.turn_id, exc)
             finally:
-                reset_confirmation_cache_after_rollback(pipeline_input.pending)
+                ConfirmationCache(
+                    pipeline_input.pending.confirmation_cache
+                ).reset_for_rollback()
         raise
 
 
