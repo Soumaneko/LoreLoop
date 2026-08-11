@@ -61,7 +61,7 @@ class NPCProfileStore:
             ON npc_profiles(active, name)
             """
         )
-        ensure_exact_schema_version(self._db, "npc_profile", 5)
+        ensure_exact_schema_version(self._db, "npc_profile", 6)
         self._db.commit()
 
     def _row_to_profile(self, row: sqlite3.Row) -> NPCProfile:

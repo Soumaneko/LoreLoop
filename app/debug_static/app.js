@@ -137,6 +137,15 @@ function list(items, fallback = "无") {
   return `<ul class="list">${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`;
 }
 
+function abilityLines(items) {
+  if (!items || !items.length) return `<span class="empty">无</span>`;
+  return `<ul class="list">${items.map((a) => {
+    const name = a?.name || "";
+    const desc = a?.description ? `：${a.description}` : "";
+    return `<li>${esc(name + desc)}</li>`;
+  }).join("")}</ul>`;
+}
+
 function metrics(items) {
   return `<div class="metrics">${items.filter(Boolean).join("")}</div>`;
 }
@@ -1643,8 +1652,8 @@ function npcProfileCard(profile) {
       ["别名命中", chips(aliasHits)],
       ["角色", esc(text(profile.role))],
       ["外观", esc(text(profile.appearance))],
-      ["性格", chips(profile.personality_traits)],
-      ["能力", chips(profile.known_abilities)],
+      ["性格", esc(text(profile.personality_trait))],
+      ["能力", abilityLines(profile.known_abilities)],
       ["派系", esc(text(profile.faction))],
       ["最近已知地点", esc(text(profile.last_known_location))],
       ["态度", esc(text(profile.attitude_to_player))],
@@ -1698,8 +1707,8 @@ function directorNpcCard(npc) {
       ["角色", esc(text(npc.role))],
       ["派系", esc(text(npc.faction))],
       ["引入回合", esc(text(npc.introduced_turn))],
-      ["性格", chips(npc.personality_traits)],
-      ["能力", chips(npc.known_abilities)],
+      ["性格", esc(text(npc.personality_trait))],
+      ["能力", abilityLines(npc.known_abilities)],
       ["核心动机", esc(text(npc.core_motivation))],
       ["秘密", esc(text(npc.hidden_secret))],
       ["冲突风格", esc(text(npc.conflict_style))],

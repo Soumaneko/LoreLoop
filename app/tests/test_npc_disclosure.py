@@ -11,8 +11,8 @@ def _profile():
         role="社区医生",
         public_summary="诊所的坐堂医生。",
         appearance="常穿深色风衣。",
-        personality_traits=["谨慎", "耐心"],
-        known_abilities=["急救"],
+        personality_trait="见人先问诊，习惯主动掌握对方近况",
+        known_abilities=[{"name": "急救", "description": "处理外伤与常见急症"}],
         faction=None,
         attitude_to_player="克制冷淡。",
         social_style="克制而友善。",
@@ -36,7 +36,7 @@ def test_disclosure_view_remote_drops_face_to_face_and_hidden_fields():
     assert data["social_style"] == "克制而友善。"
     assert data["attitude_to_player"] == "克制冷淡。"
     assert data["appearance"] is None
-    assert data["personality_traits"] == []
+    assert data["personality_trait"] is None
     assert data["known_abilities"] == []
     assert data["core_motivation"] is None
     assert data["hidden_secret"] is None
@@ -46,8 +46,10 @@ def test_disclosure_view_face_to_face_adds_appearance_and_personality():
     data = _profile().disclosure_view("face_to_face").model_dump(mode="json")
 
     assert data["appearance"] == "常穿深色风衣。"
-    assert data["personality_traits"] == ["谨慎", "耐心"]
-    assert data["known_abilities"] == ["急救"]
+    assert data["personality_trait"] == "见人先问诊，习惯主动掌握对方近况"
+    assert data["known_abilities"] == [
+        {"name": "急救", "description": "处理外伤与常见急症"}
+    ]
     assert data["conflict_style"] == "先协商后行动。"
     assert data["core_motivation"] is None
     assert data["hidden_secret"] is None

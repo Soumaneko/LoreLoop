@@ -22,14 +22,21 @@ def test_director_npc_output_rejects_blank_name():
     with pytest.raises(ValidationError):
         DirectorNPCCreateOutput(
             creation_reason="事件需要现场演员。",
-            core_motivation="完成受托调查。",
-            hidden_secret="隐瞒过去的失败。",
-            conflict_style="先观察后行动。",
-            social_style="谨慎寡言。",
-            role="调查者",
-            personality_traits=["谨慎", "果断"],
-            appearance="穿着防水短衣。",
-            name="   ",
+            identity={
+                "core_motivation": "完成受托调查。",
+                "hidden_secret": "隐瞒过去的失败。",
+                "role": "调查者",
+            },
+            behavior={
+                "conflict_style": "先观察后行动。",
+                "social_style": "谨慎寡言。",
+                "personality_trait": "先听后问，从不先表态",
+            },
+            shell={
+                "known_abilities": [],
+                "appearance": "穿着防水短衣。",
+                "name": "   ",
+            },
         )
 
 
@@ -364,7 +371,7 @@ def test_introduce_npc_allows_at_most_five_per_batch(tmp_path):
 
 
 def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
-    from app.domain.director_npc.schemas import DirectorNPCDraft
+    from app.domain.director_npc.schemas import DirectorNPCDraft, KnownAbility
     from app.domain.npc_profile.director_promotion import (
         merge_director_draft_into_npc_profile,
     )
@@ -378,8 +385,8 @@ def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
         name="林澈",
         role="社区医生",
         appearance="深色风衣。",
-        personality_traits=["谨慎", "耐心"],
-        known_abilities=["急救"],
+        personality_trait="见人先问诊，习惯主动掌握对方近况",
+        known_abilities=[KnownAbility(name="急救", description="处理外伤与常见急症")],
         core_motivation="保护社区居民。",
         hidden_secret="曾目击旧案。",
         conflict_style="先协商后行动。",

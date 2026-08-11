@@ -54,16 +54,31 @@
 {output_schema_json}
 ```
 
-字段要求：
+输出按三个递进层级组织：`identity` → `behavior` → `shell`。必须严格按照此顺序在心里依次推导，后一层在前一层的基础上细化，任何后一层字段都不得与更早层级矛盾；出现冲突时以 `identity` 的核心字段为准，并始终尊重 New NPC Public Profile 已公开的事实。
+
+`name` 是输出 schema 的顶层字段，先于三层确定，作为后续字段的锚点：
+
 - `name`：必须是一个专有姓名。若 New NPC Public Profile 中的 name 已是专有姓名，则保持原名；若 name 是身份代称、职业泛称或外观代称（如"来历不明者""筑基初期女修""练气巅峰采药女""兜帽女""二楼女子""黑衣人""店小二"），必须为 TA 创造一个符合世界观的专有姓名，不得沿用代称作为姓名。
+- 创建的姓名应避免与 Existing NPCs 中的既有姓名或别名重复，也不要与主角姓名相同。
+
+# 各层级字段要求
+
+## identity（人物内核，最先确定）
+
 - `core_motivation`：TA 长期追求、执念或人生驱动力；必须独立于主角当前行动。
-- `hidden_secret`：一个不公开的秘密、伪装、情感牵挂、野心或欲望；不得与 `core_motivation` 矛盾。
-- `conflict_style`：TA 面对冲突时倾向怎么做，并体现能力边界。
-- `social_style`：TA 与人相处时的可演出方式。
+- `hidden_secret`：一个不公开的秘密、伪装、情感牵挂、野心或欲望；不得与 `core_motivation` 自相矛盾。
 - `role`：此人在世界中的身份/职业/社会位置；优先沿用公开档案，不足时补全为稳定角色定位。
 - `faction`：所属组织、家族、职业团体或阵营；没有明确归属则填 `null`。
-- `personality_traits`：2-3 个稳定性格标签；应包含优点、缺点或行为倾向，避免全是正面词。
-- `known_abilities`：3-5 个明确能力标签；只写可被剧情使用且符合身份的能力，不写万能能力。
+
+## behavior（行为表现，依据 identity 推导）
+
+- `conflict_style`：TA 面对冲突时倾向怎么做，并体现能力边界；应能从他 `identity` 里的动机与处境推导出来。
+- `social_style`：TA 与人相处时的可演出方式；应能从他 `identity` 里的动机与处境推导出来。
+- `personality_trait`：一条稳定、外部可观察的行为倾向，不是内心概括或性格形容词罗列；必须贴合 `baseline_temperament` 与 `core_motivation`。
+
+## shell（外在呈现，依据 identity 与 behavior 推导）
+
+- `known_abilities`：3-5 条明确能力，每条含 `name`（短标签）与 `description`（该能力在什么场景下可用、边界与代价）；只写可被剧情使用且符合身份与 CoreMemory 能力基准的能力，不写万能能力。
 - `appearance`：可被场景直接描写的外观特征；优先依据 Scene Facts 和公开档案。
 
 
@@ -79,6 +94,7 @@
 7. 同一 NPC 的 `hidden_secret` 不得与 `core_motivation` 自相矛盾。
 8. 不要把 NPC 设计成单一功能按钮；TA 必须有自己的生活、动机、缺陷、能力边界和秘密。
 9. 如果公开档案只支持临时路人、职业泛称或无长期叙事潜力的人物，应仍按 schema 输出最保守的完整人物设定，但不要夸大其身份层级。
+10. 后一层字段必须与更早层级一致；发现矛盾时先检查是否看漏了前层的既定选择，而不是强行自相矛盾。
 
 
 # 禁止事项

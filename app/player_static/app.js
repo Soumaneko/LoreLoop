@@ -1445,11 +1445,15 @@ function openCodexProfile(profile, triggerElement) {
 
   // 3. 底部微型勋章区
   const pillsContainer = node("div", "codex-pills");
-  if (profile.personality_traits?.length) {
-    profile.personality_traits.forEach((t) => pillsContainer.appendChild(node("span", "codex-pill pill-trait", t)));
+  if (profile.personality_trait) {
+    pillsContainer.appendChild(node("span", "codex-pill pill-trait", profile.personality_trait));
   }
   if (profile.known_abilities?.length) {
-    profile.known_abilities.forEach((a) => pillsContainer.appendChild(node("span", "codex-pill pill-ability", a)));
+    profile.known_abilities.forEach((a) => {
+      const pill = node("span", "codex-pill pill-ability", a.name);
+      if (a.description) pill.title = a.description;
+      pillsContainer.appendChild(pill);
+    });
   }
   if (profile.aliases?.length) {
     profile.aliases.forEach((al) => pillsContainer.appendChild(node("span", "codex-pill pill-alias", al)));
@@ -3234,7 +3238,7 @@ const NPC_PUBLIC_FIELDS = [
   ["role", "身份", false],
   ["public_summary", "公开摘要", false, "textarea"],
   ["appearance", "外貌", false],
-  ["personality_traits", "性格特质", true],
+  ["personality_trait", "性格倾向", false],
   ["known_abilities", "已知能力", true],
   ["faction", "阵营", false],
   ["last_known_location", "最近已知地点", false],
@@ -3455,9 +3459,15 @@ function recomputeRecordsDirty() {
         return true;
       }
     }
+    for (const editor of list.querySelectorAll(".record-ability-editor")) {
+      if (snapshotAbilityValues(editor) !== String(editor.dataset.originalValue)) {
+        return true;
+      }
+    }
     for (const control of list.querySelectorAll("input, textarea")) {
       if (control.disabled) continue;
       if (control.closest(".record-fact-editor")) continue;
+      if (control.closest(".record-ability-editor")) continue;
       const original = control.dataset.originalValue ?? "";
       const current = control.value;
       if (control.dataset.isList === "1") {
@@ -3532,15 +3542,30 @@ function refreshRecordsAfterTurn() {
   refreshRecords({ force: true });
 }
 
-function _formatEditListValue(key, value) {
+function _abilityText(item) {
+  if (!item || typeof item !== "object") return String(item);
+  return item.description ? `${item.name}：${item.description}` : String(item.name);
+}
+function _formatEditListValue(value) {
   const items = Array.isArray(value) ? value : [];
-  return items.join(RECORD_FACT_KEYS.has(key) ? "\n" : ", ");
+  return items.join(", ");
 }
 function _splitListValue(value) {
   return String(value || "")
     .split(/[,，\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+function collectAbilityValues(editor) {
+  return [...editor.querySelectorAll(".record-ability-row")]
+    .map((rowEl) => ({
+      name: (rowEl.querySelector(".record-ability-name")?.value ?? "").trim(),
+      description: (rowEl.querySelector(".record-ability-desc")?.value ?? "").trim(),
+    }))
+    .filter((item) => item.name);
+}
+function snapshotAbilityValues(editor) {
+  return JSON.stringify(collectAbilityValues(editor));
 }
 
 function buildRecordCard({ id = null, title, statusText = "", statusActive = false, fields = [], editableFields = fields, quoteKey = null, onSave }) {
@@ -3616,6 +3641,10 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
           const factList = node("ul", "codex-fact-list");
           values.forEach((item) => factList.appendChild(node("li", "", String(item))));
           row.appendChild(factList);
+        } else if (key === "known_abilities") {
+          const factList = node("ul", "codex-fact-list");
+          values.forEach((item) => factList.appendChild(node("li", "", _abilityText(item))));
+          row.appendChild(factList);
         } else {
           const pills = node("div", "codex-pills");
           values.forEach((item) => pills.appendChild(node("span", "codex-pill pill-alias", String(item))));
@@ -3685,9 +3714,58 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
       editContainer.appendChild(row);
       return;
     }
+    if (key === "known_abilities") {
+      const editor = node("div", "record-ability-editor");
+      const abilityRow = (ability) => {
+        const rowEl = node("div", "record-ability-row");
+        const nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.className = "record-ability-name";
+        nameInput.placeholder = "名称";
+        nameInput.maxLength = 20;
+        nameInput.value = ability?.name || "";
+        const descInput = document.createElement("textarea");
+        descInput.className = "record-ability-desc";
+        descInput.rows = "1";
+        descInput.placeholder = "描述（可留空）";
+        descInput.maxLength = 120;
+        descInput.value = ability?.description || "";
+        const markInput = () => { recordsDirty = recomputeRecordsDirty(); };
+        nameInput.addEventListener("input", markInput);
+        descInput.addEventListener("input", markInput);
+        const removeBtn = node("button", "ability-remove-btn", "×");
+        removeBtn.type = "button";
+        removeBtn.title = "删除该能力";
+        removeBtn.setAttribute("aria-label", "删除该能力");
+        removeBtn.onclick = () => { rowEl.remove(); recordsDirty = recomputeRecordsDirty(); };
+        rowEl.append(nameInput, descInput, removeBtn);
+        return rowEl;
+      };
+      const render = () => {
+        editor.replaceChildren();
+        (Array.isArray(valueSource[key]) ? valueSource[key] : [])
+          .forEach((ability) => editor.appendChild(abilityRow(ability)));
+        const addBtn = node("button", "text-button", "＋ 添加能力");
+        addBtn.type = "button";
+        addBtn.onclick = () => {
+          const newRow = abilityRow({ name: "", description: "" });
+          editor.insertBefore(newRow, addBtn);
+          newRow.querySelector(".record-ability-name")?.focus();
+          recordsDirty = recomputeRecordsDirty();
+        };
+        editor.appendChild(addBtn);
+      };
+      render();
+      controls[key] = editor;
+      factRenderers[key] = render;
+      editor.dataset.originalValue = snapshotAbilityValues(editor);
+      row.appendChild(editor);
+      editContainer.appendChild(row);
+      return;
+    }
     const control = document.createElement("textarea");
     control.rows = "1";
-    control.value = isList ? _formatEditListValue(key, valueSource[key]) : (valueSource[key] ?? "");
+    control.value = isList ? _formatEditListValue(valueSource[key]) : (valueSource[key] ?? "");
     control.dataset.originalValue = control.value;
     if (isList) control.dataset.isList = "1";
     control.addEventListener("input", () => { recordsDirty = recomputeRecordsDirty(); });
@@ -3700,11 +3778,15 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
     for (const [key, , isList] of editableFields) {
       if (factRenderers[key]) {
         factRenderers[key]();
-        controls[key].dataset.originalValue = JSON.stringify(valueSource[key] || []);
+        if (key === "known_abilities") {
+          controls[key].dataset.originalValue = snapshotAbilityValues(controls[key]);
+        } else {
+          controls[key].dataset.originalValue = JSON.stringify(valueSource[key] || []);
+        }
         continue;
       }
       const control = controls[key];
-      control.value = isList ? _formatEditListValue(key, valueSource[key]) : (valueSource[key] ?? "");
+      control.value = isList ? _formatEditListValue(valueSource[key]) : (valueSource[key] ?? "");
       control.dataset.originalValue = control.value;
     }
   };
@@ -3739,7 +3821,7 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
           const control = controls[key];
           const original = valueSource[key];
           if (factRenderers[key]) {
-            const current = collectFactValues(control);
+            const current = key === "known_abilities" ? collectAbilityValues(control) : collectFactValues(control);
             const originalList = Array.isArray(original) ? original : [];
             if (JSON.stringify(current) !== JSON.stringify(originalList)) {
               values[key] = current;

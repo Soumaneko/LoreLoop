@@ -1,6 +1,11 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+)
 
 from app.core.ids import new_hex_id
 from app.core.time import utc_now
@@ -21,8 +26,28 @@ _DISCLOSURE_REMOTE_FIELDS = _DISCLOSURE_IDENTITY_FIELDS | frozenset(
     {"social_style", "attitude_to_player"}
 )
 _DISCLOSURE_FACE_TO_FACE_FIELDS = _DISCLOSURE_REMOTE_FIELDS | frozenset(
-    {"appearance", "personality_traits", "conflict_style", "known_abilities"}
+    {"appearance", "personality_trait", "conflict_style", "known_abilities"}
 )
+
+
+class KnownAbility(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=20)
+    description: str = Field(default="", max_length=120)
+
+
+class LLMKnownAbility(BaseModel):
+    """LLM-output ability: description is required and shows up in the JSON Schema.
+
+    Distinct from the persistent :class:`KnownAbility` so the player editor may
+    save empty descriptions while generated NPCs always carry one.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=20)
+    description: str = Field(min_length=1, max_length=120)
 
 #: disclosure_level -> 该级允许可见的字段集合；None 表示全量（intimate）。
 DISCLOSED_FIELD_SETS: dict[NPCDisclosureLevel, frozenset[str] | None] = {
@@ -40,8 +65,8 @@ class NPCProfilePublicView(BaseModel):
     public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
-    personality_traits: list[str] = Field(default_factory=list)
-    known_abilities: list[str] = Field(default_factory=list)
+    personality_trait: str | None = Field(default=None, max_length=40)
+    known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     last_known_location: str | None = None
     attitude_to_player: str | None = None
@@ -69,12 +94,33 @@ class NPCProfileUpdateInput(BaseModel):
     public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
-    personality_traits: list[str] = Field(default_factory=list, max_length=3)
-    known_abilities: list[str] = Field(default_factory=list, max_length=5)
+    personality_trait: str | None = Field(default=None, max_length=40)
+    known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     last_known_location: str | None = None
     attitude_to_player: str | None = None
     current_intent: str | None = None
+
+    @field_validator("personality_trait", mode="before")
+    @classmethod
+    def _trait_empty_to_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+
+class NPCNewProfileOutput(NPCProfileUpdateInput):
+    """LLM output for a newly created NPC: abilities require a description.
+
+    Distinct from the shared editor/persistent :class:`NPCProfileUpdateInput`
+    so the generated profile carries a description in its JSON Schema; player
+    edits may still save empty descriptions via the relaxed model.
+    """
+
+    known_abilities: list[LLMKnownAbility] = Field(default_factory=list, max_length=5)
+
+    def to_update_input(self) -> NPCProfileUpdateInput:
+        return NPCProfileUpdateInput.model_validate(self.model_dump())
 
 
 NPCResolution = Literal["existing", "alias_match", "new", "ignore"]
@@ -97,7 +143,7 @@ class NPCProfileCandidateResult(BaseModel):
     persist_alias: bool = False
     turn_observation: str | None = None
     profile_patch: ExistingNPCProfilePatch | None = None
-    new_profile: NPCProfileUpdateInput | None = None
+    new_profile: NPCNewProfileOutput | None = None
 
 
 class NPCProfileUpdateBatch(BaseModel):
@@ -106,19 +152,37 @@ class NPCProfileUpdateBatch(BaseModel):
     results: list[NPCProfileCandidateResult] = Field(default_factory=list)
 
 
+class NPCProfileBackfillIdentity(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    core_motivation: str = Field(min_length=1)
+    hidden_secret: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    faction: str | None = None
+
+
+class NPCProfileBackfillBehavior(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conflict_style: str = Field(min_length=1)
+    social_style: str = Field(min_length=1)
+    personality_trait: str = Field(min_length=1, max_length=40)
+
+
+class NPCProfileBackfillShell(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    known_abilities: list[LLMKnownAbility] = Field(default_factory=list, max_length=5)
+    appearance: str = Field(min_length=1)
+
+
 class NPCProfileBackfillOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
-    core_motivation: str = Field(min_length=1)
-    hidden_secret: str = Field(min_length=1)
-    conflict_style: str = Field(min_length=1)
-    social_style: str = Field(min_length=1)
-    role: str = Field(min_length=1)
-    faction: str | None = None
-    personality_traits: list[str] = Field(min_length=2, max_length=3)
-    known_abilities: list[str] = Field(default_factory=list, max_length=5)
-    appearance: str = Field(min_length=1)
+    identity: NPCProfileBackfillIdentity
+    behavior: NPCProfileBackfillBehavior
+    shell: NPCProfileBackfillShell
 
 
 class NPCMention(BaseModel):
@@ -145,8 +209,8 @@ class NPCProfile(BaseModel):
     public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
-    personality_traits: list[str] = Field(default_factory=list)
-    known_abilities: list[str] = Field(default_factory=list)
+    personality_trait: str | None = Field(default=None, max_length=40)
+    known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     last_known_location: str | None = None
     attitude_to_player: str | None = None
@@ -176,7 +240,7 @@ class NPCProfile(BaseModel):
             public_summary=self.public_summary,
             role=self.role,
             appearance=self.appearance,
-            personality_traits=list(self.personality_traits),
+            personality_trait=self.personality_trait,
             known_abilities=list(self.known_abilities),
             faction=self.faction,
             last_known_location=self.last_known_location,
@@ -243,7 +307,7 @@ def profile_from_update(
         public_summary=profile.public_summary,
         role=profile.role,
         appearance=profile.appearance,
-        personality_traits=list(profile.personality_traits),
+        personality_trait=profile.personality_trait,
         known_abilities=list(profile.known_abilities),
         faction=profile.faction,
         last_known_location=profile.last_known_location,

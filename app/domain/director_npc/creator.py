@@ -84,7 +84,9 @@ class DirectorNPCCreator:
             ),
         )
         return DirectorNPCDraft(
-            **result.model_dump(exclude={"creation_reason"}),
+            **result.identity.model_dump(),
+            **result.behavior.model_dump(),
+            **result.shell.model_dump(),
             source_setting_ids=list(creation_context.setting_ids),
             created_turn=turn_index,
             status="prepared",

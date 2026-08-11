@@ -6,6 +6,7 @@ from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.creative_brief import CreativeBrief
 from app.domain.npc_profile.schemas import (
+    KnownAbility,
     NPCProfile,
     NPCProfileBackfillOutput,
 )
@@ -77,14 +78,20 @@ def _existing_npc_view(npc: NPCProfile) -> dict:
 def _apply_backfill(profile: NPCProfile, backfill: NPCProfileBackfillOutput) -> None:
     if backfill.name.strip() and backfill.name.strip() != profile.name:
         profile.name = backfill.name.strip()
-    profile.role = profile.role or backfill.role
-    profile.appearance = profile.appearance or backfill.appearance
-    if not profile.personality_traits:
-        profile.personality_traits = list(backfill.personality_traits)
+    identity = backfill.identity
+    behavior = backfill.behavior
+    shell = backfill.shell
+    profile.role = profile.role or identity.role
+    profile.appearance = profile.appearance or shell.appearance
+    if not profile.personality_trait:
+        profile.personality_trait = behavior.personality_trait
     if not profile.known_abilities:
-        profile.known_abilities = list(backfill.known_abilities)
-    profile.faction = profile.faction or backfill.faction
-    profile.core_motivation = profile.core_motivation or backfill.core_motivation
-    profile.hidden_secret = profile.hidden_secret or backfill.hidden_secret
-    profile.conflict_style = profile.conflict_style or backfill.conflict_style
-    profile.social_style = profile.social_style or backfill.social_style
+        profile.known_abilities = [
+            KnownAbility(name=ability.name, description=ability.description)
+            for ability in shell.known_abilities
+        ]
+    profile.faction = profile.faction or identity.faction
+    profile.core_motivation = profile.core_motivation or identity.core_motivation
+    profile.hidden_secret = profile.hidden_secret or identity.hidden_secret
+    profile.conflict_style = profile.conflict_style or behavior.conflict_style
+    profile.social_style = profile.social_style or behavior.social_style

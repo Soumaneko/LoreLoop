@@ -199,6 +199,69 @@ def test_update_npc_public_fields_preserves_director_fields():
     assert "director_only" not in result
     with pytest.raises(ValueError, match="NPC general fields only"):
         update_player_record("npc", npc_id, {"aliases": ["木偶师"]})
+
+
+def test_update_npc_known_abilities_drops_blank_name_entries():
+    _seed_records()
+    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
+    result = update_player_record(
+        "npc",
+        npc_id,
+        {
+            "known_abilities": [
+                {"name": "   ", "description": "空名条目应被丢弃"},
+                {"name": "查账", "description": "核对往来账目"},
+            ]
+        },
+    )
+    assert result["public"]["known_abilities"] == [
+        {"name": "查账", "description": "核对往来账目"}
+    ]
+
+
+def test_update_npc_allows_empty_ability_description():
+    _seed_records()
+    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
+    result = update_player_record(
+        "npc",
+        npc_id,
+        {
+            "known_abilities": [
+                {"name": "查账", "description": ""},
+            ]
+        },
+    )
+    assert result["public"]["known_abilities"] == [
+        {"name": "查账", "description": ""}
+    ]
+
+
+def test_update_npc_clearing_personality_trait_persists_none():
+    _seed_records()
+    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
+    update_player_record("npc", npc_id, {"personality_trait": ""})
+    with get_campaign_runtime().stores.npc_profile() as store:
+        assert store.get_by_id(npc_id).personality_trait is None
+
+
+def test_update_npc_rejects_oversized_trait_and_excess_abilities():
+    _seed_records()
+    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
+    with pytest.raises(ValueError):
+        update_player_record("npc", npc_id, {"personality_trait": "x" * 41})
+    with pytest.raises(ValueError):
+        update_player_record(
+            "npc",
+            npc_id,
+            {
+                "known_abilities": [
+                    {"name": f"a{i}", "description": "d"}
+                    for i in range(6)
+                ]
+            },
+        )
+
+
 def test_update_npc_advanced_edits_director_content_fields():
     _seed_records()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]

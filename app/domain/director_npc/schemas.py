@@ -15,6 +15,13 @@ class NPCCreationContext(BaseModel):
     setting_ids: list[str] = Field(default_factory=list, max_length=4)
 
 
+class KnownAbility(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=20)
+    description: str = Field(min_length=1, max_length=120)
+
+
 _new_id = partial(new_hex_id, prefix="director_npc", length=12)
 
 
@@ -28,8 +35,8 @@ class DirectorNPCDraft(BaseModel):
     social_style: str = Field(min_length=1)
     role: str = Field(min_length=1)
     faction: str | None = None
-    personality_traits: list[str] = Field(min_length=2, max_length=3)
-    known_abilities: list[str] = Field(default_factory=list, max_length=5)
+    personality_trait: str = Field(min_length=1, max_length=40)
+    known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
     appearance: str = Field(min_length=1)
     name: str = Field(min_length=1)
     source_setting_ids: list[str] = Field(default_factory=list, max_length=4)
@@ -45,7 +52,7 @@ class DirectorNPCDraft(BaseModel):
             name=self.name,
             role=self.role,
             appearance=self.appearance,
-            personality_traits=list(self.personality_traits),
+            personality_trait=self.personality_trait,
             known_abilities=list(self.known_abilities),
             faction=self.faction,
             core_motivation=self.core_motivation,
@@ -58,20 +65,38 @@ class DirectorNPCDraft(BaseModel):
         )
 
 
+class DirectorNPCIdentity(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    core_motivation: str = Field(min_length=1)
+    hidden_secret: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    faction: str | None = None
+
+
+class DirectorNPCBehavior(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    conflict_style: str = Field(min_length=1)
+    social_style: str = Field(min_length=1)
+    personality_trait: str = Field(min_length=1, max_length=40)
+
+
+class DirectorNPCShell(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
+    appearance: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+
 class DirectorNPCCreateOutput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     creation_reason: str = Field(min_length=1)
-    core_motivation: str = Field(min_length=1)
-    hidden_secret: str = Field(min_length=1)
-    conflict_style: str = Field(min_length=1)
-    social_style: str = Field(min_length=1)
-    role: str = Field(min_length=1)
-    faction: str | None = None
-    personality_traits: list[str] = Field(min_length=2, max_length=3)
-    known_abilities: list[str] = Field(default_factory=list, max_length=5)
-    appearance: str = Field(min_length=1)
-    name: str = Field(min_length=1)
+    identity: DirectorNPCIdentity
+    behavior: DirectorNPCBehavior
+    shell: DirectorNPCShell
 
 
 class DirectorNPCPrivateProfile(BaseModel):
@@ -84,8 +109,8 @@ class DirectorNPCPrivateProfile(BaseModel):
     social_style: str
     role: str
     faction: str | None = None
-    personality_traits: list[str] = Field(default_factory=list)
-    known_abilities: list[str] = Field(default_factory=list)
+    personality_trait: str
+    known_abilities: list[KnownAbility] = Field(default_factory=list)
     appearance: str
     name: str
     source_setting_ids: list[str] = Field(default_factory=list)

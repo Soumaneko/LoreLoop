@@ -13,7 +13,7 @@ from app.domain.director.schemas import (
     DirectorGuidance,
     DirectorSkillRequest,
 )
-from app.domain.director_npc import DirectorNPCDraft
+from app.domain.director_npc import DirectorNPCDraft, KnownAbility
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.plot_outline.schemas import PlotOutlineResult
@@ -47,8 +47,8 @@ def test_summarize_decision_covers_every_skill(tmp_path):
             name="林澈",
             role="社区医生",
             appearance="深色风衣。",
-            personality_traits=["谨慎", "耐心"],
-            known_abilities=["急救"],
+            personality_trait="见人先问诊，习惯主动掌握对方近况",
+            known_abilities=[KnownAbility(name="急救", description="处理外伤与常见急症")],
             core_motivation="保护社区居民。",
             hidden_secret="曾目击旧案。",
             conflict_style="先协商后行动。",

@@ -72,8 +72,11 @@ def _project_text_highlights(
                 "public_summary": profile.public_summary,
                 "role": profile.role,
                 "appearance": profile.appearance,
-                "personality_traits": list(profile.personality_traits),
-                "known_abilities": list(profile.known_abilities),
+                "personality_trait": profile.personality_trait,
+                "known_abilities": [
+                    ability.model_dump(mode="json")
+                    for ability in profile.known_abilities
+                ],
                 "faction": profile.faction,
                 "last_known_location": profile.last_known_location,
             }

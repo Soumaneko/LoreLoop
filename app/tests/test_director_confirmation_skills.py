@@ -46,16 +46,25 @@ def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
             },
             npc_output={
                 "creation_reason": "主角走访北境商路。",
-                "core_motivation": "保住商队往来北境的路权。",
-                "hidden_secret": "北陆商盟暗中资助边境私军。",
-                "conflict_style": "先谈利益，谈不拢就断其商路。",
-                "social_style": "圆滑而强势。",
-                "role": "北境商队执事",
-                "faction": None,
-                "personality_traits": ["精明", "务实"],
-                "known_abilities": ["商事谈判", "押运调度"],
-                "appearance": "常穿厚重皮袍。",
-                "name": "柴行简",
+                "identity": {
+                    "core_motivation": "保住商队往来北境的路权。",
+                    "hidden_secret": "北陆商盟暗中资助边境私军。",
+                    "role": "北境商队执事",
+                    "faction": None,
+                },
+                "behavior": {
+                    "conflict_style": "先谈利益，谈不拢就断其商路。",
+                    "social_style": "圆滑而强势。",
+                    "personality_trait": "谈事先报价，把每笔往来都摆到台面上",
+                },
+                "shell": {
+                    "known_abilities": [
+                        {"name": "商事谈判", "description": "压价与斡旋贸易条件"},
+                        {"name": "押运调度", "description": "安排商队路线与护卫"},
+                    ],
+                    "appearance": "常穿厚重皮袍。",
+                    "name": "柴行简",
+                },
             },
         )
         run_confirmation_director_agent(
@@ -305,16 +314,22 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
         setting_output=setting_output,
         npc_output={
             "creation_reason": "北境商路需要一个长期活动的人物。",
-            "name": "沈栖舟",
-            "role": "北境行商",
-            "appearance": "常穿防风皮袍。",
-            "personality_traits": ["谨慎", "务实"],
-            "known_abilities": ["估价"],
-            "faction": "北陆商盟",
-            "core_motivation": "守住商队赖以生存的货路。",
-            "hidden_secret": "私下追查一批失踪货物。",
-            "conflict_style": "先谈条件，再切断补给。",
-            "social_style": "言简意赅，重视信用。",
+            "identity": {
+                "core_motivation": "守住商队赖以生存的货路。",
+                "hidden_secret": "私下追查一批失踪货物。",
+                "role": "北境行商",
+                "faction": "北陆商盟",
+            },
+            "behavior": {
+                "conflict_style": "先谈条件，再切断补给。",
+                "social_style": "言简意赅，重视信用。",
+                "personality_trait": "报价前先捻三遍算珠，算不清就不松口",
+            },
+            "shell": {
+                "known_abilities": [{"name": "估价", "description": "凭成色与行情估算货物价值"}],
+                "appearance": "常穿防风皮袍。",
+                "name": "沈栖舟",
+            },
         },
         event_selection_output=make_event_selection_output(),
     )
@@ -373,16 +388,22 @@ def test_confirmation_agent_replaces_unknown_setting_reference(tmp_path):
         },
         npc_output={
             "creation_reason": "北境商路需要一个长期活动的人物。",
-            "name": "沈栖舟",
-            "role": "北境行商",
-            "appearance": "常穿防风皮袍。",
-            "personality_traits": ["谨慎", "务实"],
-            "known_abilities": ["估价"],
-            "faction": "北陆商盟",
-            "core_motivation": "守住商队赖以生存的货路。",
-            "hidden_secret": "私下追查一批失踪货物。",
-            "conflict_style": "先谈条件，再切断补给。",
-            "social_style": "言简意赅，重视信用。",
+            "identity": {
+                "core_motivation": "守住商队赖以生存的货路。",
+                "hidden_secret": "私下追查一批失踪货物。",
+                "role": "北境行商",
+                "faction": "北陆商盟",
+            },
+            "behavior": {
+                "conflict_style": "先谈条件，再切断补给。",
+                "social_style": "言简意赅，重视信用。",
+                "personality_trait": "报价前先捻三遍算珠，算不清就不松口",
+            },
+            "shell": {
+                "known_abilities": [{"name": "估价", "description": "凭成色与行情估算货物价值"}],
+                "appearance": "常穿防风皮袍。",
+                "name": "沈栖舟",
+            },
         },
     )
 
@@ -452,15 +473,21 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
         },
         backfill_output={
             "name": "苏锦屏",
-            "role": "行商出身的生意谈判方",
-            "appearance": "声音温婉中带媚，举止从容。",
-            "personality_traits": ["从容", "精明"],
-            "known_abilities": ["商业谈判"],
-            "faction": None,
-            "core_motivation": "建立一张足以保护自身生意的合作网络。",
-            "hidden_secret": "她正在隐瞒真正货主的身份。",
-            "conflict_style": "先谈条件，谈不拢就用账目和人情施压。",
-            "social_style": "语气温婉，话锋却常常直指利益核心。",
+            "identity": {
+                "core_motivation": "建立一张足以保护自身生意的合作网络。",
+                "hidden_secret": "她正在隐瞒真正货主的身份。",
+                "role": "行商出身的生意谈判方",
+                "faction": None,
+            },
+            "behavior": {
+                "conflict_style": "先谈条件，谈不拢就用账目和人情施压。",
+                "social_style": "语气温婉，话锋却常常直指利益核心。",
+                "personality_trait": "开口先夸对方生意，再慢慢把话题引到账目上",
+            },
+            "shell": {
+                "known_abilities": [{"name": "商业谈判", "description": "凭账目与行情拿捏谈判筹码"}],
+                "appearance": "声音温婉中带媚，举止从容。",
+            },
         },
     )
 
@@ -543,15 +570,21 @@ def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
         },
         backfill_output={
             "name": "陆远舟",
-            "role": "镖师",
-            "appearance": "一身劲装。",
-            "personality_traits": ["沉稳", "寡言"],
-            "known_abilities": ["刀法"],
-            "faction": None,
-            "core_motivation": "护送商队平安。",
-            "hidden_secret": "替人捎带一封密信。",
-            "conflict_style": "先护人后对敌。",
-            "social_style": "寡言但可靠。",
+            "identity": {
+                "core_motivation": "护送商队平安。",
+                "hidden_secret": "替人捎带一封密信。",
+                "role": "镖师",
+                "faction": None,
+            },
+            "behavior": {
+                "conflict_style": "先护人后对敌。",
+                "social_style": "寡言但可靠。",
+                "personality_trait": "站在门口先扫一遍进出的人，再决定让不让路",
+            },
+            "shell": {
+                "known_abilities": [{"name": "刀法", "description": "贴身护卫时的近战刀法"}],
+                "appearance": "一身劲装。",
+            },
         },
     )
 
@@ -664,15 +697,21 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
         },
         backfill_output={
             "name": "苏锦屏",
-            "role": "行商出身的生意谈判方",
-            "appearance": "声音温婉中带媚，举止从容。",
-            "personality_traits": ["从容", "精明"],
-            "known_abilities": ["商业谈判"],
-            "faction": None,
-            "core_motivation": "建立一张足以保护自身生意的合作网络。",
-            "hidden_secret": "她正在隐瞒真正货主的身份。",
-            "conflict_style": "先谈条件，谈不拢就用账目和人情施压。",
-            "social_style": "语气温婉，话锋却常常直指利益核心。",
+            "identity": {
+                "core_motivation": "建立一张足以保护自身生意的合作网络。",
+                "hidden_secret": "她正在隐瞒真正货主的身份。",
+                "role": "行商出身的生意谈判方",
+                "faction": None,
+            },
+            "behavior": {
+                "conflict_style": "先谈条件，谈不拢就用账目和人情施压。",
+                "social_style": "语气温婉，话锋却常常直指利益核心。",
+                "personality_trait": "开口先夸对方生意，再慢慢把话题引到账目上",
+            },
+            "shell": {
+                "known_abilities": [{"name": "商业谈判", "description": "凭账目与行情拿捏谈判筹码"}],
+                "appearance": "声音温婉中带媚，举止从容。",
+            },
         },
     )
 

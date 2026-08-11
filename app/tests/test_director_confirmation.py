@@ -79,16 +79,22 @@ def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
         },
         npc_output={
             "creation_reason": "社区日常需要一个可复用医生。",
-            "core_motivation": "保护社区居民。",
-            "hidden_secret": "曾目击一宗未结案件。",
-            "conflict_style": "先协商后行动。",
-            "social_style": "克制而友善。",
-            "role": "社区医生",
-            "faction": None,
-            "personality_traits": ["谨慎", "耐心"],
-            "known_abilities": ["急救"],
-            "appearance": "常穿深色风衣。",
-            "name": "林澈",
+            "identity": {
+                "core_motivation": "保护社区居民。",
+                "hidden_secret": "曾目击一宗未结案件。",
+                "role": "社区医生",
+                "faction": None,
+            },
+            "behavior": {
+                "conflict_style": "先协商后行动。",
+                "social_style": "克制而友善。",
+                "personality_trait": "见人先问诊，习惯主动掌握对方近况",
+            },
+            "shell": {
+                "known_abilities": [{"name": "急救", "description": "处理外伤与常见急症"}],
+                "appearance": "常穿深色风衣。",
+                "name": "林澈",
+            },
         },
     )
 
@@ -150,16 +156,25 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
         },
         npc_output={
             "creation_reason": "港镇日常需要熟悉潮路的船工。",
-            "core_motivation": "保住家族赖以生存的小船。",
-            "hidden_secret": "偶然发现旧盐仓暗渠仍有人使用。",
-            "conflict_style": "先避让，退无可退时正面交涉。",
-            "social_style": "寡言但会直接指出航路风险。",
-            "role": "潮路船工",
-            "faction": None,
-            "personality_traits": ["谨慎", "务实"],
-            "known_abilities": ["辨潮", "操舟"],
-            "appearance": "皮肤被海风晒得黝黑。",
-            "name": "周汐",
+            "identity": {
+                "core_motivation": "保住家族赖以生存的小船。",
+                "hidden_secret": "偶然发现旧盐仓暗渠仍有人使用。",
+                "role": "潮路船工",
+                "faction": None,
+            },
+            "behavior": {
+                "conflict_style": "先避让，退无可退时正面交涉。",
+                "social_style": "寡言但会直接指出航路风险。",
+                "personality_trait": "开口必先谈潮水与船况，从不闲聊",
+            },
+            "shell": {
+                "known_abilities": [
+                    {"name": "辨潮", "description": "凭云色与浪头判断潮汐"},
+                    {"name": "操舟", "description": "熟练驾驶小船穿过险滩"},
+                ],
+                "appearance": "皮肤被海风晒得黝黑。",
+                "name": "周汐",
+            },
         },
     )
 
@@ -270,8 +285,11 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
                                 "public_summary": "山间采药为生的练气期女子。",
                                 "role": "采药女",
                                 "appearance": "背一只竹篓，裙角沾着泥。",
-                                "personality_traits": ["谨慎", "坚韧"],
-                                "known_abilities": ["采药", "辨识药草"],
+                                "personality_trait": "遇到不认识的药草先采一枝闻了再说话",
+                                "known_abilities": [
+                                    {"name": "采药", "description": "识别并采摘常见药草"},
+                                    {"name": "辨识药草", "description": "凭气味与外形辨认药效"},
+                                ],
                                 "faction": None,
                                 "last_known_location": "药山",
                                 "attitude_to_player": None,

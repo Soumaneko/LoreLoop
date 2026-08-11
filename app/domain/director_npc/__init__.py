@@ -2,6 +2,7 @@ from .creator import DirectorNPCCreator
 from .schemas import (
     DirectorNPCCreateOutput,
     DirectorNPCDraft,
+    KnownAbility,
     NPCCreationContext,
 )
 from .store import DirectorNPCStore
@@ -11,5 +12,6 @@ __all__ = [
     "DirectorNPCCreateOutput",
     "DirectorNPCDraft",
     "DirectorNPCStore",
+    "KnownAbility",
     "NPCCreationContext",
 ]

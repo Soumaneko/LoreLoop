@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.npc_profile.extractor import NPCProfileExtractor
@@ -109,12 +111,148 @@ def test_backfill_prompt_requires_proper_name_for_descriptor_npcs():
     assert "{creative_brief_json}" in prompt
     assert "baseline_temperament" in prompt
     assert "必须是一个专有姓名" in prompt
-    assert "必须为 TA 创造一个符合世界观的专有姓名" in prompt
+    assert "必须为 TA 创造一个符合世界观、独特的专有姓名" in prompt
+    assert "不得沿用代称作为姓名" in prompt
+    assert "则保持原名" in prompt
     assert "来历不明者" in prompt
     assert "筑基初期女修" in prompt
     assert "练气巅峰采药女" in prompt
-    assert "不得沿用代称作为姓名" in prompt
+    assert "优先沿用公开档案" in prompt
+    assert "必须独立于主角当前行动" in prompt
+    assert "并体现能力边界" in prompt
+    assert "优先依据 Scene Facts 和公开档案" in prompt
+    assert "`identity` → `behavior` → `shell`" in prompt
+    assert "personality_trait" in prompt
+    assert "外部可观察" in prompt
+    assert "`name`（短标签）与 `description`" in prompt
     assert "不要改名" not in prompt
+
+
+def test_creation_prompts_describe_every_output_schema_field():
+    from app.domain.director_npc.schemas import DirectorNPCCreateOutput
+    from app.domain.npc_profile.schemas import NPCProfileBackfillOutput
+
+    cases = [
+        (
+            "app/prompts/director/skills/director_npc_create_v1.md",
+            DirectorNPCCreateOutput,
+        ),
+        (
+            "app/prompts/director/skills/npc_profile_backfill_v1.md",
+            NPCProfileBackfillOutput,
+        ),
+    ]
+    for path, schema in cases:
+        prompt = Path(path).read_text(encoding="utf-8")
+        for field in schema.model_fields:
+            assert field in prompt, (
+                f"{path} 缺少输出字段 {field!r} 的字段说明"
+            )
+
+
+def test_update_input_allows_empty_ability_description_and_enforces_limits():
+    from pydantic import ValidationError
+
+    from app.domain.npc_profile.schemas import NPCProfileUpdateInput
+
+    ok = NPCProfileUpdateInput(
+        name="林澈",
+        personality_trait="   ",
+        known_abilities=[{"name": "急救", "description": ""}],
+    )
+    assert ok.personality_trait is None
+    assert ok.known_abilities[0].description == ""
+
+    with pytest.raises(ValidationError):
+        NPCProfileUpdateInput(name="林澈", personality_trait="x" * 41)
+    with pytest.raises(ValidationError):
+        NPCProfileUpdateInput(
+            name="林澈",
+            known_abilities=[
+                {"name": f"a{i}", "description": "d"}
+                for i in range(6)
+            ],
+        )
+
+
+def test_backfill_shell_rejects_empty_ability_descriptions():
+    from pydantic import ValidationError
+
+    from app.domain.npc_profile.schemas import NPCProfileBackfillShell
+
+    with pytest.raises(ValidationError):
+        NPCProfileBackfillShell(
+            known_abilities=[{"name": "急救", "description": "  "}],
+            appearance="风衣。",
+        )
+
+
+def test_updater_new_profile_rejects_empty_ability_descriptions():
+    from pydantic import ValidationError
+
+    from app.domain.npc_profile.schemas import NPCProfileCandidateResult
+
+    with pytest.raises(ValidationError):
+        NPCProfileCandidateResult(
+            candidate_index=0,
+            resolution="new",
+            new_profile={
+                "name": "林澈",
+                "known_abilities": [{"name": "急救", "description": " "}],
+            },
+        )
+
+
+def test_persistent_known_ability_allows_empty_description_for_player_edits():
+    from app.domain.npc_profile.schemas import KnownAbility
+
+    ability = KnownAbility(name="急救", description="   ")
+    assert ability.description == ""
+
+
+def test_llm_ability_schemas_require_description_but_player_schema_does_not():
+    from app.domain.director_npc.schemas import (
+        KnownAbility as DirectorKnownAbility,
+        DirectorNPCShell,
+    )
+    from app.domain.npc_profile.schemas import (
+        KnownAbility,
+        LLMKnownAbility,
+        NPCNewProfileOutput,
+        NPCProfileBackfillShell,
+    )
+
+    assert KnownAbility.model_json_schema()["required"] == ["name"]
+    assert LLMKnownAbility.model_json_schema()["required"] == ["name", "description"]
+    assert DirectorKnownAbility.model_json_schema()["required"] == [
+        "name",
+        "description",
+    ]
+    for container, strict_name in (
+        (DirectorNPCShell, "KnownAbility"),
+        (NPCProfileBackfillShell, "LLMKnownAbility"),
+        (NPCNewProfileOutput, "LLMKnownAbility"),
+    ):
+        defs = container.model_json_schema()["$defs"]
+        assert defs[strict_name]["required"] == ["name", "description"], (
+            f"{container.__name__} 的 JSON Schema 必须要求能力 description"
+        )
+
+
+def test_backfill_and_create_prompts_share_hierarchical_field_contract():
+    backfill = Path(
+        "app/prompts/director/skills/npc_profile_backfill_v1.md"
+    ).read_text(encoding="utf-8")
+    create = Path(
+        "app/prompts/director/skills/director_npc_create_v1.md"
+    ).read_text(encoding="utf-8")
+
+    for prompt in (backfill, create):
+        assert "`identity` → `behavior` → `shell`" in prompt
+        assert "以 `identity` 的核心字段为准" in prompt
+        assert "`personality_trait`" in prompt
+        assert "外部可观察" in prompt
+        assert "不写万能能力" in prompt
 
 
 def test_store_adds_unambiguous_given_name_alias():
@@ -173,8 +311,10 @@ def test_new_npc_candidate_is_not_saved_or_backfilled():
                             "public_summary": "醉花楼花魁，琴艺出众。",
                             "role": "醉花楼花魁",
                             "appearance": "青衣抱琵琶，姿态温婉。",
-                            "personality_traits": ["温婉", "谨慎"],
-                            "known_abilities": ["琵琶"],
+                            "personality_trait": "接客前先调一遍弦，节奏对了才开口说话",
+                            "known_abilities": [
+                                {"name": "琵琶", "description": "演奏时能以曲调应和现场气氛"}
+                            ],
                             "faction": "醉花楼",
                             "last_known_location": "醉花楼",
                             "attitude_to_player": None,
@@ -229,8 +369,10 @@ def test_new_npc_without_enrich_is_dropped():
                             "public_summary": "醉花楼二楼雅间中参与大额生意谈判的女子。",
                             "role": "生意谈判方",
                             "appearance": "声音温婉中带媚。",
-                            "personality_traits": ["从容", "精明"],
-                            "known_abilities": ["商业谈判"],
+                            "personality_trait": "开口先夸对方生意，再慢慢把话题引到账目上",
+                            "known_abilities": [
+                                {"name": "商业谈判", "description": "凭账目与行情拿捏谈判筹码"}
+                            ],
                             "faction": None,
                             "last_known_location": "醉花楼二楼雅间",
                             "attitude_to_player": None,
@@ -272,15 +414,21 @@ def test_backfill_can_promote_placeholder_name_and_preserve_alias():
         [
             {
                 "name": "苏锦屏",
-                "role": "行商出身的生意谈判方",
-                "appearance": "声音温婉中带媚，举止从容。",
-                "personality_traits": ["从容", "精明"],
-                "known_abilities": ["商业谈判"],
-                "faction": None,
-                "core_motivation": "建立一张足以保护自身生意的合作网络。",
-                "hidden_secret": "她正在隐瞒真正货主的身份。",
-                "conflict_style": "先谈条件，谈不拢就用账目和人情施压。",
-                "social_style": "语气温婉，话锋却常常直指利益核心。",
+                "identity": {
+                    "core_motivation": "建立一张足以保护自身生意的合作网络。",
+                    "hidden_secret": "她正在隐瞒真正货主的身份。",
+                    "role": "行商出身的生意谈判方",
+                    "faction": None,
+                },
+                "behavior": {
+                    "conflict_style": "先谈条件，谈不拢就用账目和人情施压。",
+                    "social_style": "语气温婉，话锋却常常直指利益核心。",
+                    "personality_trait": "开口先夸对方生意，再慢慢把话题引到账目上",
+                },
+                "shell": {
+                    "known_abilities": [{"name": "商业谈判", "description": "凭账目与行情拿捏谈判筹码"}],
+                    "appearance": "声音温婉中带媚，举止从容。",
+                },
             },
         ]
     )
@@ -291,8 +439,8 @@ def test_backfill_can_promote_placeholder_name_and_preserve_alias():
         public_summary="醉花楼二楼雅间中参与大额生意谈判的女子。",
         role="生意谈判方",
         appearance="声音温婉中带媚。",
-        personality_traits=["从容", "精明"],
-        known_abilities=["商业谈判"],
+        personality_trait="开口先夸对方生意，再慢慢把话题引到账目上",
+        known_abilities=[],
         last_known_location="醉花楼二楼雅间",
         current_intent="与李掌柜谈判一笔大生意",
     )
@@ -319,8 +467,8 @@ def test_existing_npc_update_does_not_trigger_profile_backfill():
             public_summary="鸣玉坊琵琶名手。",
             role="琵琶名手",
             appearance="白衣抱琵琶。",
-            personality_traits=["清冷"],
-            known_abilities=["琵琶"],
+            personality_trait="登台前反复试弦，不合意绝不开口",
+            known_abilities=[{"name": "琵琶", "description": "演奏时能以曲调应和现场气氛"}],
             faction="鸣玉坊",
             last_known_location="鸣玉坊",
         )
@@ -372,8 +520,10 @@ def test_existing_npc_update_does_not_trigger_profile_backfill():
     assert updated.public_summary == "鸣玉坊琵琶名手。"
     assert updated.role == "琵琶名手"
     assert updated.appearance == "白衣抱琵琶。"
-    assert updated.personality_traits == ["清冷"]
-    assert updated.known_abilities == ["琵琶"]
+    assert updated.personality_trait == "登台前反复试弦，不合意绝不开口"
+    assert [ability.model_dump() for ability in updated.known_abilities] == [
+        {"name": "琵琶", "description": "演奏时能以曲调应和现场气氛"}
+    ]
     assert updated.faction == "鸣玉坊"
     assert updated.last_known_location == "醉花楼"
     assert updated.attitude_to_player == "谨慎"
@@ -405,7 +555,7 @@ def test_similar_name_is_unresolved_and_can_create_distinct_npc():
                             "public_summary": "来自白鹤书院的年轻书生。",
                             "role": "白鹤书院书生",
                             "appearance": None,
-                            "personality_traits": [],
+                            "personality_trait": None,
                             "known_abilities": [],
                             "faction": "白鹤书院",
                             "last_known_location": "醉花楼",
@@ -417,15 +567,21 @@ def test_similar_name_is_unresolved_and_can_create_distinct_npc():
             },
             {
                 "name": "林川",
-                "role": "白鹤书院书生",
-                "appearance": "青衫书生打扮。",
-                "personality_traits": ["好学", "坦率"],
-                "known_abilities": ["经义"],
-                "faction": "白鹤书院",
-                "core_motivation": "在游学中验证自己的学问。",
-                "hidden_secret": "私下追查一封失踪的书信。",
-                "conflict_style": "先讲理，受阻后寻找旁证。",
-                "social_style": "坦率发问，不喜绕弯。",
+                "identity": {
+                    "core_motivation": "在游学中验证自己的学问。",
+                    "hidden_secret": "私下追查一封失踪的书信。",
+                    "role": "白鹤书院书生",
+                    "faction": "白鹤书院",
+                },
+                "behavior": {
+                    "conflict_style": "先讲理，受阻后寻找旁证。",
+                    "social_style": "坦率发问，不喜绕弯。",
+                    "personality_trait": "遇到新说法先引一段书上的话再下判断",
+                },
+                "shell": {
+                    "known_abilities": [{"name": "经义", "description": "引经据典辨析论题"}],
+                    "appearance": "青衫书生打扮。",
+                },
             },
         ]
     )

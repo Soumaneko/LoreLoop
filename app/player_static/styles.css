@@ -2408,6 +2408,11 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .record-fact-row { display: flex; align-items: flex-start; gap: 6px; }
 .record-fact-row textarea { flex: 1; min-width: 0; }
 
+.record-ability-editor { display: grid; gap: 6px; }
+.record-ability-row { display: flex; align-items: flex-start; gap: 6px; }
+.record-ability-row .record-ability-name { flex: 0 0 120px; }
+.record-ability-row .record-ability-desc { flex: 1; min-width: 0; }
+
 .record-edit-actions {
   display: flex;
   align-items: center;

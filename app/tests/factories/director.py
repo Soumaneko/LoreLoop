@@ -33,12 +33,14 @@ def make_current_state() -> CurrentState:
 
 
 def make_director_npc() -> DirectorNPCDraft:
+    from app.domain.director_npc.schemas import KnownAbility
+
     return DirectorNPCDraft(
         name="林澈",
         role="社区医生",
         appearance="常穿深色风衣。",
-        personality_traits=["谨慎", "耐心"],
-        known_abilities=["急救"],
+        personality_trait="见人先问诊，习惯主动掌握对方近况",
+        known_abilities=[KnownAbility(name="急救", description="处理外伤与常见急症")],
         core_motivation="保护社区居民。",
         hidden_secret="曾目击一宗未结案件。",
         conflict_style="先协商后行动。",

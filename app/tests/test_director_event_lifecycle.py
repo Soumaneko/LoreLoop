@@ -58,16 +58,25 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         ]),
         npc_output={
             "creation_reason": "码头上的一等把式。",
-            "core_motivation": "守住码头的货路。",
-            "hidden_secret": "当年沉船时他就在船上。",
-            "conflict_style": "先硬扛再周旋。",
-            "social_style": "话少，办事利落。",
-            "role": "码头把头",
-            "faction": "码头会",
-            "personality_traits": ["沉稳", "护短"],
-            "known_abilities": ["盘货", "相人"],
-            "appearance": "左臂有一道旧疤。",
-            "name": "沈二爷",
+            "identity": {
+                "core_motivation": "守住码头的货路。",
+                "hidden_secret": "当年沉船时他就在船上。",
+                "role": "码头把头",
+                "faction": "码头会",
+            },
+            "behavior": {
+                "conflict_style": "先硬扛再周旋。",
+                "social_style": "话少，办事利落。",
+                "personality_trait": "认人不认账，帮过的伙计记一辈子",
+            },
+            "shell": {
+                "known_abilities": [
+                    {"name": "盘货", "description": "凭手感辨认船货成色"},
+                    {"name": "相人", "description": "看一个人几眼就能判断靠不靠得住"},
+                ],
+                "appearance": "左臂有一道旧疤。",
+                "name": "沈二爷",
+            },
         },
     )
 
@@ -195,16 +204,25 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
         ]),
         npc_output={
             "creation_reason": "沉船事件需要一名现场调查者。",
-            "core_motivation": "靠查明沉船真相获得立足之地。",
-            "hidden_secret": "曾参与伪造一份船货清单。",
-            "conflict_style": "先观察再突然行动。",
-            "social_style": "谨慎而直接。",
-            "role": "沉船调查者",
-            "faction": None,
-            "personality_traits": ["谨慎", "果断"],
-            "known_abilities": ["潜水", "辨认船货"],
-            "appearance": "总穿着防水短衣。",
-            "name": "闻潮",
+            "identity": {
+                "core_motivation": "靠查明沉船真相获得立足之地。",
+                "hidden_secret": "曾参与伪造一份船货清单。",
+                "role": "沉船调查者",
+                "faction": None,
+            },
+            "behavior": {
+                "conflict_style": "先观察再突然行动。",
+                "social_style": "谨慎而直接。",
+                "personality_trait": "下结论前先蹲下来把现场看了又看",
+            },
+            "shell": {
+                "known_abilities": [
+                    {"name": "潜水", "description": "潜到沉船残骸中捞取物证"},
+                    {"name": "辨认船货", "description": "凭痕迹辨认船货来源与去向"},
+                ],
+                "appearance": "总穿着防水短衣。",
+                "name": "闻潮",
+            },
         },
     )
 
@@ -403,16 +421,25 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
         ]),
         npc_output={
             "creation_reason": "码头上的一等把式。",
-            "core_motivation": "守住码头的货路。",
-            "hidden_secret": "当年沉船时他就在船上。",
-            "conflict_style": "先硬扛再周旋。",
-            "social_style": "话少，办事利落。",
-            "role": "码头把头",
-            "faction": "码头会",
-            "personality_traits": ["沉稳", "护短"],
-            "known_abilities": ["盘货", "相人"],
-            "appearance": "左臂有一道旧疤。",
-            "name": "沈二爷",
+            "identity": {
+                "core_motivation": "守住码头的货路。",
+                "hidden_secret": "当年沉船时他就在船上。",
+                "role": "码头把头",
+                "faction": "码头会",
+            },
+            "behavior": {
+                "conflict_style": "先硬扛再周旋。",
+                "social_style": "话少，办事利落。",
+                "personality_trait": "认人不认账，帮过的伙计记一辈子",
+            },
+            "shell": {
+                "known_abilities": [
+                    {"name": "盘货", "description": "凭手感辨认船货成色"},
+                    {"name": "相人", "description": "看一个人几眼就能判断靠不靠得住"},
+                ],
+                "appearance": "左臂有一道旧疤。",
+                "name": "沈二爷",
+            },
         },
     )
 
@@ -492,16 +519,22 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
         },
         npc_output={
             "creation_reason": "北境商路需要一个长期活动的人物。",
-            "name": "沈栖舟",
-            "role": "北境行商",
-            "appearance": "常穿防风皮袍。",
-            "personality_traits": ["谨慎", "务实"],
-            "known_abilities": ["估价"],
-            "faction": "北陆商盟",
-            "core_motivation": "守住商队赖以生存的货路。",
-            "hidden_secret": "私下追查一批失踪货物。",
-            "conflict_style": "先谈条件，再切断补给。",
-            "social_style": "言简意赅，重视信用。",
+            "identity": {
+                "core_motivation": "守住商队赖以生存的货路。",
+                "hidden_secret": "私下追查一批失踪货物。",
+                "role": "北境行商",
+                "faction": "北陆商盟",
+            },
+            "behavior": {
+                "conflict_style": "先谈条件，再切断补给。",
+                "social_style": "言简意赅，重视信用。",
+                "personality_trait": "报价前先捻三遍算珠，算不清就不松口",
+            },
+            "shell": {
+                "known_abilities": [{"name": "估价", "description": "凭成色与行情估算货物价值"}],
+                "appearance": "常穿防风皮袍。",
+                "name": "沈栖舟",
+            },
         },
     )
 

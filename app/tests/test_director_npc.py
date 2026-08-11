@@ -1,11 +1,14 @@
 import sqlite3
 
+import pytest
+
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.creative_brief import draw_creative_brief
 from app.domain.director_npc import (
     DirectorNPCCreator,
     DirectorNPCDraft,
     DirectorNPCStore,
+    KnownAbility,
     NPCCreationContext,
 )
 
@@ -29,8 +32,8 @@ def _draft() -> DirectorNPCDraft:
         name="林澈",
         role="社区医生",
         appearance="常穿深色风衣。",
-        personality_traits=["谨慎", "耐心"],
-        known_abilities=["急救"],
+        personality_trait="见人先问诊，习惯主动掌握对方近况",
+        known_abilities=[KnownAbility(name="急救", description="处理外伤与常见急症")],
         core_motivation="保护社区居民。",
         hidden_secret="曾目击一宗未结案件。",
         conflict_style="先协商后行动。",
@@ -54,16 +57,22 @@ def test_creator_uses_general_context_without_setting_prerequisite():
     gateway = _CreatorGateway(
         {
             "creation_reason": "为社区医疗与旧案线索准备一个可复用人物。",
-            "core_motivation": "保护社区居民。",
-            "hidden_secret": "曾目击一宗未结案件。",
-            "conflict_style": "先协商后行动。",
-            "social_style": "克制而友善。",
-            "role": "社区医生",
-            "faction": None,
-            "personality_traits": ["谨慎", "耐心"],
-            "known_abilities": ["急救"],
-            "appearance": "常穿深色风衣。",
-            "name": "林澈",
+            "identity": {
+                "core_motivation": "保护社区居民。",
+                "hidden_secret": "曾目击一宗未结案件。",
+                "role": "社区医生",
+                "faction": None,
+            },
+            "behavior": {
+                "conflict_style": "先协商后行动。",
+                "social_style": "克制而友善。",
+                "personality_trait": "见人先问诊，习惯主动掌握对方近况",
+            },
+            "shell": {
+                "known_abilities": [{"name": "急救", "description": "处理外伤与常见急症"}],
+                "appearance": "常穿深色风衣。",
+                "name": "林澈",
+            },
         }
     )
 
@@ -79,9 +88,59 @@ def test_creator_uses_general_context_without_setting_prerequisite():
 
     assert draft.status == "prepared"
     assert draft.source_setting_ids == []
+    assert draft.personality_trait == "见人先问诊，习惯主动掌握对方近况"
+    assert draft.known_abilities == [
+        KnownAbility(name="急救", description="处理外伤与常见急症")
+    ]
+    assert draft.name == "林澈"
     trace = gateway.calls[0]["input_data"]
     assert "creation_context_json" in trace
     assert trace["settings_json"] == "[]"
+
+
+def test_known_ability_rejects_blank_name_and_oversized_label():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        KnownAbility(name="   ", description="处理外伤")
+    with pytest.raises(ValidationError):
+        KnownAbility(name="x" * 21, description="处理外伤")
+    with pytest.raises(ValidationError):
+        KnownAbility(name="急救", description="x" * 121)
+
+
+def test_known_ability_allows_empty_description_for_player_edits():
+    """Director ability model is LLM-facing and requires a description."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        KnownAbility(name="急救", description="   ")
+
+
+def test_creator_shell_rejects_empty_ability_descriptions():
+    from pydantic import ValidationError
+
+    from app.domain.director_npc.schemas import DirectorNPCShell
+
+    with pytest.raises(ValidationError):
+        DirectorNPCShell(
+            known_abilities=[{"name": "急救", "description": "   "}],
+            appearance="风衣。",
+            name="林澈",
+        )
+    ok = DirectorNPCShell(
+        known_abilities=[{"name": "急救", "description": "处理外伤"}],
+        appearance="风衣。",
+        name="林澈",
+    )
+    assert ok.known_abilities[0].description == "处理外伤"
+
+
+def test_known_ability_rejects_unknown_fields():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        KnownAbility.model_validate({"name": "急救", "description": "处理外伤", "level": 3})
 
 
 def test_store_uses_prepared_introduced_retired_lifecycle():
@@ -146,16 +205,22 @@ def test_creator_includes_recent_creations_in_prompt():
     gateway = _CreatorGateway(
         {
             "creation_reason": "与同批事件耦合而准备。",
-            "core_motivation": "查明沉船真相。",
-            "hidden_secret": "见过账本。",
-            "conflict_style": "先观察再出手。",
-            "social_style": "寡言。",
-            "role": "码头把头",
-            "faction": None,
-            "personality_traits": ["沉稳", "果决"],
-            "known_abilities": ["盘货"],
-            "appearance": "左臂旧疤。",
-            "name": "沈二爷",
+            "identity": {
+                "core_motivation": "查明沉船真相。",
+                "hidden_secret": "见过账本。",
+                "role": "码头把头",
+                "faction": None,
+            },
+            "behavior": {
+                "conflict_style": "先观察再出手。",
+                "social_style": "寡言。",
+                "personality_trait": "开口必先谈货，沉默时盯着对方手里的东西",
+            },
+            "shell": {
+                "known_abilities": [{"name": "盘货", "description": "凭手感辨认船货成色"}],
+                "appearance": "左臂旧疤。",
+                "name": "沈二爷",
+            },
         }
     )
     recent_creations = [
@@ -184,16 +249,22 @@ def test_creator_brief_hides_social_dimensions_from_prompt():
     gateway = _CreatorGateway(
         {
             "creation_reason": "隐藏社会维度后创建。",
-            "core_motivation": "守住货路。",
-            "hidden_secret": "旧账未清。",
-            "conflict_style": "先硬扛再周旋。",
-            "social_style": "话少利落。",
-            "role": "码头把头",
-            "faction": "码头会",
-            "personality_traits": ["沉稳", "护短"],
-            "known_abilities": ["盘货"],
-            "appearance": "左臂旧疤。",
-            "name": "沈二爷",
+            "identity": {
+                "core_motivation": "守住货路。",
+                "hidden_secret": "旧账未清。",
+                "role": "码头把头",
+                "faction": "码头会",
+            },
+            "behavior": {
+                "conflict_style": "先硬扛再周旋。",
+                "social_style": "话少利落。",
+                "personality_trait": "事到临头先自己扛，不轻易找人商量",
+            },
+            "shell": {
+                "known_abilities": [{"name": "盘货", "description": "凭手感辨认船货成色"}],
+                "appearance": "左臂旧疤。",
+                "name": "沈二爷",
+            },
         }
     )
 

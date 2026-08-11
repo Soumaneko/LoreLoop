@@ -24,7 +24,7 @@ _NPC_PUBLIC_FIELDS = {
     "public_summary",
     "role",
     "appearance",
-    "personality_traits",
+    "personality_trait",
     "known_abilities",
     "faction",
     "last_known_location",
@@ -35,12 +35,13 @@ _NPC_NULLABLE_FIELDS = {
     "public_summary",
     "role",
     "appearance",
+    "personality_trait",
     "faction",
     "last_known_location",
     "attitude_to_player",
     "current_intent",
 }
-_NPC_LIST_FIELDS = {"personality_traits", "known_abilities"}
+_NPC_LIST_FIELDS = {"known_abilities"}
 _NPC_DIRECTOR_FIELDS = {
     "core_motivation",
     "hidden_secret",
@@ -111,7 +112,7 @@ def _normalize_payload(
         if field in list_fields:
             if isinstance(value, list):
                 normalized[field] = [
-                    item for item in value if str(item).strip()
+                    item for item in value if _list_item_kept(item)
                 ]
             else:
                 normalized[field] = value
@@ -122,17 +123,11 @@ def _normalize_payload(
     return normalized
 
 
-def _strip_name_and_aliases(update) -> None:
-    """Strip whitespace from the canonical name and aliases before saving."""
-    name = getattr(update, "name", None)
-    if name is not None:
-        name = name.strip()
-        if not name:
-            raise ValueError("name must not be empty")
-        update.name = name
-    update.aliases = [
-        alias.strip() for alias in update.aliases if alias.strip()
-    ]
+def _list_item_kept(item: Any) -> bool:
+    """Keep a list item unless it is a blank string or a nameless ability dict."""
+    if isinstance(item, dict):
+        return bool(str(item.get("name", "")).strip())
+    return bool(str(item).strip())
 
 
 def _maintenance_running(runtime: CampaignRuntime) -> bool:
@@ -388,11 +383,22 @@ def _update_npc_profile(
             list_fields=list_fields,
         )
         update = current.update_view()
+        data = update.model_dump()
         for field in _NPC_PUBLIC_FIELDS:
             if field in payload:
-                setattr(update, field, payload[field])
-        _strip_name_and_aliases(update)
-        validated = NPCProfileUpdateInput.model_validate(update.model_dump())
+                data[field] = payload[field]
+        name = data.get("name")
+        if name is not None:
+            name = str(name).strip()
+            if not name:
+                raise ValueError("name must not be empty")
+            data["name"] = name
+        data["aliases"] = [
+            alias.strip()
+            for alias in data.get("aliases", [])
+            if alias and alias.strip()
+        ]
+        validated = NPCProfileUpdateInput.model_validate(data)
         _validate_npc_name_conflicts(store, npc_id, validated)
         merged = profile_from_update(
             validated,

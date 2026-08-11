@@ -13,6 +13,7 @@ from app.domain.npc_profile.schemas import (
     ExistingNPCProfilePatch,
     NPCExtractionResult,
     NPCMention,
+    NPCNewProfileOutput,
     NPCProfile,
     NPCProfileCandidateResult,
     NPCProfileUpdateBatch,
@@ -290,7 +291,7 @@ def _merge_results(
         if result.resolution == "new":
             created.append(
                 profile_from_update(
-                    cast(NPCProfileUpdateInput, result.new_profile),
+                    cast(NPCNewProfileOutput, result.new_profile).to_update_input(),
                     source_scene_ids=[scene_id],
                     updated_at=now,
                 )

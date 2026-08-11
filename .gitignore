@@ -1,4 +1,5 @@
 .env
+.agents
 AGENTS.md
 agent.md
 .venv/
@@ -12,6 +13,7 @@ __pycache__/
 /release/
 logs/
 llm_traces.jsonl
+skills-lock.json
 data/
 docs/
 debug_py/
