@@ -15,6 +15,7 @@ from app.domain.continuity import (
     ContinuityItem,
     ContinuityItemDraft,
     ContinuityProjection,
+    ContinuityProjectionOutput,
     ContinuityProjector,
     ContinuityRetriever,
     ContinuityService,
@@ -109,7 +110,7 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
 
         def run(self, **kwargs):
             self.calls.append(kwargs)
-            return kwargs["output_schema"].model_validate({"operations": []})
+            return kwargs["output_schema"].model_validate([])
 
     gateway = SpyGateway()
     active = [
@@ -136,6 +137,11 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
 
     assert result.operations == []
     assert len(gateway.calls) == 1
+    assert gateway.calls[0]["output_schema"] is ContinuityProjectionOutput
+    output_schema = json.loads(
+        gateway.calls[0]["input_data"]["output_schema_json"]
+    )
+    assert output_schema["type"] == "array"
     projected = json.loads(
         gateway.calls[0]["input_data"]["active_continuity_json"]
     )
@@ -152,20 +158,45 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
     }
 
 
+def test_projector_accepts_operation_array_as_its_wire_contract():
+    class ArrayGateway:
+        def run(self, **kwargs):
+            return kwargs["output_schema"].model_validate([{
+                "operation": "resolve",
+                "item_id": "item-1",
+                "evidence_ids": ["turn_2_p001"],
+                "reason": "正文确认事项已经完成。",
+            }])
+
+    gateway = ArrayGateway()
+    documents = build_turn_documents(
+        scene_id="scene_002",
+        turn_index=2,
+        user_input="继续调查。",
+        scene_text="顾晚棠确认账册已经找回。",
+    )
+
+    result = ContinuityProjector(gateway).project(
+        current_documents=documents,
+        active_items=[_item("item-1")],
+    )
+
+    assert result.operations[0].operation == "resolve"
+    assert result.operations[0].item_id == "item-1"
+
+
 def test_update_schema_cannot_modify_premise():
     with pytest.raises(ValidationError):
-        ContinuityProjection.model_validate({
-            "operations": [{
-                **_operation(
-                    "update",
-                    item_id="item-1",
-                    item=_update(state_delta="找到新线索。"),
-                ),
-                "premise": "偷偷改写原始事项。",
-            }],
-        })
+        ContinuityProjectionOutput.model_validate([{
+            **_operation(
+                "update",
+                item_id="item-1",
+                item=_update(state_delta="找到新线索。"),
+            ),
+            "premise": "偷偷改写原始事项。",
+        }])
 
-    output_schema = json.loads(schema_json(ContinuityProjection))
+    output_schema = json.loads(schema_json(ContinuityProjectionOutput))
     update_properties = output_schema["$defs"][
         "ContinuityUpdateOperation"
     ]["properties"]
@@ -683,7 +714,8 @@ def test_continuity_prompt_defines_noop_and_immutable_premise():
 
     assert "明确的承诺、债务、协议、职责或义务" in prompt
     assert "未完成目标、仍存在的威胁" in prompt
-    assert '{{"operations": []}}' in prompt
+    assert "必须直接输出 `[]`" in prompt
+    assert "不要在数组外添加对象包装" in prompt
     assert "事项最初成立的原因与原始含义" in prompt
     assert "本轮正文明确建立了一个新的合格事项" in prompt
     assert "长期愿景、抽象发展方向或无限延续的常规职责不得创建" in prompt
@@ -698,4 +730,4 @@ def test_continuity_prompt_defines_noop_and_immutable_premise():
         active_continuity_json="[]",
         output_schema_json="{}",
     )
-    assert '{"operations": []}' in rendered
+    assert "必须直接输出 `[]`" in rendered

@@ -5,7 +5,11 @@ from app.core.llm import LLMGateway
 from app.core.llm.schema import schema_json
 from app.domain.confirmed_history import HistoryDocument
 
-from .schemas import ContinuityItem, ContinuityProjection
+from .schemas import (
+    ContinuityItem,
+    ContinuityProjection,
+    ContinuityProjectionOutput,
+)
 
 
 class ContinuityProjector:
@@ -24,8 +28,8 @@ class ContinuityProjector:
             for document in current_documents
             if document.source_type == "scene_paragraph"
         ]
-        return cast(
-            ContinuityProjection,
+        output = cast(
+            ContinuityProjectionOutput,
             self.llm.run(
                 task="continuity_project",
                 input_data={
@@ -58,10 +62,13 @@ class ContinuityProjector:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "output_schema_json": schema_json(ContinuityProjection),
+                    "output_schema_json": schema_json(
+                        ContinuityProjectionOutput
+                    ),
                 },
-                output_schema=ContinuityProjection,
+                output_schema=ContinuityProjectionOutput,
                 temperature=0.1,
                 trace_id=trace_id,
             ),
         )
+        return ContinuityProjection(operations=output.root)

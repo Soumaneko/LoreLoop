@@ -3,7 +3,14 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    field_validator,
+    model_validator,
+)
 
 
 ContinuityKind = Literal["commitment", "open_thread"]
@@ -162,6 +169,10 @@ ContinuityOperation = Annotated[
     | ContinuityCancelOperation,
     Field(discriminator="operation"),
 ]
+
+
+class ContinuityProjectionOutput(RootModel[list[ContinuityOperation]]):
+    """Wire contract: the Projector returns the operation list directly."""
 
 
 class ContinuityProjection(BaseModel):
