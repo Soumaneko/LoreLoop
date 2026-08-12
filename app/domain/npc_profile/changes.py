@@ -1,0 +1,187 @@
+"""NPC change admission 的结果契约（Ticket 03）。
+
+把 proposal 的合法性、evidence 门禁、no-op、字段规则与实际应用收敛为
+``admit_npc_turn_changes`` 的单一来源。本文件只定义可序列化的 accepted mutation
+契约与结果容器，不包含任何判断逻辑（逻辑在 ``change_admission.py``）。
+
+``AcceptedNPCFieldChange`` 按 ``operation`` 做 discriminated union，从 schema 层
+禁止自相矛盾的数据：
+
+- ``set``：标量字段原子更新；``summary_delta`` 仅 ``public_summary`` 且必填；
+  ``current_state_sync`` 来源不得携带正文 evidence；proposal 来源的稳定字段必须
+  携带 evidence、``current_intent`` 不得携带；
+- ``add``：``known_abilities`` append-only 追加，``additions`` 非空且去重。
+
+alias 以显式 ``AcceptedNPCAliasChange`` 表达，与字段变化同属 accepted mutation
+单一来源；snapshot application 只消费这两类变化与 ``new_npc_candidates``。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Annotated, Literal, Sequence, Union
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+from app.core.text import normalize_compact_key
+from app.domain.npc_profile.schemas import KnownAbility, NPCProfile
+
+#: proposal 来源、必须携带 evidence 的稳定字段。
+_STABLE_PROPOSAL_FIELDS = frozenset(
+    {"public_summary", "role", "appearance", "personality_trait", "faction"}
+)
+
+#: CurrentState 独占同步字段（proposal 不得写入）。
+SYNC_FIELDS = frozenset({"last_known_location", "attitude_to_player"})
+
+SCALAR_FIELD_LITERAL = Literal[
+    "public_summary",
+    "role",
+    "appearance",
+    "personality_trait",
+    "faction",
+    "current_intent",
+    "last_known_location",
+    "attitude_to_player",
+]
+
+
+class AcceptedNPCScalarChange(BaseModel):
+    """标量字段的原子 set change（operation="set"）。"""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    operation: Literal["set"] = "set"
+    npc_id: str = Field(min_length=1)
+    canonical_name: str = Field(min_length=1)
+    field: SCALAR_FIELD_LITERAL
+    old_value: str | None = None
+    new_value: str = Field(min_length=1)
+    evidence_ids: tuple[str, ...] = ()
+    turn_index: int | None = None
+    summary_delta: str | None = None
+    source: Literal["proposal", "current_state_sync"] = "proposal"
+
+    @model_validator(mode="after")
+    def _summary_delta_only_for_public_summary(self):
+        if self.field == "public_summary":
+            if not self.summary_delta:
+                raise ValueError("summary_delta is required for public_summary changes")
+        elif self.summary_delta is not None:
+            raise ValueError("summary_delta is only valid for public_summary changes")
+        return self
+
+    @model_validator(mode="after")
+    def _sync_changes_carry_no_evidence(self):
+        if self.source == "current_state_sync":
+            if self.field not in SYNC_FIELDS:
+                raise ValueError(
+                    "current_state_sync changes only apply to "
+                    "last_known_location / attitude_to_player"
+                )
+            if self.evidence_ids:
+                raise ValueError("current_state_sync changes must not carry evidence")
+        return self
+
+    @model_validator(mode="after")
+    def _proposal_field_evidence_contract(self):
+        if self.source != "proposal":
+            return self
+        if self.field in SYNC_FIELDS:
+            raise ValueError(
+                "last_known_location / attitude_to_player are "
+                "current_state_sync only"
+            )
+        if self.field in _STABLE_PROPOSAL_FIELDS:
+            if not self.evidence_ids:
+                raise ValueError("stable field changes require evidence_ids")
+        elif self.evidence_ids:
+            raise ValueError("current_intent changes must not carry evidence_ids")
+        return self
+
+
+class AcceptedNPCAbilityAddChange(BaseModel):
+    """``known_abilities`` 的 append-only add change（operation="add"）。"""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    operation: Literal["add"] = "add"
+    npc_id: str = Field(min_length=1)
+    canonical_name: str = Field(min_length=1)
+    field: Literal["known_abilities"] = "known_abilities"
+    additions: list[KnownAbility] = Field(min_length=1, max_length=5)
+    evidence_ids: tuple[str, ...] = Field(min_length=1)
+    turn_index: int | None = None
+    source: Literal["proposal"] = "proposal"
+
+    @field_validator("additions")
+    @classmethod
+    def _abilities_no_duplicates(cls, values):
+        seen: set[str] = set()
+        for ability in values:
+            key = normalize_compact_key(ability.name)
+            if not key or key in seen:
+                raise ValueError("additions must not contain duplicate abilities")
+            seen.add(key)
+        return values
+
+
+#: 字段/能力两类 accepted mutation，以 ``operation`` 作 discriminator。
+AcceptedNPCFieldChange = Annotated[
+    Union[AcceptedNPCScalarChange, AcceptedNPCAbilityAddChange],
+    Field(discriminator="operation"),
+]
+
+
+@dataclass(frozen=True)
+class AcceptedNPCAliasChange:
+    npc_id: str
+    canonical_name: str
+    alias: str
+    turn_index: int | None = None
+
+
+@dataclass(frozen=True)
+class NPCChangeAdmissionWarning:
+    npc_name: str
+    field_name: str
+    code: str
+    message: str
+    evidence_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NPCAdmissionCoverage:
+    exact_targets: int
+    existing_proposals: int
+    alias_proposals: int
+    new_proposals: int
+    ignore_proposals: int
+    unresolved_surfaces: list[str]
+    synced_npcs: int
+
+
+@dataclass
+class NPCChangeAdmissionResult:
+    accepted_profile_changes: list[AcceptedNPCFieldChange] = field(default_factory=list)
+    accepted_alias_changes: list[AcceptedNPCAliasChange] = field(default_factory=list)
+    new_npc_candidates: list[NPCProfile] = field(default_factory=list)
+    warnings: list[NPCChangeAdmissionWarning] = field(default_factory=list)
+    coverage: NPCAdmissionCoverage | None = None
+    updated_profiles: list[NPCProfile] = field(default_factory=list)
+
+
+class NPCTurnValidationError(ValueError):
+    """硬校验失败：不产生任何 accepted changes。"""
+
+    def __init__(self, errors: Sequence[object]):
+        self.errors = list(errors)
+        super().__init__(
+            f"NPCTurn proposal validation failed with {len(self.errors)} error(s)"
+        )

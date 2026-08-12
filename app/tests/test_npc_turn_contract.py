@@ -501,6 +501,32 @@ def test_validation_accepts_multiple_distinct_ability_adds():
     assert errors == []
 
 
+def test_validation_duplicate_current_field_conflict():
+    request = _request()
+    errors = validate_npc_turn_proposals(
+        request,
+        _proposals(
+            _existing(surface="沈孤鸿", current_patch={"current_intent": "审问"}),
+            _alias(surface="合欢宗宗主", current_patch={"current_intent": "离开"}),
+        ),
+    )
+    assert [e.code for e in errors] == ["duplicate_current_field"]
+    assert errors[0].npc_id == "npc_001"
+    assert errors[0].field_name == "current_intent"
+
+
+def test_validation_duplicate_current_field_same_value_allowed():
+    request = _request()
+    errors = validate_npc_turn_proposals(
+        request,
+        _proposals(
+            _existing(surface="沈孤鸿", current_patch={"current_intent": "审问"}),
+            _alias(surface="合欢宗宗主", current_patch={"current_intent": "审问"}),
+        ),
+    )
+    assert errors == []
+
+
 def test_validation_existing_surface_mismatch():
     request = _request()
     errors = validate_npc_turn_proposals(

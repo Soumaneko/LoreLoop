@@ -329,6 +329,9 @@ def validate_npc_turn_proposals(
     - 重复 surface：同一归一化表面称呼只能有一条 proposal；
     - ``(target_npc_id, scalar_field)`` 全 batch 唯一：同一 NPC 的多条 proposal
       不得同时写同一标量稳定字段；
+    - ``(target_npc_id, current_field)`` 全 batch 唯一且值感知：同一 NPC 的多条
+      proposal 写 ``current_intent`` 时，相同值去重、冲突值报错
+      （``duplicate_current_field``）；
     - ``known_abilities`` 允许多条 add，但 ``(target_npc_id, normalize_compact_key(name))``
       不得重复；
     - player 保护：surface / new_profile.name / new_profile.aliases 不得等于
@@ -453,6 +456,37 @@ def validate_npc_turn_proposals(
     scalar_reported: set[tuple[str, str]] = set()
     ability_first: dict[tuple[str, str], int] = {}
     ability_reported: set[tuple[str, str]] = set()
+
+    current_field_first: dict[tuple[str, str], tuple[int, str]] = {}
+    current_field_reported: set[tuple[str, str]] = set()
+    for index, proposal in enumerate(proposals):
+        if not isinstance(proposal, (ExistingNPCProposal, AliasMatchProposal)):
+            continue
+        patch = proposal.current_patch
+        if patch is None or patch.current_intent is None:
+            continue
+        key = (proposal.target_npc_id, "current_intent")
+        value = patch.current_intent
+        first = current_field_first.get(key)
+        if first is None:
+            current_field_first[key] = (index, value)
+            continue
+        if key in current_field_reported:
+            continue
+        if value == first[1]:
+            continue
+        current_field_reported.add(key)
+        errors.append(NPCProposalValidationError(
+            code="duplicate_current_field",
+            message=(
+                "current field 'current_intent' is proposed with conflicting "
+                "values for the same target npc"
+            ),
+            proposal_index=first[0],
+            npc_id=proposal.target_npc_id,
+            field_name="current_intent",
+        ))
+
     for index, proposal in enumerate(proposals):
         if not isinstance(proposal, (ExistingNPCProposal, AliasMatchProposal)):
             continue

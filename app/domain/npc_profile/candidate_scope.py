@@ -189,16 +189,16 @@ def build_candidate_scope(
     contextual_remaining = remaining - ambiguous_included
     contextual_included = min(len(contextual), contextual_remaining)
 
-    options = [_identity_option(by_id[npc_id]) for npc_id in exact_ids]
+    options = [identity_option_from_profile(by_id[npc_id]) for npc_id in exact_ids]
     options.extend(
-        _identity_option(profile) for profile in ambiguous[:ambiguous_included]
+        identity_option_from_profile(profile) for profile in ambiguous[:ambiguous_included]
     )
     options.extend(
-        _identity_option(profile) for profile in contextual[:contextual_included]
+        identity_option_from_profile(profile) for profile in contextual[:contextual_included]
     )
 
     return CandidateScope(
-        exact_targets=[_identity_option(by_id[npc_id]) for npc_id in exact_ids],
+        exact_targets=[identity_option_from_profile(by_id[npc_id]) for npc_id in exact_ids],
         identity_options=options,
         diagnostics=CandidateScopeDiagnostics(
             participant_exact=len(participant_exact_ids),
@@ -276,7 +276,12 @@ def _descriptor_matches(value: str, segments: list[str]) -> bool:
     return any(compact in segment for segment in segments)
 
 
-def _identity_option(profile: NPCProfile) -> NPCIdentityOption:
+def identity_option_from_profile(profile: NPCProfile) -> NPCIdentityOption:
+    """把档案投影为 ``NPCIdentityOption``（Ticket 02 的身份投影契约）。
+
+    供候选池构造与 change admission 的投影一致性校验复用：aliases 合并永久 alias
+    与未过期 transient alias 并做规范化去重。
+    """
     return NPCIdentityOption(
         npc_id=profile.npc_id,
         name=profile.name,
