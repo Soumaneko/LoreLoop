@@ -1,0 +1,1077 @@
+{
+  "benchmark_version": 2,
+  "backend": "batch",
+  "fixtures_sha256": "3a7cc2a09f8b901a503479eef4c2eea4da36cd7b375bc7b1d106cd2be16ca3c4",
+  "recordings_sha256": "6fc28387a90458626145ce9a00db325cbb2d926fc4c5d8e4951e086726bbf30f",
+  "aggregate": {
+    "call_count": 14,
+    "provider_attempts": 14,
+    "weighted_passed": 156,
+    "weighted_total": 165,
+    "forbidden_violation_count": 0,
+    "invariant_violation_count": 0,
+    "categories": {
+      "exact_existing": {
+        "passed": 5,
+        "total": 5
+      },
+      "mention_recall": {
+        "passed": 9,
+        "total": 9
+      },
+      "no_op": {
+        "passed": 1,
+        "total": 1
+      },
+      "resolution": {
+        "passed": 22,
+        "total": 22
+      },
+      "stable_field": {
+        "passed": 9,
+        "total": 12
+      },
+      "new_npc": {
+        "passed": 5,
+        "total": 5
+      },
+      "alias": {
+        "passed": 1,
+        "total": 1
+      }
+    },
+    "prompt_content_chars": 8158,
+    "token_usage": {
+      "completion_tokens": 1451,
+      "prompt_tokens": 26289
+    }
+  },
+  "cases": [
+    {
+      "case_id": "exact_canonical_and_alias",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿",
+        "沈二",
+        "沈二爷"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ],
+        [
+          "npc_001",
+          "沈二"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "public_summary": "沈孤鸿，人称沈二爷，进入醉花楼并命人关门。",
+          "role": "沈二爷"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 2,
+          "content_chars": 703
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 703,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 149,
+          "prompt_tokens": 1922
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 149,
+        "prompt_tokens": 1922
+      },
+      "gold": {
+        "weighted_passed": 24,
+        "weighted_total": 24,
+        "categories": {
+          "exact_existing": {
+            "passed": 2,
+            "total": 2
+          },
+          "mention_recall": {
+            "passed": 3,
+            "total": 3
+          },
+          "no_op": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          },
+          "stable_field": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "near_name_no_alias",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "林川",
+        "陆川"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "林川"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [
+        "陆川"
+      ],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "茶馆"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 476
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 476,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 8,
+          "prompt_tokens": 1834
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 8,
+        "prompt_tokens": 1834
+      },
+      "gold": {
+        "weighted_passed": 18,
+        "weighted_total": 18,
+        "categories": {
+          "mention_recall": {
+            "passed": 2,
+            "total": 2
+          },
+          "new_npc": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 2,
+            "total": 2
+          },
+          "stable_field": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "new_persistent_vs_ignore_oneoff",
+      "call_count": 0,
+      "provider_attempts": 0,
+      "candidates": [],
+      "extract_mentions": [
+        "江晚晴",
+        "路人甲"
+      ],
+      "exact_mentions": [],
+      "aliases_added": {},
+      "new_profile_names": [
+        "江晚晴",
+        "路人甲"
+      ],
+      "field_deltas": {},
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 0,
+          "evidence_paragraphs": 0,
+          "content_chars": 0
+        },
+        "call_count": 0
+      },
+      "prompt_content_chars": 0,
+      "token_usage": null,
+      "token_usage_total": null,
+      "gold": {
+        "weighted_passed": 12,
+        "weighted_total": 12,
+        "categories": {
+          "new_npc": {
+            "passed": 2,
+            "total": 2
+          },
+          "resolution": {
+            "passed": 2,
+            "total": 2
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "player_identity_protected",
+      "call_count": 0,
+      "provider_attempts": 0,
+      "candidates": [],
+      "extract_mentions": [
+        "萧云痕"
+      ],
+      "exact_mentions": [],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {},
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 0,
+          "evidence_paragraphs": 0,
+          "content_chars": 0
+        },
+        "call_count": 0
+      },
+      "prompt_content_chars": 0,
+      "token_usage": null,
+      "token_usage_total": null,
+      "gold": {
+        "weighted_passed": 0,
+        "weighted_total": 0,
+        "categories": {},
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "org_place_ignored",
+      "call_count": 0,
+      "provider_attempts": 0,
+      "candidates": [],
+      "extract_mentions": [],
+      "exact_mentions": [],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {},
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 0,
+          "evidence_paragraphs": 0,
+          "content_chars": 0
+        },
+        "call_count": 0
+      },
+      "prompt_content_chars": 0,
+      "token_usage": null,
+      "token_usage_total": null,
+      "gold": {
+        "weighted_passed": 0,
+        "weighted_total": 0,
+        "categories": {},
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "current_fields_snapshot",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "current_intent": "查明信物来历"
+        }
+      },
+      "warnings": [
+        [
+          "npc_001",
+          "stable_changes",
+          "invalid_stable_change",
+          []
+        ]
+      ],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 568
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 568,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 86,
+          "prompt_tokens": 1877
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 86,
+        "prompt_tokens": 1877
+      },
+      "gold": {
+        "weighted_passed": 9,
+        "weighted_total": 9,
+        "categories": {
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          },
+          "stable_field": {
+            "passed": 2,
+            "total": 2
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "attitude_change_explicit",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "current_intent": "拜托萧云痕处理某事",
+          "personality_trait": "戒备心强，但确认可信后会果断托付"
+        }
+      },
+      "warnings": [
+        [
+          "npc_001",
+          "stable_changes",
+          "invalid_stable_change",
+          []
+        ]
+      ],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 499
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 499,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 141,
+          "prompt_tokens": 1849
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 141,
+        "prompt_tokens": 1849
+      },
+      "gold": {
+        "weighted_passed": 3,
+        "weighted_total": 3,
+        "categories": {
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "departed_direction",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "current_intent": "前往城南"
+        }
+      },
+      "warnings": [
+        [
+          "npc_001",
+          "stable_changes",
+          "invalid_stable_change",
+          []
+        ]
+      ],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 554
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 554,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 82,
+          "prompt_tokens": 1866
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 82,
+        "prompt_tokens": 1866
+      },
+      "gold": {
+        "weighted_passed": 3,
+        "weighted_total": 3,
+        "categories": {
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "transient_emotion_not_recorded",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "personality_trait": "易怒但能迅速平复情绪"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 484
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 484,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 83,
+          "prompt_tokens": 1840
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 83,
+        "prompt_tokens": 1840
+      },
+      "gold": {
+        "weighted_passed": 3,
+        "weighted_total": 3,
+        "categories": {
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "stable_fields_with_evidence",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "public_summary": "沈孤鸿，合欢宗宗主。",
+          "role": "合欢宗宗主",
+          "faction": "合欢宗"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 485
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 485,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 172,
+          "prompt_tokens": 1843
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 172,
+        "prompt_tokens": 1843
+      },
+      "gold": {
+        "weighted_passed": 9,
+        "weighted_total": 12,
+        "categories": {
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          },
+          "stable_field": {
+            "passed": 2,
+            "total": 3
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "stable_appearance_with_evidence",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "appearance": "左眼有一条旧疤"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 500
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 500,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 70,
+          "prompt_tokens": 1854
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 70,
+        "prompt_tokens": 1854
+      },
+      "gold": {
+        "weighted_passed": 3,
+        "weighted_total": 6,
+        "categories": {
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          },
+          "stable_field": {
+            "passed": 0,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "stable_personality_with_evidence",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "public_summary": "沈孤鸿为人沉稳、重情重义，遇险时总是先护着旁人。",
+          "personality_trait": "沉稳重情"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 560
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 560,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 141,
+          "prompt_tokens": 1874
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 141,
+        "prompt_tokens": 1874
+      },
+      "gold": {
+        "weighted_passed": 6,
+        "weighted_total": 6,
+        "categories": {
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          },
+          "stable_field": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "ability_append_dedup_cap",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "演武场",
+          "known_abilities": [
+            {
+              "name": "剑法",
+              "description": "剑术"
+            },
+            {
+              "name": "轻功",
+              "description": "身法"
+            },
+            {
+              "name": "隐匿身法",
+              "description": "使出一招隐匿身法"
+            }
+          ]
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 637
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 637,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 92,
+          "prompt_tokens": 1882
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 92,
+        "prompt_tokens": 1882
+      },
+      "gold": {
+        "weighted_passed": 3,
+        "weighted_total": 6,
+        "categories": {
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          },
+          "stable_field": {
+            "passed": 0,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "large_roster",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "npc000",
+        "无名老者"
+      ],
+      "exact_mentions": [
+        [
+          "npc000",
+          "npc000"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [
+        "无名老者"
+      ],
+      "field_deltas": {
+        "npc000": {
+          "last_known_location": "大殿"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 483
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 483,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 12,
+          "prompt_tokens": 1833
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 12,
+        "prompt_tokens": 1833
+      },
+      "gold": {
+        "weighted_passed": 9,
+        "weighted_total": 9,
+        "categories": {
+          "exact_existing": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 2,
+            "total": 2
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "alias_fixed_title",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿",
+        "沈二爷"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ],
+        [
+          "npc_001",
+          "沈二爷"
+        ]
+      ],
+      "aliases_added": {
+        "npc_001": [
+          "沈二爷"
+        ]
+      },
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "public_summary": "沈孤鸿，江湖人称沈二爷，沈二爷为其别号。",
+          "role": "江湖人称沈二爷"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 559
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 559,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 149,
+          "prompt_tokens": 1876
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 149,
+        "prompt_tokens": 1876
+      },
+      "gold": {
+        "weighted_passed": 6,
+        "weighted_total": 6,
+        "categories": {
+          "alias": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "companion_is_distinct",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿",
+        "青衣客"
+      ],
+      "exact_mentions": [
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [
+        "青衣客"
+      ],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "public_summary": "沈孤鸿，有一名多年旧友青衣客。"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 557
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 557,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 103,
+          "prompt_tokens": 1866
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 103,
+        "prompt_tokens": 1866
+      },
+      "gold": {
+        "weighted_passed": 6,
+        "weighted_total": 6,
+        "categories": {
+          "resolution": {
+            "passed": 2,
+            "total": 2
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "mixed_turn",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "沈孤鸿",
+        "合欢宗宗主",
+        "林川",
+        "陆川",
+        "路人甲"
+      ],
+      "exact_mentions": [
+        [
+          "npc_002",
+          "林川"
+        ],
+        [
+          "npc_001",
+          "沈孤鸿"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [
+        "路人甲",
+        "陆川"
+      ],
+      "field_deltas": {
+        "npc_001": {
+          "last_known_location": "醉花楼",
+          "public_summary": "沈孤鸿，合欢宗宗主。",
+          "role": "合欢宗宗主",
+          "faction": "合欢宗"
+        },
+        "npc_002": {
+          "last_known_location": "醉花楼"
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 2,
+          "evidence_paragraphs": 2,
+          "content_chars": 1093
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 1093,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 163,
+          "prompt_tokens": 2073
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 163,
+        "prompt_tokens": 2073
+      },
+      "gold": {
+        "weighted_passed": 42,
+        "weighted_total": 42,
+        "categories": {
+          "exact_existing": {
+            "passed": 2,
+            "total": 2
+          },
+          "mention_recall": {
+            "passed": 4,
+            "total": 4
+          },
+          "new_npc": {
+            "passed": 2,
+            "total": 2
+          },
+          "resolution": {
+            "passed": 4,
+            "total": 4
+          },
+          "stable_field": {
+            "passed": 2,
+            "total": 2
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      }
+    }
+  ]
+}

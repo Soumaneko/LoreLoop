@@ -8,7 +8,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿走进醉花楼，环顾四周。沈二在他身后站定。\n\n沈二爷低声道：「把门关上。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿一行进入醉花楼。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿进入醉花楼。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二随行。\"}, {\"fact_id\": \"f3\", \"fact\": \"沈二爷命人关门。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿一行进入醉花楼。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿进入醉花楼。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二随行。\"}, {\"fact_id\": \"f3\", \"fact\": \"沈二爷命人关门。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [{\"surface\": \"沈二\", \"basis\": \"same_scene_coreference\", \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"surface\": \"沈二爷\", \"basis\": \"same_scene_coreference\", \"evidence_fact_ids\": [\"f3\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}], \"evidence_fact_ids\": [\"f1\", \"f2\", \"f3\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -56,6 +56,7 @@
             "importance": "must"
           }
         ],
+        "forbidden_mentions": [],
         "exact_expectations": [
           {
             "npc_id": "npc_001",
@@ -66,11 +67,6 @@
             "npc_id": "npc_001",
             "surface": "沈二",
             "importance": "must"
-          },
-          {
-            "npc_id": "npc_001",
-            "surface": "沈二爷",
-            "importance": "must"
           }
         ],
         "resolution_expectations": [
@@ -80,6 +76,9 @@
             "importance": "must"
           }
         ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
         "stable_field_expectations": [
           {
             "npc_id": "npc_001",
@@ -88,6 +87,10 @@
             "importance": "must"
           }
         ],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
         "no_op_expectations": [
           {
             "npc_id": "npc_002",
@@ -103,7 +106,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "林川在茶馆坐下。陆川推门而入，径直走向他。",
-      "scene_facts": "{\"scene_focus\": \"林川与陆川在茶馆相遇。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"林川在茶馆坐下。\"}, {\"fact_id\": \"f2\", \"fact\": \"陆川推门而入。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"林川与陆川在茶馆相遇。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"林川在茶馆坐下。\"}, {\"fact_id\": \"f2\", \"fact\": \"陆川推门而入。\"}], \"npc_mentions\": [{\"primary_surface\": \"林川\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"primary_surface\": \"陆川\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "茶馆",
       "participants": [
@@ -128,6 +131,8 @@
             "importance": "must"
           }
         ],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
         "resolution_expectations": [
           {
             "candidate_name": "陆川",
@@ -140,19 +145,9 @@
             "importance": "must"
           }
         ],
-        "forbidden_resolutions": [
-          {
-            "candidate_name": "陆川",
-            "resolution": "alias_match"
-          }
-        ],
-        "new_npc_expectations": [
-          {
-            "name": "陆川",
-            "importance": "must"
-          }
-        ],
-        "no_op_expectations": [],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
         "stable_field_expectations": [
           {
             "npc_id": "npc_001",
@@ -160,7 +155,17 @@
             "value": "茶馆",
             "importance": "must"
           }
-        ]
+        ],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [
+          {
+            "name": "陆川",
+            "importance": "must"
+          }
+        ],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -170,7 +175,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "江晚晴提灯而来，说要留在镇上查案。一个路人甲在旁看热闹后离开。",
-      "scene_facts": "{\"scene_focus\": \"江晚晴受命查案，路人甲短暂停留。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江晚晴受命查案并留在镇上。\"}, {\"fact_id\": \"f2\", \"fact\": \"路人甲短暂看热闹后离开。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"江晚晴受命查案，路人甲短暂停留。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江晚晴受命查案并留在镇上。\"}, {\"fact_id\": \"f2\", \"fact\": \"路人甲短暂看热闹后离开。\"}], \"npc_mentions\": [{\"primary_surface\": \"江晚晴\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"primary_surface\": \"路人甲\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "镇口",
       "participants": [
@@ -179,6 +184,9 @@
       "core_memory_items": [],
       "roster": [],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
         "resolution_expectations": [
           {
             "candidate_name": "江晚晴",
@@ -187,19 +195,28 @@
           },
           {
             "candidate_name": "路人甲",
-            "resolution": "ignore",
+            "resolution": "new",
             "importance": "must"
           }
         ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [],
         "new_npc_expectations": [
           {
             "name": "江晚晴",
             "importance": "must"
+          },
+          {
+            "name": "路人甲",
+            "importance": "must"
           }
         ],
-        "forbidden_new_names": [
-          "路人甲"
-        ]
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -209,7 +226,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "萧云痕独自站在城楼上，望着远处的灯火。",
-      "scene_facts": "{\"scene_focus\": \"萧云痕在城楼瞭望。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"萧云痕在城楼瞭望。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"萧云痕在城楼瞭望。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"萧云痕在城楼瞭望。\"}], \"npc_mentions\": [{\"primary_surface\": \"萧云痕\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "城楼",
       "participants": [
@@ -218,26 +235,21 @@
       "core_memory_items": [],
       "roster": [],
       "gold": {
-        "resolution_expectations": [
-          {
-            "candidate_name": "萧云痕",
-            "resolution": "ignore",
-            "importance": "must"
-          }
-        ],
-        "forbidden_resolutions": [
-          {
-            "candidate_name": "萧云痕",
-            "resolution": "new"
-          },
-          {
-            "candidate_name": "萧云痕",
-            "resolution": "alias_match"
-          }
-        ],
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
+        "resolution_expectations": [],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
         "forbidden_new_names": [
           "萧云痕"
-        ]
+        ],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -247,21 +259,32 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "合欢宗的宗门坐落在醉花楼后山的密林里。",
-      "scene_facts": "{\"scene_focus\": \"合欢宗宗门的位置。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"合欢宗宗门位于醉花楼后山。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"合欢宗宗门的位置。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"合欢宗宗门位于醉花楼后山。\"}], \"npc_mentions\": []}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [],
       "core_memory_items": [],
       "roster": [],
       "gold": {
+        "mention_recall": [],
         "forbidden_mentions": [
           "合欢宗",
           "醉花楼"
         ],
+        "exact_expectations": [],
+        "resolution_expectations": [],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
         "forbidden_new_names": [
           "合欢宗",
           "醉花楼"
-        ]
+        ],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -271,7 +294,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿在醉花楼大堂踱步，目光始终不离门口，低声说：「我要查明信物来历。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿在醉花楼大堂观察门口。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿在醉花楼大堂踱步。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈孤鸿要查明信物来历。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿在醉花楼大堂观察门口。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿在醉花楼大堂踱步。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈孤鸿要查明信物来历。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -286,11 +309,24 @@
         }
       ],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
         "stable_field_expectations": [
           {
             "npc_id": "npc_001",
             "field": "last_known_location",
-            "value": "醉花楼大堂",
+            "value": "醉花楼",
             "importance": "must"
           },
           {
@@ -305,17 +341,21 @@
             "npc_id": "npc_001",
             "field": "attitude_to_player"
           }
-        ]
+        ],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
       "case_id": "attitude_change_explicit",
-      "description": "An explicitly expressed public attitude change toward the player is recorded in the temporary channel.",
+      "description": "Attitude is CurrentState-synced, never derived by the batch updater.",
       "scene_id": "scene_001",
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿原本戒备地盯着萧云痕，忽然收剑，沉声道：「我可以信你。此事拜托了。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿对萧云痕放下戒备。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿当面向萧云痕表示信任。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿对萧云痕放下戒备。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿当面向萧云痕表示信任。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -330,24 +370,40 @@
         }
       ],
       "gold": {
-        "stable_field_expectations": [
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
+        "resolution_expectations": [
           {
-            "npc_id": "npc_001",
-            "field": "attitude_to_player",
-            "value": "信任",
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
             "importance": "must"
           }
-        ]
+        ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [
+          {
+            "npc_id": "npc_001",
+            "field": "attitude_to_player"
+          }
+        ],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
       "case_id": "departed_direction",
-      "description": "An off-scene NPC's explicit departure direction is captured by the temporary channel.",
+      "description": "An off-scene NPC resolves via text scan; no CurrentState participant means no location sync.",
       "scene_id": "scene_001",
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿已不在堂内。小二道：「沈公子往城南去了。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿已离开大堂。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿已不在堂内。\"}, {\"fact_id\": \"f2\", \"fact\": \"小二称沈孤鸿往城南去了。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿已离开大堂。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿已不在堂内。\"}, {\"fact_id\": \"f2\", \"fact\": \"小二称沈孤鸿往城南去了。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [],
@@ -360,14 +416,25 @@
         }
       ],
       "gold": {
-        "stable_field_expectations": [
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
+        "resolution_expectations": [
           {
-            "npc_id": "npc_001",
-            "field": "last_known_location",
-            "value": "城南",
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
             "importance": "must"
           }
-        ]
+        ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -377,7 +444,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿猛地一拍桌子，满脸怒容，随后又叹了口气。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿短暂动怒。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿拍桌动怒，旋即平复。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿短暂动怒。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿拍桌动怒，旋即平复。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -392,6 +459,9 @@
         }
       ],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
         "resolution_expectations": [
           {
             "candidate_name": "沈孤鸿",
@@ -399,6 +469,10 @@
             "importance": "must"
           }
         ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
+        "stable_field_expectations": [],
         "forbidden_field_changes": [
           {
             "npc_id": "npc_001",
@@ -409,6 +483,9 @@
             "field": "current_intent"
           }
         ],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
         "no_op_expectations": []
       }
     },
@@ -419,7 +496,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿拂袖道：「我乃合欢宗宗主，此事由我一肩担起。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿自承身份。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿自称合欢宗宗主。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿自承身份。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿自称合欢宗宗主。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -434,6 +511,19 @@
         }
       ],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
         "stable_field_expectations": [
           {
             "npc_id": "npc_001",
@@ -453,7 +543,12 @@
             "value": "合欢宗现任宗主，决意独自承担门派事务。",
             "importance": "must"
           }
-        ]
+        ],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -463,7 +558,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿掀开斗篷。灯下，他左眼横着一条旧疤，据说是少年时留下的。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿左眼的旧疤。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿左眼有一条旧疤，据说是少年时留下的。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿左眼的旧疤。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿左眼有一条旧疤，据说是少年时留下的。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -478,6 +573,19 @@
         }
       ],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
         "stable_field_expectations": [
           {
             "npc_id": "npc_001",
@@ -485,7 +593,12 @@
             "value": "左眼有一条旧疤，据说是少年时留下的。",
             "importance": "must"
           }
-        ]
+        ],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -495,7 +608,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿遇险时总是先护着旁人，众人皆道他为人沉稳、重情重义。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿的性格口碑。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿遇险先护旁人。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人认为沈孤鸿沉稳重情。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿的性格口碑。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿遇险先护旁人。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人认为沈孤鸿沉稳重情。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -510,6 +623,19 @@
         }
       ],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
         "stable_field_expectations": [
           {
             "npc_id": "npc_001",
@@ -517,7 +643,12 @@
             "value": "沉稳重情",
             "importance": "must"
           }
-        ]
+        ],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -527,7 +658,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿露了一手剑法，又使出一招隐匿身法。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿展示武艺。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿展示剑法与隐匿身法。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿展示武艺。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿展示剑法与隐匿身法。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "演武场",
       "participants": [
@@ -552,6 +683,19 @@
         }
       ],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
         "stable_field_expectations": [
           {
             "npc_id": "npc_001",
@@ -573,7 +717,11 @@
             "importance": "must"
           }
         ],
-        "forbidden_field_changes": []
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -583,7 +731,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "npc000走进殿内。一名无名老者立在阶下。",
-      "scene_facts": "{\"scene_focus\": \"npc000入殿，无名老者立阶下。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"npc000走进殿内。\"}, {\"fact_id\": \"f2\", \"fact\": \"一名无名老者立在阶下。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"npc000入殿，无名老者立阶下。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"npc000走进殿内。\"}, {\"fact_id\": \"f2\", \"fact\": \"一名无名老者立在阶下。\"}], \"npc_mentions\": [{\"primary_surface\": \"npc000\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"primary_surface\": \"无名老者\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "大殿",
       "participants": [
@@ -596,6 +744,8 @@
         "name_prefix": "npc"
       },
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
         "exact_expectations": [
           {
             "npc_id": "npc000",
@@ -611,10 +761,19 @@
           },
           {
             "candidate_name": "无名老者",
-            "resolution": "ignore",
+            "resolution": "new",
             "importance": "must"
           }
-        ]
+        ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [],
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -624,7 +783,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "江湖上都称沈孤鸿一声「沈二爷」。沈二爷便是沈孤鸿的别号。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿的江湖别号。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江湖称沈孤鸿为沈二爷。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二爷是沈孤鸿的别号。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿的江湖别号。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江湖称沈孤鸿为沈二爷。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二爷是沈孤鸿的别号。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [{\"surface\": \"沈二爷\", \"basis\": \"explicit_fixed_alias\", \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -644,26 +803,31 @@
         }
       ],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
         "resolution_expectations": [
           {
             "candidate_name": "沈孤鸿",
             "resolution": "existing",
             "importance": "must"
-          },
-          {
-            "candidate_name": "沈二爷",
-            "resolution": "alias_match",
-            "target_npc_id": "npc_001",
-            "importance": "must"
           }
         ],
+        "forbidden_resolutions": [],
         "alias_expectations": [
           {
             "npc_id": "npc_001",
             "surface": "沈二爷",
             "importance": "must"
           }
-        ]
+        ],
+        "forbidden_aliases": [],
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -673,7 +837,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "一名青衣客紧随沈孤鸿进门，正是他多年的旧友。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿与一名青衣客同行。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"一名青衣客紧随沈孤鸿进门。\"}, {\"fact_id\": \"f2\", \"fact\": \"青衣客是沈孤鸿多年的旧友。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿与一名青衣客同行。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"一名青衣客紧随沈孤鸿进门。\"}, {\"fact_id\": \"f2\", \"fact\": \"青衣客是沈孤鸿多年的旧友。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"primary_surface\": \"青衣客\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -689,25 +853,35 @@
         }
       ],
       "gold": {
+        "mention_recall": [],
+        "forbidden_mentions": [],
+        "exact_expectations": [],
         "resolution_expectations": [
           {
             "candidate_name": "沈孤鸿",
             "resolution": "existing",
             "importance": "must"
-          }
-        ],
-        "forbidden_resolutions": [
+          },
           {
             "candidate_name": "青衣客",
-            "resolution": "alias_match"
+            "resolution": "new",
+            "importance": "must"
           }
         ],
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
         "forbidden_aliases": [
           {
             "npc_id": "npc_001",
             "surface": "青衣客"
           }
-        ]
+        ],
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [],
+        "new_npc_expectations": [],
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     },
     {
@@ -717,7 +891,7 @@
       "turn_index": 5,
       "user_input": "",
       "scene_text": "沈孤鸿走进醉花楼，吩咐关门。众人皆知他是合欢宗宗主。林川也在这里。陆川推门而入。路人甲在门口张望片刻后离开。",
-      "scene_facts": "{\"scene_focus\": \"醉花楼一夜，众人进出。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿走进醉花楼，吩咐关门。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人皆知他是合欢宗宗主。\"}, {\"fact_id\": \"f3\", \"fact\": \"林川在场。\"}, {\"fact_id\": \"f4\", \"fact\": \"陆川推门而入。\"}, {\"fact_id\": \"f5\", \"fact\": \"路人甲短暂停留后离开。\"}]}",
+      "scene_facts": "{\"scene_focus\": \"醉花楼一夜，众人进出。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿走进醉花楼，吩咐关门。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人皆知他是合欢宗宗主。\"}, {\"fact_id\": \"f3\", \"fact\": \"林川在场。\"}, {\"fact_id\": \"f4\", \"fact\": \"陆川推门而入。\"}, {\"fact_id\": \"f5\", \"fact\": \"路人甲短暂停留后离开。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"alias_relations\": [{\"surface\": \"合欢宗宗主\", \"basis\": \"temporary_address\", \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}, {\"primary_surface\": \"林川\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f3\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}, {\"primary_surface\": \"陆川\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f4\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}, {\"primary_surface\": \"路人甲\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f5\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -759,6 +933,7 @@
             "importance": "must"
           }
         ],
+        "forbidden_mentions": [],
         "exact_expectations": [
           {
             "npc_id": "npc_001",
@@ -789,24 +964,17 @@
           },
           {
             "candidate_name": "路人甲",
-            "resolution": "ignore",
-            "importance": "must"
-          },
-          {
-            "candidate_name": "合欢宗宗主",
-            "resolution": "alias_match",
-            "target_npc_id": "npc_001",
+            "resolution": "new",
             "importance": "must"
           }
         ],
-        "new_npc_expectations": [
+        "forbidden_resolutions": [],
+        "alias_expectations": [],
+        "forbidden_aliases": [
           {
-            "name": "陆川",
-            "importance": "must"
+            "npc_id": "npc_001",
+            "surface": "合欢宗宗主"
           }
-        ],
-        "forbidden_new_names": [
-          "路人甲"
         ],
         "stable_field_expectations": [
           {
@@ -832,18 +1000,19 @@
             "field": "current_intent"
           }
         ],
-        "forbidden_resolutions": [
+        "new_npc_expectations": [
           {
-            "candidate_name": "合欢宗宗主",
-            "resolution": "new"
+            "name": "陆川",
+            "importance": "must"
+          },
+          {
+            "name": "路人甲",
+            "importance": "must"
           }
         ],
-        "forbidden_aliases": [
-          {
-            "npc_id": "npc_001",
-            "surface": "合欢宗宗主"
-          }
-        ]
+        "forbidden_new_names": [],
+        "warning_expectations": [],
+        "no_op_expectations": []
       }
     }
   ]

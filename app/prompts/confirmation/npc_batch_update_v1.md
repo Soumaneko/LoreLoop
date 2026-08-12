@@ -26,12 +26,22 @@
 
 结构约束已由 schema 表达，此处只说明处理意图与判断门槛。
 
-# 规则
+# 字段语义
 
-1. 只为需要更新的 NPC 输出条目；没有字段变化就不输出该 NPC（程序视为 no-op）。
-2. `npc_id` 必须来自输入 `npc_batch_json` 中实际给出的 `npc_id`，禁止自造。
-3. `current_intent`：只写场景结束后仍在持续的公开意图；没有变化不写。
-4. 稳定字段（`role` / `appearance` / `personality_trait` / `faction` / `public_summary` / `known_abilities`）：只有该 NPC 的 `evidence` 段落直接、明确支持时才修改，且必须引用支持它的 `evidence` `document_id`；严禁推断或改写。
-5. `public_summary`：只用于身份、长期关系、组织归属或剧情地位的重大变化，必须附 `summary_delta` 说明本次变化；禁止文字润色。态度转变、位置/离场去向、别号或外号的新增，都不属于 `public_summary` 材料。
-6. `known_abilities`：只允许 `add` 追加新能力，不得移除或改写已有能力。
-7. `evidence_ids` 必须来自该 NPC 的 `evidence` 列表中列出的 `document_id`。
+逐个 NPC 对照 `current`、`facts` 和 `evidence`，把本轮新确认的信息归入最合适的字段。同一段正文可以同时明确支持多个字段，应对每个字段分别判断，完整记录它所支持的变化。
+
+- `role`：人物的长期身份、职业、职位或社会角色。
+- `faction`：人物明确所属、效忠或代表的组织。职位同时明确了组织归属时，可同时更新 `role` 和 `faction`。
+- `appearance`：相对稳定、可用于识别人物的外貌特征。
+- `personality_trait`：由明确描述或具有代表性的行为所确认的长期性格特征。
+- `known_abilities`：本轮首次确认的持久能力。使用简洁的能力名称，`description` 说明正文已确认的能力内容；以 `add` 追加，保留已有能力。
+- `current_intent`：场景结束后仍在持续的公开目标或行动意图。
+- `public_summary`：人物发生重大的身份、长期关系、组织归属或剧情地位变化后的完整公开摘要。`value` 写更新后的完整摘要，`summary_delta` 只说明本轮新增的重大变化。如果本轮更新了 `role` 或 `faction`，同时更新 `public_summary`，使完整摘要与新的身份和组织归属保持一致。
+
+# 处理原则
+
+1. 从 `facts` 理解本轮变化，用 `evidence` 确认稳定字段的依据。可以将正文明确表达的信息规范化、简洁归纳，保持事实含义不变。
+2. 只输出相对 `current` 确实发生的变化；某个 NPC 没有字段变化时，不输出该 NPC。
+3. 稳定字段的每条变化都引用直接支持它的 `evidence.document_id`；`evidence_ids` 从该 NPC 的 `evidence` 列表中选取。
+4. `public_summary` 聚焦足以改变人物长期公开定位的信息。态度、位置、离场去向和称呼变化由其他专门机制处理。
+5. `npc_id` 使用输入 `npc_batch_json` 中给出的值。

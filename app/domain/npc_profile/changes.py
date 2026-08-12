@@ -1,8 +1,7 @@
-"""NPC change admission 的结果契约（Ticket 03）。
+"""NPC batch change admission 的结果契约（Ticket 08）。
 
-把 proposal 的合法性、evidence 门禁、no-op、字段规则与实际应用收敛为
-``admit_npc_turn_changes`` 的单一来源。本文件只定义可序列化的 accepted mutation
-契约与结果容器，不包含任何判断逻辑（逻辑在 ``change_admission.py``）。
+本文件只定义可序列化的 accepted mutation 契约与结果容器，不包含任何判断逻辑
+（逻辑在 ``change_admission.py``）。
 
 ``AcceptedNPCFieldChange`` 按 ``operation`` 做 discriminated union，从 schema 层
 禁止自相矛盾的数据：
@@ -12,14 +11,15 @@
   携带 evidence、``current_intent`` 不得携带；
 - ``add``：``known_abilities`` append-only 追加，``additions`` 非空且去重。
 
-alias 以显式 ``AcceptedNPCAliasChange`` 表达，与字段变化同属 accepted mutation
-单一来源；snapshot application 只消费这两类变化与 ``new_npc_candidates``。
+alias 以显式 ``AcceptedNPCAliasChange`` 表达（携带 fact + paragraph 证据），与字段
+变化同属 accepted mutation 单一来源；snapshot application 只消费这两类变化与
+``new_npc_candidates``。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated, Literal, Sequence, Union
+from typing import Annotated, Literal, Union
 
 from pydantic import (
     BaseModel,
@@ -145,8 +145,10 @@ class AcceptedNPCAliasChange:
     canonical_name: str
     alias: str
     turn_index: int | None = None
-    #: 支持该 alias 关系的 Scene Fact 证据（供未来 alias/field log bridge）。
+    #: 支持该 alias 关系的 Scene Fact 证据（fact 引用与正文段落引用可独立并存，
+    #: 供未来 alias/field log bridge）。
     evidence_fact_ids: tuple[str, ...] = ()
+    evidence_paragraph_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -156,17 +158,6 @@ class NPCChangeAdmissionWarning:
     code: str
     message: str
     evidence_ids: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class NPCAdmissionCoverage:
-    exact_targets: int
-    existing_proposals: int
-    alias_proposals: int
-    new_proposals: int
-    ignore_proposals: int
-    unresolved_surfaces: list[str]
-    synced_npcs: int
 
 
 @dataclass(frozen=True)
@@ -186,7 +177,7 @@ class NPCChangeAdmissionResult:
     accepted_alias_changes: list[AcceptedNPCAliasChange] = field(default_factory=list)
     new_npc_candidates: list[NPCProfile] = field(default_factory=list)
     warnings: list[NPCChangeAdmissionWarning] = field(default_factory=list)
-    coverage: NPCAdmissionCoverage | NPCBatchCoverage | None = None
+    coverage: NPCBatchCoverage | None = None
     updated_profiles: list[NPCProfile] = field(default_factory=list)
 
 
@@ -196,13 +187,3 @@ class NPCTurnAdmissionError(ValueError):
     离线 benchmark 与录制路径把此类拒绝记为 invariant 并继续；真正的程序错误
     （scene_id 不匹配、重复 npc_id、投影不一致）仍抛普通 ``ValueError`` 传播。
     """
-
-
-class NPCTurnValidationError(NPCTurnAdmissionError):
-    """硬校验失败：不产生任何 accepted changes。"""
-
-    def __init__(self, errors: Sequence[object]):
-        self.errors = list(errors)
-        super().__init__(
-            f"NPCTurn proposal validation failed with {len(self.errors)} error(s)"
-        )

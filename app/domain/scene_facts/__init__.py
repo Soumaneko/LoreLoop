@@ -5,6 +5,7 @@ from .schemas import (
     SceneFactDraftSet,
     SceneFactExtractInput,
     SceneFactSet,
+    SceneParagraphInput,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "SceneFactExtractInput",
     "SceneFactExtractor",
     "SceneFactSet",
+    "SceneParagraphInput",
 ]

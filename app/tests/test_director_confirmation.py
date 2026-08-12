@@ -5,8 +5,6 @@ from types import SimpleNamespace
 from pydantic import ValidationError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
-from app.domain.npc_profile.schemas import NPCExtractionResult
-from app.domain.npc_profile.schemas import NPCMention
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.director.confirmation import run_confirmation_director_agent
@@ -261,75 +259,51 @@ def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
 def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
     monkeypatch,
 ):
+    from app.domain.npc_profile.identity_resolver import NpcCandidate
     from app.domain.npc_profile.store import NPCProfileStore
 
-    class _Gateway:
-        def __init__(self):
-            self.calls = []
+    candidate = NpcCandidate(
+        primary_surface="练气巅峰采药女",
+        evidence_fact_ids=("f1",),
+    )
 
-        def run(self, **kwargs):
-            self.calls.append(kwargs)
-            return kwargs["output_schema"].model_validate(
-                {
-                    "results": [
-                        {
-                            "candidate_index": 0,
-                            "resolution": "new",
-                            "matched_npc_index": None,
-                            "persist_alias": False,
-                            "turn_observation": None,
-                            "temporary_patch": None,
-                            "long_term_patch": None,
-                            "new_profile": {
-                                "name": "练气巅峰采药女",
-                                "aliases": [],
-                                "public_summary": "山间采药为生的练气期女子。",
-                                "role": "采药女",
-                                "appearance": "背一只竹篓，裙角沾着泥。",
-                                "personality_trait": "遇到不认识的药草先采一枝闻了再说话",
-                                "known_abilities": [
-                                    {"name": "采药", "description": "识别并采摘常见药草"},
-                                    {"name": "辨识药草", "description": "凭气味与外形辨认药效"},
-                                ],
-                                "faction": None,
-                                "last_known_location": "药山",
-                                "attitude_to_player": None,
-                                "current_intent": None,
-                            },
-                        }
-                    ]
-                }
-            )
+    def _apply(**kwargs):
+        return SimpleNamespace(
+            saved_ids=[],
+            new_npc_candidates=[candidate],
+            warnings=[],
+        )
 
-    gateway = _Gateway()
-    monkeypatch.setattr(confirmation_nodes, "_gateway_for", lambda _state: gateway)
+    monkeypatch.setattr(confirmation_nodes, "apply_npc_batch_update", _apply)
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "prune_npc_transient_aliases_from_current_state",
+        lambda **kwargs: [],
+    )
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
         lambda _state, name: lambda: NPCProfileStore(":memory:"),
     )
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_director_draft_ids",
+        lambda _state: set(),
+    )
     state = {
         "write_db": True,
-        "npc_extraction": NPCExtractionResult(
-            mentions=[
-                NPCMention(
-                    name="练气巅峰采药女",
-                    context_span="药山上有个练气巅峰的采药女。",
-                )
-            ]
-        ),
         "pipeline_input": SimpleNamespace(
             turn_index=3,
             user_input="",
         ),
         "trace_id": "trace-npc",
         "cache": {},
-        "scene_facts_json": '{"scene_focus": "药山。", "facts": []}',
+        "scene_facts": SceneFactSet(scene_focus="药山。"),
         "effective_scene_text": "药山上有个练气巅峰的采药女。",
         "updated_state": make_current_state(),
         "core_memory": CoreMemory(items=[]),
         "existing_npc_profiles": [],
-        "recent_summaries": [],
+        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
     }
 
     result = confirmation_nodes.npc_profile_update_node(state)
@@ -337,7 +311,10 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
     assert result["updated_npc_profile_ids"] == []
     assert len(result["new_npc_profiles"]) == 1
     assert result["new_npc_profiles"][0].name == "练气巅峰采药女"
-    assert state["cache"]["new_npc_profiles"][0].name == "练气巅峰采药女"
+    assert result["new_npc_profiles"][0].npc_id.startswith("cand_")
+    context = result["npc_candidate_context"][result["new_npc_profiles"][0].npc_id]
+    assert context.alias_surfaces == []
+    assert state["cache"]["npc_turn_result"].new_npc_profiles[0].name == "练气巅峰采药女"
 
 
 def test_director_confirm_node_receives_stashed_temporary_profiles(
@@ -385,7 +362,6 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
         "effective_scene_text": "药山上的采药女在采摘药草。",
         "recent_summaries": [],
         "selection_summaries": [],
-        "npc_extraction": None,
         "existing_npc_profiles": [],
         "new_npc_profiles": [new_profile],
         "node_errors": [],
@@ -395,6 +371,49 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
     confirmation_nodes.director_agent_confirm_node(state)
 
     assert captured["new_npc_profiles"] == [new_profile]
+
+
+def test_confirmation_observation_surfaces_new_npc_candidate_context(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    candidate = NPCProfile(npc_id="cand_abc123", name="采药女")
+    gateway = ScriptedDirectorGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []}
+    )
+
+    run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="药山上那个女子是谁？",
+        scene_facts={"scene_focus": "药山采药女露面。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+        new_npc_profiles=[candidate],
+        npc_candidate_context={
+            "cand_abc123": {
+                "primary_surface": "采药女",
+                "alias_surfaces": ["药娘"],
+                "evidence_fact_ids": ["f1"],
+                "evidence_paragraph_ids": ["turn_3_p001"],
+            }
+        },
+    )
+
+    observation = json.loads(
+        gateway.input_data[0]["director_observation_json"]
+    )
+    new_npcs = observation["resources"]["new_npcs"]
+    assert new_npcs == [{
+        "npc_id": "cand_abc123",
+        **candidate.director_view().model_dump(mode="json"),
+        "primary_surface": "采药女",
+        "alias_surfaces": ["药娘"],
+        "evidence_fact_ids": ["f1"],
+        "evidence_paragraph_ids": ["turn_3_p001"],
+    }]
 
 
 def test_confirmation_observation_two_tier_npcs(tmp_path):

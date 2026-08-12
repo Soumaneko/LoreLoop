@@ -1,88 +1,61 @@
 # NPC Pipeline Baseline Micro-benchmark
 
-This benchmark measures the CURRENT two-LLM-call NPC pipeline
-(`npc_profile_extract` + `npc_profile_update`) before the NPCTurnProcessor
-refactor, and later the single-call processor. It runs the real deterministic
-pipeline (candidate building, resolution validation, merge, evidence gate,
-store mutation, warning order) against recorded LLM outputs. It does not call
-an LLM during `--check`.
+This benchmark measures the production NPC pipeline (`batch` backend:
+deterministic identity resolution + a single `npc_batch_update` LLM call)
+against recorded LLM outputs. It runs the real deterministic pipeline (identity
+resolution, single-call batch field update, per-field fault-tolerant admission,
+CurrentState sync, store mutation, warning order) with a stub gateway. It does
+not call an LLM during `--check`.
 
-The input/gold contract and the recorded LLM outputs are deliberately split so
-the benchmark can compare across refactors:
+The input/gold contract and the recorded LLM outputs are deliberately split:
 
-- `fixtures.json` is the input + gold contract and the only fingerprint source.
-  It never contains recorded LLM output; changing it requires deliberate
+- `fixtures_batch.json` is the input + gold contract and the only fingerprint
+  source. It never contains recorded LLM output; changing it requires deliberate
   baseline review.
-- `recordings/legacy.json` holds the two old tasks' recorded outputs and token
-  usage (the `legacy` backend). A `--record` run or a new processor's recording
-  schema changes this file but NOT the contract, so comparison proceeds instead
-  of being refused.
-- Backends project recorded outputs into the same normalized signals and score
-  against the same gold, so legacy vs NPCTurnProcessor quality is comparable.
+- `recordings/batch.json` holds the `npc_batch_update` recorded outputs, token
+  usage, and attempts. A `--record` run changes this file but NOT the contract,
+  so comparison proceeds instead of being refused.
 
 ## Current checkpoint
 
-Accepted on 2026-08-12 with 17 cases covering the ticket-01 categories,
-recorded from a live API run (legacy extract + update):
+Accepted with 17 cases covering the ticket-01 categories re-scored for the
+batch architecture (mention/exact/resolution are deterministic resolver
+outputs; the LLM is measured on field changes, aliases, warnings, and no-ops).
+Recorded from a live API run on 2026-08-12 (second take, accepted):
 
-- weighted gold recall: `144/153` (the baseline allows the model to score
-  below full marks; the 9 missed points are documented known gaps below)
-- forbidden violations: `2`
+- weighted gold recall: `156/165` (the baseline allows the model to score below
+  full marks; the 9 missed points are documented exact-string gaps below)
+- forbidden violations: `0`
 - invariant violations: `0`
-- logical gateway calls: `33` (extract always runs, update skipped when
-  extraction finds no mentions)
-- provider attempts: `34` (one retry on `exact_canonical_and_alias`)
+- logical gateway calls: `14` (0 calls when identity resolution finds no
+  resolvable NPC, e.g. player-only or org/place cases)
+- provider attempts: `14` (all first-round successes)
 - real provider tokens, ALL attempts included:
-  `prompt_tokens=73387`, `completion_tokens=4537`
-
-The recordings come from a live run; the single hand-aligned recording
-(`mixed_turn`, re-recorded against its corrected scene) is real too. Cases
-whose contracts a compliant model never triggers were removed: the evidence
-gate (missing / fabricated / wrong-turn / wrong-source citations) and the
-blank-string-no-clear rule are deterministic pipeline behavior covered by
-`app/tests/test_npc_profile_workflows.py`; the disguise-coreference case was
-removed because the extractor folds the descriptor into the main NPC's
-mention, so a descriptor never becomes its own alias candidate in the
-two-task pipeline.
+  `prompt_tokens=26289`, `completion_tokens=1451`
 
 A below-full score is a feature, not a bug: the gold encodes the desired
-contract and the model may fail it, so a future processor that fixes a gap
-scores higher and the improvement is measurable. Current known gaps:
+contract and the model may fail it, so a fix scores higher and the improvement
+is measurable. The `role` + `faction` + `public_summary` linkage is now
+genuinely exercised (all three written together on `mixed_turn`); the remaining
+9 points are exact-string scoring, not omitted or wrong field updates:
 
-- `ability_append_dedup_cap` (0/3): the model maps the evidenced "隐匿身法"
-  onto the existing "轻功" and never records the new ability. It also cannot
-  see existing `known_abilities` in the update prompt, so dedup is blind.
-- `stable_fields_with_evidence` (6/9): the model writes role+faction with
-  valid evidence but skips the `public_summary` for a major identity reveal.
-- `player_identity_protected` (0/3): the player is offered as a pseudo-option,
-  so the model resolves the player as `existing` (dropped by validation, the
-  player is still never admitted) instead of `ignore`; `protected_player_identity`
-  in ticket 02 should remove the pseudo-option.
-- `mixed_turn` (forbidden): the model persists the "合欢宗宗主" title as a
-  permanent alias of 沈孤鸿 (policy: titles resolve but must not be persisted,
-  to avoid future mis-attribution) and writes an inferred `current_intent`
-  ("吩咐关门，似有要事") from a completed action.
-- Descriptor coreferences (青衣客 / 青衣人) are not extracted as separate
-  mentions; the companion case enforces that a followed companion is never
-  alias-matched even when extracted.
+- `stable_fields_with_evidence` (9/12): role/faction exact, but `public_summary`
+  written as "沈孤鸿，合欢宗宗主。" instead of the evidenced fuller sentence.
+- `stable_appearance_with_evidence` (3/6): appearance truncated to "左眼有一条
+  旧疤" instead of the evidenced full sentence.
+- `ability_append_dedup_cap` (3/6): the evidenced "隐匿身法" is now added, but
+  the gold expects the ability name "隐匿" (exact-string mismatch).
+
+A semantically tolerant scorer (accepting these values) is a candidate follow-up
+improvement and does not block the baseline.
 
 ## Usage
 
-Compare against the accepted baseline and assert no regression:
+The default backend is `batch`; bare invocations exercise the production path:
 
 ```bash
-PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py
-```
-
-Require byte-for-byte agreement with the accepted baseline:
-
-```bash
-PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --check
-```
-
-After reviewing an intentional behavior change, update the snapshot explicitly:
-
-```bash
+PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py            # compare + no regression gate
+PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --check    # require byte-for-byte baseline agreement
 PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --update-baseline
 ```
 
@@ -95,9 +68,9 @@ so re-runs never read stale traces:
 PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --record --overwrite
 ```
 
-Rebuild recordings from an existing trace file without new LLM calls
-(recovers retry tokens and attempts), and re-record a single case against a
-changed fixture (both honour `--overwrite`):
+Rebuild recordings from an existing trace file without new LLM calls (recovers
+retry tokens and attempts), and re-record a single case against a changed
+fixture (both honour `--overwrite`):
 
 ```bash
 PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --replay-trace .bench/npc_baseline/run-<token>/traces.jsonl --overwrite
@@ -107,75 +80,51 @@ PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --record --only mix
 `--only` merges into the existing recordings file instead of replacing it.
 `--replay-trace` refuses stale traces: it requires a single run in the file,
 every fixture case present, and verifies each case's recorded inputs against
-the current fixture, naming any case that must be re-recorded with
-`--record --only <case_id>`.
+the current fixture (the deterministic `npc_batch_json` projection), naming any
+case that must be re-recorded with `--record --only <case_id>`.
 
 ## Labels
 
 `gold` expectations are scored directly, with no judge LLM:
 
-- `mention_recall`: names the extractor must/should surface as NPC mentions.
-- `forbidden_mentions`: names that must never be extracted.
-- `exact_expectations`: exact existing targets that must keep their npc_id for
-  EVERY mention surface (canonical name, permanent alias, transient alias).
-- `resolution_expectations`: `candidate_name -> existing|alias_match|new|ignore`,
-  with an optional `target_npc_id` that pins the alias-match target (a proposal
-  that alias-matches a different NPC fails even when it does not persist).
-- `forbidden_resolutions`: resolution/candidate combinations that must not
-  happen (e.g. a companion must never alias-match the person it follows).
-- `alias_expectations` / `forbidden_aliases`: alias additions to a profile
-  (persist only fixed nicknames, never temporary descriptors).
+- `mention_recall`: identity-bearing primary/alias surfaces that must/should
+  appear in Scene Facts' `npc_mentions` (deterministic resolver input). Generic
+  pronouns are excluded from this contract.
+- `forbidden_mentions`: names that must never be emitted (orgs, places, player).
+- `exact_expectations`: existing targets that must keep their `npc_id` for a
+  canonical/permanent-alias surface (deterministic resolver output).
+- `resolution_expectations`: `name -> existing|new` as the deterministic
+  resolver decides (existing profile hit vs minimal candidate).
+- `alias_expectations` / `forbidden_aliases`: alias additions persisted to a
+  profile (only `explicit_fixed_alias` relations persist; temporary descriptors
+  resolve but never persist).
 - `stable_field_expectations`: updater-modifiable fields that must end at a
-  value (temporary and long-term channels both included).
+  value (CurrentState-synced `last_known_location` / `attitude_to_player` and
+  LLM `current_intent` / `stable_changes` all included).
 - `forbidden_field_changes`: fields that must remain unchanged (e.g. an
-  attitude guess with no player relationship evidence).
-- `new_npc_expectations` / `forbidden_new_names`: created candidates.
-- `warning_expectations`: expected `long_term_field_evidence_*` drop codes
-  (missing / unknown id / wrong turn / wrong source).
+  attitude or intent the batch updater must not invent).
+- `new_npc_expectations` / `forbidden_new_names`: minimal candidates offered to
+  the Director (an unmatched named person becomes a candidate; the player never
+  does).
+- `warning_expectations`: expected per-field drop codes from the batch
+  admission.
 - `no_op_expectations`: profiles that must end with no updater-modifiable field
   delta. Aliases, hit counts, `source_scene_ids` and timestamps are deliberately
   out of scope for this check.
-- Call count is enforced per backend policy (legacy `1-2`, npcturn at most
-  `1`); it is not part of the shared gold.
+- Call count is enforced per backend policy (batch `0-1`); it is not part of the
+  shared gold.
 
 `must` expectations weigh 3, `should` weigh 1. A `forbidden` or `invariant`
-violation fails the run. Per-case `prompt_metrics` record the update prompt's
-`existing_options` count and `content_chars` so roster-driven token growth can
-be measured (see `large_roster`: 110 profiles -> 111 identity options). The
-backend-neutral `prompt_content_chars` and `token_usage_total` are what the
-aggregate consumes: the former is the total content chars across all NPC calls
-in the turn, the latter sums prompt/completion tokens across every recorded
-task regardless of name, so the single-call NPCTurnProcessor totals
-identically to the legacy pair. Token figures are `null` until a real
-`--record` run.
-
-The NPC gateway call count is a backend policy, not a shared gold
-expectation: the legacy backend must make `1-2` calls per turn (the updater
-short-circuits when extraction finds no mentions), while the NPCTurnProcessor
-backend must make at most `1`. The scorer checks the policy bounds, so a
-correct single-call processor is never flagged as a regression.
-
-`baseline.json` is the detailed machine-readable checkpoint. It pins the
-`fixtures.json` SHA-256 plus the backend and recordings SHA-256; comparison is
-only refused when `fixtures.json` changes. A change of backend or recordings
-(an intentional new snapshot) is reported as a note, not an error. Running a
-recordings file under a mismatched backend fails fast instead of producing a
-mislabeled report. Changing cases requires deliberate baseline review; a
-passing run by itself is not sufficient justification.
+violation fails the run. Per-case `prompt_metrics` record the single
+`npc_batch_update` prompt's `resolved_npcs`, `evidence_paragraphs`, and
+`content_chars` so roster/evidence-driven token growth can be measured (see
+`large_roster`). `prompt_content_chars` and `token_usage_total` feed the
+aggregate; token figures are `null` until a real `--record` run.
 
 ## Determinism
 
-The offline path (`--check`) replays the recorded outputs through a stub
-gateway and re-runs `update_npc_profiles_workflow` exactly as production does:
-same candidate order, validation, merge, evidence gate, warning order, and
-store mutation. The report is byte-for-byte comparable across runs and across
-`PYTHONHASHSEED` values.
-
-## Cross-refactor comparison
-
-Both backends emit the same normalized per-case signals (mentions, exact
-targets, resolutions, aliases added, field deltas, warnings, prompt metrics)
-and score against the same gold. Ticket 06 therefore compares the NPCTurn
-report against the frozen legacy report at the gold-aggregate level
-(weighted/forbidden/invariant per category) and reports the call-count and
-token deltas. The `npcturn` backend itself lands with ticket 04.
+The offline path (`--check`) replays the recorded `npc_batch_update` outputs
+through a stub gateway and re-runs `apply_npc_batch_update` exactly as
+production does (fixed `admitted_at`): same resolution order, admission,
+warning order, and store mutation. The report is byte-for-byte comparable
+across runs and across `PYTHONHASHSEED` values.

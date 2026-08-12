@@ -92,19 +92,21 @@ def _facts(*, mentions=None, fact_text="沈孤鸿让沈二关门。") -> SceneFa
     )
 
 
-def _relation(surface, basis, evidence=None) -> AliasRelation:
+def _relation(surface, basis, evidence=None, paragraph_evidence=None) -> AliasRelation:
     return AliasRelation(
         surface=surface,
         basis=basis,
         evidence_fact_ids=list(evidence or []),
+        evidence_paragraph_ids=list(paragraph_evidence or []),
     )
 
 
-def _mention(primary, *, observed=None, relations=None) -> SceneNpcMention:
+def _mention(primary, *, relations=None) -> SceneNpcMention:
+    relations = list(relations or [])
     return SceneNpcMention(
         primary_surface=primary,
-        observed_surfaces=list(observed or [primary]),
-        alias_relations=list(relations or []),
+        alias_relations=relations,
+        evidence_fact_ids=["f1"],
     )
 
 
@@ -375,7 +377,7 @@ def test_batch_input_uses_mention_evidence_for_pronoun_facts():
         ResolvedNpc(
             npc_id="npc_001",
             canonical_name="沈孤鸿",
-            observed_surfaces=("沈孤鸿",),
+            primary_surfaces=("沈孤鸿",),
             evidence_fact_ids=("f1",),
             evidence_paragraph_ids=("turn_3_p001",),
         )
@@ -421,6 +423,38 @@ def test_alias_change_carries_evidence():
 
         assert len(result.accepted_alias_changes) == 1
         assert result.accepted_alias_changes[0].evidence_fact_ids == ("f1",)
+
+
+def test_alias_change_carries_paragraph_only_evidence():
+    mentions = [
+        _mention(
+            "沈孤鸿",
+            relations=[
+                _relation(
+                    "沈二爷",
+                    "explicit_fixed_alias",
+                    paragraph_evidence=["turn_3_p001"],
+                ),
+            ],
+        )
+    ]
+    response = {"updates": [{"npc_id": "npc_001"}]}
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile())
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=StubGateway(response),  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        assert len(result.accepted_alias_changes) == 1
+        change = result.accepted_alias_changes[0]
+        assert change.evidence_fact_ids == ()
+        assert change.evidence_paragraph_ids == ("turn_3_p001",)
 
 
 def test_parse_batch_updates_caps_stable_changes_at_eight():
@@ -623,7 +657,7 @@ def test_admission_applies_deterministic_alias_changes():
 
 
 def test_processor_makes_single_batch_call_and_projects_input():
-    resolved = [ResolvedNpc(npc_id="npc_001", canonical_name="沈孤鸿", observed_surfaces=("沈孤鸿",))]
+    resolved = [ResolvedNpc(npc_id="npc_001", canonical_name="沈孤鸿", primary_surfaces=("沈孤鸿",))]
     gateway = StubGateway({"updates": [{"npc_id": "npc_001"}]})
     batch = NPCBatchUpdater(gateway).process(  # type: ignore[arg-type]
         resolved=resolved,
@@ -668,6 +702,10 @@ def test_batch_prompt_loads_and_renders():
     )
     assert "NPC Batch" in rendered
     assert "npc_id" in rendered
+    assert "# 字段语义" in rendered
+    assert "可同时更新 `role` 和 `faction`" in rendered
+    assert "如果本轮更新了 `role` 或 `faction`" in rendered
+    assert "规范化、简洁归纳" in rendered
 
 
 def test_workflow_resolves_and_applies_to_store():

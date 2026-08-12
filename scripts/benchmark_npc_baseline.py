@@ -1,34 +1,33 @@
-"""Replayable baseline benchmark for the NPC extract + update pipeline.
+"""Replayable baseline benchmark for the NPC batch field-update pipeline.
 
-This benchmark measures the CURRENT two-LLM-call NPC pipeline
-(``npc_profile_extract`` + ``npc_profile_update``) before the NPCTurnProcessor
-refactor, and later the single-call processor. The design separates the
-input/gold contract from the recorded LLM outputs so the benchmark can compare
-across refactors:
+This benchmark measures the production NPC pipeline: deterministic identity
+resolution (resolve_npc_identities) plus a single npc_batch_update LLM
+call (apply_npc_batch_update). The design separates the input/gold contract
+from the recorded LLM outputs so the benchmark can compare across future
+refactors:
 
-- ``fixtures.json`` is the input + gold contract. It never contains recorded
-  LLM output. Its SHA-256 is the single fingerprint that gates comparison: any
-  change requires explicit baseline review.
-- ``recordings/`` holds recorded LLM outputs, one versioned file per backend
-  (``legacy.json`` for the two old tasks). Recording changes (a real
-  ``--record`` run, or a new processor's schema) do NOT invalidate the
-  contract; they only change the report, which is then diffed and re-accepted.
-- Both backends project their recorded outputs through the same deterministic
-  pipeline into the SAME normalized ``signals`` shape and score against the
-  SAME gold, so legacy vs NPCTurnProcessor quality is comparable.
+- fixtures_batch.json is the input + gold contract. It never contains
+  recorded LLM output. Its SHA-256 is the single fingerprint that gates
+  comparison: any change requires explicit baseline review.
+- recordings/batch.json holds the recorded npc_batch_update outputs and
+  token usage. Recording changes (a real --record run) do NOT invalidate
+  the contract; they only change the report, which is then diffed and
+  re-accepted.
+- The recorded output is projected through the real deterministic pipeline into
+  a normalized signals shape and scored against the gold.
 
 Execution modes:
 
-- default / ``--check``: fully offline and byte-deterministic. Recorded
-  outputs from ``recordings/legacy.json`` are replayed through a stub gateway,
+- default / --check: fully offline and byte-deterministic. Recorded
+  outputs from recordings/batch.json are replayed through a stub gateway,
   the real deterministic pipeline runs, and the report is compared against the
-  accepted ``baseline.json`` with a regression gate.
-- ``--record``: runs the real two-task pipeline against a configured LLM
-  gateway, writes raw outputs and ``token_usage`` into the legacy recordings
-  file. Requires ``OPENAI_API_KEY`` (or a compatible base URL) and is meant to
-  be run by a developer with API access. Refuses to overwrite an existing
-  recordings file without ``--overwrite`` and uses a per-run trace id so
-  re-runs never read stale traces.
+  accepted baseline_batch.json with a regression gate.
+- --record: runs the real pipeline against a configured LLM gateway, writes
+  raw outputs and token_usage into the recordings file. Requires
+  OPENAI_API_KEY (or a compatible base URL) and is meant to be run by a
+  developer with API access. Refuses to overwrite an existing recordings file
+  without --overwrite and uses a per-run trace id so re-runs never read
+  stale traces.
 
 No judge LLM is used: gold expectations are scored directly against the
 recorded outputs and the deterministic downstream results.
@@ -54,19 +53,28 @@ from app.domain.current_state.schemas import (
     PlayerState,
     SceneState,
 )
+from app.domain.npc_profile.batch_updater import (
+    apply_npc_batch_update,
+    build_npc_batch_input,
+)
+from app.domain.npc_profile.identity_resolver import (
+    resolve_npc_identities,
+    surface_is_known,
+)
 from app.domain.npc_profile.schemas import KnownAbility, NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
-from app.domain.npc_profile.updater import _existing_option_for_prompt
-from app.domain.npc_profile.workflows import update_npc_profiles_workflow
 from app.domain.scene_facts.schemas import SceneFactSet
-from app.domain.views import project_current_state, project_scene_summaries
+from app.domain.views import project_current_state
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_FIXTURES = ROOT / "benchmarks" / "npc_baseline" / "fixtures.json"
-DEFAULT_RECORDINGS = ROOT / "benchmarks" / "npc_baseline" / "recordings" / "legacy.json"
-DEFAULT_BASELINE = ROOT / "benchmarks" / "npc_baseline" / "baseline.json"
+DEFAULT_FIXTURES = ROOT / "benchmarks" / "npc_baseline" / "fixtures_batch.json"
+DEFAULT_RECORDINGS = ROOT / "benchmarks" / "npc_baseline" / "recordings" / "batch.json"
+DEFAULT_BASELINE = ROOT / "benchmarks" / "npc_baseline" / "baseline_batch.json"
 BENCHMARK_VERSION = 2
+
+#: Deterministic ``updated_at`` for the batch backend so replay is byte-stable.
+_ADMITTED_AT = "2026-08-12T00:00:00Z"
 
 #: Updater-modifiable profile fields, in a stable order for diff projection.
 UPDATER_FIELDS = (
@@ -82,16 +90,11 @@ UPDATER_FIELDS = (
 )
 
 IMPORTANCE = Literal["must", "should"]
-BACKEND = Literal["legacy", "npcturn"]
+BACKEND = Literal["batch"]
 
-#: Per-backend NPC gateway call-count contract. ``call_count`` is a backend
-#: policy, not a shared gold expectation: the legacy pipeline always makes the
-#: extract call and the update call only when extraction found mentions (so 1
-#: or 2 calls), while the NPCTurnProcessor must make at most 1.
-CALL_COUNT_BOUNDS: dict[BACKEND, tuple[int, int]] = {
-    "legacy": (1, 2),
-    "npcturn": (0, 1),
-}
+#: The batch pipeline (deterministic identity resolution + a single
+#: ``npc_batch_update`` call) makes 0 or 1 calls.
+CALL_COUNT_BOUNDS: tuple[int, int] = (0, 1)
 
 
 class AbilityFixture(BaseModel):
@@ -272,12 +275,10 @@ class CaseGold(BaseModel):
 
 
 class RecordedCase(BaseModel):
-    """Recorded LLM outputs for one case under a given backend.
+    """Recorded LLM outputs for one case under the batch backend.
 
-    ``npc_profile_extract`` and ``npc_profile_update`` are the raw parsed
-    outputs of the two gateway calls (legacy backend). ``npc_profile_update``
-    is null when the updater legitimately short-circuits (empty extraction),
-    in which case only the extract call happened. ``token_usage`` carries the
+    Records the single ``npc_batch_update`` call (null when identity resolution
+    finds no resolvable NPC, i.e. the 0-call case). ``token_usage`` carries the
     provider usage dict per task, summed over ALL provider attempts (retries
     included) so the reported cost is the real cost. ``attempts`` counts the
     provider attempts per task; a retry makes ``attempts`` larger than the
@@ -286,8 +287,7 @@ class RecordedCase(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    npc_profile_extract: dict[str, Any]
-    npc_profile_update: dict[str, Any] | None = None
+    npc_batch_update: dict[str, Any] | None = None
     token_usage: dict[str, Any] | None = None
     attempts: dict[str, int] | None = None
 
@@ -514,93 +514,32 @@ def _aliases_added(store: NPCProfileStore, case: BenchmarkCase) -> dict[str, lis
     return added
 
 
-def _build_candidate_view(case: BenchmarkCase, update_input: dict | None) -> list[dict]:
-    if update_input is None:
-        return []
-    raw = update_input.get("npc_candidates_json")
-    if not raw:
-        return []
-    projection = json.loads(raw)
-    roster = [profile.npc_id for profile in case.effective_roster()]
-    view: list[dict] = []
-    for candidate in projection:
-        index = int(candidate["candidate_index"])
-        source = candidate["source"]
-        if source == "existing":
-            matched_npc_index = candidate.get("matched_npc_index")
-            mention_names = list(candidate.get("mention_names") or [])
-            name = mention_names[0] if mention_names else ""
-            npc_id = (
-                roster[matched_npc_index]
-                if matched_npc_index is not None
-                and 0 <= matched_npc_index < len(roster)
-                else None
-            )
-            view.append({
-                "index": index,
-                "name": name,
-                "source": source,
-                "npc_id": npc_id,
-                "mention_names": mention_names,
-            })
-        else:
-            view.append({
-                "index": index,
-                "name": candidate["name"],
-                "source": source,
-                "npc_id": None,
-            })
-    return view
-
-
 def _prompt_metrics(case: BenchmarkCase, calls: list[dict]) -> dict:
-    extract_input: dict | None = None
-    update_input: dict | None = None
+    batch_input: dict | None = None
     for call in calls:
-        if call["task"] == "npc_profile_extract":
-            extract_input = call["input_data"]
-        elif call["task"] == "npc_profile_update":
-            update_input = call["input_data"]
+        if call["task"] == "npc_batch_update":
+            batch_input = call["input_data"]
 
-    extract_metrics: dict = {"scene_facts_chars": 0}
-    if extract_input is not None:
-        extract_metrics = {
-            "scene_facts_chars": len(extract_input.get("scene_facts_json", "")),
-        }
-
-    content_keys = (
-        "core_memory_json",
-        "scene_facts_json",
-        "current_state_summary_json",
-        "recent_summaries_json",
-        "scene_paragraph_evidence_json",
-        "npc_candidates_json",
-        "existing_npc_options_json",
-    )
-    update_metrics: dict = {
-        "candidates": 0,
-        "existing_options": 0,
-        "roster_total": len(case.effective_roster()),
+    batch_metrics: dict = {
+        "resolved_npcs": 0,
         "evidence_paragraphs": 0,
         "content_chars": 0,
     }
-    if update_input is not None:
-        content_chars = 0
-        for key in content_keys:
-            content_chars += len(update_input.get(key, ""))
-        update_metrics = {
-            "candidates": len(_json_list(update_input, "npc_candidates_json")),
-            "existing_options": len(_json_list(update_input, "existing_npc_options_json")),
-            "roster_total": len(case.effective_roster()),
-            "evidence_paragraphs": len(
-                _json_list(update_input, "scene_paragraph_evidence_json")
+    if batch_input is not None:
+        raw = batch_input.get("npc_batch_json", "")
+        entries = _json_list(batch_input, "npc_batch_json")
+        batch_metrics = {
+            "resolved_npcs": len(entries),
+            "evidence_paragraphs": sum(
+                len(entry.get("evidence") or [])
+                for entry in entries
+                if isinstance(entry, dict)
             ),
-            "content_chars": content_chars,
+            "content_chars": len(raw),
         }
 
     return {
-        "npc_profile_extract": extract_metrics,
-        "npc_profile_update": update_metrics,
+        "npc_batch_update": batch_metrics,
         "call_count": len(calls),
     }
 
@@ -638,11 +577,16 @@ class StubGateway:
         return kwargs["output_schema"].model_validate(response)
 
 
-def _run_offline_legacy(
+def _run_offline_batch(
     case: BenchmarkCase,
     recorded: RecordedCase,
 ) -> dict[str, Any]:
-    """Replay recorded legacy outputs through the real deterministic pipeline."""
+    """Replay the recorded ``npc_batch_update`` output through the real pipeline.
+
+    Deterministic identity resolution runs unconditionally; the single LLM call
+    fires only when the resolution found resolvable NPCs. ``admitted_at`` is
+    fixed so replay is byte-identical across runs.
+    """
     evidence_documents = {
         document.document_id: document
         for document in build_turn_documents(
@@ -651,65 +595,81 @@ def _run_offline_legacy(
             user_input=case.user_input,
             scene_text=case.scene_text,
         )
+        if document.source_type == "scene_paragraph"
     }
-    responses = [recorded.npc_profile_extract]
-    if recorded.npc_profile_update is not None:
-        responses.append(recorded.npc_profile_update)
+    scene_facts = SceneFactSet.model_validate_json(case.scene_facts)
+    responses = (
+        [recorded.npc_batch_update]
+        if recorded.npc_batch_update is not None
+        else []
+    )
     with NPCProfileStore(":memory:") as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
         gateway = StubGateway(responses)
-        result = update_npc_profiles_workflow(
-            scene_facts=case.scene_facts,
-            current_state=_current_state(case),
-            core_memory=_core_memory(case),
-            gateway=gateway,  # type: ignore[arg-type]
+        result = apply_npc_batch_update(
             npc_store=store,
+            gateway=gateway,  # type: ignore[arg-type]
+            scene_facts=scene_facts,
             evidence_documents=evidence_documents,
+            current_state=_current_state(case),
             turn_index=case.turn_index,
-            recent_summaries=[],
+            scene_id=case.scene_id,
+            admitted_at=_ADMITTED_AT,
             trace_id=f"bench_npc_{case.case_id}",
         )
         field_deltas = _project_field_deltas(store, case)
         aliases_added = _aliases_added(store, case)
+        profiles_after = store.list_all()
+    profile_by_id = {profile.npc_id: profile for profile in profiles_after}
 
-    update_call = next(
-        (call for call in gateway.calls if call["task"] == "npc_profile_update"),
-        None,
-    )
-    candidates = _build_candidate_view(case, update_call and update_call["input_data"])
-    resolutions, proposal_invariants = _legacy_resolution_signals(
-        case,
-        recorded,
-        candidates,
-    )
+    extract_mentions = [
+        surface
+        for mention in scene_facts.npc_mentions
+        for surface in [
+            mention.primary_surface,
+            *(relation.surface for relation in mention.alias_relations),
+        ]
+    ]
+    exact_mentions = [
+        [item.npc_id, surface]
+        for item in result.resolution.resolved
+        for surface in [
+            *item.primary_surfaces,
+            *(relation.surface for relation in item.alias_relations),
+        ]
+        if (
+            (profile := profile_by_id.get(item.npc_id)) is not None
+            and surface_is_known(surface, profile)
+        )
+    ]
+    resolutions: dict[str, dict] = {}
+    for item in result.resolution.resolved:
+        resolutions[item.canonical_name] = {
+            "resolution": "existing",
+            "target_npc_id": item.npc_id,
+        }
+    for candidate in result.new_npc_candidates:
+        resolutions[candidate.primary_surface] = {
+            "resolution": "new",
+            "target_npc_id": None,
+        }
     prompt_metrics = _prompt_metrics(case, gateway.calls)
     return {
         "call_count": len(gateway.calls),
-        "candidates": candidates,
+        "candidates": [],
         "resolutions": resolutions,
-        "proposal_invariants": proposal_invariants,
-        #: Backend-neutral prompt size: total content chars across all NPC
-        #: gateway calls in this turn (extract + update for legacy; the single
-        #: processor call for npcturn).
+        "proposal_invariants": [],
         "prompt_content_chars": (
-            prompt_metrics["npc_profile_extract"]["scene_facts_chars"]
-            + prompt_metrics["npc_profile_update"]["content_chars"]
+            prompt_metrics.get("npc_batch_update", {}).get("content_chars", 0)
         ),
-        "extract_mentions": [
-            str(mention.get("name"))
-            for mention in recorded.npc_profile_extract.get("mentions", [])
-            if isinstance(mention, dict) and mention.get("name")
-        ],
-        "exact_mentions": [
-            [candidate["npc_id"], surface]
-            for candidate in candidates
-            if candidate["source"] == "existing"
-            and candidate["npc_id"] is not None
-            for surface in candidate["mention_names"]
-        ],
+        "extract_mentions": extract_mentions,
+        "exact_mentions": exact_mentions,
         "aliases_added": aliases_added,
-        "new_profile_names": [profile.name for profile in result.new_profiles],
+        "new_profile_names": [
+            candidate.primary_surface
+            for candidate in result.new_npc_candidates
+        ],
         "field_deltas": field_deltas,
         "warnings": [
             [
@@ -722,22 +682,6 @@ def _run_offline_legacy(
         ],
         "prompt_metrics": prompt_metrics,
     }
-
-
-def _run_offline_npcturn(
-    case: BenchmarkCase,
-    recorded: RecordedCase,
-) -> dict[str, Any]:
-    raise NotImplementedError(
-        "the npcturn backend lands with ticket 04 (single NPCTurnProcessor); "
-        "until then run with --backend legacy"
-    )
-
-
-_BACKENDS: dict[BACKEND, Any] = {
-    "legacy": _run_offline_legacy,
-    "npcturn": _run_offline_npcturn,
-}
 
 
 def _current_state(case: BenchmarkCase) -> CurrentState:
@@ -760,54 +704,6 @@ def _core_memory(case: BenchmarkCase) -> CoreMemory:
             for item in case.core_memory_items
         ]
     )
-
-
-def _legacy_resolution_signals(
-    case: BenchmarkCase,
-    recorded: RecordedCase,
-    candidates: list[dict],
-) -> tuple[dict[str, dict], list[str]]:
-    """Build backend-neutral resolution signals from the legacy update batch.
-
-    Returns ``(resolutions, proposal_invariants)`` where ``resolutions`` maps
-    candidate name -> ``{"resolution", "target_npc_id"}`` and
-    ``proposal_invariants`` carries the legacy recording contract violations
-    (non-object results, unknown candidate indices). The scorer consumes only
-    these signals, never the raw ``RecordedCase``.
-    """
-    index_to_name = {candidate["index"]: candidate["name"] for candidate in candidates}
-    roster = [profile.npc_id for profile in case.effective_roster()]
-    candidate_by_name = {
-        candidate["name"]: candidate for candidate in candidates
-    }
-    resolutions: dict[str, dict] = {}
-    proposal_invariants: list[str] = []
-    if recorded.npc_profile_update is None:
-        return resolutions, proposal_invariants
-    for result in recorded.npc_profile_update.get("results", []):
-        if not isinstance(result, dict):
-            proposal_invariants.append("recorded result is not an object")
-            continue
-        index = result.get("candidate_index")
-        name = index_to_name.get(index)
-        if not isinstance(index, int) or name is None:
-            proposal_invariants.append(
-                f"recorded result references unknown candidate_index {index!r}"
-            )
-            continue
-        resolution = result.get("resolution", "")
-        target_npc_id: str | None = None
-        if resolution == "existing":
-            target_npc_id = candidate_by_name.get(name, {}).get("npc_id")
-        elif resolution == "alias_match":
-            matched = result.get("matched_npc_index")
-            if isinstance(matched, int) and 0 <= matched < len(roster):
-                target_npc_id = roster[matched]
-        resolutions[name] = {
-            "resolution": resolution,
-            "target_npc_id": target_npc_id,
-        }
-    return resolutions, proposal_invariants
 
 
 def _score_gold(
@@ -980,8 +876,8 @@ def _token_usage(recorded: RecordedCase) -> dict | None:
 def _token_usage_total(recorded: RecordedCase) -> dict | None:
     """Sum prompt/completion tokens across every task in the recordings entry.
 
-    Task-agnostic: aggregate and scoring never name individual tasks, so the
-    single-call NPCTurnProcessor recordings sum identically to the legacy pair.
+    Task-agnostic: aggregate and scoring never name individual tasks, so a
+    future processor with a different task name totals identically.
     """
     if recorded.token_usage is None:
         return None
@@ -999,10 +895,9 @@ def _token_usage_total(recorded: RecordedCase) -> dict | None:
 def run_case(
     case: BenchmarkCase,
     recorded: RecordedCase,
-    backend: BACKEND,
 ) -> dict:
-    signals = _BACKENDS[backend](case, recorded)
-    gold = _score_gold(case, signals, CALL_COUNT_BOUNDS[backend])
+    signals = _run_offline_batch(case, recorded)
+    gold = _score_gold(case, signals, CALL_COUNT_BOUNDS)
     return {
         "case_id": case.case_id,
         "call_count": signals["call_count"],
@@ -1068,7 +963,7 @@ def run_suite(
     fixtures: BenchmarkSuite,
     recordings: RecordingsSuite,
     *,
-    backend: BACKEND,
+    backend: BACKEND = "batch",
     fixtures_sha256: str,
     recordings_sha256: str,
 ) -> dict:
@@ -1086,7 +981,7 @@ def run_suite(
                 f"recordings for backend {backend!r} are missing case "
                 f"{case.case_id!r}"
             )
-        case_reports.append(run_case(case, recorded, backend))
+        case_reports.append(run_case(case, recorded))
     return {
         "benchmark_version": BENCHMARK_VERSION,
         "backend": backend,
@@ -1157,8 +1052,59 @@ def _write_json(path: Path, data: dict) -> None:
     )
 
 
-def _record_case(case: BenchmarkCase, trace_id: str, trace_path: Path) -> RecordedCase:
-    """Run the real two-task pipeline and return the recorded outputs."""
+def _run_live_pipeline(
+    case: BenchmarkCase,
+    gateway,
+    store: NPCProfileStore,
+    evidence_documents: dict,
+    trace_id: str,
+) -> None:
+    from app.core.time import utc_now
+
+    apply_npc_batch_update(
+        npc_store=store,
+        gateway=gateway,
+        scene_facts=SceneFactSet.model_validate_json(case.scene_facts),
+        evidence_documents=evidence_documents,
+        current_state=_current_state(case),
+        turn_index=case.turn_index,
+        scene_id=case.scene_id,
+        admitted_at=utc_now(),
+        trace_id=trace_id,
+    )
+
+
+def _recorded_from_records(
+    case: BenchmarkCase,
+    records: dict[str, dict[str, Any]],
+) -> RecordedCase:
+    expected = _expected_batch_input(case)
+    batch = records.get("npc_batch_update")
+    if expected is None:
+        if batch is not None:
+            raise RuntimeError(
+                f"case {case.case_id!r}: recorded a npc_batch_update call but "
+                "identity resolution found nothing to update"
+            )
+        return RecordedCase()
+    if batch is None:
+        raise RuntimeError(
+            f"case {case.case_id!r}: missing recorded LLM output for "
+            "['npc_batch_update'] despite resolvable NPCs"
+        )
+    return RecordedCase(
+        npc_batch_update=batch["parsed_output"],
+        token_usage={"npc_batch_update": batch.get("token_usage")},
+        attempts={"npc_batch_update": batch["attempts"]},
+    )
+
+
+def _record_case(
+    case: BenchmarkCase,
+    trace_id: str,
+    trace_path: Path,
+) -> RecordedCase:
+    """Run the real pipeline and return the recorded outputs."""
     gateway = _gateway_for_case(trace_path)
     evidence_documents = {
         document.document_id: document
@@ -1172,51 +1118,15 @@ def _record_case(case: BenchmarkCase, trace_id: str, trace_path: Path) -> Record
     with NPCProfileStore(":memory:") as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
-        update_npc_profiles_workflow(
-            scene_facts=case.scene_facts,
-            current_state=_current_state(case),
-            core_memory=_core_memory(case),
-            gateway=gateway,
-            npc_store=store,
-            evidence_documents=evidence_documents,
-            turn_index=case.turn_index,
-            recent_summaries=[],
-            trace_id=trace_id,
+        _run_live_pipeline(
+            case,
+            gateway,
+            store,
+            evidence_documents,
+            trace_id,
         )
     records = _trace_records_for(case.case_id, trace_id, gateway)
-    extract = records.get("npc_profile_extract")
-    update = records.get("npc_profile_update")
-    if extract is None:
-        raise RuntimeError(
-            f"case {case.case_id!r}: missing recorded LLM output for "
-            "['npc_profile_extract']"
-        )
-    if update is None and extract["parsed_output"].get("mentions"):
-        raise RuntimeError(
-            f"case {case.case_id!r}: missing recorded LLM output for "
-            "['npc_profile_update'] despite non-empty extraction"
-        )
-    token_usage = {
-        task: (
-            records[task].get("token_usage")
-            if task in records
-            else None
-        )
-        for task in ("npc_profile_extract", "npc_profile_update")
-    }
-    attempts = {
-        task: records[task]["attempts"]
-        for task in ("npc_profile_extract", "npc_profile_update")
-        if task in records
-    }
-    return RecordedCase(
-        npc_profile_extract=extract["parsed_output"],
-        npc_profile_update=(
-            update["parsed_output"] if update is not None else None
-        ),
-        token_usage=token_usage,
-        attempts=attempts or None,
-    )
+    return _recorded_from_records(case, records)
 
 
 def _selected_cases(
@@ -1232,11 +1142,12 @@ def _selected_cases(
     return selected
 
 
-def _expected_update_input(case: BenchmarkCase) -> dict[str, str]:
-    """Recompute the deterministic update-prompt inputs from the fixture.
+def _expected_batch_input(case: BenchmarkCase) -> dict[str, str] | None:
+    """Recompute the deterministic batch prompt input from the fixture.
 
-    Mirrors ``NPCProfileUpdater.update()`` so a replay can verify that a trace
-    was produced from the CURRENT fixture and not a stale one.
+    Mirrors ``apply_npc_batch_update``'s resolution + projection so a replay can
+    verify a trace was produced from the CURRENT fixture. Returns ``None`` when
+    identity resolution finds no resolvable NPC (the 0-call case).
     """
     evidence_documents = {
         document.document_id: document
@@ -1246,51 +1157,29 @@ def _expected_update_input(case: BenchmarkCase) -> dict[str, str]:
             user_input=case.user_input,
             scene_text=case.scene_text,
         )
-    }
-    scene_paragraph_evidence = [
-        document
-        for document in evidence_documents.values()
         if document.source_type == "scene_paragraph"
-    ]
+    }
+    scene_facts = SceneFactSet.model_validate_json(case.scene_facts)
     with NPCProfileStore(":memory:") as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
-        existing_profiles = store.list_all()
-    current_state = _current_state(case)
-    return {
-        "core_memory_json": _core_memory(case).model_dump_json(indent=2),
-        "scene_facts_json": case.scene_facts,
-        "current_state_summary_json": project_current_state(current_state),
-        "recent_summaries_json": project_scene_summaries([]),
-        "scene_paragraph_evidence_json": json.dumps(
-            [
-                {"document_id": document.document_id, "text": document.text}
-                for document in scene_paragraph_evidence
-            ],
-            ensure_ascii=False,
-            indent=2,
-        ),
-        "existing_npc_options_json": json.dumps(
-            [
-                *(
-                    _existing_option_for_prompt(index, profile)
-                    for index, profile in enumerate(existing_profiles)
-                ),
-                {
-                    "npc_index": len(existing_profiles),
-                    "name": current_state.player.name,
-                    "aliases": [],
-                    "role": None,
-                    "public_summary": None,
-                    "appearance": None,
-                    "faction": None,
-                    "last_known_location": None,
-                },
-            ],
-            ensure_ascii=False,
-            indent=2,
-        ),
-    }
+        profiles = store.list_all()
+    resolution = resolve_npc_identities(
+        profiles=profiles,
+        npc_mentions=scene_facts.npc_mentions,
+        paragraph_texts=[
+            document.text for document in evidence_documents.values()
+        ],
+        player_name=case.player_name,
+    )
+    if not resolution.resolved:
+        return None
+    return build_npc_batch_input(
+        resolved=list(resolution.resolved),
+        profiles=profiles,
+        scene_facts=scene_facts,
+        evidence_documents=evidence_documents,
+    )
 
 
 def _replay_trace(
@@ -1347,63 +1236,40 @@ def _replay_trace(
     for case in selected:
         case_entries = by_case[case.case_id]
         records = _trace_task_records(case_entries)
-        extract = records.get("npc_profile_extract")
-        if extract is None:
-            raise ValueError(
-                f"trace has no valid extract output for case {case.case_id!r}"
-            )
+        if _expected_batch_input(case) is None:
+            _verify_trace_input(case, case_entries)
+            recorded_cases[case.case_id] = RecordedCase()
+            continue
         _verify_trace_input(case, case_entries)
-        update = records.get("npc_profile_update")
-        token_usage = {
-            task: (
-                records[task].get("token_usage")
-                if task in records
-                else None
-            )
-            for task in ("npc_profile_extract", "npc_profile_update")
-        }
-        attempts = {
-            task: records[task]["attempts"]
-            for task in ("npc_profile_extract", "npc_profile_update")
-            if task in records
-        }
-        recorded_cases[case.case_id] = RecordedCase(
-            npc_profile_extract=extract["parsed_output"],
-            npc_profile_update=(
-                update["parsed_output"] if update is not None else None
-            ),
-            token_usage=token_usage,
-            attempts=attempts or None,
-        )
+        recorded_cases[case.case_id] = _recorded_from_records(case, records)
     return RecordingsSuite(
         version=1,
-        backend="legacy",
+        backend="batch",
         cases=recorded_cases,
     )
 
 
-def _verify_trace_input(case: BenchmarkCase, case_entries: list[dict]) -> None:
+def _verify_trace_input(
+    case: BenchmarkCase,
+    case_entries: list[dict],
+) -> None:
     """Fail when the trace's recorded inputs do not match the current fixture."""
-    extract_input: dict | None = None
-    update_input: dict | None = None
+    batch_input: dict | None = None
     for entry in case_entries:
         task = entry.get("task")
         input_data = entry.get("input_data")
         if not isinstance(input_data, dict):
             continue
-        if task == "npc_profile_extract" and extract_input is None:
-            extract_input = input_data
-        elif task == "npc_profile_update" and update_input is None:
-            update_input = input_data
+        if task == "npc_batch_update" and batch_input is None:
+            batch_input = input_data
 
     stale: list[str] = []
-    if extract_input is None or extract_input.get("scene_facts_json") != case.scene_facts:
-        stale.append("npc_profile_extract scene_facts")
-    if update_input is not None:
-        expected = _expected_update_input(case)
-        for key, value in expected.items():
-            if update_input.get(key) != value:
-                stale.append(f"npc_profile_update {key}")
+    expected = _expected_batch_input(case)
+    if expected is not None:
+        if batch_input is None or batch_input.get("npc_batch_json") != expected.get(
+            "npc_batch_json"
+        ):
+            stale.append("npc_batch_update npc_batch_json")
     if stale:
         raise ValueError(
             f"trace inputs for case {case.case_id!r} are stale "
@@ -1427,7 +1293,7 @@ def _record_all(
         recorded_cases[case.case_id] = _record_case(case, trace_id, trace_path)
     return RecordingsSuite(
         version=1,
-        backend="legacy",
+        backend="batch",
         cases=recorded_cases,
     )
 
@@ -1505,7 +1371,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fixtures", type=Path, default=DEFAULT_FIXTURES)
     parser.add_argument("--recordings", type=Path, default=DEFAULT_RECORDINGS)
     parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
-    parser.add_argument("--backend", choices=("legacy", "npcturn"), default="legacy")
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--record", action="store_true")
     parser.add_argument("--replay-trace", type=Path)
@@ -1528,8 +1393,6 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.replay_trace:
-        if args.backend != "legacy":
-            raise RuntimeError("--replay-trace supports only the legacy backend")
         recordings_suite = _replay_trace(
             args.replay_trace,
             fixtures,
@@ -1546,8 +1409,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         print("review the diff, then run --update-baseline")
     elif args.record:
-        if args.backend != "legacy":
-            raise RuntimeError("--record currently supports only the legacy backend")
         run_token = uuid.uuid4().hex[:12]
         recordings_suite = _record_all(
             fixtures,
@@ -1570,7 +1431,6 @@ def main(argv: list[str] | None = None) -> int:
     report = run_suite(
         fixtures,
         recordings,
-        backend=args.backend,
         fixtures_sha256=_fixtures_fingerprint(args.fixtures),
         recordings_sha256=_recordings_fingerprint(args.recordings),
     )

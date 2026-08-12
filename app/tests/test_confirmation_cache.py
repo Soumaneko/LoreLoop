@@ -62,7 +62,7 @@ class TestAdmit:
     def test_always_results_admitted_without_write(self):
         data: dict = {}
         ConfirmationCache(data).admit(
-            {"scene_facts": "facts", "npc_extraction": "npc"},
+            {"scene_facts": "facts", "npc_turn_result": "npc"},
             write_db=False,
         )
         assert data == {"scene_facts": "facts"}
@@ -70,10 +70,10 @@ class TestAdmit:
     def test_write_results_admitted_only_for_write(self):
         data: dict = {}
         ConfirmationCache(data).admit(
-            {"scene_facts": "facts", "npc_extraction": "npc"},
+            {"scene_facts": "facts", "npc_turn_result": "npc"},
             write_db=True,
         )
-        assert data == {"scene_facts": "facts", "npc_extraction": "npc"}
+        assert data == {"scene_facts": "facts", "npc_turn_result": "npc"}
 
     def test_preload_and_markers_never_admitted(self):
         data: dict = {}
@@ -117,12 +117,10 @@ class TestRollbackReset:
             "turn_summary": marker,
             "action_preview": marker,
             "continuity_projection": marker,
-            "npc_extraction": marker,
+            "npc_turn_result": marker,
             "director_decision": marker,
             "director_executions": marker,
             "director_event_reviews": marker,
-            "updated_npc_profile_ids": ["npc_1"],
-            "new_npc_profiles": marker,
             "recorded_setting_ids": ["setting_1"],
             "director_npc_profile_ids": ["npc_2"],
             "confirmed_director_npc_drafts": marker,

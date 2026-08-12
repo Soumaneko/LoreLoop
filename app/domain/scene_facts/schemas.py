@@ -13,12 +13,33 @@ NpcMentionBasis = Literal[
     "same_scene_coreference",
 ]
 
+_GENERIC_PRONOUN_SURFACES = frozenset({
+    "他",
+    "她",
+    "它",
+    "他们",
+    "她们",
+    "它们",
+    "对方",
+    "那人",
+    "此人",
+})
+
+
+def _reject_generic_pronoun(value: str, *, field_name: str) -> str:
+    clean = value.strip()
+    if normalize_compact_key(clean) in _GENERIC_PRONOUN_SURFACES:
+        raise ValueError(f"{field_name} must be an identity-bearing surface, not a pronoun")
+    return clean
+
 
 class AliasRelation(BaseModel):
     """正文表达的 alias 关系：只陈述「同一人」，不判定档案/持久化。
 
     ``explicit_fixed_alias`` 会被确定性持久化，因此必须携带至少一条
-    ``evidence_fact_id``（provenance 比普通提示字段更严格）。
+    ``evidence_fact_id`` 或 ``evidence_paragraph_id``（provenance 比普通提示
+    字段更严格）。paragraph 引用必须来自本轮输入段落（由 extractor 的
+    output_validator 校验）。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -26,6 +47,7 @@ class AliasRelation(BaseModel):
     surface: str = Field(min_length=1)
     basis: NpcMentionBasis
     evidence_fact_ids: list[str] = Field(default_factory=list)
+    evidence_paragraph_ids: list[str] = Field(default_factory=list)
 
     @field_validator("surface")
     @classmethod
@@ -33,31 +55,46 @@ class AliasRelation(BaseModel):
         clean = value.strip()
         if not clean:
             raise ValueError("surface must not be blank")
-        return clean
+        return _reject_generic_pronoun(clean, field_name="alias surface")
+
+    @field_validator("evidence_fact_ids")
+    @classmethod
+    def _fact_ids_no_duplicates(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("evidence_fact_ids must not repeat")
+        return values
+
+    @field_validator("evidence_paragraph_ids")
+    @classmethod
+    def _paragraph_ids_no_duplicates(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("evidence_paragraph_ids must not repeat")
+        return values
 
     @model_validator(mode="after")
     def _fixed_alias_requires_evidence(self):
-        if self.basis == "explicit_fixed_alias" and not self.evidence_fact_ids:
+        if self.basis == "explicit_fixed_alias" and not (
+            self.evidence_fact_ids or self.evidence_paragraph_ids
+        ):
             raise ValueError(
-                "explicit_fixed_alias requires at least one evidence_fact_id"
+                "explicit_fixed_alias requires at least one "
+                "evidence_fact_id or evidence_paragraph_id"
             )
         return self
 
 
 class SceneNpcMention(BaseModel):
-    """本章出现的一个 NPC 人物簇：表面称呼 + 场景内 alias 关系。
+    """本章出现的一个 NPC 人物簇：主称呼 + 场景内 alias 关系。
 
-    ``observed_surfaces`` 必须包含 ``primary_surface``。``evidence_fact_ids`` /
-    ``evidence_paragraph_ids`` 为人物出现的证据（mention-level，fact 引用与正文
-    段落 document 引用，与 alias relation 的证据相互独立）。Scene Facts 只陈述
-    正文表达了「这些称呼是同一人」，不判定 npc_id / existing / new / 是否建档 /
-    是否持久化。
+    ``primary_surface`` 必须是姓名、稳定称号或足以区分人物的描述；普通代词不进入
+    契约。其它有身份意义的称呼只通过 ``alias_relations`` 表达。
+    ``evidence_fact_ids`` / ``evidence_paragraph_ids`` 为人物出现的证据。Scene Facts
+    只陈述正文表达了什么，不判定 npc_id / existing / new / 是否建档 / 是否持久化。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     primary_surface: str = Field(min_length=1)
-    observed_surfaces: list[str] = Field(default_factory=list)
     alias_relations: list[AliasRelation] = Field(default_factory=list)
     evidence_fact_ids: list[str] = Field(default_factory=list)
     evidence_paragraph_ids: list[str] = Field(default_factory=list)
@@ -68,24 +105,36 @@ class SceneNpcMention(BaseModel):
         clean = value.strip()
         if not clean:
             raise ValueError("primary_surface must not be blank")
-        return clean
+        return _reject_generic_pronoun(clean, field_name="primary_surface")
 
-    @field_validator("observed_surfaces")
+    @field_validator("evidence_fact_ids")
     @classmethod
-    def _strip_observed(cls, values: list[str]) -> list[str]:
-        cleaned = [value.strip() for value in values if value.strip()]
-        if len(cleaned) != len(set(cleaned)):
-            raise ValueError("observed_surfaces must be unique")
-        return cleaned
+    def _fact_ids_no_duplicates(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("evidence_fact_ids must not repeat")
+        return values
+
+    @field_validator("evidence_paragraph_ids")
+    @classmethod
+    def _paragraph_ids_no_duplicates(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("evidence_paragraph_ids must not repeat")
+        return values
 
     @model_validator(mode="after")
-    def _primary_is_observed(self):
-        primary = normalize_compact_key(self.primary_surface)
-        if not any(
-            normalize_compact_key(surface) == primary for surface in self.observed_surfaces
-        ):
+    def _requires_evidence(self):
+        has_evidence = bool(
+            self.evidence_fact_ids
+            or self.evidence_paragraph_ids
+            or any(
+                relation.evidence_fact_ids or relation.evidence_paragraph_ids
+                for relation in self.alias_relations
+            )
+        )
+        if not has_evidence:
             raise ValueError(
-                "observed_surfaces must include the primary_surface"
+                "npc_mentions requires at least one evidence_fact_id or "
+                "evidence_paragraph_id"
             )
         return self
 
@@ -97,6 +146,21 @@ class SceneNpcMention(BaseModel):
         ]
         if len(keys) != len(set(keys)):
             raise ValueError("alias_relations surfaces must be unique")
+        return self
+
+    @model_validator(mode="after")
+    def _alias_relation_surfaces_differ_from_primary(self):
+        primary = normalize_compact_key(self.primary_surface)
+        duplicates = sorted(
+            normalize_compact_key(relation.surface)
+            for relation in self.alias_relations
+            if normalize_compact_key(relation.surface) == primary
+        )
+        if duplicates:
+            raise ValueError(
+                "alias_relations surface must not equal the primary_surface: "
+                f"{duplicates}"
+            )
         return self
 
 
@@ -118,7 +182,7 @@ class SceneFactSet(BaseModel):
 
     scene_focus: str = Field(min_length=1)
     facts: list[SceneFact] = Field(default_factory=list, max_length=12)
-    npc_mentions: list[SceneNpcMention] = Field(default_factory=list)
+    npc_mentions: list[SceneNpcMention] = Field(default_factory=list, max_length=12)
 
     @model_validator(mode="after")
     def _validate_unique_fact_ids(self):
@@ -171,6 +235,37 @@ class SceneFactDraftSet(BaseModel):
 
     scene_focus: str = Field(min_length=1)
     facts: list[SceneFactDraft] = Field(default_factory=list, max_length=12)
+    npc_mentions: list[SceneNpcMention] = Field(default_factory=list, max_length=12)
+
+    @model_validator(mode="after")
+    def _npc_mention_fact_references_positional(self):
+        # 程序按位置赋 fact_id：facts[0] -> "f1"，facts[1] -> "f2"……
+        # mention/alias 的 evidence_fact_ids 必须引用 f1..fN；draft 层校验使错误
+        # 引用进入 LLM 自动重试，而不是等 gateway 返回后构造 SceneFactSet 才失败。
+        allowed = {f"f{index}" for index in range(1, len(self.facts) + 1)}
+        for mention in self.npc_mentions:
+            referenced = set(mention.evidence_fact_ids)
+            referenced.update(
+                fact_id
+                for relation in mention.alias_relations
+                for fact_id in relation.evidence_fact_ids
+            )
+            invalid = sorted(referenced - allowed)
+            if invalid:
+                raise ValueError(
+                    "npc_mentions reference out-of-range fact ids "
+                    f"{invalid}; facts are numbered f1..f{len(self.facts)}"
+                )
+        return self
+
+
+class SceneParagraphInput(BaseModel):
+    """本轮场景正文的带 ID 段落，供 Scene Fact LLM 引用 evidence_paragraph_ids。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
 
 
 class SceneFactExtractInput(BaseModel):
@@ -179,3 +274,4 @@ class SceneFactExtractInput(BaseModel):
     scene_text: str = Field(min_length=1)
     core_memory: CoreMemory
     current_state: CurrentState
+    scene_paragraphs: list[SceneParagraphInput] = Field(default_factory=list)

@@ -1125,9 +1125,9 @@ function stepTasks(scope, stepName) {
     scene_facts_done: ["scene_fact_extract"],
     state_update_done: ["state_update"],
     continuity_projected: ["continuity_project"],
-    npc_extract_done: ["npc_profile_extract"],
+    npc_profile_updated: ["npc_batch_update"],
     action_preview_done: ["action_preview"],
-    npc_profiles_updated: ["npc_profile_update"],
+    npc_profiles_updated: ["npc_batch_update"],
     director_agent_confirmed: [
       "director_agent_decide_confirmation",
       "director_event_review_hidden",
@@ -1193,7 +1193,7 @@ function stepSummary(name, data) {
   if (name === "state_update_done") return "state updated";
   if (name === "scene_facts_done") return `${data.scene_facts?.facts?.length || 0} facts`;
   if (name === "continuity_projected") return `${data.continuity_projection?.operations?.length || 0} operations`;
-  if (name === "npc_extract_done") return `${data.npc_extraction?.mentions?.length || 0} npcs`;
+  if (name === "npc_profile_updated") return `${data.new_npc_candidates?.length || 0} 候选 · ${data.warnings?.length || 0} 警告`;
   if (name === "finish") return data.status || "done";
   return Object.keys(data || {}).join(", ") || "event";
 }
@@ -1265,14 +1265,17 @@ function renderConfirmation() {
   if (!state.run.confirmation.order.length) return `<div class="empty">暂无确认流程。</div>`;
   const sceneFacts = c.scene_facts || step("confirmation", "scene_facts_done")?.scene_facts;
   const facts = sceneFacts?.facts || [];
-  const npcExtraction = c.npc_extraction || step("confirmation", "npc_extract_done")?.npc_extraction;
+  const npcMentions = sceneFacts?.npc_mentions || [];
+  const npcUpdate = step("confirmation", "npc_profile_updated") || c;
+  const candidates = npcUpdate.new_npc_candidates || [];
+  const warnings = npcUpdate.warnings || c.warnings || step("confirmation", "npc_profiles_updated")?.warnings || [];
   const updatedNpcIds = c.updated_npc_profile_ids || step("confirmation", "npc_profiles_updated")?.updated_npc_profile_ids;
   return `
     ${timeline("confirmation", "确认事件")}
     ${card("Scene Facts", facts.length ? facts.map(contextFactCard).join("") : `<div class="empty">暂无事实</div>`)}
     ${renderStateDiff()}
     ${card("Continuity Operations", renderContinuityProjection(c.continuity_projection || step("confirmation", "continuity_projected")?.continuity_projection))}
-    ${card("NPC Profile Updates", renderNpcExtraction(npcExtraction, updatedNpcIds))}
+    ${card("NPC Profile Updates", renderNpcUpdates(npcMentions, candidates, warnings, updatedNpcIds))}
   `;
 }
 
@@ -1303,14 +1306,19 @@ function renderSettingDebug() {
 }
 
 function renderNpcDebug() {
-  const extraction = step("confirmation", "npc_extract_done")?.npc_extraction || merged("confirmation").npc_extraction;
-  const updatedIds = step("confirmation", "npc_profiles_updated")?.updated_npc_profile_ids || merged("confirmation").updated_npc_profile_ids;
+  const c = merged("confirmation");
+  const sceneFacts = c.scene_facts || step("confirmation", "scene_facts_done")?.scene_facts;
+  const npcMentions = sceneFacts?.npc_mentions || [];
+  const npcUpdate = step("confirmation", "npc_profile_updated") || c;
+  const candidates = npcUpdate.new_npc_candidates || [];
+  const warnings = npcUpdate.warnings || c.warnings || step("confirmation", "npc_profiles_updated")?.warnings || [];
+  const updatedIds = c.updated_npc_profile_ids || step("confirmation", "npc_profiles_updated")?.updated_npc_profile_ids;
   const server = state.serverState || {};
   const npcProfiles = server.npc_profiles || [];
   const npcCount = server.npc_profile_count ?? npcProfiles.length;
   const npcActiveCount = server.npc_active_profile_count ?? npcProfiles.filter((p) => p.active !== false).length;
   return `
-    ${card("NPC 提取", renderNpcExtraction(extraction, updatedIds))}
+    ${card("NPC 提取", renderNpcUpdates(npcMentions, candidates, warnings, updatedIds))}
     ${card(`NPC 档案 (${npcActiveCount}/${npcCount})`, npcProfiles.length ? npcProfiles.map(npcProfileCard).join("") : `<div class="empty">暂无 NPC 档案</div>`)}
   `;
 }
@@ -1627,17 +1635,60 @@ function stateSummary(s) {
   ]);
 }
 
-function renderNpcExtraction(data, updatedIds = []) {
-  if (!data) return `<div class="empty">No write_db or 暂无 NPC 提取。</div>`;
-  const mentions = data.mentions || [];
+function renderNpcUpdates(mentions, candidates = [], warnings = [], updatedIds = []) {
+  const mentionCount = mentions?.length || 0;
+  const candidateCount = candidates?.length || 0;
+  const warningCount = warnings?.length || 0;
+  if (!mentionCount && !candidateCount && !warningCount && !updatedIds?.length) {
+    return `<div class="empty">No write_db 或本轮无 NPC 人物簇/候选/警告。</div>`;
+  }
   return `
-    ${metrics([metric("NPC 称呼", mentions.length), metric("更新档案", updatedIds?.length || 0, "ok")])}
-    ${mentions.map((mention) => `<div class="section-card">${kv([
-      ["称呼", esc(text(mention.name))],
-      ["证据", esc(text(mention.context_span))],
-    ])}</div>`).join("")}
+    ${metrics([
+      metric("人物簇", mentionCount),
+      metric("新候选", candidateCount, candidateCount ? "ok" : ""),
+      metric("更新档案", updatedIds?.length || 0, "ok"),
+      metric("警告", warningCount, warningCount ? "warn" : ""),
+    ])}
+    ${mentionCount ? details(`人物簇 (${mentionCount})`, (mentions || []).map(npcMentionCard).join(""), true) : ""}
+    ${candidateCount ? details(`新候选 (${candidateCount})`, (candidates || []).map(npcCandidateCard).join("")) : ""}
+    ${warningCount ? details(`警告 (${warningCount})`, (warnings || []).map(npcWarningCard).join("")) : ""}
     ${updatedIds?.length ? card("更新 NPC 档案ID", chips(updatedIds)) : ""}
   `;
+}
+
+function npcMentionCard(mention) {
+  const primary = mention.primary_surface || "?";
+  const relations = mention.alias_relations || [];
+  const facts = mention.evidence_fact_ids || [];
+  const paragraphs = mention.evidence_paragraph_ids || [];
+  return `<div class="section-card">
+    <div class="card-title"><span>${esc(text(primary))}</span></div>
+    ${relations.length ? kv([["关系", relations.map((r) => `${esc(text(r.surface))}（${esc(r.basis)}）`).join("，")]]) : ""}
+    ${facts.length || paragraphs.length ? kv([
+      ["事实证据", facts.length ? chips(facts) : ""],
+      ["段落证据", paragraphs.length ? chips(paragraphs) : ""],
+    ]) : ""}
+  </div>`;
+}
+
+function npcCandidateCard(candidate) {
+  const surfaces = candidate.alias_surfaces || [];
+  return `<div class="section-card">
+    <div class="card-title"><span>${esc(text(candidate.name))}</span></div>
+    ${candidate.npc_id ? kv([["候选ID", esc(text(candidate.npc_id))]]) : ""}
+    ${surfaces.length ? kv([["别名", chips(surfaces)]]) : ""}
+  </div>`;
+}
+
+function npcWarningCard(warning) {
+  return `<div class="section-card">
+    <div class="card-title"><span>${esc(text(warning.code))}</span></div>
+    ${kv([
+      ["人物", esc(text(warning.npc_name))],
+      ["字段", esc(text(warning.field))],
+      ["证据", (warning.evidence_ids || []).length ? chips(warning.evidence_ids) : ""],
+    ])}
+  </div>`;
 }
 
 function npcProfileCard(profile) {
@@ -1900,7 +1951,7 @@ function handleGenerationPipelineEvent(event, { retry = false } = {}) {
 function handleConfirmationPipelineEvent(event) {
   if (event.step === "state_update_done") state.activeTab = "diff";
   if (event.step === "scene_facts_done") state.activeTab = "confirmation";
-  if (event.step === "npc_extract_done") state.activeTab = "npc";
+  if (event.step === "npc_profile_updated") state.activeTab = "npc";
   if (event.step === "action_preview_done") state.activeTab = "preview";
   if (event.step === "finish") {
     const data = event.data || {};

@@ -101,7 +101,7 @@ const progressLabels = {
   scene_facts_done: "正在提取场景事实",
   state_update_done: "正在更新世界状态",
   continuity_projected: "正在整理未决事项",
-  npc_extract_done: "正在整理人物信息",
+  npc_profile_updated: "正在更新人物信息",
   action_preview_done: "下一步方向已经生成",
   npc_profiles_updated: "正在写入旅程",
   campaign_setup_started: "正在生成公开世界惯例",

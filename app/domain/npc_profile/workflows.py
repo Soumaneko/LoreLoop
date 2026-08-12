@@ -1,30 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
-from app.core.llm import LLMGateway
 from app.core.text import normalize_key
 from app.domain.action.schemas import Anchor
 from app.domain.confirmed_history import HistoryDocument
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.current_state.schemas import CurrentState
 from app.domain.creative_brief import CreativeBrief, draw_creative_brief
 from app.domain.npc_profile.backfiller import NPCProfileBackfiller
-from app.domain.npc_profile.extractor import NPCProfileExtractor
-from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
+from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
-from app.domain.npc_profile.updater import NPCProfileUpdateWarning, NPCProfileUpdater
-from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.current_state.schemas import CurrentState
 
 TRANSIENT_ALIAS_TURNS = 3
-
-
-@dataclass
-class UpdateNPCProfilesResult:
-    extraction: NPCExtractionResult
-    saved_ids: list[str]
-    new_profiles: list[NPCProfile] = field(default_factory=list)
-    warnings: list[NPCProfileUpdateWarning] = field(default_factory=list)
 
 
 def attach_transient_alias_for_rename(
@@ -110,63 +96,12 @@ def gather_npc_profiles_from_state_and_anchors(
     return selected
 
 
-def update_npc_profiles_from_extraction(
-    *,
-    scene_facts: str,
-    current_state: CurrentState,
-    core_memory: CoreMemory,
-    gateway: LLMGateway,
-    npc_store: NPCProfileStore,
-    existing_profiles: list[NPCProfile],
-    extraction: NPCExtractionResult,
-    evidence_documents: dict[str, HistoryDocument] | None = None,
-    recent_summaries: list[SceneSummary] | None = None,
-    trace_id: str | None = None,
-    turn_index: int | None = None,
-) -> UpdateNPCProfilesResult:
-    updater = NPCProfileUpdater(gateway)
-    update_result = updater.update(
-        scene_facts=scene_facts,
-        current_state=current_state,
-        existing_profiles=existing_profiles,
-        extraction=extraction,
-        core_memory=core_memory,
-        evidence_documents=evidence_documents,
-        turn_index=turn_index,
-        recent_summaries=recent_summaries,
-        trace_id=trace_id,
-    )
-
-    saved_ids: list[str] = []
-    new_profiles: list[NPCProfile] = []
-    existing_ids = {profile.npc_id for profile in existing_profiles}
-    for profile in update_result.profiles:
-        if profile.npc_id not in existing_ids:
-            # Newly detected NPCs are candidates, not canonical yet: the
-            # confirmation Director decides which ones to keep via enrich_npc.
-            # Unenriched candidates are intentionally dropped.
-            new_profiles.append(profile)
-            continue
-        saved_id = npc_store.upsert(profile)
-        saved_ids.append(saved_id)
-    for npc_id, surface in update_result.exact_mentions:
-        npc_store.record_mention(npc_id, surface)
-    for npc_id, alias in update_result.aliases_to_add:
-        npc_store.append_alias(npc_id, alias, initial_hit_count=1)
-    return UpdateNPCProfilesResult(
-        extraction=extraction,
-        saved_ids=saved_ids,
-        new_profiles=new_profiles,
-        warnings=list(update_result.long_term_warnings),
-    )
-
-
 def backfill_new_npc_profile(
     *,
     profile: NPCProfile,
     existing_profiles: list[NPCProfile],
     core_memory: CoreMemory,
-    gateway: LLMGateway,
+    gateway,
     npc_store: NPCProfileStore,
     settings: list | None = None,
     trace_id: str | None = None,
@@ -182,39 +117,6 @@ def backfill_new_npc_profile(
         trace_id=trace_id,
         guidance=guidance,
         creative_brief=creative_brief or draw_creative_brief(),
-    )
-
-
-def update_npc_profiles_workflow(
-    *,
-    scene_facts: str,
-    current_state: CurrentState,
-    core_memory: CoreMemory,
-    gateway: LLMGateway,
-    npc_store: NPCProfileStore,
-    evidence_documents: dict[str, HistoryDocument] | None = None,
-    turn_index: int | None = None,
-    recent_summaries: list[SceneSummary] | None = None,
-    trace_id: str | None = None,
-) -> UpdateNPCProfilesResult:
-    existing = npc_store.list_all()
-    extractor = NPCProfileExtractor(gateway)
-    extraction = extractor.extract(
-        scene_facts=scene_facts,
-        trace_id=trace_id,
-    )
-    return update_npc_profiles_from_extraction(
-        scene_facts=scene_facts,
-        current_state=current_state,
-        core_memory=core_memory,
-        gateway=gateway,
-        npc_store=npc_store,
-        existing_profiles=existing,
-        extraction=extraction,
-        evidence_documents=evidence_documents,
-        turn_index=turn_index,
-        recent_summaries=recent_summaries,
-        trace_id=trace_id,
     )
 
 

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 from app.core.diagnostics import NullDiagnosticLogger
+from app.core.text import normalize_compact_key
+from app.core.time import utc_now
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.continuity import ContinuityProjector
@@ -15,12 +18,17 @@ from app.domain.director_event.workflows import (
     review_engaged_events_workflow,
     review_hidden_events_workflow,
 )
-from app.domain.npc_profile.extractor import NPCProfileExtractor
+from app.domain.npc_profile.batch_updater import apply_npc_batch_update
+from app.domain.npc_profile.identity_resolver import NpcCandidate
+from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.workflows import (
     prune_npc_transient_aliases_from_current_state,
-    update_npc_profiles_from_extraction,
 )
-from app.domain.scene_facts import SceneFactExtractInput, SceneFactExtractor
+from app.domain.scene_facts import (
+    SceneFactExtractInput,
+    SceneFactExtractor,
+    SceneParagraphInput,
+)
 from app.domain.scene_summary.summarizer import SceneSummarizer
 from app.domain.views import project_scene_facts
 from app.domain.world_setting.schemas import setting_appears_in_text
@@ -29,7 +37,65 @@ from app.runtime.serialization import model_data
 from .confirmation_cache import ConfirmationCache
 from .confirmation_helpers import merge_unique_ids
 from .confirmation_state import ConfirmationState
+from .npc_result import NpcCandidateContext, NpcTurnNodeResult
 from app.domain.director.confirmation import DirectorConfirmationExecutor
+
+
+def _candidate_npc_id(
+    *,
+    scene_id: str,
+    turn_index: int,
+    primary_surface: str,
+    occupied_ids: set[str],
+) -> str:
+    """候选正式 id：scene_id + turn_index + 规范化主称呼的稳定 hash。
+
+    enrich 后该 id 会成为正式档案 id（非 ``draft:`` 占位）；冲突时扩展 hash 输入。
+    """
+    base = f"{scene_id}:{turn_index}:{normalize_compact_key(primary_surface)}"
+    npc_id = f"cand_{hashlib.sha256(base.encode('utf-8')).hexdigest()[:16]}"
+    while npc_id in occupied_ids:
+        npc_id = f"cand_{hashlib.sha256(f'{base}:{npc_id}'.encode('utf-8')).hexdigest()[:16]}"
+    return npc_id
+
+
+def _candidate_shells(
+    candidates: list[NpcCandidate],
+    *,
+    scene_id: str,
+    turn_index: int,
+    admitted_at: str,
+    existing_profile_ids: set[str],
+    director_draft_ids: set[str],
+) -> tuple[list[NPCProfile], dict[str, NpcCandidateContext]]:
+    occupied = set(existing_profile_ids) | set(director_draft_ids)
+    shells: list[NPCProfile] = []
+    context: dict[str, NpcCandidateContext] = {}
+    for candidate in candidates:
+        npc_id = _candidate_npc_id(
+            scene_id=scene_id,
+            turn_index=turn_index,
+            primary_surface=candidate.primary_surface,
+            occupied_ids=occupied,
+        )
+        occupied.add(npc_id)
+        shells.append(NPCProfile(
+            npc_id=npc_id,
+            name=candidate.primary_surface,
+            source_scene_ids=[scene_id],
+            created_turn=turn_index,
+            introduced_turn=turn_index,
+            updated_at=admitted_at,
+        ))
+        context[npc_id] = NpcCandidateContext(
+            primary_surface=candidate.primary_surface,
+            alias_surfaces=[
+                relation.surface for relation in candidate.alias_relations
+            ],
+            evidence_fact_ids=list(candidate.evidence_fact_ids),
+            evidence_paragraph_ids=list(candidate.evidence_paragraph_ids),
+        )
+    return shells, context
 
 
 def _gateway_for(state: ConfirmationState):
@@ -89,6 +155,19 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
     trace_id = state["trace_id"]
     cache = ConfirmationCache(state["cache"])
     core_memory = state["core_memory"]
+    scene_paragraphs = [
+        SceneParagraphInput(
+            document_id=document.document_id,
+            text=document.text,
+        )
+        for document in build_turn_documents(
+            scene_id=state["state_before_update"].scene.scene_id,
+            turn_index=pipeline_input.turn_index,
+            user_input=pipeline_input.user_input,
+            scene_text=state["effective_scene_text"],
+        )
+        if document.source_type == "scene_paragraph"
+    ]
 
     def compute_scene_facts():
         return SceneFactExtractor(_gateway_for(state)).extract(
@@ -96,6 +175,7 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
                 scene_text=state["effective_scene_text"],
                 current_state=state["state_before_update"],
                 core_memory=core_memory,
+                scene_paragraphs=scene_paragraphs,
             ),
             trace_id=trace_id,
         )
@@ -211,31 +291,6 @@ def scene_summarize_node(state: ConfirmationState) -> ConfirmationState:
     }
 
 
-def npc_profile_extract_node(state: ConfirmationState) -> ConfirmationState:
-    if not state.get("write_db", True):
-        return {"npc_extraction": None}
-    pipeline_input = state["pipeline_input"]
-    trace_id = state["trace_id"]
-    cache = ConfirmationCache(state["cache"])
-
-    def compute_npc_extraction():
-        return NPCProfileExtractor(_gateway_for(state)).extract(
-            scene_facts=state["scene_facts_json"],
-            trace_id=trace_id,
-        )
-
-    npc_extraction = cache.compute_if_missing("npc_extraction", compute_npc_extraction)
-    return {
-        "npc_extraction": npc_extraction,
-        "events": [{
-            "step": "npc_extract_done",
-            "data": {
-                "npc_extraction": model_data(npc_extraction),
-            },
-        }],
-    }
-
-
 def action_preview_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
@@ -295,6 +350,9 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
             turn_index=pipeline_input.turn_index,
             trace_id=state["trace_id"],
             new_npc_profiles=state.get("new_npc_profiles", []),
+            npc_candidate_context=_candidate_context_plain(
+                state.get("npc_candidate_context", {})
+            ),
             scene_text=state["effective_scene_text"],
             director_log_entry=getattr(
                 state.get("pending"), "director_log_entry", None
@@ -320,15 +378,15 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
 
 
 def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
-    if not state.get("write_db", True) or state.get("npc_extraction") is None:
-        cache = ConfirmationCache(state["cache"])
+    cache = ConfirmationCache(state["cache"])
+    if not state.get("write_db", True):
         return {
-            "updated_npc_profile_ids": cache.result("updated_npc_profile_ids") or [],
-            "new_npc_profiles": cache.result("new_npc_profiles") or [],
+            "updated_npc_profile_ids": [],
+            "new_npc_profiles": [],
+            "npc_candidate_context": {},
         }
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
-    cache = ConfirmationCache(state["cache"])
     computed = False
 
     def compute_npc_update():
@@ -336,6 +394,7 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
         computed = True
         with _store_factory(state, "npc_profile")() as npc_store:
             gateway = _gateway_for(state)
+            admitted_at = utc_now()
             evidence_documents = {
                 document.document_id: document
                 for document in build_turn_documents(
@@ -346,51 +405,67 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 )
                 if document.source_type == "scene_paragraph"
             }
-            npc_result = update_npc_profiles_from_extraction(
-                scene_facts=state["scene_facts_json"],
-                current_state=state["updated_state"],
-                core_memory=state["core_memory"],
-                gateway=gateway,
+            result = apply_npc_batch_update(
                 npc_store=npc_store,
-                existing_profiles=state["existing_npc_profiles"],
-                extraction=state["npc_extraction"],
+                gateway=gateway,
+                scene_facts=state["scene_facts"],
                 evidence_documents=evidence_documents,
-                recent_summaries=state.get("recent_summaries", []),
-                trace_id=trace_id,
+                current_state=state["updated_state"],
                 turn_index=pipeline_input.turn_index,
+                scene_id=state["updated_state"].scene.scene_id,
+                admitted_at=admitted_at,
+                trace_id=trace_id,
             )
             alias_pruned_ids = prune_npc_transient_aliases_from_current_state(
                 npc_store=npc_store,
                 turn_index=pipeline_input.turn_index,
             )
-            updated_npc_profile_ids = merge_unique_ids([*npc_result.saved_ids, *alias_pruned_ids])
-            return (
-                updated_npc_profile_ids,
-                npc_result.new_profiles,
-                npc_result.warnings,
+            shells, context = _candidate_shells(
+                result.new_npc_candidates,
+                scene_id=state["updated_state"].scene.scene_id,
+                turn_index=pipeline_input.turn_index,
+                admitted_at=admitted_at,
+                existing_profile_ids={
+                    profile.npc_id
+                    for profile in state.get("existing_npc_profiles", [])
+                },
+                director_draft_ids=_director_draft_ids(state),
+            )
+            return NpcTurnNodeResult(
+                process_result=result,
+                updated_npc_profile_ids=merge_unique_ids(
+                    [*result.saved_ids, *alias_pruned_ids]
+                ),
+                new_npc_profiles=shells,
+                candidate_context=context,
             )
 
-    updated_npc_profile_ids, new_npc_profiles, npc_update_warnings = cache.atomic(
-        "updated_npc_profile_ids",
-        "new_npc_profiles",
-        "npc_update_warnings",
-        factory=compute_npc_update,
-    )
+    node_result = cache.compute_if_missing("npc_turn_result", compute_npc_update)
+    warnings = node_result.process_result.warnings
+    warning_summary = [
+        {
+            "npc_name": warning.npc_name,
+            "field": warning.field_name,
+            "code": warning.code,
+            "evidence_ids": list(warning.evidence_ids),
+        }
+        for warning in warnings
+    ]
     services = state.get("runtime_services")
     diagnostics = (
         getattr(services, "diagnostics", None)
         if services is not None
         else None
     ) or NullDiagnosticLogger()
-    dropped_events = []
+    update_events = []
     if computed:
-        for warning in npc_update_warnings:
+        for warning in warnings:
             diagnostics.warning(
-                source="npc_profile_update",
+                source="npc_batch_update",
                 code=warning.code,
                 message=warning.message,
                 trace_id=trace_id,
-                task="npc_profile_update",
+                task="npc_batch_update",
                 turn_index=getattr(pipeline_input, "turn_index", None),
                 details={
                     "npc_name": warning.npc_name,
@@ -398,27 +473,49 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                     "evidence_ids": list(warning.evidence_ids),
                 },
             )
-        if npc_update_warnings:
-            dropped_events = [{
-                "step": "npc_long_term_fields_dropped",
-                "data": {
-                    "count": len(npc_update_warnings),
-                    "warnings": [
-                        {
-                            "npc_name": warning.npc_name,
-                            "field": warning.field_name,
-                            "code": warning.code,
-                            "evidence_ids": list(warning.evidence_ids),
-                        }
-                        for warning in npc_update_warnings
-                    ],
-                },
-            }]
+        update_events = [{
+            "step": "npc_profile_updated",
+            "data": {
+                "updated_npc_profile_ids": node_result.updated_npc_profile_ids,
+                "new_npc_candidates": [
+                    {
+                        "npc_id": npc_id,
+                        "name": context.primary_surface,
+                        "alias_surfaces": list(context.alias_surfaces),
+                    }
+                    for npc_id, context in sorted(
+                        node_result.candidate_context.items()
+                    )
+                ],
+                "warnings": warning_summary,
+            },
+        }]
     return {
-        "updated_npc_profile_ids": updated_npc_profile_ids,
-        "new_npc_profiles": new_npc_profiles,
-        "npc_update_warnings": npc_update_warnings,
-        "events": dropped_events,
+        "updated_npc_profile_ids": node_result.updated_npc_profile_ids,
+        "new_npc_profiles": node_result.new_npc_profiles,
+        "npc_candidate_context": node_result.candidate_context,
+        "npc_warnings": warning_summary,
+        "events": update_events,
+    }
+
+
+def _director_draft_ids(state: ConfirmationState) -> set[str]:
+    with _store_factory(state, "director_npc")() as director_npc_store:
+        return {draft.draft_id for draft in director_npc_store.list_all()}
+
+
+def _candidate_context_plain(
+    context: dict[str, NpcCandidateContext],
+) -> dict[str, dict]:
+    """把图侧候选上下文转成纯 dict，避免 domain 依赖 graph 类型。"""
+    return {
+        npc_id: {
+            "primary_surface": candidate.primary_surface,
+            "alias_surfaces": list(candidate.alias_surfaces),
+            "evidence_fact_ids": list(candidate.evidence_fact_ids),
+            "evidence_paragraph_ids": list(candidate.evidence_paragraph_ids),
+        }
+        for npc_id, candidate in context.items()
     }
 
 

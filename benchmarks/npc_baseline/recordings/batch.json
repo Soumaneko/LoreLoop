@@ -1,0 +1,442 @@
+{
+  "version": 1,
+  "backend": "batch",
+  "cases": {
+    "exact_canonical_and_alias": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "field": "role",
+                "value": "沈二爷",
+                "evidence_ids": [
+                  "turn_0_p002"
+                ]
+              },
+              {
+                "field": "public_summary",
+                "value": "沈孤鸿，人称沈二爷，进入醉花楼并命人关门。",
+                "summary_delta": "确认其身份为沈二爷，并进入醉花楼。",
+                "evidence_ids": [
+                  "turn_0_p001",
+                  "turn_0_p002"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 149,
+          "prompt_tokens": 1922
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "near_name_no_alias": {
+      "npc_batch_update": {
+        "updates": []
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 8,
+          "prompt_tokens": 1834
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "new_persistent_vs_ignore_oneoff": {
+      "npc_batch_update": null,
+      "token_usage": null,
+      "attempts": null
+    },
+    "player_identity_protected": {
+      "npc_batch_update": null,
+      "token_usage": null,
+      "attempts": null
+    },
+    "org_place_ignored": {
+      "npc_batch_update": null,
+      "token_usage": null,
+      "attempts": null
+    },
+    "current_fields_snapshot": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "current_intent": "查明信物来历",
+            "stable_changes": [
+              {
+                "field": "current_intent",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ],
+                "value": "查明信物来历"
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 86,
+          "prompt_tokens": 1877
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "attitude_change_explicit": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "current_intent": "拜托萧云痕处理某事",
+            "stable_changes": [
+              {
+                "field": "personality_trait",
+                "value": "戒备心强，但确认可信后会果断托付",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              },
+              {
+                "field": "current_intent",
+                "value": "拜托萧云痕处理某事",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 141,
+          "prompt_tokens": 1849
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "departed_direction": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "current_intent": "前往城南",
+            "stable_changes": [
+              {
+                "field": "current_intent",
+                "value": "前往城南",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 82,
+          "prompt_tokens": 1866
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "transient_emotion_not_recorded": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "field": "personality_trait",
+                "value": "易怒但能迅速平复情绪",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 83,
+          "prompt_tokens": 1840
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "stable_fields_with_evidence": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "field": "role",
+                "value": "合欢宗宗主",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              },
+              {
+                "field": "faction",
+                "value": "合欢宗",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              },
+              {
+                "field": "public_summary",
+                "value": "沈孤鸿，合欢宗宗主。",
+                "summary_delta": "确认其身份为合欢宗宗主，并明确其组织归属为合欢宗。",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 172,
+          "prompt_tokens": 1843
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "stable_appearance_with_evidence": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "field": "appearance",
+                "value": "左眼有一条旧疤",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 70,
+          "prompt_tokens": 1854
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "stable_personality_with_evidence": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "field": "personality_trait",
+                "value": "沉稳重情",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              },
+              {
+                "field": "public_summary",
+                "value": "沈孤鸿为人沉稳、重情重义，遇险时总是先护着旁人。",
+                "summary_delta": "确认其沉稳重情的性格特征。",
+                "evidence_ids": [
+                  "turn_0_p001"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 141,
+          "prompt_tokens": 1874
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "ability_append_dedup_cap": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "evidence_ids": [
+                  "turn_0_p001"
+                ],
+                "field": "known_abilities",
+                "ability": {
+                  "name": "隐匿身法",
+                  "description": "使出一招隐匿身法"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 92,
+          "prompt_tokens": 1882
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "large_roster": {
+      "npc_batch_update": {
+        "updates": []
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 12,
+          "prompt_tokens": 1833
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "alias_fixed_title": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "evidence_ids": [
+                  "turn_0_p001"
+                ],
+                "field": "role",
+                "value": "江湖人称沈二爷"
+              },
+              {
+                "evidence_ids": [
+                  "turn_0_p001"
+                ],
+                "field": "public_summary",
+                "value": "沈孤鸿，江湖人称沈二爷，沈二爷为其别号。",
+                "summary_delta": "确认沈孤鸿的江湖别号为沈二爷。"
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 149,
+          "prompt_tokens": 1876
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "companion_is_distinct": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "evidence_ids": [
+                  "turn_0_p001"
+                ],
+                "field": "public_summary",
+                "value": "沈孤鸿，有一名多年旧友青衣客。",
+                "summary_delta": "确认沈孤鸿与青衣客为多年旧友关系。"
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 103,
+          "prompt_tokens": 1866
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "mixed_turn": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc_001",
+            "stable_changes": [
+              {
+                "field": "role",
+                "value": "合欢宗宗主",
+                "evidence_ids": [
+                  "turn_5_p001"
+                ]
+              },
+              {
+                "field": "faction",
+                "value": "合欢宗",
+                "evidence_ids": [
+                  "turn_5_p001"
+                ]
+              },
+              {
+                "field": "public_summary",
+                "value": "沈孤鸿，合欢宗宗主。",
+                "summary_delta": "确认沈孤鸿为合欢宗宗主。",
+                "evidence_ids": [
+                  "turn_5_p001"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 163,
+          "prompt_tokens": 2073
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    }
+  }
+}

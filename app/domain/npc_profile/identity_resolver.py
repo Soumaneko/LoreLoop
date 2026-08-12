@@ -13,7 +13,7 @@
 
 宁漏勿错规则：
 
-- 同一 NPC 的多个 person group 按 ``npc_id`` 合并（observed surfaces / alias
+- 同一 NPC 的多个 person group 按 ``npc_id`` 合并（primary surfaces / alias
   relations 并集，pending alias 不重复）；
 - 某人物簇的多个称呼命中不同档案（歧义）时不强行解析、也不建候选；
 - 待接受 alias 做全局协调：同一规范化 alias 被分配给多个不同 NPC 时全部丢弃；
@@ -38,11 +38,11 @@ from app.domain.scene_facts.schemas import AliasRelation, SceneNpcMention
 
 @dataclass(frozen=True)
 class ResolvedNpc:
-    """本章归并到既有档案的一个 NPC：本轮观察到的表面称呼 + alias 关系 + 证据。"""
+    """本章归并到既有档案的一个 NPC：人物簇主称呼 + alias 关系 + 证据。"""
 
     npc_id: str
     canonical_name: str
-    observed_surfaces: tuple[str, ...] = ()
+    primary_surfaces: tuple[str, ...] = ()
     alias_relations: tuple[AliasRelation, ...] = ()
     evidence_fact_ids: tuple[str, ...] = ()
     evidence_paragraph_ids: tuple[str, ...] = ()
@@ -50,12 +50,17 @@ class ResolvedNpc:
 
 @dataclass(frozen=True)
 class PendingAliasChange:
-    """``explicit_fixed_alias`` 形成的待接受 alias 变化（确定性，非模型判断）。"""
+    """``explicit_fixed_alias`` 形成的待接受 alias 变化（确定性，非模型判断）。
+
+    ``evidence_fact_ids`` / ``evidence_paragraph_ids`` 为该 alias 关系的 Scene Fact
+    证据（fact 引用与正文段落引用可独立、可并存），供 alias/field log bridge。
+    """
 
     npc_id: str
     canonical_name: str
     surface: str
     evidence_fact_ids: tuple[str, ...] = ()
+    evidence_paragraph_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -67,7 +72,7 @@ class NpcCandidate:
     """
 
     primary_surface: str
-    observed_surfaces: tuple[str, ...] = ()
+    alias_relations: tuple[AliasRelation, ...] = ()
     evidence_fact_ids: tuple[str, ...] = ()
     evidence_paragraph_ids: tuple[str, ...] = ()
 
@@ -121,14 +126,14 @@ def resolve_npc_identities(
     for mention in npc_mentions:
         if _mention_contains_player(mention, player):
             continue
-        mention_surfaces = _mention_surfaces(mention)
+        mention_surfaces = [mention.primary_surface]
         all_surfaces = _distinct_surfaces(mention)
         direct_ids = _matched_ids(mention_surfaces, variant_index)
         all_ids = _matched_ids(all_surfaces, variant_index)
         if not all_ids:
             candidates.append(NpcCandidate(
                 primary_surface=mention.primary_surface,
-                observed_surfaces=tuple(mention_surfaces),
+                alias_relations=tuple(mention.alias_relations),
                 evidence_fact_ids=_union_evidence_fact_ids(mention),
                 evidence_paragraph_ids=_union_evidence_paragraph_ids(mention),
             ))
@@ -175,7 +180,7 @@ def resolve_npc_identities(
             resolved_by_id[profile.npc_id] = ResolvedNpc(
                 npc_id=profile.npc_id,
                 canonical_name=profile.name,
-                observed_surfaces=tuple(scanned),
+                primary_surfaces=tuple(scanned),
             )
             scan_union += 1
 
@@ -309,22 +314,8 @@ def _profiles_sorted(profiles: list[NPCProfile]) -> list[NPCProfile]:
     )
 
 
-def _mention_surfaces(mention: SceneNpcMention) -> list[str]:
-    seen: set[str] = set()
-    merged: list[str] = []
-    for surface in [mention.primary_surface, *mention.observed_surfaces]:
-        key = normalize_compact_key(surface)
-        if key and key not in seen:
-            seen.add(key)
-            merged.append(surface)
-    return merged
-
-
 def _distinct_surfaces(mention: SceneNpcMention) -> list[str]:
-    surfaces = [
-        *mention.observed_surfaces,
-        *(relation.surface for relation in mention.alias_relations),
-    ]
+    surfaces = [relation.surface for relation in mention.alias_relations]
     if not mention.primary_surface:
         return surfaces
     seen: set[str] = set()
@@ -338,11 +329,10 @@ def _distinct_surfaces(mention: SceneNpcMention) -> list[str]:
 
 
 def _mention_contains_player(mention: SceneNpcMention, player: str) -> bool:
-    """玩家保护覆盖整个人物簇：任一 surface（primary + observed + alias relation）
+    """玩家保护覆盖整个人物簇：任一 surface（primary + alias relation）
     归一化等于玩家 → 整组跳过（不解析、不候选）。"""
     surfaces = [
         mention.primary_surface,
-        *mention.observed_surfaces,
         *(relation.surface for relation in mention.alias_relations),
     ]
     return any(
@@ -362,8 +352,8 @@ def _dedupe_candidates(candidates: list[NpcCandidate]) -> list[NpcCandidate]:
             continue
         by_primary[key] = NpcCandidate(
             primary_surface=existing.primary_surface,
-            observed_surfaces=tuple(
-                _merge_surfaces(existing.observed_surfaces, candidate.observed_surfaces)
+            alias_relations=tuple(
+                _merge_relations(existing.alias_relations, candidate.alias_relations)
             ),
             evidence_fact_ids=tuple(
                 sorted({*existing.evidence_fact_ids, *candidate.evidence_fact_ids})
@@ -381,7 +371,18 @@ def _dedupe_candidates(candidates: list[NpcCandidate]) -> list[NpcCandidate]:
 
 
 def _union_evidence_paragraph_ids(mention: SceneNpcMention) -> tuple[str, ...]:
-    return tuple(sorted(set(mention.evidence_paragraph_ids)))
+    return tuple(
+        sorted(
+            {
+                *mention.evidence_paragraph_ids,
+                *(
+                    paragraph_id
+                    for relation in mention.alias_relations
+                    for paragraph_id in relation.evidence_paragraph_ids
+                ),
+            }
+        )
+    )
 
 
 def _union_evidence_fact_ids(mention: SceneNpcMention) -> tuple[str, ...]:
@@ -428,7 +429,7 @@ def _resolve_group(
         resolved_by_id[npc_id] = ResolvedNpc(
             npc_id=npc_id,
             canonical_name=profile.name,
-            observed_surfaces=tuple(mention_surfaces),
+            primary_surfaces=tuple(mention_surfaces),
             alias_relations=tuple(mention.alias_relations),
             evidence_fact_ids=mention_facts,
             evidence_paragraph_ids=mention_paragraphs,
@@ -437,8 +438,8 @@ def _resolve_group(
         resolved_by_id[npc_id] = ResolvedNpc(
             npc_id=npc_id,
             canonical_name=profile.name,
-            observed_surfaces=tuple(
-                _merge_surfaces(existing.observed_surfaces, mention_surfaces)
+            primary_surfaces=tuple(
+                _merge_surfaces(existing.primary_surfaces, mention_surfaces)
             ),
             alias_relations=tuple(
                 _merge_relations(existing.alias_relations, mention.alias_relations)
@@ -509,13 +510,21 @@ def _maybe_pending_alias(
             change.npc_id == profile.npc_id
             and normalize_compact_key(change.surface) == key
         ):
-            # 已入列：合并新增证据（f1 ∪ f2），不重复添加。
+            # 已入列：合并新增证据（f1 ∪ f2 / paragraph ∪ paragraph），不重复添加。
             pending[index] = PendingAliasChange(
                 npc_id=change.npc_id,
                 canonical_name=change.canonical_name,
                 surface=change.surface,
                 evidence_fact_ids=tuple(
                     sorted({*change.evidence_fact_ids, *relation.evidence_fact_ids})
+                ),
+                evidence_paragraph_ids=tuple(
+                    sorted(
+                        {
+                            *change.evidence_paragraph_ids,
+                            *relation.evidence_paragraph_ids,
+                        }
+                    )
                 ),
             )
             return "added"
@@ -533,5 +542,8 @@ def _maybe_pending_alias(
         canonical_name=profile.name,
         surface=relation.surface,
         evidence_fact_ids=tuple(sorted(set(relation.evidence_fact_ids))),
+        evidence_paragraph_ids=tuple(
+            sorted(set(relation.evidence_paragraph_ids))
+        ),
     ))
     return "added"

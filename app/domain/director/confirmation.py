@@ -100,6 +100,7 @@ class DirectorConfirmationExecutor:
         turn_index: int,
         trace_id: str,
         new_npc_profiles: list[NPCProfile] | None = None,
+        npc_candidate_context: dict[str, dict] | None = None,
         scene_text: str = "",
         director_log_entry: dict | None = None,
     ):
@@ -114,6 +115,7 @@ class DirectorConfirmationExecutor:
         self._turn_index = turn_index
         self._trace_id = trace_id
         self._new_npc_profiles = new_npc_profiles or []
+        self._npc_candidate_context = npc_candidate_context or {}
         self._scene_text = scene_text
         self._director_log_entry = director_log_entry
 
@@ -623,6 +625,7 @@ class DirectorConfirmationExecutor:
                     {
                         "npc_id": profile.npc_id,
                         **profile.director_view().model_dump(mode="json"),
+                        **self._npc_candidate_context.get(profile.npc_id, {}),
                     }
                     for profile in self._new_npc_profiles
                 ],
@@ -733,6 +736,7 @@ def run_confirmation_director_agent(
     turn_index: int,
     trace_id: str,
     new_npc_profiles: list[NPCProfile] | None = None,
+    npc_candidate_context: dict[str, dict] | None = None,
     scene_text: str = "",
     director_log_entry: dict | None = None,
 ) -> tuple[object, DirectorSkillExecutionBatch]:
@@ -749,6 +753,7 @@ def run_confirmation_director_agent(
         turn_index=turn_index,
         trace_id=trace_id,
         new_npc_profiles=new_npc_profiles,
+        npc_candidate_context=npc_candidate_context,
         scene_text=scene_text,
         director_log_entry=director_log_entry,
     ).run()

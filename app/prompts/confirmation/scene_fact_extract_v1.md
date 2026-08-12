@@ -26,6 +26,12 @@
 {scene_text}
 ```
 
+## SceneParagraphs（本轮正文段落，带 document_id）
+
+```json
+{scene_paragraphs_json}
+```
+
 
 # 输出规范
 
@@ -41,6 +47,14 @@
 - facts：0-12 条 SceneText 中已经发生、已经展示、已经确认的新事实。
   - fact：只写一个事实簇，必须由 scene_text 明确支持。
   - 不要输出 fact_id；fact_id 由程序自动填写。
+- npc_mentions：正文出现的 NPC 人物簇，每人一条（最多 12 条，不含玩家）。
+  - primary_surface：姓名、稳定称号或足以区分人物的具体描述。
+  - alias_relations：正文表达「两个称呼是同一人」的别名关系；只陈述同一人，
+    不判定是否已有档案；其 surface 不得与 primary_surface 相同。
+  - evidence_fact_ids：该人物出现所依据的事实序号。事实按位置编号：
+    **facts 数组第 0 条是 f1，第 1 条是 f2，以此类推**（没有 f0）。
+  - evidence_paragraph_ids：该人物出现所依据的本轮段落 document_id，必须来自
+    SceneParagraphs。
 
 
 # 核心规则
@@ -55,6 +69,10 @@
 8. 合并同类过程：连续动作、重复动作、逐步描写应合并为一个结果事实，除非某一步造成了独立的后续状态、资源或信息变化。
 9. 优先提取对状态、记忆、人物互动、资源、地点连续性可能复用的事实；纯镜头、修辞、身体细节、普通动作过程通常不提取。
 10. 应当准确提取时间流逝：正文明确出现“第二天”“次日”“清晨醒来”、具体时段、经过若干小时/天或其他跨日与时段变化时，必须在 fact 中保留原有时间含义，不得压缩成只描述早餐、出发、抵达等事件而丢失时间变化。
+11. npc_mentions 只提取正文明确出现、且有具体身份称呼的人物；同一人物的多个有意义称呼合并为一条，最核心的写入 primary_surface，其余写入 alias_relations。不要记录“他”“她”“对方”“那人”等普通代词；同场代词消解只用于判断人物簇，不作为输出称呼。
+12. 每条 mention 至少给出一条 evidence_fact_id 或 evidence_paragraph_id。fact 引用严格按位置（facts[0]→f1…），越界或重复引用会被拒。
+13. alias_relations.basis：explicit_fixed_alias＝明确固定别名（“人称沈二爷”）；temporary_address＝临时头衔或称谓（“这位少侠”）；same_scene_coreference＝两个有区分度的称呼在同场明确指向同一人。普通代词本身不输出。只提取正文有依据的，不猜测；explicit_fixed_alias 必须带证据。
+14. 不要把玩家写成 npc_mention。
 
 
 # 禁止事项
@@ -68,6 +86,8 @@
 7. 不要提取纯细节描写，除非该细节改变了状态、关系、资源、位置、已知信息或场景结尾局面。
 8. 不要输出 fact_id。
 9. 不要输出任何 schema 外字段。
+10. 不要给玩家或未在正文明确出现称呼的人物建 npc_mention。
+11. 不要把 CoreMemory/CurrentState 里的旧称呼、旧别名当成本轮证据。
 
 
 # 示例
@@ -85,7 +105,21 @@
       "fact": "顾晚棠在本段正文中仍未说明账册摹本的具体去处。"
     }},
     {{
-      "fact": "顾晚棠明确提醒萧云痕，盐帮很快会追到客栈。"
+      "fact": "顾晚棠明确提醒沈忘忧，盐帮很快会追到客栈。"
+    }}
+  ],
+  "npc_mentions": [
+    {{
+      "primary_surface": "顾晚棠",
+      "alias_relations": [],
+      "evidence_fact_ids": ["f1", "f2", "f3"],
+      "evidence_paragraph_ids": ["turn_12_p001"]
+    }},
+    {{
+      "primary_surface": "沈忘忧",
+      "alias_relations": [],
+      "evidence_fact_ids": ["f3"],
+      "evidence_paragraph_ids": ["turn_12_p001"]
     }}
   ]
 }}

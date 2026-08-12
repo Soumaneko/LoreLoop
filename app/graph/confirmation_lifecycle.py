@@ -3,16 +3,18 @@ from __future__ import annotations
 import traceback
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.continuity import ContinuityApplyResult, ContinuityService
+from app.domain.npc_profile.schemas import NPCProfile
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, PendingTurn
 from app.runtime.services import RuntimeServices
 
 from .confirmation_cache import ConfirmationCache
 from .confirmation_state import ConfirmationState
+from .npc_result import NpcCandidateContext
 
 
 def _diagnostic_turn_index(state: ConfirmationState) -> int | None:
@@ -306,6 +308,24 @@ class ConfirmationMaintenanceScheduler:
             cache.mark_completed("scene_summary_scheduled")
 
 
+def _npc_candidate_summary(
+    npc_candidates: list[NPCProfile],
+    npc_candidate_context: Mapping[str, NpcCandidateContext],
+) -> list[dict]:
+    return [
+        {
+            "npc_id": profile.npc_id,
+            "name": profile.name,
+            "alias_surfaces": list(
+                npc_candidate_context[profile.npc_id].alias_surfaces
+            )
+            if profile.npc_id in npc_candidate_context
+            else [],
+        }
+        for profile in npc_candidates
+    ]
+
+
 class ConfirmationEventBuilder:
     """Build final user-facing confirmation events without performing I/O."""
 
@@ -321,13 +341,16 @@ class ConfirmationEventBuilder:
         director_executions = state.get("director_executions")
         director_npc_profile_ids = state.get("director_npc_profile_ids", [])
         updated_npc_profile_ids = state.get("updated_npc_profile_ids", [])
-        npc_extraction = state.get("npc_extraction")
+        npc_candidates = state.get("new_npc_profiles", [])
+        npc_candidate_context = state.get("npc_candidate_context", {})
+        npc_warnings = state.get("npc_warnings", [])
 
         profile_update_data = {
             "updated_npc_profile_ids": updated_npc_profile_ids,
             "director_npc_profile_ids": director_npc_profile_ids,
             "director_decision": model_data(director_decision),
             "director_executions": model_data(director_executions),
+            "warnings": list(npc_warnings),
         }
 
         scene_result_data = model_data(pipeline_input.scene_result)
@@ -356,10 +379,8 @@ class ConfirmationEventBuilder:
             ),
             "continuity_total": commit_result.continuity_total,
             "updated_npc_profile_ids": updated_npc_profile_ids,
-            "npc_extraction": (
-                model_data(npc_extraction)
-                if npc_extraction is not None
-                else None
+            "new_npc_candidates": _npc_candidate_summary(
+                npc_candidates, npc_candidate_context
             ),
             "status": "committed" if write_db else "dry_run",
             "director_npc_profile_ids": director_npc_profile_ids,

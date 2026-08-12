@@ -23,7 +23,6 @@ from .confirmation_nodes import (
     continuity_project_node,
     director_agent_confirm_node,
     director_event_review_node,
-    npc_profile_extract_node,
     npc_profile_update_node,
     scene_fact_extract_node,
     scene_summarize_node,
@@ -59,7 +58,6 @@ def build_confirmation_first_wave_graph():
         scene_fact_extract_node,
         state_update_node,
         scene_summarize_node,
-        npc_profile_extract_node,
     )
     return get_cached_graph(
         "confirmation_first_wave",
@@ -82,17 +80,11 @@ def _compile_confirmation_first_wave_graph():
         "scene_summarize",
         capture_confirmation_node_errors("scene_summarize", scene_summarize_node),
     )
-    graph.add_node(
-        "npc_profile_extract",
-        capture_confirmation_node_errors("npc_profile_extract", npc_profile_extract_node),
-    )
 
     graph.add_edge(START, "scene_fact_extract")
     graph.add_edge("scene_fact_extract", "state_update")
-    graph.add_edge("scene_fact_extract", "npc_profile_extract")
     graph.add_edge("state_update", "scene_summarize")
     graph.add_edge("scene_summarize", END)
-    graph.add_edge("npc_profile_extract", END)
 
     return graph.compile()
 

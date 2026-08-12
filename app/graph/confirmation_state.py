@@ -11,8 +11,7 @@ from app.domain.current_state.schemas import CurrentState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
 from app.domain.director import DirectorDecisionBatch, DirectorSkillExecutionBatch
 from app.domain.director_npc.schemas import DirectorNPCDraft
-from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
-from app.domain.npc_profile.updater import NPCProfileUpdateWarning
+from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
@@ -20,6 +19,7 @@ from app.runtime.session import PendingOpening, PendingTurn
 from app.runtime.services import RuntimeServices
 
 from .confirmation_cache import ConfirmationCacheData
+from .npc_result import NpcCandidateContext
 
 
 class ConfirmationEvent(TypedDict, total=False):
@@ -78,12 +78,12 @@ class ConfirmationState(TypedDict, total=False):
     updated_state: CurrentState
     state_change_set: StateChangeSet
     state_update_warnings: list[StateChangeWarning]
-    npc_extraction: NPCExtractionResult | None
     action_preview: ActionPreviewResult
     continuity_projection: ContinuityProjection
     updated_npc_profile_ids: list[str]
     new_npc_profiles: list[NPCProfile]
-    npc_update_warnings: list[NPCProfileUpdateWarning]
+    npc_candidate_context: dict[str, NpcCandidateContext]
+    npc_warnings: list[dict[str, Any]]
     director_decision: DirectorDecisionBatch
     director_executions: DirectorSkillExecutionBatch
     director_event_reviews: list[dict[str, Any]]

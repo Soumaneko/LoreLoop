@@ -32,7 +32,6 @@ from app.domain.current_state.schemas import CurrentState
 from app.domain.npc_profile.change_admission import admit_npc_batch_update
 from app.domain.npc_profile.changes import (
     NPCBatchCoverage,
-    NPCAdmissionCoverage,
     AcceptedNPCFieldChange,
     AcceptedNPCAliasChange,
     NPCChangeAdmissionResult,
@@ -76,7 +75,7 @@ class NPCBatchProcessResult:
     warnings: list[NPCChangeAdmissionWarning]
     accepted_changes: list[AcceptedNPCFieldChange]
     accepted_alias_changes: list[AcceptedNPCAliasChange]
-    coverage: NPCAdmissionCoverage | NPCBatchCoverage | None
+    coverage: NPCBatchCoverage | None
     resolution: NpcIdentityResolution
 
 
@@ -241,8 +240,12 @@ def build_npc_batch_input(
         profile = by_id.get(item.npc_id)
         if profile is None:
             continue
+        identity_surfaces = [
+            *item.primary_surfaces,
+            *(relation.surface for relation in item.alias_relations),
+        ]
         surface_keys = [
-            normalize_compact_key(surface) for surface in item.observed_surfaces
+            normalize_compact_key(surface) for surface in identity_surfaces
         ]
         fact_evidence = set(item.evidence_fact_ids)
         paragraph_evidence = set(item.evidence_paragraph_ids)
@@ -372,6 +375,7 @@ def apply_npc_batch_update(
             alias=change.surface,
             turn_index=turn_index,
             evidence_fact_ids=change.evidence_fact_ids,
+            evidence_paragraph_ids=change.evidence_paragraph_ids,
         )
         for change in resolution.pending_alias_changes
     ]
@@ -403,10 +407,16 @@ def apply_npc_batch_update(
         profile = profile_view.get(item.npc_id)
         if profile is None:
             continue
+        seen_surfaces: set[str] = set()
         for surface in [
-            *item.observed_surfaces,
+            *item.primary_surfaces,
+            *(relation.surface for relation in item.alias_relations),
             *pending_by_npc.get(item.npc_id, []),
         ]:
+            surface_key = normalize_compact_key(surface)
+            if not surface_key or surface_key in seen_surfaces:
+                continue
+            seen_surfaces.add(surface_key)
             if surface_is_known(surface, profile):
                 npc_store.record_mention(item.npc_id, surface)
 

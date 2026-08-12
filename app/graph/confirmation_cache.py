@@ -9,10 +9,11 @@ from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director import DirectorDecisionBatch, DirectorSkillExecutionBatch
 from app.domain.director_npc.schemas import DirectorNPCDraft
-from app.domain.npc_profile.schemas import NPCExtractionResult, NPCProfile
-from app.domain.npc_profile.updater import NPCProfileUpdateWarning
+from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
+
+from .npc_result import NpcTurnNodeResult
 
 T = TypeVar("T")
 
@@ -38,15 +39,12 @@ _SLOT_CATEGORIES: dict[str, frozenset[str]] = {
         "turn_summary",
         "action_preview",
         "continuity_projection",
-        "npc_update_warnings",
     }),
     "write_result": frozenset({
-        "npc_extraction",
+        "npc_turn_result",
         "director_decision",
         "director_executions",
         "director_event_reviews",
-        "updated_npc_profile_ids",
-        "new_npc_profiles",
         "recorded_setting_ids",
     }),
     "preload": frozenset({
@@ -103,13 +101,11 @@ class ConfirmationCacheData(TypedDict, total=False):
     state_change_set: StateChangeSet
     state_update_warnings: list[StateChangeWarning]
     turn_summary: SceneSummary
-    npc_extraction: NPCExtractionResult | None
     action_preview: ActionPreviewResult
     director_decision: DirectorDecisionBatch
     director_executions: DirectorSkillExecutionBatch
     director_event_reviews: list[dict[str, Any]]
-    updated_npc_profile_ids: list[str]
-    new_npc_profiles: list[NPCProfile]
+    npc_turn_result: NpcTurnNodeResult
     existing_npc_profiles: list[NPCProfile]
     director_npc_profile_ids: list[str]
     confirmed_director_npc_drafts: list[DirectorNPCDraft]
@@ -124,7 +120,6 @@ class ConfirmationCacheData(TypedDict, total=False):
     scene_summary_scheduled: bool
     continuity_projection: ContinuityProjection
     recorded_setting_ids: list[str]
-    npc_update_warnings: list[NPCProfileUpdateWarning]
 
 
 class ConfirmationCache:
