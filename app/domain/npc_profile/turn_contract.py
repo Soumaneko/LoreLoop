@@ -8,7 +8,8 @@
 - 输出：宽松 wire ``NPCBatchUpdate.updates: list[Any]``，逐字段容错解析
   （``parse_batch_updates``）；prompt 展示用 typed ``NPCBatchUpdateDisplay``；
 - 稳定字段变化为原子 change（``field`` 作 discriminator），``public_summary``
-  强制 ``summary_delta``，``known_abilities`` 为 append-only add change；
+  强制 ``summary_delta``；``personality_trait`` 与 ``known_abilities`` 的逐回合更新
+  暂时冻结，不进入 wire union；
 - 每条稳定 change 必须携带本轮场景段落 ``evidence_ids``（结构校验，非语义）。
 
 本文件不发起任何 LLM 调用。
@@ -46,7 +47,7 @@ class _EvidenceCarrying(BaseModel):
 class ScalarStableChange(_EvidenceCarrying):
     """标量稳定字段的原子 set change。"""
 
-    field: Literal["role", "appearance", "personality_trait", "faction"]
+    field: Literal["role", "appearance", "faction"]
     value: str = Field(min_length=1)
 
 
@@ -63,7 +64,11 @@ class PublicSummaryChange(_EvidenceCarrying):
 
 
 class AbilityAddChange(_EvidenceCarrying):
-    """``known_abilities`` 的 append-only add change（移除能力不开放）。"""
+    """Reserved append-only ability contract; per-turn admission is frozen.
+
+    保留该类供后续重新设计能力准入时复用，但故意不放入
+    ``NPCStableChange``，因此当前 LLM Schema 无权输出它。
+    """
 
     field: Literal["known_abilities"]
     ability: LLMKnownAbility
@@ -71,7 +76,10 @@ class AbilityAddChange(_EvidenceCarrying):
 
 #: 稳定字段变化，以 ``field`` 作 discriminator。
 NPCStableChange = Annotated[
-    Union[ScalarStableChange, PublicSummaryChange, AbilityAddChange],
+    Union[
+        ScalarStableChange,
+        PublicSummaryChange,
+    ],
     Field(discriminator="field"),
 ]
 

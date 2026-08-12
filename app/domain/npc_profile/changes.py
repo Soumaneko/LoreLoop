@@ -34,7 +34,7 @@ from app.domain.npc_profile.schemas import KnownAbility, NPCProfile
 
 #: proposal 来源、必须携带 evidence 的稳定字段。
 _STABLE_PROPOSAL_FIELDS = frozenset(
-    {"public_summary", "role", "appearance", "personality_trait", "faction"}
+    {"public_summary", "role", "appearance", "faction"}
 )
 
 #: CurrentState 独占同步字段（proposal 不得写入）。
@@ -44,7 +44,6 @@ SCALAR_FIELD_LITERAL = Literal[
     "public_summary",
     "role",
     "appearance",
-    "personality_trait",
     "faction",
     "current_intent",
     "last_known_location",

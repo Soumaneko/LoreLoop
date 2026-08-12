@@ -13,6 +13,10 @@ from app.core.time import utc_now
 
 NPCDisclosureLevel = Literal["remote", "face_to_face", "intimate"]
 
+#: ``personality_trait`` 是用于快速消费的简短稳定标签，所有生成、
+#: mutation 与持久化契约共用同一边界。
+NPC_PERSONALITY_TRAIT_MAX_LENGTH = 40
+
 NPC_DISCLOSURE_ORDER: dict[NPCDisclosureLevel, int] = {
     "remote": 0,
     "face_to_face": 1,
@@ -64,7 +68,10 @@ class NPCProfilePublicView(BaseModel):
     public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
-    personality_trait: str | None = Field(default=None, max_length=40)
+    personality_trait: str | None = Field(
+        default=None,
+        max_length=NPC_PERSONALITY_TRAIT_MAX_LENGTH,
+    )
     known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     last_known_location: str | None = None
@@ -93,7 +100,10 @@ class NPCProfileUpdateInput(BaseModel):
     public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
-    personality_trait: str | None = Field(default=None, max_length=40)
+    personality_trait: str | None = Field(
+        default=None,
+        max_length=NPC_PERSONALITY_TRAIT_MAX_LENGTH,
+    )
     known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     last_known_location: str | None = None
@@ -124,7 +134,10 @@ class NPCProfileBackfillBehavior(BaseModel):
 
     conflict_style: str = Field(min_length=1)
     social_style: str = Field(min_length=1)
-    personality_trait: str = Field(min_length=1, max_length=40)
+    personality_trait: str = Field(
+        min_length=1,
+        max_length=NPC_PERSONALITY_TRAIT_MAX_LENGTH,
+    )
 
 
 class NPCProfileBackfillShell(BaseModel):
@@ -154,7 +167,10 @@ class NPCProfile(BaseModel):
     public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
-    personality_trait: str | None = Field(default=None, max_length=40)
+    personality_trait: str | None = Field(
+        default=None,
+        max_length=NPC_PERSONALITY_TRAIT_MAX_LENGTH,
+    )
     known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
     faction: str | None = None
     last_known_location: str | None = None

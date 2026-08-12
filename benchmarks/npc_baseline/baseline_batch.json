@@ -1,13 +1,13 @@
 {
   "benchmark_version": 2,
   "backend": "batch",
-  "fixtures_sha256": "3a7cc2a09f8b901a503479eef4c2eea4da36cd7b375bc7b1d106cd2be16ca3c4",
+  "fixtures_sha256": "e16e2ab725268ab35027666b81b38a5d723dfa7f8410515f54dcb1268f60c17e",
   "recordings_sha256": "6fc28387a90458626145ce9a00db325cbb2d926fc4c5d8e4951e086726bbf30f",
   "aggregate": {
     "call_count": 14,
     "provider_attempts": 14,
-    "weighted_passed": 156,
-    "weighted_total": 165,
+    "weighted_passed": 153,
+    "weighted_total": 159,
     "forbidden_violation_count": 0,
     "invariant_violation_count": 0,
     "categories": {
@@ -28,8 +28,8 @@
         "total": 22
       },
       "stable_field": {
-        "passed": 9,
-        "total": 12
+        "passed": 8,
+        "total": 10
       },
       "new_npc": {
         "passed": 5,
@@ -40,7 +40,7 @@
         "total": 1
       }
     },
-    "prompt_content_chars": 8158,
+    "prompt_content_chars": 7072,
     "token_usage": {
       "completion_tokens": 1451,
       "prompt_tokens": 26289
@@ -81,11 +81,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 2,
-          "content_chars": 703
+          "content_chars": 641
         },
         "call_count": 1
       },
-      "prompt_content_chars": 703,
+      "prompt_content_chars": 641,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 149,
@@ -154,11 +154,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 476
+          "content_chars": 414
         },
         "call_count": 1
       },
-      "prompt_content_chars": 476,
+      "prompt_content_chars": 414,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 8,
@@ -335,11 +335,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 568
+          "content_chars": 506
         },
         "call_count": 1
       },
-      "prompt_content_chars": 568,
+      "prompt_content_chars": 506,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 86,
@@ -386,11 +386,16 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "current_intent": "拜托萧云痕处理某事",
-          "personality_trait": "戒备心强，但确认可信后会果断托付"
+          "current_intent": "拜托萧云痕处理某事"
         }
       },
       "warnings": [
+        [
+          "npc_001",
+          "stable_changes",
+          "invalid_stable_change",
+          []
+        ],
         [
           "npc_001",
           "stable_changes",
@@ -402,11 +407,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 499
+          "content_chars": 437
         },
         "call_count": 1
       },
-      "prompt_content_chars": 499,
+      "prompt_content_chars": 437,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 141,
@@ -463,11 +468,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 554
+          "content_chars": 492
         },
         "call_count": 1
       },
-      "prompt_content_chars": 554,
+      "prompt_content_chars": 492,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 82,
@@ -509,20 +514,26 @@
       "new_profile_names": [],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "醉花楼",
-          "personality_trait": "易怒但能迅速平复情绪"
+          "last_known_location": "醉花楼"
         }
       },
-      "warnings": [],
+      "warnings": [
+        [
+          "npc_001",
+          "stable_changes",
+          "invalid_stable_change",
+          []
+        ]
+      ],
       "prompt_metrics": {
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 484
+          "content_chars": 422
         },
         "call_count": 1
       },
-      "prompt_content_chars": 484,
+      "prompt_content_chars": 422,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 83,
@@ -575,11 +586,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 485
+          "content_chars": 423
         },
         "call_count": 1
       },
-      "prompt_content_chars": 485,
+      "prompt_content_chars": 423,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 172,
@@ -634,11 +645,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 500
+          "content_chars": 438
         },
         "call_count": 1
       },
-      "prompt_content_chars": 500,
+      "prompt_content_chars": 438,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 70,
@@ -685,20 +696,26 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "public_summary": "沈孤鸿为人沉稳、重情重义，遇险时总是先护着旁人。",
-          "personality_trait": "沉稳重情"
+          "public_summary": "沈孤鸿为人沉稳、重情重义，遇险时总是先护着旁人。"
         }
       },
-      "warnings": [],
+      "warnings": [
+        [
+          "npc_001",
+          "stable_changes",
+          "invalid_stable_change",
+          []
+        ]
+      ],
       "prompt_metrics": {
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 560
+          "content_chars": 498
         },
         "call_count": 1
       },
-      "prompt_content_chars": 560,
+      "prompt_content_chars": 498,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 141,
@@ -710,14 +727,10 @@
         "prompt_tokens": 1874
       },
       "gold": {
-        "weighted_passed": 6,
-        "weighted_total": 6,
+        "weighted_passed": 3,
+        "weighted_total": 3,
         "categories": {
           "resolution": {
-            "passed": 1,
-            "total": 1
-          },
-          "stable_field": {
             "passed": 1,
             "total": 1
           }
@@ -744,33 +757,26 @@
       "new_profile_names": [],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "演武场",
-          "known_abilities": [
-            {
-              "name": "剑法",
-              "description": "剑术"
-            },
-            {
-              "name": "轻功",
-              "description": "身法"
-            },
-            {
-              "name": "隐匿身法",
-              "description": "使出一招隐匿身法"
-            }
-          ]
+          "last_known_location": "演武场"
         }
       },
-      "warnings": [],
+      "warnings": [
+        [
+          "npc_001",
+          "stable_changes",
+          "invalid_stable_change",
+          []
+        ]
+      ],
       "prompt_metrics": {
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 637
+          "content_chars": 419
         },
         "call_count": 1
       },
-      "prompt_content_chars": 637,
+      "prompt_content_chars": 419,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 92,
@@ -783,14 +789,10 @@
       },
       "gold": {
         "weighted_passed": 3,
-        "weighted_total": 6,
+        "weighted_total": 3,
         "categories": {
           "resolution": {
             "passed": 1,
-            "total": 1
-          },
-          "stable_field": {
-            "passed": 0,
             "total": 1
           }
         },
@@ -827,11 +829,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 483
+          "content_chars": 421
         },
         "call_count": 1
       },
-      "prompt_content_chars": 483,
+      "prompt_content_chars": 421,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 12,
@@ -896,11 +898,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 559
+          "content_chars": 497
         },
         "call_count": 1
       },
-      "prompt_content_chars": 559,
+      "prompt_content_chars": 497,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 149,
@@ -958,11 +960,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 557
+          "content_chars": 495
         },
         "call_count": 1
       },
-      "prompt_content_chars": 557,
+      "prompt_content_chars": 495,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 103,
@@ -1029,11 +1031,11 @@
         "npc_batch_update": {
           "resolved_npcs": 2,
           "evidence_paragraphs": 2,
-          "content_chars": 1093
+          "content_chars": 969
         },
         "call_count": 1
       },
-      "prompt_content_chars": 1093,
+      "prompt_content_chars": 969,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 163,

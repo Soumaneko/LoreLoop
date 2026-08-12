@@ -603,7 +603,7 @@
     },
     {
       "case_id": "stable_personality_with_evidence",
-      "description": "A stable personality trait updates with scene-paragraph evidence.",
+      "description": "A single-turn personality observation does not overwrite the curated stable trait.",
       "scene_id": "scene_001",
       "turn_index": 0,
       "user_input": "",
@@ -619,6 +619,7 @@
         {
           "npc_id": "npc_001",
           "name": "沈孤鸿",
+          "personality_trait": "寡言谨慎",
           "updated_at": "2026-08-12T00:00:200Z"
         }
       ],
@@ -636,15 +637,13 @@
         "forbidden_resolutions": [],
         "alias_expectations": [],
         "forbidden_aliases": [],
-        "stable_field_expectations": [
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [
           {
             "npc_id": "npc_001",
-            "field": "personality_trait",
-            "value": "沉稳重情",
-            "importance": "must"
+            "field": "personality_trait"
           }
         ],
-        "forbidden_field_changes": [],
         "new_npc_expectations": [],
         "forbidden_new_names": [],
         "warning_expectations": [],
@@ -653,7 +652,7 @@
     },
     {
       "case_id": "ability_append_dedup_cap",
-      "description": "known_abilities is append-only: duplicate names are skipped and new abilities merge in.",
+      "description": "Per-turn known_abilities updates are frozen pending a safer admission design.",
       "scene_id": "scene_001",
       "turn_index": 0,
       "user_input": "",
@@ -696,28 +695,13 @@
         "forbidden_resolutions": [],
         "alias_expectations": [],
         "forbidden_aliases": [],
-        "stable_field_expectations": [
+        "stable_field_expectations": [],
+        "forbidden_field_changes": [
           {
             "npc_id": "npc_001",
-            "field": "known_abilities",
-            "value": [
-              {
-                "name": "剑法",
-                "description": "剑术"
-              },
-              {
-                "name": "轻功",
-                "description": "身法"
-              },
-              {
-                "name": "隐匿",
-                "description": "善于隐匿气息"
-              }
-            ],
-            "importance": "must"
+            "field": "known_abilities"
           }
         ],
-        "forbidden_field_changes": [],
         "new_npc_expectations": [],
         "forbidden_new_names": [],
         "warning_expectations": [],

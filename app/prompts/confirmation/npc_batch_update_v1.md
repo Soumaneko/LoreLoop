@@ -33,8 +33,6 @@
 - `role`：人物的长期身份、职业、职位或社会角色。
 - `faction`：人物明确所属、效忠或代表的组织。职位同时明确了组织归属时，可同时更新 `role` 和 `faction`。
 - `appearance`：相对稳定、可用于识别人物的外貌特征。
-- `personality_trait`：由明确描述或具有代表性的行为所确认的长期性格特征。
-- `known_abilities`：本轮首次确认的持久能力。使用简洁的能力名称，`description` 说明正文已确认的能力内容；以 `add` 追加，保留已有能力。
 - `current_intent`：场景结束后仍在持续的公开目标或行动意图。
 - `public_summary`：人物发生重大的身份、长期关系、组织归属或剧情地位变化后的完整公开摘要。`value` 写更新后的完整摘要，`summary_delta` 只说明本轮新增的重大变化。如果本轮更新了 `role` 或 `faction`，同时更新 `public_summary`，使完整摘要与新的身份和组织归属保持一致。
 

@@ -283,12 +283,7 @@ def build_npc_batch_input(
                 "public_summary": profile.public_summary,
                 "role": profile.role,
                 "appearance": profile.appearance,
-                "personality_trait": profile.personality_trait,
                 "faction": profile.faction,
-                "known_abilities": [
-                    {"name": ability.name, "description": ability.description}
-                    for ability in profile.known_abilities
-                ],
                 "current_intent": profile.current_intent,
             },
             "facts": facts,

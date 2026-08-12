@@ -252,28 +252,22 @@ def test_admission_keeps_first_duplicate_stable_field():
     assert "duplicate_stable_field" in {w.code for w in result.warnings}
 
 
-def test_admission_accepts_multiple_ability_adds():
-    from app.domain.npc_profile.schemas import LLMKnownAbility
-    from app.domain.npc_profile.turn_contract import AbilityAddChange
+def test_parse_batch_updates_rejects_known_abilities_but_keeps_other_fields():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
 
-    changes = [
-        AbilityAddChange(
-            field="known_abilities",
-            ability=LLMKnownAbility(name="剑法", description="快"),
-            evidence_ids=["turn_3_p001"],
-        ),
-        AbilityAddChange(
-            field="known_abilities",
-            ability=LLMKnownAbility(name="身法", description="巧"),
-            evidence_ids=["turn_3_p001"],
-        ),
-    ]
-    result = _admit([_entry("npc_001", stable_changes=changes)])
+    entries, warnings = parse_batch_updates([{
+        "npc_id": "npc_001",
+        "current_intent": "明日去坊市探听消息",
+        "stable_changes": [{
+            "field": "known_abilities",
+            "ability": {"name": "情报打探", "description": "擅长打听消息"},
+            "evidence_ids": ["turn_3_p001"],
+        }],
+    }])
 
-    updated = {p.npc_id: p for p in result.updated_profiles}
-    abilities = {ability.name for ability in updated["npc_001"].known_abilities}
-    assert abilities == {"剑法", "身法"}
-    assert "duplicate_stable_field" not in {w.code for w in result.warnings}
+    assert entries[0].current_intent == "明日去坊市探听消息"
+    assert entries[0].stable_changes == []
+    assert [warning.code for warning in warnings] == ["invalid_stable_change"]
 
 
 def test_admission_bad_evidence_first_does_not_poison_valid_same_field():
@@ -332,6 +326,26 @@ def test_parse_batch_updates_salvages_valid_fields_when_one_change_invalid():
     assert {warning.code for warning in warnings} == {"invalid_stable_change"}
 
 
+def test_parse_batch_updates_rejects_trait_update_but_keeps_current_intent():
+    """真实回归：逐回合 batch 无权更新 personality_trait。"""
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    entries, warnings = parse_batch_updates([{
+        "npc_id": "npc_001",
+        "current_intent": "拜师后去山下坊市探听消息",
+        "stable_changes": [{
+            "field": "personality_trait",
+            "value": "沉稳重情",
+            "evidence_ids": ["turn_3_p001"],
+        }],
+    }])
+
+    assert len(entries) == 1
+    assert entries[0].current_intent == "拜师后去山下坊市探听消息"
+    assert entries[0].stable_changes == []
+    assert [warning.code for warning in warnings] == ["invalid_stable_change"]
+
+
 def test_parse_batch_updates_tolerates_null_entries():
     from app.domain.npc_profile.batch_updater import parse_batch_updates
 
@@ -368,6 +382,19 @@ def test_batch_display_schema_shapes_stable_changes():
     schema = json.loads(schema_json(NPCBatchUpdateDisplay))
     items = schema["$defs"]["NPCBatchUpdateEntry"]["properties"]["stable_changes"]["items"]
     assert "oneOf" in items
+    mapping = items["discriminator"]["mapping"]
+    assert "personality_trait" not in mapping
+    assert "known_abilities" not in mapping
+
+
+def test_store_rejects_mutated_invalid_profile_before_write():
+    profile = _profile(personality_trait="稳重")
+    profile.personality_trait = "过" * 41
+
+    with NPCProfileStore(":memory:") as store:
+        with pytest.raises(ValidationError, match="personality_trait"):
+            store.upsert(profile)
+        assert store.get_by_id(profile.npc_id) is None
 
 
 def test_batch_input_uses_mention_evidence_for_pronoun_facts():
@@ -623,6 +650,40 @@ def test_workflow_loose_envelope_applies_valid_and_drops_invalid():
         assert {"invalid_update_entry"} <= {w.code for w in result.warnings}
 
 
+def test_workflow_rejects_trait_update_and_persists_valid_intent():
+    mentions = [_mention("沈孤鸿")]
+    original_trait = "遇事沉稳"
+    response = {
+        "updates": [{
+            "npc_id": "npc_001",
+            "current_intent": "拜师后去山下坊市探听消息",
+            "stable_changes": [{
+                "field": "personality_trait",
+                "value": "沉稳重情",
+                "evidence_ids": ["turn_3_p001"],
+            }],
+        }],
+    }
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile(personality_trait=original_trait))
+
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=StubGateway(response),  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        persisted = store.get_by_id("npc_001")
+        assert persisted is not None
+        assert persisted.personality_trait == original_trait
+        assert persisted.current_intent == "拜师后去山下坊市探听消息"
+        assert "invalid_stable_change" in {w.code for w in result.warnings}
+
+
 def test_admission_no_op_for_resolved_npc_without_output():
     result = _admit([], current_state=_state(participants=()))
 
@@ -671,6 +732,8 @@ def test_processor_makes_single_batch_call_and_projects_input():
     assert [call["task"] for call in gateway.calls] == ["npc_batch_update"]
     entries = json.loads(gateway.calls[0]["input_data"]["npc_batch_json"])
     assert entries[0]["npc_id"] == "npc_001"
+    assert "personality_trait" not in entries[0]["current"]
+    assert "known_abilities" not in entries[0]["current"]
     assert entries[0]["facts"] == [{"fact_id": "f1", "fact": "沈孤鸿让沈二关门。"}]
     assert entries[0]["evidence"][0]["document_id"] == "turn_3_p001"
     assert batch.entries[0].npc_id == "npc_001"

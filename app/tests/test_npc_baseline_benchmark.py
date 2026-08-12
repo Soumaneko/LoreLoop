@@ -53,8 +53,8 @@ def test_npc_baseline_benchmark_matches_accepted_baseline(benchmark_report):
 def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     cases = {case["case_id"]: case for case in benchmark_report["cases"]}
 
-    assert benchmark_report["aggregate"]["weighted_passed"] == 156
-    assert benchmark_report["aggregate"]["weighted_total"] == 165
+    assert benchmark_report["aggregate"]["weighted_passed"] == 153
+    assert benchmark_report["aggregate"]["weighted_total"] == 159
     assert benchmark_report["aggregate"]["forbidden_violation_count"] == 0
     assert benchmark_report["aggregate"]["invariant_violation_count"] == 0
     assert benchmark_report["aggregate"]["call_count"] == 14
@@ -103,8 +103,18 @@ def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
             "appearance": "左眼有一条旧疤",
         }
     }
-    # - evidenced "隐匿身法" is now added, but the gold expects the name "隐匿".
-    assert cases["ability_append_dedup_cap"]["gold"]["weighted_passed"] == 3
+    # Per-turn batch updates cannot mutate curated abilities while admission is frozen.
+    ability = cases["ability_append_dedup_cap"]
+    assert ability["field_deltas"]["npc_001"].get("known_abilities") is None
+    assert "invalid_stable_change" in {
+        warning[2] for warning in ability["warnings"]
+    }
+    # Per-turn batch updates cannot overwrite curated personality traits.
+    personality = cases["stable_personality_with_evidence"]
+    assert personality["field_deltas"]["npc_001"].get("personality_trait") is None
+    assert "invalid_stable_change" in {
+        warning[2] for warning in personality["warnings"]
+    }
     # - mixed_turn: role+faction+public_summary linkage now works end to end.
     assert cases["mixed_turn"]["gold"]["weighted_passed"] == 42
     assert cases["mixed_turn"]["field_deltas"]["npc_001"]["role"] == "合欢宗宗主"

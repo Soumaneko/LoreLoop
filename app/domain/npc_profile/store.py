@@ -77,7 +77,12 @@ class NPCProfileStore:
         return profile
 
     def upsert(self, profile: NPCProfile) -> str:
+        # Pydantic 模型的字段可被直接赋值，不会自动重跑整体校验。
+        # Store 是最后的持久化防线：任何未经重新校验的内存对象都不得
+        # 序列化进 SQLite。
+        NPCProfile.model_validate(profile.model_dump(mode="python"))
         self._ensure_given_name_alias(profile)
+        NPCProfile.model_validate(profile.model_dump(mode="python"))
         now = profile.updated_at or utc_now()
         profile.updated_at = now
         self._db.execute(

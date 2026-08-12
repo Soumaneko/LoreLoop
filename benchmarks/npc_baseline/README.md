@@ -23,8 +23,10 @@ batch architecture (mention/exact/resolution are deterministic resolver
 outputs; the LLM is measured on field changes, aliases, warnings, and no-ops).
 Recorded from a live API run on 2026-08-12 (second take, accepted):
 
-- weighted gold recall: `156/165` (the baseline allows the model to score below
-  full marks; the 9 missed points are documented exact-string gaps below)
+- weighted gold recall: `153/159` (the baseline allows the model to score below
+  full marks; the 9 missed points are documented exact-string gaps below;
+  personality and abilities are currently curated fields outside per-turn
+  update scoring)
 - forbidden violations: `0`
 - invariant violations: `0`
 - logical gateway calls: `14` (0 calls when identity resolution finds no

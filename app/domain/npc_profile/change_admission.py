@@ -35,11 +35,9 @@ from app.domain.npc_profile.changes import (
     NPCChangeAdmissionWarning,
 )
 from app.domain.npc_profile.schemas import (
-    KnownAbility,
     NPCProfile,
 )
 from app.domain.npc_profile.turn_contract import (
-    AbilityAddChange,
     NPCBatchUpdateEntry,
     PublicSummaryChange,
     ScalarStableChange,
@@ -127,7 +125,6 @@ def admit_npc_batch_update(
 
     accepted_changes: list[AcceptedNPCFieldChange] = []
     warnings: list[NPCChangeAdmissionWarning] = list(entry_warnings or [])
-    added_ability_keys: dict[str, set[str]] = {}
     seen_current_ids: set[str] = set()
     seen_stable_fields: set[tuple[str, str]] = set()
     # 只有真正被丢弃的 entry（schema 阶段 invalid_update_entry）计入；
@@ -172,19 +169,6 @@ def admit_npc_batch_update(
             seen_current_ids,
         )
         for change in entry.stable_changes:
-            if isinstance(change, AbilityAddChange):
-                # append-only 能力按规范化名称去重（``added_ability_keys`` 内部处理），
-                # 不参与标量字段的 (npc_id, field) 去重。
-                _admit_stable_change(
-                    target,
-                    change,
-                    valid_evidence,
-                    turn_index,
-                    accepted_changes,
-                    warnings,
-                    added_ability_keys,
-                )
-                continue
             field_key = (entry.npc_id, change.field)
             if field_key in seen_stable_fields:
                 warnings.append(NPCChangeAdmissionWarning(
@@ -204,7 +188,6 @@ def admit_npc_batch_update(
                 turn_index,
                 accepted_changes,
                 warnings,
-                added_ability_keys,
             )
             if accepted:
                 seen_stable_fields.add(field_key)
@@ -311,12 +294,11 @@ def _profile_index(profiles: list[NPCProfile]) -> dict[str, NPCProfile]:
 
 def _admit_stable_change(
     target: NPCProfile,
-    change: AbilityAddChange | PublicSummaryChange | ScalarStableChange,
+    change: PublicSummaryChange | ScalarStableChange,
     valid_evidence: dict[str, HistoryDocument],
     turn_index: int,
     accepted_changes: list[AcceptedNPCFieldChange],
     warnings: list[NPCChangeAdmissionWarning],
-    added_ability_keys: dict[str, set[str]],
 ) -> bool:
     """per-field 容错审理单条稳定字段变化；返回是否实际接受（append 了 change）。"""
     invalid = [
@@ -336,15 +318,6 @@ def _admit_stable_change(
             evidence_ids=tuple(sorted(set(invalid))),
         ))
         return False
-
-    if isinstance(change, AbilityAddChange):
-        return _admit_ability_add(
-            target,
-            change,
-            turn_index,
-            accepted_changes,
-            added_ability_keys,
-        )
 
     if isinstance(change, PublicSummaryChange):
         if change.value == target.public_summary:
@@ -371,43 +344,6 @@ def _admit_stable_change(
         field=change.field,
         old_value=current,
         new_value=change.value,
-        evidence_ids=tuple(change.evidence_ids),
-        turn_index=turn_index,
-        source="proposal",
-    ))
-    return True
-
-
-def _admit_ability_add(
-    target: NPCProfile,
-    change: AbilityAddChange,
-    turn_index: int,
-    accepted_changes: list[AcceptedNPCFieldChange],
-    added_ability_keys: dict[str, set[str]],
-) -> bool:
-    """append-only 能力 add：按规范化能力名去重、上限 5；返回是否实际接受。"""
-    key = normalize_compact_key(change.ability.name)
-    if not key:
-        return False
-    existing_keys = {
-        normalize_compact_key(ability.name)
-        for ability in target.known_abilities
-    }
-    added = added_ability_keys.setdefault(target.npc_id, set())
-    if key in existing_keys or key in added:
-        return False
-    if len(target.known_abilities) + len(added) >= 5:
-        return False
-    added.add(key)
-    accepted_changes.append(AcceptedNPCAbilityAddChange(
-        npc_id=target.npc_id,
-        canonical_name=target.name,
-        additions=[
-            KnownAbility(
-                name=change.ability.name,
-                description=change.ability.description,
-            )
-        ],
         evidence_ids=tuple(change.evidence_ids),
         turn_index=turn_index,
         source="proposal",
@@ -574,8 +510,15 @@ def _apply_accepted_changes(
         _touch_profile(profile, scene_id, admitted_at)
         mutated[profile.npc_id] = profile
 
+    # ``validate_assignment`` 未开启，因此上面的原子 setattr/list 合并
+    # 完成后在这里重新验证整个 snapshot。这是写库前的领域边界，
+    # 防止今后新字段约束与 mutation contract 漂移时产生无效对象。
+    validated = [
+        NPCProfile.model_validate(profile.model_dump(mode="python"))
+        for profile in mutated.values()
+    ]
     return sorted(
-        mutated.values(),
+        validated,
         key=lambda profile: (normalize_compact_key(profile.name), profile.npc_id),
     )
 
