@@ -1,0 +1,850 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "case_id": "exact_canonical_and_alias",
+      "description": "Exact hits via canonical name, permanent alias, and transient alias resolve to one existing profile with a temporary patch.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿走进醉花楼，环顾四周。沈二在他身后站定。\n\n沈二爷低声道：「把门关上。」",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿一行进入醉花楼。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿进入醉花楼。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二随行。\"}, {\"fact_id\": \"f3\", \"fact\": \"沈二爷命人关门。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [
+        {
+          "id": "core_world_bg",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "这是一个以修仙江湖为背景的文字冒险。NPC 身份以场景事实为准。"
+        }
+      ],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "aliases": [
+            "沈二"
+          ],
+          "transient_aliases": {
+            "沈二爷": 3
+          },
+          "updated_at": "2026-08-12T00:00:200Z"
+        },
+        {
+          "npc_id": "npc_002",
+          "name": "林川",
+          "updated_at": "2026-08-12T00:00:100Z"
+        }
+      ],
+      "gold": {
+        "mention_recall": [
+          {
+            "name": "沈孤鸿",
+            "importance": "must"
+          },
+          {
+            "name": "沈二",
+            "importance": "must"
+          },
+          {
+            "name": "沈二爷",
+            "importance": "must"
+          }
+        ],
+        "exact_expectations": [
+          {
+            "npc_id": "npc_001",
+            "surface": "沈孤鸿",
+            "importance": "must"
+          },
+          {
+            "npc_id": "npc_001",
+            "surface": "沈二",
+            "importance": "must"
+          },
+          {
+            "npc_id": "npc_001",
+            "surface": "沈二爷",
+            "importance": "must"
+          }
+        ],
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "last_known_location",
+            "value": "醉花楼",
+            "importance": "must"
+          }
+        ],
+        "no_op_expectations": [
+          {
+            "npc_id": "npc_002",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "near_name_no_alias",
+      "description": "A near-identical name is unresolved and becomes a distinct NPC; it must never alias-match the existing profile.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "林川在茶馆坐下。陆川推门而入，径直走向他。",
+      "scene_facts": "{\"scene_focus\": \"林川与陆川在茶馆相遇。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"林川在茶馆坐下。\"}, {\"fact_id\": \"f2\", \"fact\": \"陆川推门而入。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "茶馆",
+      "participants": [
+        "林川"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "林川",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "mention_recall": [
+          {
+            "name": "陆川",
+            "importance": "must"
+          },
+          {
+            "name": "林川",
+            "importance": "must"
+          }
+        ],
+        "resolution_expectations": [
+          {
+            "candidate_name": "陆川",
+            "resolution": "new",
+            "importance": "must"
+          },
+          {
+            "candidate_name": "林川",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "forbidden_resolutions": [
+          {
+            "candidate_name": "陆川",
+            "resolution": "alias_match"
+          }
+        ],
+        "new_npc_expectations": [
+          {
+            "name": "陆川",
+            "importance": "must"
+          }
+        ],
+        "no_op_expectations": [],
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "last_known_location",
+            "value": "茶馆",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "new_persistent_vs_ignore_oneoff",
+      "description": "A persistent new role is admitted as a candidate; a one-off extra is ignored.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "江晚晴提灯而来，说要留在镇上查案。一个路人甲在旁看热闹后离开。",
+      "scene_facts": "{\"scene_focus\": \"江晚晴受命查案，路人甲短暂停留。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江晚晴受命查案并留在镇上。\"}, {\"fact_id\": \"f2\", \"fact\": \"路人甲短暂看热闹后离开。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "镇口",
+      "participants": [
+        "江晚晴"
+      ],
+      "core_memory_items": [],
+      "roster": [],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "江晚晴",
+            "resolution": "new",
+            "importance": "must"
+          },
+          {
+            "candidate_name": "路人甲",
+            "resolution": "ignore",
+            "importance": "must"
+          }
+        ],
+        "new_npc_expectations": [
+          {
+            "name": "江晚晴",
+            "importance": "must"
+          }
+        ],
+        "forbidden_new_names": [
+          "路人甲"
+        ]
+      }
+    },
+    {
+      "case_id": "player_identity_protected",
+      "description": "The player is never admitted as an NPC; the mention resolves to ignore.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "萧云痕独自站在城楼上，望着远处的灯火。",
+      "scene_facts": "{\"scene_focus\": \"萧云痕在城楼瞭望。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"萧云痕在城楼瞭望。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "城楼",
+      "participants": [
+        "萧云痕"
+      ],
+      "core_memory_items": [],
+      "roster": [],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "萧云痕",
+            "resolution": "ignore",
+            "importance": "must"
+          }
+        ],
+        "forbidden_resolutions": [
+          {
+            "candidate_name": "萧云痕",
+            "resolution": "new"
+          },
+          {
+            "candidate_name": "萧云痕",
+            "resolution": "alias_match"
+          }
+        ],
+        "forbidden_new_names": [
+          "萧云痕"
+        ]
+      }
+    },
+    {
+      "case_id": "org_place_ignored",
+      "description": "Organizations and places are filtered at extraction and never become NPC mentions.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "合欢宗的宗门坐落在醉花楼后山的密林里。",
+      "scene_facts": "{\"scene_focus\": \"合欢宗宗门的位置。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"合欢宗宗门位于醉花楼后山。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [],
+      "core_memory_items": [],
+      "roster": [],
+      "gold": {
+        "forbidden_mentions": [
+          "合欢宗",
+          "醉花楼"
+        ],
+        "forbidden_new_names": [
+          "合欢宗",
+          "醉花楼"
+        ]
+      }
+    },
+    {
+      "case_id": "current_fields_snapshot",
+      "description": "The temporary channel snapshots location and persistent intent; a single-action attitude guess is forbidden.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿在醉花楼大堂踱步，目光始终不离门口，低声说：「我要查明信物来历。」",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿在醉花楼大堂观察门口。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿在醉花楼大堂踱步。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈孤鸿要查明信物来历。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "last_known_location",
+            "value": "醉花楼大堂",
+            "importance": "must"
+          },
+          {
+            "npc_id": "npc_001",
+            "field": "current_intent",
+            "value": "查明信物来历",
+            "importance": "must"
+          }
+        ],
+        "forbidden_field_changes": [
+          {
+            "npc_id": "npc_001",
+            "field": "attitude_to_player"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "attitude_change_explicit",
+      "description": "An explicitly expressed public attitude change toward the player is recorded in the temporary channel.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿原本戒备地盯着萧云痕，忽然收剑，沉声道：「我可以信你。此事拜托了。」",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿对萧云痕放下戒备。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿当面向萧云痕表示信任。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "attitude_to_player",
+            "value": "信任",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "departed_direction",
+      "description": "An off-scene NPC's explicit departure direction is captured by the temporary channel.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿已不在堂内。小二道：「沈公子往城南去了。」",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿已离开大堂。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿已不在堂内。\"}, {\"fact_id\": \"f2\", \"fact\": \"小二称沈孤鸿往城南去了。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "last_known_location",
+            "value": "城南",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "transient_emotion_not_recorded",
+      "description": "A single-action transient emotion must not be written into attitude or intent.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿猛地一拍桌子，满脸怒容，随后又叹了口气。",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿短暂动怒。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿拍桌动怒，旋即平复。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "forbidden_field_changes": [
+          {
+            "npc_id": "npc_001",
+            "field": "attitude_to_player"
+          },
+          {
+            "npc_id": "npc_001",
+            "field": "current_intent"
+          }
+        ],
+        "no_op_expectations": []
+      }
+    },
+    {
+      "case_id": "stable_fields_with_evidence",
+      "description": "Stable identity fields update when backed by valid scene-paragraph evidence; one paragraph may support several fields.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿拂袖道：「我乃合欢宗宗主，此事由我一肩担起。」",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿自承身份。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿自称合欢宗宗主。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "role",
+            "value": "合欢宗宗主",
+            "importance": "must"
+          },
+          {
+            "npc_id": "npc_001",
+            "field": "faction",
+            "value": "合欢宗",
+            "importance": "must"
+          },
+          {
+            "npc_id": "npc_001",
+            "field": "public_summary",
+            "value": "合欢宗现任宗主，决意独自承担门派事务。",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "stable_appearance_with_evidence",
+      "description": "A persistent physical feature updates the stable appearance field with scene-paragraph evidence.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿掀开斗篷。灯下，他左眼横着一条旧疤，据说是少年时留下的。",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿左眼的旧疤。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿左眼有一条旧疤，据说是少年时留下的。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "appearance",
+            "value": "左眼有一条旧疤，据说是少年时留下的。",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "stable_personality_with_evidence",
+      "description": "A stable personality trait updates with scene-paragraph evidence.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿遇险时总是先护着旁人，众人皆道他为人沉稳、重情重义。",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿的性格口碑。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿遇险先护旁人。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人认为沈孤鸿沉稳重情。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "personality_trait",
+            "value": "沉稳重情",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "ability_append_dedup_cap",
+      "description": "known_abilities is append-only: duplicate names are skipped and new abilities merge in.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "沈孤鸿露了一手剑法，又使出一招隐匿身法。",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿展示武艺。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿展示剑法与隐匿身法。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "演武场",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "known_abilities": [
+            {
+              "name": "剑法",
+              "description": "剑术"
+            },
+            {
+              "name": "轻功",
+              "description": "身法"
+            }
+          ],
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "known_abilities",
+            "value": [
+              {
+                "name": "剑法",
+                "description": "剑术"
+              },
+              {
+                "name": "轻功",
+                "description": "身法"
+              },
+              {
+                "name": "隐匿",
+                "description": "善于隐匿气息"
+              }
+            ],
+            "importance": "must"
+          }
+        ],
+        "forbidden_field_changes": []
+      }
+    },
+    {
+      "case_id": "large_roster",
+      "description": "A 110-NPC roster keeps exact hits intact while identity options remain bounded and linear-growth is quantified.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "npc000走进殿内。一名无名老者立在阶下。",
+      "scene_facts": "{\"scene_focus\": \"npc000入殿，无名老者立阶下。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"npc000走进殿内。\"}, {\"fact_id\": \"f2\", \"fact\": \"一名无名老者立在阶下。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "大殿",
+      "participants": [
+        "npc000"
+      ],
+      "core_memory_items": [],
+      "roster": [],
+      "roster_template": {
+        "count": 110,
+        "name_prefix": "npc"
+      },
+      "gold": {
+        "exact_expectations": [
+          {
+            "npc_id": "npc000",
+            "surface": "npc000",
+            "importance": "must"
+          }
+        ],
+        "resolution_expectations": [
+          {
+            "candidate_name": "npc000",
+            "resolution": "existing",
+            "importance": "must"
+          },
+          {
+            "candidate_name": "无名老者",
+            "resolution": "ignore",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "alias_fixed_title",
+      "description": "An explicitly stated fixed nickname persists as a permanent alias.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "江湖上都称沈孤鸿一声「沈二爷」。沈二爷便是沈孤鸿的别号。",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿的江湖别号。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江湖称沈孤鸿为沈二爷。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二爷是沈孤鸿的别号。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        },
+        {
+          "npc_id": "npc_002",
+          "name": "林川",
+          "updated_at": "2026-08-12T00:00:100Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          },
+          {
+            "candidate_name": "沈二爷",
+            "resolution": "alias_match",
+            "target_npc_id": "npc_001",
+            "importance": "must"
+          }
+        ],
+        "alias_expectations": [
+          {
+            "npc_id": "npc_001",
+            "surface": "沈二爷",
+            "importance": "must"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "companion_is_distinct",
+      "description": "A companion described as following the NPC is a different person and must never alias-match.",
+      "scene_id": "scene_001",
+      "turn_index": 0,
+      "user_input": "",
+      "scene_text": "一名青衣客紧随沈孤鸿进门，正是他多年的旧友。",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿与一名青衣客同行。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"一名青衣客紧随沈孤鸿进门。\"}, {\"fact_id\": \"f2\", \"fact\": \"青衣客是沈孤鸿多年的旧友。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿",
+        "青衣客"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "updated_at": "2026-08-12T00:00:200Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          }
+        ],
+        "forbidden_resolutions": [
+          {
+            "candidate_name": "青衣客",
+            "resolution": "alias_match"
+          }
+        ],
+        "forbidden_aliases": [
+          {
+            "npc_id": "npc_001",
+            "surface": "青衣客"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "mixed_turn",
+      "description": "Existing, new, and ignore appear together with a stable-field change backed by this turn's evidence and a location snapshot; no unfounded attitude is recorded.",
+      "scene_id": "scene_001",
+      "turn_index": 5,
+      "user_input": "",
+      "scene_text": "沈孤鸿走进醉花楼，吩咐关门。众人皆知他是合欢宗宗主。林川也在这里。陆川推门而入。路人甲在门口张望片刻后离开。",
+      "scene_facts": "{\"scene_focus\": \"醉花楼一夜，众人进出。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿走进醉花楼，吩咐关门。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人皆知他是合欢宗宗主。\"}, {\"fact_id\": \"f3\", \"fact\": \"林川在场。\"}, {\"fact_id\": \"f4\", \"fact\": \"陆川推门而入。\"}, {\"fact_id\": \"f5\", \"fact\": \"路人甲短暂停留后离开。\"}]}",
+      "player_name": "萧云痕",
+      "scene_location": "醉花楼",
+      "participants": [
+        "沈孤鸿",
+        "林川"
+      ],
+      "core_memory_items": [],
+      "roster": [
+        {
+          "npc_id": "npc_001",
+          "name": "沈孤鸿",
+          "aliases": [
+            "沈二"
+          ],
+          "updated_at": "2026-08-12T00:00:200Z"
+        },
+        {
+          "npc_id": "npc_002",
+          "name": "林川",
+          "updated_at": "2026-08-12T00:00:100Z"
+        }
+      ],
+      "gold": {
+        "mention_recall": [
+          {
+            "name": "沈孤鸿",
+            "importance": "must"
+          },
+          {
+            "name": "林川",
+            "importance": "must"
+          },
+          {
+            "name": "陆川",
+            "importance": "must"
+          },
+          {
+            "name": "路人甲",
+            "importance": "must"
+          }
+        ],
+        "exact_expectations": [
+          {
+            "npc_id": "npc_001",
+            "surface": "沈孤鸿",
+            "importance": "must"
+          },
+          {
+            "npc_id": "npc_002",
+            "surface": "林川",
+            "importance": "must"
+          }
+        ],
+        "resolution_expectations": [
+          {
+            "candidate_name": "沈孤鸿",
+            "resolution": "existing",
+            "importance": "must"
+          },
+          {
+            "candidate_name": "林川",
+            "resolution": "existing",
+            "importance": "must"
+          },
+          {
+            "candidate_name": "陆川",
+            "resolution": "new",
+            "importance": "must"
+          },
+          {
+            "candidate_name": "路人甲",
+            "resolution": "ignore",
+            "importance": "must"
+          },
+          {
+            "candidate_name": "合欢宗宗主",
+            "resolution": "alias_match",
+            "target_npc_id": "npc_001",
+            "importance": "must"
+          }
+        ],
+        "new_npc_expectations": [
+          {
+            "name": "陆川",
+            "importance": "must"
+          }
+        ],
+        "forbidden_new_names": [
+          "路人甲"
+        ],
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc_001",
+            "field": "role",
+            "value": "合欢宗宗主",
+            "importance": "must"
+          },
+          {
+            "npc_id": "npc_002",
+            "field": "last_known_location",
+            "value": "醉花楼",
+            "importance": "must"
+          }
+        ],
+        "forbidden_field_changes": [
+          {
+            "npc_id": "npc_001",
+            "field": "attitude_to_player"
+          },
+          {
+            "npc_id": "npc_001",
+            "field": "current_intent"
+          }
+        ],
+        "forbidden_resolutions": [
+          {
+            "candidate_name": "合欢宗宗主",
+            "resolution": "new"
+          }
+        ],
+        "forbidden_aliases": [
+          {
+            "npc_id": "npc_001",
+            "surface": "合欢宗宗主"
+          }
+        ]
+      }
+    }
+  ]
+}

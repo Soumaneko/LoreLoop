@@ -800,6 +800,26 @@ def test_updater_prompt_defines_temporary_and_long_term_channels():
     assert "profile_patch" not in prompt
 
 
+def test_update_prompt_renders_with_full_input():
+    from app.core.llm.prompts import PromptLoader
+
+    template, version = PromptLoader().load("npc_profile_update")
+    assert version == "v1"
+    input_data = {
+        "core_memory_json": "{}",
+        "current_state_summary_json": "{}",
+        "recent_summaries_json": "[]",
+        "npc_candidates_json": "[]",
+        "existing_npc_options_json": "[]",
+        "scene_facts_json": "{}",
+        "scene_paragraph_evidence_json": "[]",
+        "output_schema_json": "{}",
+    }
+    rendered = template.format(**input_data)
+    assert "{{" not in rendered
+    assert '{"<字段名>": ["<Scene Paragraph Evidence 的 document_id>", ...]}' in rendered
+
+
 def test_long_term_patch_updates_existing_profile_fields():
     store = NPCProfileStore(":memory:")
     existing_id = store.upsert(

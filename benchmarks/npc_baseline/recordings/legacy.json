@@ -1,0 +1,961 @@
+{
+  "version": 1,
+  "backend": "legacy",
+  "cases": {
+    "exact_canonical_and_alias": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿进入醉花楼。"
+          },
+          {
+            "name": "沈二",
+            "context_span": "沈二随行。"
+          },
+          {
+            "name": "沈二爷",
+            "context_span": "沈二爷命人关门。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": 0,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿进入醉花楼，环顾四周。其随行人员沈二（沈二爷）命人关门。",
+            "temporary_patch": {
+              "last_known_location": "醉花楼",
+              "attitude_to_player": null,
+              "current_intent": null
+            },
+            "long_term_patch": null,
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 70,
+          "prompt_tokens": 553
+        },
+        "npc_profile_update": {
+          "completion_tokens": 315,
+          "prompt_tokens": 7327
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 2
+      }
+    },
+    "near_name_no_alias": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "林川",
+            "context_span": "林川在茶馆坐下。"
+          },
+          {
+            "name": "陆川",
+            "context_span": "陆川推门而入。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "林川在茶馆坐下，等待或休息。",
+            "temporary_patch": {
+              "last_known_location": "茶馆",
+              "attitude_to_player": null,
+              "current_intent": null
+            },
+            "long_term_patch": null,
+            "new_profile": null
+          },
+          {
+            "candidate_index": 1,
+            "resolution": "new",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "陆川推门而入，径直走向林川，似乎与他有约或相识。",
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": {
+              "name": "陆川",
+              "aliases": [],
+              "public_summary": "与林川相识，在茶馆与他碰面。",
+              "role": null,
+              "appearance": null,
+              "personality_trait": null,
+              "known_abilities": [],
+              "faction": null,
+              "last_known_location": "茶馆",
+              "attitude_to_player": null,
+              "current_intent": "与林川会面"
+            }
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 46,
+          "prompt_tokens": 532
+        },
+        "npc_profile_update": {
+          "completion_tokens": 309,
+          "prompt_tokens": 3328
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "new_persistent_vs_ignore_oneoff": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "江晚晴",
+            "context_span": "江晚晴受命查案并留在镇上。"
+          },
+          {
+            "name": "路人甲",
+            "context_span": "路人甲短暂看热闹后离开。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "new",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "提灯而来，受命查案并留在镇上。",
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": {
+              "name": "江晚晴",
+              "aliases": [],
+              "public_summary": "受命查案并留在镇上的女子。",
+              "role": "查案者",
+              "appearance": null,
+              "personality_trait": null,
+              "known_abilities": [],
+              "faction": null,
+              "last_known_location": "镇口",
+              "attitude_to_player": null,
+              "current_intent": "查案"
+            }
+          },
+          {
+            "candidate_index": 1,
+            "resolution": "ignore",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "短暂看热闹后离开。",
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 54,
+          "prompt_tokens": 543
+        },
+        "npc_profile_update": {
+          "completion_tokens": 272,
+          "prompt_tokens": 3195
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "player_identity_protected": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "萧云痕",
+            "context_span": "萧云痕在城楼瞭望。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "独自站在城楼上，望着远处的灯火。",
+            "temporary_patch": {
+              "last_known_location": "城楼"
+            },
+            "long_term_patch": null,
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 30,
+          "prompt_tokens": 516
+        },
+        "npc_profile_update": {
+          "completion_tokens": 101,
+          "prompt_tokens": 3105
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "org_place_ignored": {
+      "npc_profile_extract": {
+        "mentions": []
+      },
+      "npc_profile_update": null,
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 6,
+          "prompt_tokens": 515
+        },
+        "npc_profile_update": null
+      },
+      "attempts": {
+        "npc_profile_extract": 1
+      }
+    },
+    "current_fields_snapshot": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿在醉花楼大堂踱步。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "在醉花楼大堂踱步，目光始终不离门口，低声说要查明信物来历。",
+            "temporary_patch": {
+              "last_known_location": "醉花楼大堂",
+              "attitude_to_player": null,
+              "current_intent": "查明信物来历"
+            },
+            "long_term_patch": null,
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 32,
+          "prompt_tokens": 542
+        },
+        "npc_profile_update": {
+          "completion_tokens": 135,
+          "prompt_tokens": 3310
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "attitude_change_explicit": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿当面向萧云痕表示信任。"
+          },
+          {
+            "name": "萧云痕",
+            "context_span": "沈孤鸿当面向萧云痕表示信任。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿原本戒备地盯着萧云痕，忽然收剑，表示信任并托付某事。",
+            "temporary_patch": {
+              "last_known_location": "醉花楼",
+              "attitude_to_player": "信任",
+              "current_intent": "托付萧云痕某事"
+            },
+            "long_term_patch": {
+              "personality_trait": "戒备心重但能放下成见",
+              "field_evidence": {
+                "personality_trait": [
+                  "turn_0_p001"
+                ]
+              }
+            },
+            "new_profile": null
+          },
+          {
+            "candidate_index": 1,
+            "resolution": "ignore",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": null,
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 58,
+          "prompt_tokens": 519
+        },
+        "npc_profile_update": {
+          "completion_tokens": 250,
+          "prompt_tokens": 3341
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "departed_direction": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿已不在堂内。小二称沈孤鸿往城南去了。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿已离开醉花楼大堂，据小二称其往城南去了。",
+            "temporary_patch": {
+              "last_known_location": "城南",
+              "attitude_to_player": null,
+              "current_intent": null
+            },
+            "long_term_patch": null,
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 38,
+          "prompt_tokens": 535
+        },
+        "npc_profile_update": {
+          "completion_tokens": 126,
+          "prompt_tokens": 3280
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "transient_emotion_not_recorded": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿拍桌动怒，旋即平复。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿猛地拍桌，满脸怒容，随即又叹了口气，情绪由愤怒转为无奈。",
+            "temporary_patch": {
+              "last_known_location": "醉花楼",
+              "attitude_to_player": null,
+              "current_intent": null
+            },
+            "long_term_patch": {
+              "public_summary": null,
+              "role": null,
+              "appearance": null,
+              "personality_trait": null,
+              "faction": null,
+              "known_abilities": null,
+              "field_evidence": {}
+            },
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 33,
+          "prompt_tokens": 517
+        },
+        "npc_profile_update": {
+          "completion_tokens": 184,
+          "prompt_tokens": 3276
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "stable_fields_with_evidence": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿自称合欢宗宗主。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿拂袖自称合欢宗宗主，语气决绝，表示愿一肩担起某事。",
+            "temporary_patch": {
+              "last_known_location": "醉花楼",
+              "attitude_to_player": null,
+              "current_intent": "担起合欢宗宗主之责"
+            },
+            "long_term_patch": {
+              "role": "合欢宗宗主",
+              "faction": "合欢宗",
+              "field_evidence": {
+                "role": [
+                  "turn_0_p001"
+                ],
+                "faction": [
+                  "turn_0_p001"
+                ]
+              }
+            },
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 30,
+          "prompt_tokens": 514
+        },
+        "npc_profile_update": {
+          "completion_tokens": 194,
+          "prompt_tokens": 3276
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "stable_appearance_with_evidence": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿左眼有一条旧疤，据说是少年时留下的。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿掀开斗篷，在灯下露出左眼旧疤。",
+            "temporary_patch": null,
+            "long_term_patch": {
+              "appearance": "左眼有一条旧疤，据说是少年时留下的。",
+              "field_evidence": {
+                "appearance": [
+                  "turn_0_p001"
+                ]
+              }
+            },
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 36,
+          "prompt_tokens": 521
+        },
+        "npc_profile_update": {
+          "completion_tokens": 138,
+          "prompt_tokens": 3294
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "stable_personality_with_evidence": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿遇险先护旁人。众人认为沈孤鸿沉稳重情。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "众人议论沈孤鸿遇险时先护旁人，口碑沉稳重情。",
+            "temporary_patch": null,
+            "long_term_patch": {
+              "public_summary": null,
+              "role": null,
+              "appearance": null,
+              "personality_trait": "沉稳重情",
+              "faction": null,
+              "known_abilities": null,
+              "field_evidence": {
+                "personality_trait": [
+                  "turn_0_p001"
+                ]
+              }
+            },
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 39,
+          "prompt_tokens": 535
+        },
+        "npc_profile_update": {
+          "completion_tokens": 169,
+          "prompt_tokens": 3309
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "ability_append_dedup_cap": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿展示剑法与隐匿身法。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿在演武场展示了一套剑法，随后又使出一招隐匿身法，展现了其武艺。",
+            "temporary_patch": {
+              "last_known_location": "演武场",
+              "attitude_to_player": null,
+              "current_intent": null
+            },
+            "long_term_patch": {
+              "known_abilities": {
+                "add": [
+                  {
+                    "name": "剑法",
+                    "description": "剑术"
+                  },
+                  {
+                    "name": "轻功",
+                    "description": "身法"
+                  }
+                ]
+              },
+              "field_evidence": {
+                "known_abilities": [
+                  "turn_0_p001"
+                ]
+              }
+            },
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 31,
+          "prompt_tokens": 515
+        },
+        "npc_profile_update": {
+          "completion_tokens": 219,
+          "prompt_tokens": 3316
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "large_roster": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "npc000",
+            "context_span": "npc000走进殿内。"
+          },
+          {
+            "name": "无名老者",
+            "context_span": "一名无名老者立在阶下。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "npc000走进殿内。",
+            "temporary_patch": {
+              "last_known_location": "大殿",
+              "attitude_to_player": null,
+              "current_intent": null
+            },
+            "long_term_patch": null,
+            "new_profile": null
+          },
+          {
+            "candidate_index": 1,
+            "resolution": "ignore",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "一名无名老者立在阶下，身份不明。",
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 49,
+          "prompt_tokens": 537
+        },
+        "npc_profile_update": {
+          "completion_tokens": 196,
+          "prompt_tokens": 10422
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "alias_fixed_title": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "江湖称沈孤鸿为沈二爷。"
+          },
+          {
+            "name": "沈二爷",
+            "context_span": "沈二爷是沈孤鸿的别号。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": null,
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": null
+          },
+          {
+            "candidate_index": 1,
+            "resolution": "alias_match",
+            "matched_npc_index": 0,
+            "persist_alias": true,
+            "turn_observation": null,
+            "temporary_patch": null,
+            "long_term_patch": {
+              "field_evidence": {
+                "public_summary": [
+                  "turn_0_p001"
+                ]
+              },
+              "public_summary": "江湖人称沈二爷。"
+            },
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 57,
+          "prompt_tokens": 540
+        },
+        "npc_profile_update": {
+          "completion_tokens": 194,
+          "prompt_tokens": 3423
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "companion_is_distinct": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿与一名青衣客同行。"
+          },
+          {
+            "name": "青衣客",
+            "context_span": "青衣客是沈孤鸿多年的旧友。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿与青衣客一同进入醉花楼。",
+            "temporary_patch": {
+              "last_known_location": "醉花楼",
+              "attitude_to_player": null,
+              "current_intent": null
+            },
+            "long_term_patch": null,
+            "new_profile": null
+          },
+          {
+            "candidate_index": 1,
+            "resolution": "new",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "青衣客紧随沈孤鸿进门，是沈孤鸿多年的旧友。",
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": {
+              "name": "青衣客",
+              "aliases": [],
+              "public_summary": "沈孤鸿多年的旧友。",
+              "role": null,
+              "appearance": "身着青衣。",
+              "personality_trait": null,
+              "known_abilities": [],
+              "faction": null,
+              "last_known_location": "醉花楼",
+              "attitude_to_player": null,
+              "current_intent": null
+            }
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 54,
+          "prompt_tokens": 539
+        },
+        "npc_profile_update": {
+          "completion_tokens": 307,
+          "prompt_tokens": 3359
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    },
+    "mixed_turn": {
+      "npc_profile_extract": {
+        "mentions": [
+          {
+            "name": "沈孤鸿",
+            "context_span": "沈孤鸿走进醉花楼，吩咐关门。"
+          },
+          {
+            "name": "合欢宗宗主",
+            "context_span": "众人皆知他是合欢宗宗主。"
+          },
+          {
+            "name": "林川",
+            "context_span": "林川在场。"
+          },
+          {
+            "name": "陆川",
+            "context_span": "陆川推门而入。"
+          },
+          {
+            "name": "路人甲",
+            "context_span": "路人甲短暂停留后离开。"
+          }
+        ]
+      },
+      "npc_profile_update": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "沈孤鸿走进醉花楼并吩咐关门，表现出对场所的控制权。",
+            "temporary_patch": {
+              "last_known_location": "醉花楼",
+              "attitude_to_player": null,
+              "current_intent": "吩咐关门，似有要事"
+            },
+            "long_term_patch": {
+              "role": "合欢宗宗主",
+              "public_summary": null,
+              "appearance": null,
+              "personality_trait": null,
+              "faction": "合欢宗",
+              "known_abilities": null,
+              "field_evidence": {
+                "role": [
+                  "turn_5_p001"
+                ],
+                "faction": [
+                  "turn_5_p001"
+                ]
+              }
+            },
+            "new_profile": null
+          },
+          {
+            "candidate_index": 1,
+            "resolution": "alias_match",
+            "matched_npc_index": 0,
+            "persist_alias": true,
+            "turn_observation": "众人皆知他是合欢宗宗主，此身份在本场景被公开确认。",
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": null
+          },
+          {
+            "candidate_index": 2,
+            "resolution": "existing",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "林川在醉花楼内。",
+            "temporary_patch": {
+              "last_known_location": "醉花楼",
+              "attitude_to_player": null,
+              "current_intent": null
+            },
+            "long_term_patch": null,
+            "new_profile": null
+          },
+          {
+            "candidate_index": 3,
+            "resolution": "new",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "陆川推门进入醉花楼。",
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": {
+              "name": "陆川",
+              "aliases": [],
+              "public_summary": null,
+              "role": null,
+              "appearance": null,
+              "personality_trait": null,
+              "known_abilities": [],
+              "faction": null,
+              "last_known_location": "醉花楼",
+              "attitude_to_player": null,
+              "current_intent": null
+            }
+          },
+          {
+            "candidate_index": 4,
+            "resolution": "ignore",
+            "matched_npc_index": null,
+            "persist_alias": false,
+            "turn_observation": "路人甲在门口短暂张望后离开，无进一步互动。",
+            "temporary_patch": null,
+            "long_term_patch": null,
+            "new_profile": null
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_profile_extract": {
+          "completion_tokens": 95,
+          "prompt_tokens": 594
+        },
+        "npc_profile_update": {
+          "completion_tokens": 670,
+          "prompt_tokens": 3759
+        }
+      },
+      "attempts": {
+        "npc_profile_extract": 1,
+        "npc_profile_update": 1
+      }
+    }
+  }
+}

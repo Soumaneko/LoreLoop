@@ -85,7 +85,7 @@
   - existing / alias_match：稳定身份字段（public_summary、role、appearance、personality_trait、faction、known_abilities）发生变化时才填写相应字段。
   - new / ignore：必须为 null。
 - `field_evidence`：
-  - 位于 long_term_patch 内。每个被写入的高风险字段（public_summary、role、appearance、personality_trait、known_abilities、faction）必须同时给出对应条目：`{"<字段名>": ["<Scene Paragraph Evidence 的 document_id>", ...]}`。每个 `document_id` 必须来自上文的 Scene Paragraph Evidence，且该段落必须明确提及该 NPC 并支持对应字段。
+  - 位于 long_term_patch 内。每个被写入的高风险字段（public_summary、role、appearance、personality_trait、known_abilities、faction）必须同时给出对应条目：`{{"<字段名>": ["<Scene Paragraph Evidence 的 document_id>", ...]}}`。每个 `document_id` 必须来自上文的 Scene Paragraph Evidence，且该段落必须明确提及该 NPC 并支持对应字段。
   - 没有写入的字段不需要条目；缺条目或引用无效 `document_id` 的字段更新会被程序丢弃。
 - `new_profile`：
   - new：必须填写完整公开档案，name 必须保持候选原始 name。
