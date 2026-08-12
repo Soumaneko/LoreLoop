@@ -29,11 +29,15 @@ snapshot 应用收敛为一个深的 NPC change admission 模块：
 
 from __future__ import annotations
 
+from typing import Iterable
+
 from app.core.text import normalize_compact_key
 from app.domain.confirmed_history.schemas import HistoryDocument
 from app.domain.current_state.schemas import CurrentState
 from app.domain.npc_profile.changes import (
+    NPCTurnAdmissionError,
     NPCTurnValidationError,
+    NPCBatchCoverage,
     AcceptedNPCAbilityAddChange,
     AcceptedNPCAliasChange,
     AcceptedNPCFieldChange,
@@ -52,6 +56,7 @@ from app.domain.npc_profile.turn_contract import (
     AliasMatchProposal,
     ExistingNPCProposal,
     NewNPCProposal,
+    NPCBatchUpdateEntry,
     NPCTurnProposal,
     NPCTurnRequest,
     PublicSummaryChange,
@@ -222,6 +227,265 @@ def admit_npc_turn_changes(
     )
 
 
+def admit_npc_batch_update(
+    *,
+    updates: list[NPCBatchUpdateEntry],
+    entry_warnings: list[NPCChangeAdmissionWarning] | None = None,
+    resolved_npc_ids: Iterable[str],
+    alias_changes: list[AcceptedNPCAliasChange],
+    profiles: list[NPCProfile],
+    evidence_documents: dict[str, HistoryDocument],
+    current_state: CurrentState,
+    turn_index: int,
+    scene_id: str,
+    admitted_at: str,
+) -> NPCChangeAdmissionResult:
+    """审理 NPC batch field updater 的输出，per-field 容错（宁漏勿错）。
+
+    只有程序错误才整批失败：scene_id 不匹配、profiles 重复 npc_id、解析出的
+    npc_id 没有对应档案。模型输出层面的问题一律只丢对应条目 / 字段：
+
+    - schema 解析失败的条目 → 丢弃并记 warning（``invalid_update_entry``，由
+      ``entry_warnings`` 传入，宽松 wire envelope 阶段产生）；
+    - 未知或未解析 npc_id 的条目 → 丢弃并记 warning（``unknown_npc_id`` /
+      ``unresolved_npc_id``）；
+    - 字段证据非法 → 只丢该字段（``change_evidence_dropped``）；
+    - 同一 (npc_id, field) 重复（能力按规范化名称去重）→ 保留接受的首条；
+    - 已解析但无输出的 NPC → no-op；
+    - CurrentState 同步独立执行，不受 LLM 输出影响。
+    """
+    if scene_id != current_state.scene.scene_id:
+        raise ValueError(
+            f"scene_id mismatch: admission scene {scene_id!r} != "
+            f"current_state scene {current_state.scene.scene_id!r}"
+        )
+
+    profile_by_id = _profile_index(profiles)
+    if len(profile_by_id) != len(profiles):
+        raise ValueError("profiles contain duplicate npc_ids")
+
+    resolved_ids = set(resolved_npc_ids)
+    if resolved_ids - set(profile_by_id):
+        raise ValueError(
+            "resolved npc_ids have no profile: "
+            f"{sorted(resolved_ids - set(profile_by_id))}"
+        )
+
+    alias_npc_ids = {change.npc_id for change in alias_changes}
+    if alias_npc_ids - resolved_ids:
+        raise ValueError(
+            "alias changes reference npc_ids outside the resolved set: "
+            f"{sorted(alias_npc_ids - resolved_ids)}"
+        )
+
+    # alias mutation 自身校验（确定性输入损坏 → ValueError）：
+    # canonical_name 必须与档案一致、alias 不得为空白。
+    for change in alias_changes:
+        profile = profile_by_id[change.npc_id]
+        if change.canonical_name != profile.name:
+            raise ValueError(
+                f"alias change canonical_name {change.canonical_name!r} "
+                f"does not match profile name {profile.name!r}"
+            )
+        if not normalize_compact_key(change.alias):
+            raise ValueError(
+                f"alias change for {profile.npc_id!r} has a blank alias"
+            )
+
+    # 已是目标档案 name / 既有 alias / transient alias 的 alias → no-op 过滤
+    # （不写入、不计入 updated）。
+    alias_changes = [
+        change
+        for change in alias_changes
+        if not _alias_already_known(profile_by_id[change.npc_id], change.alias)
+    ]
+
+    valid_evidence = _batch_valid_evidence(
+        evidence_documents,
+        turn_index=turn_index,
+        scene_id=scene_id,
+    )
+
+    accepted_changes: list[AcceptedNPCFieldChange] = []
+    warnings: list[NPCChangeAdmissionWarning] = list(entry_warnings or [])
+    added_ability_keys: dict[str, set[str]] = {}
+    seen_current_ids: set[str] = set()
+    seen_stable_fields: set[tuple[str, str]] = set()
+    # 只有真正被丢弃的 entry（schema 阶段 invalid_update_entry）计入；
+    # 字段级 warning（current_intent / stable change）条目仍然存活。
+    dropped_entries = sum(
+        1
+        for warning in (entry_warnings or [])
+        if warning.code == "invalid_update_entry"
+    )
+
+    for entry in updates:
+        target = profile_by_id.get(entry.npc_id)
+        if target is None:
+            dropped_entries += 1
+            warnings.append(NPCChangeAdmissionWarning(
+                npc_name=entry.npc_id,
+                field_name="npc_id",
+                code="unknown_npc_id",
+                message=(
+                    f"batch update references unknown npc_id "
+                    f"{entry.npc_id!r}; entry dropped"
+                ),
+            ))
+            continue
+        if entry.npc_id not in resolved_ids:
+            dropped_entries += 1
+            warnings.append(NPCChangeAdmissionWarning(
+                npc_name=target.name,
+                field_name="npc_id",
+                code="unresolved_npc_id",
+                message=(
+                    f"batch update references npc {entry.npc_id!r} that was not "
+                    "resolved this turn; entry dropped"
+                ),
+            ))
+            continue
+        _admit_batch_current_intent(
+            target,
+            entry.current_intent,
+            turn_index,
+            accepted_changes,
+            seen_current_ids,
+        )
+        for change in entry.stable_changes:
+            if isinstance(change, AbilityAddChange):
+                # append-only 能力按规范化名称去重（``added_ability_keys`` 内部处理），
+                # 不参与标量字段的 (npc_id, field) 去重。
+                _admit_stable_change(
+                    target,
+                    change,
+                    valid_evidence,
+                    turn_index,
+                    accepted_changes,
+                    warnings,
+                    added_ability_keys,
+                )
+                continue
+            field_key = (entry.npc_id, change.field)
+            if field_key in seen_stable_fields:
+                warnings.append(NPCChangeAdmissionWarning(
+                    npc_name=target.name,
+                    field_name=change.field,
+                    code="duplicate_stable_field",
+                    message=(
+                        f"stable field {change.field!r} is updated more than once "
+                        f"for npc {entry.npc_id!r}; duplicate dropped"
+                    ),
+                ))
+                continue
+            accepted = _admit_stable_change(
+                target,
+                change,
+                valid_evidence,
+                turn_index,
+                accepted_changes,
+                warnings,
+                added_ability_keys,
+            )
+            if accepted:
+                seen_stable_fields.add(field_key)
+
+    synced_ids = _sync_participants(
+        profiles,
+        [],
+        current_state,
+        turn_index,
+        accepted_changes,
+    )
+
+    updated_profiles = _apply_accepted_changes(
+        profiles,
+        accepted_changes,
+        alias_changes,
+        scene_id,
+        admitted_at,
+    )
+
+    updated_npc_ids = {change.npc_id for change in accepted_changes}
+    # 已接受的确定性 alias 同样写入档案（``_apply_accepted_changes`` 应用），
+    # 因此 alias-only 的 npc 计入 updated、排除出 no-op。
+    updated_npc_ids.update(change.npc_id for change in alias_changes)
+    warnings = sorted(
+        warnings,
+        key=lambda warning: (
+            warning.npc_name,
+            warning.field_name,
+            warning.code,
+            warning.evidence_ids,
+        ),
+    )
+
+    return NPCChangeAdmissionResult(
+        accepted_profile_changes=accepted_changes,
+        accepted_alias_changes=list(alias_changes),
+        warnings=warnings,
+        coverage=NPCBatchCoverage(
+            resolved_npcs=len(resolved_ids),
+            updated_npcs=len(updated_npc_ids),
+            no_op_npcs=len(resolved_ids - updated_npc_ids),
+            dropped_entries=dropped_entries,
+            synced_npcs=len(synced_ids),
+        ),
+        updated_profiles=updated_profiles,
+    )
+
+
+def _alias_already_known(profile: NPCProfile, alias: str) -> bool:
+    """alias 已是目标档案的 name / 永久 alias / transient alias → no-op。"""
+    key = normalize_compact_key(alias)
+    if not key:
+        return True
+    return key == normalize_compact_key(profile.name) or key in {
+        normalize_compact_key(value)
+        for value in [*profile.aliases, *profile.transient_aliases]
+    }
+
+
+def _batch_valid_evidence(
+    evidence_documents: dict[str, HistoryDocument],
+    *,
+    turn_index: int,
+    scene_id: str,
+) -> dict[str, HistoryDocument]:
+    """batch 版本的证据门禁：只需 id 解析为本轮本场景的正文段落。"""
+    return {
+        document.document_id: document
+        for mapping_key, document in evidence_documents.items()
+        if mapping_key == document.document_id
+        and document.source_type == "scene_paragraph"
+        and document.turn_index == turn_index
+        and document.scene_id == scene_id
+    }
+
+
+def _admit_batch_current_intent(
+    target: NPCProfile,
+    value: str | None,
+    turn_index: int,
+    accepted_changes: list[AcceptedNPCFieldChange],
+    seen_current_ids: set[str],
+) -> None:
+    if value is None or value == target.current_intent:
+        return
+    if target.npc_id in seen_current_ids:
+        return
+    seen_current_ids.add(target.npc_id)
+    accepted_changes.append(AcceptedNPCScalarChange(
+        npc_id=target.npc_id,
+        canonical_name=target.name,
+        field="current_intent",
+        old_value=target.current_intent,
+        new_value=value,
+        turn_index=turn_index,
+        source="proposal",
+    ))
+
+
 def _profile_index(profiles: list[NPCProfile]) -> dict[str, NPCProfile]:
     return {profile.npc_id: profile for profile in profiles}
 
@@ -320,7 +584,8 @@ def _admit_stable_change(
     accepted_changes: list[AcceptedNPCFieldChange],
     warnings: list[NPCChangeAdmissionWarning],
     added_ability_keys: dict[str, set[str]],
-) -> None:
+) -> bool:
+    """per-field 容错审理单条稳定字段变化；返回是否实际接受（append 了 change）。"""
     invalid = [
         evidence_id
         for evidence_id in change.evidence_ids
@@ -337,21 +602,20 @@ def _admit_stable_change(
             ),
             evidence_ids=tuple(sorted(set(invalid))),
         ))
-        return
+        return False
 
     if isinstance(change, AbilityAddChange):
-        _admit_ability_add(
+        return _admit_ability_add(
             target,
             change,
             turn_index,
             accepted_changes,
             added_ability_keys,
         )
-        return
 
     if isinstance(change, PublicSummaryChange):
         if change.value == target.public_summary:
-            return
+            return False
         accepted_changes.append(AcceptedNPCScalarChange(
             npc_id=target.npc_id,
             canonical_name=target.name,
@@ -363,11 +627,11 @@ def _admit_stable_change(
             summary_delta=change.summary_delta,
             source="proposal",
         ))
-        return
+        return True
 
     current = getattr(target, change.field)
     if change.value == current:
-        return
+        return False
     accepted_changes.append(AcceptedNPCScalarChange(
         npc_id=target.npc_id,
         canonical_name=target.name,
@@ -378,6 +642,7 @@ def _admit_stable_change(
         turn_index=turn_index,
         source="proposal",
     ))
+    return True
 
 
 def _admit_ability_add(
@@ -386,19 +651,20 @@ def _admit_ability_add(
     turn_index: int,
     accepted_changes: list[AcceptedNPCFieldChange],
     added_ability_keys: dict[str, set[str]],
-) -> None:
+) -> bool:
+    """append-only 能力 add：按规范化能力名去重、上限 5；返回是否实际接受。"""
     key = normalize_compact_key(change.ability.name)
     if not key:
-        return
+        return False
     existing_keys = {
         normalize_compact_key(ability.name)
         for ability in target.known_abilities
     }
     added = added_ability_keys.setdefault(target.npc_id, set())
     if key in existing_keys or key in added:
-        return
+        return False
     if len(target.known_abilities) + len(added) >= 5:
-        return
+        return False
     added.add(key)
     accepted_changes.append(AcceptedNPCAbilityAddChange(
         npc_id=target.npc_id,
@@ -413,6 +679,7 @@ def _admit_ability_add(
         turn_index=turn_index,
         source="proposal",
     ))
+    return True
 
 
 def _admit_alias(
@@ -503,7 +770,7 @@ def _reconcile_candidate_identities(
     for candidate in candidates:
         name_key = normalize_compact_key(candidate.name)
         if name_key and len(index.get(name_key, {})) > 1:
-            raise ValueError(
+            raise NPCTurnAdmissionError(
                 f"new candidate name {candidate.name!r} collides with an "
                 "existing identity variant; refusing the whole batch"
             )
@@ -638,7 +905,7 @@ def _sync_profile_aggregated(
         if isinstance(raw, str) and raw.strip():
             attitudes.add(raw.strip())
     if len(attitudes) > 1:
-        raise ValueError(
+        raise NPCTurnAdmissionError(
             f"conflicting participant attitudes for npc {profile.npc_id!r}: "
             f"{sorted(attitudes)}"
         )

@@ -7,6 +7,7 @@ from scripts.benchmark_npc_baseline import (
     DEFAULT_FIXTURES,
     DEFAULT_RECORDINGS,
     _fixtures_fingerprint,
+    _finalize_report,
     _replay_trace,
     _recordings_fingerprint,
     compare_reports,
@@ -214,3 +215,37 @@ def test_replay_trace_rejects_missing_case(tmp_path):
 
     with pytest.raises(ValueError, match="missing cases"):
         _replay_trace(trace, fixtures, only={"exact_canonical_and_alias"})
+
+
+def _legacy_report():
+    fixtures = load_fixtures(DEFAULT_FIXTURES)
+    recordings = load_recordings(DEFAULT_RECORDINGS)
+    return run_suite(
+        fixtures,
+        recordings,
+        backend="legacy",
+        fixtures_sha256=_fixtures_fingerprint(DEFAULT_FIXTURES),
+        recordings_sha256=_recordings_fingerprint(DEFAULT_RECORDINGS),
+    )
+
+
+def test_finalize_report_handles_missing_baseline(capsys, tmp_path):
+    report = _legacy_report()
+    missing = tmp_path / "missing.json"
+
+    assert _finalize_report(report, missing, check=False) == 0
+    assert _finalize_report(report, missing, check=True) == 1
+    out = capsys.readouterr().out
+    assert "no accepted baseline" in out
+    assert "aggregate:" not in out
+
+
+def test_finalize_report_compares_when_baseline_exists(tmp_path):
+    report = _legacy_report()
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    assert _finalize_report(report, baseline_path, check=False) == 0

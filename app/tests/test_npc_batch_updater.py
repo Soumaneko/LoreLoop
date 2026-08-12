@@ -1,0 +1,738 @@
+import json
+from dataclasses import asdict
+
+import pytest
+from pydantic import ValidationError
+
+from app.core.llm.prompts import PromptLoader
+from app.domain.confirmed_history import build_turn_documents
+from app.domain.current_state.schemas import (
+    CurrentState,
+    ParticipantState,
+    PlayerState,
+    SceneState,
+)
+from app.domain.npc_profile.batch_updater import (
+    NPCBatchUpdater,
+    apply_npc_batch_update,
+    build_npc_batch_input,
+)
+from app.domain.npc_profile.change_admission import admit_npc_batch_update
+from app.domain.npc_profile.changes import AcceptedNPCAliasChange, NPCBatchCoverage
+from app.domain.npc_profile.identity_resolver import ResolvedNpc
+from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.npc_profile.store import NPCProfileStore
+from app.domain.npc_profile.turn_contract import (
+    NPCBatchUpdate,
+    NPCBatchUpdateDisplay,
+    NPCBatchUpdateEntry,
+    ScalarStableChange,
+)
+from app.domain.scene_facts.schemas import AliasRelation, SceneFact, SceneFactSet, SceneNpcMention
+
+_SCENE_ID = "scene_001"
+_TURN_INDEX = 3
+_ADMITTED_AT = "2026-08-12T00:00:00Z"
+_PLAYER = "萧云痕"
+_SCENE_TEXT = "沈孤鸿走进醉花楼。\n\n沈二在门口守着。"
+
+
+class StubGateway:
+    def __init__(self, response=None):
+        self._response = response
+        self.calls: list[dict] = []
+
+    def run(self, **kwargs):
+        self.calls.append({
+            "task": kwargs["task"],
+            "input_data": kwargs["input_data"],
+        })
+        return kwargs["output_schema"].model_validate(self._response)
+
+
+def _profile(npc_id="npc_001", name="沈孤鸿", *, aliases=None, **kwargs) -> NPCProfile:
+    return NPCProfile(
+        npc_id=npc_id,
+        name=name,
+        aliases=list(aliases or []),
+        **kwargs,
+    )
+
+
+def _state(*, participants=("沈孤鸿",), location="醉花楼") -> CurrentState:
+    return CurrentState(
+        scene=SceneState(
+            scene_id=_SCENE_ID,
+            location=location,
+            participants=[
+                ParticipantState(name=name) for name in participants
+            ],
+        ),
+        player=PlayerState(name=_PLAYER),
+    )
+
+
+def _evidence(scene_text=_SCENE_TEXT) -> dict:
+    return {
+        document.document_id: document
+        for document in build_turn_documents(
+            scene_id=_SCENE_ID,
+            turn_index=_TURN_INDEX,
+            user_input="",
+            scene_text=scene_text,
+        )
+    }
+
+
+def _facts(*, mentions=None, fact_text="沈孤鸿让沈二关门。") -> SceneFactSet:
+    return SceneFactSet(
+        scene_focus="沈孤鸿在醉花楼。",
+        facts=[SceneFact(fact_id="f1", fact=fact_text)],
+        npc_mentions=list(mentions or []),
+    )
+
+
+def _relation(surface, basis, evidence=None) -> AliasRelation:
+    return AliasRelation(
+        surface=surface,
+        basis=basis,
+        evidence_fact_ids=list(evidence or []),
+    )
+
+
+def _mention(primary, *, observed=None, relations=None) -> SceneNpcMention:
+    return SceneNpcMention(
+        primary_surface=primary,
+        observed_surfaces=list(observed or [primary]),
+        alias_relations=list(relations or []),
+    )
+
+
+def _entry(npc_id, *, current_intent=None, stable_changes=None) -> NPCBatchUpdateEntry:
+    return NPCBatchUpdateEntry(
+        npc_id=npc_id,
+        current_intent=current_intent,
+        stable_changes=list(stable_changes or []),
+    )
+
+
+def _role_change(value="醉花楼主", evidence=None) -> ScalarStableChange:
+    return ScalarStableChange(
+        field="role",
+        value=value,
+        evidence_ids=list(evidence or ["turn_3_p001"]),
+    )
+
+
+def _admit(
+    updates,
+    *,
+    entry_warnings=None,
+    resolved=("npc_001",),
+    alias_changes=None,
+    profiles=None,
+    evidence_documents=None,
+    current_state=None,
+):
+    return admit_npc_batch_update(
+        updates=updates,
+        entry_warnings=list(entry_warnings or []),
+        resolved_npc_ids=list(resolved),
+        alias_changes=list(alias_changes or []),
+        profiles=profiles or [_profile()],
+        evidence_documents=evidence_documents or _evidence(),
+        current_state=current_state or _state(),
+        turn_index=_TURN_INDEX,
+        scene_id=_SCENE_ID,
+        admitted_at=_ADMITTED_AT,
+    )
+
+
+def test_batch_schema_normalizes_blank_current_intent():
+    entry = NPCBatchUpdateEntry(
+        npc_id="npc_001",
+        current_intent="  ",
+        stable_changes=[_role_change()],
+    )
+    assert entry.current_intent is None
+    batch = NPCBatchUpdate(updates=[entry.model_dump()])
+    assert batch.updates == [entry.model_dump()]
+
+
+def test_batch_schema_rejects_unknown_fields():
+    with pytest.raises(ValidationError):
+        NPCBatchUpdateEntry.model_validate(
+            {"npc_id": "npc_001", "resolution": "existing"}
+        )
+
+
+def test_admission_applies_valid_stable_change_and_sync():
+    result = _admit(
+        [_entry("npc_001", stable_changes=[_role_change()])],
+        current_state=_state(participants=["沈孤鸿"]),
+    )
+
+    updated = {p.npc_id: p for p in result.updated_profiles}
+    profile = updated["npc_001"]
+    assert profile.role == "醉花楼主"
+    assert profile.last_known_location == "醉花楼"
+    assert result.warnings == []
+    assert isinstance(result.coverage, NPCBatchCoverage)
+    assert result.coverage.updated_npcs == 1
+    assert result.coverage.synced_npcs == 1
+
+def test_admission_drops_unknown_npc_id_entry_only():
+    result = _admit(
+        [
+            _entry("npc_999", stable_changes=[_role_change()]),
+            _entry("npc_001", stable_changes=[_role_change()]),
+        ]
+    )
+
+    assert [p.npc_id for p in result.updated_profiles] == ["npc_001"]
+    codes = {warning.code for warning in result.warnings}
+    assert codes == {"unknown_npc_id"}
+    assert isinstance(result.coverage, NPCBatchCoverage)
+    assert result.coverage.dropped_entries == 1
+
+
+def test_admission_drops_unresolved_npc_id_entry_only():
+    result = _admit(
+        [_entry("npc_002", stable_changes=[_role_change()])],
+        profiles=[_profile(), _profile("npc_002", "林川")],
+        resolved=("npc_001",),
+        current_state=_state(participants=()),
+    )
+
+    assert [p.npc_id for p in result.updated_profiles] == []
+    codes = {warning.code for warning in result.warnings}
+    assert codes == {"unresolved_npc_id"}
+
+
+def test_admission_drops_field_with_invalid_evidence_only():
+    result = _admit(
+        [
+            _entry(
+                "npc_001",
+                stable_changes=[
+                    _role_change(evidence=["turn_3_p099"]),
+                    ScalarStableChange(
+                        field="faction",
+                        value="合欢宗",
+                        evidence_ids=["turn_3_p001"],
+                    ),
+                ],
+            )
+        ]
+    )
+
+    updated = {p.npc_id: p for p in result.updated_profiles}
+    assert updated["npc_001"].role is None
+    assert updated["npc_001"].faction == "合欢宗"
+    assert "change_evidence_dropped" in {w.code for w in result.warnings}
+
+
+def test_admission_keeps_first_duplicate_stable_field():
+    result = _admit(
+        [
+            _entry(
+                "npc_001",
+                stable_changes=[
+                    _role_change(value="醉花楼主"),
+                    _role_change(value="合欢宗宗主"),
+                ],
+            )
+        ]
+    )
+
+    updated = {p.npc_id: p for p in result.updated_profiles}
+    assert updated["npc_001"].role == "醉花楼主"
+    assert "duplicate_stable_field" in {w.code for w in result.warnings}
+
+
+def test_admission_accepts_multiple_ability_adds():
+    from app.domain.npc_profile.schemas import LLMKnownAbility
+    from app.domain.npc_profile.turn_contract import AbilityAddChange
+
+    changes = [
+        AbilityAddChange(
+            field="known_abilities",
+            ability=LLMKnownAbility(name="剑法", description="快"),
+            evidence_ids=["turn_3_p001"],
+        ),
+        AbilityAddChange(
+            field="known_abilities",
+            ability=LLMKnownAbility(name="身法", description="巧"),
+            evidence_ids=["turn_3_p001"],
+        ),
+    ]
+    result = _admit([_entry("npc_001", stable_changes=changes)])
+
+    updated = {p.npc_id: p for p in result.updated_profiles}
+    abilities = {ability.name for ability in updated["npc_001"].known_abilities}
+    assert abilities == {"剑法", "身法"}
+    assert "duplicate_stable_field" not in {w.code for w in result.warnings}
+
+
+def test_admission_bad_evidence_first_does_not_poison_valid_same_field():
+    result = _admit(
+        [
+            _entry(
+                "npc_001",
+                stable_changes=[
+                    _role_change(value="初值", evidence=["turn_3_p099"]),
+                    _role_change(value="正确值", evidence=["turn_3_p001"]),
+                ],
+            )
+        ]
+    )
+
+    updated = {p.npc_id: p for p in result.updated_profiles}
+    assert updated["npc_001"].role == "正确值"
+    assert "change_evidence_dropped" in {w.code for w in result.warnings}
+    assert "duplicate_stable_field" not in {w.code for w in result.warnings}
+
+
+def test_parse_batch_updates_skips_invalid_entries_only():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    entries, warnings = parse_batch_updates([
+        {"npc_id": "npc_001", "current_intent": "查明账本"},
+        {"bogus": True},
+        {"npc_id": "npc_002", "stable_changes": [{"field": "role", "value": "x", "evidence_ids": ["e"]}]},
+    ])
+
+    assert [entry.npc_id for entry in entries] == ["npc_001", "npc_002"]
+    assert len(warnings) == 1
+    assert warnings[0].code == "invalid_update_entry"
+
+
+def test_parse_batch_updates_salvages_valid_fields_when_one_change_invalid():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    entries, warnings = parse_batch_updates([
+        {
+            "npc_id": "npc_001",
+            "current_intent": "查明账本",
+            "stable_changes": [
+                {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                {"field": "bogus_field", "value": "x"},
+            ],
+        },
+    ])
+
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.npc_id == "npc_001"
+    assert entry.current_intent == "查明账本"
+    assert len(entry.stable_changes) == 1
+    assert entry.stable_changes[0].field == "role"
+    assert {warning.code for warning in warnings} == {"invalid_stable_change"}
+
+
+def test_parse_batch_updates_tolerates_null_entries():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    entries, warnings = parse_batch_updates([None, {"npc_id": "npc_001"}, "not a dict"])
+
+    assert [entry.npc_id for entry in entries] == ["npc_001"]
+    assert len(warnings) == 2
+    assert all(warning.code == "invalid_update_entry" for warning in warnings)
+
+
+def test_parse_batch_updates_drops_only_bad_current_intent():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    entries, warnings = parse_batch_updates([
+        {
+            "npc_id": "npc_001",
+            "current_intent": 123,
+            "stable_changes": [
+                {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
+            ],
+        },
+    ])
+
+    assert entries[0].current_intent is None
+    assert len(entries[0].stable_changes) == 1
+    assert {warning.code for warning in warnings} == {"invalid_current_intent"}
+
+
+def test_batch_display_schema_shapes_stable_changes():
+    import json
+
+    from app.core.llm.schema import schema_json
+
+    schema = json.loads(schema_json(NPCBatchUpdateDisplay))
+    items = schema["$defs"]["NPCBatchUpdateEntry"]["properties"]["stable_changes"]["items"]
+    assert "oneOf" in items
+
+
+def test_batch_input_uses_mention_evidence_for_pronoun_facts():
+    from app.domain.npc_profile.identity_resolver import ResolvedNpc
+
+    resolved = [
+        ResolvedNpc(
+            npc_id="npc_001",
+            canonical_name="沈孤鸿",
+            observed_surfaces=("沈孤鸿",),
+            evidence_fact_ids=("f1",),
+            evidence_paragraph_ids=("turn_3_p001",),
+        )
+    ]
+    facts = SceneFactSet(
+        scene_focus="x",
+        facts=[SceneFact(fact_id="f1", fact="他正式成为醉花楼主。")],
+    )
+    evidence = _evidence("众人散去后，他接过印信，正式成为醉花楼主。")
+
+    input_data = build_npc_batch_input(
+        resolved=resolved,
+        profiles=[_profile()],
+        scene_facts=facts,
+        evidence_documents=evidence,
+    )
+    entries = json.loads(input_data["npc_batch_json"])
+    assert entries[0]["facts"] == [{"fact_id": "f1", "fact": "他正式成为醉花楼主。"}]
+    assert entries[0]["evidence"][0]["document_id"] == "turn_3_p001"
+
+
+def test_alias_change_carries_evidence():
+    mentions = [
+        _mention(
+            "沈孤鸿",
+            relations=[
+                _relation("沈二爷", "explicit_fixed_alias", evidence=["f1"]),
+            ],
+        )
+    ]
+    response = {"updates": [{"npc_id": "npc_001"}]}
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile())
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=StubGateway(response),  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        assert len(result.accepted_alias_changes) == 1
+        assert result.accepted_alias_changes[0].evidence_fact_ids == ("f1",)
+
+
+def test_parse_batch_updates_caps_stable_changes_at_eight():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    changes = [
+        {"field": "role", "value": f"值{i}", "evidence_ids": ["turn_3_p001"]}
+        for i in range(10)
+    ]
+    entries, warnings = parse_batch_updates([
+        {"npc_id": "npc_001", "stable_changes": changes},
+    ])
+
+    assert len(entries) == 1
+    assert len(entries[0].stable_changes) == 8
+    assert sum(1 for w in warnings if w.code == "stable_change_limit_exceeded") == 2
+
+
+def test_admission_dropped_entries_counts_only_entry_drops():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    entries, entry_warnings = parse_batch_updates([
+        {
+            "npc_id": "npc_001",
+            "current_intent": 123,
+            "stable_changes": [
+                {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
+            ],
+        },
+        None,
+    ])
+    result = _admit(entries, entry_warnings=entry_warnings, current_state=_state(participants=()))
+
+    assert isinstance(result.coverage, NPCBatchCoverage)
+    assert result.coverage.dropped_entries == 1
+    assert result.coverage.updated_npcs == 1
+
+
+def test_admission_alias_only_update_counts_as_updated():
+    alias = AcceptedNPCAliasChange(
+        npc_id="npc_001",
+        canonical_name="沈孤鸿",
+        alias="沈二爷",
+        turn_index=_TURN_INDEX,
+    )
+    result = _admit([], alias_changes=[alias], current_state=_state(participants=()))
+
+    assert isinstance(result.coverage, NPCBatchCoverage)
+    assert result.coverage.updated_npcs == 1
+    assert result.coverage.no_op_npcs == 0
+
+
+def test_admission_rejects_alias_outside_resolved_set():
+    with pytest.raises(ValueError, match="outside the resolved set"):
+        _admit(
+            [],
+            alias_changes=[
+                AcceptedNPCAliasChange(
+                    npc_id="npc_999",
+                    canonical_name="x",
+                    alias="y",
+                    turn_index=_TURN_INDEX,
+                )
+            ],
+            current_state=_state(participants=()),
+        )
+
+    with pytest.raises(ValueError, match="outside the resolved set"):
+        _admit(
+            [],
+            profiles=[_profile(), _profile("npc_002", "林川")],
+            resolved=("npc_001",),
+            alias_changes=[
+                AcceptedNPCAliasChange(
+                    npc_id="npc_002",
+                    canonical_name="林川",
+                    alias="y",
+                    turn_index=_TURN_INDEX,
+                )
+            ],
+            current_state=_state(participants=()),
+        )
+
+
+def test_admission_rejects_alias_with_wrong_canonical_name():
+    with pytest.raises(ValueError, match="does not match profile name"):
+        _admit(
+            [],
+            alias_changes=[
+                AcceptedNPCAliasChange(
+                    npc_id="npc_001",
+                    canonical_name="林川",
+                    alias="沈二爷",
+                    turn_index=_TURN_INDEX,
+                )
+            ],
+            current_state=_state(participants=()),
+        )
+
+
+def test_admission_rejects_blank_alias():
+    with pytest.raises(ValueError, match="blank alias"):
+        _admit(
+            [],
+            alias_changes=[
+                AcceptedNPCAliasChange(
+                    npc_id="npc_001",
+                    canonical_name="沈孤鸿",
+                    alias="   ",
+                    turn_index=_TURN_INDEX,
+                )
+            ],
+            current_state=_state(participants=()),
+        )
+
+
+def test_admission_filters_existing_alias_as_noop():
+    alias = AcceptedNPCAliasChange(
+        npc_id="npc_001",
+        canonical_name="沈孤鸿",
+        alias="沈二",
+        turn_index=_TURN_INDEX,
+    )
+    result = _admit(
+        [],
+        alias_changes=[alias],
+        profiles=[_profile(aliases=["沈二"])],
+        current_state=_state(participants=()),
+    )
+
+    assert result.accepted_alias_changes == []
+    assert result.updated_profiles == []
+    assert isinstance(result.coverage, NPCBatchCoverage)
+    assert result.coverage.updated_npcs == 0
+    assert result.coverage.no_op_npcs == 1
+
+
+def test_workflow_loose_envelope_applies_valid_and_drops_invalid():
+    mentions = [_mention("沈孤鸿")]
+    response = {
+        "updates": [
+            {
+                "npc_id": "npc_001",
+                "stable_changes": [
+                    {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
+                ],
+            },
+            {"bogus": True},
+        ]
+    }
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile())
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=StubGateway(response),  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        profile = store.get_by_id("npc_001")
+        assert profile is not None
+        assert profile.role == "醉花楼主"
+        assert {"invalid_update_entry"} <= {w.code for w in result.warnings}
+
+
+def test_admission_no_op_for_resolved_npc_without_output():
+    result = _admit([], current_state=_state(participants=()))
+
+    assert result.updated_profiles == []
+    assert isinstance(result.coverage, NPCBatchCoverage)
+    assert result.coverage.resolved_npcs == 1
+    assert result.coverage.no_op_npcs == 1
+    assert result.coverage.synced_npcs == 0
+
+
+def test_admission_sync_runs_independently_of_llm_output():
+    result = _admit([], current_state=_state(participants=["沈孤鸿"]))
+
+    updated = {p.npc_id: p for p in result.updated_profiles}
+    assert updated["npc_001"].last_known_location == "醉花楼"
+    assert isinstance(result.coverage, NPCBatchCoverage)
+    assert result.coverage.synced_npcs == 1
+
+
+def test_admission_applies_deterministic_alias_changes():
+    alias = AcceptedNPCAliasChange(
+        npc_id="npc_001",
+        canonical_name="沈孤鸿",
+        alias="沈二爷",
+        turn_index=_TURN_INDEX,
+    )
+    result = _admit([], alias_changes=[alias])
+
+    updated = {p.npc_id: p for p in result.updated_profiles}
+    assert "沈二爷" in updated["npc_001"].aliases
+    assert result.accepted_alias_changes == [alias]
+
+
+def test_processor_makes_single_batch_call_and_projects_input():
+    resolved = [ResolvedNpc(npc_id="npc_001", canonical_name="沈孤鸿", observed_surfaces=("沈孤鸿",))]
+    gateway = StubGateway({"updates": [{"npc_id": "npc_001"}]})
+    batch = NPCBatchUpdater(gateway).process(  # type: ignore[arg-type]
+        resolved=resolved,
+        profiles=[_profile()],
+        scene_facts=_facts(),
+        evidence_documents=_evidence(),
+        turn_index=_TURN_INDEX,
+        scene_id=_SCENE_ID,
+    )
+
+    assert [call["task"] for call in gateway.calls] == ["npc_batch_update"]
+    entries = json.loads(gateway.calls[0]["input_data"]["npc_batch_json"])
+    assert entries[0]["npc_id"] == "npc_001"
+    assert entries[0]["facts"] == [{"fact_id": "f1", "fact": "沈孤鸿让沈二关门。"}]
+    assert entries[0]["evidence"][0]["document_id"] == "turn_3_p001"
+    assert batch.entries[0].npc_id == "npc_001"
+    assert batch.entry_warnings == []
+
+
+def test_processor_zero_calls_without_resolved_npcs():
+    gateway = StubGateway()
+    batch = NPCBatchUpdater(gateway).process(  # type: ignore[arg-type]
+        resolved=[],
+        profiles=[_profile()],
+        scene_facts=_facts(),
+        evidence_documents=_evidence(),
+        turn_index=_TURN_INDEX,
+        scene_id=_SCENE_ID,
+    )
+
+    assert gateway.calls == []
+    assert batch.entries == []
+    assert batch.entry_warnings == []
+
+
+def test_batch_prompt_loads_and_renders():
+    template, version = PromptLoader().load("npc_batch_update")
+    assert version == "v1"
+    rendered = template.format(
+        npc_batch_json="[]",
+        output_schema_json="{}",
+    )
+    assert "NPC Batch" in rendered
+    assert "npc_id" in rendered
+
+
+def test_workflow_resolves_and_applies_to_store():
+    mentions = [
+        _mention(
+            "沈孤鸿",
+            relations=[
+                _relation("沈二爷", "explicit_fixed_alias", evidence=["f1"]),
+            ],
+        )
+    ]
+    gateway = StubGateway({
+        "updates": [
+            {
+                "npc_id": "npc_001",
+                "current_intent": "查明账本",
+                "stable_changes": [
+                    {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                ],
+            }
+        ]
+    })
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile(aliases=["沈二"]))
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=gateway,  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        assert [call["task"] for call in gateway.calls] == ["npc_batch_update"]
+        assert result.saved_ids == ["npc_001"]
+        assert result.accepted_alias_changes[0].alias == "沈二爷"
+        profile = store.get_by_id("npc_001")
+        assert profile is not None
+        assert profile.role == "醉花楼主"
+        assert profile.current_intent == "查明账本"
+        assert profile.last_known_location == "醉花楼"
+        assert "沈二爷" in profile.aliases
+        assert profile.name_hit_count == 1
+        assert profile.alias_hit_counts.get("沈二爷") == 1
+        assert result.new_npc_candidates == []
+
+
+def test_workflow_is_deterministic():
+    mentions = [_mention("沈孤鸿")]
+    response = {"updates": [{"npc_id": "npc_001"}]}
+
+    def run_once():
+        with NPCProfileStore(":memory:") as store:
+            store.upsert(_profile())
+            return apply_npc_batch_update(
+                npc_store=store,
+                gateway=StubGateway(json.loads(json.dumps(response))),  # type: ignore[arg-type]
+                scene_facts=_facts(mentions=mentions),
+                evidence_documents=_evidence(),
+                current_state=_state(),
+                turn_index=_TURN_INDEX,
+                admitted_at=_ADMITTED_AT,
+            )
+
+    first = run_once()
+    second = run_once()
+    assert asdict(first) == asdict(second)

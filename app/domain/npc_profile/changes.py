@@ -145,6 +145,8 @@ class AcceptedNPCAliasChange:
     canonical_name: str
     alias: str
     turn_index: int | None = None
+    #: 支持该 alias 关系的 Scene Fact 证据（供未来 alias/field log bridge）。
+    evidence_fact_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -167,17 +169,36 @@ class NPCAdmissionCoverage:
     synced_npcs: int
 
 
+@dataclass(frozen=True)
+class NPCBatchCoverage:
+    """NPC batch field updater 的覆盖诊断（宁漏勿错语义）。"""
+
+    resolved_npcs: int
+    updated_npcs: int
+    no_op_npcs: int
+    dropped_entries: int
+    synced_npcs: int
+
+
 @dataclass
 class NPCChangeAdmissionResult:
     accepted_profile_changes: list[AcceptedNPCFieldChange] = field(default_factory=list)
     accepted_alias_changes: list[AcceptedNPCAliasChange] = field(default_factory=list)
     new_npc_candidates: list[NPCProfile] = field(default_factory=list)
     warnings: list[NPCChangeAdmissionWarning] = field(default_factory=list)
-    coverage: NPCAdmissionCoverage | None = None
+    coverage: NPCAdmissionCoverage | NPCBatchCoverage | None = None
     updated_profiles: list[NPCProfile] = field(default_factory=list)
 
 
-class NPCTurnValidationError(ValueError):
+class NPCTurnAdmissionError(ValueError):
+    """整批被拒绝的基类：由模型输出或确定性输入触发的 admission 拒绝。
+
+    离线 benchmark 与录制路径把此类拒绝记为 invariant 并继续；真正的程序错误
+    （scene_id 不匹配、重复 npc_id、投影不一致）仍抛普通 ``ValueError`` 传播。
+    """
+
+
+class NPCTurnValidationError(NPCTurnAdmissionError):
     """硬校验失败：不产生任何 accepted changes。"""
 
     def __init__(self, errors: Sequence[object]):

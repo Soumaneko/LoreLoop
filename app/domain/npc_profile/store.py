@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from app.core.text import normalize_key
+from app.core.text import normalize_compact_key, normalize_key
 from app.domain.npc_profile.schemas import (
     NPCProfile,
     utc_now,
@@ -182,7 +182,7 @@ class NPCProfileStore:
         clean = str(surface).strip()
         if profile is None or not clean:
             return False
-        if normalize_key(clean) == normalize_key(profile.name):
+        if normalize_compact_key(clean) == normalize_compact_key(profile.name):
             profile.name_hit_count += 1
         else:
             alias = _find_alias(profile, clean)
@@ -234,8 +234,9 @@ def _name_matches(term: str, profile: NPCProfile) -> bool:
 
 
 def _find_alias(profile: NPCProfile, surface: str) -> str | None:
-    key = surface.casefold()
+    """按 identity 同一规范化（compact）匹配永久 alias，返回 verbatim alias。"""
+    key = normalize_compact_key(surface)
     for alias in profile.aliases:
-        if alias.casefold() == key:
+        if normalize_compact_key(alias) == key:
             return alias
     return None

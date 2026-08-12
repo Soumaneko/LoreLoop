@@ -22,7 +22,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import (
     BaseModel,
@@ -303,6 +303,56 @@ class NPCTurnProposalBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     proposals: list[NPCTurnProposal] = Field(default_factory=list, max_length=MAX_PROPOSALS)
+
+
+class NPCBatchUpdateEntry(BaseModel):
+    """NPC batch field updater 的单个既有 NPC 条目（admission 输入 / display 形状）。
+
+    ``npc_id`` 由确定性身份解析层给定；LLM 只输出字段变化，不再判断
+    mention/alias/new/ignore，也不再生成新 NPC 完整档案。``current_intent``
+    空白会被归一化为 None（即不修改）。
+
+    该模型是**已解析**的条目（``stable_changes`` 为 typed union）；宽松 wire 解析
+    由 ``parse_batch_updates`` 逐字段 salvage 后构造本模型。
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    npc_id: str = Field(min_length=1)
+    current_intent: str | None = None
+    stable_changes: list[NPCStableChange] = Field(default_factory=list, max_length=8)
+
+    @field_validator("current_intent")
+    @classmethod
+    def _blank_to_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+
+class NPCBatchUpdate(BaseModel):
+    """单次批量字段更新调用的 LLM 输出（宽松 wire envelope）。
+
+    ``updates`` 为 ``list[Any]``：null / 非对象元素 / 单条目内部字段非法都不拖垮
+    整批解析。逐字段 salvage 由下游 ``parse_batch_updates`` 完成（宁漏勿错）。
+    该模型只用于 gateway 的宽容解析，不作为 prompt 展示 schema。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    updates: list[Any] = Field(default_factory=list, max_length=256)
+
+
+class NPCBatchUpdateDisplay(BaseModel):
+    """prompt 展示用的完整形状 schema（结构约束由此表达）。
+
+    与宽容 wire ``NPCBatchUpdate`` 分离：模型看到 typed 条目与全部 field variant /
+    evidence_ids / summary_delta / ability 结构，程序解析仍逐字段容错。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    updates: list[NPCBatchUpdateEntry] = Field(default_factory=list, max_length=256)
 
 
 @dataclass(frozen=True)

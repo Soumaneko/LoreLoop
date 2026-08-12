@@ -1446,6 +1446,55 @@ def _write_recordings(
     _write_json(path, suite.model_dump())
 
 
+def _finalize_report(
+    report: dict,
+    baseline_path: Path,
+    *,
+    check: bool,
+) -> int:
+    """Compare against the accepted baseline, or report its absence.
+
+    A missing baseline is expected on the FIRST ``--record``/``--replay-trace``
+    for a backend: the run succeeded and the report should be reviewed before
+    ``--update-baseline`` accepts it. ``--check`` still fails without a
+    baseline (there is nothing to check against).
+    """
+    if not baseline_path.exists():
+        print(
+            f"no accepted baseline at {baseline_path}; "
+            "run --update-baseline after reviewing this report"
+        )
+        return 1 if check else 0
+
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    lines, regression = compare_reports(report, baseline)
+    print("\n".join(lines))
+    aggregate = report["aggregate"]
+    token = aggregate["token_usage"]
+    token_text = (
+        " ".join(f"{key}={value}" for key, value in sorted(token.items()))
+        if token
+        else "token usage not recorded"
+    )
+    print(
+        "aggregate: "
+        f"weighted={aggregate['weighted_passed']}/{aggregate['weighted_total']} "
+        f"forbidden={aggregate['forbidden_violation_count']} "
+        f"invariant={aggregate['invariant_violation_count']} "
+        f"calls={aggregate['call_count']} "
+        f"attempts={aggregate['provider_attempts']} "
+        f"prompt_content_chars={aggregate['prompt_content_chars']} "
+        f"({token_text})"
+    )
+    if check and report != baseline:
+        print("benchmark output differs from the accepted baseline")
+        return 1
+    if regression:
+        print("quality regression detected")
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -1533,33 +1582,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"updated baseline: {args.baseline}")
         return 0
 
-    baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
-    lines, regression = compare_reports(report, baseline)
-    print("\n".join(lines))
-    aggregate = report["aggregate"]
-    token = aggregate["token_usage"]
-    token_text = (
-        " ".join(f"{key}={value}" for key, value in sorted(token.items()))
-        if token
-        else "token usage not recorded"
-    )
-    print(
-        "aggregate: "
-        f"weighted={aggregate['weighted_passed']}/{aggregate['weighted_total']} "
-        f"forbidden={aggregate['forbidden_violation_count']} "
-        f"invariant={aggregate['invariant_violation_count']} "
-        f"calls={aggregate['call_count']} "
-        f"attempts={aggregate['provider_attempts']} "
-        f"prompt_content_chars={aggregate['prompt_content_chars']} "
-        f"({token_text})"
-    )
-    if args.check and report != baseline:
-        print("benchmark output differs from the accepted baseline")
-        return 1
-    if regression:
-        print("quality regression detected")
-        return 1
-    return 0
+    return _finalize_report(report, args.baseline, check=args.check)
 
 
 if __name__ == "__main__":
