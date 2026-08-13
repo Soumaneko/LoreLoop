@@ -1,7 +1,17 @@
 import json
 import sqlite3
+from collections.abc import Sequence
 
 from app.core.text import normalize_compact_key, normalize_key
+from app.domain.confirmed_history.schemas import HistoryDocument
+from app.domain.npc_profile.changes import AcceptedNPCFieldChange
+from app.domain.npc_profile.field_history import (
+    NPCFieldChangeEvidence,
+    NPCFieldChangeLog,
+    NPCFieldChangeRecordResult,
+    PreparedNPCFieldBatch,
+    prepare_accepted_field_changes,
+)
 from app.domain.npc_profile.schemas import (
     NPCProfile,
     utc_now,
@@ -9,7 +19,11 @@ from app.domain.npc_profile.schemas import (
 from app.runtime.sqlite import (
     connect_sqlite,
     ensure_exact_schema_version,
+    transaction,
 )
+
+
+SCHEMA_VERSION = 7
 
 
 class NPCProfileStore:
@@ -19,6 +33,12 @@ class NPCProfileStore:
         self._create_tables()
 
     def _create_tables(self) -> None:
+        persisted_version = self._current_schema_version()
+        if persisted_version not in {None, 6, SCHEMA_VERSION}:
+            raise RuntimeError(
+                "Unsupported npc_profile database schema: "
+                f"expected {SCHEMA_VERSION}, got {persisted_version}"
+            )
         self._db.execute(
             """
             CREATE TABLE IF NOT EXISTS npc_profiles (
@@ -61,8 +81,257 @@ class NPCProfileStore:
             ON npc_profiles(active, name)
             """
         )
-        ensure_exact_schema_version(self._db, "npc_profile", 6)
+        version = persisted_version
+        if version == 6:
+            self._migrate_v6_to_v7()
+        elif version is None:
+            with transaction(self._db):
+                self._create_field_history_tables()
+                self._validate_field_history_schema()
+                ensure_exact_schema_version(
+                    self._db,
+                    "npc_profile",
+                    SCHEMA_VERSION,
+                )
+        elif version != SCHEMA_VERSION:
+            raise RuntimeError(
+                "Unsupported npc_profile database schema: "
+                f"expected {SCHEMA_VERSION}, got {version}"
+            )
+        self._validate_field_history_schema()
+        ensure_exact_schema_version(
+            self._db,
+            "npc_profile",
+            SCHEMA_VERSION,
+        )
         self._db.commit()
+
+    def _current_schema_version(self) -> int | None:
+        versions_table = self._db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ("schema_versions",),
+        ).fetchone()
+        if versions_table is None:
+            return None
+        row = self._db.execute(
+            "SELECT version FROM schema_versions WHERE component = ?",
+            ("npc_profile",),
+        ).fetchone()
+        return int(row["version"]) if row is not None else None
+
+    def _migrate_v6_to_v7(self) -> None:
+        """Add evidence-backed field history without rewriting profile rows."""
+
+        with transaction(self._db):
+            self._create_field_history_tables()
+            self._validate_field_history_schema()
+            self._db.execute(
+                """
+                UPDATE schema_versions
+                SET version = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE component = 'npc_profile'
+                """,
+                (SCHEMA_VERSION,),
+            )
+
+    def _create_field_history_tables(self) -> None:
+        statements = (
+            """
+            CREATE TABLE IF NOT EXISTS npc_field_change_logs (
+                log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                npc_id TEXT NOT NULL,
+                field_name TEXT NOT NULL CHECK(field_name IN (
+                    'public_summary', 'role', 'appearance', 'faction'
+                )),
+                turn_index INTEGER NOT NULL CHECK(turn_index >= 0),
+                old_value TEXT,
+                new_value TEXT NOT NULL,
+                summary_delta TEXT,
+                source TEXT NOT NULL CHECK(source = 'proposal'),
+                CHECK(
+                    (field_name = 'public_summary'
+                     AND summary_delta IS NOT NULL
+                     AND length(trim(summary_delta)) > 0)
+                    OR
+                    (field_name != 'public_summary' AND summary_delta IS NULL)
+                ),
+                UNIQUE(npc_id, field_name, turn_index),
+                FOREIGN KEY(npc_id) REFERENCES npc_profiles(id)
+                    ON DELETE CASCADE
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_npc_field_change_bridge
+            ON npc_field_change_logs(npc_id, field_name, turn_index, log_id)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS npc_field_change_evidence (
+                log_id INTEGER NOT NULL,
+                position INTEGER NOT NULL CHECK(position >= 0),
+                evidence_id TEXT NOT NULL,
+                evidence_hash TEXT NOT NULL CHECK(length(evidence_hash) = 64),
+                PRIMARY KEY(log_id, position),
+                UNIQUE(log_id, evidence_id),
+                FOREIGN KEY(log_id) REFERENCES npc_field_change_logs(log_id)
+                    ON DELETE CASCADE
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_npc_field_change_evidence_id
+            ON npc_field_change_evidence(evidence_id)
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS npc_field_change_processed_turns (
+                turn_index INTEGER PRIMARY KEY CHECK(turn_index >= 0),
+                batch_hash TEXT NOT NULL CHECK(length(batch_hash) = 64)
+            )
+            """,
+        )
+        for statement in statements:
+            self._db.execute(statement)
+
+    def _validate_field_history_schema(self) -> None:
+        expected_columns = {
+            "npc_field_change_logs": {
+                "log_id": ("INTEGER", 0, 1),
+                "npc_id": ("TEXT", 1, 0),
+                "field_name": ("TEXT", 1, 0),
+                "turn_index": ("INTEGER", 1, 0),
+                "old_value": ("TEXT", 0, 0),
+                "new_value": ("TEXT", 1, 0),
+                "summary_delta": ("TEXT", 0, 0),
+                "source": ("TEXT", 1, 0),
+            },
+            "npc_field_change_evidence": {
+                "log_id": ("INTEGER", 1, 1),
+                "position": ("INTEGER", 1, 2),
+                "evidence_id": ("TEXT", 1, 0),
+                "evidence_hash": ("TEXT", 1, 0),
+            },
+            "npc_field_change_processed_turns": {
+                "turn_index": ("INTEGER", 0, 1),
+                "batch_hash": ("TEXT", 1, 0),
+            },
+        }
+        for table, expected in expected_columns.items():
+            rows = self._db.execute(f"PRAGMA table_info({table})").fetchall()
+            actual = {
+                row["name"]: (
+                    str(row["type"]).upper(),
+                    int(row["notnull"]),
+                    int(row["pk"]),
+                )
+                for row in rows
+            }
+            if actual != expected:
+                self._raise_field_history_schema_error(table)
+
+        self._require_foreign_keys(
+            "npc_field_change_logs",
+            {("npc_id", "npc_profiles", "id", "CASCADE")},
+        )
+        self._require_foreign_keys(
+            "npc_field_change_evidence",
+            {("log_id", "npc_field_change_logs", "log_id", "CASCADE")},
+        )
+        self._require_foreign_keys("npc_field_change_processed_turns", set())
+
+        required_indexes = (
+            (
+                "npc_field_change_logs",
+                ("npc_id", "field_name", "turn_index"),
+                True,
+            ),
+            (
+                "npc_field_change_logs",
+                ("npc_id", "field_name", "turn_index", "log_id"),
+                False,
+            ),
+            (
+                "npc_field_change_evidence",
+                ("log_id", "evidence_id"),
+                True,
+            ),
+            (
+                "npc_field_change_evidence",
+                ("evidence_id",),
+                False,
+            ),
+        )
+        for table, columns, unique in required_indexes:
+            if not self._has_index(table, columns, unique=unique):
+                self._raise_field_history_schema_error(table)
+
+        required_sql_fragments = {
+            "npc_field_change_logs": (
+                "field_name text not null check(field_name in",
+                "check(turn_index >= 0)",
+                "check(source = 'proposal')",
+                "length(trim(summary_delta)) > 0",
+            ),
+            "npc_field_change_evidence": (
+                "check(position >= 0)",
+                "check(length(evidence_hash) = 64)",
+            ),
+            "npc_field_change_processed_turns": (
+                "check(turn_index >= 0)",
+                "check(length(batch_hash) = 64)",
+            ),
+        }
+        for table, fragments in required_sql_fragments.items():
+            row = self._db.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name = ?",
+                (table,),
+            ).fetchone()
+            normalized = " ".join(str(row["sql"] or "").lower().split()) if row else ""
+            if any(fragment not in normalized for fragment in fragments):
+                self._raise_field_history_schema_error(table)
+
+    def _require_foreign_keys(
+        self,
+        table: str,
+        expected: set[tuple[str, str, str, str]],
+    ) -> None:
+        actual = {
+            (
+                row["from"],
+                row["table"],
+                row["to"],
+                str(row["on_delete"]).upper(),
+            )
+            for row in self._db.execute(
+                f"PRAGMA foreign_key_list({table})"
+            ).fetchall()
+        }
+        if actual != expected:
+            self._raise_field_history_schema_error(table)
+
+    def _has_index(
+        self,
+        table: str,
+        columns: tuple[str, ...],
+        *,
+        unique: bool,
+    ) -> bool:
+        for row in self._db.execute(f"PRAGMA index_list({table})").fetchall():
+            if bool(row["unique"]) != unique:
+                continue
+            indexed = tuple(
+                item["name"]
+                for item in self._db.execute(
+                    f"PRAGMA index_info({row['name']})"
+                ).fetchall()
+            )
+            if indexed == columns:
+                return True
+        return False
+
+    @staticmethod
+    def _raise_field_history_schema_error(table: str) -> None:
+        raise RuntimeError(
+            f"npc_profiles.db table {table!r} does not match "
+            "the current NPC field-history contract"
+        )
 
     def _row_to_profile(self, row: sqlite3.Row) -> NPCProfile:
         profile = NPCProfile.model_validate(json.loads(row["profile_json"]))
@@ -124,11 +393,41 @@ class NPCProfileStore:
         return self._row_to_profile(row) if row is not None else None
 
     def delete_by_id(self, npc_id: str) -> None:
-        self._db.execute(
-            "DELETE FROM npc_profiles WHERE id = ?",
-            (npc_id,),
-        )
-        self._db.commit()
+        with transaction(self._db):
+            affected_turns = [
+                int(row["turn_index"])
+                for row in self._db.execute(
+                    """
+                    SELECT DISTINCT turn_index
+                    FROM npc_field_change_logs
+                    WHERE npc_id = ?
+                    """,
+                    (npc_id,),
+                ).fetchall()
+            ]
+            if affected_turns:
+                # The processed hash describes the whole turn batch.  Keeping
+                # other NPC rows or the marker after one member is cascaded
+                # would leave a partial batch that an exact replay cannot heal.
+                placeholders = ",".join("?" for _ in affected_turns)
+                self._db.execute(
+                    f"""
+                    DELETE FROM npc_field_change_logs
+                    WHERE turn_index IN ({placeholders})
+                    """,
+                    tuple(affected_turns),
+                )
+                self._db.execute(
+                    f"""
+                    DELETE FROM npc_field_change_processed_turns
+                    WHERE turn_index IN ({placeholders})
+                    """,
+                    tuple(affected_turns),
+                )
+            self._db.execute(
+                "DELETE FROM npc_profiles WHERE id = ?",
+                (npc_id,),
+            )
 
     def get_by_name(self, name: str) -> NPCProfile | None:
         term = normalize_key(name)
@@ -197,6 +496,265 @@ class NPCProfileStore:
         profile.updated_at = utc_now()
         self.upsert(profile)
         return True
+
+    def record_accepted_field_changes(
+        self,
+        *,
+        changes: Sequence[AcceptedNPCFieldChange],
+        evidence_documents: Sequence[HistoryDocument],
+        turn_index: int,
+        scene_id: str,
+        reset_before_record: bool = False,
+    ) -> NPCFieldChangeRecordResult:
+        """Atomically persist one confirmed turn's eligible field changes.
+
+        A processed-turn hash closes the commit-marker gap: replaying the exact
+        same batch is a no-op, while a different batch for the same turn fails
+        closed unless the caller explicitly requests a history reset.
+        """
+
+        prepared = prepare_accepted_field_changes(
+            changes=changes,
+            evidence_documents=evidence_documents,
+            turn_index=turn_index,
+            scene_id=scene_id,
+        )
+        reset_performed = False
+        replayed = False
+        with transaction(self._db):
+            self._require_field_history_profiles_match(prepared)
+            existing = self._db.execute(
+                """
+                SELECT batch_hash
+                FROM npc_field_change_processed_turns
+                WHERE turn_index = ?
+                """,
+                (turn_index,),
+            ).fetchone()
+            if existing is not None and existing["batch_hash"] == prepared.batch_hash:
+                if not reset_before_record or not self._has_other_field_history_turns(
+                    turn_index
+                ):
+                    replayed = True
+                else:
+                    self._clear_field_history_rows()
+                    reset_performed = True
+            elif existing is not None and not reset_before_record:
+                raise ValueError(
+                    "NPC field history turn was already processed with a "
+                    f"different batch: {turn_index}"
+                )
+            elif reset_before_record:
+                self._clear_field_history_rows()
+                reset_performed = True
+
+            if not replayed:
+                self._insert_prepared_field_batch(prepared)
+
+        logs = self.list_field_change_logs(turn_index=turn_index)
+        return NPCFieldChangeRecordResult(
+            turn_index=turn_index,
+            batch_hash=prepared.batch_hash,
+            logs=logs,
+            replayed=replayed,
+            reset_performed=reset_performed,
+        )
+
+    def list_field_change_logs(
+        self,
+        *,
+        npc_ids: Sequence[str] | None = None,
+        turn_index: int | None = None,
+    ) -> list[NPCFieldChangeLog]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if npc_ids is not None:
+            ordered_ids = list(dict.fromkeys(npc_ids))
+            if not ordered_ids:
+                return []
+            placeholders = ",".join("?" for _ in ordered_ids)
+            clauses.append(f"npc_id IN ({placeholders})")
+            params.extend(ordered_ids)
+        if turn_index is not None:
+            clauses.append("turn_index = ?")
+            params.append(turn_index)
+        sql = "SELECT * FROM npc_field_change_logs"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY turn_index, npc_id, field_name, log_id"
+        rows = self._db.execute(sql, tuple(params)).fetchall()
+        return self._field_logs_from_rows(rows)
+
+    def field_change_logs_for_evidence(
+        self,
+        evidence_ids: Sequence[str],
+    ) -> list[NPCFieldChangeLog]:
+        ordered_ids = list(dict.fromkeys(evidence_ids))
+        if not ordered_ids:
+            return []
+        placeholders = ",".join("?" for _ in ordered_ids)
+        rows = self._db.execute(
+            f"""
+            SELECT DISTINCT logs.*
+            FROM npc_field_change_logs AS logs
+            JOIN npc_field_change_evidence AS evidence
+              ON evidence.log_id = logs.log_id
+            WHERE evidence.evidence_id IN ({placeholders})
+            ORDER BY logs.turn_index, logs.npc_id, logs.field_name, logs.log_id
+            """,
+            tuple(ordered_ids),
+        ).fetchall()
+        return self._field_logs_from_rows(rows)
+
+    def field_change_batch_hash(self, turn_index: int) -> str | None:
+        row = self._db.execute(
+            """
+            SELECT batch_hash FROM npc_field_change_processed_turns
+            WHERE turn_index = ?
+            """,
+            (turn_index,),
+        ).fetchone()
+        return str(row["batch_hash"]) if row is not None else None
+
+    def clear_field_change_history(self) -> None:
+        with transaction(self._db):
+            self._clear_field_history_rows()
+
+    def _require_field_history_profiles_match(
+        self,
+        prepared: PreparedNPCFieldBatch,
+    ) -> None:
+        npc_ids = list(dict.fromkeys(
+            change.npc_id for change in prepared.changes
+        ))
+        if not npc_ids:
+            return
+        placeholders = ",".join("?" for _ in npc_ids)
+        rows = self._db.execute(
+            f"SELECT * FROM npc_profiles WHERE id IN ({placeholders})",
+            tuple(npc_ids),
+        ).fetchall()
+        known = {row["id"] for row in rows}
+        unknown = sorted(set(npc_ids) - known)
+        if unknown:
+            raise ValueError(
+                f"NPC field changes reference unknown profiles: {unknown}"
+            )
+        profiles = {
+            row["id"]: self._row_to_profile(row)
+            for row in rows
+        }
+        mismatched = sorted(
+            f"{change.npc_id}/{change.field_name}"
+            for change in prepared.changes
+            if getattr(profiles[change.npc_id], change.field_name)
+            != change.new_value
+        )
+        if mismatched:
+            raise ValueError(
+                "NPC field changes do not match the committed profile "
+                f"snapshot: {mismatched}"
+            )
+
+    def _has_other_field_history_turns(self, turn_index: int) -> bool:
+        return self._db.execute(
+            """
+            SELECT 1 FROM npc_field_change_processed_turns
+            WHERE turn_index != ? LIMIT 1
+            """,
+            (turn_index,),
+        ).fetchone() is not None
+
+    def _clear_field_history_rows(self) -> None:
+        self._db.execute("DELETE FROM npc_field_change_logs")
+        self._db.execute("DELETE FROM npc_field_change_processed_turns")
+
+    def _insert_prepared_field_batch(
+        self,
+        prepared: PreparedNPCFieldBatch,
+    ) -> None:
+        for change in prepared.changes:
+            cursor = self._db.execute(
+                """
+                INSERT INTO npc_field_change_logs(
+                    npc_id, field_name, turn_index, old_value, new_value,
+                    summary_delta, source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    change.npc_id,
+                    change.field_name,
+                    change.turn_index,
+                    change.old_value,
+                    change.new_value,
+                    change.summary_delta,
+                    change.source,
+                ),
+            )
+            log_id = int(cursor.lastrowid)
+            for evidence in change.evidence:
+                self._db.execute(
+                    """
+                    INSERT INTO npc_field_change_evidence(
+                        log_id, position, evidence_id, evidence_hash
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        log_id,
+                        evidence.position,
+                        evidence.evidence_id,
+                        evidence.evidence_hash,
+                    ),
+                )
+        self._db.execute(
+            """
+            INSERT INTO npc_field_change_processed_turns(turn_index, batch_hash)
+            VALUES (?, ?)
+            """,
+            (prepared.turn_index, prepared.batch_hash),
+        )
+
+    def _field_logs_from_rows(
+        self,
+        rows: Sequence[sqlite3.Row],
+    ) -> list[NPCFieldChangeLog]:
+        if not rows:
+            return []
+        log_ids = [int(row["log_id"]) for row in rows]
+        placeholders = ",".join("?" for _ in log_ids)
+        evidence_rows = self._db.execute(
+            f"""
+            SELECT * FROM npc_field_change_evidence
+            WHERE log_id IN ({placeholders})
+            ORDER BY log_id, position
+            """,
+            tuple(log_ids),
+        ).fetchall()
+        evidence_by_log: dict[int, list[NPCFieldChangeEvidence]] = {}
+        for evidence in evidence_rows:
+            log_id = int(evidence["log_id"])
+            evidence_by_log.setdefault(log_id, []).append(
+                NPCFieldChangeEvidence(
+                    log_id=log_id,
+                    position=int(evidence["position"]),
+                    evidence_id=evidence["evidence_id"],
+                    evidence_hash=evidence["evidence_hash"],
+                )
+            )
+        return [
+            NPCFieldChangeLog(
+                log_id=int(row["log_id"]),
+                npc_id=row["npc_id"],
+                field_name=row["field_name"],
+                turn_index=int(row["turn_index"]),
+                old_value=row["old_value"],
+                new_value=row["new_value"],
+                summary_delta=row["summary_delta"],
+                source=row["source"],
+                evidence=evidence_by_log.get(int(row["log_id"]), []),
+            )
+            for row in rows
+        ]
 
     def close(self) -> None:
         self._db.close()

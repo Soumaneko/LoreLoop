@@ -74,6 +74,37 @@ weighted recall is preserved.
 after reviewing an intentional semantic change; a passing run by itself is not
 sufficient justification.
 
+## Pending NPC field-history checkpoint
+
+Ticket 10 keeps its benchmark-first contracts separate from the accepted
+25-case suite until the NPC bridge is implemented and reviewed:
+
+- fixture: `cases_npc_field_pending.json` (version 2, 8 cases);
+- implementation-before score: must `3/10`, weighted `9/30`, invariant
+  violations `6`;
+- report: `.scratch/npc-turn-processor/phase0-npc-field-report.json`;
+- accepted `cases.json` and `baseline.json` remain unchanged.
+
+The pending suite declares NPC profiles, stable field-change nodes, pointer
+integrity modes, and structured `(npc_id, field_name, log_id)` provenance. A
+fixture-local `log_ref` is resolved to the store-assigned integer `log_id` when
+the pending store is materialized; fixture labels never masquerade as database
+IDs. Its
+current failures are intentional: they identify recall/provenance that cannot
+exist before `NPCProfileHistoryBridge` is wired. Guards already satisfied by
+direct History or Continuity remain green.
+
+Run the pending checkpoint without comparing or updating the accepted
+baseline:
+
+```bash
+PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py --pending-npc-field
+```
+
+`--pending-npc-field` rejects `--check` and `--update-baseline`; after the
+production bridge passes semantic review, these cases can be promoted through
+an explicit accepted-baseline update.
+
 Run and compare with the accepted baseline:
 
 ```bash
@@ -108,7 +139,8 @@ to ContextExtractor as a main, supporting, or adjacent evidence record.
   payload.
 - `provenance_expectations` apply to main hits and verify direct/relation route
   separation. They may also assert merged Continuity IDs and lifecycle
-  operations for evidence shared by multiple matters.
+  operations for evidence shared by multiple matters. Pending NPC cases may
+  additionally assert structured field-change provenance by stable `log_id`.
 
 Channel counts are diagnostic only. More relation-only or direct-only hits are
 not inherently better.

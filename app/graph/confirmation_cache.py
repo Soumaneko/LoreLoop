@@ -57,6 +57,7 @@ _SLOT_CATEGORIES: dict[str, frozenset[str]] = {
         "turn_summary_saved",
         "short_term_saved",
         "confirmed_history_saved",
+        "npc_field_logs_saved",
         "scene_summary_scheduled",
     }),
     "marker_data": frozenset({
@@ -114,6 +115,7 @@ class ConfirmationCacheData(TypedDict, total=False):
     state_saved: bool
     short_term_saved: bool
     confirmed_history_saved: bool
+    npc_field_logs_saved: bool
     scene_summary_future: Future[Any]
     scene_summary_job_id: str | None
     scene_summary_operation_id: str | None

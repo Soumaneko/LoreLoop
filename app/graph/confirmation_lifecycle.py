@@ -140,6 +140,7 @@ class ConfirmationCommitServices:
     current_state_store: Callable
     short_term_memory_store: Callable
     confirmed_history_store: Callable
+    npc_profile_store: Callable
     continuity_store: Callable
     scene_summary_store: Callable
 
@@ -240,6 +241,26 @@ class ConfirmationCommitter:
                 for document in documents
                 if document.source_type == "scene_paragraph"
             }
+            if not cache.completed("npc_field_logs_saved"):
+                if not cache.produced("npc_turn_result"):
+                    raise RuntimeError(
+                        "Confirmation commit is missing npc_turn_result"
+                    )
+                npc_turn_result = cache.result("npc_turn_result")
+                accepted_changes = (
+                    npc_turn_result.process_result.accepted_changes
+                )
+                with services.npc_profile_store() as npc_store:
+                    npc_store.record_accepted_field_changes(
+                        changes=accepted_changes,
+                        evidence_documents=list(evidence_documents.values()),
+                        turn_index=pipeline_input.turn_index,
+                        scene_id=updated_state.scene.scene_id,
+                        reset_before_record=(
+                            pipeline_input.clear_confirmed_history_before_save
+                        ),
+                    )
+                cache.mark_completed("npc_field_logs_saved")
             continuity_result = ContinuityService(
                 None,
                 continuity_store,

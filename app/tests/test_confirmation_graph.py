@@ -539,6 +539,7 @@ def test_rollback_cache_keeps_pure_results_and_discards_write_markers():
         "state_saved": True,
         "short_term_saved": True,
         "confirmed_history_saved": True,
+        "npc_field_logs_saved": True,
         "scene_summary_scheduled": True,
     })
 

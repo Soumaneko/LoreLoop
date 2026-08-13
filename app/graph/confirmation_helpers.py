@@ -283,6 +283,7 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
             current_state_store=stores.current_state,
             short_term_memory_store=stores.short_term,
             confirmed_history_store=stores.confirmed_history,
+            npc_profile_store=stores.npc_profile,
             continuity_store=stores.continuity,
             scene_summary_store=stores.scene_summary,
         )

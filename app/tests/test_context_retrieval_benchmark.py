@@ -5,12 +5,21 @@ import pytest
 from scripts.benchmark_context_retrieval import (
     DEFAULT_BASELINE,
     DEFAULT_CASES,
+    PENDING_NPC_FIELD_CASES,
+    NPCFieldAttributionExpectation,
+    _expected_npc_attribution_key,
+    _materialize_npc_field_fixtures,
     _cases_fingerprint,
     compare_reports,
     load_suite,
     main,
     run_suite,
 )
+from app.domain.confirmed_history import (
+    ConfirmedHistoryStore,
+    history_document_text_hash,
+)
+from app.domain.npc_profile.store import NPCProfileStore
 
 
 @pytest.fixture(scope="module")
@@ -162,3 +171,129 @@ def test_context_retrieval_benchmark_check_command(capsys):
     output = capsys.readouterr().out
     assert "aggregate:" in output
     assert "quality regression detected" not in output
+
+
+def test_pending_npc_field_contracts_capture_pre_bridge_gaps():
+    suite = load_suite(PENDING_NPC_FIELD_CASES)
+    report = run_suite(
+        suite,
+        fingerprint=_cases_fingerprint(PENDING_NPC_FIELD_CASES),
+    )
+    repeated = run_suite(
+        suite,
+        fingerprint=_cases_fingerprint(PENDING_NPC_FIELD_CASES),
+    )
+
+    assert suite.version == 2
+    assert len(suite.cases) == 8
+    assert repeated == report
+    assert all(
+        case["npc_bridge_status"] == "pending_not_wired"
+        for case in report["cases"]
+    )
+
+    cases = {case["case_id"]: case for case in report["cases"]}
+    assert cases["npc_role_relation_exact"]["missed_groups"] == [
+        "guqing_role"
+    ]
+    assert cases["npc_stale_hash"]["missed_groups"] == [
+        "valid_role_pointer"
+    ]
+    assert cases["npc_relation_owner_cap"]["missed_groups"] == [
+        "qin_faction",
+        "qin_appearance",
+        "qin_summary",
+        "lu_role",
+    ]
+    assert cases["npc_inactive_profile_eligibility"]["missed_groups"] == [
+        "explicit_inactive_alias"
+    ]
+
+    # Existing retrieval already closes the direct and Continuity halves; the
+    # pending contract specifically records the missing NPC provenance.
+    assert cases["npc_direct_exact_vs_relation_noise"][
+        "invariant_violations"
+    ] == []
+    shared = cases["shared_npc_continuity_evidence"]
+    assert shared["must_recalled"] == 1
+    assert shared["visible_evidence_ids"] == ["turn_1_p001"]
+    assert any(
+        "expected linked NPC changes" in violation
+        for violation in shared["invariant_violations"]
+    )
+    aggregate = report["aggregate"]
+    assert aggregate["must_recalled"] == 3
+    assert aggregate["must_total"] == 10
+    assert aggregate["weighted_recalled"] == 9
+    assert aggregate["weighted_total"] == 30
+    assert aggregate["invariant_violation_count"] == 6
+    assert aggregate["forbidden_visible_count"] == 0
+    assert aggregate["forbidden_main_visible_count"] == 0
+    assert aggregate["duplicate_visible_count"] == 0
+
+
+def test_pending_npc_field_command_writes_separate_report(tmp_path, capsys):
+    report_path = tmp_path / "pending-report.json"
+
+    assert main([
+        "--pending-npc-field",
+        "--json-out",
+        str(report_path),
+    ]) == 0
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["benchmark_version"] == 2
+    assert len(report["cases"]) == 8
+    assert "pending NPC field-history contracts" in capsys.readouterr().out
+
+
+def test_pending_npc_log_ref_resolves_to_store_assigned_integer_id():
+    expectation = NPCFieldAttributionExpectation(
+        npc_id="npc-a",
+        field_name="role",
+        log_ref="role-change",
+    )
+
+    assert _expected_npc_attribution_key(
+        expectation,
+        {"role-change": 17},
+    ) == ("npc-a", "role", "17")
+
+
+def test_pending_npc_fixtures_materialize_real_logs_and_pointer_modes():
+    suite = load_suite(PENDING_NPC_FIELD_CASES)
+    case = next(item for item in suite.cases if item.case_id == "npc_stale_hash")
+
+    with (
+        ConfirmedHistoryStore() as history_store,
+        NPCProfileStore(":memory:") as npc_store,
+    ):
+        for turn in case.turns:
+            history_store.upsert_turn(**turn.model_dump())
+        documents = {
+            item.document_id: item
+            for item in history_store.list_documents()
+        }
+        ids_by_ref = _materialize_npc_field_fixtures(
+            case,
+            documents,
+            npc_store,
+        )
+        logs = {
+            (item.field_name, item.turn_index): item
+            for item in npc_store.list_field_change_logs()
+        }
+        final_profile = npc_store.get_by_id("npc-shenyan")
+
+    assert all(isinstance(value, int) for value in ids_by_ref.values())
+    assert len(set(ids_by_ref.values())) == 3
+    assert logs[("role", 1)].evidence[0].evidence_hash == (
+        history_document_text_hash(documents["turn_1_p001"])
+    )
+    assert logs[("faction", 2)].evidence[0].evidence_hash != (
+        history_document_text_hash(documents["turn_2_p001"])
+    )
+    assert logs[("appearance", 3)].evidence[0].evidence_id == "turn_3_p999"
+    assert "turn_3_p999" not in documents
+    assert final_profile is not None
+    assert final_profile.appearance == "常穿灰布长衫"
