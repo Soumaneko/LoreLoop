@@ -31,13 +31,6 @@ from app.domain.npc_profile.store import NPCProfileStore
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES = ROOT / "benchmarks" / "context_retrieval" / "cases.json"
 DEFAULT_BASELINE = ROOT / "benchmarks" / "context_retrieval" / "baseline.json"
-PENDING_NPC_FIELD_CASES = (
-    ROOT / "benchmarks" / "context_retrieval" / "cases_npc_field_pending.json"
-)
-PENDING_NPC_FIELD_REPORT = (
-    ROOT / ".scratch" / "npc-turn-processor" / "phase0-npc-field-report.json"
-)
-BENCHMARK_VERSION = 1
 
 
 class TurnFixture(BaseModel):
@@ -451,6 +444,13 @@ def _score_case(
         "stale_relation_links": evidence.stale_relation_links,
         "invalid_relation_links": evidence.invalid_relation_links,
         "degraded_relation_links": evidence.degraded_relation_links,
+        "matched_npc_profiles": evidence.matched_npc_profiles,
+        "npc_valid_links": evidence.npc_valid_links,
+        "npc_stale_links": evidence.npc_stale_links,
+        "npc_invalid_links": evidence.npc_invalid_links,
+        "npc_degraded_links": evidence.npc_degraded_links,
+        "npc_relation_candidates": evidence.npc_relation_candidates,
+        "npc_relation_hits_added": evidence.npc_relation_hits_added,
         "invariant_violations": invariant_violations,
     }
     if case.npc_profiles or case.npc_field_logs:
@@ -465,7 +465,7 @@ def _materialize_npc_field_fixtures(
     documents: dict[str, HistoryDocument],
     npc_store: NPCProfileStore,
 ) -> dict[str, int]:
-    """Persist pending NPC fixtures through the production v7 store contract.
+    """Persist accepted NPC fixtures through the production v7 store contract.
 
     Historical nodes are replayed in turn order so snapshot verification sees
     the value that was current when each node was committed. Stale/missing
@@ -682,6 +682,27 @@ def run_suite(suite: BenchmarkSuite, *, fingerprint: str) -> dict:
         "degraded_relation_links": sum(
             case["degraded_relation_links"] for case in case_results
         ),
+        "npc_valid_links": sum(
+            case["npc_valid_links"] for case in case_results
+        ),
+        "npc_stale_links": sum(
+            case["npc_stale_links"] for case in case_results
+        ),
+        "npc_invalid_links": sum(
+            case["npc_invalid_links"] for case in case_results
+        ),
+        "npc_degraded_links": sum(
+            case["npc_degraded_links"] for case in case_results
+        ),
+        "matched_npc_profiles": sum(
+            case["matched_npc_profiles"] for case in case_results
+        ),
+        "npc_relation_candidates": sum(
+            case["npc_relation_candidates"] for case in case_results
+        ),
+        "npc_relation_hits_added": sum(
+            case["npc_relation_hits_added"] for case in case_results
+        ),
         "payload_chars": sum(case["payload_chars"] for case in case_results),
     }
     return {
@@ -697,8 +718,8 @@ def _case_map(report: dict) -> dict[str, dict]:
 
 
 def compare_reports(current: dict, baseline: dict) -> tuple[list[str], bool]:
-    if baseline.get("benchmark_version") != BENCHMARK_VERSION:
-        raise ValueError("baseline benchmark version does not match runner")
+    if baseline.get("benchmark_version") != current.get("benchmark_version"):
+        raise ValueError("baseline benchmark version does not match cases")
     if baseline.get("cases_sha256") != current["cases_sha256"]:
         raise ValueError("cases.json changed; review cases before updating baseline")
 
@@ -750,41 +771,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--update-baseline", action="store_true")
     parser.add_argument("--check", action="store_true")
-    parser.add_argument(
-        "--pending-npc-field",
-        action="store_true",
-        help=(
-            "run the pre-implementation NPC field-history contracts without "
-            "comparing or updating the accepted baseline"
-        ),
-    )
     args = parser.parse_args(argv)
-
-    if args.pending_npc_field:
-        if args.update_baseline or args.check:
-            parser.error(
-                "--pending-npc-field cannot update/check the accepted baseline"
-            )
-        args.cases = PENDING_NPC_FIELD_CASES
-        if args.json_out is None:
-            args.json_out = PENDING_NPC_FIELD_REPORT
 
     suite = load_suite(args.cases)
     report = run_suite(suite, fingerprint=_cases_fingerprint(args.cases))
     if args.json_out:
         _write_report(args.json_out, report)
-
-    if args.pending_npc_field:
-        aggregate = report["aggregate"]
-        print(
-            "pending NPC field-history contracts: "
-            f"must={aggregate['must_recalled']}/{aggregate['must_total']} "
-            f"weighted={aggregate['weighted_recalled']}/"
-            f"{aggregate['weighted_total']} "
-            f"invariants={aggregate['invariant_violation_count']} "
-            f"report={args.json_out}"
-        )
-        return 0
 
     if args.update_baseline:
         _write_report(args.baseline, report)

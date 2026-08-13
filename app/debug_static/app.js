@@ -1243,6 +1243,13 @@ function renderContextFacts(g) {
       metric("关系候选", evidence.relation_candidates_considered || 0, "info"),
       metric("关系入选", evidence.relation_hits_added || 0, evidence.relation_hits_added ? "ok" : ""),
       metric("失效关系", evidence.stale_relation_links || 0, evidence.stale_relation_links ? "warn" : ""),
+      metric("命中NPC档案", evidence.matched_npc_profiles || 0, "info"),
+      metric("NPC有效", evidence.npc_valid_links || 0, "info"),
+      metric("NPC失效", evidence.npc_stale_links || 0, evidence.npc_stale_links ? "warn" : ""),
+      metric("NPC无效", evidence.npc_invalid_links || 0, evidence.npc_invalid_links ? "warn" : ""),
+      metric("NPC降级", evidence.npc_degraded_links || 0, evidence.npc_degraded_links ? "warn" : ""),
+      metric("NPC候选", evidence.npc_relation_candidates || 0, "info"),
+      metric("NPC入选", evidence.npc_relation_hits_added || 0, evidence.npc_relation_hits_added ? "ok" : ""),
       metric("连续性事项", continuity.items?.length || 0, "info"),
       metric("索引回合", evidence.indexed_turns || 0, "info"),
     ])}

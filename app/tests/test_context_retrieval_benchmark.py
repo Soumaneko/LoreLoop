@@ -5,7 +5,6 @@ import pytest
 from scripts.benchmark_context_retrieval import (
     DEFAULT_BASELINE,
     DEFAULT_CASES,
-    PENDING_NPC_FIELD_CASES,
     NPCFieldAttributionExpectation,
     _expected_npc_attribution_key,
     _materialize_npc_field_fixtures,
@@ -173,26 +172,27 @@ def test_context_retrieval_benchmark_check_command(capsys):
     assert "quality regression detected" not in output
 
 
-def test_pending_npc_field_contracts_green_after_bridge_wiring():
-    suite = load_suite(PENDING_NPC_FIELD_CASES)
+def test_npc_field_contracts_green_in_accepted_suite():
+    suite = load_suite(DEFAULT_CASES)
     report = run_suite(
         suite,
-        fingerprint=_cases_fingerprint(PENDING_NPC_FIELD_CASES),
+        fingerprint=_cases_fingerprint(DEFAULT_CASES),
     )
     repeated = run_suite(
         suite,
-        fingerprint=_cases_fingerprint(PENDING_NPC_FIELD_CASES),
+        fingerprint=_cases_fingerprint(DEFAULT_CASES),
     )
+    assert repeated == report
 
     assert suite.version == 2
-    assert len(suite.cases) == 8
-    assert repeated == report
-    assert all(
-        case["npc_bridge_status"] == "wired"
+    assert len(suite.cases) == 33
+    npc_cases = {
+        case["case_id"]: case
         for case in report["cases"]
-    )
+        if case.get("npc_bridge_status") == "wired"
+    }
+    assert len(npc_cases) == 8
 
-    cases = {case["case_id"]: case for case in report["cases"]}
     for case_id in (
         "npc_role_relation_exact",
         "npc_public_summary_delta",
@@ -200,43 +200,74 @@ def test_pending_npc_field_contracts_green_after_bridge_wiring():
         "npc_relation_owner_cap",
         "npc_inactive_profile_eligibility",
     ):
-        assert cases[case_id]["missed_groups"] == [], case_id
+        assert npc_cases[case_id]["missed_groups"] == [], case_id
     # Direct protection is preserved: the exact direct answer keeps the seat.
-    assert cases["npc_direct_exact_vs_relation_noise"]["missed_groups"] == []
-    assert cases["npc_direct_exact_vs_relation_noise"][
+    assert npc_cases["npc_direct_exact_vs_relation_noise"]["missed_groups"] == []
+    assert npc_cases["npc_direct_exact_vs_relation_noise"][
         "invariant_violations"
     ] == []
-    shared = cases["shared_npc_continuity_evidence"]
+    shared = npc_cases["shared_npc_continuity_evidence"]
     assert shared["must_recalled"] == 1
     assert shared["visible_evidence_ids"] == ["turn_1_p001"]
     assert shared["invariant_violations"] == []
     aggregate = report["aggregate"]
-    assert aggregate["must_recalled"] == 10
-    assert aggregate["must_total"] == 10
-    assert aggregate["weighted_recalled"] == 30
-    assert aggregate["weighted_total"] == 30
+    assert aggregate["must_recalled"] == 37
+    assert aggregate["must_total"] == 38
+    assert aggregate["weighted_recalled"] == 120
+    assert aggregate["weighted_total"] == 125
     assert aggregate["invariant_violation_count"] == 0
     assert aggregate["forbidden_visible_count"] == 0
     assert aggregate["forbidden_main_visible_count"] == 0
-    assert aggregate["duplicate_visible_count"] == 0
 
 
-def test_pending_npc_field_command_writes_separate_report(tmp_path, capsys):
-    report_path = tmp_path / "pending-report.json"
+def test_every_case_records_npc_field_funnel():
+    report = run_suite(
+        load_suite(DEFAULT_CASES),
+        fingerprint=_cases_fingerprint(DEFAULT_CASES),
+    )
+    npc_fields = {
+        "matched_npc_profiles",
+        "npc_valid_links",
+        "npc_stale_links",
+        "npc_invalid_links",
+        "npc_degraded_links",
+        "npc_relation_candidates",
+        "npc_relation_hits_added",
+    }
+    for case in report["cases"]:
+        assert npc_fields.issubset(case), case["case_id"]
+    # Non-NPC cases are recorded with a zero funnel so the schema is uniform.
+    for case in report["cases"]:
+        if not case.get("npc_bridge_status"):
+            assert all(case[field] == 0 for field in npc_fields), case["case_id"]
 
-    assert main([
-        "--pending-npc-field",
-        "--json-out",
-        str(report_path),
-    ]) == 0
-
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    assert report["benchmark_version"] == 2
-    assert len(report["cases"]) == 8
-    assert "pending NPC field-history contracts" in capsys.readouterr().out
+    aggregate = report["aggregate"]
+    assert aggregate["npc_valid_links"] == 12
+    assert aggregate["npc_stale_links"] == 2
+    assert aggregate["npc_invalid_links"] == 1
+    assert aggregate["npc_degraded_links"] == 0
+    assert aggregate["matched_npc_profiles"] == 9
+    assert aggregate["npc_relation_candidates"] == 10
+    assert aggregate["npc_relation_hits_added"] == 8
 
 
-def test_pending_npc_log_ref_resolves_to_store_assigned_integer_id():
+def test_compare_reports_accepts_matching_custom_version():
+    def minimal(version):
+        return {
+            "benchmark_version": version,
+            "cases_sha256": "x",
+            "aggregate": {},
+            "cases": [],
+        }
+
+    lines, regression = compare_reports(minimal(1), minimal(1))
+    assert lines == [] and not regression
+
+    with pytest.raises(ValueError, match="does not match cases"):
+        compare_reports(minimal(2), minimal(1))
+
+
+def test_npc_log_ref_resolves_to_store_assigned_integer_id():
     expectation = NPCFieldAttributionExpectation(
         npc_id="npc-a",
         field_name="role",
@@ -249,8 +280,8 @@ def test_pending_npc_log_ref_resolves_to_store_assigned_integer_id():
     ) == ("npc-a", "role", "17")
 
 
-def test_pending_npc_fixtures_materialize_real_logs_and_pointer_modes():
-    suite = load_suite(PENDING_NPC_FIELD_CASES)
+def test_npc_fixtures_materialize_real_logs_and_pointer_modes():
+    suite = load_suite(DEFAULT_CASES)
     case = next(item for item in suite.cases if item.case_id == "npc_stale_hash")
 
     with (

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "cases": [
     {
       "case_id": "direct_exact_answer",
@@ -942,6 +942,482 @@
         {"item_id": "mis-hung", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
       ],
       "forbidden_evidence_ids": ["turn_1_p001"]
+    },    {
+      "case_id": "npc_role_relation_exact",
+      "description": "An explicit NPC query recovers a pronoun-only paragraph through an evidence-backed role change.",
+      "current_turn_index": 4,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_guqing",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "顾青", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她当众接过巡城司铜印，正式出任北门巡检。"
+        }
+      ],
+      "npc_profiles": [
+        {"npc_id": "npc-guqing", "name": "顾青", "role": "北门巡检"}
+      ],
+      "npc_field_logs": [
+        {
+          "log_ref": "npc-guqing-role-t1",
+          "npc_id": "npc-guqing",
+          "field_name": "role",
+          "turn_index": 1,
+          "evidence_ids": ["turn_1_p001"],
+          "new_value": "北门巡检"
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "guqing_role",
+          "importance": "must",
+          "acceptable_evidence_ids": ["turn_1_p001"]
+        }
+      ],
+      "provenance_expectations": [
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": false,
+          "relation": true,
+          "linked_npc_changes": [
+            {"npc_id": "npc-guqing", "field_name": "role", "log_ref": "npc-guqing-role-t1"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "npc_public_summary_delta",
+      "description": "A public-summary query matches the relevant delta node without broadcasting the aggregate current summary onto an older node.",
+      "current_turn_index": 5,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_rescuer",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": ["救援者身份"]
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她在盟会推举中接过赤沙会令牌，成为新任首领。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "她从沙暴里救回整支商队，此后被当地人视作可靠的救援者。"
+        }
+      ],
+      "npc_profiles": [
+        {
+          "npc_id": "npc-shalan",
+          "name": "沙岚",
+          "public_summary": "赤沙会首领，曾从沙暴中救回商队，是当地知名救援者。"
+        }
+      ],
+      "npc_field_logs": [
+        {
+          "log_ref": "npc-shalan-summary-t1",
+          "npc_id": "npc-shalan",
+          "field_name": "public_summary",
+          "turn_index": 1,
+          "evidence_ids": ["turn_1_p001"],
+          "new_value": "赤沙会新任首领。",
+          "summary_delta": "接掌赤沙会并成为新任首领。"
+        },
+        {
+          "log_ref": "npc-shalan-summary-t2",
+          "npc_id": "npc-shalan",
+          "field_name": "public_summary",
+          "turn_index": 2,
+          "evidence_ids": ["turn_2_p001"],
+          "old_value": "赤沙会新任首领。",
+          "new_value": "赤沙会首领，曾从沙暴中救回商队，是当地知名救援者。",
+          "summary_delta": "因从沙暴中救回商队而成为当地知名救援者。"
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "rescuer_delta",
+          "importance": "must",
+          "acceptable_evidence_ids": ["turn_2_p001"]
+        }
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001"],
+      "provenance_expectations": [
+        {
+          "evidence_id": "turn_2_p001",
+          "direct": true,
+          "relation": true,
+          "linked_npc_changes": [
+            {"npc_id": "npc-shalan", "field_name": "public_summary", "log_ref": "npc-shalan-summary-t2"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "npc_field_zero_support",
+      "description": "A complete NPC field node with zero evidence support loses its relation attribution even when it is the only node.",
+      "current_turn_index": 4,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_zhouqi",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "周启", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "他在库房盘点存货，又逐页核对了往来账目。"
+        }
+      ],
+      "npc_profiles": [
+        {"npc_id": "npc-zhouqi", "name": "周启", "role": "青岩镇守门人"}
+      ],
+      "npc_field_logs": [
+        {
+          "log_ref": "npc-zhouqi-role-t1",
+          "npc_id": "npc-zhouqi",
+          "field_name": "role",
+          "turn_index": 1,
+          "evidence_ids": ["turn_1_p001"],
+          "new_value": "青岩镇守门人"
+        }
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001"]
+    },
+    {
+      "case_id": "npc_direct_exact_vs_relation_noise",
+      "description": "An exact direct appearance answer wins a one-seat payload over an unrelated but valid NPC faction relation.",
+      "current_turn_index": 4,
+      "policy": {"max_hits": 1},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_liulan",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "柳岚", "aliases": []}],
+            "topics": ["佩剑"]
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她在堂前递上名帖，正式加入白鹿堂。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "柳岚第一次赴宴时佩着一柄乌鞘短剑。"
+        }
+      ],
+      "npc_profiles": [
+        {"npc_id": "npc-liulan", "name": "柳岚", "faction": "白鹿堂"}
+      ],
+      "npc_field_logs": [
+        {
+          "log_ref": "npc-liulan-faction-t1",
+          "npc_id": "npc-liulan",
+          "field_name": "faction",
+          "turn_index": 1,
+          "evidence_ids": ["turn_1_p001"],
+          "new_value": "白鹿堂"
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "liulan_sword",
+          "importance": "must",
+          "acceptable_evidence_ids": ["turn_2_p001"]
+        }
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001"],
+      "provenance_expectations": [
+        {
+          "evidence_id": "turn_2_p001",
+          "direct": true,
+          "relation": false
+        }
+      ]
+    },
+    {
+      "case_id": "shared_npc_continuity_evidence",
+      "description": "One pronoun-only document shared by a Continuity node and an NPC role node appears once with both provenances.",
+      "current_turn_index": 4,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_guqing",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "顾青", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她接过北门铜印，当众确认从今日起担任巡检。"
+        }
+      ],
+      "continuity_items": [
+        {
+          "id": "north-gate-office",
+          "kind": "open_thread",
+          "status": "active",
+          "subject": "北门巡检任命",
+          "premise": "确认顾青是否正式接任北门巡检。",
+          "entities": ["顾青"],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
+      ],
+      "continuity_logs": [
+        {
+          "item_id": "north-gate-office",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": ["turn_1_p001"],
+          "reason": "顾青接过北门铜印并确认担任巡检。"
+        }
+      ],
+      "npc_profiles": [
+        {"npc_id": "npc-guqing", "name": "顾青", "role": "北门巡检"}
+      ],
+      "npc_field_logs": [
+        {
+          "log_ref": "npc-guqing-role-t1",
+          "npc_id": "npc-guqing",
+          "field_name": "role",
+          "turn_index": 1,
+          "evidence_ids": ["turn_1_p001"],
+          "new_value": "北门巡检"
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "shared_appointment",
+          "importance": "must",
+          "acceptable_evidence_ids": ["turn_1_p001"]
+        }
+      ],
+      "provenance_expectations": [
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": false,
+          "relation": true,
+          "linked_continuity_ids": ["north-gate-office"],
+          "linked_operations": ["create"],
+          "linked_npc_changes": [
+            {"npc_id": "npc-guqing", "field_name": "role", "log_ref": "npc-guqing-role-t1"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "npc_stale_hash",
+      "description": "Valid, stale-hash, and missing NPC field evidence pointers coexist; only the valid node may contribute.",
+      "current_turn_index": 6,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_shenyan",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "沈砚", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "他接过医馆钥匙，正式成为回春堂的坐堂医师。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "他在门前挂起回春堂木牌，确认此后归属回春堂。"}
+      ],
+      "npc_profiles": [
+        {
+          "npc_id": "npc-shenyan",
+          "name": "沈砚",
+          "role": "回春堂坐堂医师",
+          "faction": "回春堂",
+          "appearance": "常穿灰布长衫"
+        }
+      ],
+      "npc_field_logs": [
+        {
+          "log_ref": "npc-shenyan-role-t1",
+          "npc_id": "npc-shenyan",
+          "field_name": "role",
+          "turn_index": 1,
+          "evidence_ids": ["turn_1_p001"],
+          "new_value": "回春堂坐堂医师"
+        },
+        {
+          "log_ref": "npc-shenyan-faction-t2",
+          "npc_id": "npc-shenyan",
+          "field_name": "faction",
+          "turn_index": 2,
+          "evidence_ids": ["turn_2_p001"],
+          "new_value": "回春堂",
+          "hash_mode": "stale"
+        },
+        {
+          "log_ref": "npc-shenyan-appearance-t3",
+          "npc_id": "npc-shenyan",
+          "field_name": "appearance",
+          "turn_index": 3,
+          "evidence_ids": ["turn_3_p999"],
+          "new_value": "常穿灰布长衫",
+          "hash_mode": "missing"
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "valid_role_pointer",
+          "importance": "must",
+          "acceptable_evidence_ids": ["turn_1_p001"]
+        }
+      ],
+      "forbidden_evidence_ids": ["turn_2_p001"],
+      "provenance_expectations": [
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": false,
+          "relation": true,
+          "linked_npc_changes": [
+            {"npc_id": "npc-shenyan", "field_name": "role", "log_ref": "npc-shenyan-role-t1"}
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "npc_relation_owner_cap",
+      "description": "One NPC is capped at three relation seats while a different NPC keeps an independent owner budget.",
+      "current_turn_index": 8,
+      "policy": {"max_hits": 5},
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_qinshuang",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "秦霜", "aliases": []}],
+            "topics": []
+          },
+          {
+            "intent_id": "explicit_luheng",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "陆衡", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她换上黑羽卫旧制甲衣，正式成为黑羽卫斥候。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她在名册上按下指印，自此归属黑羽卫。"},
+        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "她摘下面具，露出左颊一道新月形伤痕。"},
+        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "她救出被围商旅，此后以护送商队闻名。"},
+        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "他接管南仓钥匙，正式成为南仓管事。"}
+      ],
+      "npc_profiles": [
+        {
+          "npc_id": "npc-qinshuang",
+          "name": "秦霜",
+          "role": "黑羽卫斥候",
+          "faction": "黑羽卫",
+          "appearance": "左颊有新月形伤痕",
+          "public_summary": "以护送商队闻名的黑羽卫斥候。"
+        },
+        {"npc_id": "npc-luheng", "name": "陆衡", "role": "南仓管事"}
+      ],
+      "npc_field_logs": [
+        {"log_ref": "npc-qinshuang-role-t1", "npc_id": "npc-qinshuang", "field_name": "role", "turn_index": 1, "evidence_ids": ["turn_1_p001"], "new_value": "黑羽卫斥候"},
+        {"log_ref": "npc-qinshuang-faction-t2", "npc_id": "npc-qinshuang", "field_name": "faction", "turn_index": 2, "evidence_ids": ["turn_2_p001"], "new_value": "黑羽卫"},
+        {"log_ref": "npc-qinshuang-appearance-t3", "npc_id": "npc-qinshuang", "field_name": "appearance", "turn_index": 3, "evidence_ids": ["turn_3_p001"], "new_value": "左颊有新月形伤痕"},
+        {"log_ref": "npc-qinshuang-summary-t4", "npc_id": "npc-qinshuang", "field_name": "public_summary", "turn_index": 4, "evidence_ids": ["turn_4_p001"], "new_value": "以护送商队闻名的黑羽卫斥候。", "summary_delta": "因救出被围商旅而以护送商队闻名。"},
+        {"log_ref": "npc-luheng-role-t5", "npc_id": "npc-luheng", "field_name": "role", "turn_index": 5, "evidence_ids": ["turn_5_p001"], "new_value": "南仓管事"}
+      ],
+      "gold_groups": [
+        {"group_id": "qin_faction", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]},
+        {"group_id": "qin_appearance", "importance": "must", "acceptable_evidence_ids": ["turn_3_p001"]},
+        {"group_id": "qin_summary", "importance": "must", "acceptable_evidence_ids": ["turn_4_p001"]},
+        {"group_id": "lu_role", "importance": "must", "acceptable_evidence_ids": ["turn_5_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_1_p001"]
+    },
+    {
+      "case_id": "npc_inactive_profile_eligibility",
+      "description": "An inactive profile is reachable through an explicit permanent alias but not through current-context identity alone.",
+      "current_turn_index": 6,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "explicit_laoliu",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [{"name": "老柳", "aliases": []}],
+            "topics": []
+          },
+          {
+            "intent_id": "context_zhaoqi",
+            "focus": "entity",
+            "origin": "current_context",
+            "entities": [{"name": "赵七", "aliases": []}],
+            "topics": []
+          }
+        ]
+      },
+      "turns": [
+        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "他交出渡口账册后，被推举为旧渡口账房。"},
+        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "他接过巡夜铜锣，成为东街巡夜人。"}
+      ],
+      "npc_profiles": [
+        {"npc_id": "npc-liubo", "name": "柳伯", "aliases": ["老柳"], "active": false, "role": "旧渡口账房"},
+        {"npc_id": "npc-zhaoqi", "name": "赵七", "active": false, "role": "东街巡夜人"}
+      ],
+      "npc_field_logs": [
+        {"log_ref": "npc-liubo-role-t1", "npc_id": "npc-liubo", "field_name": "role", "turn_index": 1, "evidence_ids": ["turn_1_p001"], "new_value": "旧渡口账房"},
+        {"log_ref": "npc-zhaoqi-role-t2", "npc_id": "npc-zhaoqi", "field_name": "role", "turn_index": 2, "evidence_ids": ["turn_2_p001"], "new_value": "东街巡夜人"}
+      ],
+      "gold_groups": [
+        {"group_id": "explicit_inactive_alias", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+      ],
+      "forbidden_evidence_ids": ["turn_2_p001"],
+      "provenance_expectations": [
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": false,
+          "relation": true,
+          "linked_npc_changes": [
+            {"npc_id": "npc-liubo", "field_name": "role", "log_ref": "npc-liubo-role-t1"}
+          ]
+        }
+      ]
     }
   ]
 }

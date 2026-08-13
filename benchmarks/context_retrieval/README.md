@@ -2,18 +2,20 @@
 
 This deterministic benchmark measures the quality of the final Confirmed
 History payload selected for Context Facts. It runs the real
-`ContinuityHistoryBridge` and `ContextHistoryRetriever` against in-memory SQLite
-stores. It does not call an LLM or touch a real save.
+`ContinuityHistoryBridge`, `NPCProfileHistoryBridge`, and
+`ContextHistoryRetriever` against in-memory SQLite stores. It does not call an
+LLM or touch a real save.
 
 ## Current checkpoint
 
-Accepted on 2026-08-10 with 25 cases:
+Accepted on 2026-08-13 with 33 cases:
 
-- must recall: `27/28`
-- weighted recall: `90/95`
+- must recall: `37/38`
+- weighted recall: `120/125`
 - forbidden evidence visible: `0`
 - forbidden main evidence visible: `0`
 - invariant violations: `0`
+- duplicate visible: `4`
 
 The newest cases are benchmark-first contracts for per-evidence semantic
 validation. They are closed by the node-evidence quality layer (see
@@ -74,36 +76,35 @@ weighted recall is preserved.
 after reviewing an intentional semantic change; a passing run by itself is not
 sufficient justification.
 
-## Pending NPC field-history checkpoint
+## NPC field-history contracts
 
-Ticket 10 keeps its benchmark-first contracts separate from the accepted
-25-case suite until the NPC bridge is implemented and reviewed:
+Ticket 10 adds 8 accepted cases that drive the `NPCProfileHistoryBridge` against
+the production v7 field-change store. Each case declares NPC profiles, stable
+field-change nodes, pointer integrity modes, and structured
+`(npc_id, field_name, log_id)` provenance. A fixture-local `log_ref` is resolved
+to the store-assigned integer `log_id` when the fixture is materialized; fixture
+labels never masquerade as database IDs.
 
-- fixture: `cases_npc_field_pending.json` (version 2, 8 cases);
-- implementation-before score: must `3/10`, weighted `9/30`, invariant
-  violations `6`;
-- report: `.scratch/npc-turn-processor/phase0-npc-field-report.json`;
-- accepted `cases.json` and `baseline.json` remain unchanged.
-
-The pending suite declares NPC profiles, stable field-change nodes, pointer
-integrity modes, and structured `(npc_id, field_name, log_id)` provenance. A
-fixture-local `log_ref` is resolved to the store-assigned integer `log_id` when
-the pending store is materialized; fixture labels never masquerade as database
-IDs. Its
-current failures are intentional: they identify recall/provenance that cannot
-exist before `NPCProfileHistoryBridge` is wired. Guards already satisfied by
-direct History or Continuity remain green.
-
-Run the pending checkpoint without comparing or updating the accepted
-baseline:
-
-```bash
-PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py --pending-npc-field
-```
-
-`--pending-npc-field` rejects `--check` and `--update-baseline`; after the
-production bridge passes semantic review, these cases can be promoted through
-an explicit accepted-baseline update.
+- `npc_role_relation_exact`: a query asks for an NPC identity, the scene prose
+  uses only a pronoun, direct retrieval misses, and the `role` field-change node
+  bridges the key evidence as a relation hit.
+- `npc_public_summary_delta`: a major `public_summary` update is bridged only by
+  its `summary_delta` node; the aggregated current summary never broadcasts onto
+  earlier evidence.
+- `npc_field_zero_support`: a complete-basis field link whose evidence scores
+  zero support is stripped like a Continuity zero-support mount; its attribution
+  must not claim a seat.
+- `npc_direct_exact_vs_relation_noise`: when direct retrieval already answers
+  exactly, a weak NPC relation proposal does not steal the seat.
+- `shared_npc_continuity_evidence`: the same document referenced by an NPC field
+  node and a Continuity node is selected once and carries both provenance sets.
+- `npc_stale_hash`: missing evidence and non-null hash mismatches are skipped
+  diagnostically while valid links keep their seats.
+- `npc_relation_owner_cap`: repeated field updates of one NPC cannot monopolize
+  the payload; separate NPC profiles do not share the owner cap.
+- `npc_inactive_profile_eligibility`: an inactive profile only reactivates
+  through an explicit name/alias input, never through current-context or
+  topic-only noise.
 
 Run and compare with the accepted baseline:
 
@@ -139,7 +140,7 @@ to ContextExtractor as a main, supporting, or adjacent evidence record.
   payload.
 - `provenance_expectations` apply to main hits and verify direct/relation route
   separation. They may also assert merged Continuity IDs and lifecycle
-  operations for evidence shared by multiple matters. Pending NPC cases may
+  operations for evidence shared by multiple matters. NPC field cases may
   additionally assert structured field-change provenance by stable `log_id`.
 
 Channel counts are diagnostic only. More relation-only or direct-only hits are
@@ -190,6 +191,10 @@ with the rest of retrieval). The score keeps a primary/context split:
 combined = max(primary_support, 0.4 * context_support)
 quality  = primary_support if primary_support > weak else min(combined, weak)
 ```
+
+NPC field nodes use the same split: `public_summary` nodes carry the
+`summary_delta` as primary basis (never the aggregated full summary), and
+`role` / `appearance` / `faction` nodes carry the change's `new_value`.
 
 Only the primary basis (premise / state delta / closing reason) can reach
 `strong`; the contextual background can lift an evidence at most to `weak`, so
