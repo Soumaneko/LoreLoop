@@ -89,6 +89,7 @@ def _candidate_shells(
         ))
         context[npc_id] = NpcCandidateContext(
             primary_surface=candidate.primary_surface,
+            presence=candidate.presence,
             alias_surfaces=[
                 relation.surface for relation in candidate.alias_relations
             ],
@@ -511,6 +512,7 @@ def _candidate_context_plain(
     return {
         npc_id: {
             "primary_surface": candidate.primary_surface,
+            "presence": candidate.presence,
             "alias_surfaces": list(candidate.alias_surfaces),
             "evidence_fact_ids": list(candidate.evidence_fact_ids),
             "evidence_paragraph_ids": list(candidate.evidence_paragraph_ids),

@@ -4,7 +4,11 @@ import pytest
 
 from app.domain.npc_profile.identity_resolver import resolve_npc_identities
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.scene_facts.schemas import AliasRelation, SceneNpcMention
+from app.domain.scene_facts.schemas import (
+    AliasRelation,
+    NpcPresence,
+    SceneNpcMention,
+)
 
 _PLAYER = "萧云痕"
 
@@ -39,12 +43,14 @@ def _mention(
     relations=None,
     evidence=None,
     paragraph_evidence=None,
+    presence: NpcPresence = "appeared",
 ) -> SceneNpcMention:
     if evidence is None:
         evidence = ["f1"]  # schema requires at least one evidence
     relations = list(relations or [])
     return SceneNpcMention(
         primary_surface=primary,
+        presence=presence,
         alias_relations=relations,
         evidence_fact_ids=list(evidence or []),
         evidence_paragraph_ids=list(paragraph_evidence or []),
@@ -210,6 +216,58 @@ def test_scan_union_keeps_missed_existing_npc():
     assert resolution.resolved[0].npc_id == "npc_001"
 
 
+def test_scan_union_resolves_as_mentioned_only():
+    profiles = [_profile("npc_001", "沈孤鸿")]
+    resolution = _resolve(
+        profiles,
+        [],
+        texts=["沈孤鸿走进醉花楼。"],
+    )
+    assert resolution.diagnostics is not None
+
+    assert resolution.resolved[0].presence == "mentioned_only"
+    assert resolution.diagnostics.appeared_groups == 0
+    assert resolution.diagnostics.mentioned_only_groups == 1
+
+
+def test_mention_presence_projected_onto_resolved_npc():
+    profiles = [_profile("npc_001", "沈孤鸿")]
+    appeared = _resolve(profiles, [_mention("沈孤鸿", presence="appeared")])
+    assert appeared.resolved[0].presence == "appeared"
+
+    mentioned = _resolve(profiles, [_mention("沈孤鸿", presence="mentioned_only")])
+    assert mentioned.resolved[0].presence == "mentioned_only"
+
+
+def test_merge_same_npc_appeared_wins():
+    profiles = [_profile("npc_001", "沈孤鸿", aliases=["沈二"])]
+    resolution = _resolve(
+        profiles,
+        [
+            _mention("沈孤鸿", presence="mentioned_only"),
+            _mention("沈二", presence="appeared"),
+        ],
+    )
+    assert resolution.resolved[0].presence == "appeared"
+    assert resolution.diagnostics is not None
+    assert resolution.diagnostics.appeared_groups == 1
+    assert resolution.diagnostics.mentioned_only_groups == 0
+
+
+def test_candidate_keeps_mention_presence_and_merge_priority():
+    resolution = _resolve(
+        [],
+        [
+            _mention("采药女", presence="mentioned_only"),
+            _mention("采药女", presence="appeared", evidence=["f2"]),
+        ],
+    )
+    candidates = {
+        candidate.primary_surface: candidate for candidate in resolution.candidates
+    }
+    assert candidates["采药女"].presence == "appeared"
+
+
 def test_pending_alias_conflict_with_another_profile_skipped():
     profiles = [
         _profile("npc_001", "沈孤鸿"),
@@ -256,14 +314,21 @@ def test_resolution_is_deterministic():
 
 def test_npc_mentions_schema_validates_shape():
     with pytest.raises(Exception):
-        SceneNpcMention(primary_surface="沈孤鸿")
+        SceneNpcMention(primary_surface="沈孤鸿")  # type: ignore[call-arg]
     with pytest.raises(Exception):
         AliasRelation(surface="沈二爷", basis="explicit_fixed_alias")
+    with pytest.raises(Exception):
+        SceneNpcMention(  # type: ignore[call-arg]
+            primary_surface="沈孤鸿",
+            evidence_fact_ids=["f1"],
+        )
     mention = SceneNpcMention(
         primary_surface="沈孤鸿",
+        presence="appeared",
         evidence_fact_ids=["f1"],
     )
     assert mention.primary_surface == "沈孤鸿"
+    assert mention.presence == "appeared"
 
 
 def test_same_npc_groups_are_merged():

@@ -49,6 +49,9 @@
   - 不要输出 fact_id；fact_id 由程序自动填写。
 - npc_mentions：正文出现的 NPC 人物簇，每人一条（最多 12 条，不含玩家）。
   - primary_surface：姓名、稳定称号或足以区分人物的具体描述。
+  - presence：appeared＝该人物在本轮正文中实际说话、行动，或处于直接可观察状态；
+    即使回合结束前离场仍为 appeared。mentioned_only＝只被谈论、回忆、转述或远程
+    引用，没有实际参与本场景。同一人物既被提及又实际参与，合并为 appeared。
   - alias_relations：正文表达「两个称呼是同一人」的别名关系；只陈述同一人，
     不判定是否已有档案；其 surface 不得与 primary_surface 相同。
   - evidence_fact_ids：该人物出现所依据的事实序号。事实按位置编号：
@@ -73,6 +76,7 @@
 12. 每条 mention 至少给出一条 evidence_fact_id 或 evidence_paragraph_id。fact 引用严格按位置（facts[0]→f1…），越界或重复引用会被拒。
 13. alias_relations.basis：explicit_fixed_alias＝明确固定别名（“人称沈二爷”）；temporary_address＝临时头衔或称谓（“这位少侠”）；same_scene_coreference＝两个有区分度的称呼在同场明确指向同一人。普通代词本身不输出。只提取正文有依据的，不猜测；explicit_fixed_alias 必须带证据。
 14. 不要把玩家写成 npc_mention。
+15. presence 只看本轮正文证据：实际说话、行动、直接可观察的状态、与在场者直接互动才算 appeared；被其他人谈论、回忆、转述或远程引用的为 mentioned_only。不要仅凭名字出现在正文或转述内容推断 appeared。
 
 
 # 禁止事项
@@ -92,11 +96,11 @@
 
 # 示例
 
-若 SceneText 写“顾晚棠喝下药后脸色稍缓，却仍把账册摹本的去处含糊带过，只说盐帮很快会追到客栈”，合适输出类似：
+若 SceneText 写“顾晚棠喝下药后脸色稍缓，向沈忘忧说道：「账册摹本的去处不便明说，盐帮很快会追到客栈。」”，合适输出类似：
 
 ```json
 {{
-  "scene_focus": "顾晚棠服药后稍有恢复，并提醒盐帮追兵将至。",
+  "scene_focus": "顾晚棠服药后稍有恢复，并提醒沈忘忧盐帮追兵将至。",
   "facts": [
     {{
       "fact": "顾晚棠喝下药后脸色稍有好转，但身体状态仍未完全恢复。"
@@ -111,12 +115,14 @@
   "npc_mentions": [
     {{
       "primary_surface": "顾晚棠",
+      "presence": "appeared",
       "alias_relations": [],
       "evidence_fact_ids": ["f1", "f2", "f3"],
       "evidence_paragraph_ids": ["turn_12_p001"]
     }},
     {{
       "primary_surface": "沈忘忧",
+      "presence": "appeared",
       "alias_relations": [],
       "evidence_fact_ids": ["f3"],
       "evidence_paragraph_ids": ["turn_12_p001"]

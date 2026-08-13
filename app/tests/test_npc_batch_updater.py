@@ -28,7 +28,13 @@ from app.domain.npc_profile.turn_contract import (
     NPCBatchUpdateEntry,
     ScalarStableChange,
 )
-from app.domain.scene_facts.schemas import AliasRelation, SceneFact, SceneFactSet, SceneNpcMention
+from app.domain.scene_facts.schemas import (
+    AliasRelation,
+    NpcPresence,
+    SceneFact,
+    SceneFactSet,
+    SceneNpcMention,
+)
 
 _SCENE_ID = "scene_001"
 _TURN_INDEX = 3
@@ -101,10 +107,11 @@ def _relation(surface, basis, evidence=None, paragraph_evidence=None) -> AliasRe
     )
 
 
-def _mention(primary, *, relations=None) -> SceneNpcMention:
+def _mention(primary, *, relations=None, presence: NpcPresence = "appeared") -> SceneNpcMention:
     relations = list(relations or [])
     return SceneNpcMention(
         primary_surface=primary,
+        presence=presence,
         alias_relations=relations,
         evidence_fact_ids=["f1"],
     )
@@ -131,6 +138,7 @@ def _admit(
     *,
     entry_warnings=None,
     resolved=("npc_001",),
+    mutable=None,
     alias_changes=None,
     profiles=None,
     evidence_documents=None,
@@ -140,6 +148,9 @@ def _admit(
         updates=updates,
         entry_warnings=list(entry_warnings or []),
         resolved_npc_ids=list(resolved),
+        mutable_npc_ids=(
+            list(resolved) if mutable is None else list(mutable)
+        ),
         alias_changes=list(alias_changes or []),
         profiles=profiles or [_profile()],
         evidence_documents=evidence_documents or _evidence(),
@@ -404,6 +415,7 @@ def test_batch_input_uses_mention_evidence_for_pronoun_facts():
         ResolvedNpc(
             npc_id="npc_001",
             canonical_name="沈孤鸿",
+            presence="appeared",
             primary_surfaces=("沈孤鸿",),
             evidence_fact_ids=("f1",),
             evidence_paragraph_ids=("turn_3_p001",),
@@ -718,7 +730,7 @@ def test_admission_applies_deterministic_alias_changes():
 
 
 def test_processor_makes_single_batch_call_and_projects_input():
-    resolved = [ResolvedNpc(npc_id="npc_001", canonical_name="沈孤鸿", primary_surfaces=("沈孤鸿",))]
+    resolved = [ResolvedNpc(npc_id="npc_001", canonical_name="沈孤鸿", presence="appeared", primary_surfaces=("沈孤鸿",))]
     gateway = StubGateway({"updates": [{"npc_id": "npc_001"}]})
     batch = NPCBatchUpdater(gateway).process(  # type: ignore[arg-type]
         resolved=resolved,
@@ -837,3 +849,153 @@ def test_workflow_is_deterministic():
     first = run_once()
     second = run_once()
     assert asdict(first) == asdict(second)
+
+
+def test_mentioned_only_npc_excluded_from_batch_and_field_output():
+    mentions = [_mention("沈孤鸿", presence="mentioned_only")]
+    response = {
+        "updates": [
+            {
+                "npc_id": "npc_001",
+                "stable_changes": [
+                    {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                ],
+            }
+        ]
+    }
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile())
+        gateway = StubGateway(response)  # type: ignore[arg-type]
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=gateway,  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        assert gateway.calls == []
+        assert all(
+            change.field != "role" for change in result.accepted_changes
+        )
+        profile = store.get_by_id("npc_001")
+        assert profile is not None
+        assert profile.role is None
+
+
+def test_mentioned_only_alias_still_admitted():
+    mentions = [
+        _mention(
+            "沈孤鸿",
+            presence="mentioned_only",
+            relations=[
+                _relation("沈二爷", "explicit_fixed_alias", evidence=["f1"]),
+            ],
+        )
+    ]
+    response = {"updates": []}
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile())
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=StubGateway(response),  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        assert len(result.accepted_alias_changes) == 1
+        assert result.accepted_alias_changes[0].alias == "沈二爷"
+
+
+def test_scan_union_records_mention_hit_but_never_enters_batch():
+    response = {
+        "updates": [
+            {
+                "npc_id": "npc_001",
+                "stable_changes": [
+                    {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                ],
+            }
+        ]
+    }
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile())
+        gateway = StubGateway(response)  # type: ignore[arg-type]
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=gateway,  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=[]),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        assert result.resolution.diagnostics is not None
+        assert result.resolution.diagnostics.scan_union_added == 1
+        assert result.resolution.resolved[0].presence == "mentioned_only"
+        assert gateway.calls == []
+        assert all(
+            change.field != "role" for change in result.accepted_changes
+        )
+        profile = store.get_by_id("npc_001")
+        assert profile is not None
+        assert profile.name_hit_count == 1
+        assert profile.role is None
+
+
+def test_admission_rejects_mentioned_only_field_output():
+    result = _admit(
+        [_entry("npc_001", stable_changes=[_role_change()])],
+        resolved=("npc_001",),
+        mutable=(),
+    )
+    assert all(
+        change.field != "role" for change in result.accepted_profile_changes
+    )
+    assert any(
+        warning.code == "mentioned_only_field_output"
+        for warning in result.warnings
+    )
+
+
+def test_admission_mutable_must_be_subset_of_resolved():
+    with pytest.raises(ValueError, match="subset of resolved"):
+        _admit(
+            [],
+            resolved=("npc_001",),
+            mutable=("npc_999",),
+        )
+
+
+def test_admission_requires_mutable_npc_ids():
+    with pytest.raises(TypeError):
+        admit_npc_batch_update(  # type: ignore[call-arg]
+            updates=[],
+            resolved_npc_ids=["npc_001"],
+            alias_changes=[],
+            profiles=[_profile()],
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            scene_id=_SCENE_ID,
+            admitted_at=_ADMITTED_AT,
+        )
+
+
+def test_admission_helper_defaults_mutable_to_resolved():
+    result = _admit(
+        [_entry("npc_001", stable_changes=[_role_change()])],
+        resolved=("npc_001",),
+    )
+    assert any(
+        change.field == "role" for change in result.accepted_profile_changes
+    )
+    assert any(
+        profile.role == "醉花楼主" for profile in result.updated_profiles
+    )

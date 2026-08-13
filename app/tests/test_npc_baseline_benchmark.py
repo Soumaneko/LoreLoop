@@ -60,7 +60,7 @@ def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     assert benchmark_report["aggregate"]["weighted_total"] == 159
     assert benchmark_report["aggregate"]["forbidden_violation_count"] == 0
     assert benchmark_report["aggregate"]["invariant_violation_count"] == 0
-    assert benchmark_report["aggregate"]["call_count"] == 14
+    assert benchmark_report["aggregate"]["call_count"] == 12
     assert benchmark_report["aggregate"]["provider_attempts"] == 14
 
     assert cases["new_persistent_vs_ignore_oneoff"]["call_count"] == 0
@@ -151,16 +151,16 @@ def test_last_scene_pending_contract_is_deterministic_and_records_only_expected_
     assert report == repeated
     assert len(report["cases"]) == 8
     aggregate = report["aggregate"]
-    assert aggregate["weighted_passed"] == 75
+    assert aggregate["weighted_passed"] == 111
     assert aggregate["weighted_total"] == 141
     assert aggregate["forbidden_violation_count"] == 0
     assert aggregate["invariant_violation_count"] == 0
     assert aggregate["categories"]["resolution"] == {"passed": 11, "total": 11}
     assert aggregate["categories"]["stable_field"] == {"passed": 2, "total": 2}
-    assert aggregate["categories"]["npc_presence"] == {"passed": 0, "total": 11}
+    assert aggregate["categories"]["npc_presence"] == {"passed": 11, "total": 11}
     assert aggregate["categories"]["last_scene_summary"] == {"passed": 0, "total": 9}
     assert aggregate["categories"]["last_scene_batch_scope"] == {
-        "passed": 10,
+        "passed": 11,
         "total": 11,
     }
     assert aggregate["categories"]["evidence_warning"] == {"passed": 0, "total": 1}
@@ -169,7 +169,6 @@ def test_last_scene_pending_contract_is_deterministic_and_records_only_expected_
     mentioned = cases["mentioned_only_no_overwrite"]
     assert mentioned["last_scene_contract_signals"]["batch_npc_ids"] == [
         "npc-yao",
-        "npc-su",
     ]
     assert mentioned["last_scene_contract_signals"]["scene_summaries"] == {}
     assert mentioned["gold"]["forbidden_violations"] == []

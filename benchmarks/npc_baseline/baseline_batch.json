@@ -1,10 +1,10 @@
 {
   "benchmark_version": 2,
   "backend": "batch",
-  "fixtures_sha256": "e16e2ab725268ab35027666b81b38a5d723dfa7f8410515f54dcb1268f60c17e",
+  "fixtures_sha256": "b9300162d42f61e82d093c278f50dbe31ed108e749f6f4b978abcbee7825a526",
   "recordings_sha256": "6fc28387a90458626145ce9a00db325cbb2d926fc4c5d8e4951e086726bbf30f",
   "aggregate": {
-    "call_count": 14,
+    "call_count": 12,
     "provider_attempts": 14,
     "weighted_passed": 153,
     "weighted_total": 159,
@@ -40,7 +40,7 @@
         "total": 1
       }
     },
-    "prompt_content_chars": 7072,
+    "prompt_content_chars": 6096,
     "token_usage": {
       "completion_tokens": 1451,
       "prompt_tokens": 26289
@@ -437,7 +437,7 @@
     },
     {
       "case_id": "departed_direction",
-      "call_count": 1,
+      "call_count": 0,
       "provider_attempts": 1,
       "candidates": [],
       "extract_mentions": [
@@ -451,28 +451,17 @@
       ],
       "aliases_added": {},
       "new_profile_names": [],
-      "field_deltas": {
-        "npc_001": {
-          "current_intent": "前往城南"
-        }
-      },
-      "warnings": [
-        [
-          "npc_001",
-          "stable_changes",
-          "invalid_stable_change",
-          []
-        ]
-      ],
+      "field_deltas": {},
+      "warnings": [],
       "prompt_metrics": {
         "npc_batch_update": {
-          "resolved_npcs": 1,
-          "evidence_paragraphs": 1,
-          "content_chars": 492
+          "resolved_npcs": 0,
+          "evidence_paragraphs": 0,
+          "content_chars": 0
         },
-        "call_count": 1
+        "call_count": 0
       },
-      "prompt_content_chars": 492,
+      "prompt_content_chars": 0,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 82,
@@ -711,11 +700,11 @@
         "npc_batch_update": {
           "resolved_npcs": 1,
           "evidence_paragraphs": 1,
-          "content_chars": 498
+          "content_chars": 511
         },
         "call_count": 1
       },
-      "prompt_content_chars": 498,
+      "prompt_content_chars": 511,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 141,
@@ -863,7 +852,7 @@
     },
     {
       "case_id": "alias_fixed_title",
-      "call_count": 1,
+      "call_count": 0,
       "provider_attempts": 1,
       "candidates": [],
       "extract_mentions": [
@@ -888,21 +877,19 @@
       "new_profile_names": [],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "醉花楼",
-          "public_summary": "沈孤鸿，江湖人称沈二爷，沈二爷为其别号。",
-          "role": "江湖人称沈二爷"
+          "last_known_location": "醉花楼"
         }
       },
       "warnings": [],
       "prompt_metrics": {
         "npc_batch_update": {
-          "resolved_npcs": 1,
-          "evidence_paragraphs": 1,
-          "content_chars": 497
+          "resolved_npcs": 0,
+          "evidence_paragraphs": 0,
+          "content_chars": 0
         },
-        "call_count": 1
+        "call_count": 0
       },
-      "prompt_content_chars": 497,
+      "prompt_content_chars": 0,
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 149,

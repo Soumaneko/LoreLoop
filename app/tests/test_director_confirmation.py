@@ -264,6 +264,7 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
 
     candidate = NpcCandidate(
         primary_surface="练气巅峰采药女",
+        presence="appeared",
         evidence_fact_ids=("f1",),
     )
 
@@ -314,6 +315,7 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
     assert result["new_npc_profiles"][0].npc_id.startswith("cand_")
     context = result["npc_candidate_context"][result["new_npc_profiles"][0].npc_id]
     assert context.alias_surfaces == []
+    assert context.presence == "appeared"
     assert state["cache"]["npc_turn_result"].new_npc_profiles[0].name == "练气巅峰采药女"
 
 
@@ -395,6 +397,7 @@ def test_confirmation_observation_surfaces_new_npc_candidate_context(tmp_path):
         npc_candidate_context={
             "cand_abc123": {
                 "primary_surface": "采药女",
+                "presence": "appeared",
                 "alias_surfaces": ["药娘"],
                 "evidence_fact_ids": ["f1"],
                 "evidence_paragraph_ids": ["turn_3_p001"],
@@ -410,6 +413,7 @@ def test_confirmation_observation_surfaces_new_npc_candidate_context(tmp_path):
         "npc_id": "cand_abc123",
         **candidate.director_view().model_dump(mode="json"),
         "primary_surface": "采药女",
+        "presence": "appeared",
         "alias_surfaces": ["药娘"],
         "evidence_fact_ids": ["f1"],
         "evidence_paragraph_ids": ["turn_3_p001"],

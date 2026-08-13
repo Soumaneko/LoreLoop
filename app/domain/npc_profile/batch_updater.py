@@ -354,7 +354,10 @@ def apply_npc_batch_update(
     )
 
     parsed = NPCBatchUpdater(gateway).process(
-        resolved=list(resolution.resolved),
+        resolved=[
+            item for item in resolution.resolved
+            if item.presence == "appeared"
+        ],
         profiles=profiles,
         scene_facts=scene_facts,
         evidence_documents=current_evidence,
@@ -378,6 +381,10 @@ def apply_npc_batch_update(
         updates=parsed.entries,
         entry_warnings=parsed.entry_warnings,
         resolved_npc_ids=[item.npc_id for item in resolution.resolved],
+        mutable_npc_ids=[
+            item.npc_id for item in resolution.resolved
+            if item.presence == "appeared"
+        ],
         alias_changes=alias_changes,
         profiles=profiles,
         evidence_documents=current_evidence,

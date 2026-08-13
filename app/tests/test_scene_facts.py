@@ -114,6 +114,7 @@ def test_prompt_npc_mentions_rules_are_concise_and_consistent():
 def _mention(**overrides):
     base = {
         "primary_surface": "沈孤鸿",
+        "presence": "appeared",
         "alias_relations": [],
         "evidence_fact_ids": ["f1"],
         "evidence_paragraph_ids": ["turn_12_p001"],
@@ -324,6 +325,7 @@ def test_scene_fact_draft_rejects_relation_surface_equals_primary():
             npc_mentions=[
                 {
                     "primary_surface": "沈孤鸿",
+                    "presence": "appeared",
                     "alias_relations": [
                         {
                             "surface": "沈孤鸿",
@@ -348,6 +350,7 @@ def test_scene_npc_mentions_reject_generic_pronouns(surface):
     with pytest.raises(ValidationError, match="identity-bearing surface"):
         SceneNpcMention(
             primary_surface=surface,
+            presence="appeared",
             evidence_fact_ids=["f1"],
         )
     with pytest.raises(ValidationError, match="identity-bearing surface"):

@@ -13,6 +13,11 @@ NpcMentionBasis = Literal[
     "same_scene_coreference",
 ]
 
+NpcPresence = Literal[
+    "appeared",
+    "mentioned_only",
+]
+
 _GENERIC_PRONOUN_SURFACES = frozenset({
     "他",
     "她",
@@ -90,11 +95,15 @@ class SceneNpcMention(BaseModel):
     契约。其它有身份意义的称呼只通过 ``alias_relations`` 表达。
     ``evidence_fact_ids`` / ``evidence_paragraph_ids`` 为人物出现的证据。Scene Facts
     只陈述正文表达了什么，不判定 npc_id / existing / new / 是否建档 / 是否持久化。
+    ``presence`` 区分实际参与场景与仅被谈论：``appeared`` 表示实际说话、行动或处于
+    直接可观察状态（即使回合结束前离场）；``mentioned_only`` 表示只被谈论、回忆、
+    转述或远程引用。必填、无缺省，避免旧调用静默把 mention 当 appeared。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     primary_surface: str = Field(min_length=1)
+    presence: NpcPresence
     alias_relations: list[AliasRelation] = Field(default_factory=list)
     evidence_fact_ids: list[str] = Field(default_factory=list)
     evidence_paragraph_ids: list[str] = Field(default_factory=list)

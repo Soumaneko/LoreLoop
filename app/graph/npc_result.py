@@ -4,13 +4,15 @@ from dataclasses import dataclass, field
 
 from app.domain.npc_profile.batch_updater import NPCBatchProcessResult
 from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.scene_facts.schemas import NpcPresence
 
 
 @dataclass(frozen=True)
 class NpcCandidateContext:
-    """图侧候选上下文：薄壳 NPCProfile 之外的 alias 与证据（供 Director 展示）。"""
+    """图侧候选上下文：薄壳 NPCProfile 之外的 alias、证据与出场类别（供 Director 展示）。"""
 
     primary_surface: str
+    presence: NpcPresence
     alias_surfaces: list[str] = field(default_factory=list)
     evidence_fact_ids: list[str] = field(default_factory=list)
     evidence_paragraph_ids: list[str] = field(default_factory=list)

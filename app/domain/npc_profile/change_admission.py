@@ -49,6 +49,7 @@ def admit_npc_batch_update(
     updates: list[NPCBatchUpdateEntry],
     entry_warnings: list[NPCChangeAdmissionWarning] | None = None,
     resolved_npc_ids: Iterable[str],
+    mutable_npc_ids: Iterable[str],
     alias_changes: list[AcceptedNPCAliasChange],
     profiles: list[NPCProfile],
     evidence_documents: dict[str, HistoryDocument],
@@ -59,6 +60,10 @@ def admit_npc_batch_update(
 ) -> NPCChangeAdmissionResult:
     """审理 NPC batch field updater 的输出，per-field 容错（宁漏勿错）。
 
+    ``resolved_npc_ids`` 为全部确定性解析成功的 NPC（alias 校验、mention hit 使用）；
+    ``mutable_npc_ids`` 为 presence==appeared 的 NPC，字段 mutation 只对它们生效，
+    必须显式传入（缺失会静默恢复 mentioned-only 字段 mutation，故不可选填）。
+
     只有程序错误才整批失败：scene_id 不匹配、profiles 重复 npc_id、解析出的
     npc_id 没有对应档案。模型输出层面的问题一律只丢对应条目 / 字段：
 
@@ -66,6 +71,8 @@ def admit_npc_batch_update(
       ``entry_warnings`` 传入，宽松 wire envelope 阶段产生）；
     - 未知或未解析 npc_id 的条目 → 丢弃并记 warning（``unknown_npc_id`` /
       ``unresolved_npc_id``）；
+    - presence 非 appeared 的 npc 输出字段条目 → 丢弃并记 warning
+      （``mentioned_only_field_output``）；
     - 字段证据非法 → 只丢该字段（``change_evidence_dropped``）；
     - 同一 (npc_id, field) 重复（能力按规范化名称去重）→ 保留接受的首条；
     - 已解析但无输出的 NPC → no-op；
@@ -86,6 +93,12 @@ def admit_npc_batch_update(
         raise ValueError(
             "resolved npc_ids have no profile: "
             f"{sorted(resolved_ids - set(profile_by_id))}"
+        )
+    mutable_ids = set(mutable_npc_ids)
+    if mutable_ids - resolved_ids:
+        raise ValueError(
+            "mutable npc_ids must be a subset of resolved npc_ids: "
+            f"{sorted(mutable_ids - resolved_ids)}"
         )
 
     alias_npc_ids = {change.npc_id for change in alias_changes}
@@ -158,6 +171,18 @@ def admit_npc_batch_update(
                 message=(
                     f"batch update references npc {entry.npc_id!r} that was not "
                     "resolved this turn; entry dropped"
+                ),
+            ))
+            continue
+        if entry.npc_id not in mutable_ids:
+            dropped_entries += 1
+            warnings.append(NPCChangeAdmissionWarning(
+                npc_name=target.name,
+                field_name="npc_id",
+                code="mentioned_only_field_output",
+                message=(
+                    f"batch update references npc {entry.npc_id!r} whose "
+                    "presence is not appeared; field output dropped"
                 ),
             ))
             continue

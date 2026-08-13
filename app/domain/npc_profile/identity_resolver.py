@@ -33,15 +33,25 @@ from dataclasses import dataclass
 
 from app.core.text import eligible_highlight_term, normalize_compact_key
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.scene_facts.schemas import AliasRelation, SceneNpcMention
+from app.domain.scene_facts.schemas import (
+    AliasRelation,
+    NpcPresence,
+    SceneNpcMention,
+)
 
 
 @dataclass(frozen=True)
 class ResolvedNpc:
-    """本章归并到既有档案的一个 NPC：人物簇主称呼 + alias 关系 + 证据。"""
+    """本章归并到既有档案的一个 NPC：人物簇主称呼 + alias 关系 + 证据 + 出场类别。
+
+    ``presence`` 为该 NPC 在本轮 Scene Facts 中的出场类别（多簇合并时 appeared
+    优先）。scan-union 兜底（正文命中但 Scene Facts 未报）没有结构化证据，一律
+    记为 ``mentioned_only``——「未被证明为 appeared」，不进入字段 mutation。
+    """
 
     npc_id: str
     canonical_name: str
+    presence: NpcPresence
     primary_surfaces: tuple[str, ...] = ()
     alias_relations: tuple[AliasRelation, ...] = ()
     evidence_fact_ids: tuple[str, ...] = ()
@@ -69,9 +79,11 @@ class NpcCandidate:
 
     ``evidence_fact_ids`` / ``evidence_paragraph_ids`` 为人物出现的证据（mention-
     level 与 alias relation 的证据并集），供 Director 判断是否值得 enrich。
+    ``presence`` 保留其 mention 的出场类别（多 mention 合并 appeared 优先）。
     """
 
     primary_surface: str
+    presence: NpcPresence
     alias_relations: tuple[AliasRelation, ...] = ()
     evidence_fact_ids: tuple[str, ...] = ()
     evidence_paragraph_ids: tuple[str, ...] = ()
@@ -84,6 +96,8 @@ class IdentityResolutionDiagnostics:
     ambiguous_groups: int
     unmatched_groups: int
     scan_union_added: int
+    appeared_groups: int
+    mentioned_only_groups: int
     pending_aliases: int
     alias_conflicts: int
 
@@ -133,6 +147,7 @@ def resolve_npc_identities(
         if not all_ids:
             candidates.append(NpcCandidate(
                 primary_surface=mention.primary_surface,
+                presence=mention.presence,
                 alias_relations=tuple(mention.alias_relations),
                 evidence_fact_ids=_union_evidence_fact_ids(mention),
                 evidence_paragraph_ids=_union_evidence_paragraph_ids(mention),
@@ -180,6 +195,7 @@ def resolve_npc_identities(
             resolved_by_id[profile.npc_id] = ResolvedNpc(
                 npc_id=profile.npc_id,
                 canonical_name=profile.name,
+                presence="mentioned_only",
                 primary_surfaces=tuple(scanned),
             )
             scan_union += 1
@@ -213,12 +229,18 @@ def resolve_npc_identities(
         )
     )
 
+    appeared_groups = sum(
+        1 for item in resolved_by_id.values() if item.presence == "appeared"
+    )
+    mentioned_only_groups = len(resolved_by_id) - appeared_groups
     diagnostics = IdentityResolutionDiagnostics(
         groups=len(npc_mentions),
         resolved_groups=len(resolved_by_id) - scan_union,
         ambiguous_groups=ambiguous,
         unmatched_groups=unmatched,
         scan_union_added=scan_union,
+        appeared_groups=appeared_groups,
+        mentioned_only_groups=mentioned_only_groups,
         pending_aliases=len(pending),
         alias_conflicts=alias_conflicts,
     )
@@ -352,6 +374,7 @@ def _dedupe_candidates(candidates: list[NpcCandidate]) -> list[NpcCandidate]:
             continue
         by_primary[key] = NpcCandidate(
             primary_surface=existing.primary_surface,
+            presence=_merge_presence(existing.presence, candidate.presence),
             alias_relations=tuple(
                 _merge_relations(existing.alias_relations, candidate.alias_relations)
             ),
@@ -429,6 +452,7 @@ def _resolve_group(
         resolved_by_id[npc_id] = ResolvedNpc(
             npc_id=npc_id,
             canonical_name=profile.name,
+            presence=mention.presence,
             primary_surfaces=tuple(mention_surfaces),
             alias_relations=tuple(mention.alias_relations),
             evidence_fact_ids=mention_facts,
@@ -438,6 +462,7 @@ def _resolve_group(
         resolved_by_id[npc_id] = ResolvedNpc(
             npc_id=npc_id,
             canonical_name=profile.name,
+            presence=_merge_presence(existing.presence, mention.presence),
             primary_surfaces=tuple(
                 _merge_surfaces(existing.primary_surfaces, mention_surfaces)
             ),
@@ -459,6 +484,10 @@ def _resolve_group(
         if status == "conflict":
             conflicts += 1
     return conflicts
+
+
+def _merge_presence(first: NpcPresence, second: NpcPresence) -> NpcPresence:
+    return "appeared" if "appeared" in (first, second) else "mentioned_only"
 
 
 def _merge_surfaces(*groups: Sequence[str]) -> list[str]:

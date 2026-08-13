@@ -974,6 +974,7 @@ def test_candidate_npc_id_is_deterministic_and_conflict_free():
     shells, context = confirmation_nodes._candidate_shells(
         [NpcCandidate(
             primary_surface="采药女",
+            presence="appeared",
             evidence_fact_ids=("f1",),
         )],
         scene_id="scene_001",
