@@ -87,6 +87,10 @@ class RelationEvidenceLink:
     evidence_basis_primary: str | None
     evidence_basis_context: str | None
     basis_complete: bool
+    #: Per-intent reasons kept so the judge never broadcasts one intent's
+    #: reason onto another.  ``match_reasons`` remains the document-level union
+    #: for diagnostics; ranking reads only this mapping per intent.
+    intent_match_reasons: dict[str, frozenset[str]] = field(default_factory=dict)
     #: Turn the pointer's evidence must belong to. Continuity links do not
     #: carry it (``None`` skips the turn check); the NPC adapter fills it from
     #: the field log so a hash-colliding document from another turn is stale.
@@ -105,6 +109,36 @@ class RelationEvidenceLink:
         if unknown:
             raise ValueError(
                 f"unknown relation match reasons: {sorted(unknown)}"
+            )
+        if self.intent_match_reasons:
+            if set(self.intent_match_reasons) != set(self.triggering_intent_ids):
+                raise ValueError(
+                    "non-empty intent_match_reasons must cover exactly the "
+                    "triggering intents"
+                )
+            union_reasons = set().union(*(
+                reasons for reasons in self.intent_match_reasons.values()
+            ))
+            if union_reasons != set(self.match_reasons):
+                raise ValueError(
+                    "intent_match_reasons union must equal match_reasons"
+                )
+            empty_intents = [
+                intent_id
+                for intent_id, reasons in self.intent_match_reasons.items()
+                if not reasons
+            ]
+            if empty_intents:
+                raise ValueError(
+                    "every intent_match_reasons value must be non-empty: "
+                    f"{sorted(empty_intents)}"
+                )
+        unknown_reasons = set().union(*(
+            reasons for reasons in self.intent_match_reasons.values()
+        )) - _KNOWN_REASONS
+        if unknown_reasons:
+            raise ValueError(
+                f"unknown relation match reasons: {sorted(unknown_reasons)}"
             )
         if self.source == "continuity":
             if self.continuity is None or self.npc is not None:
@@ -138,6 +172,10 @@ def continuity_link_to_evidence(
         evidence_position=link.evidence_position,
         triggering_intent_ids=tuple(link.triggering_intent_ids),
         match_reasons=frozenset(link.match_reasons),
+        intent_match_reasons={
+            intent_id: frozenset(reasons)
+            for intent_id, reasons in link.intent_match_reasons.items()
+        },
         evidence_basis_primary=link.evidence_basis_primary,
         evidence_basis_context=link.evidence_basis_context,
         basis_complete=link.basis_complete,
@@ -161,6 +199,10 @@ def npc_field_link_to_evidence(
         evidence_position=link.evidence_position,
         triggering_intent_ids=tuple(link.triggering_intent_ids),
         match_reasons=frozenset(link.match_reasons),
+        intent_match_reasons={
+            intent_id: frozenset(reasons)
+            for intent_id, reasons in link.intent_match_reasons.items()
+        },
         evidence_basis_primary=link.evidence_basis_primary,
         evidence_basis_context=link.evidence_basis_context,
         basis_complete=link.basis_complete,
@@ -435,7 +477,7 @@ class _AdmissionAccumulator:
                 link.owner_key
             )
             self._intent_reasons.setdefault(intent_id, set()).update(
-                link.match_reasons
+                link.intent_match_reasons.get(intent_id, link.match_reasons)
             )
         if link.continuity is not None:
             self._continuity_ids.add(link.continuity.continuity_id)

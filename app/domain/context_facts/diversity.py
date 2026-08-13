@@ -65,6 +65,12 @@ class SelectionProposal(Generic[CandidateT]):
     route: Literal["direct", "relation"]
     channel_rank: int
     signal_rank: int
+    #: Recency tie-break that sorts before payload cost. Pure NPC field links
+    #: set this to ``current_turn_index - turn_index`` (0 = current, newer
+    #: first, never negative) so a recent node wins over an older one without
+    #: outranking the direct route; Continuity, mixed and direct proposals keep
+    #: 0 so their relative ordering is unchanged.
+    recency_rank: int = 0
 
 
 @dataclass(frozen=True)
@@ -294,6 +300,7 @@ def select_diverse_candidates(
                 _FOCUS_PRIORITY[owner.focus],
                 -new_coverage,
                 proposal.signal_rank,
+                proposal.recency_rank,
                 not route_is_new,
                 marginal_cost_band,
                 proposal.channel_rank,

@@ -230,6 +230,9 @@ class ContinuityHistoryLink(BaseModel):
     evidence_hash: str | None = Field(default=None, min_length=64, max_length=64)
     triggering_intent_ids: list[str] = Field(min_length=1)
     match_reasons: list[ContinuityRelationReason] = Field(min_length=1)
+    intent_match_reasons: dict[str, list[ContinuityRelationReason]] = Field(
+        default_factory=dict
+    )
     eligibility_reasons: list[ContinuityRelationReason] = Field(
         default_factory=list
     )

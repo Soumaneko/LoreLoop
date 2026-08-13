@@ -173,7 +173,7 @@ def test_context_retrieval_benchmark_check_command(capsys):
     assert "quality regression detected" not in output
 
 
-def test_pending_npc_field_contracts_capture_pre_bridge_gaps():
+def test_pending_npc_field_contracts_green_after_bridge_wiring():
     suite = load_suite(PENDING_NPC_FIELD_CASES)
     report = run_suite(
         suite,
@@ -188,45 +188,34 @@ def test_pending_npc_field_contracts_capture_pre_bridge_gaps():
     assert len(suite.cases) == 8
     assert repeated == report
     assert all(
-        case["npc_bridge_status"] == "pending_not_wired"
+        case["npc_bridge_status"] == "wired"
         for case in report["cases"]
     )
 
     cases = {case["case_id"]: case for case in report["cases"]}
-    assert cases["npc_role_relation_exact"]["missed_groups"] == [
-        "guqing_role"
-    ]
-    assert cases["npc_stale_hash"]["missed_groups"] == [
-        "valid_role_pointer"
-    ]
-    assert cases["npc_relation_owner_cap"]["missed_groups"] == [
-        "qin_faction",
-        "qin_appearance",
-        "qin_summary",
-        "lu_role",
-    ]
-    assert cases["npc_inactive_profile_eligibility"]["missed_groups"] == [
-        "explicit_inactive_alias"
-    ]
-
-    # Existing retrieval already closes the direct and Continuity halves; the
-    # pending contract specifically records the missing NPC provenance.
+    for case_id in (
+        "npc_role_relation_exact",
+        "npc_public_summary_delta",
+        "npc_stale_hash",
+        "npc_relation_owner_cap",
+        "npc_inactive_profile_eligibility",
+    ):
+        assert cases[case_id]["missed_groups"] == [], case_id
+    # Direct protection is preserved: the exact direct answer keeps the seat.
+    assert cases["npc_direct_exact_vs_relation_noise"]["missed_groups"] == []
     assert cases["npc_direct_exact_vs_relation_noise"][
         "invariant_violations"
     ] == []
     shared = cases["shared_npc_continuity_evidence"]
     assert shared["must_recalled"] == 1
     assert shared["visible_evidence_ids"] == ["turn_1_p001"]
-    assert any(
-        "expected linked NPC changes" in violation
-        for violation in shared["invariant_violations"]
-    )
+    assert shared["invariant_violations"] == []
     aggregate = report["aggregate"]
-    assert aggregate["must_recalled"] == 3
+    assert aggregate["must_recalled"] == 10
     assert aggregate["must_total"] == 10
-    assert aggregate["weighted_recalled"] == 9
+    assert aggregate["weighted_recalled"] == 30
     assert aggregate["weighted_total"] == 30
-    assert aggregate["invariant_violation_count"] == 6
+    assert aggregate["invariant_violation_count"] == 0
     assert aggregate["forbidden_visible_count"] == 0
     assert aggregate["forbidden_main_visible_count"] == 0
     assert aggregate["duplicate_visible_count"] == 0

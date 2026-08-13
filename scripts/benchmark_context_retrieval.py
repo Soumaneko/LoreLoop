@@ -23,6 +23,7 @@ from app.domain.context_facts.continuity_bridge import ContinuityHistoryBridge
 from app.domain.context_facts.views import project_context_history
 from app.domain.continuity import ContinuityItem, ContinuityStore
 from app.domain.npc_profile.changes import AcceptedNPCScalarChange
+from app.domain.npc_profile.history_bridge import NPCProfileHistoryBridge
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 
@@ -453,7 +454,7 @@ def _score_case(
         "invariant_violations": invariant_violations,
     }
     if case.npc_profiles or case.npc_field_logs:
-        result["npc_bridge_status"] = "pending_not_wired"
+        result["npc_bridge_status"] = "wired"
         result["npc_fixture_profiles"] = len(case.npc_profiles)
         result["npc_fixture_logs"] = len(case.npc_field_logs)
     return result
@@ -630,6 +631,9 @@ def run_case(case: BenchmarkCase) -> dict:
             continuity_store,
             **case.bridge,
         ).retrieve(case.search_plan)
+        npc_bridge = NPCProfileHistoryBridge(npc_store).retrieve(
+            case.search_plan
+        )
         result = ContextHistoryRetriever(
             history_store,
             diversity_policy=policy,
@@ -637,8 +641,10 @@ def run_case(case: BenchmarkCase) -> dict:
             case.search_plan,
             current_turn_index=case.current_turn_index,
             continuity_links=bridge.links,
+            npc_field_links=npc_bridge.links,
             matched_active_continuities=bridge.matched_active_continuities,
             matched_archived_continuities=bridge.matched_archived_continuities,
+            matched_npc_profiles=len(npc_bridge.matched_profile_ids),
         )
         payload = project_context_history(result)
         return _score_case(

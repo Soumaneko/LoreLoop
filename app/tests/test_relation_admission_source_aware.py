@@ -54,6 +54,7 @@ def _npc_link(
     evidence_hash=None,
     intents=("i1",),
     reasons=("npc_name_match",),
+    intent_match_reasons=None,
     basis=None,
     basis_complete=True,
     position=0,
@@ -68,6 +69,7 @@ def _npc_link(
         evidence_position=position,
         triggering_intent_ids=list(intents),
         match_reasons=list(reasons),
+        intent_match_reasons=intent_match_reasons or {},
         evidence_basis_primary=basis,
         basis_complete=basis_complete,
     )
@@ -215,6 +217,108 @@ class TestAdapters:
     def test_npc_link_rejects_unknown_reason_vocabulary(self):
         with pytest.raises(ValueError, match="match_reasons"):
             _npc_link(reasons=("bogus_reason",))
+
+    def _npc_evidence_link(
+        self,
+        *,
+        intents=("a",),
+        match_reasons=frozenset({"npc_name_match"}),
+        intent_match_reasons=None,
+    ):
+        return RelationEvidenceLink(
+            source="npc_profile",
+            node_key="n",
+            owner_key="o",
+            evidence_id="e",
+            evidence_hash=None,
+            evidence_position=0,
+            triggering_intent_ids=tuple(intents),
+            match_reasons=frozenset(match_reasons),
+            intent_match_reasons=intent_match_reasons or {},
+            evidence_basis_primary=None,
+            evidence_basis_context=None,
+            basis_complete=True,
+            npc=NPCAttribution(npc_id="npc-a", field_name="role", log_id=1),
+        )
+
+    def test_link_rejects_partial_intent_match_reasons(self):
+        with pytest.raises(
+            ValueError,
+            match="must cover exactly the triggering intents",
+        ):
+            self._npc_evidence_link(
+                intents=("a", "b"),
+                match_reasons=frozenset({
+                    "npc_name_match",
+                    "npc_value_topic_match",
+                }),
+                intent_match_reasons={"a": {"npc_name_match"}},
+            )
+
+    def test_link_rejects_empty_per_intent_reason_set(self):
+        with pytest.raises(ValueError, match="must be non-empty"):
+            self._npc_evidence_link(
+                intents=("a", "b"),
+                match_reasons=frozenset({"npc_name_match"}),
+                intent_match_reasons={
+                    "a": {"npc_name_match"},
+                    "b": frozenset(),
+                },
+            )
+
+    def test_link_rejects_intent_union_not_equal_to_global(self):
+        with pytest.raises(ValueError, match="must equal match_reasons"):
+            self._npc_evidence_link(
+                intents=("a", "b"),
+                match_reasons=frozenset({
+                    "npc_name_match",
+                    "npc_alias_match",
+                }),
+                intent_match_reasons={
+                    "a": {"npc_name_match"},
+                    "b": {"npc_value_topic_match"},
+                },
+            )
+
+    def test_legacy_empty_intent_match_reasons_allowed(self):
+        link = self._npc_evidence_link(
+            intents=("a", "b"),
+            match_reasons=frozenset({
+                "npc_name_match",
+                "npc_value_topic_match",
+            }),
+        )
+        assert link.intent_match_reasons == {}
+
+    def test_legacy_flat_link_falls_back_to_global_reasons(self):
+        text = "她接过铜印，正式成为北门巡检。"
+        documents_by_id, by_turn, paragraph = _scene_context(text)
+        evidence_hash = history_document_text_hash(paragraph)
+        npc = npc_field_link_to_evidence(_npc_link(
+            npc_id="npc-a",
+            log_id=7,
+            evidence_id=paragraph.document_id,
+            evidence_hash=evidence_hash,
+            intents=("a", "b"),
+            reasons=("npc_name_match", "npc_value_topic_match"),
+            basis="北门巡检",
+        ))
+
+        admissions, _ = judge_relation_links(
+            [npc],
+            documents_by_id=documents_by_id,
+            by_turn=by_turn,
+        )
+
+        admission = admissions[paragraph.document_id]
+        assert admission.intent_match_reasons["a"] == {
+            "npc_name_match",
+            "npc_value_topic_match",
+        }
+        assert admission.intent_match_reasons["b"] == {
+            "npc_name_match",
+            "npc_value_topic_match",
+        }
 
     def test_npc_reasons_fall_into_fixed_tiers(self):
         from app.domain.context_facts.relation_admission import RelationAdmission
@@ -415,6 +519,36 @@ class TestJudgeSourceAware:
 
         admission = admissions[paragraph.document_id]
         assert admission.signal_rank_for("a") == 0
+        assert admission.signal_rank_for("b") == 4
+
+    def test_npc_per_intent_reasons_do_not_cross_inflate(self):
+        text = "她接过铜印，正式成为北门巡检。"
+        documents_by_id, by_turn, paragraph = _scene_context(text)
+        evidence_hash = history_document_text_hash(paragraph)
+        npc = npc_field_link_to_evidence(_npc_link(
+            npc_id="npc-a",
+            log_id=7,
+            evidence_id=paragraph.document_id,
+            evidence_hash=evidence_hash,
+            intents=("a", "b"),
+            reasons=("npc_name_match", "npc_value_topic_match"),
+            intent_match_reasons={
+                "a": ["npc_name_match"],
+                "b": ["npc_value_topic_match"],
+            },
+            basis="北门巡检",
+        ))
+
+        admissions, _ = judge_relation_links(
+            [npc],
+            documents_by_id=documents_by_id,
+            by_turn=by_turn,
+        )
+
+        admission = admissions[paragraph.document_id]
+        assert admission.intent_match_reasons["a"] == {"npc_name_match"}
+        assert admission.intent_match_reasons["b"] == {"npc_value_topic_match"}
+        assert admission.signal_rank_for("a") == 2
         assert admission.signal_rank_for("b") == 4
 
 
@@ -653,6 +787,111 @@ class TestRetrieverSeam:
                 topics=[],
             )
         ])
+
+    def test_retriever_npc_recency_is_scoped_to_the_proposal_intent(self):
+        text_one = "她接过铜印，正式成为北门巡检。"
+        text_three = "他换上新甲，改任南门守备。"
+        with ConfirmedHistoryStore() as store:
+            store.upsert_turn(
+                scene_id="scene_001",
+                turn_index=1,
+                user_input="",
+                scene_text=text_one,
+            )
+            store.upsert_turn(
+                scene_id="scene_003",
+                turn_index=3,
+                user_input="",
+                scene_text=text_three,
+            )
+            documents = store.list_documents()
+            first = next(
+                item
+                for item in documents
+                if item.source_type == "scene_paragraph" and item.turn_index == 1
+            )
+            third = next(
+                item
+                for item in documents
+                if item.source_type == "scene_paragraph" and item.turn_index == 3
+            )
+            hash_one = history_document_text_hash(first)
+            hash_three = history_document_text_hash(third)
+            # The same document is served by a Continuity link (intent "a")
+            # and an NPC link (intent "b").
+            continuity = _continuity_link(
+                item_id="thread",
+                evidence_id=first.document_id,
+                evidence_hash=hash_one,
+                intents=("a",),
+                basis=text_one,
+            )
+            npc_mixed = _npc_link(
+                npc_id="npc-x",
+                log_id=7,
+                turn_index=1,
+                evidence_id=first.document_id,
+                evidence_hash=hash_one,
+                intents=("b",),
+                basis="北门巡检",
+            )
+            npc_pure = _npc_link(
+                npc_id="npc-y",
+                log_id=9,
+                turn_index=3,
+                evidence_id=third.document_id,
+                evidence_hash=hash_three,
+                intents=("b",),
+                basis="南门守备",
+            )
+            result = ContextHistoryRetriever(
+                store,
+                diversity_policy=HistoryDiversityPolicy(max_hits=1),
+            ).retrieve(
+                self._plan("顾青", intent_id="b"),
+                current_turn_index=5,
+                continuity_links=[continuity],
+                npc_field_links=[npc_mixed, npc_pure],
+            )
+
+        # Both documents are pure-NPC for intent "b"; recency prefers the newer
+        # pure document over the mixed one even though the mixed document also
+        # carries a Continuity attribution for another intent.
+        assert [hit.evidence_id for hit in result.hits] == [
+            third.document_id
+        ]
+
+    def test_npc_recency_clamps_when_document_turn_is_ahead(self):
+        text = "她接过铜印，正式成为北门巡检。"
+        with ConfirmedHistoryStore() as store:
+            store.upsert_turn(
+                scene_id="scene_003",
+                turn_index=3,
+                user_input="",
+                scene_text=text,
+            )
+            documents = store.list_documents()
+            paragraph = next(
+                item for item in documents if item.source_type == "scene_paragraph"
+            )
+            link = _npc_link(
+                npc_id="npc-a",
+                log_id=7,
+                turn_index=3,
+                evidence_id=paragraph.document_id,
+                evidence_hash=history_document_text_hash(paragraph),
+                intents=("q",),
+                basis="北门巡检",
+            )
+            result = ContextHistoryRetriever(store).retrieve(
+                self._plan("顾青"),
+                current_turn_index=1,
+                npc_field_links=[link],
+            )
+
+        assert [hit.evidence_id for hit in result.hits] == [
+            paragraph.document_id
+        ]
 
     def test_npc_field_links_flow_into_relation_hits(self):
         text = "她接过铜印，正式成为北门巡检。"

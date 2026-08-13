@@ -7,9 +7,20 @@ from app.domain.confirmed_history.schemas import HistorySource
 from app.domain.continuity import ContinuitySelection
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
+from app.domain.npc_profile.field_history import NPCFieldHistoryName
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.world_setting.schemas import SettingKind
+
+
+class LinkedNPCFieldChange(BaseModel):
+    """Diagnostics-only provenance: one NPC field node behind a relation hit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    npc_id: str = Field(min_length=1)
+    field_name: NPCFieldHistoryName
+    log_id: int = Field(ge=1)
 
 
 class ContextFact(BaseModel):
@@ -155,6 +166,8 @@ class ContextHistoryHit(BaseModel):
     linked_operations: list[
         Literal["create", "update", "resolve", "cancel"]
     ] = Field(default_factory=list)
+    linked_npc_changes: list[LinkedNPCFieldChange] = Field(default_factory=list)
+    linked_npc_profile_ids: list[str] = Field(default_factory=list)
     relation_match_reasons: list[str] = Field(default_factory=list)
     relation_evidence_quality: float | None = Field(default=None, ge=0)
     relation_evidence_class: str | None = Field(default=None)
@@ -200,6 +213,15 @@ class ContextHistoryHit(BaseModel):
             item.evidence_id for item in self.context_after
         }):
             raise ValueError("context_after must not contain duplicate evidence IDs")
+        if len(self.linked_npc_changes) != len({
+            (item.npc_id, item.field_name, item.log_id)
+            for item in self.linked_npc_changes
+        }):
+            raise ValueError(
+                "linked_npc_changes must not contain duplicate nodes"
+            )
+        if len(self.linked_npc_profile_ids) != len(set(self.linked_npc_profile_ids)):
+            raise ValueError("linked_npc_profile_ids must not contain duplicates")
         return self
 
 
@@ -211,12 +233,19 @@ class ContextHistoryEvidenceSet(BaseModel):
     indexed_turns: int = Field(default=0, ge=0)
     matched_active_continuities: int = Field(default=0, ge=0)
     matched_archived_continuities: int = Field(default=0, ge=0)
+    matched_npc_profiles: int = Field(default=0, ge=0)
     valid_relation_links: int = Field(default=0, ge=0)
     relation_candidates_considered: int = Field(default=0, ge=0)
     relation_hits_added: int = Field(default=0, ge=0)
     stale_relation_links: int = Field(default=0, ge=0)
     invalid_relation_links: int = Field(default=0, ge=0)
     degraded_relation_links: int = Field(default=0, ge=0)
+    npc_valid_links: int = Field(default=0, ge=0)
+    npc_stale_links: int = Field(default=0, ge=0)
+    npc_invalid_links: int = Field(default=0, ge=0)
+    npc_degraded_links: int = Field(default=0, ge=0)
+    npc_relation_candidates: int = Field(default=0, ge=0)
+    npc_relation_hits_added: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def _validate_global_evidence_uniqueness(self):

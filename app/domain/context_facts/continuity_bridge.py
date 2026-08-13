@@ -138,6 +138,12 @@ class ContinuityHistoryBridge:
                 key=lambda intent_id: (intent_order[intent_id], intent_id),
             )
             reasons = _sorted_reasons(match.reasons)
+            intent_match_reasons = {
+                intent_id: _sorted_reasons(ranking_reasons)
+                for intent_id, ranking_reasons in sorted(
+                    match.ranking_intent_reasons.items()
+                )
+            }
             eligibility_reasons = _sorted_reasons(
                 match.eligibility_reasons
             )
@@ -154,6 +160,7 @@ class ContinuityHistoryBridge:
                         evidence_hash=evidence.evidence_hash,
                         triggering_intent_ids=triggering_intent_ids,
                         match_reasons=reasons,
+                        intent_match_reasons=intent_match_reasons,
                         eligibility_reasons=eligibility_reasons,
                         evidence_position=evidence.position,
                         evidence_basis_primary=basis_primary,

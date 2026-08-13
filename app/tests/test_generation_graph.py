@@ -1108,7 +1108,7 @@ def test_extract_context_facts_preserves_facts_when_npc_selection_fails(
     captured = {}
 
     class _FakeContextFactsService:
-        def __init__(self, gateway, history_store, continuity_store, setting_store):
+        def __init__(self, gateway, history_store, continuity_store, setting_store, npc_profile_store=None):
             pass
 
         def build(self, input, trace_id):
@@ -1386,7 +1386,7 @@ def test_context_facts_npc_profiles_respect_disclosure_levels(
     captured = {}
 
     class _FakeContextFactsService:
-        def __init__(self, gateway, history_store, continuity_store, setting_store):
+        def __init__(self, gateway, history_store, continuity_store, setting_store, npc_profile_store=None):
             pass
 
         def build(self, input, trace_id):

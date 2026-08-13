@@ -1,6 +1,7 @@
 from app.core.llm import LLMGateway
 from app.domain.confirmed_history import ConfirmedHistoryStore
 from app.domain.continuity import ContinuityRetriever, ContinuityStore
+from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.world_setting import WorldSettingStore
 
 from .extractor import ContextExtractor
@@ -13,6 +14,7 @@ from .schemas import (
     ContextFactsInput,
     ContextFactsResult,
 )
+from app.domain.npc_profile.history_bridge import NPCProfileHistoryBridge
 
 
 class ContextFactsService:
@@ -22,11 +24,13 @@ class ContextFactsService:
         history_store: ConfirmedHistoryStore,
         continuity_store: ContinuityStore,
         setting_store: WorldSettingStore,
+        npc_profile_store: NPCProfileStore,
     ):
         self.extractor = ContextExtractor(llm)
         self.history_store = history_store
         self.continuity_store = continuity_store
         self.setting_store = setting_store
+        self.npc_profile_store = npc_profile_store
 
     def build(
         self,
@@ -44,18 +48,23 @@ class ContextFactsService:
         continuity_history_links = ContinuityHistoryBridge(
             self.continuity_store
         ).retrieve(search_plan)
+        npc_history_links = NPCProfileHistoryBridge(
+            self.npc_profile_store
+        ).retrieve(search_plan)
         history_evidence = ContextHistoryRetriever(
             self.history_store
         ).retrieve(
             search_plan,
             current_turn_index=input_data.current_turn_index,
             continuity_links=continuity_history_links.links,
+            npc_field_links=npc_history_links.links,
             matched_active_continuities=(
                 continuity_history_links.matched_active_continuities
             ),
             matched_archived_continuities=(
                 continuity_history_links.matched_archived_continuities
             ),
+            matched_npc_profiles=len(npc_history_links.matched_profile_ids),
         )
         continuity = ContinuityRetriever(
             self.continuity_store

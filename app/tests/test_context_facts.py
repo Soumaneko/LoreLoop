@@ -2266,6 +2266,7 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
         ConfirmedHistoryStore() as store,
         ContinuityStore() as continuity_store,
         WorldSettingStore() as setting_store,
+        NPCProfileStore(":memory:") as npc_store,
     ):
         store.upsert_turn(
             scene_id="scene_003",
@@ -2282,7 +2283,7 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
             created_turn=1,
         ))
         result = ContextFactsService(
-            gateway, store, continuity_store, setting_store
+            gateway, store, continuity_store, setting_store, npc_store
         ).build(
             ContextFactsInput(
                 user_input="我问顾阁主盐帮的最新动向。",

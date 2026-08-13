@@ -20,6 +20,7 @@ from app.domain.continuity import (
     ContinuityStore,
 )
 from app.domain.context_facts.continuity_bridge import ContinuityHistoryBridge
+from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.world_setting import WorldSettingStore
 
 
@@ -637,6 +638,7 @@ def test_context_facts_service_wires_forward_bridge_into_history_retrieval():
         ConfirmedHistoryStore() as history_store,
         ContinuityStore() as continuity_store,
         WorldSettingStore() as setting_store,
+        NPCProfileStore(":memory:") as npc_store,
     ):
         history_store.upsert_turn(
             scene_id="scene_001",
@@ -659,7 +661,11 @@ def test_context_facts_service_wires_forward_bridge_into_history_retrieval():
         )
 
         result = ContextFactsService(
-            Gateway(), history_store, continuity_store, setting_store
+            Gateway(),
+            history_store,
+            continuity_store,
+            setting_store,
+            npc_store,
         ).build(ContextFactsInput(
             user_input="回想苏念薇与姓周之人的事情。",
             core_memory=CoreMemory(items=[]),

@@ -101,12 +101,14 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
             _store_factory(state, "confirmed_history")() as history_store,
             _store_factory(state, "continuity")() as continuity_store,
             _store_factory(state, "world_setting")() as setting_store,
+            _store_factory(state, "npc_profile")() as npc_profile_store,
         ):
             result = ContextFactsService(
                 gateway_for(state),
                 history_store,
                 continuity_store,
                 setting_store,
+                npc_profile_store,
             ).build(
                 ContextFactsInput(
                     user_input=state["user_input"],

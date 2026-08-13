@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from app.domain.confirmed_history import (
     HistoryDocument,
-    best_trigram_match,
     document_window,
 )
+from app.domain.confirmed_history.text import support_score
 
 ZERO_SUPPORT = 0.02
 WEAK_SUPPORT = 0.30
@@ -28,36 +27,6 @@ class LinkSupport:
     @property
     def degraded(self) -> bool:
         return self.support_class != "strong"
-
-
-def support_score(basis_text: str | None, window_text: str) -> float:
-    """Lexical support of a node basis against a window of evidence text.
-
-    Combines trigram overlap with a distinctive-bigram containment ratio so
-    short Chinese 2-char terms (约定, 铜牌, 追查) count even when no shared
-    trigram survives. Returns 0.0 for empty basis/window.
-    """
-    if not basis_text or not window_text:
-        return 0.0
-    trigram_score, _ = best_trigram_match([basis_text], window_text)
-    return max(trigram_score, _substring_support(basis_text, window_text))
-
-
-def _substring_support(basis_text: str, window_text: str) -> float:
-    basis = _compact(basis_text)
-    window = _compact(window_text)
-    grams = {
-        basis[index:index + 2]
-        for index in range(len(basis) - 1)
-    }
-    if not grams:
-        return 0.0
-    matched = sum(1 for gram in grams if gram in window)
-    return matched / len(grams)
-
-
-def _compact(text: str) -> str:
-    return re.sub(r"[^\w\u4e00-\u9fff]", "", re.sub(r"\s+", "", text.casefold()))
 
 
 def link_window_text(

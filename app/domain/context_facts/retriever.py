@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import cast
 
 from app.domain.confirmed_history import (
     ConfirmedHistoryStore,
@@ -11,6 +12,7 @@ from app.domain.confirmed_history import (
     document_window,
 )
 from app.domain.continuity import ContinuityHistoryLink
+from app.domain.npc_profile.field_history import NPCFieldHistoryName
 from app.domain.npc_profile.history_bridge import NPCFieldHistoryLink
 
 from .clustering import SUPPORTING_EVIDENCE_MAX, cluster_near_duplicates
@@ -32,6 +34,7 @@ from .schemas import (
     ContextHistoryHit,
     ContextSearchIntent,
     ContextSearchPlan,
+    LinkedNPCFieldChange,
     SupportingEvidence,
 )
 
@@ -82,6 +85,7 @@ class ContextHistoryRetriever:
         npc_field_links: Sequence[NPCFieldHistoryLink] | None = None,
         matched_active_continuities: int = 0,
         matched_archived_continuities: int = 0,
+        matched_npc_profiles: int = 0,
     ) -> ContextHistoryEvidenceSet:
         documents = self.store.list_documents()
         by_turn: dict[int, list[HistoryDocument]] = defaultdict(list)
@@ -195,6 +199,13 @@ class ContextHistoryRetriever:
                 pair[0].document.document_id,
             ))
             for channel_rank, (candidate, admission) in enumerate(channel):
+                owners = admission.intent_owner_keys.get(
+                    intent.intent_id,
+                    frozenset(),
+                )
+                is_pure_npc = bool(owners) and all(
+                    owner.startswith("npc_profile:") for owner in owners
+                )
                 proposals.append(SelectionProposal(
                     candidate=candidate,
                     owner_intent_id=intent.intent_id,
@@ -202,6 +213,15 @@ class ContextHistoryRetriever:
                     channel_rank=channel_rank,
                     signal_rank=admission.signal_rank_for(
                         intent.intent_id
+                    ),
+                    recency_rank=(
+                        max(
+                            0,
+                            current_turn_index
+                            - candidate.document.turn_index,
+                        )
+                        if is_pure_npc
+                        else 0
                     ),
                 ))
 
@@ -235,12 +255,19 @@ class ContextHistoryRetriever:
             preview=preview,
             commit=commit,
         )
+        npc_relation_candidates = sum(
+            1
+            for candidate in relation_representatives.values()
+            if candidate.relation_admission is not None
+            and candidate.relation_admission.linked_npc_changes
+        )
         return ContextHistoryEvidenceSet(
             hits=hits,
             indexed_documents=self.store.count(),
             indexed_turns=self.store.turn_count(),
             matched_active_continuities=matched_active_continuities,
             matched_archived_continuities=matched_archived_continuities,
+            matched_npc_profiles=matched_npc_profiles,
             valid_relation_links=diagnostics.valid_links,
             relation_candidates_considered=len(relation_representatives),
             relation_hits_added=sum(
@@ -251,6 +278,16 @@ class ContextHistoryRetriever:
             stale_relation_links=diagnostics.stale_links,
             invalid_relation_links=diagnostics.invalid_links,
             degraded_relation_links=diagnostics.degraded_links,
+            npc_valid_links=diagnostics.npc_valid_links,
+            npc_stale_links=diagnostics.npc_stale_links,
+            npc_invalid_links=diagnostics.npc_invalid_links,
+            npc_degraded_links=diagnostics.npc_degraded_links,
+            npc_relation_candidates=npc_relation_candidates,
+            npc_relation_hits_added=sum(
+                1
+                for hit in hits
+                if hit.linked_npc_changes and not hit.matched_intent_ids
+            ),
         )
 
     def _retrieve_intent(
@@ -617,6 +654,28 @@ def _build_history_hit(
         ),
         linked_operations=(
             sorted(admission.linked_operations)
+            if admission is not None
+            else []
+        ),
+        linked_npc_changes=(
+            [
+                LinkedNPCFieldChange(
+                    npc_id=npc_id,
+                    field_name=cast(NPCFieldHistoryName, field_name),
+                    log_id=log_id,
+                )
+                for npc_id, field_name, log_id in sorted(
+                    admission.linked_npc_changes
+                )
+            ]
+            if admission is not None
+            else []
+        ),
+        linked_npc_profile_ids=(
+            sorted({
+                npc_id
+                for npc_id, _, _ in admission.linked_npc_changes
+            })
             if admission is not None
             else []
         ),
