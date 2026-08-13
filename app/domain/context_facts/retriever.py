@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from app.domain.confirmed_history import (
@@ -10,6 +11,7 @@ from app.domain.confirmed_history import (
     document_window,
 )
 from app.domain.continuity import ContinuityHistoryLink
+from app.domain.npc_profile.history_bridge import NPCFieldHistoryLink
 
 from .clustering import SUPPORTING_EVIDENCE_MAX, cluster_near_duplicates
 from .diversity import (
@@ -18,7 +20,12 @@ from .diversity import (
     SelectionProposal,
     select_diverse_candidates,
 )
-from .relation_admission import RelationAdmission, judge_relation_links
+from .relation_admission import (
+    RelationAdmission,
+    continuity_link_to_evidence,
+    judge_relation_links,
+    npc_field_link_to_evidence,
+)
 from .schemas import (
     AdjacentEvidence,
     ContextHistoryEvidenceSet,
@@ -72,6 +79,7 @@ class ContextHistoryRetriever:
         *,
         current_turn_index: int,
         continuity_links: list[ContinuityHistoryLink] | None = None,
+        npc_field_links: Sequence[NPCFieldHistoryLink] | None = None,
         matched_active_continuities: int = 0,
         matched_archived_continuities: int = 0,
     ) -> ContextHistoryEvidenceSet:
@@ -113,8 +121,15 @@ class ContextHistoryRetriever:
             document.document_id: document for document in documents
         }
 
+        evidence_links = [
+            *(continuity_link_to_evidence(link) for link in (continuity_links or [])),
+            *(
+                npc_field_link_to_evidence(link)
+                for link in (npc_field_links or [])
+            ),
+        ]
         admissions, diagnostics = judge_relation_links(
-            continuity_links or [],
+            evidence_links,
             documents_by_id=documents_by_id,
             by_turn=by_turn,
         )
@@ -185,7 +200,9 @@ class ContextHistoryRetriever:
                     owner_intent_id=intent.intent_id,
                     route="relation",
                     channel_rank=channel_rank,
-                    signal_rank=admission.signal_rank,
+                    signal_rank=admission.signal_rank_for(
+                        intent.intent_id
+                    ),
                 ))
 
         hits: list[ContextHistoryHit] = []

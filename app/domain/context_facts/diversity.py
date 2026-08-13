@@ -23,7 +23,7 @@ class HistoryDiversityPolicy:
     turn_cap: int = 2
     max_evidence_text_chars: int = 2_400
     min_excerpt_chars: int = 160
-    continuity_item_cap: int = 3
+    relation_owner_cap: int = 3
 
     def __post_init__(self) -> None:
         positive = {
@@ -34,7 +34,7 @@ class HistoryDiversityPolicy:
             "turn_cap": self.turn_cap,
             "max_evidence_text_chars": self.max_evidence_text_chars,
             "min_excerpt_chars": self.min_excerpt_chars,
-            "continuity_item_cap": self.continuity_item_cap,
+            "relation_owner_cap": self.relation_owner_cap,
         }
         invalid = [name for name, value in positive.items() if value < 1]
         if invalid:
@@ -126,7 +126,7 @@ def select_diverse_candidates(
     degraded_rescue_count: dict[str, int] = defaultdict(int)
     route_coverage: dict[tuple[str, str], int] = defaultdict(int)
     entity_owner_counts: dict[str, int] = defaultdict(int)
-    continuity_item_counts: dict[str, int] = defaultdict(int)
+    relation_owner_counts: dict[str, int] = defaultdict(int)
     turn_counts: dict[int, int] = defaultdict(int)
     current_payload_chars = 2  # Compact projection of an empty evidence set.
 
@@ -219,14 +219,17 @@ def select_diverse_candidates(
                 or entity_owner_counts[entity] < policy.entity_cap
             )
         admission = candidate.relation_admission
-        linked_continuity_ids = (
-            set(admission.matched_continuity_ids)
+        owner_keys = (
+            admission.intent_owner_keys.get(
+                proposal.owner_intent_id,
+                frozenset(),
+            )
             if admission is not None
-            else set()
+            else frozenset()
         )
-        if not linked_continuity_ids or not all(
-            continuity_item_counts[item_id] < policy.continuity_item_cap
-            for item_id in linked_continuity_ids
+        if not owner_keys or not all(
+            relation_owner_counts[owner_key] < policy.relation_owner_cap
+            for owner_key in owner_keys
         ):
             return False
         # Degraded relation evidence may only rescue an intent that has no
@@ -362,11 +365,16 @@ def select_diverse_candidates(
             if entity is not None:
                 entity_owner_counts[entity] += 1
         else:
-            for item_id in (
-                admission.matched_continuity_ids
-                if admission is not None
-                else ()
-            ):
-                continuity_item_counts[item_id] += 1
+            admission = candidate.relation_admission
+            if admission is not None:
+                # Only the owner keys attached to the proposal's intent are
+                # consumed, and only when the document enters via a relation
+                # proposal: a dual-route document selected as direct never
+                # spends relation owner budget.
+                for owner_key in admission.intent_owner_keys.get(
+                    owner.intent_id,
+                    frozenset(),
+                ):
+                    relation_owner_counts[owner_key] += 1
 
     return selected

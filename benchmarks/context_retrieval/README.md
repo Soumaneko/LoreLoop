@@ -161,7 +161,7 @@ the node-evidence quality layer:
   accumulate normal intent coverage, and one is no longer allowed once the
   intent has an actually selected direct hit. These constraints apply
   simultaneously, not additively: per-intent degraded cap (`intent_target`),
-  per-turn (`turn_cap`), per-continuity (`continuity_item_cap`), global
+  per-turn (`turn_cap`), per-relation-owner (`relation_owner_cap`), global
   (`max_hits`) and the serialized payload budget. `entity_cap` only constrains
   the direct route and is not a degraded relation bound.
 

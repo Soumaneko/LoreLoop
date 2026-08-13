@@ -11,6 +11,9 @@ from app.domain.context_facts.evidence_support import (
     link_window_text,
     support_score,
 )
+from app.domain.context_facts.relation_admission import (
+    continuity_link_to_evidence,
+)
 
 
 def _support(basis: str | None, window: str):
@@ -165,7 +168,7 @@ class TestLinkWindowText:
 
 class TestAdmissionAccumulator:
     def _link(self, intent_ids: list[str], *, basis_complete: bool = True):
-        return ContinuityHistoryLink(
+        return continuity_link_to_evidence(ContinuityHistoryLink(
             continuity_id="item",
             continuity_status="active",
             operation="create",
@@ -175,7 +178,7 @@ class TestAdmissionAccumulator:
             match_reasons=["exact_entity_match"],
             evidence_position=0,
             basis_complete=basis_complete,
-        )
+        ))
 
     def _support(self, *, quality: float, support_class: str, degraded: bool):
         return SimpleNamespace(
@@ -284,18 +287,16 @@ class TestRelationAdmission:
     def test_signal_rank_tiers(self):
         from app.domain.context_facts.relation_admission import RelationAdmission
 
-        assert RelationAdmission(
-            match_reasons=frozenset({"two_entity_match"})
-        ).signal_rank == 0
-        assert RelationAdmission(
-            match_reasons=frozenset({"exact_entity_match"})
-        ).signal_rank == 2
-        assert RelationAdmission(
-            match_reasons=frozenset({"location_match"})
-        ).signal_rank == 4
-        assert RelationAdmission(
-            match_reasons=frozenset()
-        ).signal_rank == 6
+        def admission(reasons):
+            return RelationAdmission(
+                match_reasons=frozenset(reasons),
+                intent_match_reasons={"i": frozenset(reasons)},
+            )
+
+        assert admission({"two_entity_match"}).signal_rank_for("i") == 0
+        assert admission({"exact_entity_match"}).signal_rank_for("i") == 2
+        assert admission({"location_match"}).signal_rank_for("i") == 4
+        assert admission(set()).signal_rank_for("i") == 6
 
 
 class TestRelationAdmissionMerge:
@@ -462,7 +463,7 @@ class TestJudgeRelationLinks:
         basis_complete=True,
         evidence_hash=None,
     ):
-        return ContinuityHistoryLink(
+        return continuity_link_to_evidence(ContinuityHistoryLink(
             continuity_id="item",
             continuity_status="active",
             operation="create",
@@ -473,7 +474,7 @@ class TestJudgeRelationLinks:
             evidence_position=0,
             evidence_basis_primary=basis,
             basis_complete=basis_complete,
-        )
+        ))
 
     @staticmethod
     def _paragraph(documents_by_id):

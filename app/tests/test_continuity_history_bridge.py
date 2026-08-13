@@ -547,7 +547,7 @@ def test_relation_only_hits_are_capped_per_continuity_item():
             history_store,
             diversity_policy=HistoryDiversityPolicy(
                 max_hits=10,
-                continuity_item_cap=3,
+                relation_owner_cap=3,
             ),
         ).retrieve(
             _explicit_entity_plan(),
@@ -599,7 +599,7 @@ def test_shared_relation_evidence_counts_against_every_linked_item_cap():
             history_store,
             diversity_policy=HistoryDiversityPolicy(
                 max_hits=10,
-                continuity_item_cap=2,
+                relation_owner_cap=2,
             ),
         ).retrieve(
             _explicit_entity_plan(),

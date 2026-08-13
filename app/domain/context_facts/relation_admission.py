@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from typing import Literal
 
 from app.domain.confirmed_history import (
     HistoryDocument,
@@ -10,12 +11,166 @@ from app.domain.confirmed_history import (
 )
 from app.domain.continuity import ContinuityHistoryLink
 from app.domain.continuity.schemas import ContinuityOperationType
+from app.domain.npc_profile.field_history import BRIDGEABLE_NPC_FIELD_NAMES
+from app.domain.npc_profile.history_bridge import NPCFieldHistoryLink
 
 from .evidence_support import (
     CLASS_RANK,
     classify_link_support,
     link_window_text,
 )
+
+
+#: Categorical relation-match tiers for :meth:`RelationAdmission.signal_rank_for`.
+#: Continuity and NPC field links share one vocabulary; an unknown reason is
+#: rejected at link construction instead of silently degrading to the lowest
+#: tier. ``npc_delta_topic_match`` (exact summary delta) is the most precise
+#: NPC signal; ``npc_value_topic_match`` (a full field value) is broader.
+_TIER_0_REASONS = frozenset({
+    "two_entity_match",
+    "subject_topic_match",
+    "premise_topic_match",
+    "current_state_topic_match",
+    "npc_delta_topic_match",
+})
+_TIER_2_REASONS = frozenset({
+    "exact_entity_match",
+    "alias_match",
+    "npc_name_match",
+    "npc_alias_match",
+})
+_TIER_4_REASONS = frozenset({
+    "location_match",
+    "npc_value_topic_match",
+})
+_KNOWN_REASONS = (
+    _TIER_0_REASONS | _TIER_2_REASONS | _TIER_4_REASONS
+)
+
+
+@dataclass(frozen=True)
+class ContinuityAttribution:
+    """Source-specific attribution for a Continuity lifecycle link."""
+
+    continuity_id: str
+    operation: ContinuityOperationType
+
+
+@dataclass(frozen=True)
+class NPCAttribution:
+    """Source-specific attribution for one evidence-backed NPC field node."""
+
+    npc_id: str
+    field_name: str
+    log_id: int
+
+
+@dataclass(frozen=True)
+class RelationEvidenceLink:
+    """Normalized relation link consumed by the shared admission pass.
+
+    Continuity and NPC field links are converted through small adapters so the
+    judge never depends on a domain store schema.  ``node_key`` is namespaced
+    within ``source`` to avoid ID collisions; ``owner_key`` is the unit the
+    selector caps (``continuity:<item_id>`` / ``npc_profile:<npc_id>``) so one
+    matter or profile cannot monopolize the payload.
+    """
+
+    source: Literal["continuity", "npc_profile"]
+    node_key: str
+    owner_key: str
+    evidence_id: str
+    evidence_hash: str | None
+    evidence_position: int
+    triggering_intent_ids: tuple[str, ...]
+    match_reasons: frozenset[str]
+    evidence_basis_primary: str | None
+    evidence_basis_context: str | None
+    basis_complete: bool
+    #: Turn the pointer's evidence must belong to. Continuity links do not
+    #: carry it (``None`` skips the turn check); the NPC adapter fills it from
+    #: the field log so a hash-colliding document from another turn is stale.
+    evidence_turn_index: int | None = None
+    continuity: ContinuityAttribution | None = None
+    npc: NPCAttribution | None = None
+
+    def __post_init__(self) -> None:
+        if not self.node_key or not self.owner_key or not self.evidence_id:
+            raise ValueError(
+                "relation evidence link requires non-empty node/owner/evidence"
+            )
+        if self.evidence_turn_index is not None and self.evidence_turn_index < 0:
+            raise ValueError("evidence_turn_index must be >= 0")
+        unknown = self.match_reasons - _KNOWN_REASONS
+        if unknown:
+            raise ValueError(
+                f"unknown relation match reasons: {sorted(unknown)}"
+            )
+        if self.source == "continuity":
+            if self.continuity is None or self.npc is not None:
+                raise ValueError(
+                    "continuity source link requires a continuity attribution"
+                )
+        elif self.source == "npc_profile":
+            if self.npc is None or self.continuity is not None:
+                raise ValueError(
+                    "npc_profile source link requires an NPC attribution"
+                )
+            if self.npc.field_name not in BRIDGEABLE_NPC_FIELD_NAMES:
+                raise ValueError(
+                    f"NPC field link carries a non-bridgeable field: "
+                    f"{self.npc.field_name!r}"
+                )
+        else:
+            raise ValueError(f"unknown relation link source: {self.source!r}")
+
+
+def continuity_link_to_evidence(
+    link: ContinuityHistoryLink,
+) -> RelationEvidenceLink:
+    """Adapt one Continuity lifecycle link into the normalized relation link."""
+    return RelationEvidenceLink(
+        source="continuity",
+        node_key=f"{link.continuity_id}:{link.operation}",
+        owner_key=f"continuity:{link.continuity_id}",
+        evidence_id=link.evidence_id,
+        evidence_hash=link.evidence_hash,
+        evidence_position=link.evidence_position,
+        triggering_intent_ids=tuple(link.triggering_intent_ids),
+        match_reasons=frozenset(link.match_reasons),
+        evidence_basis_primary=link.evidence_basis_primary,
+        evidence_basis_context=link.evidence_basis_context,
+        basis_complete=link.basis_complete,
+        continuity=ContinuityAttribution(
+            continuity_id=link.continuity_id,
+            operation=link.operation,
+        ),
+    )
+
+
+def npc_field_link_to_evidence(
+    link: NPCFieldHistoryLink,
+) -> RelationEvidenceLink:
+    """Adapt one NPC field-history link into the normalized relation link."""
+    return RelationEvidenceLink(
+        source="npc_profile",
+        node_key=f"log:{link.log_id}",
+        owner_key=f"npc_profile:{link.npc_id}",
+        evidence_id=link.evidence_id,
+        evidence_hash=link.evidence_hash,
+        evidence_position=link.evidence_position,
+        triggering_intent_ids=tuple(link.triggering_intent_ids),
+        match_reasons=frozenset(link.match_reasons),
+        evidence_basis_primary=link.evidence_basis_primary,
+        evidence_basis_context=link.evidence_basis_context,
+        basis_complete=link.basis_complete,
+        evidence_turn_index=link.turn_index,
+        npc=NPCAttribution(
+            npc_id=link.npc_id,
+            field_name=link.field_name,
+            log_id=link.log_id,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -25,8 +180,9 @@ class RelationAdmission:
     Produced by :func:`judge_relation_links`; consumed by the retriever and the
     diversity selector without re-deriving node->evidence validity, per-intent
     attribution, merge semantics, or degraded status. A document served by
-    multiple lifecycle links carries the per-intent quality/class/degraded
-    verdict those links jointly imply.
+    multiple links (Continuity, NPC field, or both) carries the per-intent
+    quality/class/degraded verdict those links jointly imply plus every
+    source-specific attribution that cleared validation.
     """
 
     intent_quality: dict[str, float] = field(default_factory=dict)
@@ -36,7 +192,15 @@ class RelationAdmission:
     linked_operations: frozenset[ContinuityOperationType] = field(
         default_factory=frozenset
     )
+    linked_npc_changes: frozenset[tuple[str, str, int]] = field(
+        default_factory=frozenset
+    )
+    owner_keys: frozenset[str] = field(default_factory=frozenset)
+    intent_owner_keys: dict[str, frozenset[str]] = field(default_factory=dict)
     match_reasons: frozenset[str] = field(default_factory=frozenset)
+    intent_match_reasons: dict[str, frozenset[str]] = field(
+        default_factory=dict
+    )
     intent_first_order: dict[str, int] = field(default_factory=dict)
 
     @property
@@ -63,20 +227,23 @@ class RelationAdmission:
         )
         return self.intent_class.get(best_intent)
 
-    @property
-    def signal_rank(self) -> int:
-        """Categorical structural-link tier for final selection."""
-        reasons = self.match_reasons
-        if reasons.intersection({
-            "two_entity_match",
-            "subject_topic_match",
-            "premise_topic_match",
-            "current_state_topic_match",
-        }):
+    def signal_rank_for(self, intent_id: str) -> int:
+        """Categorical structural-link tier for one intent's relation proposal.
+
+        Scoped to the reasons that serve ``intent_id`` so a strong reason on
+        another intent of the same document never promotes this proposal.
+        """
+        reasons = self.intent_match_reasons.get(intent_id, frozenset())
+        unknown = reasons - _KNOWN_REASONS
+        if unknown:
+            raise ValueError(
+                f"unknown relation match reasons: {sorted(unknown)}"
+            )
+        if reasons.intersection(_TIER_0_REASONS):
             return 0
-        if reasons.intersection({"exact_entity_match", "alias_match"}):
+        if reasons.intersection(_TIER_2_REASONS):
             return 2
-        if "location_match" in reasons:
+        if reasons.intersection(_TIER_4_REASONS):
             return 4
         return 6
 
@@ -147,6 +314,15 @@ class RelationAdmission:
             if orders:
                 intent_first_order[intent_id] = min(orders)
 
+        intent_owner_keys: dict[str, frozenset[str]] = {}
+        for intent_id in intent_ids:
+            keys = set().union(*(
+                admission.intent_owner_keys.get(intent_id, frozenset())
+                for admission in serving_members
+            ))
+            if keys:
+                intent_owner_keys[intent_id] = frozenset(keys)
+
         return cls(
             intent_quality=intent_quality,
             intent_class=intent_class,
@@ -158,21 +334,48 @@ class RelationAdmission:
             linked_operations=frozenset().union(*(
                 admission.linked_operations for admission in serving_members
             )),
+            linked_npc_changes=frozenset().union(*(
+                admission.linked_npc_changes for admission in serving_members
+            )),
+            owner_keys=frozenset().union(*(
+                admission.owner_keys for admission in serving_members
+            )),
+            intent_owner_keys=intent_owner_keys,
             match_reasons=frozenset().union(*(
                 admission.match_reasons for admission in serving_members
             )),
+            intent_match_reasons={
+                intent_id: frozenset().union(*(
+                    admission.intent_match_reasons.get(intent_id, frozenset())
+                    for admission in serving_members
+                ))
+                for intent_id in intent_ids
+                if any(
+                    intent_id in admission.intent_match_reasons
+                    for admission in serving_members
+                )
+            },
             intent_first_order=intent_first_order,
         )
 
 
 @dataclass(frozen=True)
 class RelationLinkDiagnostics:
-    """Per-link funnel counts for the relation admission pass."""
+    """Per-link funnel counts for the relation admission pass.
+
+    The plain counters are totals across every relation source; the ``npc_*``
+    counters are the NPC field-history subset.  With only Continuity links
+    present the plain counters equal the Continuity funnel.
+    """
 
     valid_links: int = 0
     stale_links: int = 0
     invalid_links: int = 0
     degraded_links: int = 0
+    npc_valid_links: int = 0
+    npc_stale_links: int = 0
+    npc_invalid_links: int = 0
+    npc_degraded_links: int = 0
 
 
 class _AdmissionAccumulator:
@@ -185,7 +388,11 @@ class _AdmissionAccumulator:
         "_intent_first_order",
         "_continuity_ids",
         "_operations",
+        "_npc_changes",
+        "_owner_keys",
+        "_intent_owner_keys",
         "_reasons",
+        "_intent_reasons",
     )
 
     def __init__(self) -> None:
@@ -195,9 +402,13 @@ class _AdmissionAccumulator:
         self._intent_first_order: dict[str, int] = {}
         self._continuity_ids: set[str] = set()
         self._operations: set[ContinuityOperationType] = set()
+        self._npc_changes: set[tuple[str, str, int]] = set()
+        self._owner_keys: set[str] = set()
+        self._intent_owner_keys: dict[str, set[str]] = {}
         self._reasons: set[str] = set()
+        self._intent_reasons: dict[str, set[str]] = {}
 
-    def absorb(self, link: ContinuityHistoryLink, support, order: int) -> None:
+    def absorb(self, link: RelationEvidenceLink, support, order: int) -> None:
         for intent_id in link.triggering_intent_ids:
             current = self._intent_quality.get(intent_id)
             if (
@@ -220,8 +431,22 @@ class _AdmissionAccumulator:
             current_order = self._intent_first_order.get(intent_id)
             if current_order is None or order < current_order:
                 self._intent_first_order[intent_id] = order
-        self._continuity_ids.add(link.continuity_id)
-        self._operations.add(link.operation)
+            self._intent_owner_keys.setdefault(intent_id, set()).add(
+                link.owner_key
+            )
+            self._intent_reasons.setdefault(intent_id, set()).update(
+                link.match_reasons
+            )
+        if link.continuity is not None:
+            self._continuity_ids.add(link.continuity.continuity_id)
+            self._operations.add(link.continuity.operation)
+        if link.npc is not None:
+            self._npc_changes.add((
+                link.npc.npc_id,
+                link.npc.field_name,
+                link.npc.log_id,
+            ))
+        self._owner_keys.add(link.owner_key)
         self._reasons.update(link.match_reasons)
 
     def admission(self) -> RelationAdmission:
@@ -231,27 +456,38 @@ class _AdmissionAccumulator:
             intent_degraded=dict(self._intent_degraded),
             matched_continuity_ids=frozenset(self._continuity_ids),
             linked_operations=frozenset(self._operations),
+            linked_npc_changes=frozenset(self._npc_changes),
+            owner_keys=frozenset(self._owner_keys),
+            intent_owner_keys={
+                intent_id: frozenset(keys)
+                for intent_id, keys in self._intent_owner_keys.items()
+            },
             match_reasons=frozenset(self._reasons),
+            intent_match_reasons={
+                intent_id: frozenset(reasons)
+                for intent_id, reasons in self._intent_reasons.items()
+            },
             intent_first_order=dict(self._intent_first_order),
         )
 
 
 def judge_relation_links(
-    links: list[ContinuityHistoryLink],
+    links: list[RelationEvidenceLink],
     *,
     documents_by_id: dict[str, HistoryDocument],
     by_turn: dict[int, list[HistoryDocument]],
 ) -> tuple[dict[str, RelationAdmission], RelationLinkDiagnostics]:
-    """Resolve, validate, and judge every lifecycle link in one pass.
+    """Resolve, validate, and judge every relation link in one pass.
 
     Returns the per-document judged admissions (only documents that cleared
     validation and attribution survive) plus the diagnostic funnel. A link
     whose complete basis scores zero support loses its attribution
-    unconditionally; incomplete bases fail open.
+    unconditionally; incomplete bases fail open. Continuity and NPC field links
+    share the same validation/support/suppression pipeline.
     """
-    nodes: dict[tuple[str, str], list[ContinuityHistoryLink]] = defaultdict(list)
+    nodes: dict[tuple[str, str], list[RelationEvidenceLink]] = defaultdict(list)
     for link in links:
-        nodes[(link.continuity_id, link.operation)].append(link)
+        nodes[(link.source, link.node_key)].append(link)
     node_evidence_ids = {
         node_key: {link.evidence_id for link in node_links}
         for node_key, node_links in nodes.items()
@@ -269,21 +505,35 @@ def judge_relation_links(
                 link.evidence_hash is not None
                 and history_document_text_hash(document) != link.evidence_hash
             )
+            or (
+                link.evidence_turn_index is not None
+                and document.turn_index != link.evidence_turn_index
+            )
         ):
             diagnostics = replace(
                 diagnostics,
                 stale_links=diagnostics.stale_links + 1,
             )
+            if link.source == "npc_profile":
+                diagnostics = replace(
+                    diagnostics,
+                    npc_stale_links=diagnostics.npc_stale_links + 1,
+                )
             continue
         diagnostics = replace(
             diagnostics,
             valid_links=diagnostics.valid_links + 1,
         )
+        if link.source == "npc_profile":
+            diagnostics = replace(
+                diagnostics,
+                npc_valid_links=diagnostics.npc_valid_links + 1,
+            )
 
         window_text = link_window_text(
             document,
             by_turn[document.turn_index],
-            node_evidence_ids[(link.continuity_id, link.operation)],
+            node_evidence_ids[(link.source, link.node_key)],
         )
         support = classify_link_support(
             basis_primary=link.evidence_basis_primary,
@@ -296,12 +546,22 @@ def judge_relation_links(
                 diagnostics,
                 invalid_links=diagnostics.invalid_links + 1,
             )
+            if link.source == "npc_profile":
+                diagnostics = replace(
+                    diagnostics,
+                    npc_invalid_links=diagnostics.npc_invalid_links + 1,
+                )
             continue
         if support.degraded:
             diagnostics = replace(
                 diagnostics,
                 degraded_links=diagnostics.degraded_links + 1,
             )
+            if link.source == "npc_profile":
+                diagnostics = replace(
+                    diagnostics,
+                    npc_degraded_links=diagnostics.npc_degraded_links + 1,
+                )
 
         accumulator = accumulators.get(document.document_id)
         if accumulator is None:
@@ -315,14 +575,14 @@ def judge_relation_links(
 
 
 def _suppress_attribution(
-    link: ContinuityHistoryLink,
+    link: RelationEvidenceLink,
     support,
 ) -> bool:
     """Strip a relation attribution that has no support at all.
 
     A link with a complete basis whose evidence scores zero support is an
-    error mount and never claims the matter, even when it is the node's only
-    evidence. Incomplete bases fail open; every other class keeps its
+    error mount and never claims the matter/profile, even when it is the node's
+    only evidence. Incomplete bases fail open; every other class keeps its
     attribution.
     """
     return support.basis_complete and support.support_class == "zero"
