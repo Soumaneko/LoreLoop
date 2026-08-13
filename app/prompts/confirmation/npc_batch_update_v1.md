@@ -34,12 +34,12 @@
 - `faction`：人物明确所属、效忠或代表的组织。职位同时明确了组织归属时，可同时更新 `role` 和 `faction`。
 - `appearance`：相对稳定、可用于识别人物的外貌特征。
 - `current_intent`：场景结束后仍在持续的公开目标或行动意图。
-- `public_summary`：人物发生重大的身份、长期关系、组织归属或剧情地位变化后的完整公开摘要。`value` 写更新后的完整摘要，`summary_delta` 只说明本轮新增的重大变化。如果本轮更新了 `role` 或 `faction`，同时更新 `public_summary`，使完整摘要与新的身份和组织归属保持一致。
+- `public_summary`：人物发生重大的身份、长期关系、组织归属或剧情地位变化后的完整公开摘要。`value` 写更新后的完整摘要，`summary_delta` 只说明本轮新增的重大变化，严禁流水账式记录。如果本轮更新了 `role` 或 `faction`，同时更新 `public_summary`，使完整摘要与新的身份和组织归属保持一致。
 
 # 处理原则
 
 1. 从 `facts` 理解本轮变化，用 `evidence` 确认稳定字段的依据。可以将正文明确表达的信息规范化、简洁归纳，保持事实含义不变。
 2. 只输出相对 `current` 确实发生的变化；某个 NPC 没有字段变化时，不输出该 NPC。
 3. 稳定字段的每条变化都引用直接支持它的 `evidence.document_id`；`evidence_ids` 从该 NPC 的 `evidence` 列表中选取。
-4. `public_summary` 聚焦足以改变人物长期公开定位的信息。态度、位置、离场去向和称呼变化由其他专门机制处理。
+4. `public_summary` 必须聚焦足以改变人物长期公开定位的重大信息。严禁仅仅在态度、位置、离场去向和称呼变化时修改 `public_summary`，严禁流水账式记录。
 5. `npc_id` 使用输入 `npc_batch_json` 中给出的值。

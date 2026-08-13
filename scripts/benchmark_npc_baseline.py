@@ -87,6 +87,10 @@ UPDATER_FIELDS = (
     "personality_trait",
     "faction",
     "known_abilities",
+    # Ticket 11 pending contract.  ``getattr(..., None)`` keeps the accepted
+    # v7 backend byte-identical until the production v8 fields exist.
+    "last_scene_summary",
+    "last_scene_turn",
 )
 
 IMPORTANCE = Literal["must", "should"]
@@ -120,6 +124,8 @@ class RosterProfileFixture(BaseModel):
     last_known_location: str | None = None
     attitude_to_player: str | None = None
     current_intent: str | None = None
+    last_scene_summary: str | None = None
+    last_scene_turn: int | None = Field(default=None, ge=0)
     source_scene_ids: list[str] = Field(default_factory=list)
     #: Explicit ordering key. ``NPCProfileStore.list_all()`` orders by
     #: ``updated_at DESC, name ASC``; fixtures pin the value so the candidate
@@ -127,7 +133,7 @@ class RosterProfileFixture(BaseModel):
     updated_at: str = ""
 
     def to_profile(self) -> NPCProfile:
-        return NPCProfile(
+        declared: dict[str, Any] = dict(
             npc_id=self.npc_id,
             name=self.name,
             aliases=list(self.aliases),
@@ -146,7 +152,18 @@ class RosterProfileFixture(BaseModel):
             current_intent=self.current_intent,
             source_scene_ids=list(self.source_scene_ids),
             updated_at=self.updated_at,
+            last_scene_summary=self.last_scene_summary,
+            last_scene_turn=self.last_scene_turn,
         )
+        # One fixture model spans the accepted v7 suite and the pending v8
+        # contract.  Only the active production profile fields are projected;
+        # this is contract routing, not a runtime compatibility path.
+        values = {
+            key: value
+            for key, value in declared.items()
+            if key in NPCProfile.model_fields
+        }
+        return NPCProfile(**values)
 
 
 class CoreMemoryItemFixture(BaseModel):
@@ -252,6 +269,66 @@ class NoOpExpectation(BaseModel):
     importance: IMPORTANCE = "must"
 
 
+class PresenceExpectation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    surface: str = Field(min_length=1)
+    presence: Literal["appeared", "mentioned_only"]
+    importance: IMPORTANCE = "must"
+
+
+class SceneSummaryExpectation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    npc_id: str = Field(min_length=1)
+    turn_index: int = Field(ge=0)
+    required_terms: list[str] = Field(default_factory=list)
+    forbidden_terms: list[str] = Field(default_factory=list)
+    acceptable_evidence_ids: list[str] = Field(min_length=1, max_length=8)
+    importance: IMPORTANCE = "must"
+
+    @model_validator(mode="after")
+    def validate_terms_and_evidence(self):
+        if len(self.acceptable_evidence_ids) != len(set(self.acceptable_evidence_ids)):
+            raise ValueError("scene summary acceptable evidence IDs must be unique")
+        if len(self.required_terms) != len(set(self.required_terms)):
+            raise ValueError("scene summary required terms must be unique")
+        if len(self.forbidden_terms) != len(set(self.forbidden_terms)):
+            raise ValueError("scene summary forbidden terms must be unique")
+        return self
+
+
+class LastSceneContract(BaseModel):
+    """Ticket 11 future contract, absent from accepted v7 fixtures."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    presence_expectations: list[PresenceExpectation] = Field(default_factory=list)
+    scene_summary_expectations: list[SceneSummaryExpectation] = Field(
+        default_factory=list
+    )
+    no_scene_summary_npc_ids: list[str] = Field(default_factory=list)
+    expected_batch_npc_ids: list[str] = Field(default_factory=list)
+    excluded_batch_npc_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_contract_keys(self):
+        surfaces = [item.surface.casefold() for item in self.presence_expectations]
+        if len(surfaces) != len(set(surfaces)):
+            raise ValueError("last-scene presence surfaces must be unique")
+        summary_ids = [item.npc_id for item in self.scene_summary_expectations]
+        if len(summary_ids) != len(set(summary_ids)):
+            raise ValueError("last-scene summary npc IDs must be unique")
+        for values, label in (
+            (self.no_scene_summary_npc_ids, "no-summary NPC IDs"),
+            (self.expected_batch_npc_ids, "expected batch NPC IDs"),
+            (self.excluded_batch_npc_ids, "excluded batch NPC IDs"),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"last-scene {label} must be unique")
+        return self
+
+
 class CaseGold(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -343,6 +420,9 @@ class BenchmarkCase(BaseModel):
     roster: list[RosterProfileFixture] = Field(default_factory=list)
     roster_template: RosterTemplate | None = None
     gold: CaseGold
+    #: Future v8 contract.  Keeping it outside ``gold`` makes its presence
+    #: explicit and keeps all accepted v7 report bytes unchanged.
+    last_scene_contract: LastSceneContract | None = None
 
     @model_validator(mode="after")
     def validate_roster_source(self):
@@ -468,7 +548,7 @@ def _normalize_field_value(value: Any) -> Any:
 
 
 def _to_json_value(profile: NPCProfile, field: str) -> Any:
-    value = getattr(profile, field)
+    value = getattr(profile, field, None)
     if field == "known_abilities":
         return _normalize_field_value(value)
     return value
@@ -487,8 +567,8 @@ def _project_field_deltas(
             continue
         changed: dict[str, Any] = {}
         for field in UPDATER_FIELDS:
-            before = _normalize_field_value(getattr(original, field))
-            after_value = _normalize_field_value(getattr(profile, field))
+            before = _normalize_field_value(getattr(original, field, None))
+            after_value = _normalize_field_value(getattr(profile, field, None))
             if before != after_value:
                 changed[field] = _to_json_value(profile, field)
         if changed:
@@ -655,6 +735,23 @@ def _run_offline_batch(
             "target_npc_id": None,
         }
     prompt_metrics = _prompt_metrics(case, gateway.calls)
+    batch_entries = []
+    for call in gateway.calls:
+        if call["task"] == "npc_batch_update":
+            batch_entries = _json_list(call["input_data"], "npc_batch_json")
+    scene_summaries: dict[str, dict[str, Any]] = {}
+    for change in result.accepted_changes:
+        if getattr(change, "field", None) != "last_scene_summary":
+            continue
+        scene_summaries[change.npc_id] = {
+            "summary": getattr(change, "new_value", None),
+            "turn_index": getattr(change, "turn_index", None),
+            "evidence_ids": list(getattr(change, "evidence_ids", ()) or ()),
+        }
+    mention_presences = [
+        [mention.primary_surface, getattr(mention, "presence", None)]
+        for mention in scene_facts.npc_mentions
+    ]
     return {
         "call_count": len(gateway.calls),
         "candidates": [],
@@ -681,6 +778,15 @@ def _run_offline_batch(
             for warning in result.warnings
         ],
         "prompt_metrics": prompt_metrics,
+        "last_scene_contract_signals": {
+            "mention_presences": mention_presences,
+            "batch_npc_ids": [
+                entry.get("npc_id")
+                for entry in batch_entries
+                if isinstance(entry, dict) and isinstance(entry.get("npc_id"), str)
+            ],
+            "scene_summaries": scene_summaries,
+        },
     }
 
 
@@ -831,6 +937,44 @@ def _score_gold(
         matched = expectation.npc_id not in field_deltas
         positive.append(("no_op", matched, expectation.importance == "must"))
 
+    contract = case.last_scene_contract
+    if contract is not None:
+        contract_signals = signals["last_scene_contract_signals"]
+        presence_by_surface = {
+            normalize_key(surface): presence
+            for surface, presence in contract_signals["mention_presences"]
+        }
+        for expectation in contract.presence_expectations:
+            matched = (
+                presence_by_surface.get(normalize_key(expectation.surface))
+                == expectation.presence
+            )
+            positive.append(("npc_presence", matched, expectation.importance == "must"))
+
+        summaries = contract_signals["scene_summaries"]
+        for expectation in contract.scene_summary_expectations:
+            got = summaries.get(expectation.npc_id)
+            summary = str((got or {}).get("summary") or "")
+            evidence_ids = list((got or {}).get("evidence_ids") or [])
+            matched = bool(got)
+            matched = matched and (got or {}).get("turn_index") == expectation.turn_index
+            matched = matched and 20 <= len(summary) <= 160
+            matched = matched and 1 <= len(evidence_ids) <= 4
+            matched = matched and set(evidence_ids).issubset(
+                expectation.acceptable_evidence_ids
+            )
+            matched = matched and all(term in summary for term in expectation.required_terms)
+            matched = matched and all(term not in summary for term in expectation.forbidden_terms)
+            positive.append(("last_scene_summary", matched, expectation.importance == "must"))
+
+        for npc_id in contract.no_scene_summary_npc_ids:
+            positive.append(("last_scene_absent", npc_id not in summaries, True))
+        batch_npc_ids = set(contract_signals["batch_npc_ids"])
+        for npc_id in contract.expected_batch_npc_ids:
+            positive.append(("last_scene_batch_scope", npc_id in batch_npc_ids, True))
+        for npc_id in contract.excluded_batch_npc_ids:
+            positive.append(("last_scene_batch_scope", npc_id not in batch_npc_ids, True))
+
     weighted_total = 0
     weighted_passed = 0
     passed_total: dict[str, int] = {}
@@ -898,7 +1042,7 @@ def run_case(
 ) -> dict:
     signals = _run_offline_batch(case, recorded)
     gold = _score_gold(case, signals, CALL_COUNT_BOUNDS)
-    return {
+    report = {
         "case_id": case.case_id,
         "call_count": signals["call_count"],
         "provider_attempts": recorded.provider_attempts(),
@@ -915,6 +1059,11 @@ def run_case(
         "token_usage_total": _token_usage_total(recorded),
         "gold": gold,
     }
+    if case.last_scene_contract is not None:
+        report["last_scene_contract_signals"] = signals[
+            "last_scene_contract_signals"
+        ]
+    return report
 
 
 def _aggregate(case_reports: list[dict]) -> dict:

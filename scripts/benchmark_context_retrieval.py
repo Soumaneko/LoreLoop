@@ -107,9 +107,16 @@ class NPCProfileFixture(BaseModel):
     role: str | None = None
     appearance: str | None = None
     faction: str | None = None
+    last_scene_summary: str | None = None
+    last_scene_turn: int | None = Field(default=None, ge=0)
 
     def to_domain(self) -> NPCProfile:
-        return NPCProfile.model_validate(self.model_dump())
+        data = {
+            key: value
+            for key, value in self.model_dump().items()
+            if key in NPCProfile.model_fields
+        }
+        return NPCProfile.model_validate(data)
 
 
 class NPCFieldLogFixture(BaseModel):
@@ -119,7 +126,13 @@ class NPCFieldLogFixture(BaseModel):
 
     log_ref: str = Field(min_length=1)
     npc_id: str = Field(min_length=1)
-    field_name: Literal["public_summary", "role", "appearance", "faction"]
+    field_name: Literal[
+        "public_summary",
+        "role",
+        "appearance",
+        "faction",
+        "last_scene_summary",
+    ]
     turn_index: int = Field(ge=0)
     evidence_ids: list[str] = Field(min_length=1, max_length=4)
     old_value: str | None = None
@@ -147,7 +160,13 @@ class NPCFieldAttributionExpectation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     npc_id: str = Field(min_length=1)
-    field_name: Literal["public_summary", "role", "appearance", "faction"]
+    field_name: Literal[
+        "public_summary",
+        "role",
+        "appearance",
+        "faction",
+        "last_scene_summary",
+    ]
     log_ref: str = Field(min_length=1)
 
 
@@ -482,6 +501,12 @@ def _materialize_npc_field_fixtures(
 
     logs_by_turn: dict[int, list[NPCFieldLogFixture]] = {}
     for fixture in case.npc_field_logs:
+        # Ticket 11 pending fixtures are loadable before the v8 production
+        # field exists.  They intentionally remain unmaterialized so the
+        # pre-implementation report records a bridge gap instead of inventing
+        # a role/public-summary stand-in.
+        if fixture.field_name not in NPCProfile.model_fields:
+            continue
         logs_by_turn.setdefault(fixture.turn_index, []).append(fixture)
 
     log_ids_by_ref: dict[str, int] = {}
@@ -513,6 +538,8 @@ def _materialize_npc_field_fixtures(
                     f"{case.case_id}: missing NPC profile {fixture.npc_id}"
                 )
             setattr(profile, fixture.field_name, fixture.new_value)
+            if fixture.field_name == "last_scene_summary":
+                setattr(profile, "last_scene_turn", turn_index)
             npc_store.upsert(profile)
             changes.append(AcceptedNPCScalarChange(
                 npc_id=fixture.npc_id,
@@ -647,12 +674,21 @@ def run_case(case: BenchmarkCase) -> dict:
             matched_npc_profiles=len(npc_bridge.matched_profile_ids),
         )
         payload = project_context_history(result)
-        return _score_case(
+        scored = _score_case(
             case,
             result,
             payload,
             npc_log_ids_by_ref=npc_log_ids_by_ref,
         )
+        pending_refs = sorted(
+            fixture.log_ref
+            for fixture in case.npc_field_logs
+            if fixture.field_name not in NPCProfile.model_fields
+        )
+        if pending_refs:
+            scored["npc_bridge_status"] = "pending_last_scene"
+            scored["pending_npc_log_refs"] = pending_refs
+        return scored
 
 
 def run_suite(suite: BenchmarkSuite, *, fingerprint: str) -> dict:
@@ -782,6 +818,13 @@ def main(argv: list[str] | None = None) -> int:
         _write_report(args.baseline, report)
         print(f"updated baseline: {args.baseline}")
         return 0
+
+    if not args.baseline.exists():
+        print(
+            f"no accepted baseline at {args.baseline}; "
+            "review the pending report before implementation"
+        )
+        return 1 if args.check else 0
 
     baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
     lines, regression = compare_reports(report, baseline)

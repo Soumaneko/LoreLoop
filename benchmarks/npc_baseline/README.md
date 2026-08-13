@@ -130,3 +130,32 @@ through a stub gateway and re-runs `apply_npc_batch_update` exactly as
 production does (fixed `admitted_at`): same resolution order, admission,
 warning order, and store mutation. The report is byte-for-byte comparable
 across runs and across `PYTHONHASHSEED` values.
+
+## Ticket 11 pending contract
+
+`cases_last_scene_pending.json` and `recordings/last_scene_pending.json` are an
+unaccepted benchmark-first contract for the planned v8 NPC model.  They do not
+change `fixtures_batch.json`, its fingerprint, or `baseline_batch.json`.
+
+The optional `last_scene_contract` scores three future signals without a judge
+LLM:
+
+- `npc_presence`: `appeared` vs `mentioned_only` emitted by Scene Facts;
+- `last_scene_summary`: one 20–160 character summary for the expected turn,
+  containing required terms, excluding stale terms, and citing 1–4 paragraph
+  IDs from an allowed set;
+- `last_scene_batch_scope`: appeared profiles enter the updater while
+  mentioned-only profiles do not.
+
+The pending recordings deliberately use the future nested `scene_summary`
+wire key.  The current v7 parser ignores it, so the pre-implementation report
+records explicit presence/summary/salvage gaps rather than pretending the
+feature exists.  Run it without accepting a baseline:
+
+```bash
+PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py \
+  --fixtures benchmarks/npc_baseline/cases_last_scene_pending.json \
+  --recordings benchmarks/npc_baseline/recordings/last_scene_pending.json \
+  --baseline .scratch/npc-turn-processor/nonexistent-last-scene-baseline.json \
+  --json-out .scratch/npc-turn-processor/phase0-last-scene-report.json
+```

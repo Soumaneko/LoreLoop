@@ -21,6 +21,11 @@ from app.domain.confirmed_history import (
 from app.domain.npc_profile.store import NPCProfileStore
 
 
+LAST_SCENE_PENDING_CASES = (
+    DEFAULT_CASES.parent / "cases_last_scene_pending.json"
+)
+
+
 @pytest.fixture(scope="module")
 def benchmark_report():
     suite = load_suite(DEFAULT_CASES)
@@ -41,6 +46,50 @@ def test_context_retrieval_benchmark_matches_accepted_baseline(benchmark_report)
     assert not regression
     assert benchmark_report == baseline
     assert len(lines) == len(benchmark_report["cases"])
+
+
+def test_last_scene_pending_retrieval_contract_has_only_expected_bridge_gaps():
+    suite = load_suite(LAST_SCENE_PENDING_CASES)
+    report = run_suite(
+        suite,
+        fingerprint=_cases_fingerprint(LAST_SCENE_PENDING_CASES),
+    )
+    repeated = run_suite(
+        suite,
+        fingerprint=_cases_fingerprint(LAST_SCENE_PENDING_CASES),
+    )
+
+    assert report == repeated
+    assert report["aggregate"]["must_recalled"] == 1
+    assert report["aggregate"]["must_total"] == 3
+    assert report["aggregate"]["weighted_recalled"] == 3
+    assert report["aggregate"]["weighted_total"] == 9
+    assert report["aggregate"]["forbidden_visible_count"] == 0
+    assert report["aggregate"]["forbidden_main_visible_count"] == 0
+    assert report["aggregate"]["invariant_violation_count"] == 2
+
+    cases = {case["case_id"]: case for case in report["cases"]}
+    latest = cases["npc_latest_scene_identity"]
+    assert latest["npc_bridge_status"] == "pending_last_scene"
+    assert latest["pending_npc_log_refs"] == [
+        "su-scene-latest",
+        "su-scene-old",
+    ]
+    assert latest["missed_groups"] == ["latest_scene"]
+
+    topic = cases["npc_last_scene_topic"]
+    assert topic["npc_bridge_status"] == "pending_last_scene"
+    assert topic["missed_groups"] == ["spy_plan"]
+
+    mentioned = cases["npc_mentioned_only_not_bridged"]
+    assert mentioned["npc_bridge_status"] == "wired"
+    assert mentioned["recalled_groups"] == ["reported_fact"]
+    assert mentioned["invariant_violations"] == []
+    assert mentioned["route_counts"] == {
+        "direct_only": 1,
+        "relation_only": 0,
+        "dual": 0,
+    }
 
 
 def test_context_retrieval_benchmark_captures_current_quality_signals(

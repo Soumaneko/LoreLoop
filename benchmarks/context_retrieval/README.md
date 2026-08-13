@@ -196,6 +196,26 @@ NPC field nodes use the same split: `public_summary` nodes carry the
 `summary_delta` as primary basis (never the aggregated full summary), and
 `role` / `appearance` / `faction` nodes carry the change's `new_value`.
 
+### Ticket 11 pending last-scene nodes
+
+`cases_last_scene_pending.json` declares three unaccepted contracts for the
+planned `last_scene_summary` field: latest-node identity recall, bounded topic
+recall of an older node, and a mentioned-only fact that remains direct History
+without NPC relation attribution.  Until the v8 profile field exists, the
+runner intentionally does not materialize these declared logs and labels the
+affected cases `pending_last_scene`; this avoids using `role` or legacy
+`public_summary` as a semantic stand-in.
+
+```bash
+PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py \
+  --cases benchmarks/context_retrieval/cases_last_scene_pending.json \
+  --baseline .scratch/npc-turn-processor/nonexistent-last-scene-context-baseline.json \
+  --json-out .scratch/npc-turn-processor/phase0-last-scene-context-report.json
+```
+
+These pending files never participate in the accepted `baseline.json --check`
+gate until implementation and human review are complete.
+
 Only the primary basis (premise / state delta / closing reason) can reach
 `strong`; the contextual background can lift an evidence at most to `weak`, so
 item-level semantics can never broadcast a node the evidence does not change.
