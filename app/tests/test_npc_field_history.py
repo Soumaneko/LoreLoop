@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 import pytest
@@ -67,13 +68,15 @@ def _record(
         if not isinstance(change, AcceptedNPCScalarChange):
             continue
         if change.field not in {
-            "public_summary", "role", "appearance", "faction"
+            "role", "appearance", "faction", "last_scene_summary"
         }:
             continue
         profile = store.get_by_id(change.npc_id)
         if profile is None:
             continue
         setattr(profile, change.field, change.new_value)
+        if change.field == "last_scene_summary":
+            profile.last_scene_turn = change.turn_index
         store.upsert(profile)
     return store.record_accepted_field_changes(
         changes=changes,
@@ -101,7 +104,7 @@ def test_record_rejects_change_that_does_not_match_committed_snapshot():
         assert store.field_change_batch_hash(3) is None
 
 
-def test_fresh_store_creates_v7_field_history_schema(tmp_path):
+def test_fresh_store_creates_v8_field_history_schema(tmp_path):
     db_path = tmp_path / "npcs.db"
     with NPCProfileStore(str(db_path)):
         pass
@@ -118,7 +121,7 @@ def test_fresh_store_creates_v7_field_history_schema(tmp_path):
     }
     connection.close()
 
-    assert version == 7
+    assert version == 8
     assert {
         "npc_field_change_logs",
         "npc_field_change_evidence",
@@ -178,8 +181,265 @@ def test_v6_migration_is_additive_and_preserves_profile_json(tmp_path):
     ).fetchone()[0]
     connection.close()
 
-    assert migrated_json == raw_profile_json
+    assert json.loads(migrated_json) == json.loads(raw_profile_json)
+    assert version == 8
+
+
+def _seed_v7_store(
+    db_path,
+    *,
+    rows: list[tuple[str, str, dict]],
+) -> None:
+    connection = sqlite3.connect(db_path)
+    connection.executescript(
+        """
+        CREATE TABLE npc_profiles (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            aliases_json TEXT NOT NULL DEFAULT '[]',
+            profile_json TEXT NOT NULL,
+            source_scene_ids_json TEXT NOT NULL DEFAULT '[]',
+            updated_at TEXT NOT NULL DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1,
+            name_hit_count INTEGER NOT NULL DEFAULT 0,
+            alias_hit_counts_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE TABLE schema_versions (
+            component TEXT PRIMARY KEY,
+            version INTEGER NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO schema_versions(component, version)
+        VALUES ('npc_profile', 7);
+        CREATE TABLE npc_field_change_logs (
+            log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            npc_id TEXT NOT NULL,
+            field_name TEXT NOT NULL CHECK(field_name IN (
+                'public_summary', 'role', 'appearance', 'faction'
+            )),
+            turn_index INTEGER NOT NULL CHECK(turn_index >= 0),
+            old_value TEXT,
+            new_value TEXT NOT NULL,
+            summary_delta TEXT,
+            source TEXT NOT NULL CHECK(source = 'proposal'),
+            CHECK(
+                (field_name = 'public_summary'
+                 AND summary_delta IS NOT NULL
+                 AND length(trim(summary_delta)) > 0)
+                OR
+                (field_name != 'public_summary' AND summary_delta IS NULL)
+            ),
+            UNIQUE(npc_id, field_name, turn_index)
+        );
+        CREATE TABLE npc_field_change_evidence (
+            log_id INTEGER NOT NULL,
+            position INTEGER NOT NULL CHECK(position >= 0),
+            evidence_id TEXT NOT NULL,
+            evidence_hash TEXT NOT NULL CHECK(length(evidence_hash) = 64),
+            PRIMARY KEY(log_id, position),
+            UNIQUE(log_id, evidence_id)
+        );
+        CREATE TABLE npc_field_change_processed_turns (
+            turn_index INTEGER PRIMARY KEY CHECK(turn_index >= 0),
+            batch_hash TEXT NOT NULL CHECK(length(batch_hash) = 64)
+        );
+        """
+    )
+    for npc_id, name, profile_fields in rows:
+        raw = {
+            "npc_id": npc_id,
+            "name": name,
+            "aliases": [],
+            "transient_aliases": {},
+            "public_summary": None,
+            "role": None,
+            "current_intent": None,
+            "source_scene_ids": [],
+            "updated_at": "2026-08-13T00:00:00Z",
+            "active": True,
+            "name_hit_count": 0,
+            "alias_hit_counts": {},
+            **profile_fields,
+        }
+        connection.execute(
+            """
+            INSERT INTO npc_profiles(
+                id, name, aliases_json, profile_json, source_scene_ids_json,
+                updated_at, active, name_hit_count, alias_hit_counts_json
+            ) VALUES (?, ?, '[]', ?, '[]', ?, 1, 0, '{}')
+            """,
+            (npc_id, name, json.dumps(raw, ensure_ascii=False), "2026-08-13T00:00:00Z"),
+        )
+    connection.commit()
+    connection.close()
+
+
+def test_v7_migration_role_fallback_from_legacy_public_summary(tmp_path):
+    db_path = tmp_path / "v7-role-fallback.db"
+    _seed_v7_store(
+        db_path,
+        rows=[
+            (
+                "npc-a",
+                "顾青",
+                {"public_summary": "北门巡检，刚正不阿。", "current_intent": "巡查北门"},
+            ),
+            (
+                "npc-b",
+                "陆衡",
+                {"role": "南仓管事", "public_summary": "白鹿堂执事。"},
+            ),
+        ],
+    )
+
+    with NPCProfileStore(str(db_path)) as store:
+        fallback = store.get_by_id("npc-a")
+        assert fallback is not None
+        assert fallback.role == "北门巡检，刚正不阿。"
+        assert fallback.last_scene_summary is None
+        assert fallback.last_scene_turn is None
+
+        preserved = store.get_by_id("npc-b")
+        assert preserved is not None
+        assert preserved.role == "南仓管事"
+
+    connection = sqlite3.connect(db_path)
+    for npc_id in ("npc-a", "npc-b"):
+        raw = json.loads(
+            connection.execute(
+                "SELECT profile_json FROM npc_profiles WHERE id = ?",
+                (npc_id,),
+            ).fetchone()[0]
+        )
+        assert "public_summary" not in raw
+        assert "current_intent" not in raw
+    connection.close()
+
+
+def test_v7_migration_whitespace_role_triggers_public_summary_fallback(tmp_path):
+    db_path = tmp_path / "v7-whitespace-role.db"
+    _seed_v7_store(
+        db_path,
+        rows=[
+            (
+                "npc-a",
+                "顾青",
+                {"role": "   ", "public_summary": "北门巡检。"},
+            ),
+        ],
+    )
+
+    with NPCProfileStore(str(db_path)) as store:
+        profile = store.get_by_id("npc-a")
+        assert profile is not None
+        assert profile.role == "北门巡检。"
+
+
+def test_v7_migration_fails_closed_on_orphaned_field_history_rows(tmp_path):
+    db_path = tmp_path / "v7-orphan.db"
+    _seed_v7_store(
+        db_path,
+        rows=[("npc-a", "顾青", {"role": "北门巡检"})],
+    )
+    connection = sqlite3.connect(db_path)
+    connection.execute(
+        """
+        INSERT INTO npc_field_change_evidence(log_id, position, evidence_id, evidence_hash)
+        VALUES (999, 0, 'turn_1_p001', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    with pytest.raises(RuntimeError, match="orphaned field-history rows"):
+        NPCProfileStore(str(db_path))
+
+    connection = sqlite3.connect(db_path)
+    version = connection.execute(
+        "SELECT version FROM schema_versions WHERE component='npc_profile'"
+    ).fetchone()[0]
+    orphan = connection.execute(
+        "SELECT 1 FROM npc_field_change_evidence WHERE log_id = 999"
+    ).fetchone()
+    connection.close()
     assert version == 7
+    assert orphan is not None
+
+
+def test_v7_migration_preserves_legacy_public_summary_logs_as_readonly_audit(
+    tmp_path,
+):
+    db_path = tmp_path / "v7-legacy-logs.db"
+    _seed_v7_store(
+        db_path,
+        rows=[("npc-a", "顾青", {"role": "北门巡检"})],
+    )
+    connection = sqlite3.connect(db_path)
+    connection.execute(
+        """
+        INSERT INTO npc_field_change_logs(
+            npc_id, field_name, turn_index, old_value, new_value, summary_delta,
+            source
+        ) VALUES ('npc-a', 'public_summary', 1, NULL, '北门巡检。', '正式接任北门巡检。', 'proposal')
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO npc_field_change_evidence(log_id, position, evidence_id, evidence_hash)
+        VALUES (1, 0, 'turn_1_p001', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    with NPCProfileStore(str(db_path)) as store:
+        logs = store.list_field_change_logs()
+        assert len(logs) == 1
+        assert logs[0].field_name == "public_summary"
+        assert logs[0].summary_delta == "正式接任北门巡检。"
+        assert logs[0].evidence[0].evidence_id == "turn_1_p001"
+
+
+def test_v8_logs_accept_last_scene_summary_and_reject_legacy_public_summary_writes(
+    tmp_path,
+):
+    db_path = tmp_path / "v8-writes.db"
+    _seed_v7_store(
+        db_path,
+        rows=[("npc-a", "顾青", {"role": "北门巡检"})],
+    )
+    with NPCProfileStore(str(db_path)) as store:
+        profile = store.get_by_id("npc-a")
+        assert profile is not None
+        profile.last_scene_summary = "她当众接任北门巡检。"
+        profile.last_scene_turn = 3
+        store.upsert(profile)
+        change = AcceptedNPCScalarChange(
+            npc_id="npc-a",
+            canonical_name="顾青",
+            field="last_scene_summary",
+            old_value=None,
+            new_value="她当众接任北门巡检。",
+            evidence_ids=("turn_3_p001",),
+            turn_index=3,
+            source="proposal",
+        )
+        document = _document(turn_index=3)
+        result = store.record_accepted_field_changes(
+            changes=[change],
+            evidence_documents=[document],
+            turn_index=3,
+            scene_id="scene-3",
+        )
+        assert [log.field_name for log in result.logs] == ["last_scene_summary"]
+
+    connection = sqlite3.connect(db_path)
+    allowed = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='npc_field_change_logs'"
+    ).fetchone()[0]
+    connection.close()
+    assert "last_scene_summary" in allowed
+    assert "public_summary" in allowed
 
 
 def test_failed_v6_migration_rolls_back_version_and_new_tables(tmp_path):
@@ -260,18 +520,17 @@ def test_record_round_trip_preserves_exact_values_position_and_hash():
 
 
 @pytest.mark.parametrize(
-    ("field_name", "new_value", "summary_delta"),
+    ("field_name", "new_value"),
     [
-        ("role", "北门巡检", None),
-        ("appearance", "左颊有新月形伤痕", None),
-        ("faction", "白鹿堂", None),
-        ("public_summary", "新任北门巡检。", "正式接任北门巡检。"),
+        ("role", "北门巡检"),
+        ("appearance", "左颊有新月形伤痕"),
+        ("faction", "白鹿堂"),
+        ("last_scene_summary", "她当众接任北门巡检并承诺严守北门。"),
     ],
 )
 def test_all_bridgeable_scalar_fields_round_trip(
     field_name,
     new_value,
-    summary_delta,
 ):
     document = _document()
     change = AcceptedNPCScalarChange(
@@ -282,7 +541,6 @@ def test_all_bridgeable_scalar_fields_round_trip(
         new_value=new_value,
         evidence_ids=(document.document_id,),
         turn_index=3,
-        summary_delta=summary_delta,
         source="proposal",
     )
     with NPCProfileStore(":memory:") as store:
@@ -292,19 +550,11 @@ def test_all_bridgeable_scalar_fields_round_trip(
     assert result.logs[0].field_name == field_name
     assert result.logs[0].old_value == "旧值"
     assert result.logs[0].new_value == new_value
-    assert result.logs[0].summary_delta == summary_delta
+    assert result.logs[0].summary_delta is None
 
 
 def test_only_proposal_stable_scalar_changes_are_recorded():
     document = _document()
-    current_intent = AcceptedNPCScalarChange(
-        npc_id="npc-a",
-        canonical_name="顾青",
-        field="current_intent",
-        new_value="巡查北门",
-        turn_index=3,
-        source="proposal",
-    )
     synced_location = AcceptedNPCScalarChange(
         npc_id="npc-a",
         canonical_name="顾青",
@@ -325,7 +575,7 @@ def test_only_proposal_stable_scalar_changes_are_recorded():
         store.upsert(_profile())
         result = _record(
             store,
-            [current_intent, synced_location, ability],
+            [synced_location, ability],
             [document],
         )
 
@@ -602,12 +852,12 @@ def test_newer_or_unknown_version_is_rejected_without_creating_v7_tables(tmp_pat
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         INSERT INTO schema_versions(component, version)
-        VALUES ('npc_profile', 8);
+        VALUES ('npc_profile', 9);
         """
     )
     connection.close()
 
-    with pytest.raises(RuntimeError, match="expected 7, got 8"):
+    with pytest.raises(RuntimeError, match="expected 8, got 9"):
         NPCProfileStore(str(db_path))
 
     connection = sqlite3.connect(db_path)
@@ -621,8 +871,8 @@ def test_newer_or_unknown_version_is_rejected_without_creating_v7_tables(tmp_pat
     assert table is None
 
 
-def test_claimed_v7_without_required_constraints_is_rejected(tmp_path):
-    db_path = tmp_path / "fake-v7.db"
+def test_claimed_v8_without_required_constraints_is_rejected(tmp_path):
+    db_path = tmp_path / "fake-v8.db"
     connection = sqlite3.connect(db_path)
     connection.executescript(
         """
@@ -643,7 +893,7 @@ def test_claimed_v7_without_required_constraints_is_rejected(tmp_path):
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         INSERT INTO schema_versions(component, version)
-        VALUES ('npc_profile', 7);
+        VALUES ('npc_profile', 8);
         CREATE TABLE npc_field_change_logs (
             log_id INTEGER, npc_id TEXT, field_name TEXT, turn_index INTEGER,
             old_value TEXT, new_value TEXT, summary_delta TEXT, source TEXT

@@ -327,7 +327,6 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
     new_profile = NPCProfile(
         name="练气巅峰采药女",
         role="采药女",
-        public_summary="山间采药为生的练气期女子。",
     )
     captured = {}
 

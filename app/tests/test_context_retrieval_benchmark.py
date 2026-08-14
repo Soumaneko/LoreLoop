@@ -48,7 +48,7 @@ def test_context_retrieval_benchmark_matches_accepted_baseline(benchmark_report)
     assert len(lines) == len(benchmark_report["cases"])
 
 
-def test_last_scene_pending_retrieval_contract_has_only_expected_bridge_gaps():
+def test_last_scene_bridge_is_wired_and_recalls_through_identity_and_topic():
     suite = load_suite(LAST_SCENE_PENDING_CASES)
     report = run_suite(
         suite,
@@ -60,26 +60,25 @@ def test_last_scene_pending_retrieval_contract_has_only_expected_bridge_gaps():
     )
 
     assert report == repeated
-    assert report["aggregate"]["must_recalled"] == 1
+    assert report["aggregate"]["must_recalled"] == 3
     assert report["aggregate"]["must_total"] == 3
-    assert report["aggregate"]["weighted_recalled"] == 3
+    assert report["aggregate"]["weighted_recalled"] == 9
     assert report["aggregate"]["weighted_total"] == 9
     assert report["aggregate"]["forbidden_visible_count"] == 0
     assert report["aggregate"]["forbidden_main_visible_count"] == 0
-    assert report["aggregate"]["invariant_violation_count"] == 2
+    assert report["aggregate"]["invariant_violation_count"] == 0
 
     cases = {case["case_id"]: case for case in report["cases"]}
     latest = cases["npc_latest_scene_identity"]
-    assert latest["npc_bridge_status"] == "pending_last_scene"
-    assert latest["pending_npc_log_refs"] == [
-        "su-scene-latest",
-        "su-scene-old",
-    ]
-    assert latest["missed_groups"] == ["latest_scene"]
+    assert latest["npc_bridge_status"] == "wired"
+    assert latest["recalled_groups"] == ["latest_scene"]
+    assert latest["missed_groups"] == []
+    assert latest["route_counts"] == {"direct_only": 0, "relation_only": 1, "dual": 0}
 
     topic = cases["npc_last_scene_topic"]
-    assert topic["npc_bridge_status"] == "pending_last_scene"
-    assert topic["missed_groups"] == ["spy_plan"]
+    assert topic["npc_bridge_status"] == "wired"
+    assert topic["recalled_groups"] == ["spy_plan"]
+    assert topic["missed_groups"] == []
 
     mentioned = cases["npc_mentioned_only_not_bridged"]
     assert mentioned["npc_bridge_status"] == "wired"
@@ -233,7 +232,7 @@ def test_npc_field_contracts_green_in_accepted_suite():
     )
     assert repeated == report
 
-    assert suite.version == 2
+    assert suite.version == 3
     assert len(suite.cases) == 33
     npc_cases = {
         case["case_id"]: case
@@ -244,12 +243,23 @@ def test_npc_field_contracts_green_in_accepted_suite():
 
     for case_id in (
         "npc_role_relation_exact",
-        "npc_public_summary_delta",
         "npc_stale_hash",
         "npc_relation_owner_cap",
         "npc_inactive_profile_eligibility",
     ):
         assert npc_cases[case_id]["missed_groups"] == [], case_id
+    # v8 regression: legacy public_summary logs survive as read-only audit rows
+    # but are never bridged; the evidence surfaces via direct text only.
+    legacy = npc_cases["npc_public_summary_delta"]
+    assert legacy["npc_valid_links"] == 0
+    assert legacy["matched_npc_profiles"] == 0
+    assert legacy["route_counts"] == {"direct_only": 1, "relation_only": 0, "dual": 0}
+    assert legacy["selected_main_ids"] == ["turn_2_p001"]
+    assert legacy["npc_legacy_log_refs"] == [
+        "npc-shalan-summary-t1",
+        "npc-shalan-summary-t2",
+    ]
+    assert legacy["invariant_violations"] == []
     # Direct protection is preserved: the exact direct answer keeps the seat.
     assert npc_cases["npc_direct_exact_vs_relation_noise"]["missed_groups"] == []
     assert npc_cases["npc_direct_exact_vs_relation_noise"][
@@ -260,10 +270,10 @@ def test_npc_field_contracts_green_in_accepted_suite():
     assert shared["visible_evidence_ids"] == ["turn_1_p001"]
     assert shared["invariant_violations"] == []
     aggregate = report["aggregate"]
-    assert aggregate["must_recalled"] == 37
-    assert aggregate["must_total"] == 38
-    assert aggregate["weighted_recalled"] == 120
-    assert aggregate["weighted_total"] == 125
+    assert aggregate["must_recalled"] == 36
+    assert aggregate["must_total"] == 37
+    assert aggregate["weighted_recalled"] == 117
+    assert aggregate["weighted_total"] == 122
     assert aggregate["invariant_violation_count"] == 0
     assert aggregate["forbidden_visible_count"] == 0
     assert aggregate["forbidden_main_visible_count"] == 0
@@ -291,11 +301,11 @@ def test_every_case_records_npc_field_funnel():
             assert all(case[field] == 0 for field in npc_fields), case["case_id"]
 
     aggregate = report["aggregate"]
-    assert aggregate["npc_valid_links"] == 12
+    assert aggregate["npc_valid_links"] == 11
     assert aggregate["npc_stale_links"] == 2
     assert aggregate["npc_invalid_links"] == 1
     assert aggregate["npc_degraded_links"] == 0
-    assert aggregate["matched_npc_profiles"] == 9
+    assert aggregate["matched_npc_profiles"] == 8
     assert aggregate["npc_relation_candidates"] == 10
     assert aggregate["npc_relation_hits_added"] == 8
 

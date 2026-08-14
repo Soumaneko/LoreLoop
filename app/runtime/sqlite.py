@@ -15,7 +15,7 @@ SUPPORTED_SCHEMA_VERSIONS = {
     "director_event": 11,
     "director_log": 1,
     "director_npc": 5,
-    "npc_profile": 7,
+    "npc_profile": 8,
     "scene_summary": 1,
     "short_term_memory": 5,
     "world_setting": 12,

@@ -14,15 +14,6 @@
                 "evidence_ids": [
                   "turn_0_p002"
                 ]
-              },
-              {
-                "field": "public_summary",
-                "value": "沈孤鸿，人称沈二爷，进入醉花楼并命人关门。",
-                "summary_delta": "确认其身份为沈二爷，并进入醉花楼。",
-                "evidence_ids": [
-                  "turn_0_p001",
-                  "turn_0_p002"
-                ]
               }
             ]
           }
@@ -69,21 +60,7 @@
     },
     "current_fields_snapshot": {
       "npc_batch_update": {
-        "updates": [
-          {
-            "npc_id": "npc_001",
-            "current_intent": "查明信物来历",
-            "stable_changes": [
-              {
-                "field": "current_intent",
-                "evidence_ids": [
-                  "turn_0_p001"
-                ],
-                "value": "查明信物来历"
-              }
-            ]
-          }
-        ]
+        "updates": []
       },
       "token_usage": {
         "npc_batch_update": {
@@ -100,18 +77,10 @@
         "updates": [
           {
             "npc_id": "npc_001",
-            "current_intent": "拜托萧云痕处理某事",
             "stable_changes": [
               {
                 "field": "personality_trait",
                 "value": "戒备心强，但确认可信后会果断托付",
-                "evidence_ids": [
-                  "turn_0_p001"
-                ]
-              },
-              {
-                "field": "current_intent",
-                "value": "拜托萧云痕处理某事",
                 "evidence_ids": [
                   "turn_0_p001"
                 ]
@@ -132,21 +101,7 @@
     },
     "departed_direction": {
       "npc_batch_update": {
-        "updates": [
-          {
-            "npc_id": "npc_001",
-            "current_intent": "前往城南",
-            "stable_changes": [
-              {
-                "field": "current_intent",
-                "value": "前往城南",
-                "evidence_ids": [
-                  "turn_0_p001"
-                ]
-              }
-            ]
-          }
-        ]
+        "updates": []
       },
       "token_usage": {
         "npc_batch_update": {
@@ -204,14 +159,6 @@
                 "evidence_ids": [
                   "turn_0_p001"
                 ]
-              },
-              {
-                "field": "public_summary",
-                "value": "沈孤鸿，合欢宗宗主。",
-                "summary_delta": "确认其身份为合欢宗宗主，并明确其组织归属为合欢宗。",
-                "evidence_ids": [
-                  "turn_0_p001"
-                ]
               }
             ]
           }
@@ -263,14 +210,6 @@
               {
                 "field": "personality_trait",
                 "value": "沉稳重情",
-                "evidence_ids": [
-                  "turn_0_p001"
-                ]
-              },
-              {
-                "field": "public_summary",
-                "value": "沈孤鸿为人沉稳、重情重义，遇险时总是先护着旁人。",
-                "summary_delta": "确认其沉稳重情的性格特征。",
                 "evidence_ids": [
                   "turn_0_p001"
                 ]
@@ -345,14 +284,6 @@
                 ],
                 "field": "role",
                 "value": "江湖人称沈二爷"
-              },
-              {
-                "evidence_ids": [
-                  "turn_0_p001"
-                ],
-                "field": "public_summary",
-                "value": "沈孤鸿，江湖人称沈二爷，沈二爷为其别号。",
-                "summary_delta": "确认沈孤鸿的江湖别号为沈二爷。"
               }
             ]
           }
@@ -370,21 +301,7 @@
     },
     "companion_is_distinct": {
       "npc_batch_update": {
-        "updates": [
-          {
-            "npc_id": "npc_001",
-            "stable_changes": [
-              {
-                "evidence_ids": [
-                  "turn_0_p001"
-                ],
-                "field": "public_summary",
-                "value": "沈孤鸿，有一名多年旧友青衣客。",
-                "summary_delta": "确认沈孤鸿与青衣客为多年旧友关系。"
-              }
-            ]
-          }
-        ]
+        "updates": []
       },
       "token_usage": {
         "npc_batch_update": {
@@ -412,14 +329,6 @@
               {
                 "field": "faction",
                 "value": "合欢宗",
-                "evidence_ids": [
-                  "turn_5_p001"
-                ]
-              },
-              {
-                "field": "public_summary",
-                "value": "沈孤鸿，合欢宗宗主。",
-                "summary_delta": "确认沈孤鸿为合欢宗宗主。",
                 "evidence_ids": [
                   "turn_5_p001"
                 ]

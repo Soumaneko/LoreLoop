@@ -34,19 +34,19 @@ NPC_TOPIC_MATCH_THRESHOLD = 0.30
 #: Minimum normalized topic length for topic-triggered eligibility.
 NPC_TOPIC_MIN_CHARS = 2
 
-#: Deterministic field ordering for bridge emission.
+#: Deterministic field ordering for bridge emission.  ``public_summary`` 是
+#: v7 遗留字段，其日志只读保留为 audit row，不再桥接发射。
 _FIELD_ORDER: tuple[NPCFieldHistoryName, ...] = (
-    "public_summary",
     "role",
     "appearance",
     "faction",
+    "last_scene_summary",
 )
 
 
 NPCFieldRelationReason = Literal[
     "npc_name_match",
     "npc_alias_match",
-    "npc_delta_topic_match",
     "npc_value_topic_match",
 ]
 
@@ -55,12 +55,11 @@ class NPCFieldHistoryLink(BaseModel):
     """A structural pointer from one accepted field log into Confirmed History.
 
     ``evidence_basis_primary`` is the node-specific semantic basis (the
-    ``summary_delta`` for ``public_summary``, the ``new_value`` otherwise);
-    ``old_value`` never enters the basis so a later aggregate cannot broadcast
-    onto an older node.  The basis is unbounded because it only feeds lexical
-    matching and never enters the LLM payload.  ``intent_match_reasons`` keeps
-    the per-intent reason set so the shared admission pass never broadcasts one
-    intent's reason onto another.
+    ``new_value`` of the field change); ``old_value`` never enters the basis so a
+    later aggregate cannot broadcast onto an older node.  The basis is unbounded
+    because it only feeds lexical matching and never enters the LLM payload.
+    ``intent_match_reasons`` keeps the per-intent reason set so the shared
+    admission pass never broadcasts one intent's reason onto another.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -274,11 +273,7 @@ class NPCProfileHistoryBridge:
         for emission in ordered:
             if len(links) >= self.total_link_cap:
                 break
-            basis = (
-                emission.log.summary_delta
-                if emission.field_name == "public_summary"
-                else emission.log.new_value
-            )
+            basis = emission.log.new_value
             union_reasons = set().union(*(
                 reasons for reasons in emission.intent_reasons.values()
             ))
@@ -388,22 +383,17 @@ class NPCProfileHistoryBridge:
             if len(normalized) < NPC_TOPIC_MIN_CHARS:
                 continue
             for field_name, logs in field_logs.items():
-                reason = (
-                    "npc_delta_topic_match"
-                    if field_name == "public_summary"
-                    else "npc_value_topic_match"
-                )
+                # v7 legacy ``public_summary`` 日志只读保留、不再参与主题匹配，
+                # 既不能单独授予档案主题命中，也不进入发射。
+                if field_name not in _FIELD_ORDER:
+                    continue
                 for log in logs:
-                    basis = (
-                        log.summary_delta
-                        if field_name == "public_summary"
-                        else log.new_value
-                    )
+                    basis = log.new_value
                     if basis and support_score(
                         normalized,
                         basis,
                     ) >= NPC_TOPIC_MATCH_THRESHOLD:
-                        reasons_by_log[log.log_id].add(reason)
+                        reasons_by_log[log.log_id].add("npc_value_topic_match")
         return dict(reasons_by_log)
 
     def _collect_emissions(

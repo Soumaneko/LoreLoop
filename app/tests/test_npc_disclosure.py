@@ -1,6 +1,10 @@
+import pytest
+from pydantic import ValidationError
+
 from app.domain.npc_profile.schemas import (
     DISCLOSED_FIELD_SETS,
     NPCProfile,
+    NPCProfilePublicView,
 )
 
 
@@ -9,7 +13,8 @@ def _profile():
         name="林澈",
         aliases=["林医生"],
         role="社区医生",
-        public_summary="诊所的坐堂医生。",
+        last_scene_summary="他在诊所后厅处置了一起急症。",
+        last_scene_turn=3,
         appearance="常穿深色风衣。",
         personality_trait="见人先问诊，习惯主动掌握对方近况",
         known_abilities=[{"name": "急救", "description": "处理外伤与常见急症"}],
@@ -35,6 +40,8 @@ def test_disclosure_view_remote_drops_face_to_face_and_hidden_fields():
     assert data["role"] == "社区医生"
     assert data["social_style"] == "克制而友善。"
     assert data["attitude_to_player"] == "克制冷淡。"
+    assert data["last_scene_summary"] == "他在诊所后厅处置了一起急症。"
+    assert data["last_scene_turn"] == 3
     assert data["appearance"] is None
     assert data["personality_trait"] is None
     assert data["known_abilities"] == []
@@ -89,3 +96,19 @@ def test_disclosed_field_sets_cover_all_levels():
     assert DISCLOSED_FIELD_SETS["face_to_face"] is not None
     assert DISCLOSED_FIELD_SETS["intimate"] is None
     assert DISCLOSED_FIELD_SETS["remote"] < DISCLOSED_FIELD_SETS["face_to_face"]
+
+
+def test_public_view_enforces_last_scene_mutual_null():
+    base = {
+        "name": "林澈",
+        "role": "社区医生",
+        "last_scene_summary": "他在诊所后厅处置了一起急症。",
+    }
+    with pytest.raises(ValidationError, match="both be set or both be null"):
+        NPCProfilePublicView(**base)
+    with pytest.raises(ValidationError, match="both be set or both be null"):
+        NPCProfilePublicView(**{**base, "last_scene_summary": None, "last_scene_turn": 3})
+    valid = NPCProfilePublicView(
+        **{**base, "last_scene_turn": 3}
+    )
+    assert valid.last_scene_turn == 3

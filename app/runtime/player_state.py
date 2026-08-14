@@ -69,7 +69,6 @@ def _project_text_highlights(
                 "kind": "npc",
                 "name": profile.name,
                 "aliases": list(profile.aliases),
-                "public_summary": profile.public_summary,
                 "role": profile.role,
                 "appearance": profile.appearance,
                 "personality_trait": profile.personality_trait,
@@ -79,6 +78,7 @@ def _project_text_highlights(
                 ],
                 "faction": profile.faction,
                 "last_known_location": profile.last_known_location,
+                "last_scene_summary": profile.last_scene_summary,
             }
             candidates.extend(
                 (surface, "npc", public_profile)

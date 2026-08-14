@@ -289,7 +289,7 @@
     },
     {
       "case_id": "current_fields_snapshot",
-      "description": "The temporary channel snapshots location and persistent intent; a single-action attitude guess is forbidden.",
+      "description": "CurrentState deterministically syncs location; a single-action attitude guess is forbidden.",
       "scene_id": "scene_001",
       "turn_index": 0,
       "user_input": "",
@@ -327,12 +327,6 @@
             "npc_id": "npc_001",
             "field": "last_known_location",
             "value": "醉花楼",
-            "importance": "must"
-          },
-          {
-            "npc_id": "npc_001",
-            "field": "current_intent",
-            "value": "查明信物来历",
             "importance": "must"
           }
         ],
@@ -477,10 +471,6 @@
           {
             "npc_id": "npc_001",
             "field": "attitude_to_player"
-          },
-          {
-            "npc_id": "npc_001",
-            "field": "current_intent"
           }
         ],
         "new_npc_expectations": [],
@@ -535,12 +525,6 @@
             "npc_id": "npc_001",
             "field": "faction",
             "value": "合欢宗",
-            "importance": "must"
-          },
-          {
-            "npc_id": "npc_001",
-            "field": "public_summary",
-            "value": "合欢宗现任宗主，决意独自承担门派事务。",
             "importance": "must"
           }
         ],
@@ -978,10 +962,6 @@
           {
             "npc_id": "npc_001",
             "field": "attitude_to_player"
-          },
-          {
-            "npc_id": "npc_001",
-            "field": "current_intent"
           }
         ],
         "new_npc_expectations": [

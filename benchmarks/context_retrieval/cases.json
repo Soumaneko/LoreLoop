@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "cases": [
     {
       "case_id": "direct_exact_answer",
@@ -11,7 +11,12 @@
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
@@ -37,25 +42,38 @@
         {
           "group_id": "first_meeting_appearance",
           "importance": "must",
-          "acceptable_evidence_ids": ["turn_2_p001"]
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
         }
       ],
       "provenance_expectations": [
-        {"evidence_id": "turn_2_p001", "direct": true, "relation": false}
+        {
+          "evidence_id": "turn_2_p001",
+          "direct": true,
+          "relation": false
+        }
       ]
     },
     {
       "case_id": "direct_multi_intent_coverage",
       "description": "One document can satisfy entity and event intents without duplication.",
       "current_turn_index": 5,
-      "policy": {"max_hits": 2},
+      "policy": {
+        "max_hits": 2
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
             "topics": []
           },
           {
@@ -63,7 +81,9 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["黑塔密约"]
+            "topics": [
+              "黑塔密约"
+            ]
           }
         ]
       },
@@ -88,16 +108,24 @@
         {
           "group_id": "combined_entity_event_fact",
           "importance": "must",
-          "acceptable_evidence_ids": ["turn_3_p001"]
+          "acceptable_evidence_ids": [
+            "turn_3_p001"
+          ]
         },
         {
           "group_id": "deadline_rule",
           "importance": "should",
-          "acceptable_evidence_ids": ["turn_2_p001"]
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
         }
       ],
       "provenance_expectations": [
-        {"evidence_id": "turn_3_p001", "direct": true, "relation": false}
+        {
+          "evidence_id": "turn_3_p001",
+          "direct": true,
+          "relation": false
+        }
       ]
     },
     {
@@ -110,7 +138,12 @@
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
@@ -133,7 +166,9 @@
           "kind": "commitment",
           "subject": "艾琳调查黑塔的承诺",
           "premise": "艾琳答应在三天内调查黑塔。",
-          "entities": ["艾琳"],
+          "entities": [
+            "艾琳"
+          ],
           "created_turn": 1,
           "updated_turn": 1
         }
@@ -143,18 +178,26 @@
           "item_id": "promise-ailin",
           "operation": "create",
           "turn_index": 1,
-          "evidence_ids": ["turn_1_p001"]
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
         }
       ],
       "gold_groups": [
         {
           "group_id": "promise",
           "importance": "must",
-          "acceptable_evidence_ids": ["turn_1_p001"]
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
         }
       ],
       "provenance_expectations": [
-        {"evidence_id": "turn_1_p001", "direct": true, "relation": true}
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": true,
+          "relation": true
+        }
       ]
     },
     {
@@ -167,35 +210,149 @@
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她答应查明北门为何封闭。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她收下了刻有月纹的钥匙。"},
-        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "她确认失踪信使最后去了钟楼。"},
-        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "她承诺在满月前归还借来的地图。"},
-        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "码头工人谈起了昨夜的暴雨。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她答应查明北门为何封闭。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "她收下了刻有月纹的钥匙。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "她确认失踪信使最后去了钟楼。"
+        },
+        {
+          "turn_index": 4,
+          "scene_id": "scene_004",
+          "scene_text": "她承诺在满月前归还借来的地图。"
+        },
+        {
+          "turn_index": 5,
+          "scene_id": "scene_005",
+          "scene_text": "码头工人谈起了昨夜的暴雨。"
+        }
       ],
       "continuity_items": [
-        {"id": "a-north-gate", "subject": "艾琳调查北门", "premise": "查明北门封闭原因。", "entities": ["艾琳"], "created_turn": 1, "updated_turn": 1},
-        {"id": "b-moon-key", "subject": "艾琳保管月纹钥匙", "premise": "确认钥匙的用途。", "entities": ["艾琳"], "created_turn": 2, "updated_turn": 2},
-        {"id": "c-messenger", "subject": "艾琳追查失踪信使", "premise": "找到信使在钟楼留下的线索。", "entities": ["艾琳"], "created_turn": 3, "updated_turn": 3},
-        {"id": "d-map", "kind": "commitment", "subject": "艾琳归还地图", "premise": "在满月前归还地图。", "entities": ["艾琳"], "created_turn": 4, "updated_turn": 4}
+        {
+          "id": "a-north-gate",
+          "subject": "艾琳调查北门",
+          "premise": "查明北门封闭原因。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 1,
+          "updated_turn": 1
+        },
+        {
+          "id": "b-moon-key",
+          "subject": "艾琳保管月纹钥匙",
+          "premise": "确认钥匙的用途。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 2,
+          "updated_turn": 2
+        },
+        {
+          "id": "c-messenger",
+          "subject": "艾琳追查失踪信使",
+          "premise": "找到信使在钟楼留下的线索。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 3,
+          "updated_turn": 3
+        },
+        {
+          "id": "d-map",
+          "kind": "commitment",
+          "subject": "艾琳归还地图",
+          "premise": "在满月前归还地图。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 4,
+          "updated_turn": 4
+        }
       ],
       "continuity_logs": [
-        {"item_id": "a-north-gate", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "b-moon-key", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]},
-        {"item_id": "c-messenger", "operation": "create", "turn_index": 3, "evidence_ids": ["turn_3_p001"]},
-        {"item_id": "d-map", "operation": "create", "turn_index": 4, "evidence_ids": ["turn_4_p001"]}
+        {
+          "item_id": "a-north-gate",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "item_id": "b-moon-key",
+          "operation": "create",
+          "turn_index": 2,
+          "evidence_ids": [
+            "turn_2_p001"
+          ]
+        },
+        {
+          "item_id": "c-messenger",
+          "operation": "create",
+          "turn_index": 3,
+          "evidence_ids": [
+            "turn_3_p001"
+          ]
+        },
+        {
+          "item_id": "d-map",
+          "operation": "create",
+          "turn_index": 4,
+          "evidence_ids": [
+            "turn_4_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "north_gate", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
-        {"group_id": "moon_key", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]},
-        {"group_id": "messenger", "importance": "must", "acceptable_evidence_ids": ["turn_3_p001"]},
-        {"group_id": "map_deadline", "importance": "must", "acceptable_evidence_ids": ["turn_4_p001"]}
+        {
+          "group_id": "north_gate",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "group_id": "moon_key",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
+        },
+        {
+          "group_id": "messenger",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_3_p001"
+          ]
+        },
+        {
+          "group_id": "map_deadline",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_4_p001"
+          ]
+        }
       ]
     },
     {
@@ -208,39 +365,96 @@
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她表示会调查钟楼的异常灯光。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她承诺查清钟楼夜间亮灯的原因。"},
-        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "她再次确认不会放弃钟楼调查。"},
-        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "她说钟楼的事情仍由自己负责。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她表示会调查钟楼的异常灯光。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "她承诺查清钟楼夜间亮灯的原因。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "她再次确认不会放弃钟楼调查。"
+        },
+        {
+          "turn_index": 4,
+          "scene_id": "scene_004",
+          "scene_text": "她说钟楼的事情仍由自己负责。"
+        }
       ],
       "continuity_items": [
-        {"id": "tower-light", "subject": "艾琳调查钟楼灯光", "premise": "查清钟楼夜间亮灯的原因。", "entities": ["艾琳"], "created_turn": 1, "updated_turn": 1}
+        {
+          "id": "tower-light",
+          "subject": "艾琳调查钟楼灯光",
+          "premise": "查清钟楼夜间亮灯的原因。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
       ],
       "continuity_logs": [
-        {"item_id": "tower-light", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001", "turn_2_p001", "turn_3_p001", "turn_4_p001"]}
+        {
+          "item_id": "tower-light",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001",
+            "turn_2_p001",
+            "turn_3_p001",
+            "turn_4_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "tower_investigation_commitment", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001", "turn_2_p001", "turn_3_p001", "turn_4_p001"], "max_useful_evidence": 1}
+        {
+          "group_id": "tower_investigation_commitment",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001",
+            "turn_2_p001",
+            "turn_3_p001",
+            "turn_4_p001"
+          ],
+          "max_useful_evidence": 1
+        }
       ]
     },
     {
       "case_id": "explicit_direct_vs_context_relation",
       "description": "Explicit direct evidence is protected before a current-context relation supplement.",
       "current_turn_index": 7,
-      "policy": {"max_hits": 2},
+      "policy": {
+        "max_hits": 2
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "current_companion",
             "focus": "entity",
             "origin": "current_context",
-            "entities": [{"name": "背景人物", "aliases": []}],
+            "entities": [
+              {
+                "name": "背景人物",
+                "aliases": []
+              }
+            ],
             "topics": []
           },
           {
@@ -248,24 +462,66 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["黑塔密约"]
+            "topics": [
+              "黑塔密约"
+            ]
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "黑塔密约规定只有持印者可以开启石门。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "那个人曾把备用药品放在马车底层。"},
-        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "黑塔密约的见证仪式在冬至举行。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "黑塔密约规定只有持印者可以开启石门。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "那个人曾把备用药品放在马车底层。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "黑塔密约的见证仪式在冬至举行。"
+        }
       ],
       "continuity_items": [
-        {"id": "companion-supplies", "subject": "背景人物保管补给", "premise": "备用药品放在马车底层。", "entities": ["背景人物"], "created_turn": 2, "updated_turn": 2}
+        {
+          "id": "companion-supplies",
+          "subject": "背景人物保管补给",
+          "premise": "备用药品放在马车底层。",
+          "entities": [
+            "背景人物"
+          ],
+          "created_turn": 2,
+          "updated_turn": 2
+        }
       ],
       "continuity_logs": [
-        {"item_id": "companion-supplies", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]}
+        {
+          "item_id": "companion-supplies",
+          "operation": "create",
+          "turn_index": 2,
+          "evidence_ids": [
+            "turn_2_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "tower_access_rule", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
-        {"group_id": "companion_supplies", "importance": "should", "acceptable_evidence_ids": ["turn_2_p001"]}
+        {
+          "group_id": "tower_access_rule",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "group_id": "companion_supplies",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
+        }
       ]
     },
     {
@@ -279,43 +535,135 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["黑塔密约"]
+            "topics": [
+              "黑塔密约"
+            ]
           },
           {
             "intent_id": "current_old_port",
             "focus": "location",
             "origin": "current_context",
-            "entities": [{"name": "旧港", "aliases": []}],
+            "entities": [
+              {
+                "name": "旧港",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "当时有人在木箱上留下记号。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "参与者最终确认事情已经解决。"},
-        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "潮水冲走了堤岸边的旧木板。"},
-        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "巡逻队后来结束了那次搜查。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "当时有人在木箱上留下记号。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "参与者最终确认事情已经解决。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "潮水冲走了堤岸边的旧木板。"
+        },
+        {
+          "turn_index": 4,
+          "scene_id": "scene_004",
+          "scene_text": "巡逻队后来结束了那次搜查。"
+        }
       ],
       "continuity_items": [
-        {"id": "a-strong-pact", "status": "resolved", "subject": "黑塔密约后续", "premise": "确认密约参与者的结局。", "current_state": "黑塔密约相关事项已经解决。", "entities": ["见证人"], "created_turn": 1, "updated_turn": 2, "closed_turn": 2},
-        {"id": "b-weak-location", "status": "resolved", "subject": "旧港木箱旧事", "premise": "调查旧港发现的木箱记号。", "current_state": "搜查已经结束。", "entities": ["巡逻队"], "location": "旧港", "created_turn": 3, "updated_turn": 4, "closed_turn": 4}
+        {
+          "id": "a-strong-pact",
+          "status": "resolved",
+          "subject": "黑塔密约后续",
+          "premise": "确认密约参与者的结局。",
+          "current_state": "黑塔密约相关事项已经解决。",
+          "entities": [
+            "见证人"
+          ],
+          "created_turn": 1,
+          "updated_turn": 2,
+          "closed_turn": 2
+        },
+        {
+          "id": "b-weak-location",
+          "status": "resolved",
+          "subject": "旧港木箱旧事",
+          "premise": "调查旧港发现的木箱记号。",
+          "current_state": "搜查已经结束。",
+          "entities": [
+            "巡逻队"
+          ],
+          "location": "旧港",
+          "created_turn": 3,
+          "updated_turn": 4,
+          "closed_turn": 4
+        }
       ],
       "continuity_logs": [
-        {"item_id": "a-strong-pact", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "a-strong-pact", "operation": "resolve", "turn_index": 2, "evidence_ids": ["turn_2_p001"], "reason": "确认密约事项已经解决。"},
-        {"item_id": "b-weak-location", "operation": "create", "turn_index": 3, "evidence_ids": ["turn_3_p001"]},
-        {"item_id": "b-weak-location", "operation": "resolve", "turn_index": 4, "evidence_ids": ["turn_4_p001"], "reason": "确认搜查已经结束。"}
+        {
+          "item_id": "a-strong-pact",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "item_id": "a-strong-pact",
+          "operation": "resolve",
+          "turn_index": 2,
+          "evidence_ids": [
+            "turn_2_p001"
+          ],
+          "reason": "确认密约事项已经解决。"
+        },
+        {
+          "item_id": "b-weak-location",
+          "operation": "create",
+          "turn_index": 3,
+          "evidence_ids": [
+            "turn_3_p001"
+          ]
+        },
+        {
+          "item_id": "b-weak-location",
+          "operation": "resolve",
+          "turn_index": 4,
+          "evidence_ids": [
+            "turn_4_p001"
+          ],
+          "reason": "确认搜查已经结束。"
+        }
       ],
       "gold_groups": [
-        {"group_id": "pact_resolution", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]}
+        {
+          "group_id": "pact_resolution",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_3_p001", "turn_4_p001"]
+      "forbidden_evidence_ids": [
+        "turn_3_p001",
+        "turn_4_p001"
+      ]
     },
     {
       "case_id": "short_critical_vs_long_background",
       "description": "A constrained payload reveals whether long recent background displaces a short critical fact.",
       "current_turn_index": 10,
-      "policy": {"max_hits": 2, "max_payload_chars": 520, "max_evidence_text_chars": 360, "min_excerpt_chars": 120},
+      "policy": {
+        "max_hits": 2,
+        "max_payload_chars": 520,
+        "max_evidence_text_chars": 360,
+        "min_excerpt_chars": 120
+      },
       "search_plan": {
         "intents": [
           {
@@ -323,17 +671,39 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["旧钥匙"]
+            "topics": [
+              "旧钥匙"
+            ]
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "旧钥匙藏在钟楼第三层的松动砖缝里。"},
-        {"turn_index": 9, "scene_id": "scene_009", "scene_text": "旧钥匙相关的泛泛背景说明反复提到城门、街道、天气和无关行人的往来，但没有说明钥匙的位置或用途。旧钥匙相关的泛泛背景说明继续描述市场开门、船只靠岸、钟声响起以及守卫换班，却仍然没有给出可行动的具体线索。旧钥匙相关的泛泛背景说明又列举许多已经知道的环境细节，包括石墙颜色、路面积水和远处灯火，但这些内容对寻找钥匙没有新增帮助。旧钥匙相关的泛泛背景说明最后重复了此前的城市气氛与人群动向，依旧没有说明钥匙在哪里。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "旧钥匙藏在钟楼第三层的松动砖缝里。"
+        },
+        {
+          "turn_index": 9,
+          "scene_id": "scene_009",
+          "scene_text": "旧钥匙相关的泛泛背景说明反复提到城门、街道、天气和无关行人的往来，但没有说明钥匙的位置或用途。旧钥匙相关的泛泛背景说明继续描述市场开门、船只靠岸、钟声响起以及守卫换班，却仍然没有给出可行动的具体线索。旧钥匙相关的泛泛背景说明又列举许多已经知道的环境细节，包括石墙颜色、路面积水和远处灯火，但这些内容对寻找钥匙没有新增帮助。旧钥匙相关的泛泛背景说明最后重复了此前的城市气氛与人群动向，依旧没有说明钥匙在哪里。"
+        }
       ],
       "gold_groups": [
-        {"group_id": "key_location", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
-        {"group_id": "recent_background", "importance": "should", "acceptable_evidence_ids": ["turn_9_p001"]}
+        {
+          "group_id": "key_location",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "group_id": "recent_background",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_9_p001"
+          ]
+        }
       ]
     },
     {
@@ -347,40 +717,121 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["调查黑塔"]
+            "topics": [
+              "调查黑塔"
+            ]
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "守卫答应调查黑塔的异常灯光。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "守卫承诺查清黑塔为何在夜间亮灯。"},
-        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "商人决定调查黑塔附近失踪的货车。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "守卫答应调查黑塔的异常灯光。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "守卫承诺查清黑塔为何在夜间亮灯。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "商人决定调查黑塔附近失踪的货车。"
+        }
       ],
       "gold_groups": [
-        {"group_id": "guard_light_investigation", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001", "turn_2_p001"], "max_useful_evidence": 1},
-        {"group_id": "merchant_wagon_investigation", "importance": "should", "acceptable_evidence_ids": ["turn_3_p001"]}
+        {
+          "group_id": "guard_light_investigation",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001",
+            "turn_2_p001"
+          ],
+          "max_useful_evidence": 1
+        },
+        {
+          "group_id": "merchant_wagon_investigation",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_3_p001"
+          ]
+        }
       ]
     },
     {
       "case_id": "turn_cap_preserves_diversity",
       "description": "At most two main hits from one turn preserve room for evidence from another turn.",
       "current_turn_index": 5,
-      "policy": {"max_hits": 3},
+      "policy": {
+        "max_hits": 3
+      },
       "search_plan": {
         "intents": [
-          {"intent_id": "topic_alpha", "focus": "topic", "origin": "explicit_input", "entities": [], "topics": ["赤印"]},
-          {"intent_id": "topic_beta", "focus": "topic", "origin": "explicit_input", "entities": [], "topics": ["蓝印"]},
-          {"intent_id": "topic_gamma", "focus": "topic", "origin": "explicit_input", "entities": [], "topics": ["银印"]}
+          {
+            "intent_id": "topic_alpha",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": [
+              "赤印"
+            ]
+          },
+          {
+            "intent_id": "topic_beta",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": [
+              "蓝印"
+            ]
+          },
+          {
+            "intent_id": "topic_gamma",
+            "focus": "topic",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": [
+              "银印"
+            ]
+          }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "赤印允许进入东门。\n\n蓝印允许开启仓库。\n\n银印允许查阅旧档案。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "银印后来被交给了档案管理员。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "赤印允许进入东门。\n\n蓝印允许开启仓库。\n\n银印允许查阅旧档案。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "银印后来被交给了档案管理员。"
+        }
       ],
       "gold_groups": [
-        {"group_id": "red_seal", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
-        {"group_id": "blue_seal", "importance": "must", "acceptable_evidence_ids": ["turn_1_p002"]},
-        {"group_id": "silver_seal", "importance": "should", "acceptable_evidence_ids": ["turn_1_p003", "turn_2_p001"]}
+        {
+          "group_id": "red_seal",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "group_id": "blue_seal",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p002"
+          ]
+        },
+        {
+          "group_id": "silver_seal",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_1_p003",
+            "turn_2_p001"
+          ]
+        }
       ]
     },
     {
@@ -393,14 +844,27 @@
             "intent_id": "explicit_linzhou",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "林舟", "aliases": []}],
+            "entities": [
+              {
+                "name": "林舟",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "最初在边境发现了陌生脚印。"},
-        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "众人目送陌生商队离开官道。\n\n那些人问的是行情，观察的却是守卫人数。\n\n现有迹象表明他们很可能是外围探子。\n\n旧堡的防御足以遮蔽仓库中的物资。\n\n队长决定暂不追查探子，先护送伤员返回旧堡。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "最初在边境发现了陌生脚印。"
+        },
+        {
+          "turn_index": 5,
+          "scene_id": "scene_005",
+          "scene_text": "众人目送陌生商队离开官道。\n\n那些人问的是行情，观察的却是守卫人数。\n\n现有迹象表明他们很可能是外围探子。\n\n旧堡的防御足以遮蔽仓库中的物资。\n\n队长决定暂不追查探子，先护送伤员返回旧堡。"
+        }
       ],
       "continuity_items": [
         {
@@ -408,19 +872,60 @@
           "subject": "林舟处理边境探子",
           "premise": "调查边境出现的陌生脚印。",
           "current_state": "林舟确认商队可疑，但决定暂不追查，先护送伤员返回旧堡。",
-          "entities": ["林舟"],
+          "entities": [
+            "林舟"
+          ],
           "created_turn": 1,
           "updated_turn": 5
         }
       ],
       "continuity_logs": [
-        {"item_id": "border-scouts", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "border-scouts", "operation": "update", "turn_index": 5, "state_delta": "确认可疑但暂不追查。", "evidence_ids": ["turn_5_p001", "turn_5_p002", "turn_5_p003", "turn_5_p004", "turn_5_p005"]}
+        {
+          "item_id": "border-scouts",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "item_id": "border-scouts",
+          "operation": "update",
+          "turn_index": 5,
+          "state_delta": "确认可疑但暂不追查。",
+          "evidence_ids": [
+            "turn_5_p001",
+            "turn_5_p002",
+            "turn_5_p003",
+            "turn_5_p004",
+            "turn_5_p005"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "latest_decision", "importance": "must", "acceptable_evidence_ids": ["turn_5_p005"]},
-        {"group_id": "scout_assessment", "importance": "should", "acceptable_evidence_ids": ["turn_5_p002", "turn_5_p003"], "max_useful_evidence": 1},
-        {"group_id": "thread_origin", "importance": "should", "acceptable_evidence_ids": ["turn_1_p001"]}
+        {
+          "group_id": "latest_decision",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_5_p005"
+          ]
+        },
+        {
+          "group_id": "scout_assessment",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_5_p002",
+            "turn_5_p003"
+          ],
+          "max_useful_evidence": 1
+        },
+        {
+          "group_id": "thread_origin",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ]
     },
     {
@@ -433,36 +938,118 @@
             "intent_id": "explicit_linzhou",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "林舟", "aliases": []}],
+            "entities": [
+              {
+                "name": "林舟",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 0, "scene_id": "scene_000", "scene_text": "那枚联络玉牌短暂闪了一下。\n\n他握着玉牌思考下一步安排。"},
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "回信确认，先前玉牌闪光正是有人接受邀请时发出的联络信号。"}
+        {
+          "turn_index": 0,
+          "scene_id": "scene_000",
+          "scene_text": "那枚联络玉牌短暂闪了一下。\n\n他握着玉牌思考下一步安排。"
+        },
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "回信确认，先前玉牌闪光正是有人接受邀请时发出的联络信号。"
+        }
       ],
       "continuity_items": [
-        {"id": "a-recruitment", "subject": "林舟等待招募回应", "premise": "确认是否有人接受邀请。", "current_state": "已经收到接受邀请的回信。", "entities": ["林舟"], "created_turn": 0, "updated_turn": 1},
-        {"id": "b-signal", "status": "resolved", "subject": "林舟确认玉牌闪光来源", "premise": "查明联络玉牌为何闪光。", "entities": ["林舟"], "created_turn": 0, "updated_turn": 1, "closed_turn": 1}
+        {
+          "id": "a-recruitment",
+          "subject": "林舟等待招募回应",
+          "premise": "确认是否有人接受邀请。",
+          "current_state": "已经收到接受邀请的回信。",
+          "entities": [
+            "林舟"
+          ],
+          "created_turn": 0,
+          "updated_turn": 1
+        },
+        {
+          "id": "b-signal",
+          "status": "resolved",
+          "subject": "林舟确认玉牌闪光来源",
+          "premise": "查明联络玉牌为何闪光。",
+          "entities": [
+            "林舟"
+          ],
+          "created_turn": 0,
+          "updated_turn": 1,
+          "closed_turn": 1
+        }
       ],
       "continuity_logs": [
-        {"item_id": "a-recruitment", "operation": "create", "turn_index": 0, "evidence_ids": ["turn_0_p002"]},
-        {"item_id": "b-signal", "operation": "create", "turn_index": 0, "evidence_ids": ["turn_0_p001"]},
-        {"item_id": "b-signal", "operation": "resolve", "turn_index": 1, "evidence_ids": ["turn_1_p001"], "reason": "确认玉牌闪光来源已查明。"},
-        {"item_id": "a-recruitment", "operation": "update", "turn_index": 1, "state_delta": "收到招募回应。", "evidence_ids": ["turn_1_p001"]}
+        {
+          "item_id": "a-recruitment",
+          "operation": "create",
+          "turn_index": 0,
+          "evidence_ids": [
+            "turn_0_p002"
+          ]
+        },
+        {
+          "item_id": "b-signal",
+          "operation": "create",
+          "turn_index": 0,
+          "evidence_ids": [
+            "turn_0_p001"
+          ]
+        },
+        {
+          "item_id": "b-signal",
+          "operation": "resolve",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
+          "reason": "确认玉牌闪光来源已查明。"
+        },
+        {
+          "item_id": "a-recruitment",
+          "operation": "update",
+          "turn_index": 1,
+          "state_delta": "收到招募回应。",
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "shared_reply", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
-        {"group_id": "signal_origin", "importance": "should", "acceptable_evidence_ids": ["turn_0_p001"]}
+        {
+          "group_id": "shared_reply",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "group_id": "signal_origin",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_0_p001"
+          ]
+        }
       ],
       "provenance_expectations": [
         {
           "evidence_id": "turn_1_p001",
           "direct": false,
           "relation": true,
-          "linked_continuity_ids": ["a-recruitment", "b-signal"],
-          "linked_operations": ["update", "resolve"]
+          "linked_continuity_ids": [
+            "a-recruitment",
+            "b-signal"
+          ],
+          "linked_operations": [
+            "update",
+            "resolve"
+          ]
         }
       ]
     },
@@ -470,7 +1057,9 @@
       "case_id": "player_input_vs_scene_outcome",
       "description": "A real-save-derived action/outcome pair keeps confirmed scene evidence ahead of contradictory player intent.",
       "current_turn_index": 3,
-      "policy": {"max_hits": 1},
+      "policy": {
+        "max_hits": 1
+      },
       "search_plan": {
         "intents": [
           {
@@ -478,7 +1067,9 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["铜盒"]
+            "topics": [
+              "铜盒"
+            ]
           }
         ]
       },
@@ -491,41 +1082,81 @@
         }
       ],
       "gold_groups": [
-        {"group_id": "confirmed_delivery_outcome", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+        {
+          "group_id": "confirmed_delivery_outcome",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_1_input"],
+      "forbidden_evidence_ids": [
+        "turn_1_input"
+      ],
       "provenance_expectations": [
-        {"evidence_id": "turn_1_p001", "direct": true, "relation": false}
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": true,
+          "relation": false
+        }
       ]
     },
     {
       "case_id": "explicit_relation_vs_context_direct",
       "description": "Explicit-input Continuity evidence keeps a seat ahead of plentiful current-context direct matches.",
       "current_turn_index": 8,
-      "policy": {"max_hits": 2},
+      "policy": {
+        "max_hits": 2
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
             "topics": []
           },
           {
             "intent_id": "current_capital",
             "focus": "location",
             "origin": "current_context",
-            "entities": [{"name": "王都", "aliases": []}],
+            "entities": [
+              {
+                "name": "王都",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她曾答应在钟楼关闭前，把黑塔密钥交给北门守卫。"},
-        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "王都广场的鸽群被钟声惊起。"},
-        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "王都的商铺在雨后重新开门。"},
-        {"turn_index": 7, "scene_id": "scene_007", "scene_text": "王都巡逻队沿着城墙更换岗哨。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她曾答应在钟楼关闭前，把黑塔密钥交给北门守卫。"
+        },
+        {
+          "turn_index": 5,
+          "scene_id": "scene_005",
+          "scene_text": "王都广场的鸽群被钟声惊起。"
+        },
+        {
+          "turn_index": 6,
+          "scene_id": "scene_006",
+          "scene_text": "王都的商铺在雨后重新开门。"
+        },
+        {
+          "turn_index": 7,
+          "scene_id": "scene_007",
+          "scene_text": "王都巡逻队沿着城墙更换岗哨。"
+        }
       ],
       "continuity_items": [
         {
@@ -533,43 +1164,94 @@
           "kind": "commitment",
           "subject": "艾琳交付黑塔密钥的承诺",
           "premise": "艾琳答应把黑塔密钥交给北门守卫。",
-          "entities": ["艾琳"],
+          "entities": [
+            "艾琳"
+          ],
           "created_turn": 1,
           "updated_turn": 1
         }
       ],
       "continuity_logs": [
-        {"item_id": "ailin-key-promise", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+        {
+          "item_id": "ailin-key-promise",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "explicit_key_promise", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]},
-        {"group_id": "current_capital_context", "importance": "should", "acceptable_evidence_ids": ["turn_5_p001", "turn_6_p001", "turn_7_p001"], "max_useful_evidence": 1}
+        {
+          "group_id": "explicit_key_promise",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "group_id": "current_capital_context",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_5_p001",
+            "turn_6_p001",
+            "turn_7_p001"
+          ],
+          "max_useful_evidence": 1
+        }
       ],
       "provenance_expectations": [
-        {"evidence_id": "turn_1_p001", "direct": false, "relation": true}
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": false,
+          "relation": true
+        }
       ]
     },
     {
       "case_id": "direct_noise_vs_relation_exact",
       "description": "Surface mentions of an explicit entity must not crowd out indirect Continuity evidence that actually answers the question.",
       "current_turn_index": 7,
-      "policy": {"max_hits": 2},
+      "policy": {
+        "max_hits": 2
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "那份仍未履行的承诺，是在满月前把解药送到北门诊所。"},
-        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "艾琳从市场旁经过，停下来听了一会儿钟声。"},
-        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "艾琳在旅店门口和马夫谈论明天的天气。"},
-        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "艾琳沿着河岸散步，随后回到了住处。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "那份仍未履行的承诺，是在满月前把解药送到北门诊所。"
+        },
+        {
+          "turn_index": 4,
+          "scene_id": "scene_004",
+          "scene_text": "艾琳从市场旁经过，停下来听了一会儿钟声。"
+        },
+        {
+          "turn_index": 5,
+          "scene_id": "scene_005",
+          "scene_text": "艾琳在旅店门口和马夫谈论明天的天气。"
+        },
+        {
+          "turn_index": 6,
+          "scene_id": "scene_006",
+          "scene_text": "艾琳沿着河岸散步，随后回到了住处。"
+        }
       ],
       "continuity_items": [
         {
@@ -577,76 +1259,185 @@
           "kind": "commitment",
           "subject": "艾琳送达解药的承诺",
           "premise": "艾琳需要在满月前把解药送到北门诊所。",
-          "entities": ["艾琳"],
+          "entities": [
+            "艾琳"
+          ],
           "created_turn": 1,
           "updated_turn": 1
         }
       ],
       "continuity_logs": [
-        {"item_id": "ailin-antidote-promise", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+        {
+          "item_id": "ailin-antidote-promise",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "antidote_promise", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+        {
+          "group_id": "antidote_promise",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ]
     },
     {
       "case_id": "direct_exact_vs_relation_noise_and_zero",
       "description": "An exact direct answer leaves zero seats for same-entity Continuity links that do not answer the question.",
       "current_turn_index": 6,
-      "policy": {"max_hits": 1},
+      "policy": {
+        "max_hits": 1
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_first_meeting",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
-            "topics": ["第一次见面穿什么"]
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
+            "topics": [
+              "第一次见面穿什么"
+            ]
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她把一封没有署名的信留在旧港仓库。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她答应下次经过北门时归还借来的地图。"},
-        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "艾琳第一次见面穿什么？她当时穿着一件蓝色披风。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她把一封没有署名的信留在旧港仓库。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "她答应下次经过北门时归还借来的地图。"
+        },
+        {
+          "turn_index": 4,
+          "scene_id": "scene_004",
+          "scene_text": "艾琳第一次见面穿什么？她当时穿着一件蓝色披风。"
+        }
       ],
       "continuity_items": [
-        {"id": "ailin-unsigned-letter", "subject": "艾琳留下的无名信", "premise": "查明旧港仓库里那封信的收件人。", "entities": ["艾琳"], "created_turn": 1, "updated_turn": 1},
-        {"id": "ailin-map-return", "kind": "commitment", "subject": "艾琳归还地图", "premise": "艾琳答应经过北门时归还地图。", "entities": ["艾琳"], "created_turn": 2, "updated_turn": 2}
+        {
+          "id": "ailin-unsigned-letter",
+          "subject": "艾琳留下的无名信",
+          "premise": "查明旧港仓库里那封信的收件人。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 1,
+          "updated_turn": 1
+        },
+        {
+          "id": "ailin-map-return",
+          "kind": "commitment",
+          "subject": "艾琳归还地图",
+          "premise": "艾琳答应经过北门时归还地图。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 2,
+          "updated_turn": 2
+        }
       ],
       "continuity_logs": [
-        {"item_id": "ailin-unsigned-letter", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "ailin-map-return", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]}
+        {
+          "item_id": "ailin-unsigned-letter",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "item_id": "ailin-map-return",
+          "operation": "create",
+          "turn_index": 2,
+          "evidence_ids": [
+            "turn_2_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "first_meeting_clothes", "importance": "must", "acceptable_evidence_ids": ["turn_4_p001"]}
+        {
+          "group_id": "first_meeting_clothes",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_4_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_1_p001", "turn_2_p001"],
+      "forbidden_evidence_ids": [
+        "turn_1_p001",
+        "turn_2_p001"
+      ],
       "provenance_expectations": [
-        {"evidence_id": "turn_4_p001", "direct": true, "relation": false}
+        {
+          "evidence_id": "turn_4_p001",
+          "direct": true,
+          "relation": false
+        }
       ]
     },
     {
       "case_id": "cross_channel_long_relation_critical",
       "description": "A long critical relation evidence item competes with short ordinary direct mentions under one payload budget.",
       "current_turn_index": 8,
-      "policy": {"max_hits": 3, "max_payload_chars": 430, "intent_target": 1, "max_evidence_text_chars": 360, "min_excerpt_chars": 120},
+      "policy": {
+        "max_hits": 3,
+        "max_payload_chars": 430,
+        "intent_target": 1,
+        "max_evidence_text_chars": 360,
+        "min_excerpt_chars": 120
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "在议会争论结束后，她逐项核对了药瓶封口、北门换岗时间和诊所值夜名单，又说明沿途可能遇到封路、宵禁和临时盘查。尽管这些准备十分繁琐，真正决定后续行动的事实只有一个：她已经承诺亲自携带解药，并且必须在满月升起以前把它送到北门诊所，否则伤者将错过最后的救治窗口。"},
-        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "艾琳在市场买了一袋苹果。"},
-        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "艾琳经过喷泉时看了看天空。"},
-        {"turn_index": 7, "scene_id": "scene_007", "scene_text": "艾琳回旅店取走了自己的手套。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "在议会争论结束后，她逐项核对了药瓶封口、北门换岗时间和诊所值夜名单，又说明沿途可能遇到封路、宵禁和临时盘查。尽管这些准备十分繁琐，真正决定后续行动的事实只有一个：她已经承诺亲自携带解药，并且必须在满月升起以前把它送到北门诊所，否则伤者将错过最后的救治窗口。"
+        },
+        {
+          "turn_index": 5,
+          "scene_id": "scene_005",
+          "scene_text": "艾琳在市场买了一袋苹果。"
+        },
+        {
+          "turn_index": 6,
+          "scene_id": "scene_006",
+          "scene_text": "艾琳经过喷泉时看了看天空。"
+        },
+        {
+          "turn_index": 7,
+          "scene_id": "scene_007",
+          "scene_text": "艾琳回旅店取走了自己的手套。"
+        }
       ],
       "continuity_items": [
         {
@@ -654,87 +1445,230 @@
           "kind": "commitment",
           "subject": "艾琳送解药的紧急承诺",
           "premise": "艾琳必须在满月前亲自把解药送到北门诊所。",
-          "entities": ["艾琳"],
+          "entities": [
+            "艾琳"
+          ],
           "created_turn": 1,
           "updated_turn": 1
         }
       ],
       "continuity_logs": [
-        {"item_id": "ailin-long-antidote", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+        {
+          "item_id": "ailin-long-antidote",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "critical_delivery_deadline", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+        {
+          "group_id": "critical_delivery_deadline",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ]
     },
     {
       "case_id": "cross_channel_long_direct_critical",
       "description": "A long critical direct answer competes with short but irrelevant relation evidence under one payload budget.",
       "current_turn_index": 8,
-      "policy": {"max_hits": 3, "max_payload_chars": 430, "intent_target": 1, "max_evidence_text_chars": 360, "min_excerpt_chars": 120},
+      "policy": {
+        "max_hits": 3,
+        "max_payload_chars": 430,
+        "intent_target": 1,
+        "max_evidence_text_chars": 360,
+        "min_excerpt_chars": 120
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_black_tower_route",
             "focus": "topic",
             "origin": "explicit_input",
-            "entities": [{"name": "艾琳", "aliases": []}],
-            "topics": ["黑塔密道路线"]
+            "entities": [
+              {
+                "name": "艾琳",
+                "aliases": []
+              }
+            ],
+            "topics": [
+              "黑塔密道路线"
+            ]
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她曾把备用火石放进旧港仓库的木箱。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她答应替旅店老板寻找丢失的账本。"},
-        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "艾琳解释黑塔密道路线时，先排除了正门和塌陷的西侧台阶，又提醒众人避开会触发警铃的红砖区域。路线必须从旧水渠入口向北走到第二处分岔，在刻着双月图案的墙前右转，穿过低矮石廊后再沿铁梯上行。最关键的是，抵达封死的拱门时不要推门，而要按下左侧第三块松动石砖，隐藏通道才会开启。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她曾把备用火石放进旧港仓库的木箱。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "她答应替旅店老板寻找丢失的账本。"
+        },
+        {
+          "turn_index": 6,
+          "scene_id": "scene_006",
+          "scene_text": "艾琳解释黑塔密道路线时，先排除了正门和塌陷的西侧台阶，又提醒众人避开会触发警铃的红砖区域。路线必须从旧水渠入口向北走到第二处分岔，在刻着双月图案的墙前右转，穿过低矮石廊后再沿铁梯上行。最关键的是，抵达封死的拱门时不要推门，而要按下左侧第三块松动石砖，隐藏通道才会开启。"
+        }
       ],
       "continuity_items": [
-        {"id": "ailin-firestone", "subject": "艾琳存放备用火石", "premise": "记住旧港仓库中备用火石的位置。", "entities": ["艾琳"], "created_turn": 1, "updated_turn": 1},
-        {"id": "ailin-ledger", "kind": "commitment", "subject": "艾琳寻找旅店账本", "premise": "艾琳答应寻找丢失的账本。", "entities": ["艾琳"], "created_turn": 2, "updated_turn": 2}
+        {
+          "id": "ailin-firestone",
+          "subject": "艾琳存放备用火石",
+          "premise": "记住旧港仓库中备用火石的位置。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 1,
+          "updated_turn": 1
+        },
+        {
+          "id": "ailin-ledger",
+          "kind": "commitment",
+          "subject": "艾琳寻找旅店账本",
+          "premise": "艾琳答应寻找丢失的账本。",
+          "entities": [
+            "艾琳"
+          ],
+          "created_turn": 2,
+          "updated_turn": 2
+        }
       ],
       "continuity_logs": [
-        {"item_id": "ailin-firestone", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "ailin-ledger", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]}
+        {
+          "item_id": "ailin-firestone",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "item_id": "ailin-ledger",
+          "operation": "create",
+          "turn_index": 2,
+          "evidence_ids": [
+            "turn_2_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "hidden_route_instruction", "importance": "must", "acceptable_evidence_ids": ["turn_6_p001"]}
+        {
+          "group_id": "hidden_route_instruction",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_6_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_1_p001", "turn_2_p001"],
+      "forbidden_evidence_ids": [
+        "turn_1_p001",
+        "turn_2_p001"
+      ],
       "provenance_expectations": [
-        {"evidence_id": "turn_6_p001", "direct": true, "relation": false}
+        {
+          "evidence_id": "turn_6_p001",
+          "direct": true,
+          "relation": false
+        }
       ]
     },
     {
       "case_id": "relation_node_evidence_noise",
       "description": "A generalised noise sentence mounted on the same lifecycle node as two strong evidence sentences must not become a selected main hit.",
       "current_turn_index": 8,
-      "policy": {"turn_cap": 5},
+      "policy": {
+        "turn_cap": 5
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "那女人", "aliases": []}],
+            "entities": [
+              {
+                "name": "那女人",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "那女人在码头把一枚铜牌交到阿九手中。"},
-        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "阿九确认三日后在青岩镇按刻痕接头。\n\n那女人点头应下，约定以铜牌为凭。\n\n对岸灯火在薄雾里明灭。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "那女人在码头把一枚铜牌交到阿九手中。"
+        },
+        {
+          "turn_index": 5,
+          "scene_id": "scene_005",
+          "scene_text": "阿九确认三日后在青岩镇按刻痕接头。\n\n那女人点头应下，约定以铜牌为凭。\n\n对岸灯火在薄雾里明灭。"
+        }
       ],
       "continuity_items": [
-        {"id": "handoff", "subject": "码头铜牌交接", "premise": "约定三日后在青岩镇以铜牌暗记接头。", "entities": ["那女人"], "created_turn": 1, "updated_turn": 5}
+        {
+          "id": "handoff",
+          "subject": "码头铜牌交接",
+          "premise": "约定三日后在青岩镇以铜牌暗记接头。",
+          "entities": [
+            "那女人"
+          ],
+          "created_turn": 1,
+          "updated_turn": 5
+        }
       ],
       "continuity_logs": [
-        {"item_id": "handoff", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "handoff", "operation": "update", "turn_index": 5, "state_delta": "阿九确认三日后在青岩镇按刻痕接头。", "evidence_ids": ["turn_5_p001", "turn_5_p002", "turn_5_p003"]}
+        {
+          "item_id": "handoff",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "item_id": "handoff",
+          "operation": "update",
+          "turn_index": 5,
+          "state_delta": "阿九确认三日后在青岩镇按刻痕接头。",
+          "evidence_ids": [
+            "turn_5_p001",
+            "turn_5_p002",
+            "turn_5_p003"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "handoff_agreed", "importance": "must", "acceptable_evidence_ids": ["turn_5_p001", "turn_5_p002"], "max_useful_evidence": 2},
-        {"group_id": "handoff_origin", "importance": "should", "acceptable_evidence_ids": ["turn_1_p001"]}
+        {
+          "group_id": "handoff_agreed",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_5_p001",
+            "turn_5_p002"
+          ],
+          "max_useful_evidence": 2
+        },
+        {
+          "group_id": "handoff_origin",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
-      "forbidden_main_evidence_ids": ["turn_5_p003"]
+      "forbidden_main_evidence_ids": [
+        "turn_5_p003"
+      ]
     },
     {
       "case_id": "shared_evidence_link_specific_validity",
@@ -746,27 +1680,81 @@
             "intent_id": "explicit_ajiu",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "阿九", "aliases": []}],
+            "entities": [
+              {
+                "name": "阿九",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "把一枚铜牌交到那女人手中，约定三日后在青岩镇接头。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "把一枚铜牌交到那女人手中，约定三日后在青岩镇接头。"
+        }
       ],
       "continuity_items": [
-        {"id": "copper-handoff", "subject": "铜牌交接", "premise": "约定三日后在青岩镇交接铜牌。", "entities": ["阿九"], "created_turn": 1, "updated_turn": 1},
-        {"id": "gate-rebuild", "subject": "重建山门", "premise": "筹备重建山门的材料与人力。", "entities": ["阿九"], "created_turn": 1, "updated_turn": 1}
+        {
+          "id": "copper-handoff",
+          "subject": "铜牌交接",
+          "premise": "约定三日后在青岩镇交接铜牌。",
+          "entities": [
+            "阿九"
+          ],
+          "created_turn": 1,
+          "updated_turn": 1
+        },
+        {
+          "id": "gate-rebuild",
+          "subject": "重建山门",
+          "premise": "筹备重建山门的材料与人力。",
+          "entities": [
+            "阿九"
+          ],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
       ],
       "continuity_logs": [
-        {"item_id": "copper-handoff", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "gate-rebuild", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+        {
+          "item_id": "copper-handoff",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "item_id": "gate-rebuild",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "handoff_basis", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+        {
+          "group_id": "handoff_basis",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
       "provenance_expectations": [
-        {"evidence_id": "turn_1_p001", "direct": false, "relation": true, "linked_continuity_ids": ["copper-handoff"]}
+        {
+          "evidence_id": "turn_1_p001",
+          "direct": false,
+          "relation": true,
+          "linked_continuity_ids": [
+            "copper-handoff"
+          ]
+        }
       ]
     },
     {
@@ -780,25 +1768,61 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["铜牌接头"]
+            "topics": [
+              "铜牌接头"
+            ]
           }
         ]
       },
       "turns": [
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "他点头应下。\n\n约定三日后在青岩镇以铜牌接头。"}
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "他点头应下。\n\n约定三日后在青岩镇以铜牌接头。"
+        }
       ],
       "continuity_items": [
-        {"id": "token-appointment", "subject": "青岩镇接头", "premise": "约定三日后在青岩镇以铜牌接头。", "entities": [], "created_turn": 2, "updated_turn": 2}
+        {
+          "id": "token-appointment",
+          "subject": "青岩镇接头",
+          "premise": "约定三日后在青岩镇以铜牌接头。",
+          "entities": [],
+          "created_turn": 2,
+          "updated_turn": 2
+        }
       ],
       "continuity_logs": [
-        {"item_id": "token-appointment", "operation": "create", "turn_index": 2, "evidence_ids": ["turn_2_p001"]}
+        {
+          "item_id": "token-appointment",
+          "operation": "create",
+          "turn_index": 2,
+          "evidence_ids": [
+            "turn_2_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "implicit_agreement", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]},
-        {"group_id": "adjacent_semantics", "importance": "should", "acceptable_evidence_ids": ["turn_2_p002"]}
+        {
+          "group_id": "implicit_agreement",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
+        },
+        {
+          "group_id": "adjacent_semantics",
+          "importance": "should",
+          "acceptable_evidence_ids": [
+            "turn_2_p002"
+          ]
+        }
       ],
       "provenance_expectations": [
-        {"evidence_id": "turn_2_p001", "direct": false, "relation": true}
+        {
+          "evidence_id": "turn_2_p001",
+          "direct": false,
+          "relation": true
+        }
       ]
     },
     {
@@ -811,22 +1835,54 @@
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "那女人", "aliases": []}],
+            "entities": [
+              {
+                "name": "那女人",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "在旧港确认了接头暗记与三日后时间。"}
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "在旧港确认了接头暗记与三日后时间。"
+        }
       ],
       "continuity_items": [
-        {"id": "legacy-handoff", "subject": "旧港接头", "premise": "确认接头暗记与时间。", "entities": ["那女人"], "created_turn": 3, "updated_turn": 3}
+        {
+          "id": "legacy-handoff",
+          "subject": "旧港接头",
+          "premise": "确认接头暗记与时间。",
+          "entities": [
+            "那女人"
+          ],
+          "created_turn": 3,
+          "updated_turn": 3
+        }
       ],
       "continuity_logs": [
-        {"item_id": "legacy-handoff", "operation": "create", "turn_index": 3, "evidence_ids": ["turn_3_p001"], "hash_mode": "legacy"}
+        {
+          "item_id": "legacy-handoff",
+          "operation": "create",
+          "turn_index": 3,
+          "evidence_ids": [
+            "turn_3_p001"
+          ],
+          "hash_mode": "legacy"
+        }
       ],
       "gold_groups": [
-        {"group_id": "legacy_basis", "importance": "must", "acceptable_evidence_ids": ["turn_3_p001"]}
+        {
+          "group_id": "legacy_basis",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_3_p001"
+          ]
+        }
       ]
     },
     {
@@ -839,32 +1895,75 @@
             "intent_id": "explicit_ajiu",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "阿九", "aliases": []}],
+            "entities": [
+              {
+                "name": "阿九",
+                "aliases": []
+              }
+            ],
             "topics": []
           },
           {
             "intent_id": "explicit_ailin",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "那女人", "aliases": []}],
+            "entities": [
+              {
+                "name": "那女人",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "他在青岩镇的库房盘点存货，核对往来账目。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "阿九与那女人约定三日后在青岩镇以铜牌接头。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "他在青岩镇的库房盘点存货，核对往来账目。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "阿九与那女人约定三日后在青岩镇以铜牌接头。"
+        }
       ],
       "continuity_items": [
-        {"id": "agreement", "subject": "青岩镇接头", "premise": "约定三日后在青岩镇以铜牌接头。", "entities": ["阿九", "那女人"], "created_turn": 1, "updated_turn": 1}
+        {
+          "id": "agreement",
+          "subject": "青岩镇接头",
+          "premise": "约定三日后在青岩镇以铜牌接头。",
+          "entities": [
+            "阿九",
+            "那女人"
+          ],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
       ],
       "continuity_logs": [
-        {"item_id": "agreement", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+        {
+          "item_id": "agreement",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
       "gold_groups": [
-        {"group_id": "real_agreement", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]}
+        {
+          "group_id": "real_agreement",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_1_p001"]
+      "forbidden_evidence_ids": [
+        "turn_1_p001"
+      ]
     },
     {
       "case_id": "anonymized_spy_regression",
@@ -877,21 +1976,41 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["外乡客", "刺探"]
+            "topics": [
+              "外乡客",
+              "刺探"
+            ]
           },
           {
             "intent_id": "explicit_village",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "青岩镇", "aliases": []}],
+            "entities": [
+              {
+                "name": "青岩镇",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "那人握着信物，摩挲暗记，盘算下一步。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "外乡客在青岩镇向茶客打听护院布防。"},
-        {"turn_index": 6, "scene_id": "scene_006", "scene_text": "众人合议后确认重振宗派已有眉目，以信物为记推进并留意刺探。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "那人握着信物，摩挲暗记，盘算下一步。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "外乡客在青岩镇向茶客打听护院布防。"
+        },
+        {
+          "turn_index": 6,
+          "scene_id": "scene_006",
+          "scene_text": "众人合议后确认重振宗派已有眉目，以信物为记推进并留意刺探。"
+        }
       ],
       "continuity_items": [
         {
@@ -901,7 +2020,10 @@
           "subject": "重振宗派",
           "premise": "清点护院人手并重整班次。",
           "current_state": "确认以信物为记推进，并留意刺探。",
-          "entities": ["青岩镇", "外乡客"],
+          "entities": [
+            "青岩镇",
+            "外乡客"
+          ],
           "location": "青岩镇",
           "created_turn": 1,
           "updated_turn": 6,
@@ -909,13 +2031,36 @@
         }
       ],
       "continuity_logs": [
-        {"item_id": "revive-sect", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]},
-        {"item_id": "revive-sect", "operation": "resolve", "turn_index": 6, "evidence_ids": ["turn_6_p001"], "reason": "合议确认重振宗派已有眉目，以信物为记推进并留意刺探。"}
+        {
+          "item_id": "revive-sect",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        },
+        {
+          "item_id": "revive-sect",
+          "operation": "resolve",
+          "turn_index": 6,
+          "evidence_ids": [
+            "turn_6_p001"
+          ],
+          "reason": "合议确认重振宗派已有眉目，以信物为记推进并留意刺探。"
+        }
       ],
       "gold_groups": [
-        {"group_id": "spy_answer", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]}
+        {
+          "group_id": "spy_answer",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_1_p001"]
+      "forbidden_evidence_ids": [
+        "turn_1_p001"
+      ]
     },
     {
       "case_id": "complete_zero_single_current_context",
@@ -927,22 +2072,50 @@
             "intent_id": "current_qingyan",
             "focus": "entity",
             "origin": "current_context",
-            "entities": [{"name": "青岩镇", "aliases": []}],
+            "entities": [
+              {
+                "name": "青岩镇",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "他在库房盘点存货，核对往来账目。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "他在库房盘点存货，核对往来账目。"
+        }
       ],
       "continuity_items": [
-        {"id": "mis-hung", "subject": "青岩镇接头", "premise": "约定三日后在青岩镇以铜牌接头。", "entities": ["青岩镇"], "created_turn": 1, "updated_turn": 1}
+        {
+          "id": "mis-hung",
+          "subject": "青岩镇接头",
+          "premise": "约定三日后在青岩镇以铜牌接头。",
+          "entities": [
+            "青岩镇"
+          ],
+          "created_turn": 1,
+          "updated_turn": 1
+        }
       ],
       "continuity_logs": [
-        {"item_id": "mis-hung", "operation": "create", "turn_index": 1, "evidence_ids": ["turn_1_p001"]}
+        {
+          "item_id": "mis-hung",
+          "operation": "create",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_1_p001"]
-    },    {
+      "forbidden_evidence_ids": [
+        "turn_1_p001"
+      ]
+    },
+    {
       "case_id": "npc_role_relation_exact",
       "description": "An explicit NPC query recovers a pronoun-only paragraph through an evidence-backed role change.",
       "current_turn_index": 4,
@@ -952,7 +2125,12 @@
             "intent_id": "explicit_guqing",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "顾青", "aliases": []}],
+            "entities": [
+              {
+                "name": "顾青",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
@@ -965,7 +2143,11 @@
         }
       ],
       "npc_profiles": [
-        {"npc_id": "npc-guqing", "name": "顾青", "role": "北门巡检"}
+        {
+          "npc_id": "npc-guqing",
+          "name": "顾青",
+          "role": "北门巡检"
+        }
       ],
       "npc_field_logs": [
         {
@@ -973,7 +2155,9 @@
           "npc_id": "npc-guqing",
           "field_name": "role",
           "turn_index": 1,
-          "evidence_ids": ["turn_1_p001"],
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
           "new_value": "北门巡检"
         }
       ],
@@ -981,7 +2165,9 @@
         {
           "group_id": "guqing_role",
           "importance": "must",
-          "acceptable_evidence_ids": ["turn_1_p001"]
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
         }
       ],
       "provenance_expectations": [
@@ -990,14 +2176,18 @@
           "direct": false,
           "relation": true,
           "linked_npc_changes": [
-            {"npc_id": "npc-guqing", "field_name": "role", "log_ref": "npc-guqing-role-t1"}
+            {
+              "npc_id": "npc-guqing",
+              "field_name": "role",
+              "log_ref": "npc-guqing-role-t1"
+            }
           ]
         }
       ]
     },
     {
       "case_id": "npc_public_summary_delta",
-      "description": "A public-summary query matches the relevant delta node without broadcasting the aggregate current summary onto an older node.",
+      "description": "Regression: v7 legacy public_summary logs survive as read-only audit rows but are never bridged, so a matching topic yields no relation.",
       "current_turn_index": 5,
       "search_plan": {
         "intents": [
@@ -1006,7 +2196,9 @@
             "focus": "topic",
             "origin": "explicit_input",
             "entities": [],
-            "topics": ["救援者身份"]
+            "topics": [
+              "救援者身份"
+            ]
           }
         ]
       },
@@ -1025,8 +2217,7 @@
       "npc_profiles": [
         {
           "npc_id": "npc-shalan",
-          "name": "沙岚",
-          "public_summary": "赤沙会首领，曾从沙暴中救回商队，是当地知名救援者。"
+          "name": "沙岚"
         }
       ],
       "npc_field_logs": [
@@ -1035,37 +2226,37 @@
           "npc_id": "npc-shalan",
           "field_name": "public_summary",
           "turn_index": 1,
-          "evidence_ids": ["turn_1_p001"],
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
           "new_value": "赤沙会新任首领。",
-          "summary_delta": "接掌赤沙会并成为新任首领。"
+          "summary_delta": "接掌赤沙会并成为新任首领。",
+          "legacy": true
         },
         {
           "log_ref": "npc-shalan-summary-t2",
           "npc_id": "npc-shalan",
           "field_name": "public_summary",
           "turn_index": 2,
-          "evidence_ids": ["turn_2_p001"],
+          "evidence_ids": [
+            "turn_2_p001"
+          ],
           "old_value": "赤沙会新任首领。",
           "new_value": "赤沙会首领，曾从沙暴中救回商队，是当地知名救援者。",
-          "summary_delta": "因从沙暴中救回商队而成为当地知名救援者。"
+          "summary_delta": "因从沙暴中救回商队而成为当地知名救援者。",
+          "legacy": true
         }
       ],
-      "gold_groups": [
-        {
-          "group_id": "rescuer_delta",
-          "importance": "must",
-          "acceptable_evidence_ids": ["turn_2_p001"]
-        }
+      "gold_groups": [],
+      "forbidden_evidence_ids": [
+        "turn_1_p001"
       ],
-      "forbidden_evidence_ids": ["turn_1_p001"],
       "provenance_expectations": [
         {
           "evidence_id": "turn_2_p001",
           "direct": true,
-          "relation": true,
-          "linked_npc_changes": [
-            {"npc_id": "npc-shalan", "field_name": "public_summary", "log_ref": "npc-shalan-summary-t2"}
-          ]
+          "relation": false,
+          "linked_npc_changes": []
         }
       ]
     },
@@ -1079,7 +2270,12 @@
             "intent_id": "explicit_zhouqi",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "周启", "aliases": []}],
+            "entities": [
+              {
+                "name": "周启",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
@@ -1092,7 +2288,11 @@
         }
       ],
       "npc_profiles": [
-        {"npc_id": "npc-zhouqi", "name": "周启", "role": "青岩镇守门人"}
+        {
+          "npc_id": "npc-zhouqi",
+          "name": "周启",
+          "role": "青岩镇守门人"
+        }
       ],
       "npc_field_logs": [
         {
@@ -1100,25 +2300,38 @@
           "npc_id": "npc-zhouqi",
           "field_name": "role",
           "turn_index": 1,
-          "evidence_ids": ["turn_1_p001"],
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
           "new_value": "青岩镇守门人"
         }
       ],
-      "forbidden_evidence_ids": ["turn_1_p001"]
+      "forbidden_evidence_ids": [
+        "turn_1_p001"
+      ]
     },
     {
       "case_id": "npc_direct_exact_vs_relation_noise",
       "description": "An exact direct appearance answer wins a one-seat payload over an unrelated but valid NPC faction relation.",
       "current_turn_index": 4,
-      "policy": {"max_hits": 1},
+      "policy": {
+        "max_hits": 1
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_liulan",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "柳岚", "aliases": []}],
-            "topics": ["佩剑"]
+            "entities": [
+              {
+                "name": "柳岚",
+                "aliases": []
+              }
+            ],
+            "topics": [
+              "佩剑"
+            ]
           }
         ]
       },
@@ -1135,7 +2348,11 @@
         }
       ],
       "npc_profiles": [
-        {"npc_id": "npc-liulan", "name": "柳岚", "faction": "白鹿堂"}
+        {
+          "npc_id": "npc-liulan",
+          "name": "柳岚",
+          "faction": "白鹿堂"
+        }
       ],
       "npc_field_logs": [
         {
@@ -1143,7 +2360,9 @@
           "npc_id": "npc-liulan",
           "field_name": "faction",
           "turn_index": 1,
-          "evidence_ids": ["turn_1_p001"],
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
           "new_value": "白鹿堂"
         }
       ],
@@ -1151,10 +2370,14 @@
         {
           "group_id": "liulan_sword",
           "importance": "must",
-          "acceptable_evidence_ids": ["turn_2_p001"]
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
         }
       ],
-      "forbidden_evidence_ids": ["turn_1_p001"],
+      "forbidden_evidence_ids": [
+        "turn_1_p001"
+      ],
       "provenance_expectations": [
         {
           "evidence_id": "turn_2_p001",
@@ -1173,7 +2396,12 @@
             "intent_id": "explicit_guqing",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "顾青", "aliases": []}],
+            "entities": [
+              {
+                "name": "顾青",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
@@ -1192,7 +2420,9 @@
           "status": "active",
           "subject": "北门巡检任命",
           "premise": "确认顾青是否正式接任北门巡检。",
-          "entities": ["顾青"],
+          "entities": [
+            "顾青"
+          ],
           "created_turn": 1,
           "updated_turn": 1
         }
@@ -1202,12 +2432,18 @@
           "item_id": "north-gate-office",
           "operation": "create",
           "turn_index": 1,
-          "evidence_ids": ["turn_1_p001"],
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
           "reason": "顾青接过北门铜印并确认担任巡检。"
         }
       ],
       "npc_profiles": [
-        {"npc_id": "npc-guqing", "name": "顾青", "role": "北门巡检"}
+        {
+          "npc_id": "npc-guqing",
+          "name": "顾青",
+          "role": "北门巡检"
+        }
       ],
       "npc_field_logs": [
         {
@@ -1215,7 +2451,9 @@
           "npc_id": "npc-guqing",
           "field_name": "role",
           "turn_index": 1,
-          "evidence_ids": ["turn_1_p001"],
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
           "new_value": "北门巡检"
         }
       ],
@@ -1223,7 +2461,9 @@
         {
           "group_id": "shared_appointment",
           "importance": "must",
-          "acceptable_evidence_ids": ["turn_1_p001"]
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
         }
       ],
       "provenance_expectations": [
@@ -1231,10 +2471,18 @@
           "evidence_id": "turn_1_p001",
           "direct": false,
           "relation": true,
-          "linked_continuity_ids": ["north-gate-office"],
-          "linked_operations": ["create"],
+          "linked_continuity_ids": [
+            "north-gate-office"
+          ],
+          "linked_operations": [
+            "create"
+          ],
           "linked_npc_changes": [
-            {"npc_id": "npc-guqing", "field_name": "role", "log_ref": "npc-guqing-role-t1"}
+            {
+              "npc_id": "npc-guqing",
+              "field_name": "role",
+              "log_ref": "npc-guqing-role-t1"
+            }
           ]
         }
       ]
@@ -1249,14 +2497,27 @@
             "intent_id": "explicit_shenyan",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "沈砚", "aliases": []}],
+            "entities": [
+              {
+                "name": "沈砚",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "他接过医馆钥匙，正式成为回春堂的坐堂医师。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "他在门前挂起回春堂木牌，确认此后归属回春堂。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "他接过医馆钥匙，正式成为回春堂的坐堂医师。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "他在门前挂起回春堂木牌，确认此后归属回春堂。"
+        }
       ],
       "npc_profiles": [
         {
@@ -1273,7 +2534,9 @@
           "npc_id": "npc-shenyan",
           "field_name": "role",
           "turn_index": 1,
-          "evidence_ids": ["turn_1_p001"],
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
           "new_value": "回春堂坐堂医师"
         },
         {
@@ -1281,7 +2544,9 @@
           "npc_id": "npc-shenyan",
           "field_name": "faction",
           "turn_index": 2,
-          "evidence_ids": ["turn_2_p001"],
+          "evidence_ids": [
+            "turn_2_p001"
+          ],
           "new_value": "回春堂",
           "hash_mode": "stale"
         },
@@ -1290,7 +2555,9 @@
           "npc_id": "npc-shenyan",
           "field_name": "appearance",
           "turn_index": 3,
-          "evidence_ids": ["turn_3_p999"],
+          "evidence_ids": [
+            "turn_3_p999"
+          ],
           "new_value": "常穿灰布长衫",
           "hash_mode": "missing"
         }
@@ -1299,17 +2566,25 @@
         {
           "group_id": "valid_role_pointer",
           "importance": "must",
-          "acceptable_evidence_ids": ["turn_1_p001"]
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
         }
       ],
-      "forbidden_evidence_ids": ["turn_2_p001"],
+      "forbidden_evidence_ids": [
+        "turn_2_p001"
+      ],
       "provenance_expectations": [
         {
           "evidence_id": "turn_1_p001",
           "direct": false,
           "relation": true,
           "linked_npc_changes": [
-            {"npc_id": "npc-shenyan", "field_name": "role", "log_ref": "npc-shenyan-role-t1"}
+            {
+              "npc_id": "npc-shenyan",
+              "field_name": "role",
+              "log_ref": "npc-shenyan-role-t1"
+            }
           ]
         }
       ]
@@ -1318,31 +2593,63 @@
       "case_id": "npc_relation_owner_cap",
       "description": "One NPC is capped at three relation seats while a different NPC keeps an independent owner budget.",
       "current_turn_index": 8,
-      "policy": {"max_hits": 5},
+      "policy": {
+        "max_hits": 5
+      },
       "search_plan": {
         "intents": [
           {
             "intent_id": "explicit_qinshuang",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "秦霜", "aliases": []}],
+            "entities": [
+              {
+                "name": "秦霜",
+                "aliases": []
+              }
+            ],
             "topics": []
           },
           {
             "intent_id": "explicit_luheng",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "陆衡", "aliases": []}],
+            "entities": [
+              {
+                "name": "陆衡",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "她换上黑羽卫旧制甲衣，正式成为黑羽卫斥候。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "她在名册上按下指印，自此归属黑羽卫。"},
-        {"turn_index": 3, "scene_id": "scene_003", "scene_text": "她摘下面具，露出左颊一道新月形伤痕。"},
-        {"turn_index": 4, "scene_id": "scene_004", "scene_text": "她救出被围商旅，此后以护送商队闻名。"},
-        {"turn_index": 5, "scene_id": "scene_005", "scene_text": "他接管南仓钥匙，正式成为南仓管事。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她换上黑羽卫旧制甲衣，正式成为黑羽卫斥候。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "她在名册上按下指印，自此归属黑羽卫。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "她摘下面具，露出左颊一道新月形伤痕。"
+        },
+        {
+          "turn_index": 4,
+          "scene_id": "scene_004",
+          "scene_text": "她救出被围商旅，此后以护送商队闻名。"
+        },
+        {
+          "turn_index": 5,
+          "scene_id": "scene_005",
+          "scene_text": "他接管南仓钥匙，正式成为南仓管事。"
+        }
       ],
       "npc_profiles": [
         {
@@ -1350,25 +2657,100 @@
           "name": "秦霜",
           "role": "黑羽卫斥候",
           "faction": "黑羽卫",
-          "appearance": "左颊有新月形伤痕",
-          "public_summary": "以护送商队闻名的黑羽卫斥候。"
+          "appearance": "左颊有新月形伤痕"
         },
-        {"npc_id": "npc-luheng", "name": "陆衡", "role": "南仓管事"}
+        {
+          "npc_id": "npc-luheng",
+          "name": "陆衡",
+          "role": "南仓管事"
+        }
       ],
       "npc_field_logs": [
-        {"log_ref": "npc-qinshuang-role-t1", "npc_id": "npc-qinshuang", "field_name": "role", "turn_index": 1, "evidence_ids": ["turn_1_p001"], "new_value": "黑羽卫斥候"},
-        {"log_ref": "npc-qinshuang-faction-t2", "npc_id": "npc-qinshuang", "field_name": "faction", "turn_index": 2, "evidence_ids": ["turn_2_p001"], "new_value": "黑羽卫"},
-        {"log_ref": "npc-qinshuang-appearance-t3", "npc_id": "npc-qinshuang", "field_name": "appearance", "turn_index": 3, "evidence_ids": ["turn_3_p001"], "new_value": "左颊有新月形伤痕"},
-        {"log_ref": "npc-qinshuang-summary-t4", "npc_id": "npc-qinshuang", "field_name": "public_summary", "turn_index": 4, "evidence_ids": ["turn_4_p001"], "new_value": "以护送商队闻名的黑羽卫斥候。", "summary_delta": "因救出被围商旅而以护送商队闻名。"},
-        {"log_ref": "npc-luheng-role-t5", "npc_id": "npc-luheng", "field_name": "role", "turn_index": 5, "evidence_ids": ["turn_5_p001"], "new_value": "南仓管事"}
+        {
+          "log_ref": "npc-qinshuang-role-t1",
+          "npc_id": "npc-qinshuang",
+          "field_name": "role",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
+          "new_value": "黑羽卫斥候"
+        },
+        {
+          "log_ref": "npc-qinshuang-faction-t2",
+          "npc_id": "npc-qinshuang",
+          "field_name": "faction",
+          "turn_index": 2,
+          "evidence_ids": [
+            "turn_2_p001"
+          ],
+          "new_value": "黑羽卫"
+        },
+        {
+          "log_ref": "npc-qinshuang-appearance-t3",
+          "npc_id": "npc-qinshuang",
+          "field_name": "appearance",
+          "turn_index": 3,
+          "evidence_ids": [
+            "turn_3_p001"
+          ],
+          "new_value": "左颊有新月形伤痕"
+        },
+        {
+          "log_ref": "npc-qinshuang-summary-t4",
+          "npc_id": "npc-qinshuang",
+          "field_name": "last_scene_summary",
+          "turn_index": 4,
+          "evidence_ids": [
+            "turn_4_p001"
+          ],
+          "new_value": "以护送商队闻名的黑羽卫斥候。",
+          "old_value": null
+        },
+        {
+          "log_ref": "npc-luheng-role-t5",
+          "npc_id": "npc-luheng",
+          "field_name": "role",
+          "turn_index": 5,
+          "evidence_ids": [
+            "turn_5_p001"
+          ],
+          "new_value": "南仓管事"
+        }
       ],
       "gold_groups": [
-        {"group_id": "qin_faction", "importance": "must", "acceptable_evidence_ids": ["turn_2_p001"]},
-        {"group_id": "qin_appearance", "importance": "must", "acceptable_evidence_ids": ["turn_3_p001"]},
-        {"group_id": "qin_summary", "importance": "must", "acceptable_evidence_ids": ["turn_4_p001"]},
-        {"group_id": "lu_role", "importance": "must", "acceptable_evidence_ids": ["turn_5_p001"]}
+        {
+          "group_id": "qin_faction",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_2_p001"
+          ]
+        },
+        {
+          "group_id": "qin_appearance",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_3_p001"
+          ]
+        },
+        {
+          "group_id": "qin_summary",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_4_p001"
+          ]
+        },
+        {
+          "group_id": "lu_role",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_5_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_1_p001"]
+      "forbidden_evidence_ids": [
+        "turn_1_p001"
+      ]
     },
     {
       "case_id": "npc_inactive_profile_eligibility",
@@ -1380,41 +2762,102 @@
             "intent_id": "explicit_laoliu",
             "focus": "entity",
             "origin": "explicit_input",
-            "entities": [{"name": "老柳", "aliases": []}],
+            "entities": [
+              {
+                "name": "老柳",
+                "aliases": []
+              }
+            ],
             "topics": []
           },
           {
             "intent_id": "context_zhaoqi",
             "focus": "entity",
             "origin": "current_context",
-            "entities": [{"name": "赵七", "aliases": []}],
+            "entities": [
+              {
+                "name": "赵七",
+                "aliases": []
+              }
+            ],
             "topics": []
           }
         ]
       },
       "turns": [
-        {"turn_index": 1, "scene_id": "scene_001", "scene_text": "他交出渡口账册后，被推举为旧渡口账房。"},
-        {"turn_index": 2, "scene_id": "scene_002", "scene_text": "他接过巡夜铜锣，成为东街巡夜人。"}
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "他交出渡口账册后，被推举为旧渡口账房。"
+        },
+        {
+          "turn_index": 2,
+          "scene_id": "scene_002",
+          "scene_text": "他接过巡夜铜锣，成为东街巡夜人。"
+        }
       ],
       "npc_profiles": [
-        {"npc_id": "npc-liubo", "name": "柳伯", "aliases": ["老柳"], "active": false, "role": "旧渡口账房"},
-        {"npc_id": "npc-zhaoqi", "name": "赵七", "active": false, "role": "东街巡夜人"}
+        {
+          "npc_id": "npc-liubo",
+          "name": "柳伯",
+          "aliases": [
+            "老柳"
+          ],
+          "active": false,
+          "role": "旧渡口账房"
+        },
+        {
+          "npc_id": "npc-zhaoqi",
+          "name": "赵七",
+          "active": false,
+          "role": "东街巡夜人"
+        }
       ],
       "npc_field_logs": [
-        {"log_ref": "npc-liubo-role-t1", "npc_id": "npc-liubo", "field_name": "role", "turn_index": 1, "evidence_ids": ["turn_1_p001"], "new_value": "旧渡口账房"},
-        {"log_ref": "npc-zhaoqi-role-t2", "npc_id": "npc-zhaoqi", "field_name": "role", "turn_index": 2, "evidence_ids": ["turn_2_p001"], "new_value": "东街巡夜人"}
+        {
+          "log_ref": "npc-liubo-role-t1",
+          "npc_id": "npc-liubo",
+          "field_name": "role",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
+          "new_value": "旧渡口账房"
+        },
+        {
+          "log_ref": "npc-zhaoqi-role-t2",
+          "npc_id": "npc-zhaoqi",
+          "field_name": "role",
+          "turn_index": 2,
+          "evidence_ids": [
+            "turn_2_p001"
+          ],
+          "new_value": "东街巡夜人"
+        }
       ],
       "gold_groups": [
-        {"group_id": "explicit_inactive_alias", "importance": "must", "acceptable_evidence_ids": ["turn_1_p001"]}
+        {
+          "group_id": "explicit_inactive_alias",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_1_p001"
+          ]
+        }
       ],
-      "forbidden_evidence_ids": ["turn_2_p001"],
+      "forbidden_evidence_ids": [
+        "turn_2_p001"
+      ],
       "provenance_expectations": [
         {
           "evidence_id": "turn_1_p001",
           "direct": false,
           "relation": true,
           "linked_npc_changes": [
-            {"npc_id": "npc-liubo", "field_name": "role", "log_ref": "npc-liubo-role-t1"}
+            {
+              "npc_id": "npc-liubo",
+              "field_name": "role",
+              "log_ref": "npc-liubo-role-t1"
+            }
           ]
         }
       ]

@@ -6,9 +6,8 @@
 ``AcceptedNPCFieldChange`` 按 ``operation`` 做 discriminated union，从 schema 层
 禁止自相矛盾的数据：
 
-- ``set``：标量字段原子更新；``summary_delta`` 仅 ``public_summary`` 且必填；
-  ``current_state_sync`` 来源不得携带正文 evidence；proposal 来源的稳定字段必须
-  携带 evidence、``current_intent`` 不得携带；
+- ``set``：标量字段原子更新；``current_state_sync`` 来源不得携带正文 evidence；
+  proposal 来源的稳定字段（含 ``last_scene_summary``）必须携带 evidence；
 - ``add``：``known_abilities`` append-only 追加，``additions`` 非空且去重。
 
 alias 以显式 ``AcceptedNPCAliasChange`` 表达（携带 fact + paragraph 证据），与字段
@@ -34,18 +33,17 @@ from app.domain.npc_profile.schemas import KnownAbility, NPCProfile
 
 #: proposal 来源、必须携带 evidence 的稳定字段。
 _STABLE_PROPOSAL_FIELDS = frozenset(
-    {"public_summary", "role", "appearance", "faction"}
+    {"last_scene_summary", "role", "appearance", "faction"}
 )
 
 #: CurrentState 独占同步字段（proposal 不得写入）。
 SYNC_FIELDS = frozenset({"last_known_location", "attitude_to_player"})
 
 SCALAR_FIELD_LITERAL = Literal[
-    "public_summary",
     "role",
     "appearance",
     "faction",
-    "current_intent",
+    "last_scene_summary",
     "last_known_location",
     "attitude_to_player",
 ]
@@ -64,17 +62,7 @@ class AcceptedNPCScalarChange(BaseModel):
     new_value: str = Field(min_length=1)
     evidence_ids: tuple[str, ...] = ()
     turn_index: int | None = None
-    summary_delta: str | None = None
     source: Literal["proposal", "current_state_sync"] = "proposal"
-
-    @model_validator(mode="after")
-    def _summary_delta_only_for_public_summary(self):
-        if self.field == "public_summary":
-            if not self.summary_delta:
-                raise ValueError("summary_delta is required for public_summary changes")
-        elif self.summary_delta is not None:
-            raise ValueError("summary_delta is only valid for public_summary changes")
-        return self
 
     @model_validator(mode="after")
     def _sync_changes_carry_no_evidence(self):
@@ -100,8 +88,6 @@ class AcceptedNPCScalarChange(BaseModel):
         if self.field in _STABLE_PROPOSAL_FIELDS:
             if not self.evidence_ids:
                 raise ValueError("stable field changes require evidence_ids")
-        elif self.evidence_ids:
-            raise ValueError("current_intent changes must not carry evidence_ids")
         return self
 
 

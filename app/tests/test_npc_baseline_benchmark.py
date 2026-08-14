@@ -56,8 +56,8 @@ def test_npc_baseline_benchmark_matches_accepted_baseline(benchmark_report):
 def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     cases = {case["case_id"]: case for case in benchmark_report["cases"]}
 
-    assert benchmark_report["aggregate"]["weighted_passed"] == 153
-    assert benchmark_report["aggregate"]["weighted_total"] == 159
+    assert benchmark_report["aggregate"]["weighted_passed"] == 150
+    assert benchmark_report["aggregate"]["weighted_total"] == 153
     assert benchmark_report["aggregate"]["forbidden_violation_count"] == 0
     assert benchmark_report["aggregate"]["invariant_violation_count"] == 0
     assert benchmark_report["aggregate"]["call_count"] == 12
@@ -78,7 +78,6 @@ def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     assert snapshot["field_deltas"] == {
         "npc_001": {
             "last_known_location": "醉花楼",
-            "current_intent": "查明信物来历",
         }
     }
 
@@ -96,8 +95,7 @@ def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     assert roster["exact_mentions"] == [["npc000", "npc000"]]
 
     # Remaining 9 points are exact-string scoring against the ideal gold:
-    # - stable_fields: role/faction exact; public_summary written as
-    #   "沈孤鸿，合欢宗宗主。" instead of the evidenced fuller sentence.
+    # - stable_fields: role/faction exact (public_summary removed in v8).
     assert cases["stable_fields_with_evidence"]["gold"]["weighted_passed"] == 9
     # - appearance truncated from the evidenced full sentence.
     assert cases["stable_appearance_with_evidence"]["field_deltas"] == {
@@ -118,7 +116,7 @@ def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     assert "invalid_stable_change" in {
         warning[2] for warning in personality["warnings"]
     }
-    # - mixed_turn: role+faction+public_summary linkage now works end to end.
+    # - mixed_turn: role+faction linkage now works end to end.
     assert cases["mixed_turn"]["gold"]["weighted_passed"] == 42
     assert cases["mixed_turn"]["field_deltas"]["npc_001"]["role"] == "合欢宗宗主"
     assert cases["mixed_turn"]["field_deltas"]["npc_002"]["last_known_location"] == "醉花楼"

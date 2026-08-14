@@ -11,10 +11,15 @@ save's live ``npc_profiles.db``.  The replay uses:
 * the current Scene Facts extractor and ``npc_batch_update`` pipeline.
 
 After every successful turn the accepted stable changes are committed to the
-replay database through the production v7 field-history contract.  The replay
+replay database through the production v8 field-history contract.  The replay
 database is the progress marker, so a failed call cannot partially advance the
 sequence.  Promotion into a real save is intentionally out of scope: review
 all per-turn reports and the final profile diff first.
+
+The full v8 replay workflow (independent workspace, per-turn ``session_type``
+traces, and an explicit promote tool) is scheduled for Ticket 11 Phase 6; this
+tool currently provides the minimal v8 schema compatibility so it can read
+current archives.
 """
 
 from __future__ import annotations
@@ -48,13 +53,13 @@ REPLAY_DB_NAME = "npc_profiles.replay.db"
 METADATA_NAME = "metadata.json"
 REPORTS_DIR_NAME = "reports"
 TRACE_NAME = "llm_traces.jsonl"
-SUPPORTED_MAIN_SCHEMA = 7
+SUPPORTED_MAIN_SCHEMA = 8
 REPLAY_FIELDS = (
-    "public_summary",
     "role",
     "appearance",
     "faction",
-    "current_intent",
+    "last_scene_summary",
+    "last_scene_turn",
     "last_known_location",
     "attitude_to_player",
 )
@@ -153,7 +158,7 @@ def _load_current_templates(save_dir: Path) -> dict[str, NPCProfile]:
     path = save_dir / "npc_profiles.db"
     if _schema_version(path, "npc_profile") != SUPPORTED_MAIN_SCHEMA:
         raise RuntimeError(
-            "live copied npc_profiles.db must be upgraded to schema v7 before replay"
+            "live copied npc_profiles.db must be upgraded to schema v8 before replay"
         )
     with _connect_readonly(path) as connection:
         rows = connection.execute(
@@ -187,7 +192,7 @@ def _adapt_legacy_profile(
     template = templates.get(npc_id)
     if template is None:
         raise RuntimeError(
-            f"legacy snapshot NPC {npc_id!r} has no current v7 profile template"
+            f"legacy snapshot NPC {npc_id!r} has no current v8 profile template"
         )
     profile = template.model_copy(deep=True)
 
@@ -195,11 +200,11 @@ def _adapt_legacy_profile(
         "name",
         "aliases",
         "transient_aliases",
-        "public_summary",
         "role",
         "appearance",
         "faction",
-        "current_intent",
+        "last_scene_summary",
+        "last_scene_turn",
         "attitude_to_player",
         "active",
         "name_hit_count",
@@ -219,7 +224,7 @@ def _adapt_legacy_profile(
     )
     profile.last_known_location = historical_location
     # Old ability/personality shapes are deliberately not projected.  Both are
-    # frozen in the current per-turn updater and the v7 template is valid.
+    # frozen in the current per-turn updater and the v8 template is valid.
     return NPCProfile.model_validate(profile.model_dump(mode="python"))
 
 
@@ -380,7 +385,7 @@ def init_replay(save_dir: Path) -> dict[str, Any]:
     save_dir = save_dir.resolve()
     audit = inspect_save(save_dir)
     if audit["npc_schema_version"] != SUPPORTED_MAIN_SCHEMA:
-        raise RuntimeError("copied save is not schema v7")
+        raise RuntimeError("copied save is not schema v8")
     workspace = save_dir / WORKSPACE_NAME
     replay_db = workspace / REPLAY_DB_NAME
     if replay_db.exists():

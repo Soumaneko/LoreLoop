@@ -1,22 +1,22 @@
 {
-  "benchmark_version": 2,
-  "cases_sha256": "e089a592fe387dddd9fe3389de51a6389f820c4e2f08bf3183fa61250e1e7b6a",
+  "benchmark_version": 3,
+  "cases_sha256": "a7c9df6d2ac9a7ef481cbbf2b42aff5d55bd8cb1f06baaffd617745d8fb7746d",
   "aggregate": {
-    "must_recalled": 37,
-    "must_total": 38,
-    "weighted_recalled": 120,
-    "weighted_total": 125,
+    "must_recalled": 36,
+    "must_total": 37,
+    "weighted_recalled": 117,
+    "weighted_total": 122,
     "forbidden_visible_count": 0,
     "forbidden_main_visible_count": 0,
     "duplicate_visible_count": 4,
     "invariant_violation_count": 0,
     "invalid_relation_links": 9,
     "degraded_relation_links": 14,
-    "npc_valid_links": 12,
+    "npc_valid_links": 11,
     "npc_stale_links": 2,
     "npc_invalid_links": 1,
     "npc_degraded_links": 0,
-    "matched_npc_profiles": 9,
+    "matched_npc_profiles": 8,
     "npc_relation_candidates": 10,
     "npc_relation_hits_added": 8,
     "payload_chars": 9398
@@ -1254,22 +1254,20 @@
       "visible_evidence_ids": [
         "turn_2_p001"
       ],
-      "recalled_groups": [
-        "rescuer_delta"
-      ],
+      "recalled_groups": [],
       "missed_groups": [],
-      "must_recalled": 1,
-      "must_total": 1,
-      "weighted_recalled": 3,
-      "weighted_total": 3,
+      "must_recalled": 0,
+      "must_total": 0,
+      "weighted_recalled": 0,
+      "weighted_total": 0,
       "forbidden_visible_ids": [],
       "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
       "payload_chars": 146,
       "route_counts": {
-        "direct_only": 0,
+        "direct_only": 1,
         "relation_only": 0,
-        "dual": 1
+        "dual": 0
       },
       "continuity_contributions": {},
       "turn_contributions": {
@@ -1280,8 +1278,8 @@
       "stale_relation_links": 0,
       "invalid_relation_links": 0,
       "degraded_relation_links": 0,
-      "matched_npc_profiles": 1,
-      "npc_valid_links": 1,
+      "matched_npc_profiles": 0,
+      "npc_valid_links": 0,
       "npc_stale_links": 0,
       "npc_invalid_links": 0,
       "npc_degraded_links": 0,
@@ -1290,7 +1288,11 @@
       "invariant_violations": [],
       "npc_bridge_status": "wired",
       "npc_fixture_profiles": 1,
-      "npc_fixture_logs": 2
+      "npc_fixture_logs": 2,
+      "npc_legacy_log_refs": [
+        "npc-shalan-summary-t1",
+        "npc-shalan-summary-t2"
+      ]
     },
     {
       "case_id": "npc_field_zero_support",

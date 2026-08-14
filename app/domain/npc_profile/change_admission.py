@@ -39,7 +39,6 @@ from app.domain.npc_profile.schemas import (
 )
 from app.domain.npc_profile.turn_contract import (
     NPCBatchUpdateEntry,
-    PublicSummaryChange,
     ScalarStableChange,
 )
 
@@ -138,10 +137,9 @@ def admit_npc_batch_update(
 
     accepted_changes: list[AcceptedNPCFieldChange] = []
     warnings: list[NPCChangeAdmissionWarning] = list(entry_warnings or [])
-    seen_current_ids: set[str] = set()
     seen_stable_fields: set[tuple[str, str]] = set()
     # 只有真正被丢弃的 entry（schema 阶段 invalid_update_entry）计入；
-    # 字段级 warning（current_intent / stable change）条目仍然存活。
+    # 字段级 warning（stable change）条目仍然存活。
     dropped_entries = sum(
         1
         for warning in (entry_warnings or [])
@@ -186,36 +184,15 @@ def admit_npc_batch_update(
                 ),
             ))
             continue
-        _admit_batch_current_intent(
+        _admit_stable_changes(
             target,
-            entry.current_intent,
+            entry.stable_changes,
+            valid_evidence,
             turn_index,
             accepted_changes,
-            seen_current_ids,
+            warnings,
+            seen_stable_fields,
         )
-        for change in entry.stable_changes:
-            field_key = (entry.npc_id, change.field)
-            if field_key in seen_stable_fields:
-                warnings.append(NPCChangeAdmissionWarning(
-                    npc_name=target.name,
-                    field_name=change.field,
-                    code="duplicate_stable_field",
-                    message=(
-                        f"stable field {change.field!r} is updated more than once "
-                        f"for npc {entry.npc_id!r}; duplicate dropped"
-                    ),
-                ))
-                continue
-            accepted = _admit_stable_change(
-                target,
-                change,
-                valid_evidence,
-                turn_index,
-                accepted_changes,
-                warnings,
-            )
-            if accepted:
-                seen_stable_fields.add(field_key)
 
     synced_ids = _sync_participants(
         profiles,
@@ -290,90 +267,64 @@ def _batch_valid_evidence(
     }
 
 
-def _admit_batch_current_intent(
-    target: NPCProfile,
-    value: str | None,
-    turn_index: int,
-    accepted_changes: list[AcceptedNPCFieldChange],
-    seen_current_ids: set[str],
-) -> None:
-    if value is None or value == target.current_intent:
-        return
-    if target.npc_id in seen_current_ids:
-        return
-    seen_current_ids.add(target.npc_id)
-    accepted_changes.append(AcceptedNPCScalarChange(
-        npc_id=target.npc_id,
-        canonical_name=target.name,
-        field="current_intent",
-        old_value=target.current_intent,
-        new_value=value,
-        turn_index=turn_index,
-        source="proposal",
-    ))
-
-
 def _profile_index(profiles: list[NPCProfile]) -> dict[str, NPCProfile]:
     return {profile.npc_id: profile for profile in profiles}
 
 
-def _admit_stable_change(
+def _admit_stable_changes(
     target: NPCProfile,
-    change: PublicSummaryChange | ScalarStableChange,
+    changes: list[ScalarStableChange],
     valid_evidence: dict[str, HistoryDocument],
     turn_index: int,
     accepted_changes: list[AcceptedNPCFieldChange],
     warnings: list[NPCChangeAdmissionWarning],
-) -> bool:
-    """per-field 容错审理单条稳定字段变化；返回是否实际接受（append 了 change）。"""
-    invalid = [
-        evidence_id
-        for evidence_id in change.evidence_ids
-        if evidence_id not in valid_evidence
-    ]
-    if invalid:
-        warnings.append(NPCChangeAdmissionWarning(
-            npc_name=target.name,
-            field_name=change.field,
-            code="change_evidence_dropped",
-            message=(
-                "stable field change dropped: evidence ids are not confirmed "
-                "scene paragraphs of this turn in this scene"
-            ),
-            evidence_ids=tuple(sorted(set(invalid))),
-        ))
-        return False
-
-    if isinstance(change, PublicSummaryChange):
-        if change.value == target.public_summary:
-            return False
+    seen_stable_fields: set[tuple[str, str]],
+) -> None:
+    """per-field 容错审理单条条目的全部稳定字段变化（宁漏勿错）。"""
+    for change in changes:
+        field_key = (target.npc_id, change.field)
+        if field_key in seen_stable_fields:
+            warnings.append(NPCChangeAdmissionWarning(
+                npc_name=target.name,
+                field_name=change.field,
+                code="duplicate_stable_field",
+                message=(
+                    f"stable field {change.field!r} is updated more than once "
+                    f"for npc {target.npc_id!r}; duplicate dropped"
+                ),
+            ))
+            continue
+        invalid = [
+            evidence_id
+            for evidence_id in change.evidence_ids
+            if evidence_id not in valid_evidence
+        ]
+        if invalid:
+            warnings.append(NPCChangeAdmissionWarning(
+                npc_name=target.name,
+                field_name=change.field,
+                code="change_evidence_dropped",
+                message=(
+                    "stable field change dropped: evidence ids are not confirmed "
+                    "scene paragraphs of this turn in this scene"
+                ),
+                evidence_ids=tuple(sorted(set(invalid))),
+            ))
+            continue
+        current = getattr(target, change.field)
+        if change.value == current:
+            continue
         accepted_changes.append(AcceptedNPCScalarChange(
             npc_id=target.npc_id,
             canonical_name=target.name,
-            field="public_summary",
-            old_value=target.public_summary,
+            field=change.field,
+            old_value=current,
             new_value=change.value,
             evidence_ids=tuple(change.evidence_ids),
             turn_index=turn_index,
-            summary_delta=change.summary_delta,
             source="proposal",
         ))
-        return True
-
-    current = getattr(target, change.field)
-    if change.value == current:
-        return False
-    accepted_changes.append(AcceptedNPCScalarChange(
-        npc_id=target.npc_id,
-        canonical_name=target.name,
-        field=change.field,
-        old_value=current,
-        new_value=change.value,
-        evidence_ids=tuple(change.evidence_ids),
-        turn_index=turn_index,
-        source="proposal",
-    ))
-    return True
+        seen_stable_fields.add(field_key)
 
 
 def _resolve_participants(

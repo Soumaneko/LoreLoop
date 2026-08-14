@@ -39,6 +39,8 @@ def _seed_records():
             role="流浪木偶师",
             core_motivation="找回被窃的木偶。",
             hidden_secret="曾目睹一桩旧案。",
+            last_scene_summary="他在灰烬图书馆当众修好了被窃的木偶。",
+            last_scene_turn=3,
             name_hit_count=2,
         ))
     with runtime.stores.world_setting() as store:
@@ -199,6 +201,23 @@ def test_update_npc_public_fields_preserves_director_fields():
     assert "director_only" not in result
     with pytest.raises(ValueError, match="NPC general fields only"):
         update_player_record("npc", npc_id, {"aliases": ["木偶师"]})
+
+
+def test_update_npc_public_fields_preserves_last_scene_record():
+    _seed_records()
+    runtime = get_campaign_runtime()
+    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
+    update_player_record(
+        "npc",
+        npc_id,
+        {"role": "巡回木偶师"},
+    )
+    with runtime.stores.npc_profile() as store:
+        saved = store.get_by_id(npc_id)
+        assert saved is not None
+        assert saved.role == "巡回木偶师"
+        assert saved.last_scene_summary == "他在灰烬图书馆当众修好了被窃的木偶。"
+        assert saved.last_scene_turn == 3
 
 
 def test_update_npc_known_abilities_drops_blank_name_entries():

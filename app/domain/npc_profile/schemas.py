@@ -5,6 +5,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 from app.core.ids import new_hex_id
@@ -24,7 +25,14 @@ NPC_DISCLOSURE_ORDER: dict[NPCDisclosureLevel, int] = {
 }
 
 _DISCLOSURE_IDENTITY_FIELDS = frozenset(
-    {"name", "role", "aliases", "faction", "public_summary"}
+    {
+        "name",
+        "role",
+        "aliases",
+        "faction",
+        "last_scene_summary",
+        "last_scene_turn",
+    }
 )
 _DISCLOSURE_REMOTE_FIELDS = _DISCLOSURE_IDENTITY_FIELDS | frozenset(
     {"social_style", "attitude_to_player"}
@@ -60,12 +68,15 @@ DISCLOSED_FIELD_SETS: dict[NPCDisclosureLevel, frozenset[str] | None] = {
     "intimate": None,
 }
 
+#: ``last_scene_summary`` 描述最近一次实际参与场景时的公开表现，程序 + evidence
+#: 驱动写入，不开放人工编辑。
+NPC_LAST_SCENE_SUMMARY_MAX_LENGTH = 160
+
 class NPCProfilePublicView(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
     aliases: list[str] = Field(default_factory=list)
-    public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
     personality_trait: str | None = Field(
@@ -76,7 +87,20 @@ class NPCProfilePublicView(BaseModel):
     faction: str | None = None
     last_known_location: str | None = None
     attitude_to_player: str | None = None
-    current_intent: str | None = None
+    last_scene_summary: str | None = Field(
+        default=None,
+        max_length=NPC_LAST_SCENE_SUMMARY_MAX_LENGTH,
+    )
+    last_scene_turn: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _last_scene_fields_mutual_null(self):
+        if (self.last_scene_summary is None) != (self.last_scene_turn is None):
+            raise ValueError(
+                "last_scene_summary and last_scene_turn must both be set or "
+                "both be null"
+            )
+        return self
 
 
 class NPCProfileDirectorView(NPCProfilePublicView):
@@ -97,7 +121,6 @@ class NPCProfileUpdateInput(BaseModel):
 
     name: str
     aliases: list[str] = Field(default_factory=list)
-    public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
     personality_trait: str | None = Field(
@@ -108,7 +131,6 @@ class NPCProfileUpdateInput(BaseModel):
     faction: str | None = None
     last_known_location: str | None = None
     attitude_to_player: str | None = None
-    current_intent: str | None = None
 
     @field_validator("personality_trait", mode="before")
     @classmethod
@@ -164,7 +186,6 @@ class NPCProfile(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     transient_aliases: dict[str, int] = Field(default_factory=dict)
 
-    public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
     personality_trait: str | None = Field(
@@ -175,7 +196,14 @@ class NPCProfile(BaseModel):
     faction: str | None = None
     last_known_location: str | None = None
     attitude_to_player: str | None = None
-    current_intent: str | None = None
+
+    #: 最近一次实际参与场景时的公开表现；``last_scene_summary`` 与
+    #: ``last_scene_turn`` 由程序与 evidence 一起写入，二者必须同时存在或同时为空。
+    last_scene_summary: str | None = Field(
+        default=None,
+        max_length=NPC_LAST_SCENE_SUMMARY_MAX_LENGTH,
+    )
+    last_scene_turn: int | None = Field(default=None, ge=0)
 
     core_motivation: str | None = None
     hidden_secret: str | None = None
@@ -194,11 +222,19 @@ class NPCProfile(BaseModel):
     name_hit_count: int = Field(default=0, ge=0)
     alias_hit_counts: dict[str, int] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def _last_scene_fields_mutual_null(self):
+        if (self.last_scene_summary is None) != (self.last_scene_turn is None):
+            raise ValueError(
+                "last_scene_summary and last_scene_turn must both be set or "
+                "both be null"
+            )
+        return self
+
     def update_view(self) -> NPCProfileUpdateInput:
         return NPCProfileUpdateInput(
             name=self.name,
             aliases=list(self.aliases),
-            public_summary=self.public_summary,
             role=self.role,
             appearance=self.appearance,
             personality_trait=self.personality_trait,
@@ -206,12 +242,13 @@ class NPCProfile(BaseModel):
             faction=self.faction,
             last_known_location=self.last_known_location,
             attitude_to_player=self.attitude_to_player,
-            current_intent=self.current_intent,
         )
 
     def public_view(self) -> NPCProfilePublicView:
         return NPCProfilePublicView(
             **self.update_view().model_dump(mode="json"),
+            last_scene_summary=self.last_scene_summary,
+            last_scene_turn=self.last_scene_turn,
         )
 
     def director_view(self) -> NPCProfileDirectorView:
@@ -265,7 +302,6 @@ def profile_from_update(
         npc_id=npc_id or new_hex_id(),
         name=profile.name,
         aliases=list(profile.aliases),
-        public_summary=profile.public_summary,
         role=profile.role,
         appearance=profile.appearance,
         personality_trait=profile.personality_trait,
@@ -273,7 +309,6 @@ def profile_from_update(
         faction=profile.faction,
         last_known_location=profile.last_known_location,
         attitude_to_player=profile.attitude_to_player,
-        current_intent=profile.current_intent,
         source_scene_ids=source_scene_ids or [],
         updated_at=updated_at or utc_now(),
         active=active,

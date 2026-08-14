@@ -29,7 +29,6 @@ def _profile(
     role=None,
     faction=None,
     appearance=None,
-    public_summary=None,
 ) -> None:
     store.upsert(NPCProfile(
         npc_id=npc_id,
@@ -40,7 +39,6 @@ def _profile(
         role=role,
         faction=faction,
         appearance=appearance,
-        public_summary=public_summary,
     ))
 
 
@@ -58,6 +56,8 @@ def _logs(
             profile = store.get_by_id(log["npc_id"])
             assert profile is not None
             setattr(profile, log["field"], log["new_value"])
+            if log["field"] == "last_scene_summary":
+                profile.last_scene_turn = turn
             store.upsert(profile)
         changes = []
         documents = []
@@ -82,7 +82,6 @@ def _logs(
                 new_value=log["new_value"],
                 evidence_ids=(evidence_id,),
                 turn_index=turn,
-                summary_delta=log.get("summary_delta"),
                 source="proposal",
             ))
         scene_id = next(
@@ -319,24 +318,22 @@ class TestTopic:
 
         assert result.links == []
 
-    def test_summary_delta_topic_match_only_emits_matched_node(self):
+    def test_value_topic_match_only_emits_matched_last_scene_node(self):
         with NPCProfileStore(":memory:") as store:
             _profile(store, "npc-shalan", "沙岚")
             _logs(store, [
                 {
                     "npc_id": "npc-shalan",
-                    "field": "public_summary",
-                    "new_value": "赤沙会新任首领。",
-                    "summary_delta": "接掌赤沙会并成为新任首领。",
+                    "field": "last_scene_summary",
+                    "new_value": "她在盟会推举中接过赤沙会令牌。",
                     "turn": 1,
                     "evidence_text": "她在盟会推举中接过赤沙会令牌。",
                     "scene_id": "scene_001",
                 },
                 {
                     "npc_id": "npc-shalan",
-                    "field": "public_summary",
-                    "new_value": "赤沙会首领，当地知名救援者。",
-                    "summary_delta": "因从沙暴中救回商队而成为当地知名救援者。",
+                    "field": "last_scene_summary",
+                    "new_value": "她从沙暴里救回整支商队，成为当地知名救援者。",
                     "turn": 2,
                     "evidence_text": "她从沙暴里救回整支商队。",
                     "scene_id": "scene_002",
@@ -349,9 +346,9 @@ class TestTopic:
         assert len(result.links) == 1
         link = result.links[0]
         assert link.turn_index == 2
-        assert link.match_reasons == ["npc_delta_topic_match"]
+        assert link.match_reasons == ["npc_value_topic_match"]
         assert link.evidence_basis_primary == (
-            "因从沙暴中救回商队而成为当地知名救援者。"
+            "她从沙暴里救回整支商队，成为当地知名救援者。"
         )
 
     def test_pure_topic_intent_does_not_add_identity_baseline(self):
@@ -493,13 +490,12 @@ class TestEmission:
                     "turn": turn,
                     "evidence_text": text,
                     "scene_id": f"scene_{turn:03d}",
-                    **({"summary_delta": delta} if delta else {}),
                 }
-                for turn, field, value, text, delta in (
-                    (1, "role", "黑羽卫斥候", "她成为黑羽卫斥候。", None),
-                    (2, "faction", "黑羽卫", "她归属黑羽卫。", None),
-                    (3, "appearance", "左颊有新月形伤痕", "她左颊有伤痕。", None),
-                    (4, "public_summary", "以护送商队闻名。", "她以护送商队闻名。", "因护送商队而闻名。"),
+                for turn, field, value, text in (
+                    (1, "role", "黑羽卫斥候", "她成为黑羽卫斥候。"),
+                    (2, "faction", "黑羽卫", "她归属黑羽卫。"),
+                    (3, "appearance", "左颊有新月形伤痕", "她左颊有伤痕。"),
+                    (4, "last_scene_summary", "她以护送商队闻名。", "她以护送商队闻名。"),
                 )
             ])
             result = _bridge(store).retrieve(_plan([

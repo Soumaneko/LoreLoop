@@ -71,7 +71,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIXTURES = ROOT / "benchmarks" / "npc_baseline" / "fixtures_batch.json"
 DEFAULT_RECORDINGS = ROOT / "benchmarks" / "npc_baseline" / "recordings" / "batch.json"
 DEFAULT_BASELINE = ROOT / "benchmarks" / "npc_baseline" / "baseline_batch.json"
-BENCHMARK_VERSION = 2
+BENCHMARK_VERSION = 3
 
 #: Deterministic ``updated_at`` for the batch backend so replay is byte-stable.
 _ADMITTED_AT = "2026-08-12T00:00:00Z"
@@ -80,15 +80,11 @@ _ADMITTED_AT = "2026-08-12T00:00:00Z"
 UPDATER_FIELDS = (
     "last_known_location",
     "attitude_to_player",
-    "current_intent",
-    "public_summary",
     "role",
     "appearance",
     "personality_trait",
     "faction",
     "known_abilities",
-    # Ticket 11 pending contract.  ``getattr(..., None)`` keeps the accepted
-    # v7 backend byte-identical until the production v8 fields exist.
     "last_scene_summary",
     "last_scene_turn",
 )
@@ -115,7 +111,6 @@ class RosterProfileFixture(BaseModel):
     name: str = Field(min_length=1)
     aliases: list[str] = Field(default_factory=list)
     transient_aliases: dict[str, int] = Field(default_factory=dict)
-    public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
     personality_trait: str | None = None
@@ -123,7 +118,6 @@ class RosterProfileFixture(BaseModel):
     known_abilities: list[AbilityFixture] = Field(default_factory=list)
     last_known_location: str | None = None
     attitude_to_player: str | None = None
-    current_intent: str | None = None
     last_scene_summary: str | None = None
     last_scene_turn: int | None = Field(default=None, ge=0)
     source_scene_ids: list[str] = Field(default_factory=list)
@@ -138,7 +132,6 @@ class RosterProfileFixture(BaseModel):
             name=self.name,
             aliases=list(self.aliases),
             transient_aliases=dict(self.transient_aliases),
-            public_summary=self.public_summary,
             role=self.role,
             appearance=self.appearance,
             personality_trait=self.personality_trait,
@@ -149,15 +142,13 @@ class RosterProfileFixture(BaseModel):
             faction=self.faction,
             last_known_location=self.last_known_location,
             attitude_to_player=self.attitude_to_player,
-            current_intent=self.current_intent,
             source_scene_ids=list(self.source_scene_ids),
             updated_at=self.updated_at,
             last_scene_summary=self.last_scene_summary,
             last_scene_turn=self.last_scene_turn,
         )
-        # One fixture model spans the accepted v7 suite and the pending v8
-        # contract.  Only the active production profile fields are projected;
-        # this is contract routing, not a runtime compatibility path.
+        # The fixture model may carry pending v8 fields not yet part of the
+        # production profile; only the active production fields are projected.
         values = {
             key: value
             for key, value in declared.items()

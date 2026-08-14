@@ -124,7 +124,6 @@ def parse_batch_updates(
     """逐字段 salvage 宽松 wire envelope（宁漏勿错）。
 
     - 非对象元素 / 缺或非 str ``npc_id`` → 丢整条（无法归因）；
-    - ``current_intent`` 非字符串 → 只丢它（``invalid_current_intent``）；
     - ``stable_changes`` 非列表 → 丢整字段；逐条 ``NPCStableChange.model_validate``，
       失败只丢该 change（``invalid_stable_change``，带 index）；
     - 合法 npc_id + 剩余合法字段照常构造 typed 条目进入 admission。
@@ -154,21 +153,6 @@ def parse_batch_updates(
             ))
             continue
         npc_id = npc_id.strip()
-
-        current_intent = raw.get("current_intent")
-        intent: str | None = None
-        if isinstance(current_intent, str) and current_intent.strip():
-            intent = current_intent.strip()
-        elif current_intent is not None and not isinstance(current_intent, str):
-            warnings.append(NPCChangeAdmissionWarning(
-                npc_name=npc_id,
-                field_name="current_intent",
-                code="invalid_current_intent",
-                message=(
-                    f"batch update entry {index} current_intent is not a "
-                    "string; dropped"
-                ),
-            ))
 
         stable_changes: list[NPCStableChange] = []
         raw_changes = raw.get("stable_changes")
@@ -216,7 +200,6 @@ def parse_batch_updates(
                     stable_changes.append(parsed_change)
         entries.append(NPCBatchUpdateEntry(
             npc_id=npc_id,
-            current_intent=intent,
             stable_changes=stable_changes,
         ))
     return entries, warnings
@@ -280,11 +263,9 @@ def build_npc_batch_input(
             "npc_id": item.npc_id,
             "name": item.canonical_name,
             "current": {
-                "public_summary": profile.public_summary,
                 "role": profile.role,
                 "appearance": profile.appearance,
                 "faction": profile.faction,
-                "current_intent": profile.current_intent,
             },
             "facts": facts,
             "evidence": evidence,

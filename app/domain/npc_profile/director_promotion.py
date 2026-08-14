@@ -24,7 +24,6 @@ def npc_profile_from_director_draft(
 ) -> NPCProfile:
     return NPCProfile(
         name=draft.name,
-        public_summary=draft.role,
         role=draft.role,
         appearance=draft.appearance,
         personality_trait=draft.personality_trait,
@@ -49,7 +48,6 @@ def merge_director_draft_into_npc_profile(
     disclosure_level=None,
 ) -> NPCProfile:
     merged = profile.model_copy(deep=True)
-    merged.public_summary = merged.public_summary or draft.role
     if merged.source_director_npc_id:
         merged.role = merged.role or draft.role
         merged.appearance = merged.appearance or draft.appearance

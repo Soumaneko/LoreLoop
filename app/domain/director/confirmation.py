@@ -596,7 +596,7 @@ class DirectorConfirmationExecutor:
                         "role": profile.role,
                         "aliases": list(profile.aliases),
                         "faction": profile.faction,
-                        "public_summary": profile.public_summary,
+                        "last_scene_summary": profile.last_scene_summary,
                     }
                     for profile in self._npc_profile_store.list_all()
                 ],

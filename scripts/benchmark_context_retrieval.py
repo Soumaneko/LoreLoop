@@ -5,7 +5,7 @@ import hashlib
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -95,7 +95,7 @@ class ContinuityLogFixture(BaseModel):
 
 
 class NPCProfileFixture(BaseModel):
-    """Pending NPC field-history contract; production bridge is added later."""
+    """NPC field-history contract fixture projected onto the production profile."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -103,7 +103,6 @@ class NPCProfileFixture(BaseModel):
     name: str = Field(min_length=1)
     aliases: list[str] = Field(default_factory=list)
     active: bool = True
-    public_summary: str | None = None
     role: str | None = None
     appearance: str | None = None
     faction: str | None = None
@@ -117,6 +116,10 @@ class NPCProfileFixture(BaseModel):
             if key in NPCProfile.model_fields
         }
         return NPCProfile.model_validate(data)
+
+
+#: v7 legacy ``public_summary`` logs are read-only audit rows simulated via
+#: direct SQL; they survive the store rebuild but are never bridged.
 
 
 class NPCFieldLogFixture(BaseModel):
@@ -139,6 +142,10 @@ class NPCFieldLogFixture(BaseModel):
     new_value: str = Field(min_length=1)
     summary_delta: str | None = None
     hash_mode: Literal["valid", "stale", "missing"] = "valid"
+    #: v7 legacy audit row simulated via direct SQL (public_summary only);
+    #: these logs are read-only and never bridged, but must survive the store
+    #: rebuild and remain queryable.
+    legacy: bool = False
 
     @model_validator(mode="after")
     def validate_field_contract(self):
@@ -253,7 +260,7 @@ class BenchmarkCase(BaseModel):
 class BenchmarkSuite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1, 2]
+    version: Literal[1, 2, 3]
     cases: list[BenchmarkCase] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -479,17 +486,75 @@ def _score_case(
     return result
 
 
+def _seed_legacy_npc_field_log(
+    npc_store: NPCProfileStore,
+    fixture: NPCFieldLogFixture,
+    documents: dict[str, HistoryDocument],
+) -> None:
+    """Insert a v7 legacy ``public_summary`` audit row via direct SQL.
+
+    The profile has no such field and the production write-set forbids it, so
+    the row is staged exactly like a v7-era log: kept read-only and queryable,
+    and the History bridge never emits it.
+    """
+    if fixture.field_name != "public_summary":
+        raise ValueError(f"legacy NPC field log must be public_summary: {fixture.log_ref}")
+    connection = npc_store._db
+    cursor = connection.execute(
+        """
+        INSERT INTO npc_field_change_logs(
+            npc_id, field_name, turn_index, old_value, new_value, summary_delta,
+            source
+        ) VALUES (?, 'public_summary', ?, ?, ?, ?, 'proposal')
+        """,
+        (
+            fixture.npc_id,
+            fixture.turn_index,
+            fixture.old_value,
+            fixture.new_value,
+            fixture.summary_delta,
+        ),
+    )
+    log_id = cursor.lastrowid
+    if log_id is None:
+        raise RuntimeError("legacy NPC field log insert did not return a log_id")
+    log_id = int(log_id)
+    for position, evidence_id in enumerate(fixture.evidence_ids):
+        document = documents.get(evidence_id)
+        if document is None:
+            raise ValueError(
+                f"unknown evidence for legacy NPC log {fixture.log_ref}: {evidence_id}"
+            )
+        connection.execute(
+            """
+            INSERT INTO npc_field_change_evidence(
+                log_id, position, evidence_id, evidence_hash
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (
+                log_id,
+                position,
+                evidence_id,
+                history_document_text_hash(document),
+            ),
+        )
+
+
 def _materialize_npc_field_fixtures(
     case: BenchmarkCase,
     documents: dict[str, HistoryDocument],
     npc_store: NPCProfileStore,
 ) -> dict[str, int]:
-    """Persist accepted NPC fixtures through the production v7 store contract.
+    """Persist accepted NPC fixtures through the production v8 store contract.
 
     Historical nodes are replayed in turn order so snapshot verification sees
     the value that was current when each node was committed. Stale/missing
     pointers use altered/synthetic HistoryDocument values only for hashing;
     they are deliberately absent or different in the real History store.
+
+    Contract routing: ``public_summary`` fixtures simulate v7 legacy audit rows
+    via direct SQL (read-only, never bridged); ``role`` / ``appearance`` /
+    ``faction`` / ``last_scene_summary`` go through the production write-set.
     """
 
     final_profiles = {
@@ -501,11 +566,9 @@ def _materialize_npc_field_fixtures(
 
     logs_by_turn: dict[int, list[NPCFieldLogFixture]] = {}
     for fixture in case.npc_field_logs:
-        # Ticket 11 pending fixtures are loadable before the v8 production
-        # field exists.  They intentionally remain unmaterialized so the
-        # pre-implementation report records a bridge gap instead of inventing
-        # a role/public-summary stand-in.
         if fixture.field_name not in NPCProfile.model_fields:
+            if fixture.legacy:
+                _seed_legacy_npc_field_log(npc_store, fixture, documents)
             continue
         logs_by_turn.setdefault(fixture.turn_index, []).append(fixture)
 
@@ -544,12 +607,11 @@ def _materialize_npc_field_fixtures(
             changes.append(AcceptedNPCScalarChange(
                 npc_id=fixture.npc_id,
                 canonical_name=profile.name,
-                field=fixture.field_name,
+                field=cast(Any, fixture.field_name),
                 old_value=fixture.old_value,
                 new_value=fixture.new_value,
                 evidence_ids=tuple(fixture.evidence_ids),
                 turn_index=turn_index,
-                summary_delta=fixture.summary_delta,
                 source="proposal",
             ))
             for evidence_id in fixture.evidence_ids:
@@ -683,11 +745,10 @@ def run_case(case: BenchmarkCase) -> dict:
         pending_refs = sorted(
             fixture.log_ref
             for fixture in case.npc_field_logs
-            if fixture.field_name not in NPCProfile.model_fields
+            if fixture.legacy
         )
         if pending_refs:
-            scored["npc_bridge_status"] = "pending_last_scene"
-            scored["pending_npc_log_refs"] = pending_refs
+            scored["npc_legacy_log_refs"] = pending_refs
         return scored
 
 

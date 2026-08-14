@@ -117,10 +117,9 @@ def _mention(primary, *, relations=None, presence: NpcPresence = "appeared") -> 
     )
 
 
-def _entry(npc_id, *, current_intent=None, stable_changes=None) -> NPCBatchUpdateEntry:
+def _entry(npc_id, *, stable_changes=None) -> NPCBatchUpdateEntry:
     return NPCBatchUpdateEntry(
         npc_id=npc_id,
-        current_intent=current_intent,
         stable_changes=list(stable_changes or []),
     )
 
@@ -159,17 +158,6 @@ def _admit(
         scene_id=_SCENE_ID,
         admitted_at=_ADMITTED_AT,
     )
-
-
-def test_batch_schema_normalizes_blank_current_intent():
-    entry = NPCBatchUpdateEntry(
-        npc_id="npc_001",
-        current_intent="  ",
-        stable_changes=[_role_change()],
-    )
-    assert entry.current_intent is None
-    batch = NPCBatchUpdate(updates=[entry.model_dump()])
-    assert batch.updates == [entry.model_dump()]
 
 
 def test_batch_schema_rejects_unknown_fields():
@@ -268,7 +256,6 @@ def test_parse_batch_updates_rejects_known_abilities_but_keeps_other_fields():
 
     entries, warnings = parse_batch_updates([{
         "npc_id": "npc_001",
-        "current_intent": "明日去坊市探听消息",
         "stable_changes": [{
             "field": "known_abilities",
             "ability": {"name": "情报打探", "description": "擅长打听消息"},
@@ -276,7 +263,6 @@ def test_parse_batch_updates_rejects_known_abilities_but_keeps_other_fields():
         }],
     }])
 
-    assert entries[0].current_intent == "明日去坊市探听消息"
     assert entries[0].stable_changes == []
     assert [warning.code for warning in warnings] == ["invalid_stable_change"]
 
@@ -304,7 +290,7 @@ def test_parse_batch_updates_skips_invalid_entries_only():
     from app.domain.npc_profile.batch_updater import parse_batch_updates
 
     entries, warnings = parse_batch_updates([
-        {"npc_id": "npc_001", "current_intent": "查明账本"},
+        {"npc_id": "npc_001"},
         {"bogus": True},
         {"npc_id": "npc_002", "stable_changes": [{"field": "role", "value": "x", "evidence_ids": ["e"]}]},
     ])
@@ -320,7 +306,6 @@ def test_parse_batch_updates_salvages_valid_fields_when_one_change_invalid():
     entries, warnings = parse_batch_updates([
         {
             "npc_id": "npc_001",
-            "current_intent": "查明账本",
             "stable_changes": [
                 {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
                 {"field": "bogus_field", "value": "x"},
@@ -331,29 +316,30 @@ def test_parse_batch_updates_salvages_valid_fields_when_one_change_invalid():
     assert len(entries) == 1
     entry = entries[0]
     assert entry.npc_id == "npc_001"
-    assert entry.current_intent == "查明账本"
     assert len(entry.stable_changes) == 1
     assert entry.stable_changes[0].field == "role"
     assert {warning.code for warning in warnings} == {"invalid_stable_change"}
 
 
-def test_parse_batch_updates_rejects_trait_update_but_keeps_current_intent():
+def test_parse_batch_updates_rejects_trait_update_but_keeps_role_change():
     """真实回归：逐回合 batch 无权更新 personality_trait。"""
     from app.domain.npc_profile.batch_updater import parse_batch_updates
 
     entries, warnings = parse_batch_updates([{
         "npc_id": "npc_001",
-        "current_intent": "拜师后去山下坊市探听消息",
-        "stable_changes": [{
-            "field": "personality_trait",
-            "value": "沉稳重情",
-            "evidence_ids": ["turn_3_p001"],
-        }],
+        "stable_changes": [
+            {
+                "field": "personality_trait",
+                "value": "沉稳重情",
+                "evidence_ids": ["turn_3_p001"],
+            },
+            {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+        ],
     }])
 
     assert len(entries) == 1
-    assert entries[0].current_intent == "拜师后去山下坊市探听消息"
-    assert entries[0].stable_changes == []
+    assert len(entries[0].stable_changes) == 1
+    assert entries[0].stable_changes[0].field == "role"
     assert [warning.code for warning in warnings] == ["invalid_stable_change"]
 
 
@@ -365,24 +351,6 @@ def test_parse_batch_updates_tolerates_null_entries():
     assert [entry.npc_id for entry in entries] == ["npc_001"]
     assert len(warnings) == 2
     assert all(warning.code == "invalid_update_entry" for warning in warnings)
-
-
-def test_parse_batch_updates_drops_only_bad_current_intent():
-    from app.domain.npc_profile.batch_updater import parse_batch_updates
-
-    entries, warnings = parse_batch_updates([
-        {
-            "npc_id": "npc_001",
-            "current_intent": 123,
-            "stable_changes": [
-                {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
-            ],
-        },
-    ])
-
-    assert entries[0].current_intent is None
-    assert len(entries[0].stable_changes) == 1
-    assert {warning.code for warning in warnings} == {"invalid_current_intent"}
 
 
 def test_batch_display_schema_shapes_stable_changes():
@@ -518,7 +486,6 @@ def test_admission_dropped_entries_counts_only_entry_drops():
     entries, entry_warnings = parse_batch_updates([
         {
             "npc_id": "npc_001",
-            "current_intent": 123,
             "stable_changes": [
                 {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
             ],
@@ -662,18 +629,20 @@ def test_workflow_loose_envelope_applies_valid_and_drops_invalid():
         assert {"invalid_update_entry"} <= {w.code for w in result.warnings}
 
 
-def test_workflow_rejects_trait_update_and_persists_valid_intent():
+def test_workflow_rejects_trait_update_and_keeps_role_change():
     mentions = [_mention("沈孤鸿")]
     original_trait = "遇事沉稳"
     response = {
         "updates": [{
             "npc_id": "npc_001",
-            "current_intent": "拜师后去山下坊市探听消息",
-            "stable_changes": [{
-                "field": "personality_trait",
-                "value": "沉稳重情",
-                "evidence_ids": ["turn_3_p001"],
-            }],
+            "stable_changes": [
+                {
+                    "field": "personality_trait",
+                    "value": "沉稳重情",
+                    "evidence_ids": ["turn_3_p001"],
+                },
+                {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+            ],
         }],
     }
     with NPCProfileStore(":memory:") as store:
@@ -692,7 +661,7 @@ def test_workflow_rejects_trait_update_and_persists_valid_intent():
         persisted = store.get_by_id("npc_001")
         assert persisted is not None
         assert persisted.personality_trait == original_trait
-        assert persisted.current_intent == "拜师后去山下坊市探听消息"
+        assert persisted.role == "醉花楼主"
         assert "invalid_stable_change" in {w.code for w in result.warnings}
 
 
@@ -779,7 +748,6 @@ def test_batch_prompt_loads_and_renders():
     assert "npc_id" in rendered
     assert "# 字段语义" in rendered
     assert "可同时更新 `role` 和 `faction`" in rendered
-    assert "如果本轮更新了 `role` 或 `faction`" in rendered
     assert "规范化、简洁归纳" in rendered
 
 
@@ -796,7 +764,6 @@ def test_workflow_resolves_and_applies_to_store():
         "updates": [
             {
                 "npc_id": "npc_001",
-                "current_intent": "查明账本",
                 "stable_changes": [
                     {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
                 ],
@@ -821,7 +788,6 @@ def test_workflow_resolves_and_applies_to_store():
         profile = store.get_by_id("npc_001")
         assert profile is not None
         assert profile.role == "醉花楼主"
-        assert profile.current_intent == "查明账本"
         assert profile.last_known_location == "醉花楼"
         assert "沈二爷" in profile.aliases
         assert profile.name_hit_count == 1

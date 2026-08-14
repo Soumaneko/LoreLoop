@@ -1703,7 +1703,7 @@ function npcProfileCard(profile) {
   const active = profile.active !== false;
   return `<div class="section-card" style="${active ? "" : "opacity:.6"}">
     <div class="card-title"><span>${esc(profile.name)}</span>${metric(active ? "active" : "inactive", `hit ${profile.name_hit_count ?? 0}`, active ? "ok" : "warn")}</div>
-    ${profile.public_summary || profile.role ? `<div style="margin-bottom:8px">${esc(text(profile.public_summary || profile.role))}</div>` : ""}
+    ${profile.role ? `<div style="margin-bottom:8px">${esc(text(profile.role))}</div>` : ""}
     ${kv([
       ["ID", esc(text(profile.npc_id))],
       ["别名", chips(profile.aliases)],
@@ -1715,7 +1715,8 @@ function npcProfileCard(profile) {
       ["派系", esc(text(profile.faction))],
       ["最近已知地点", esc(text(profile.last_known_location))],
       ["态度", esc(text(profile.attitude_to_player))],
-      ["意图", esc(text(profile.current_intent))],
+      ["最近出场", esc(text(profile.last_scene_summary))],
+      ["出场回合", esc(text(profile.last_scene_turn))],
       ["来源场景", chips(profile.source_scene_ids)],
       ["来源导演NPC", esc(text(profile.source_director_npc_id))],
       ["创建回合", esc(text(profile.created_turn))],

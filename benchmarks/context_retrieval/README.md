@@ -8,10 +8,11 @@ LLM or touch a real save.
 
 ## Current checkpoint
 
-Accepted on 2026-08-13 with 33 cases:
+Accepted on 2026-08-13 (33 cases); re-recorded for the v8 NPC schema on
+2026-08-14:
 
-- must recall: `37/38`
-- weighted recall: `120/125`
+- must recall: `36/37`
+- weighted recall: `117/122`
 - forbidden evidence visible: `0`
 - forbidden main evidence visible: `0`
 - invariant violations: `0`
@@ -79,7 +80,7 @@ sufficient justification.
 ## NPC field-history contracts
 
 Ticket 10 adds 8 accepted cases that drive the `NPCProfileHistoryBridge` against
-the production v7 field-change store. Each case declares NPC profiles, stable
+the production v8 field-change store. Each case declares NPC profiles, stable
 field-change nodes, pointer integrity modes, and structured
 `(npc_id, field_name, log_id)` provenance. A fixture-local `log_ref` is resolved
 to the store-assigned integer `log_id` when the fixture is materialized; fixture
@@ -88,9 +89,9 @@ labels never masquerade as database IDs.
 - `npc_role_relation_exact`: a query asks for an NPC identity, the scene prose
   uses only a pronoun, direct retrieval misses, and the `role` field-change node
   bridges the key evidence as a relation hit.
-- `npc_public_summary_delta`: a major `public_summary` update is bridged only by
-  its `summary_delta` node; the aggregated current summary never broadcasts onto
-  earlier evidence.
+- `npc_public_summary_delta`: regression that v7 legacy `public_summary` logs
+  survive as read-only audit rows but are never bridged, so a matching topic
+  yields no relation and the evidence surfaces only through direct text match.
 - `npc_field_zero_support`: a complete-basis field link whose evidence scores
   zero support is stripped like a Continuity zero-support mount; its attribution
   must not claim a seat.
@@ -192,19 +193,19 @@ combined = max(primary_support, 0.4 * context_support)
 quality  = primary_support if primary_support > weak else min(combined, weak)
 ```
 
-NPC field nodes use the same split: `public_summary` nodes carry the
-`summary_delta` as primary basis (never the aggregated full summary), and
-`role` / `appearance` / `faction` nodes carry the change's `new_value`.
+NPC field nodes use the change's `new_value` as the primary basis. Legacy v7
+`public_summary` nodes (which carry `summary_delta`) are read-only audit rows
+and never reach retrieval.
 
-### Ticket 11 pending last-scene nodes
+### Ticket 11 last-scene nodes
 
-`cases_last_scene_pending.json` declares three unaccepted contracts for the
-planned `last_scene_summary` field: latest-node identity recall, bounded topic
+`cases_last_scene_pending.json` declares three contracts for the
+`last_scene_summary` field: latest-node identity recall, bounded topic
 recall of an older node, and a mentioned-only fact that remains direct History
-without NPC relation attribution.  Until the v8 profile field exists, the
-runner intentionally does not materialize these declared logs and labels the
-affected cases `pending_last_scene`; this avoids using `role` or legacy
-`public_summary` as a semantic stand-in.
+without NPC relation attribution. Since the v8 profile field and the bridge
+write-set exist, the runner materializes these logs through the production
+store and the bridge resolves them: identity recalls the latest node, topics
+add back an older node, and mentioned-only facts stay direct.
 
 ```bash
 PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py \

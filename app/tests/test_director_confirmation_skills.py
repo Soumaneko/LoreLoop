@@ -449,7 +449,6 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
         name="二楼女子",
         role="生意谈判方",
         appearance="声音温婉中带媚。",
-        public_summary="醉花楼二楼雅间中参与大额生意谈判的女子。",
     )
     new_id = new_profile.npc_id
     gateway = ScriptedDirectorGateway(
@@ -671,7 +670,6 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
                 name="二楼女子",
                 role="生意谈判方",
                 appearance="声音温婉中带媚。",
-                public_summary="醉花楼二楼雅间中参与大额生意谈判的女子。",
             )
         )
         new_profile = npc_store.get_by_id(new_id)

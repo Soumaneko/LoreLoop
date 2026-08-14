@@ -21,7 +21,6 @@ _CONTINUITY_EDITABLE_FIELDS = {
 _CONTINUITY_NULLABLE_FIELDS = {"location"}
 _NPC_PUBLIC_FIELDS = {
     "name",
-    "public_summary",
     "role",
     "appearance",
     "personality_trait",
@@ -29,17 +28,14 @@ _NPC_PUBLIC_FIELDS = {
     "faction",
     "last_known_location",
     "attitude_to_player",
-    "current_intent",
 }
 _NPC_NULLABLE_FIELDS = {
-    "public_summary",
     "role",
     "appearance",
     "personality_trait",
     "faction",
     "last_known_location",
     "attitude_to_player",
-    "current_intent",
 }
 _NPC_LIST_FIELDS = {"known_abilities"}
 _NPC_DIRECTOR_FIELDS = {
@@ -410,6 +406,10 @@ def _update_npc_profile(
             alias_hit_counts=dict(current.alias_hit_counts),
         )
         _preserve_npc_director_fields(merged, current)
+        # ``last_scene_*`` 是程序 + evidence 驱动写入的派生态，普通字段编辑
+        # 不得清空它们；UpdateInput 刻意不含这两个字段，因此这里显式保留。
+        merged.last_scene_summary = current.last_scene_summary
+        merged.last_scene_turn = current.last_scene_turn
         if view == "advanced":
             for field in _NPC_ADVANCED_DIRECTOR_FIELDS:
                 if field in payload:

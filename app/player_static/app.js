@@ -1435,8 +1435,8 @@ function openCodexProfile(profile, triggerElement) {
   subHeader.appendChild(typeBadge);
   els.codexContent.appendChild(subHeader);
 
-  // 2. 顶部引文区：展示外貌描写 (appearance) 或 summary
-  const quoteText = profile.appearance || profile.public_summary || "";
+  // 2. 顶部引文区：展示外貌描写 (appearance) 或最近出场记录
+  const quoteText = profile.appearance || profile.last_scene_summary || "";
 
   if (quoteText) {
     const quoteBox = node("div", "codex-quote-box", `“${quoteText}”`);
@@ -1473,8 +1473,8 @@ function openCodexProfile(profile, triggerElement) {
     detailsPanel.appendChild(row);
   };
 
-  if (profile.public_summary && profile.public_summary !== quoteText) {
-    appendDetailText("详细信息", profile.public_summary);
+  if (profile.last_scene_summary && profile.last_scene_summary !== quoteText) {
+    appendDetailText("最近出场", profile.last_scene_summary);
   }
   if (profile.last_known_location) appendDetailText("最后活动地点", profile.last_known_location);
 
@@ -3236,14 +3236,12 @@ const NPC_PUBLIC_FIELDS = [
   ["name", "姓名", false],
   ["aliases", "别名", true],
   ["role", "身份", false],
-  ["public_summary", "公开摘要", false, "textarea"],
   ["appearance", "外貌", false],
   ["personality_trait", "性格倾向", false],
   ["known_abilities", "已知能力", true],
   ["faction", "阵营", false],
   ["last_known_location", "最近已知地点", false],
   ["attitude_to_player", "对玩家态度", false],
-  ["current_intent", "当前意图", false],
 ];
 
 const NPC_ADVANCED_DIRECTOR_FIELDS = [
@@ -3976,7 +3974,7 @@ function renderNpcRecords(profiles) {
       statusText: "人物",
       fields: _editableFieldsFor(data, NPC_FIELD_META)
         .filter(([key]) => !NPC_HIDDEN_FIELD_KEYS.has(key)),
-      quoteKey: "public_summary",
+      quoteKey: "appearance",
       onSave: async (values) => {
         await updateRecord("npc", profile.id, values);
         showToast("人物档案已更新");

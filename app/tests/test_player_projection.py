@@ -106,7 +106,6 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             name="埃利奥",
             aliases=["木偶师", "莱尔"],
             role="流浪木偶师",
-            public_summary="一名公开身份不明的木偶师。",
             hidden_secret="不应投影的 NPC 秘密",
         ))
     with runtime.stores.world_setting() as store:
@@ -194,7 +193,6 @@ def test_text_highlights_exclude_single_char_settings_and_prefer_npc_on_collisio
         store.upsert(NPCProfile(
             name="商会",
             role="行商首领",
-            public_summary="执掌商会的老人。",
         ))
     with runtime.stores.world_setting() as store:
         store.save(WorldSetting(

@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable, Sequence
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -21,15 +21,19 @@ from app.domain.confirmed_history.schemas import HistoryDocument
 from .changes import AcceptedNPCFieldChange, AcceptedNPCScalarChange
 
 
+#: 可读的字段名集合；``public_summary`` 仅为 v7 遗留只读 audit row 保留，
+#: 不在新写入集合内。
 NPCFieldHistoryName = Literal[
     "public_summary",
     "role",
     "appearance",
     "faction",
+    "last_scene_summary",
 ]
 
+#: 新写入集合：只有这些 proposal 稳定字段会产生 field-history node。
 BRIDGEABLE_NPC_FIELD_NAMES: frozenset[str] = frozenset(
-    {"public_summary", "role", "appearance", "faction"}
+    {"last_scene_summary", "role", "appearance", "faction"}
 )
 
 
@@ -201,11 +205,11 @@ def prepare_accepted_field_changes(
             ))
         prepared.append(PreparedNPCFieldChange(
             npc_id=change.npc_id,
-            field_name=change.field,
+            field_name=cast(NPCFieldHistoryName, change.field),
             turn_index=turn_index,
             old_value=change.old_value,
             new_value=change.new_value,
-            summary_delta=change.summary_delta,
+            summary_delta=None,
             source="proposal",
             evidence=pointers,
         ))

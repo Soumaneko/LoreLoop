@@ -21,28 +21,28 @@ The input/gold contract and the recorded LLM outputs are deliberately split:
 Accepted with 17 cases covering the ticket-01 categories re-scored for the
 batch architecture (mention/exact/resolution are deterministic resolver
 outputs; the LLM is measured on field changes, aliases, warnings, and no-ops).
-Recorded from a live API run on 2026-08-12 (second take, accepted):
+Recorded from a live API run on 2026-08-12 (second take, accepted); re-recorded
+for the v8 schema on 2026-08-14:
 
-- weighted gold recall: `153/159` (the baseline allows the model to score below
+- weighted gold recall: `150/153` (the baseline allows the model to score below
   full marks; the 9 missed points are documented exact-string gaps below;
   personality and abilities are currently curated fields outside per-turn
   update scoring)
 - forbidden violations: `0`
 - invariant violations: `0`
-- logical gateway calls: `14` (0 calls when identity resolution finds no
+- logical gateway calls: `12` (0 calls when identity resolution finds no
   resolvable NPC, e.g. player-only or org/place cases)
-- provider attempts: `14` (all first-round successes)
+- provider attempts: `12` (all first-round successes)
 - real provider tokens, ALL attempts included:
   `prompt_tokens=26289`, `completion_tokens=1451`
 
 A below-full score is a feature, not a bug: the gold encodes the desired
 contract and the model may fail it, so a fix scores higher and the improvement
-is measurable. The `role` + `faction` + `public_summary` linkage is now
-genuinely exercised (all three written together on `mixed_turn`); the remaining
-9 points are exact-string scoring, not omitted or wrong field updates:
+is measurable. The `role` + `faction` linkage is genuinely exercised (both
+written together on `mixed_turn`); the remaining 9 points are exact-string
+scoring, not omitted or wrong field updates:
 
-- `stable_fields_with_evidence` (9/12): role/faction exact, but `public_summary`
-  written as "沈孤鸿，合欢宗宗主。" instead of the evidenced fuller sentence.
+- `stable_fields_with_evidence` (9/12): role/faction exact.
 - `stable_appearance_with_evidence` (3/6): appearance truncated to "左眼有一条
   旧疤" instead of the evidenced full sentence.
 - `ability_append_dedup_cap` (3/6): the evidenced "隐匿身法" is now added, but
@@ -102,9 +102,9 @@ case that must be re-recorded with `--record --only <case_id>`.
   resolve but never persist).
 - `stable_field_expectations`: updater-modifiable fields that must end at a
   value (CurrentState-synced `last_known_location` / `attitude_to_player` and
-  LLM `current_intent` / `stable_changes` all included).
+  LLM `stable_changes` — `role` / `appearance` / `faction` — all included).
 - `forbidden_field_changes`: fields that must remain unchanged (e.g. an
-  attitude or intent the batch updater must not invent).
+  attitude the batch updater must not invent).
 - `new_npc_expectations` / `forbidden_new_names`: minimal candidates offered to
   the Director (an unmatched named person becomes a candidate; the player never
   does).
@@ -134,8 +134,9 @@ across runs and across `PYTHONHASHSEED` values.
 ## Ticket 11 pending contract
 
 `cases_last_scene_pending.json` and `recordings/last_scene_pending.json` are an
-unaccepted benchmark-first contract for the planned v8 NPC model.  They do not
-change `fixtures_batch.json`, its fingerprint, or `baseline_batch.json`.
+unaccepted benchmark-first contract for the v8 NPC model's `last_scene_*`
+fields.  They do not change `fixtures_batch.json`, its fingerprint, or
+`baseline_batch.json`.
 
 The optional `last_scene_contract` scores three future signals without a judge
 LLM:
@@ -148,9 +149,10 @@ LLM:
   mentioned-only profiles do not.
 
 The pending recordings deliberately use the future nested `scene_summary`
-wire key.  The current v7 parser ignores it, so the pre-implementation report
-records explicit presence/summary/salvage gaps rather than pretending the
-feature exists.  Run it without accepting a baseline:
+wire key.  The current v8 parser still ignores it (the `scene_summary` slot and
+its atomic `last_scene_*` admission write are Phase 3 pending), so the
+pre-implementation report records explicit presence/summary/salvage gaps rather
+than pretending the feature exists.  Run it without accepting a baseline:
 
 ```bash
 PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py \

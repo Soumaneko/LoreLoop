@@ -7,9 +7,10 @@
   （由 ``build_npc_batch_input`` 投影）；
 - 输出：宽松 wire ``NPCBatchUpdate.updates: list[Any]``，逐字段容错解析
   （``parse_batch_updates``）；prompt 展示用 typed ``NPCBatchUpdateDisplay``；
-- 稳定字段变化为原子 change（``field`` 作 discriminator），``public_summary``
-  强制 ``summary_delta``；``personality_trait`` 与 ``known_abilities`` 的逐回合更新
-  暂时冻结，不进入 wire union；
+- 稳定字段变化为原子 change（``field`` 作 discriminator），范围限
+  ``role / appearance / faction``；``last_scene_summary`` 走独立的
+  ``scene_summary`` 槽位（Phase 3），``personality_trait`` 与 ``known_abilities``
+  的逐回合更新暂时冻结，不进入 wire union；
 - 每条稳定 change 必须携带本轮场景段落 ``evidence_ids``（结构校验，非语义）。
 
 本文件不发起任何 LLM 调用。
@@ -17,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -51,18 +52,6 @@ class ScalarStableChange(_EvidenceCarrying):
     value: str = Field(min_length=1)
 
 
-class PublicSummaryChange(_EvidenceCarrying):
-    """``public_summary`` 的原子 set change，必须携带 ``summary_delta``。
-
-    ``summary_delta`` 只描述本次重大变化，未来 History bridge 以 delta 而非完整
-    summary 作为 relation basis。
-    """
-
-    field: Literal["public_summary"]
-    value: str = Field(min_length=1)
-    summary_delta: str = Field(min_length=1)
-
-
 class AbilityAddChange(_EvidenceCarrying):
     """Reserved append-only ability contract; per-turn admission is frozen.
 
@@ -76,10 +65,7 @@ class AbilityAddChange(_EvidenceCarrying):
 
 #: 稳定字段变化，以 ``field`` 作 discriminator。
 NPCStableChange = Annotated[
-    Union[
-        ScalarStableChange,
-        PublicSummaryChange,
-    ],
+    ScalarStableChange,
     Field(discriminator="field"),
 ]
 
@@ -88,8 +74,7 @@ class NPCBatchUpdateEntry(BaseModel):
     """NPC batch field updater 的单个既有 NPC 条目（admission 输入 / display 形状）。
 
     ``npc_id`` 由确定性身份解析层给定；LLM 只输出字段变化，不再判断
-    mention/alias/new/ignore，也不再生成新 NPC 完整档案。``current_intent``
-    空白会被归一化为 None（即不修改）。
+    mention/alias/new/ignore，也不再生成新 NPC 完整档案。
 
     该模型是**已解析**的条目（``stable_changes`` 为 typed union）；宽松 wire 解析
     由 ``parse_batch_updates`` 逐字段 salvage 后构造本模型。
@@ -98,15 +83,7 @@ class NPCBatchUpdateEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     npc_id: str = Field(min_length=1)
-    current_intent: str | None = None
     stable_changes: list[NPCStableChange] = Field(default_factory=list, max_length=8)
-
-    @field_validator("current_intent")
-    @classmethod
-    def _blank_to_none(cls, value):
-        if isinstance(value, str) and not value.strip():
-            return None
-        return value
 
 
 class NPCBatchUpdate(BaseModel):
