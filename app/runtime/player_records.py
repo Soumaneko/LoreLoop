@@ -244,6 +244,10 @@ def _npc_profile_record(profile, *, view: str) -> dict[str, Any]:
         "id": profile.npc_id,
         "public": model_data(profile.update_view()),
     }
+    # ``last_scene_*`` 是程序 + evidence 驱动的只读派生态：随 load/update
+    # 统一投影给展示层，但绝不并入 update_view（编辑面不可写）。
+    record["public"]["last_scene_summary"] = profile.last_scene_summary
+    record["public"]["last_scene_turn"] = profile.last_scene_turn
     if view == "advanced":
         record["director_only"] = {
             key: model_data(getattr(profile, key))
@@ -418,16 +422,9 @@ def _update_npc_profile(
         saved = store.get_by_id(npc_id)
         if saved is None:
             raise RuntimeError("NPC profile disappeared after save")
-    record = {
-        "id": saved.npc_id,
-        "public": model_data(saved.update_view()),
-    }
-    if view == "advanced":
-        record["director_only"] = {
-            key: model_data(getattr(saved, key))
-            for key in _NPC_ADVANCED_DIRECTOR_FIELDS
-        }
-    return record
+    # 统一走 ``_npc_profile_record`` 投影：load 与 update 响应结构一致，
+    # 都携带只读 last-scene pair（编辑面仍不可写）。
+    return _npc_profile_record(saved, view=view)
 
 
 def _preserve_npc_director_fields(profile: NPCProfile, current: NPCProfile) -> None:

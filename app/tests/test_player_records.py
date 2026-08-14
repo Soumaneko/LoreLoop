@@ -207,11 +207,32 @@ def test_update_npc_public_fields_preserves_last_scene_record():
     _seed_records()
     runtime = get_campaign_runtime()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    update_player_record(
+    # load 响应统一投影：general 视图的 public 记录携带只读 pair。
+    loaded = load_player_records()["npc_profiles"][0]
+    assert loaded["public"]["last_scene_summary"] == "他在灰烬图书馆当众修好了被窃的木偶。"
+    assert loaded["public"]["last_scene_turn"] == 3
+    # update 响应走同一投影，pair 仍然可见且未变。
+    result = update_player_record(
         "npc",
         npc_id,
         {"role": "巡回木偶师"},
     )
+    assert result["public"]["role"] == "巡回木偶师"
+    assert result["public"]["last_scene_summary"] == "他在灰烬图书馆当众修好了被窃的木偶。"
+    assert result["public"]["last_scene_turn"] == 3
+    # 提交 last-scene pair 属于未知字段，被拒绝。
+    with pytest.raises(ValueError, match="NPC general fields only"):
+        update_player_record(
+            "npc",
+            npc_id,
+            {"last_scene_summary": "篡改的摘要"},
+        )
+    with pytest.raises(ValueError, match="NPC general fields only"):
+        update_player_record(
+            "npc",
+            npc_id,
+            {"last_scene_turn": 0},
+        )
     with runtime.stores.npc_profile() as store:
         saved = store.get_by_id(npc_id)
         assert saved is not None

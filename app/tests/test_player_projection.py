@@ -107,6 +107,8 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             aliases=["木偶师", "莱尔"],
             role="流浪木偶师",
             hidden_secret="不应投影的 NPC 秘密",
+            last_scene_summary="他在图书馆当众修好了木偶。",
+            last_scene_turn=6,
         ))
     with runtime.stores.world_setting() as store:
         store.save(WorldSetting(
@@ -159,6 +161,11 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "木偶师", "埃利奥", "图书馆",
     }
     assert {item["kind"] for item in payload["highlights"]} == {"npc", "setting"}
+    npc_highlight = next(
+        item for item in payload["highlights"] if item["kind"] == "npc"
+    )
+    assert npc_highlight["profile"]["last_scene_summary"] == "他在图书馆当众修好了木偶。"
+    assert npc_highlight["profile"]["last_scene_turn"] == 6
     setting_highlight = next(
         item for item in payload["highlights"] if item["kind"] == "setting"
     )

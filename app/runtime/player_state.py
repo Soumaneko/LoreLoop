@@ -79,6 +79,7 @@ def _project_text_highlights(
                 "faction": profile.faction,
                 "last_known_location": profile.last_known_location,
                 "last_scene_summary": profile.last_scene_summary,
+                "last_scene_turn": profile.last_scene_turn,
             }
             candidates.extend(
                 (surface, "npc", public_profile)

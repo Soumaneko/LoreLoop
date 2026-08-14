@@ -1476,6 +1476,15 @@ function openCodexProfile(profile, triggerElement) {
   if (profile.last_scene_summary && profile.last_scene_summary !== quoteText) {
     appendDetailText("最近出场", profile.last_scene_summary);
   }
+  // 回合数显式 null 判断：turn=0（开场回合）也必须显示「第 0 回合」。
+  if (profile.last_scene_turn != null) {
+    const turnRow = node("section", "codex-field");
+    turnRow.append(
+      node("span", "resource-label", "出场回合"),
+      node("p", "", `第 ${profile.last_scene_turn} 回合`),
+    );
+    detailsPanel.appendChild(turnRow);
+  }
   if (profile.last_known_location) appendDetailText("最后活动地点", profile.last_known_location);
 
   if (detailsPanel.childNodes.length > 0) {
@@ -3252,6 +3261,23 @@ const NPC_ADVANCED_DIRECTOR_FIELDS = [
   ["director_notes", "导演备注", false],
 ];
 
+// 显示/编辑字段显式拆分：NPC_VIEW_FIELDS 是程序驱动的只读展示字段
+// （last-scene pair 永不可编辑），NPC_EDITABLE_FIELDS 保持现有可编辑字段。
+// 显示格式化器单独放 NPC_VIEW_FORMATTERS——不复用字段元组第 4 位
+// （该位在 Setting 元组中是 "textarea" 字符串约定）。
+const NPC_VIEW_FIELDS = [
+  ["last_scene_summary", "最近出场", false],
+  ["last_scene_turn", "出场回合", false],
+];
+const NPC_VIEW_FORMATTERS = {
+  // 回合数用显式 null 判断：turn=0（开场回合）也必须显示「第 0 回合」。
+  last_scene_turn: (raw) => (raw == null ? null : `第 ${raw} 回合`),
+};
+const NPC_EDITABLE_FIELDS = [
+  ...NPC_PUBLIC_FIELDS,
+  ...NPC_ADVANCED_DIRECTOR_FIELDS,
+];
+
 const SETTING_FIELDS = [
   ["name", "名称", false],
   ["summary", "摘要", false, "textarea"],
@@ -3566,7 +3592,7 @@ function snapshotAbilityValues(editor) {
   return JSON.stringify(collectAbilityValues(editor));
 }
 
-function buildRecordCard({ id = null, title, statusText = "", statusActive = false, fields = [], editableFields = fields, quoteKey = null, onSave }) {
+function buildRecordCard({ id = null, title, statusText = "", statusActive = false, fields = [], editableFields = fields, quoteKey = null, viewFormatters = {}, onSave }) {
   const card = node("div", "record-card");
   const head = node("div", "record-card-head");
   head.appendChild(node("div", "record-card-title", title));
@@ -3652,7 +3678,12 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
         row.appendChild(node("p", "", "—"));
       }
     } else {
-      const text = raw == null || raw === "" ? "—" : String(raw);
+      // 显式 null 判断（turn=0 必须显示）；格式化器按字段名从
+      // viewFormatters 查找（typeof 防护，绝不把非函数当函数调用）。
+      const format = viewFormatters[key];
+      const text = raw == null || raw === ""
+        ? "—"
+        : (typeof format === "function" ? format(raw) : String(raw));
       row.appendChild(node("p", "", text));
     }
     viewContainer.appendChild(row);
@@ -3948,7 +3979,9 @@ function _fieldMetaByKey(lists) {
   return meta;
 }
 
-const NPC_FIELD_META = _fieldMetaByKey([NPC_PUBLIC_FIELDS, NPC_ADVANCED_DIRECTOR_FIELDS]);
+// 可编辑字段 meta 只覆盖 NPC_EDITABLE_FIELDS；last-scene pair 走
+// NPC_VIEW_FIELDS 只读展示，绝不进入编辑表单。
+const NPC_FIELD_META = _fieldMetaByKey([NPC_EDITABLE_FIELDS]);
 const SETTING_FIELD_META = _fieldMetaByKey([SETTING_FIELDS]);
 
 const NPC_HIDDEN_FIELD_KEYS = new Set(["aliases"]);
@@ -3968,12 +4001,17 @@ function renderNpcRecords(profiles) {
   }
   for (const profile of profiles) {
     const data = { ...(profile.public || {}), ...(profile.director_only || {}) };
+    // 显示/编辑字段显式拆分：fields 含只读展示字段（含 last-scene pair），
+    // editableFields 保持现有可编辑字段（编辑模式无 pair 输入框）。
+    const editableFields = _editableFieldsFor(data, NPC_FIELD_META)
+      .filter(([key]) => !NPC_HIDDEN_FIELD_KEYS.has(key));
     const builder = buildRecordCard({
       id: profile.id,
       title: profile.public?.name || "（未命名）",
       statusText: "人物",
-      fields: _editableFieldsFor(data, NPC_FIELD_META)
-        .filter(([key]) => !NPC_HIDDEN_FIELD_KEYS.has(key)),
+      fields: [...editableFields, ...NPC_VIEW_FIELDS],
+      editableFields,
+      viewFormatters: NPC_VIEW_FORMATTERS,
       quoteKey: "appearance",
       onSave: async (values) => {
         await updateRecord("npc", profile.id, values);
