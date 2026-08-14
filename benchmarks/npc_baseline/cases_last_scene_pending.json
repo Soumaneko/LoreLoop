@@ -128,13 +128,13 @@
       "gold": {"resolution_expectations": [{"candidate_name": "苏念薇", "resolution": "existing"}, {"candidate_name": "姚沉璧", "resolution": "existing"}], "stable_field_expectations": [{"npc_id": "npc-su", "field": "role", "value": "合欢宗弟子"}, {"npc_id": "npc-su", "field": "faction", "value": "合欢宗"}], "forbidden_field_changes": [{"npc_id": "npc-su", "field": "public_summary"}]},
       "last_scene_contract": {
         "presence_expectations": [{"surface": "姚沉璧", "presence": "appeared"}, {"surface": "苏念薇", "presence": "appeared"}],
-        "scene_summary_expectations": [{"npc_id": "npc-yao", "turn_index": 26, "required_terms": ["苏念薇", "会到"], "acceptable_evidence_ids": ["turn_26_p001"]}, {"npc_id": "npc-su", "turn_index": 26, "required_terms": ["加入合欢宗", "听从"], "acceptable_evidence_ids": ["turn_26_p002"]}],
+        "scene_summary_expectations": [{"npc_id": "npc-yao", "turn_index": 26, "required_terms": ["苏念薇"], "required_any_terms": ["过来", "就来", "就到", "将至", "快到了"], "acceptable_evidence_ids": ["turn_26_p001"]}, {"npc_id": "npc-su", "turn_index": 26, "required_terms": ["加入合欢宗", "听从"], "acceptable_evidence_ids": ["turn_26_p002"]}],
         "expected_batch_npc_ids": ["npc-su", "npc-yao"]
       }
     },
     {
-      "case_id": "per_npc_scene_summary_salvage",
-      "description": "One invalid NPC summary is dropped without blocking another NPC's valid summary.",
+      "case_id": "multi_npc_scene_summary_coverage",
+      "description": "Two appeared NPCs both produce a valid per-turn scene summary; the real model is not expected to emit malformed input. Invalid-summary salvage is deterministic program behavior covered by focused pytest.",
       "scene_id": "scene_salvage",
       "turn_index": 27,
       "scene_text": "秦霜把库房钥匙交给林舟，嘱咐他天亮前不得离开。\n\n林舟接过钥匙，当场答应守到天亮。",
@@ -143,11 +143,10 @@
       "scene_location": "宗门库房",
       "participants": ["秦霜", "林舟"],
       "roster": [{"npc_id": "npc-qin", "name": "秦霜", "role": "库房管事", "updated_at": "2026-08-13T00:00:27Z"}, {"npc_id": "npc-lin", "name": "林舟", "role": "信使", "updated_at": "2026-08-13T00:00:26Z"}],
-      "gold": {"resolution_expectations": [{"candidate_name": "秦霜", "resolution": "existing"}, {"candidate_name": "林舟", "resolution": "existing"}], "warning_expectations": [{"npc_id": "npc-qin", "field": "last_scene_summary", "code": "invalid_scene_summary"}]},
+      "gold": {"resolution_expectations": [{"candidate_name": "秦霜", "resolution": "existing"}, {"candidate_name": "林舟", "resolution": "existing"}]},
       "last_scene_contract": {
         "presence_expectations": [{"surface": "秦霜", "presence": "appeared"}, {"surface": "林舟", "presence": "appeared"}],
-        "scene_summary_expectations": [{"npc_id": "npc-lin", "turn_index": 27, "required_terms": ["钥匙", "守到天亮"], "acceptable_evidence_ids": ["turn_27_p001", "turn_27_p002"]}],
-        "no_scene_summary_npc_ids": ["npc-qin"],
+        "scene_summary_expectations": [{"npc_id": "npc-qin", "turn_index": 27, "required_terms": ["钥匙", "林舟"], "acceptable_evidence_ids": ["turn_27_p001"]}, {"npc_id": "npc-lin", "turn_index": 27, "required_terms": ["钥匙", "守到天亮"], "acceptable_evidence_ids": ["turn_27_p001", "turn_27_p002"]}],
         "expected_batch_npc_ids": ["npc-qin", "npc-lin"]
       }
     }

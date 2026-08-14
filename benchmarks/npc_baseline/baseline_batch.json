@@ -2,10 +2,10 @@
   "benchmark_version": 3,
   "backend": "batch",
   "fixtures_sha256": "165968d5dab863ae14a45da8c4720e51c8fafd86faa520f542ca8d714609f8bb",
-  "recordings_sha256": "b9f163319fa9ffc2d284b6491215030eea4b04ab54b2d69a1070141606a77581",
+  "recordings_sha256": "c852fed3524b7b96e7fd8cf108e83699b638cf50bbc77df70ff9020953dbd780",
   "aggregate": {
     "call_count": 12,
-    "provider_attempts": 14,
+    "provider_attempts": 12,
     "weighted_passed": 150,
     "weighted_total": 153,
     "forbidden_violation_count": 0,
@@ -42,8 +42,8 @@
     },
     "prompt_content_chars": 5316,
     "token_usage": {
-      "completion_tokens": 1451,
-      "prompt_tokens": 26289
+      "completion_tokens": 1309,
+      "prompt_tokens": 18678
     }
   },
   "cases": [
@@ -72,7 +72,8 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "role": "沈二爷"
+          "last_scene_summary": "沈孤鸿走进醉花楼，环顾四周，沈二随行。随后沈二爷低声命人将门关上。",
+          "last_scene_turn": 0
         }
       },
       "warnings": [],
@@ -87,13 +88,13 @@
       "prompt_content_chars": 581,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 149,
-          "prompt_tokens": 1922
+          "completion_tokens": 99,
+          "prompt_tokens": 1605
         }
       },
       "token_usage_total": {
-        "completion_tokens": 149,
-        "prompt_tokens": 1922
+        "completion_tokens": 99,
+        "prompt_tokens": 1605
       },
       "gold": {
         "weighted_passed": 24,
@@ -145,7 +146,9 @@
       ],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "茶馆"
+          "last_known_location": "茶馆",
+          "last_scene_summary": "林川在茶馆坐下，随后陆川推门而入，径直走向他。",
+          "last_scene_turn": 0
         }
       },
       "warnings": [],
@@ -160,13 +163,13 @@
       "prompt_content_chars": 354,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 8,
-          "prompt_tokens": 1834
+          "completion_tokens": 81,
+          "prompt_tokens": 1517
         }
       },
       "token_usage_total": {
-        "completion_tokens": 8,
-        "prompt_tokens": 1834
+        "completion_tokens": 81,
+        "prompt_tokens": 1517
       },
       "gold": {
         "weighted_passed": 18,
@@ -318,7 +321,9 @@
       "new_profile_names": [],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "醉花楼"
+          "last_known_location": "醉花楼",
+          "last_scene_summary": "沈孤鸿在醉花楼大堂踱步，目光始终不离门口，并低声表示要查明信物来历。",
+          "last_scene_turn": 0
         }
       },
       "warnings": [],
@@ -333,13 +338,13 @@
       "prompt_content_chars": 446,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 86,
-          "prompt_tokens": 1877
+          "completion_tokens": 89,
+          "prompt_tokens": 1560
         }
       },
       "token_usage_total": {
-        "completion_tokens": 86,
-        "prompt_tokens": 1877
+        "completion_tokens": 89,
+        "prompt_tokens": 1560
       },
       "gold": {
         "weighted_passed": 6,
@@ -376,17 +381,12 @@
       "new_profile_names": [],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "醉花楼"
+          "last_known_location": "醉花楼",
+          "last_scene_summary": "沈孤鸿原本戒备地盯着萧云痕，随后收剑，当面向萧云痕表示信任，并托付要事。",
+          "last_scene_turn": 0
         }
       },
-      "warnings": [
-        [
-          "npc_001",
-          "stable_changes",
-          "invalid_stable_change",
-          []
-        ]
-      ],
+      "warnings": [],
       "prompt_metrics": {
         "npc_batch_update": {
           "resolved_npcs": 1,
@@ -398,13 +398,13 @@
       "prompt_content_chars": 377,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 141,
-          "prompt_tokens": 1849
+          "completion_tokens": 92,
+          "prompt_tokens": 1532
         }
       },
       "token_usage_total": {
-        "completion_tokens": 141,
-        "prompt_tokens": 1849
+        "completion_tokens": 92,
+        "prompt_tokens": 1532
       },
       "gold": {
         "weighted_passed": 3,
@@ -422,7 +422,7 @@
     {
       "case_id": "departed_direction",
       "call_count": 0,
-      "provider_attempts": 1,
+      "provider_attempts": 0,
       "candidates": [],
       "extract_mentions": [
         "沈孤鸿"
@@ -446,16 +446,8 @@
         "call_count": 0
       },
       "prompt_content_chars": 0,
-      "token_usage": {
-        "npc_batch_update": {
-          "completion_tokens": 82,
-          "prompt_tokens": 1866
-        }
-      },
-      "token_usage_total": {
-        "completion_tokens": 82,
-        "prompt_tokens": 1866
-      },
+      "token_usage": null,
+      "token_usage_total": null,
       "gold": {
         "weighted_passed": 3,
         "weighted_total": 3,
@@ -487,17 +479,12 @@
       "new_profile_names": [],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "醉花楼"
+          "last_known_location": "醉花楼",
+          "last_scene_summary": "沈孤鸿在会议中猛地拍桌动怒，表现出强烈不满，但随后又叹了口气，情绪迅速平复下来。",
+          "last_scene_turn": 0
         }
       },
-      "warnings": [
-        [
-          "npc_001",
-          "stable_changes",
-          "invalid_stable_change",
-          []
-        ]
-      ],
+      "warnings": [],
       "prompt_metrics": {
         "npc_batch_update": {
           "resolved_npcs": 1,
@@ -509,13 +496,13 @@
       "prompt_content_chars": 362,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 83,
-          "prompt_tokens": 1840
+          "completion_tokens": 91,
+          "prompt_tokens": 1523
         }
       },
       "token_usage_total": {
-        "completion_tokens": 83,
-        "prompt_tokens": 1840
+        "completion_tokens": 91,
+        "prompt_tokens": 1523
       },
       "gold": {
         "weighted_passed": 3,
@@ -550,7 +537,9 @@
         "npc_001": {
           "last_known_location": "醉花楼",
           "role": "合欢宗宗主",
-          "faction": "合欢宗"
+          "faction": "合欢宗",
+          "last_scene_summary": "沈孤鸿拂袖宣称自己乃合欢宗宗主，并表示此事由他一肩担起。",
+          "last_scene_turn": 0
         }
       },
       "warnings": [],
@@ -565,13 +554,13 @@
       "prompt_content_chars": 363,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 172,
-          "prompt_tokens": 1843
+          "completion_tokens": 153,
+          "prompt_tokens": 1526
         }
       },
       "token_usage_total": {
-        "completion_tokens": 172,
-        "prompt_tokens": 1843
+        "completion_tokens": 153,
+        "prompt_tokens": 1526
       },
       "gold": {
         "weighted_passed": 9,
@@ -609,7 +598,9 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "appearance": "左眼有一条旧疤"
+          "appearance": "左眼有一条旧疤，据说是少年时留下的",
+          "last_scene_summary": "沈孤鸿掀开斗篷，在灯下露出左眼一条旧疤，据说是少年时留下的。",
+          "last_scene_turn": 0
         }
       },
       "warnings": [],
@@ -624,13 +615,13 @@
       "prompt_content_chars": 378,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 70,
-          "prompt_tokens": 1854
+          "completion_tokens": 131,
+          "prompt_tokens": 1537
         }
       },
       "token_usage_total": {
-        "completion_tokens": 70,
-        "prompt_tokens": 1854
+        "completion_tokens": 131,
+        "prompt_tokens": 1537
       },
       "gold": {
         "weighted_passed": 3,
@@ -667,17 +658,12 @@
       "new_profile_names": [],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "醉花楼"
+          "last_known_location": "醉花楼",
+          "last_scene_summary": "沈孤鸿遇险时先将身旁弟子护到身后，沉声令众人退开，展现出沉稳与重情的作风。",
+          "last_scene_turn": 0
         }
       },
-      "warnings": [
-        [
-          "npc_001",
-          "stable_changes",
-          "invalid_stable_change",
-          []
-        ]
-      ],
+      "warnings": [],
       "prompt_metrics": {
         "npc_batch_update": {
           "resolved_npcs": 1,
@@ -689,13 +675,13 @@
       "prompt_content_chars": 451,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 141,
-          "prompt_tokens": 1874
+          "completion_tokens": 91,
+          "prompt_tokens": 1566
         }
       },
       "token_usage_total": {
-        "completion_tokens": 141,
-        "prompt_tokens": 1874
+        "completion_tokens": 91,
+        "prompt_tokens": 1566
       },
       "gold": {
         "weighted_passed": 3,
@@ -728,17 +714,12 @@
       "new_profile_names": [],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "演武场"
+          "last_known_location": "演武场",
+          "last_scene_summary": "沈孤鸿在众人面前展示了一手剑法，随后又使出一招隐匿身法，显露其武艺与潜行技巧。",
+          "last_scene_turn": 0
         }
       },
-      "warnings": [
-        [
-          "npc_001",
-          "stable_changes",
-          "invalid_stable_change",
-          []
-        ]
-      ],
+      "warnings": [],
       "prompt_metrics": {
         "npc_batch_update": {
           "resolved_npcs": 1,
@@ -750,13 +731,13 @@
       "prompt_content_chars": 359,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 92,
-          "prompt_tokens": 1882
+          "completion_tokens": 94,
+          "prompt_tokens": 1523
         }
       },
       "token_usage_total": {
-        "completion_tokens": 92,
-        "prompt_tokens": 1882
+        "completion_tokens": 94,
+        "prompt_tokens": 1523
       },
       "gold": {
         "weighted_passed": 3,
@@ -792,7 +773,9 @@
       ],
       "field_deltas": {
         "npc000": {
-          "last_known_location": "大殿"
+          "last_known_location": "大殿",
+          "last_scene_summary": "npc000走进殿内，殿内有一名无名老者立在阶下。",
+          "last_scene_turn": 0
         }
       },
       "warnings": [],
@@ -807,13 +790,13 @@
       "prompt_content_chars": 361,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 12,
-          "prompt_tokens": 1833
+          "completion_tokens": 80,
+          "prompt_tokens": 1516
         }
       },
       "token_usage_total": {
-        "completion_tokens": 12,
-        "prompt_tokens": 1833
+        "completion_tokens": 80,
+        "prompt_tokens": 1516
       },
       "gold": {
         "weighted_passed": 9,
@@ -835,7 +818,7 @@
     {
       "case_id": "alias_fixed_title",
       "call_count": 0,
-      "provider_attempts": 1,
+      "provider_attempts": 0,
       "candidates": [],
       "extract_mentions": [
         "沈孤鸿",
@@ -872,16 +855,8 @@
         "call_count": 0
       },
       "prompt_content_chars": 0,
-      "token_usage": {
-        "npc_batch_update": {
-          "completion_tokens": 149,
-          "prompt_tokens": 1876
-        }
-      },
-      "token_usage_total": {
-        "completion_tokens": 149,
-        "prompt_tokens": 1876
-      },
+      "token_usage": null,
+      "token_usage_total": null,
       "gold": {
         "weighted_passed": 6,
         "weighted_total": 6,
@@ -920,7 +895,9 @@
       ],
       "field_deltas": {
         "npc_001": {
-          "last_known_location": "醉花楼"
+          "last_known_location": "醉花楼",
+          "last_scene_summary": "沈孤鸿进门时，一名青衣客紧随其后，该青衣客被证实是沈孤鸿多年的旧友。",
+          "last_scene_turn": 0
         }
       },
       "warnings": [],
@@ -935,13 +912,13 @@
       "prompt_content_chars": 435,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 103,
-          "prompt_tokens": 1866
+          "completion_tokens": 89,
+          "prompt_tokens": 1549
         }
       },
       "token_usage_total": {
-        "completion_tokens": 103,
-        "prompt_tokens": 1866
+        "completion_tokens": 89,
+        "prompt_tokens": 1549
       },
       "gold": {
         "weighted_passed": 6,
@@ -987,10 +964,14 @@
         "npc_001": {
           "last_known_location": "醉花楼",
           "role": "合欢宗宗主",
-          "faction": "合欢宗"
+          "faction": "合欢宗",
+          "last_scene_summary": "沈孤鸿走进醉花楼并吩咐关门，众人皆知他是合欢宗宗主。",
+          "last_scene_turn": 5
         },
         "npc_002": {
-          "last_known_location": "醉花楼"
+          "last_known_location": "醉花楼",
+          "last_scene_summary": "林川在醉花楼内，沈孤鸿吩咐关门时他也在场。",
+          "last_scene_turn": 5
         }
       },
       "warnings": [],
@@ -1005,13 +986,13 @@
       "prompt_content_chars": 849,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 163,
-          "prompt_tokens": 2073
+          "completion_tokens": 219,
+          "prompt_tokens": 1724
         }
       },
       "token_usage_total": {
-        "completion_tokens": 163,
-        "prompt_tokens": 2073
+        "completion_tokens": 219,
+        "prompt_tokens": 1724
       },
       "gold": {
         "weighted_passed": 42,

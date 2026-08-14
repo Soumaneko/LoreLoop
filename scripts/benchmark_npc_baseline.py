@@ -273,7 +273,11 @@ class SceneSummaryExpectation(BaseModel):
 
     npc_id: str = Field(min_length=1)
     turn_index: int = Field(ge=0)
+    #: 必须全部出现的字面词。
     required_terms: list[str] = Field(default_factory=list)
+    #: 语义等价组：至少命中一个即可（如「将要到来」→ 过来/到/就来/将至）。
+    #: 避免把模型的自然措辞绑定到单一字面词。
+    required_any_terms: list[str] = Field(default_factory=list)
     forbidden_terms: list[str] = Field(default_factory=list)
     acceptable_evidence_ids: list[str] = Field(min_length=1, max_length=8)
     importance: IMPORTANCE = "must"
@@ -284,6 +288,8 @@ class SceneSummaryExpectation(BaseModel):
             raise ValueError("scene summary acceptable evidence IDs must be unique")
         if len(self.required_terms) != len(set(self.required_terms)):
             raise ValueError("scene summary required terms must be unique")
+        if len(self.required_any_terms) != len(set(self.required_any_terms)):
+            raise ValueError("scene summary required-any terms must be unique")
         if len(self.forbidden_terms) != len(set(self.forbidden_terms)):
             raise ValueError("scene summary forbidden terms must be unique")
         return self
@@ -920,8 +926,15 @@ def _score_gold(
             (item for item in case.effective_roster() if item.npc_id == expectation.npc_id),
             None,
         )
-        npc_name = profile.name if profile is not None else expectation.npc_id
-        matched = (npc_name, expectation.field, expectation.code) in warning_keys
+        # parse 阶段 warning 以 npc_id 作 npc_name，admission 阶段用档案名；
+        # 两个面都接受，避免把 wire 阶段丢弃与审理阶段丢弃当两种形状。
+        candidates = {expectation.npc_id}
+        if profile is not None:
+            candidates.add(profile.name)
+        matched = any(
+            (npc_name, expectation.field, expectation.code) in warning_keys
+            for npc_name in candidates
+        )
         positive.append(("evidence_warning", matched, expectation.importance == "must"))
 
     for expectation in gold.no_op_expectations:
@@ -955,6 +968,12 @@ def _score_gold(
                 expectation.acceptable_evidence_ids
             )
             matched = matched and all(term in summary for term in expectation.required_terms)
+            matched = matched and (
+                not expectation.required_any_terms
+                or any(
+                    term in summary for term in expectation.required_any_terms
+                )
+            )
             matched = matched and all(term not in summary for term in expectation.forbidden_terms)
             positive.append(("last_scene_summary", matched, expectation.importance == "must"))
 
@@ -1287,7 +1306,8 @@ def _expected_batch_input(case: BenchmarkCase) -> dict[str, str] | None:
 
     Mirrors ``apply_npc_batch_update``'s resolution + projection so a replay can
     verify a trace was produced from the CURRENT fixture. Returns ``None`` when
-    identity resolution finds no resolvable NPC (the 0-call case).
+    identity resolution finds no **appeared** resolvable NPC (the 0-call case);
+    mentioned-only resolutions never trigger the batch call.
     """
     evidence_documents = {
         document.document_id: document
@@ -1312,10 +1332,13 @@ def _expected_batch_input(case: BenchmarkCase) -> dict[str, str] | None:
         ],
         player_name=case.player_name,
     )
-    if not resolution.resolved:
+    appeared = [
+        item for item in resolution.resolved if item.presence == "appeared"
+    ]
+    if not appeared:
         return None
     return build_npc_batch_input(
-        resolved=list(resolution.resolved),
+        resolved=appeared,
         profiles=profiles,
         scene_facts=scene_facts,
         evidence_documents=evidence_documents,

@@ -26,6 +26,7 @@ from app.domain.npc_profile.turn_contract import (
     NPCBatchUpdate,
     NPCBatchUpdateDisplay,
     NPCBatchUpdateEntry,
+    NPCSceneSummaryDraft,
     ScalarStableChange,
 )
 from app.domain.scene_facts.schemas import (
@@ -117,10 +118,18 @@ def _mention(primary, *, relations=None, presence: NpcPresence = "appeared") -> 
     )
 
 
-def _entry(npc_id, *, stable_changes=None) -> NPCBatchUpdateEntry:
+def _entry(npc_id, *, stable_changes=None, scene_summary=None) -> NPCBatchUpdateEntry:
     return NPCBatchUpdateEntry(
         npc_id=npc_id,
+        scene_summary=scene_summary,
         stable_changes=list(stable_changes or []),
+    )
+
+
+def _summary(text=None, evidence=None) -> NPCSceneSummaryDraft:
+    return NPCSceneSummaryDraft(
+        summary=text or "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。",
+        evidence_ids=list(evidence or ["turn_3_p001"]),
     )
 
 
@@ -169,7 +178,7 @@ def test_batch_schema_rejects_unknown_fields():
 
 def test_admission_applies_valid_stable_change_and_sync():
     result = _admit(
-        [_entry("npc_001", stable_changes=[_role_change()])],
+        [_entry("npc_001", scene_summary=_summary(), stable_changes=[_role_change()])],
         current_state=_state(participants=["沈孤鸿"]),
     )
 
@@ -186,7 +195,7 @@ def test_admission_drops_unknown_npc_id_entry_only():
     result = _admit(
         [
             _entry("npc_999", stable_changes=[_role_change()]),
-            _entry("npc_001", stable_changes=[_role_change()]),
+            _entry("npc_001", scene_summary=_summary(), stable_changes=[_role_change()]),
         ]
     )
 
@@ -201,7 +210,7 @@ def test_admission_drops_unresolved_npc_id_entry_only():
     result = _admit(
         [_entry("npc_002", stable_changes=[_role_change()])],
         profiles=[_profile(), _profile("npc_002", "林川")],
-        resolved=("npc_001",),
+        resolved=(),
         current_state=_state(participants=()),
     )
 
@@ -353,13 +362,15 @@ def test_parse_batch_updates_tolerates_null_entries():
     assert all(warning.code == "invalid_update_entry" for warning in warnings)
 
 
-def test_batch_display_schema_shapes_stable_changes():
+def test_batch_display_schema_requires_scene_summary_and_shapes_stable_changes():
     import json
 
     from app.core.llm.schema import schema_json
 
     schema = json.loads(schema_json(NPCBatchUpdateDisplay))
-    items = schema["$defs"]["NPCBatchUpdateEntry"]["properties"]["stable_changes"]["items"]
+    entry_def = schema["$defs"]["NPCBatchUpdateDisplayEntry"]
+    assert "scene_summary" in entry_def["required"]
+    items = entry_def["properties"]["stable_changes"]["items"]
     assert "oneOf" in items
     mapping = items["discriminator"]["mapping"]
     assert "personality_trait" not in mapping
@@ -965,3 +976,167 @@ def test_admission_helper_defaults_mutable_to_resolved():
     assert any(
         profile.role == "醉花楼主" for profile in result.updated_profiles
     )
+
+
+def test_scene_summary_atomic_write_applied_profile_turn_matches():
+    result = _admit(
+        [_entry("npc_001", scene_summary=_summary())],
+    )
+    summary_change = next(
+        change
+        for change in result.accepted_profile_changes
+        if change.field == "last_scene_summary"
+    )
+    assert summary_change.turn_index == _TURN_INDEX
+    assert summary_change.evidence_ids == ("turn_3_p001",)
+    (profile,) = result.updated_profiles
+    assert profile.last_scene_summary == _summary().summary
+    assert profile.last_scene_turn == _TURN_INDEX
+
+
+def test_scene_summary_mentioned_only_not_written():
+    result = _admit(
+        [_entry("npc_001", scene_summary=_summary())],
+        resolved=("npc_001",),
+        mutable=(),  # presence != appeared
+        current_state=_state(participants=()),
+    )
+    assert result.accepted_profile_changes == []
+    assert result.updated_profiles == []
+    assert {warning.code for warning in result.warnings} == {
+        "mentioned_only_field_output"
+    }
+
+
+def test_scene_summary_bad_evidence_salvage_keeps_stable_changes():
+    result = _admit(
+        [
+            _entry(
+                "npc_001",
+                scene_summary=_summary(evidence=["turn_3_p099"]),
+                stable_changes=[_role_change()],
+            )
+        ]
+    )
+    assert "scene_summary_evidence_dropped" in {
+        warning.code for warning in result.warnings
+    }
+    assert any(
+        change.field == "role" for change in result.accepted_profile_changes
+    )
+    (profile,) = result.updated_profiles
+    assert profile.last_scene_summary is None
+    assert profile.last_scene_turn is None
+    assert profile.role == "醉花楼主"
+
+
+def test_scene_summary_single_npc_failure_is_isolated():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    entries, entry_warnings = parse_batch_updates([
+        {
+            "npc_id": "npc_001",
+            "scene_summary": {"summary": "太短", "evidence_ids": ["turn_3_p001"]},
+        },
+        {
+            "npc_id": "npc_002",
+            "scene_summary": {
+                "summary": "林川接过库房钥匙，当场答应留守到天亮，随后在门边坐下。",
+                "evidence_ids": ["turn_3_p001"],
+            },
+        },
+    ])
+    first = _profile("npc_001", "沈孤鸿")
+    second = _profile("npc_002", "林川")
+    result = _admit(
+        entries,
+        entry_warnings=entry_warnings,
+        resolved=("npc_001", "npc_002"),
+        profiles=[first, second],
+    )
+    assert {warning.code for warning in result.warnings} == {
+        "invalid_scene_summary"
+    }
+    by_id = {profile.npc_id: profile for profile in result.updated_profiles}
+    assert by_id["npc_001"].last_scene_summary is None
+    assert by_id["npc_001"].last_scene_turn is None
+    assert by_id["npc_002"].last_scene_summary == (
+        "林川接过库房钥匙，当场答应留守到天亮，随后在门边坐下。"
+    )
+    assert by_id["npc_002"].last_scene_turn == _TURN_INDEX
+
+
+def test_scene_summary_appeared_missing_emits_warning():
+    result = _admit(
+        [],
+        resolved=("npc_001",),
+        current_state=_state(participants=()),
+    )
+    assert {warning.code for warning in result.warnings} == {
+        "missing_scene_summary"
+    }
+    assert result.accepted_profile_changes == []
+    assert result.updated_profiles == []
+
+
+def test_scene_summary_same_text_new_turn_still_applies():
+    first = _profile()
+    first.last_scene_summary = "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。"
+    first.last_scene_turn = _TURN_INDEX - 1
+    result = _admit(
+        [_entry("npc_001", scene_summary=_summary())],
+        profiles=[first],
+    )
+    (profile,) = result.updated_profiles
+    assert profile.last_scene_summary == _summary().summary
+    assert profile.last_scene_turn == _TURN_INDEX
+
+
+def test_scene_summary_full_pipeline_records_field_log_and_consistent_snapshot():
+    mentions = [_mention("沈孤鸿")]
+    response = {
+        "updates": [{
+            "npc_id": "npc_001",
+            "scene_summary": {
+                "summary": "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。",
+                "evidence_ids": ["turn_3_p001"],
+            },
+            "stable_changes": [],
+        }],
+    }
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile())
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=StubGateway(response),  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        saved = store.get_by_id("npc_001")
+        assert saved is not None
+        assert saved.last_scene_summary == (
+            "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。"
+        )
+        assert saved.last_scene_turn == _TURN_INDEX
+
+        summary_change = next(
+            change
+            for change in result.accepted_changes
+            if change.field == "last_scene_summary"
+        )
+        documents = list(_evidence().values())
+        store.record_accepted_field_changes(
+            changes=[summary_change],
+            evidence_documents=documents,
+            turn_index=_TURN_INDEX,
+            scene_id=_SCENE_ID,
+        )
+        logs = store.list_field_change_logs()
+        assert len(logs) == 1
+        assert logs[0].field_name == "last_scene_summary"
+        assert logs[0].turn_index == _TURN_INDEX
+        assert logs[0].evidence[0].evidence_id == "turn_3_p001"

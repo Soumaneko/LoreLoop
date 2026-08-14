@@ -61,7 +61,7 @@ def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     assert benchmark_report["aggregate"]["forbidden_violation_count"] == 0
     assert benchmark_report["aggregate"]["invariant_violation_count"] == 0
     assert benchmark_report["aggregate"]["call_count"] == 12
-    assert benchmark_report["aggregate"]["provider_attempts"] == 14
+    assert benchmark_report["aggregate"]["provider_attempts"] == 12
 
     assert cases["new_persistent_vs_ignore_oneoff"]["call_count"] == 0
     assert cases["player_identity_protected"]["call_count"] == 0
@@ -75,11 +75,12 @@ def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     assert exact["field_deltas"]["npc_001"]["last_known_location"] == "醉花楼"
 
     snapshot = cases["current_fields_snapshot"]
-    assert snapshot["field_deltas"] == {
-        "npc_001": {
-            "last_known_location": "醉花楼",
-        }
-    }
+    assert snapshot["field_deltas"]["npc_001"]["last_known_location"] == "醉花楼"
+    # v8 生产链路：appeared NPC 每回合都写入摘要 + 回合。
+    assert snapshot["field_deltas"]["npc_001"]["last_scene_turn"] == 0
+    assert isinstance(
+        snapshot["field_deltas"]["npc_001"].get("last_scene_summary"), str
+    )
 
     near = cases["near_name_no_alias"]
     assert near["new_profile_names"] == ["陆川"]
@@ -98,22 +99,21 @@ def test_npc_baseline_benchmark_captures_quality_signals(benchmark_report):
     # - stable_fields: role/faction exact (public_summary removed in v8).
     assert cases["stable_fields_with_evidence"]["gold"]["weighted_passed"] == 9
     # - appearance truncated from the evidenced full sentence.
-    assert cases["stable_appearance_with_evidence"]["field_deltas"] == {
-        "npc_001": {
-            "last_known_location": "醉花楼",
-            "appearance": "左眼有一条旧疤",
-        }
-    }
+    appearance = cases["stable_appearance_with_evidence"]["field_deltas"]["npc_001"]
+    assert appearance["last_known_location"] == "醉花楼"
+    # 真实重录下模型写全证据句但漏句号；gold 要求「少年时留下的。」。
+    assert appearance["appearance"] == "左眼有一条旧疤，据说是少年时留下的"
+    assert appearance["last_scene_turn"] == 0
     # Per-turn batch updates cannot mutate curated abilities while admission is frozen.
     ability = cases["ability_append_dedup_cap"]
     assert ability["field_deltas"]["npc_001"].get("known_abilities") is None
-    assert "invalid_stable_change" in {
+    assert "invalid_stable_change" not in {
         warning[2] for warning in ability["warnings"]
     }
     # Per-turn batch updates cannot overwrite curated personality traits.
     personality = cases["stable_personality_with_evidence"]
     assert personality["field_deltas"]["npc_001"].get("personality_trait") is None
-    assert "invalid_stable_change" in {
+    assert "invalid_stable_change" not in {
         warning[2] for warning in personality["warnings"]
     }
     # - mixed_turn: role+faction linkage now works end to end.
@@ -149,34 +149,37 @@ def test_last_scene_pending_contract_is_deterministic_and_records_only_expected_
     assert report == repeated
     assert len(report["cases"]) == 8
     aggregate = report["aggregate"]
-    assert aggregate["weighted_passed"] == 111
-    assert aggregate["weighted_total"] == 141
+    assert aggregate["weighted_passed"] == 135
+    assert aggregate["weighted_total"] == 138
     assert aggregate["forbidden_violation_count"] == 0
     assert aggregate["invariant_violation_count"] == 0
     assert aggregate["categories"]["resolution"] == {"passed": 11, "total": 11}
-    assert aggregate["categories"]["stable_field"] == {"passed": 2, "total": 2}
+    # 唯一真实质量缺口：真实模型对 npc-su 漏写 role（只写了 faction）。
+    assert aggregate["categories"]["stable_field"] == {"passed": 1, "total": 2}
     assert aggregate["categories"]["npc_presence"] == {"passed": 11, "total": 11}
-    assert aggregate["categories"]["last_scene_summary"] == {"passed": 0, "total": 9}
+    assert aggregate["categories"]["last_scene_summary"] == {"passed": 10, "total": 10}
+    assert aggregate["categories"]["last_scene_absent"] == {"passed": 1, "total": 1}
     assert aggregate["categories"]["last_scene_batch_scope"] == {
         "passed": 11,
         "total": 11,
     }
-    assert aggregate["categories"]["evidence_warning"] == {"passed": 0, "total": 1}
 
     cases = {case["case_id"]: case for case in report["cases"]}
     mentioned = cases["mentioned_only_no_overwrite"]
     assert mentioned["last_scene_contract_signals"]["batch_npc_ids"] == [
         "npc-yao",
     ]
-    assert mentioned["last_scene_contract_signals"]["scene_summaries"] == {}
+    assert "npc-yao" in mentioned["last_scene_contract_signals"]["scene_summaries"]
+    assert "npc-su" not in mentioned["last_scene_contract_signals"]["scene_summaries"]
     assert mentioned["gold"]["forbidden_violations"] == []
 
-    # The current parser deliberately ignores the future nested scene_summary
-    # key.  Phase 3 should turn only the second entry into a valid summary and
-    # emit an invalid_scene_summary warning for the first.
-    salvage = cases["per_npc_scene_summary_salvage"]
-    assert salvage["warnings"] == []
-    assert salvage["last_scene_contract_signals"]["scene_summaries"] == {}
+    # 真实 LLM benchmark 衡量模型应做对什么；非法摘要的容错由确定性测试负责。
+    # 两个 appeared NPC 都产出合法摘要，无需 invalid warning。
+    coverage = cases["multi_npc_scene_summary_coverage"]
+    assert coverage["warnings"] == []
+    assert set(
+        coverage["last_scene_contract_signals"]["scene_summaries"]
+    ) == {"npc-qin", "npc-lin"}
 
     no_accumulation = next(
         case

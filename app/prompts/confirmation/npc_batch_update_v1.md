@@ -30,6 +30,7 @@
 
 逐个 NPC 对照 `current`、`facts` 和 `evidence`，把本轮新确认的信息归入最合适的字段。同一段正文可以同时明确支持多个字段，应对每个字段分别判断，完整记录它所支持的变化。
 
+- `scene_summary`：该 NPC 本轮**实际参与**场景的公开表现记录，20–160 字压缩本轮其言语、行动、明确决定与可观察状态。只写本轮正文直接呈现的内容；`evidence_ids` 引用 1–4 条直接支持它的 `evidence.document_id`。
 - `role`：人物的长期身份、职业、职位或社会角色。
 - `faction`：人物明确所属、效忠或代表的组织。职位同时明确了组织归属时，可同时更新 `role` 和 `faction`。
 - `appearance`：相对稳定、可用于识别人物的外貌特征。
@@ -37,6 +38,8 @@
 # 处理原则
 
 1. 从 `facts` 理解本轮变化，用 `evidence` 确认稳定字段的依据。可以将正文明确表达的信息规范化、简洁归纳，保持事实含义不变。
-2. 只输出相对 `current` 确实发生的变化；某个 NPC 没有字段变化时，不输出该 NPC。
-3. 稳定字段的每条变化都引用直接支持它的 `evidence.document_id`；`evidence_ids` 从该 NPC 的 `evidence` 列表中选取。
-4. `npc_id` 使用输入 `npc_batch_json` 中给出的值。
+2. 每个输入 NPC 都必须输出一条 `scene_summary`；即使该 NPC 的 stable 字段没有变化（`stable_changes` 为空），仍必须输出 `scene_summary`。不能因为「没有字段变化」就省略该 NPC 的摘要。
+3. 稳定字段与 `scene_summary` 的每条 evidence 都引用直接支持它的 `evidence.document_id`；`evidence_ids` 从该 NPC 的 `evidence` 列表中选取。
+4. `scene_summary` 只描述本轮实际出场（appeared）NPC 的公开表现；只被谈论、回忆或转述的 NPC 不输出 `scene_summary`。
+5. `scene_summary` 严禁写成人物传记或跨回合经历：不搬运 `current` 中已有的信息，不叠加前几回合的内容，不推断内心动机、隐藏计划或环境铺陈；同一 NPC 的两次出场各写各的独立摘要。
+6. `npc_id` 使用输入 `npc_batch_json` 中给出的值。

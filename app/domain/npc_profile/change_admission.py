@@ -39,6 +39,7 @@ from app.domain.npc_profile.schemas import (
 )
 from app.domain.npc_profile.turn_contract import (
     NPCBatchUpdateEntry,
+    NPCSceneSummaryDraft,
     ScalarStableChange,
 )
 
@@ -73,6 +74,9 @@ def admit_npc_batch_update(
     - presence 非 appeared 的 npc 输出字段条目 → 丢弃并记 warning
       （``mentioned_only_field_output``）；
     - 字段证据非法 → 只丢该字段（``change_evidence_dropped``）；
+    - ``scene_summary`` 草稿的 evidence 非法 → 丢摘要（``scene_summary_evidence_dropped``）；
+      同一 npc 重复摘要 → 丢（``duplicate_scene_summary``）；空/超长摘要已在
+      parser 阶段以 ``invalid_scene_summary`` 丢弃；
     - 同一 (npc_id, field) 重复（能力按规范化名称去重）→ 保留接受的首条；
     - 已解析但无输出的 NPC → no-op；
     - CurrentState 同步独立执行，不受 LLM 输出影响。
@@ -138,8 +142,10 @@ def admit_npc_batch_update(
     accepted_changes: list[AcceptedNPCFieldChange] = []
     warnings: list[NPCChangeAdmissionWarning] = list(entry_warnings or [])
     seen_stable_fields: set[tuple[str, str]] = set()
+    seen_scene_npc_ids: set[str] = set()
+    scene_handled_npc_ids: set[str] = set()
     # 只有真正被丢弃的 entry（schema 阶段 invalid_update_entry）计入；
-    # 字段级 warning（stable change）条目仍然存活。
+    # 字段级 warning（stable change / scene summary）条目仍然存活。
     dropped_entries = sum(
         1
         for warning in (entry_warnings or [])
@@ -184,6 +190,16 @@ def admit_npc_batch_update(
                 ),
             ))
             continue
+        _admit_scene_summary(
+            target,
+            entry.scene_summary,
+            valid_evidence,
+            turn_index,
+            accepted_changes,
+            warnings,
+            seen_scene_npc_ids,
+            scene_handled_npc_ids,
+        )
         _admit_stable_changes(
             target,
             entry.stable_changes,
@@ -193,6 +209,26 @@ def admit_npc_batch_update(
             warnings,
             seen_stable_fields,
         )
+
+    for npc_id in sorted(mutable_ids):
+        if npc_id in scene_handled_npc_ids:
+            continue
+        if any(
+            warning.code == "invalid_scene_summary"
+            and warning.npc_name == npc_id
+            for warning in warnings
+        ):
+            continue
+        target = profile_by_id[npc_id]
+        warnings.append(NPCChangeAdmissionWarning(
+            npc_name=target.name,
+            field_name="last_scene_summary",
+            code="missing_scene_summary",
+            message=(
+                f"appeared npc {npc_id!r} did not produce an accepted "
+                "scene summary this turn"
+            ),
+        ))
 
     synced_ids = _sync_participants(
         profiles,
@@ -269,6 +305,74 @@ def _batch_valid_evidence(
 
 def _profile_index(profiles: list[NPCProfile]) -> dict[str, NPCProfile]:
     return {profile.npc_id: profile for profile in profiles}
+
+
+def _admit_scene_summary(
+    target: NPCProfile,
+    draft: NPCSceneSummaryDraft | None,
+    valid_evidence: dict[str, HistoryDocument],
+    turn_index: int,
+    accepted_changes: list[AcceptedNPCFieldChange],
+    warnings: list[NPCChangeAdmissionWarning],
+    seen_scene_npc_ids: set[str],
+    scene_handled_npc_ids: set[str],
+) -> None:
+    """审理单个 appeared NPC 的本轮摘要草稿（宁漏勿错）。
+
+    - 无草稿 → 不处理（``missing_scene_summary`` 由循环后兜底发出）；
+    - evidence 引用非本轮本场景正文 → 丢摘要（``scene_summary_evidence_dropped``）；
+    - 同一 npc 第二条摘要 → 丢（``duplicate_scene_summary``）；
+    - no-op 用 ``(summary, turn)`` 判断：相同摘要出现在新回合仍构成有效记录；
+    - 接受时生成 ``last_scene_summary`` scalar change，snapshot 应用阶段由程序
+      同步写 ``last_scene_turn``（原子成对）。
+    """
+    if draft is None:
+        return
+    scene_handled_npc_ids.add(target.npc_id)
+    if target.npc_id in seen_scene_npc_ids:
+        warnings.append(NPCChangeAdmissionWarning(
+            npc_name=target.name,
+            field_name="last_scene_summary",
+            code="duplicate_scene_summary",
+            message=(
+                f"scene summary is provided more than once for npc "
+                f"{target.npc_id!r}; duplicate dropped"
+            ),
+        ))
+        return
+    invalid = [
+        evidence_id
+        for evidence_id in draft.evidence_ids
+        if evidence_id not in valid_evidence
+    ]
+    if invalid:
+        warnings.append(NPCChangeAdmissionWarning(
+            npc_name=target.name,
+            field_name="last_scene_summary",
+            code="scene_summary_evidence_dropped",
+            message=(
+                "scene summary dropped: evidence ids are not confirmed "
+                "scene paragraphs of this turn in this scene"
+            ),
+            evidence_ids=tuple(sorted(set(invalid))),
+        ))
+        return
+    if (
+        target.last_scene_summary == draft.summary
+        and target.last_scene_turn == turn_index
+    ):
+        return
+    seen_scene_npc_ids.add(target.npc_id)
+    accepted_changes.append(AcceptedNPCScalarChange(
+        npc_id=target.npc_id,
+        canonical_name=target.name,
+        field="last_scene_summary",
+        old_value=target.last_scene_summary,
+        new_value=draft.summary,
+        evidence_ids=tuple(draft.evidence_ids),
+        turn_index=turn_index,
+        source="proposal",
+    ))
 
 
 def _admit_stable_changes(
@@ -468,6 +572,10 @@ def _apply_accepted_changes(
         )
         if isinstance(change, AcceptedNPCScalarChange):
             setattr(profile, change.field, change.new_value)
+            # ``last_scene_summary`` 必须与程序派生的回合数原子成对写入；
+            # 只写文本会触发 mutual-null 校验失败。
+            if change.field == "last_scene_summary":
+                profile.last_scene_turn = change.turn_index
         else:
             profile.known_abilities = [
                 *profile.known_abilities,

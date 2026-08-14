@@ -50,6 +50,7 @@ from app.domain.npc_profile.turn_contract import (
     NPCBatchUpdate,
     NPCBatchUpdateDisplay,
     NPCBatchUpdateEntry,
+    NPCSceneSummaryDraft,
     NPCStableChange,
 )
 from app.domain.scene_facts.schemas import SceneFactSet
@@ -124,6 +125,8 @@ def parse_batch_updates(
     """逐字段 salvage 宽松 wire envelope（宁漏勿错）。
 
     - 非对象元素 / 缺或非 str ``npc_id`` → 丢整条（无法归因）；
+    - ``scene_summary`` 非对象 / 摘要空、超长 / evidence 非法 → 丢该槽位
+      （``invalid_scene_summary``）；其余字段照常存活；
     - ``stable_changes`` 非列表 → 丢整字段；逐条 ``NPCStableChange.model_validate``，
       失败只丢该 change（``invalid_stable_change``，带 index）；
     - 合法 npc_id + 剩余合法字段照常构造 typed 条目进入 admission。
@@ -153,6 +156,22 @@ def parse_batch_updates(
             ))
             continue
         npc_id = npc_id.strip()
+
+        scene_summary: NPCSceneSummaryDraft | None = None
+        raw_summary = raw.get("scene_summary")
+        if raw_summary is not None:
+            try:
+                scene_summary = NPCSceneSummaryDraft.model_validate(raw_summary)
+            except ValidationError as exc:
+                warnings.append(NPCChangeAdmissionWarning(
+                    npc_name=npc_id,
+                    field_name="last_scene_summary",
+                    code="invalid_scene_summary",
+                    message=(
+                        f"batch update entry {index} scene_summary failed "
+                        f"schema validation; dropped: {exc}"
+                    ),
+                ))
 
         stable_changes: list[NPCStableChange] = []
         raw_changes = raw.get("stable_changes")
@@ -200,6 +219,7 @@ def parse_batch_updates(
                     stable_changes.append(parsed_change)
         entries.append(NPCBatchUpdateEntry(
             npc_id=npc_id,
+            scene_summary=scene_summary,
             stable_changes=stable_changes,
         ))
     return entries, warnings

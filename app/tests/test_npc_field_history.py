@@ -442,6 +442,34 @@ def test_v8_logs_accept_last_scene_summary_and_reject_legacy_public_summary_writ
     assert "public_summary" in allowed
 
 
+def test_store_rejects_last_scene_summary_turn_mismatch():
+    document = _document(turn_index=3)
+    with NPCProfileStore(":memory:") as store:
+        profile = _profile()
+        profile.last_scene_summary = "她当众接任北门巡检。"
+        profile.last_scene_turn = 2
+        store.upsert(profile)
+        change = AcceptedNPCScalarChange(
+            npc_id="npc-a",
+            canonical_name="顾青",
+            field="last_scene_summary",
+            old_value=None,
+            new_value="她当众接任北门巡检。",
+            evidence_ids=(document.document_id,),
+            turn_index=3,
+            source="proposal",
+        )
+        with pytest.raises(ValueError, match="last_scene_turn"):
+            store.record_accepted_field_changes(
+                changes=[change],
+                evidence_documents=[document],
+                turn_index=3,
+                scene_id="scene-3",
+            )
+        assert store.list_field_change_logs() == []
+        assert store.field_change_batch_hash(3) is None
+
+
 def test_failed_v6_migration_rolls_back_version_and_new_tables(tmp_path):
     db_path = tmp_path / "broken-v6.db"
     connection = sqlite3.connect(db_path)

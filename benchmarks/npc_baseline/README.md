@@ -31,10 +31,10 @@ for the v8 schema on 2026-08-14:
 - forbidden violations: `0`
 - invariant violations: `0`
 - logical gateway calls: `12` (0 calls when identity resolution finds no
-  resolvable NPC, e.g. player-only or org/place cases)
+  resolvable appeared NPC, e.g. player-only, org/place, or mentioned-only cases)
 - provider attempts: `12` (all first-round successes)
 - real provider tokens, ALL attempts included:
-  `prompt_tokens=26289`, `completion_tokens=1451`
+  `prompt_tokens=18678`, `completion_tokens=1309`
 
 A below-full score is a feature, not a bug: the gold encodes the desired
 contract and the model may fail it, so a fix scores higher and the improvement
@@ -148,11 +148,10 @@ LLM:
 - `last_scene_batch_scope`: appeared profiles enter the updater while
   mentioned-only profiles do not.
 
-The pending recordings deliberately use the future nested `scene_summary`
-wire key.  The current v8 parser still ignores it (the `scene_summary` slot and
-its atomic `last_scene_*` admission write are Phase 3 pending), so the
-pre-implementation report records explicit presence/summary/salvage gaps rather
-than pretending the feature exists.  Run it without accepting a baseline:
+The pending recordings use the nested `scene_summary` wire key.  The parser
+consumes it and admission writes the pair atomically, so the pre-implementation
+gaps (presence / summary / salvage) are now expected to be green.  Run it
+without accepting a baseline:
 
 ```bash
 PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py \

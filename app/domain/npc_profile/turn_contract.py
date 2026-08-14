@@ -9,8 +9,8 @@
   （``parse_batch_updates``）；prompt 展示用 typed ``NPCBatchUpdateDisplay``；
 - 稳定字段变化为原子 change（``field`` 作 discriminator），范围限
   ``role / appearance / faction``；``last_scene_summary`` 走独立的
-  ``scene_summary`` 槽位（Phase 3），``personality_trait`` 与 ``known_abilities``
-  的逐回合更新暂时冻结，不进入 wire union；
+  ``scene_summary`` 槽位（每个 appeared NPC 每回合一条），``personality_trait``
+  与 ``known_abilities`` 的逐回合更新暂时冻结，不进入 wire union；
 - 每条稳定 change 必须携带本轮场景段落 ``evidence_ids``（结构校验，非语义）。
 
 本文件不发起任何 LLM 调用。
@@ -63,6 +63,27 @@ class AbilityAddChange(_EvidenceCarrying):
     ability: LLMKnownAbility
 
 
+class NPCSceneSummaryDraft(BaseModel):
+    """每个 appeared existing NPC 的本轮独立摘要草稿（``scene_summary`` 槽位）。
+
+    只压缩本轮该 NPC 的公开言语、行动、决定与可观察状态；不接收旧摘要、不累积、
+    不写跨回合传记。``summary`` 20–160 字，``evidence_ids`` 1–4 条本轮本场景正文
+    段落（结构约束；语义归因由 prompt 保证）。
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    summary: str = Field(min_length=20, max_length=160)
+    evidence_ids: list[str] = Field(min_length=1, max_length=4)
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def _evidence_ids_no_duplicates(cls, values):
+        if len(values) != len(set(values)):
+            raise ValueError("scene_summary evidence_ids must not repeat")
+        return values
+
+
 #: 稳定字段变化，以 ``field`` 作 discriminator。
 NPCStableChange = Annotated[
     ScalarStableChange,
@@ -76,13 +97,15 @@ class NPCBatchUpdateEntry(BaseModel):
     ``npc_id`` 由确定性身份解析层给定；LLM 只输出字段变化，不再判断
     mention/alias/new/ignore，也不再生成新 NPC 完整档案。
 
-    该模型是**已解析**的条目（``stable_changes`` 为 typed union）；宽松 wire 解析
-    由 ``parse_batch_updates`` 逐字段 salvage 后构造本模型。
+    该模型是**已解析**的条目（``stable_changes`` 为 typed union；``scene_summary``
+    为独立摘要槽位）；宽松 wire 解析由 ``parse_batch_updates`` 逐字段 salvage 后
+    构造本模型。
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     npc_id: str = Field(min_length=1)
+    scene_summary: NPCSceneSummaryDraft | None = None
     stable_changes: list[NPCStableChange] = Field(default_factory=list, max_length=8)
 
 
@@ -99,13 +122,31 @@ class NPCBatchUpdate(BaseModel):
     updates: list[Any] = Field(default_factory=list, max_length=256)
 
 
+class NPCBatchUpdateDisplayEntry(BaseModel):
+    """prompt 展示用的单个 appeared NPC 条目。
+
+    与解析/admission 用的 ``NPCBatchUpdateEntry`` 分离：``scene_summary`` 在这里
+    **必填**——每个输入 NPC 都必须输出本轮摘要，即使 stable 字段无变化。宽松 wire
+    解析仍以 optional 构造 ``NPCBatchUpdateEntry`` 以便 salvage（漏写 → admission
+    记 ``missing_scene_summary``）。
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    npc_id: str = Field(min_length=1)
+    scene_summary: NPCSceneSummaryDraft
+    stable_changes: list[NPCStableChange] = Field(default_factory=list, max_length=8)
+
+
 class NPCBatchUpdateDisplay(BaseModel):
     """prompt 展示用的完整形状 schema（结构约束由此表达）。
 
     与宽松 wire ``NPCBatchUpdate`` 分离：模型看到 typed 条目与全部 field variant /
-    evidence_ids / summary_delta / ability 结构，程序解析仍逐字段容错。
+    evidence_ids / ability 结构，程序解析仍逐字段容错。
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    updates: list[NPCBatchUpdateEntry] = Field(default_factory=list, max_length=256)
+    updates: list[NPCBatchUpdateDisplayEntry] = Field(
+        default_factory=list, max_length=256
+    )

@@ -770,6 +770,12 @@ class NPCProfileStore:
             if getattr(profiles[change.npc_id], change.field_name)
             != change.new_value
         )
+        mismatched.extend(
+            f"{change.npc_id}/last_scene_turn"
+            for change in prepared.changes
+            if change.field_name == "last_scene_summary"
+            and profiles[change.npc_id].last_scene_turn != change.turn_index
+        )
         if mismatched:
             raise ValueError(
                 "NPC field changes do not match the committed profile "
