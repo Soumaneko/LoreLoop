@@ -68,6 +68,7 @@ def _accepted_role_change() -> AcceptedNPCScalarChange:
         field="role",
         old_value="守卫",
         new_value="北门巡检",
+        change_basis="改任北门巡检",
         evidence_ids=("turn_3_p001",),
         turn_index=3,
         source="proposal",

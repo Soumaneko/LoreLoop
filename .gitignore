@@ -24,3 +24,4 @@ tools/
 SPEC.md
 .bench/
 .scratch
+.saves

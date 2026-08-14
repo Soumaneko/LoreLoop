@@ -8,7 +8,7 @@
           {
             "npc_id": "npc_001",
             "scene_summary": {
-              "summary": "沈孤鸿走进醉花楼，环顾四周，沈二随行。随后沈二爷低声命人将门关上。",
+              "summary": "沈孤鸿走进醉花楼，环顾四周后，命随行的沈二将门关上。",
               "evidence_ids": [
                 "turn_0_p001",
                 "turn_0_p002"
@@ -20,8 +20,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 99,
-          "prompt_tokens": 1605
+          "completion_tokens": 93,
+          "prompt_tokens": 1958
         }
       },
       "attempts": {
@@ -34,7 +34,7 @@
           {
             "npc_id": "npc_001",
             "scene_summary": {
-              "summary": "林川在茶馆坐下，随后陆川推门而入，径直走向他。",
+              "summary": "林川在茶馆坐下，等待某人到来。随后陆川推门而入，径直走向他。",
               "evidence_ids": [
                 "turn_0_p001"
               ]
@@ -45,8 +45,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 81,
-          "prompt_tokens": 1517
+          "completion_tokens": 85,
+          "prompt_tokens": 1870
         }
       },
       "attempts": {
@@ -74,7 +74,7 @@
           {
             "npc_id": "npc_001",
             "scene_summary": {
-              "summary": "沈孤鸿在醉花楼大堂踱步，目光始终不离门口，并低声表示要查明信物来历。",
+              "summary": "沈孤鸿在醉花楼大堂踱步，目光始终不离门口，并明确表示要查明信物来历。",
               "evidence_ids": [
                 "turn_0_p001"
               ]
@@ -85,8 +85,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 89,
-          "prompt_tokens": 1560
+          "completion_tokens": 65,
+          "prompt_tokens": 1913
         }
       },
       "attempts": {
@@ -111,7 +111,7 @@
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 92,
-          "prompt_tokens": 1532
+          "prompt_tokens": 1885
         }
       },
       "attempts": {
@@ -129,7 +129,7 @@
           {
             "npc_id": "npc_001",
             "scene_summary": {
-              "summary": "沈孤鸿在会议中猛地拍桌动怒，表现出强烈不满，但随后又叹了口气，情绪迅速平复下来。",
+              "summary": "沈孤鸿在议事中拍桌动怒，表现出强烈不满，但随即平复情绪，叹了口气。",
               "evidence_ids": [
                 "turn_0_p001"
               ]
@@ -140,8 +140,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 91,
-          "prompt_tokens": 1523
+          "completion_tokens": 87,
+          "prompt_tokens": 1876
         }
       },
       "attempts": {
@@ -163,6 +163,7 @@
               {
                 "field": "role",
                 "value": "合欢宗宗主",
+                "change_basis": "首次设定沈孤鸿的身份为合欢宗宗主。",
                 "evidence_ids": [
                   "turn_0_p001"
                 ]
@@ -170,6 +171,7 @@
               {
                 "field": "faction",
                 "value": "合欢宗",
+                "change_basis": "首次设定沈孤鸿所属组织为合欢宗。",
                 "evidence_ids": [
                   "turn_0_p001"
                 ]
@@ -180,8 +182,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 153,
-          "prompt_tokens": 1526
+          "completion_tokens": 193,
+          "prompt_tokens": 1879
         }
       },
       "attempts": {
@@ -203,6 +205,7 @@
               {
                 "field": "appearance",
                 "value": "左眼有一条旧疤，据说是少年时留下的",
+                "change_basis": "首次设定外貌：左眼旧疤",
                 "evidence_ids": [
                   "turn_0_p001"
                 ]
@@ -213,8 +216,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 131,
-          "prompt_tokens": 1537
+          "completion_tokens": 147,
+          "prompt_tokens": 1890
         }
       },
       "attempts": {
@@ -227,7 +230,7 @@
           {
             "npc_id": "npc_001",
             "scene_summary": {
-              "summary": "沈孤鸿遇险时先将身旁弟子护到身后，沉声令众人退开，展现出沉稳与重情的作风。",
+              "summary": "沈孤鸿遇险时先将身旁弟子护到身后，沉声喝令众人退开，随后众人评价他为人沉稳、重情重义。",
               "evidence_ids": [
                 "turn_0_p001"
               ]
@@ -238,8 +241,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 91,
-          "prompt_tokens": 1566
+          "completion_tokens": 97,
+          "prompt_tokens": 1919
         }
       },
       "attempts": {
@@ -252,7 +255,7 @@
           {
             "npc_id": "npc_001",
             "scene_summary": {
-              "summary": "沈孤鸿在众人面前展示了一手剑法，随后又使出一招隐匿身法，显露其武艺与潜行技巧。",
+              "summary": "沈孤鸿在众人面前展示了一套剑法，随后又施展了一招隐匿身法，显露其武艺与潜行技巧。",
               "evidence_ids": [
                 "turn_0_p001"
               ]
@@ -263,8 +266,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 94,
-          "prompt_tokens": 1523
+          "completion_tokens": 93,
+          "prompt_tokens": 1876
         }
       },
       "attempts": {
@@ -289,7 +292,7 @@
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 80,
-          "prompt_tokens": 1516
+          "prompt_tokens": 1869
         }
       },
       "attempts": {
@@ -307,7 +310,7 @@
           {
             "npc_id": "npc_001",
             "scene_summary": {
-              "summary": "沈孤鸿进门时，一名青衣客紧随其后，该青衣客被证实是沈孤鸿多年的旧友。",
+              "summary": "沈孤鸿进门时，一名青衣客紧随其后，此人正是他多年的旧友。",
               "evidence_ids": [
                 "turn_0_p001"
               ]
@@ -318,8 +321,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 89,
-          "prompt_tokens": 1549
+          "completion_tokens": 83,
+          "prompt_tokens": 1902
         }
       },
       "attempts": {
@@ -332,7 +335,7 @@
           {
             "npc_id": "npc_002",
             "scene_summary": {
-              "summary": "林川在醉花楼内，沈孤鸿吩咐关门时他也在场。",
+              "summary": "林川在醉花楼内，与沈孤鸿、陆川等人同处一室。",
               "evidence_ids": [
                 "turn_5_p001"
               ]
@@ -351,6 +354,7 @@
               {
                 "field": "role",
                 "value": "合欢宗宗主",
+                "change_basis": "首次设定沈孤鸿为合欢宗宗主。",
                 "evidence_ids": [
                   "turn_5_p001"
                 ]
@@ -358,6 +362,7 @@
               {
                 "field": "faction",
                 "value": "合欢宗",
+                "change_basis": "首次设定沈孤鸿所属组织为合欢宗。",
                 "evidence_ids": [
                   "turn_5_p001"
                 ]
@@ -368,8 +373,8 @@
       },
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 219,
-          "prompt_tokens": 1724
+          "completion_tokens": 261,
+          "prompt_tokens": 2077
         }
       },
       "attempts": {

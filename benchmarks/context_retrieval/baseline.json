@@ -1,25 +1,25 @@
 {
   "benchmark_version": 3,
-  "cases_sha256": "a7c9df6d2ac9a7ef481cbbf2b42aff5d55bd8cb1f06baaffd617745d8fb7746d",
+  "cases_sha256": "68437dbe2eba4cadc5c09ea008edcf8003742919af657090b8bf5d93c8989b09",
   "aggregate": {
-    "must_recalled": 36,
-    "must_total": 37,
-    "weighted_recalled": 117,
-    "weighted_total": 122,
+    "must_recalled": 38,
+    "must_total": 38,
+    "weighted_recalled": 123,
+    "weighted_total": 125,
     "forbidden_visible_count": 0,
     "forbidden_main_visible_count": 0,
-    "duplicate_visible_count": 4,
+    "duplicate_visible_count": 3,
     "invariant_violation_count": 0,
     "invalid_relation_links": 9,
     "degraded_relation_links": 14,
-    "npc_valid_links": 11,
+    "npc_valid_links": 14,
     "npc_stale_links": 2,
     "npc_invalid_links": 1,
     "npc_degraded_links": 0,
-    "matched_npc_profiles": 8,
-    "npc_relation_candidates": 10,
-    "npc_relation_hits_added": 8,
-    "payload_chars": 9398
+    "matched_npc_profiles": 9,
+    "npc_relation_candidates": 13,
+    "npc_relation_hits_added": 9,
+    "payload_chars": 9531
   },
   "cases": [
     {
@@ -221,12 +221,12 @@
       "case_id": "single_continuity_item_flood",
       "selected_main_ids": [
         "turn_2_p001",
-        "turn_1_p001",
+        "turn_4_p001",
         "turn_3_p001"
       ],
       "visible_evidence_ids": [
         "turn_2_p001",
-        "turn_1_p001",
+        "turn_4_p001",
         "turn_3_p001"
       ],
       "recalled_groups": [
@@ -250,9 +250,9 @@
         "tower-light": 3
       },
       "turn_contributions": {
-        "1": 1,
         "2": 1,
-        "3": 1
+        "3": 1,
+        "4": 1
       },
       "relation_candidates_considered": 4,
       "relation_hits_added": 3,
@@ -508,31 +508,30 @@
       "case_id": "late_state_delta_evidence",
       "selected_main_ids": [
         "turn_1_p001",
-        "turn_5_p001",
-        "turn_5_p003"
+        "turn_5_p005",
+        "turn_5_p001"
       ],
       "visible_evidence_ids": [
         "turn_1_p001",
+        "turn_5_p005",
+        "turn_5_p004",
         "turn_5_p001",
-        "turn_5_p002",
-        "turn_5_p003",
-        "turn_5_p004"
+        "turn_5_p002"
       ],
       "recalled_groups": [
+        "latest_decision",
         "scout_assessment",
         "thread_origin"
       ],
-      "missed_groups": [
-        "latest_decision"
-      ],
-      "must_recalled": 0,
+      "missed_groups": [],
+      "must_recalled": 1,
       "must_total": 1,
-      "weighted_recalled": 2,
+      "weighted_recalled": 5,
       "weighted_total": 5,
       "forbidden_visible_ids": [],
       "forbidden_main_visible_ids": [],
-      "duplicate_visible_count": 1,
-      "payload_chars": 637,
+      "duplicate_visible_count": 0,
+      "payload_chars": 642,
       "route_counts": {
         "direct_only": 0,
         "relation_only": 3,
@@ -1120,12 +1119,12 @@
     {
       "case_id": "anonymized_spy_regression",
       "selected_main_ids": [
-        "turn_2_p001",
-        "turn_6_p001"
+        "turn_6_p001",
+        "turn_2_p001"
       ],
       "visible_evidence_ids": [
-        "turn_2_p001",
-        "turn_6_p001"
+        "turn_6_p001",
+        "turn_2_p001"
       ],
       "recalled_groups": [
         "spy_answer"
@@ -1500,7 +1499,7 @@
       "forbidden_visible_ids": [],
       "forbidden_main_visible_ids": [],
       "duplicate_visible_count": 0,
-      "payload_chars": 541,
+      "payload_chars": 542,
       "route_counts": {
         "direct_only": 0,
         "relation_only": 4,
@@ -1575,6 +1574,52 @@
       "npc_bridge_status": "wired",
       "npc_fixture_profiles": 2,
       "npc_fixture_logs": 2
+    },
+    {
+      "case_id": "npc_multi_topic_trigger_funnel",
+      "selected_main_ids": [
+        "turn_5_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_5_p001"
+      ],
+      "recalled_groups": [
+        "newest_node"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 127,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {},
+      "turn_contributions": {
+        "5": 1
+      },
+      "relation_candidates_considered": 3,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invalid_relation_links": 0,
+      "degraded_relation_links": 0,
+      "matched_npc_profiles": 1,
+      "npc_valid_links": 3,
+      "npc_stale_links": 0,
+      "npc_invalid_links": 0,
+      "npc_degraded_links": 0,
+      "npc_relation_candidates": 3,
+      "npc_relation_hits_added": 1,
+      "invariant_violations": [],
+      "npc_bridge_status": "wired",
+      "npc_fixture_profiles": 1,
+      "npc_fixture_logs": 3
     }
   ]
 }

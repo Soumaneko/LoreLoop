@@ -557,8 +557,8 @@ def test_relation_only_hits_are_capped_per_continuity_item():
         )
 
     assert [hit.evidence_id for hit in result.hits] == [
-        "turn_1_p001",
-        "turn_2_p001",
+        "turn_5_p001",
+        "turn_4_p001",
         "turn_3_p001",
     ]
     assert result.relation_candidates_considered == 5
@@ -566,12 +566,21 @@ def test_relation_only_hits_are_capped_per_continuity_item():
 
 
 def test_shared_relation_evidence_counts_against_every_linked_item_cap():
+    # 共享证据（turn_1）以最高 node-evidence support 入选并同时计入两个
+    # 事项的 owner cap；质量次一档的各自证据按 recency 决胜（issue 16）。
     texts = {
         "turn_1_p001": "共同证据。",
         "turn_2_p001": "甲事项自己的第一条证据。",
         "turn_3_p001": "甲事项自己的第二条证据。",
         "turn_4_p001": "乙事项自己的第一条证据。",
         "turn_5_p001": "乙事项自己的第二条证据。",
+    }
+    bases = {
+        "turn_1_p001": "共同证据。",
+        "turn_2_p001": "甲事项自有证据。",
+        "turn_3_p001": "甲事项自有证据。",
+        "turn_4_p001": "乙事项自有证据。",
+        "turn_5_p001": "乙事项自有证据。",
     }
     with ConfirmedHistoryStore() as history_store:
         for turn, text in enumerate(texts.values(), start=1):
@@ -592,7 +601,7 @@ def test_shared_relation_evidence_counts_against_every_linked_item_cap():
                 triggering_intent_ids=["explicit_npc"],
                 match_reasons=["exact_entity_match"],
                 evidence_position=position,
-                evidence_basis_primary=texts[evidence_id],
+                evidence_basis_primary=bases[evidence_id],
                 basis_complete=True,
             )
 
@@ -617,8 +626,8 @@ def test_shared_relation_evidence_counts_against_every_linked_item_cap():
 
     assert [hit.evidence_id for hit in result.hits] == [
         "turn_1_p001",
-        "turn_2_p001",
-        "turn_4_p001",
+        "turn_5_p001",
+        "turn_3_p001",
     ]
     assert result.hits[0].linked_continuity_ids == ["thread-a", "thread-b"]
     assert result.relation_candidates_considered == 5

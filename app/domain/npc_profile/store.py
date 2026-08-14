@@ -23,7 +23,7 @@ from app.runtime.sqlite import (
 )
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 class NPCProfileStore:
@@ -34,7 +34,7 @@ class NPCProfileStore:
 
     def _create_tables(self) -> None:
         persisted_version = self._current_schema_version()
-        if persisted_version not in {None, 6, 7, SCHEMA_VERSION}:
+        if persisted_version not in {None, 6, 7, 8, SCHEMA_VERSION}:
             raise RuntimeError(
                 "Unsupported npc_profile database schema: "
                 f"expected {SCHEMA_VERSION}, got {persisted_version}"
@@ -85,8 +85,12 @@ class NPCProfileStore:
         if version == 6:
             self._migrate_v6_to_v7()
             self._migrate_v7_to_v8()
+            self._migrate_v8_to_v9()
         elif version == 7:
             self._migrate_v7_to_v8()
+            self._migrate_v8_to_v9()
+        elif version == 8:
+            self._migrate_v8_to_v9()
         elif version is None:
             with transaction(self._db):
                 self._create_field_history_tables()
@@ -253,6 +257,36 @@ class NPCProfileStore:
         self._db.execute("DROP TABLE npc_field_change_logs_backup")
         self._db.execute("DROP TABLE npc_field_change_evidence_backup")
 
+    def _migrate_v8_to_v9(self) -> None:
+        """Add the trusted per-change ``change_basis`` column (v9).
+
+        Additive nullable column: existing logs keep ``change_basis`` NULL, and
+        the History bridge marks such nodes ``basis_complete=False`` (incomplete
+        basis, degraded-rescue only) instead of pretending a complete delta.
+        """
+
+        with transaction(self._db):
+            columns = {
+                row["name"]
+                for row in self._db.execute(
+                    "PRAGMA table_info(npc_field_change_logs)"
+                ).fetchall()
+            }
+            if "change_basis" not in columns:
+                self._db.execute(
+                    "ALTER TABLE npc_field_change_logs "
+                    "ADD COLUMN change_basis TEXT"
+                )
+            self._validate_field_history_schema()
+            self._db.execute(
+                """
+                UPDATE schema_versions
+                SET version = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE component = 'npc_profile'
+                """,
+                (9,),
+            )
+
     def _create_field_history_tables(self) -> None:
         statements = (
             """
@@ -266,6 +300,7 @@ class NPCProfileStore:
                 turn_index INTEGER NOT NULL CHECK(turn_index >= 0),
                 old_value TEXT,
                 new_value TEXT NOT NULL,
+                change_basis TEXT,
                 summary_delta TEXT,
                 source TEXT NOT NULL CHECK(source = 'proposal'),
                 CHECK(
@@ -319,6 +354,7 @@ class NPCProfileStore:
                 "turn_index": ("INTEGER", 1, 0),
                 "old_value": ("TEXT", 0, 0),
                 "new_value": ("TEXT", 1, 0),
+                "change_basis": ("TEXT", 0, 0),
                 "summary_delta": ("TEXT", 0, 0),
                 "source": ("TEXT", 1, 0),
             },
@@ -804,8 +840,8 @@ class NPCProfileStore:
                 """
                 INSERT INTO npc_field_change_logs(
                     npc_id, field_name, turn_index, old_value, new_value,
-                    summary_delta, source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    change_basis, summary_delta, source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     change.npc_id,
@@ -813,6 +849,7 @@ class NPCProfileStore:
                     change.turn_index,
                     change.old_value,
                     change.new_value,
+                    change.change_basis,
                     change.summary_delta,
                     change.source,
                 ),
@@ -875,6 +912,7 @@ class NPCProfileStore:
                 turn_index=int(row["turn_index"]),
                 old_value=row["old_value"],
                 new_value=row["new_value"],
+                change_basis=row["change_basis"],
                 summary_delta=row["summary_delta"],
                 source=row["source"],
                 evidence=evidence_by_log.get(int(row["log_id"]), []),

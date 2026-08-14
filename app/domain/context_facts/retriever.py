@@ -191,11 +191,14 @@ class ContextHistoryRetriever:
             ]
             channel.sort(key=lambda pair: (
                 -pair[1].intent_quality.get(intent.intent_id, 0.0),
+                # Recency is the quality tie-break: equal-quality nodes rank
+                # newest first (issue 16); link arrival order only resolves
+                # remaining determinism.
+                -pair[0].document.turn_index,
                 pair[1].intent_first_order.get(
                     intent.intent_id,
                     1_000_000_000,
                 ),
-                -pair[0].document.turn_index,
                 pair[0].document.document_id,
             ))
             for channel_rank, (candidate, admission) in enumerate(channel):

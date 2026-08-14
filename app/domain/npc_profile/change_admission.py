@@ -424,6 +424,7 @@ def _admit_stable_changes(
             field=change.field,
             old_value=current,
             new_value=change.value,
+            change_basis=change.change_basis,
             evidence_ids=tuple(change.evidence_ids),
             turn_index=turn_index,
             source="proposal",

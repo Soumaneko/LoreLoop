@@ -861,6 +861,152 @@ class TestRetrieverSeam:
             third.document_id
         ]
 
+    def test_older_stronger_relation_beats_newer_weaker_relation(self):
+        # issue 16 必测 4：较旧 strong relation 排在较新 weak（但仍 strong）
+        # 之前；recency 只在关联质量相等后决胜。
+        text_older = "她接过铜印，正式成为北门巡检。"
+        text_newer = "她巡防北门，责任重大。"
+        with ConfirmedHistoryStore() as store:
+            store.upsert_turn(
+                scene_id="scene_001",
+                turn_index=1,
+                user_input="",
+                scene_text=text_older,
+            )
+            store.upsert_turn(
+                scene_id="scene_005",
+                turn_index=5,
+                user_input="",
+                scene_text=text_newer,
+            )
+            documents = store.list_documents()
+            older = next(
+                item
+                for item in documents
+                if item.source_type == "scene_paragraph" and item.turn_index == 1
+            )
+            newer = next(
+                item
+                for item in documents
+                if item.source_type == "scene_paragraph" and item.turn_index == 5
+            )
+            older_link = _npc_link(
+                npc_id="npc-x",
+                log_id=1,
+                turn_index=1,
+                evidence_id=older.document_id,
+                evidence_hash=history_document_text_hash(older),
+                intents=("b",),
+                basis="北门巡检",
+            )
+            newer_link = _npc_link(
+                npc_id="npc-y",
+                log_id=2,
+                turn_index=5,
+                evidence_id=newer.document_id,
+                evidence_hash=history_document_text_hash(newer),
+                intents=("b",),
+                basis="北门巡检",
+            )
+            result = ContextHistoryRetriever(
+                store,
+                diversity_policy=HistoryDiversityPolicy(max_hits=1),
+            ).retrieve(
+                self._plan("顾青", intent_id="b"),
+                current_turn_index=6,
+                continuity_links=[],
+                npc_field_links=[newer_link, older_link],
+            )
+
+        # 较旧节点 support 1.0（strong）、较新节点 ~0.33（strong）：质量优先
+        # 于 recency，较旧者必须胜出（旧行为按 recency 会选较新者）。
+        assert [hit.evidence_id for hit in result.hits] == [
+            older.document_id
+        ]
+
+    def test_bridge_basis_has_no_full_value_context_backfeed(self):
+        # issue 16 P1-2：累积字段 node basis 只有持久化 change_basis，
+        # 不再把完整 new_value 作为 context —— 只支持 retained 旧事实的
+        # evidence 对 change_basis 得 zero，被 complete-basis 剥离。
+        text = "她仍是北门巡检，今日照常巡视北门。"
+        with ConfirmedHistoryStore() as store:
+            store.upsert_turn(
+                scene_id="scene_005",
+                turn_index=5,
+                user_input="",
+                scene_text=text,
+            )
+            doc = next(
+                item
+                for item in store.list_documents()
+                if item.source_type == "scene_paragraph"
+            )
+            link = _npc_link(
+                npc_id="npc-a",
+                log_id=7,
+                turn_index=5,
+                evidence_id=doc.document_id,
+                evidence_hash=history_document_text_hash(doc),
+                intents=("b",),
+                basis="新增兼管东市职责",
+                basis_complete=True,
+            )
+            result = ContextHistoryRetriever(
+                store,
+                diversity_policy=HistoryDiversityPolicy(max_hits=2),
+            ).retrieve(
+                self._plan("顾青", intent_id="b"),
+                current_turn_index=6,
+                continuity_links=[],
+                npc_field_links=[link],
+                matched_active_continuities=0,
+                matched_archived_continuities=0,
+                matched_npc_profiles=1,
+            )
+
+        assert result.invalid_relation_links == 1
+        assert [hit.evidence_id for hit in result.hits] == []
+
+    def test_bridge_basis_positive_control_passes(self):
+        # 对照：真正支持 change_basis 的 evidence 仍 strong 入选。
+        text = "她接手东市巡务，兼管东市。"
+        with ConfirmedHistoryStore() as store:
+            store.upsert_turn(
+                scene_id="scene_005",
+                turn_index=5,
+                user_input="",
+                scene_text=text,
+            )
+            doc = next(
+                item
+                for item in store.list_documents()
+                if item.source_type == "scene_paragraph"
+            )
+            link = _npc_link(
+                npc_id="npc-a",
+                log_id=7,
+                turn_index=5,
+                evidence_id=doc.document_id,
+                evidence_hash=history_document_text_hash(doc),
+                intents=("b",),
+                basis="新增兼管东市职责",
+                basis_complete=True,
+            )
+            result = ContextHistoryRetriever(
+                store,
+                diversity_policy=HistoryDiversityPolicy(max_hits=2),
+            ).retrieve(
+                self._plan("顾青", intent_id="b"),
+                current_turn_index=6,
+                continuity_links=[],
+                npc_field_links=[link],
+                matched_active_continuities=0,
+                matched_archived_continuities=0,
+                matched_npc_profiles=1,
+            )
+
+        assert [hit.evidence_id for hit in result.hits] == [doc.document_id]
+
     def test_npc_recency_clamps_when_document_turn_is_ahead(self):
         text = "她接过铜印，正式成为北门巡检。"
         with ConfirmedHistoryStore() as store:

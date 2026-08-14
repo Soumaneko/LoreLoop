@@ -2,7 +2,7 @@
   "benchmark_version": 3,
   "backend": "batch",
   "fixtures_sha256": "165968d5dab863ae14a45da8c4720e51c8fafd86faa520f542ca8d714609f8bb",
-  "recordings_sha256": "c852fed3524b7b96e7fd8cf108e83699b638cf50bbc77df70ff9020953dbd780",
+  "recordings_sha256": "5c1e8e400cc4d0bb3690d0cea3ae7ca427ec8c0deeabe242e58de64f2dfcf3b8",
   "aggregate": {
     "call_count": 12,
     "provider_attempts": 12,
@@ -42,8 +42,8 @@
     },
     "prompt_content_chars": 5316,
     "token_usage": {
-      "completion_tokens": 1309,
-      "prompt_tokens": 18678
+      "completion_tokens": 1376,
+      "prompt_tokens": 22914
     }
   },
   "cases": [
@@ -72,7 +72,7 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "last_scene_summary": "沈孤鸿走进醉花楼，环顾四周，沈二随行。随后沈二爷低声命人将门关上。",
+          "last_scene_summary": "沈孤鸿走进醉花楼，环顾四周后，命随行的沈二将门关上。",
           "last_scene_turn": 0
         }
       },
@@ -88,13 +88,13 @@
       "prompt_content_chars": 581,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 99,
-          "prompt_tokens": 1605
+          "completion_tokens": 93,
+          "prompt_tokens": 1958
         }
       },
       "token_usage_total": {
-        "completion_tokens": 99,
-        "prompt_tokens": 1605
+        "completion_tokens": 93,
+        "prompt_tokens": 1958
       },
       "gold": {
         "weighted_passed": 24,
@@ -147,7 +147,7 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "茶馆",
-          "last_scene_summary": "林川在茶馆坐下，随后陆川推门而入，径直走向他。",
+          "last_scene_summary": "林川在茶馆坐下，等待某人到来。随后陆川推门而入，径直走向他。",
           "last_scene_turn": 0
         }
       },
@@ -163,13 +163,13 @@
       "prompt_content_chars": 354,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 81,
-          "prompt_tokens": 1517
+          "completion_tokens": 85,
+          "prompt_tokens": 1870
         }
       },
       "token_usage_total": {
-        "completion_tokens": 81,
-        "prompt_tokens": 1517
+        "completion_tokens": 85,
+        "prompt_tokens": 1870
       },
       "gold": {
         "weighted_passed": 18,
@@ -322,7 +322,7 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "last_scene_summary": "沈孤鸿在醉花楼大堂踱步，目光始终不离门口，并低声表示要查明信物来历。",
+          "last_scene_summary": "沈孤鸿在醉花楼大堂踱步，目光始终不离门口，并明确表示要查明信物来历。",
           "last_scene_turn": 0
         }
       },
@@ -338,13 +338,13 @@
       "prompt_content_chars": 446,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 89,
-          "prompt_tokens": 1560
+          "completion_tokens": 65,
+          "prompt_tokens": 1913
         }
       },
       "token_usage_total": {
-        "completion_tokens": 89,
-        "prompt_tokens": 1560
+        "completion_tokens": 65,
+        "prompt_tokens": 1913
       },
       "gold": {
         "weighted_passed": 6,
@@ -399,12 +399,12 @@
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 92,
-          "prompt_tokens": 1532
+          "prompt_tokens": 1885
         }
       },
       "token_usage_total": {
         "completion_tokens": 92,
-        "prompt_tokens": 1532
+        "prompt_tokens": 1885
       },
       "gold": {
         "weighted_passed": 3,
@@ -480,7 +480,7 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "last_scene_summary": "沈孤鸿在会议中猛地拍桌动怒，表现出强烈不满，但随后又叹了口气，情绪迅速平复下来。",
+          "last_scene_summary": "沈孤鸿在议事中拍桌动怒，表现出强烈不满，但随即平复情绪，叹了口气。",
           "last_scene_turn": 0
         }
       },
@@ -496,13 +496,13 @@
       "prompt_content_chars": 362,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 91,
-          "prompt_tokens": 1523
+          "completion_tokens": 87,
+          "prompt_tokens": 1876
         }
       },
       "token_usage_total": {
-        "completion_tokens": 91,
-        "prompt_tokens": 1523
+        "completion_tokens": 87,
+        "prompt_tokens": 1876
       },
       "gold": {
         "weighted_passed": 3,
@@ -554,13 +554,13 @@
       "prompt_content_chars": 363,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 153,
-          "prompt_tokens": 1526
+          "completion_tokens": 193,
+          "prompt_tokens": 1879
         }
       },
       "token_usage_total": {
-        "completion_tokens": 153,
-        "prompt_tokens": 1526
+        "completion_tokens": 193,
+        "prompt_tokens": 1879
       },
       "gold": {
         "weighted_passed": 9,
@@ -615,13 +615,13 @@
       "prompt_content_chars": 378,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 131,
-          "prompt_tokens": 1537
+          "completion_tokens": 147,
+          "prompt_tokens": 1890
         }
       },
       "token_usage_total": {
-        "completion_tokens": 131,
-        "prompt_tokens": 1537
+        "completion_tokens": 147,
+        "prompt_tokens": 1890
       },
       "gold": {
         "weighted_passed": 3,
@@ -659,7 +659,7 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "last_scene_summary": "沈孤鸿遇险时先将身旁弟子护到身后，沉声令众人退开，展现出沉稳与重情的作风。",
+          "last_scene_summary": "沈孤鸿遇险时先将身旁弟子护到身后，沉声喝令众人退开，随后众人评价他为人沉稳、重情重义。",
           "last_scene_turn": 0
         }
       },
@@ -675,13 +675,13 @@
       "prompt_content_chars": 451,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 91,
-          "prompt_tokens": 1566
+          "completion_tokens": 97,
+          "prompt_tokens": 1919
         }
       },
       "token_usage_total": {
-        "completion_tokens": 91,
-        "prompt_tokens": 1566
+        "completion_tokens": 97,
+        "prompt_tokens": 1919
       },
       "gold": {
         "weighted_passed": 3,
@@ -715,7 +715,7 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "演武场",
-          "last_scene_summary": "沈孤鸿在众人面前展示了一手剑法，随后又使出一招隐匿身法，显露其武艺与潜行技巧。",
+          "last_scene_summary": "沈孤鸿在众人面前展示了一套剑法，随后又施展了一招隐匿身法，显露其武艺与潜行技巧。",
           "last_scene_turn": 0
         }
       },
@@ -731,13 +731,13 @@
       "prompt_content_chars": 359,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 94,
-          "prompt_tokens": 1523
+          "completion_tokens": 93,
+          "prompt_tokens": 1876
         }
       },
       "token_usage_total": {
-        "completion_tokens": 94,
-        "prompt_tokens": 1523
+        "completion_tokens": 93,
+        "prompt_tokens": 1876
       },
       "gold": {
         "weighted_passed": 3,
@@ -791,12 +791,12 @@
       "token_usage": {
         "npc_batch_update": {
           "completion_tokens": 80,
-          "prompt_tokens": 1516
+          "prompt_tokens": 1869
         }
       },
       "token_usage_total": {
         "completion_tokens": 80,
-        "prompt_tokens": 1516
+        "prompt_tokens": 1869
       },
       "gold": {
         "weighted_passed": 9,
@@ -896,7 +896,7 @@
       "field_deltas": {
         "npc_001": {
           "last_known_location": "醉花楼",
-          "last_scene_summary": "沈孤鸿进门时，一名青衣客紧随其后，该青衣客被证实是沈孤鸿多年的旧友。",
+          "last_scene_summary": "沈孤鸿进门时，一名青衣客紧随其后，此人正是他多年的旧友。",
           "last_scene_turn": 0
         }
       },
@@ -912,13 +912,13 @@
       "prompt_content_chars": 435,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 89,
-          "prompt_tokens": 1549
+          "completion_tokens": 83,
+          "prompt_tokens": 1902
         }
       },
       "token_usage_total": {
-        "completion_tokens": 89,
-        "prompt_tokens": 1549
+        "completion_tokens": 83,
+        "prompt_tokens": 1902
       },
       "gold": {
         "weighted_passed": 6,
@@ -970,7 +970,7 @@
         },
         "npc_002": {
           "last_known_location": "醉花楼",
-          "last_scene_summary": "林川在醉花楼内，沈孤鸿吩咐关门时他也在场。",
+          "last_scene_summary": "林川在醉花楼内，与沈孤鸿、陆川等人同处一室。",
           "last_scene_turn": 5
         }
       },
@@ -986,13 +986,13 @@
       "prompt_content_chars": 849,
       "token_usage": {
         "npc_batch_update": {
-          "completion_tokens": 219,
-          "prompt_tokens": 1724
+          "completion_tokens": 261,
+          "prompt_tokens": 2077
         }
       },
       "token_usage_total": {
-        "completion_tokens": 219,
-        "prompt_tokens": 1724
+        "completion_tokens": 261,
+        "prompt_tokens": 2077
       },
       "gold": {
         "weighted_passed": 42,

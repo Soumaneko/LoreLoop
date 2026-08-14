@@ -2,13 +2,236 @@
   "version": 1,
   "backend": "batch",
   "cases": {
-    "appeared_action_summary": {"npc_batch_update": {"updates": [{"npc_id": "npc-qin", "scene_summary": {"summary": "秦霜推开库房木门，逐一核对货架上的药箱，发现三箱灵药短缺，当即封住库门，决定天亮后查问守夜弟子。", "evidence_ids": ["turn_20_p001", "turn_20_p002"]}, "stable_changes": []}]}, "token_usage": {"npc_batch_update": {"completion_tokens": 109, "prompt_tokens": 1610}}, "attempts": {"npc_batch_update": 1}},
-    "appeared_dialogue_plan_summary": {"npc_batch_update": {"updates": [{"npc_id": "npc-su", "scene_summary": {"summary": "苏念薇收刀入鞘，向萧欢提议明日拜师后一同前往山下坊市，探听周姓修士的风声。", "evidence_ids": ["turn_21_p001"]}, "stable_changes": []}]}, "token_usage": {"npc_batch_update": {"completion_tokens": 93, "prompt_tokens": 1554}}, "attempts": {"npc_batch_update": 1}},
-    "mentioned_only_no_overwrite": {"npc_batch_update": {"updates": [{"npc_id": "npc-yao", "scene_summary": {"summary": "姚沉璧压低声音向在场者透露，苏念薇如今仍在陷空山上。", "evidence_ids": ["turn_22_p001"]}, "stable_changes": []}]}, "token_usage": {"npc_batch_update": {"completion_tokens": 84, "prompt_tokens": 1528}}, "attempts": {"npc_batch_update": 1}},
-    "appeared_then_departed": {"npc_batch_update": {"updates": [{"npc_id": "npc-lin", "scene_summary": {"summary": "林舟将密信交给萧欢，告知北门守卫已被调走，随后告辞离开。", "evidence_ids": ["turn_23_p001"]}, "stable_changes": []}]}, "token_usage": {"npc_batch_update": {"completion_tokens": 85, "prompt_tokens": 1560}}, "attempts": {"npc_batch_update": 1}},
-    "same_summary_next_turn": {"npc_batch_update": {"updates": [{"npc_id": "npc-qin", "scene_summary": {"summary": "秦霜仍守在库房门前，逐一核验每名出入弟子的腰牌，履行库房管事的职责。", "evidence_ids": ["turn_24_p001"]}, "stable_changes": []}]}, "token_usage": {"npc_batch_update": {"completion_tokens": 90, "prompt_tokens": 1532}}, "attempts": {"npc_batch_update": 1}},
-    "summary_does_not_accumulate": {"npc_batch_update": {"updates": [{"npc_id": "npc-su", "scene_summary": {"summary": "苏念薇在演武场演示御风术，绕过三根木桩后稳稳落地。", "evidence_ids": ["turn_25_p001"]}, "stable_changes": []}]}, "token_usage": {"npc_batch_update": {"completion_tokens": 84, "prompt_tokens": 1539}}, "attempts": {"npc_batch_update": 1}},
-    "stable_role_with_scene_summary": {"npc_batch_update": {"updates": [{"npc_id": "npc-yao", "scene_summary": {"summary": "姚沉璧立在茶棚门口，扬声告知苏念薇很快就会过来。", "evidence_ids": ["turn_26_p001"]}, "stable_changes": []}, {"npc_id": "npc-su", "scene_summary": {"summary": "苏念薇随后走进茶棚，当众抱拳宣布今日起加入合欢宗门下，往后听从宗主安排。", "evidence_ids": ["turn_26_p002"]}, "stable_changes": [{"field": "faction", "value": "合欢宗", "evidence_ids": ["turn_26_p002"]}]}]}, "token_usage": {"npc_batch_update": {"completion_tokens": 191, "prompt_tokens": 1756}}, "attempts": {"npc_batch_update": 1}},
-    "multi_npc_scene_summary_coverage": {"npc_batch_update": {"updates": [{"npc_id": "npc-lin", "scene_summary": {"summary": "林舟从秦霜处接过库房钥匙，并当场答应守到天亮。", "evidence_ids": ["turn_27_p001", "turn_27_p002"]}, "stable_changes": []}, {"npc_id": "npc-qin", "scene_summary": {"summary": "秦霜将库房钥匙交给林舟，嘱咐他天亮前不得离开。", "evidence_ids": ["turn_27_p001"]}, "stable_changes": []}]}, "token_usage": {"npc_batch_update": {"completion_tokens": 156, "prompt_tokens": 1734}}, "attempts": {"npc_batch_update": 1}}
+    "appeared_action_summary": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc-qin",
+            "scene_summary": {
+              "summary": "秦霜推开库房木门，逐一核对货架上的药箱，发现三箱灵药短缺，当即封住库门，决定天亮后查问守夜弟子。",
+              "evidence_ids": [
+                "turn_20_p001",
+                "turn_20_p002"
+              ]
+            },
+            "stable_changes": []
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 109,
+          "prompt_tokens": 1963
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "appeared_dialogue_plan_summary": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc-su",
+            "scene_summary": {
+              "summary": "苏念薇收刀入鞘，向萧欢提议明日拜师后一同前往山下坊市，探听周姓修士的风声。",
+              "evidence_ids": [
+                "turn_21_p001"
+              ]
+            },
+            "stable_changes": []
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 93,
+          "prompt_tokens": 1907
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "mentioned_only_no_overwrite": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc-yao",
+            "scene_summary": {
+              "summary": "姚沉璧压低声音向主角透露，苏念薇如今仍在陷空山上。",
+              "evidence_ids": [
+                "turn_22_p001"
+              ]
+            },
+            "stable_changes": []
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 83,
+          "prompt_tokens": 1881
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "appeared_then_departed": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc-lin",
+            "scene_summary": {
+              "summary": "林舟将密信交给萧欢，告知北门守卫已被调走，随后告辞离开。",
+              "evidence_ids": [
+                "turn_23_p001"
+              ]
+            },
+            "stable_changes": []
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 85,
+          "prompt_tokens": 1913
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "same_summary_next_turn": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc-qin",
+            "scene_summary": {
+              "summary": "秦霜仍守在库房门前，逐一核验每名出入弟子的腰牌，履行库房管事的职责。",
+              "evidence_ids": [
+                "turn_24_p001"
+              ]
+            },
+            "stable_changes": []
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 90,
+          "prompt_tokens": 1885
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "summary_does_not_accumulate": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc-su",
+            "scene_summary": {
+              "summary": "苏念薇在演武场演示御风术，绕过三根木桩后稳稳落地，展示了其御风术的熟练程度。",
+              "evidence_ids": [
+                "turn_25_p001"
+              ]
+            },
+            "stable_changes": []
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 93,
+          "prompt_tokens": 1892
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "stable_role_with_scene_summary": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc-yao",
+            "scene_summary": {
+              "summary": "姚沉璧立在茶棚门口，扬声告知苏念薇很快就会过来。",
+              "evidence_ids": [
+                "turn_26_p001"
+              ]
+            },
+            "stable_changes": []
+          },
+          {
+            "npc_id": "npc-su",
+            "scene_summary": {
+              "summary": "苏念薇随后走进茶棚，当众抱拳宣布今日起加入合欢宗门下，往后听从宗主安排。",
+              "evidence_ids": [
+                "turn_26_p002"
+              ]
+            },
+            "stable_changes": [
+              {
+                "field": "faction",
+                "value": "合欢宗",
+                "change_basis": "新增所属组织：合欢宗",
+                "evidence_ids": [
+                  "turn_26_p002"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 206,
+          "prompt_tokens": 2109
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    },
+    "multi_npc_scene_summary_coverage": {
+      "npc_batch_update": {
+        "updates": [
+          {
+            "npc_id": "npc-lin",
+            "scene_summary": {
+              "summary": "林舟从秦霜处接过库房钥匙，并当场答应守到天亮。",
+              "evidence_ids": [
+                "turn_27_p001",
+                "turn_27_p002"
+              ]
+            },
+            "stable_changes": []
+          },
+          {
+            "npc_id": "npc-qin",
+            "scene_summary": {
+              "summary": "秦霜将库房钥匙交给林舟，嘱咐他天亮前不得离开。",
+              "evidence_ids": [
+                "turn_27_p001"
+              ]
+            },
+            "stable_changes": []
+          }
+        ]
+      },
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 156,
+          "prompt_tokens": 2087
+        }
+      },
+      "attempts": {
+        "npc_batch_update": 1
+      }
+    }
   }
 }

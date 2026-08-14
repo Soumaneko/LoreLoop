@@ -9,14 +9,34 @@ LLM or touch a real save.
 ## Current checkpoint
 
 Accepted on 2026-08-13 (33 cases); re-recorded for the v8 NPC schema on
-2026-08-14:
+2026-08-14; re-recorded for issue 16 (NPC bridge structural correction) on
+2026-08-14 (34 cases):
 
-- must recall: `36/37`
-- weighted recall: `117/122`
+- must recall: `38/38`
+- weighted recall: `123/125`
 - forbidden evidence visible: `0`
 - forbidden main evidence visible: `0`
 - invariant violations: `0`
-- duplicate visible: `4`
+- duplicate visible: `3`
+
+### Issue 16 changes (2026-08-14, per-case review)
+
+The NPC field-history bridge no longer truncates legitimately topic-triggered
+nodes before node-evidence support, and the relation selector ranks
+node-evidence quality before trigger tier / recency / payload cost:
+
+- `npc_multi_topic_trigger_funnel` (new): three topic-matched nodes all enter
+  admission (funnel candidates) while `max_hits=1` admits only the newest;
+  the funnel separates node triggering from final budget competition.
+- `late_state_delta_evidence`: the latest update's delta evidence now wins a
+  seat (`latest_decision` must now recalled) -- the intended quality-first
+  outcome.
+- `npc_relation_owner_cap`: turn-3/turn-4 fixtures tightened so all four
+  nodes carry equal 1.0 support; the case isolates owner-cap mechanics under
+  quality-first ordering (recency breaks the tie, forbidden old role excluded).
+- `single_continuity_item_flood` / `anonymized_spy_regression`: selection
+  order changed (recency is now the quality tie-break inside the relation
+  channel) with identical scores.
 
 The newest cases are benchmark-first contracts for per-evidence semantic
 validation. They are closed by the node-evidence quality layer (see

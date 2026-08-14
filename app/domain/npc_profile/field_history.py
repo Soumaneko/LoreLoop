@@ -47,6 +47,16 @@ class NPCFieldChangeEvidence(BaseModel):
 
 
 class NPCFieldChangeLog(BaseModel):
+    """One persisted field-log row as read back from the store.
+
+    ``change_basis`` is deliberately nullable here: v8->v9 migration leaves
+    legacy rows with ``NULL`` (no basis), and the History bridge marks those
+    ``basis_complete=False`` (incomplete, degraded rescue only).  The write API
+    never produces ``NULL`` for accumulating fields -- that contract lives on
+    ``PreparedNPCFieldChange`` -- so a NULL in the read model always means
+    "migrated legacy row", never "written without a basis".
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     log_id: int = Field(ge=1)
@@ -55,6 +65,7 @@ class NPCFieldChangeLog(BaseModel):
     turn_index: int = Field(ge=0)
     old_value: str | None = None
     new_value: str = Field(min_length=1)
+    change_basis: str | None = None
     summary_delta: str | None = None
     source: Literal["proposal"] = "proposal"
     evidence: list[NPCFieldChangeEvidence] = Field(min_length=1, max_length=4)
@@ -62,6 +73,7 @@ class NPCFieldChangeLog(BaseModel):
     @model_validator(mode="after")
     def validate_node(self):
         _validate_summary_delta(self.field_name, self.summary_delta)
+        _validate_change_basis(self.field_name, self.change_basis)
         positions = [item.position for item in self.evidence]
         if positions != list(range(len(self.evidence))):
             raise ValueError("NPC field evidence positions must be contiguous")
@@ -91,7 +103,15 @@ class PreparedNPCFieldEvidence(BaseModel):
 
 
 class PreparedNPCFieldChange(BaseModel):
-    """One bridgeable accepted change ready for atomic persistence."""
+    """One bridgeable accepted change ready for atomic persistence.
+
+    This is the write-side contract: the batch field updater must persist a
+    non-empty ``change_basis`` (at most 80 characters) for every accumulating
+    stable field change.  ``None`` is only legal for ``last_scene_summary``,
+    whose whole new value is its basis.  Rejecting ``None`` here makes it
+    impossible for the current write API to fabricate a pseudo-legacy log with
+    a NULL basis.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -100,6 +120,7 @@ class PreparedNPCFieldChange(BaseModel):
     turn_index: int = Field(ge=0)
     old_value: str | None = None
     new_value: str = Field(min_length=1)
+    change_basis: str | None = Field(default=None, min_length=1, max_length=80)
     summary_delta: str | None = None
     source: Literal["proposal"] = "proposal"
     evidence: list[PreparedNPCFieldEvidence] = Field(min_length=1, max_length=4)
@@ -107,6 +128,13 @@ class PreparedNPCFieldChange(BaseModel):
     @model_validator(mode="after")
     def validate_node(self):
         _validate_summary_delta(self.field_name, self.summary_delta)
+        _validate_change_basis(self.field_name, self.change_basis)
+        if self.field_name in ("role", "appearance", "faction"):
+            if not self.change_basis or not self.change_basis.strip():
+                raise ValueError(
+                    "role/appearance/faction field logs require a non-empty "
+                    "change_basis"
+                )
         positions = [item.position for item in self.evidence]
         if positions != list(range(len(self.evidence))):
             raise ValueError("NPC field evidence positions must be contiguous")
@@ -166,6 +194,16 @@ def prepare_accepted_field_changes(
                 "eligible NPC field change turn does not match record turn: "
                 f"{change.npc_id}/{change.field}"
             )
+        # 防御性断言：写入 API 不得为累积稳定字段制造无 basis 的日志
+        # （AcceptedNPCScalarChange 模型校验之外的第二道闸门）。
+        if (
+            change.field in ("role", "appearance", "faction")
+            and (not change.change_basis or not change.change_basis.strip())
+        ):
+            raise ValueError(
+                "role/appearance/faction changes require a non-empty "
+                f"change_basis: {change.npc_id}/{change.field}"
+            )
         eligible.append(change)
 
     node_keys = [(item.npc_id, item.field, item.turn_index) for item in eligible]
@@ -209,6 +247,7 @@ def prepare_accepted_field_changes(
             turn_index=turn_index,
             old_value=change.old_value,
             new_value=change.new_value,
+            change_basis=change.change_basis,
             summary_delta=None,
             source="proposal",
             evidence=pointers,
@@ -245,3 +284,16 @@ def _validate_summary_delta(
             raise ValueError("public_summary field logs require summary_delta")
     elif summary_delta is not None:
         raise ValueError("summary_delta is only valid for public_summary logs")
+
+
+def _validate_change_basis(
+    field_name: NPCFieldHistoryName,
+    change_basis: str | None,
+) -> None:
+    if change_basis is None:
+        return
+    if field_name not in ("role", "appearance", "faction"):
+        raise ValueError(
+            "change_basis is only valid for accumulating stable fields "
+            f"(role/appearance/faction), got {field_name}"
+        )

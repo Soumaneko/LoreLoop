@@ -140,6 +140,7 @@ class NPCFieldLogFixture(BaseModel):
     evidence_ids: list[str] = Field(min_length=1, max_length=4)
     old_value: str | None = None
     new_value: str = Field(min_length=1)
+    change_basis: str | None = None
     summary_delta: str | None = None
     hash_mode: Literal["valid", "stale", "missing"] = "valid"
     #: v7 legacy audit row simulated via direct SQL (public_summary only);
@@ -610,6 +611,7 @@ def _materialize_npc_field_fixtures(
                 field=cast(Any, fixture.field_name),
                 old_value=fixture.old_value,
                 new_value=fixture.new_value,
+                change_basis=fixture.change_basis,
                 evidence_ids=tuple(fixture.evidence_ids),
                 turn_index=turn_index,
                 source="proposal",

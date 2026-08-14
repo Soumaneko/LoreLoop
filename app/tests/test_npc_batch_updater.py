@@ -133,10 +133,11 @@ def _summary(text=None, evidence=None) -> NPCSceneSummaryDraft:
     )
 
 
-def _role_change(value="醉花楼主", evidence=None) -> ScalarStableChange:
+def _role_change(value="醉花楼主", evidence=None, basis="成为醉花楼主") -> ScalarStableChange:
     return ScalarStableChange(
         field="role",
         value=value,
+        change_basis=basis,
         evidence_ids=list(evidence or ["turn_3_p001"]),
     )
 
@@ -229,6 +230,7 @@ def test_admission_drops_field_with_invalid_evidence_only():
                     ScalarStableChange(
                         field="faction",
                         value="合欢宗",
+                        change_basis="加入合欢宗",
                         evidence_ids=["turn_3_p001"],
                     ),
                 ],
@@ -301,7 +303,7 @@ def test_parse_batch_updates_skips_invalid_entries_only():
     entries, warnings = parse_batch_updates([
         {"npc_id": "npc_001"},
         {"bogus": True},
-        {"npc_id": "npc_002", "stable_changes": [{"field": "role", "value": "x", "evidence_ids": ["e"]}]},
+        {"npc_id": "npc_002", "stable_changes": [{"field": "role", "value": "x", "change_basis": "x", "evidence_ids": ["e"]}]},
     ])
 
     assert [entry.npc_id for entry in entries] == ["npc_001", "npc_002"]
@@ -316,7 +318,7 @@ def test_parse_batch_updates_salvages_valid_fields_when_one_change_invalid():
         {
             "npc_id": "npc_001",
             "stable_changes": [
-                {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                {"field": "role", "value": "醉花楼主", "change_basis": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
                 {"field": "bogus_field", "value": "x"},
             ],
         },
@@ -342,7 +344,7 @@ def test_parse_batch_updates_rejects_trait_update_but_keeps_role_change():
                 "value": "沉稳重情",
                 "evidence_ids": ["turn_3_p001"],
             },
-            {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+            {"field": "role", "value": "醉花楼主", "change_basis": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
         ],
     }])
 
@@ -479,7 +481,7 @@ def test_parse_batch_updates_caps_stable_changes_at_eight():
     from app.domain.npc_profile.batch_updater import parse_batch_updates
 
     changes = [
-        {"field": "role", "value": f"值{i}", "evidence_ids": ["turn_3_p001"]}
+        {"field": "role", "value": f"值{i}", "change_basis": f"成为值{i}", "evidence_ids": ["turn_3_p001"]}
         for i in range(10)
     ]
     entries, warnings = parse_batch_updates([
@@ -498,7 +500,7 @@ def test_admission_dropped_entries_counts_only_entry_drops():
         {
             "npc_id": "npc_001",
             "stable_changes": [
-                {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
+                {"field": "role", "value": "醉花楼主", "change_basis": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
             ],
         },
         None,
@@ -616,7 +618,7 @@ def test_workflow_loose_envelope_applies_valid_and_drops_invalid():
             {
                 "npc_id": "npc_001",
                 "stable_changes": [
-                    {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
+                    {"field": "role", "value": "醉花楼主", "change_basis": "醉花楼主", "evidence_ids": ["turn_3_p001"]}
                 ],
             },
             {"bogus": True},
@@ -652,7 +654,7 @@ def test_workflow_rejects_trait_update_and_keeps_role_change():
                     "value": "沉稳重情",
                     "evidence_ids": ["turn_3_p001"],
                 },
-                {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                {"field": "role", "value": "醉花楼主", "change_basis": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
             ],
         }],
     }
@@ -776,7 +778,7 @@ def test_workflow_resolves_and_applies_to_store():
             {
                 "npc_id": "npc_001",
                 "stable_changes": [
-                    {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                    {"field": "role", "value": "醉花楼主", "change_basis": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
                 ],
             }
         ]
@@ -835,7 +837,7 @@ def test_mentioned_only_npc_excluded_from_batch_and_field_output():
             {
                 "npc_id": "npc_001",
                 "stable_changes": [
-                    {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                    {"field": "role", "value": "醉花楼主", "change_basis": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
                 ],
             }
         ]
@@ -895,7 +897,7 @@ def test_scan_union_records_mention_hit_but_never_enters_batch():
             {
                 "npc_id": "npc_001",
                 "stable_changes": [
-                    {"field": "role", "value": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
+                    {"field": "role", "value": "醉花楼主", "change_basis": "醉花楼主", "evidence_ids": ["turn_3_p001"]},
                 ],
             }
         ]

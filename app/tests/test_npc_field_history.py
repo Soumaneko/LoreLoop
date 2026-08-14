@@ -42,13 +42,17 @@ def _role_change(
     npc_id: str = "npc-a",
     turn_index: int = 3,
     evidence_ids: tuple[str, ...] = ("turn_3_p001",),
+    basis: str | None = None,
 ) -> AcceptedNPCScalarChange:
+    # 生产 writer 对累积稳定字段必写 change_basis（首设即整值）；helper 默认
+    # 显式携带 basis，避免测试掩盖"写入 API 必须提供 change_basis"的契约。
     return AcceptedNPCScalarChange(
         npc_id=npc_id,
         canonical_name="顾青",
         field="role",
         old_value=None,
         new_value=value,
+        change_basis=basis if basis is not None else value,
         evidence_ids=evidence_ids,
         turn_index=turn_index,
         source="proposal",
@@ -104,7 +108,7 @@ def test_record_rejects_change_that_does_not_match_committed_snapshot():
         assert store.field_change_batch_hash(3) is None
 
 
-def test_fresh_store_creates_v8_field_history_schema(tmp_path):
+def test_fresh_store_creates_v9_field_history_schema(tmp_path):
     db_path = tmp_path / "npcs.db"
     with NPCProfileStore(str(db_path)):
         pass
@@ -121,7 +125,7 @@ def test_fresh_store_creates_v8_field_history_schema(tmp_path):
     }
     connection.close()
 
-    assert version == 8
+    assert version == 9
     assert {
         "npc_field_change_logs",
         "npc_field_change_evidence",
@@ -182,7 +186,7 @@ def test_v6_migration_is_additive_and_preserves_profile_json(tmp_path):
     connection.close()
 
     assert json.loads(migrated_json) == json.loads(raw_profile_json)
-    assert version == 8
+    assert version == 9
 
 
 def _seed_v7_store(
@@ -400,6 +404,42 @@ def test_v7_migration_preserves_legacy_public_summary_logs_as_readonly_audit(
         assert logs[0].evidence[0].evidence_id == "turn_1_p001"
 
 
+def test_v9_migration_keeps_legacy_role_log_without_change_basis_readable(tmp_path):
+    # 旧日志（v7 时代，无 change_basis 列）经 v7->v8->v9 迁移后 change_basis
+    # 为 NULL；读模型必须容忍（basis_complete=False 降级），写入 API 不得再
+    # 制造这种行。
+    db_path = tmp_path / "v7-legacy-role.db"
+    _seed_v7_store(
+        db_path,
+        rows=[("npc-a", "顾青", {"role": "北门巡检"})],
+    )
+    connection = sqlite3.connect(db_path)
+    connection.execute(
+        """
+        INSERT INTO npc_field_change_logs(
+            npc_id, field_name, turn_index, old_value, new_value, summary_delta,
+            source
+        ) VALUES ('npc-a', 'role', 1, NULL, '北门巡检', NULL, 'proposal')
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO npc_field_change_evidence(log_id, position, evidence_id, evidence_hash)
+        VALUES (1, 0, 'turn_1_p001', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    with NPCProfileStore(str(db_path)) as store:
+        logs = store.list_field_change_logs()
+        assert len(logs) == 1
+        assert logs[0].field_name == "role"
+        assert logs[0].change_basis is None
+        # 读模型明确标记为 legacy（无 basis），绝不伪装完整 delta。
+        assert logs[0].model_dump()["change_basis"] is None
+
+
 def test_v8_logs_accept_last_scene_summary_and_reject_legacy_public_summary_writes(
     tmp_path,
 ):
@@ -523,6 +563,7 @@ def test_record_round_trip_preserves_exact_values_position_and_hash():
     change = _role_change(
         long_value,
         evidence_ids=(first.document_id, second.document_id),
+        basis="长值仍需短 basis",
     )
 
     with NPCProfileStore(":memory:") as store:
@@ -548,17 +589,18 @@ def test_record_round_trip_preserves_exact_values_position_and_hash():
 
 
 @pytest.mark.parametrize(
-    ("field_name", "new_value"),
+    ("field_name", "new_value", "basis"),
     [
-        ("role", "北门巡检"),
-        ("appearance", "左颊有新月形伤痕"),
-        ("faction", "白鹿堂"),
-        ("last_scene_summary", "她当众接任北门巡检并承诺严守北门。"),
+        ("role", "北门巡检", "改任北门巡检"),
+        ("appearance", "左颊有新月形伤痕", "新增左颊伤痕"),
+        ("faction", "白鹿堂", "加入白鹿堂"),
+        ("last_scene_summary", "她当众接任北门巡检并承诺严守北门。", None),
     ],
 )
 def test_all_bridgeable_scalar_fields_round_trip(
     field_name,
     new_value,
+    basis,
 ):
     document = _document()
     change = AcceptedNPCScalarChange(
@@ -567,6 +609,7 @@ def test_all_bridgeable_scalar_fields_round_trip(
         field=field_name,
         old_value="旧值",
         new_value=new_value,
+        change_basis=basis,
         evidence_ids=(document.document_id,),
         turn_index=3,
         source="proposal",
@@ -620,6 +663,7 @@ def test_batch_hash_is_document_order_independent_but_change_order_sensitive():
         canonical_name="顾青",
         field="faction",
         new_value="白鹿堂",
+        change_basis="加入白鹿堂",
         evidence_ids=(second.document_id,),
         turn_index=3,
     )
@@ -674,6 +718,85 @@ def test_pointer_validation_rejects_whole_batch(documents, match):
 
         assert store.list_field_change_logs() == []
         assert store.field_change_batch_hash(3) is None
+
+
+@pytest.mark.parametrize(
+    ("basis", "match"),
+    [
+        (None, "require a non-empty change_basis"),
+        ("", "at least 1 character"),
+        ("   ", "at least 1 character"),
+        ("改" * 81, "at most 80 characters"),
+    ],
+)
+def test_write_api_rejects_missing_blank_or_too_long_change_basis(basis, match):
+    # 写入 API 不得制造 change_basis=NULL / 空白 / 超长的伪 legacy 日志；
+    # missing 被模型 validator 拒绝，空白被 pydantic strip 后 min_length 拒绝，
+    # 过长被 max_length 拒绝——三层都在 AcceptedNPCScalarChange 模型层拦截。
+    with pytest.raises(ValueError, match=match):
+        AcceptedNPCScalarChange(
+            npc_id="npc-a",
+            canonical_name="顾青",
+            field="role",
+            old_value=None,
+            new_value="北门巡检",
+            change_basis=basis,
+            evidence_ids=("turn_3_p001",),
+            turn_index=3,
+            source="proposal",
+        )
+
+
+def test_prepared_write_model_rejects_missing_change_basis_for_accumulating_field():
+    # 第二道闸门：PreparedNPCFieldChange（写模型）拒绝累积字段缺 basis，
+    # 即便 AcceptedNPC 层被绕过。last_scene_summary 仍允许 None（整值 basis）。
+    from app.domain.npc_profile.field_history import (
+        PreparedNPCFieldChange,
+        PreparedNPCFieldEvidence,
+    )
+
+    evidence = PreparedNPCFieldEvidence(
+        position=0,
+        evidence_id="turn_3_p001",
+        evidence_hash="a" * 64,
+    )
+    with pytest.raises(ValueError, match="require a non-empty change_basis"):
+        PreparedNPCFieldChange(
+            npc_id="npc-a",
+            field_name="role",
+            turn_index=3,
+            old_value=None,
+            new_value="北门巡检",
+            change_basis=None,
+            summary_delta=None,
+            source="proposal",
+            evidence=[evidence],
+        )
+    with pytest.raises(ValueError, match="require a non-empty change_basis"):
+        PreparedNPCFieldChange(
+            npc_id="npc-a",
+            field_name="appearance",
+            turn_index=3,
+            old_value=None,
+            new_value="左颊有新月形伤痕",
+            change_basis="   ",
+            summary_delta=None,
+            source="proposal",
+            evidence=[evidence],
+        )
+    # last_scene_summary 整值即 basis，允许 None。
+    ok = PreparedNPCFieldChange(
+        npc_id="npc-a",
+        field_name="last_scene_summary",
+        turn_index=3,
+        old_value=None,
+        new_value="她当众接任北门巡检。",
+        change_basis=None,
+        summary_delta=None,
+        source="proposal",
+        evidence=[evidence],
+    )
+    assert ok.change_basis is None
 
 
 def test_duplicate_node_or_evidence_rejects_whole_batch():
@@ -777,6 +900,7 @@ def test_reset_atomically_replaces_old_turns_and_marker_gap_retry_is_noop():
         canonical_name="顾青",
         field="faction",
         new_value="白鹿堂",
+        change_basis="加入白鹿堂",
         evidence_ids=(turn_four.document_id,),
         turn_index=4,
     )
@@ -828,6 +952,7 @@ def test_profile_delete_invalidates_whole_affected_turn_batch():
             canonical_name="陆衡",
             field="role",
             new_value="南仓管事",
+            change_basis="升任南仓管事",
             evidence_ids=(document.document_id,),
             turn_index=3,
         )
@@ -880,12 +1005,12 @@ def test_newer_or_unknown_version_is_rejected_without_creating_v7_tables(tmp_pat
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         INSERT INTO schema_versions(component, version)
-        VALUES ('npc_profile', 9);
+        VALUES ('npc_profile', 10);
         """
     )
     connection.close()
 
-    with pytest.raises(RuntimeError, match="expected 8, got 9"):
+    with pytest.raises(RuntimeError, match="expected 9, got 10"):
         NPCProfileStore(str(db_path))
 
     connection = sqlite3.connect(db_path)

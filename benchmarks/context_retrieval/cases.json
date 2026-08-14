@@ -2158,7 +2158,8 @@
           "evidence_ids": [
             "turn_1_p001"
           ],
-          "new_value": "北门巡检"
+          "new_value": "北门巡检",
+          "change_basis": "北门巡检"
         }
       ],
       "gold_groups": [
@@ -2303,7 +2304,8 @@
           "evidence_ids": [
             "turn_1_p001"
           ],
-          "new_value": "青岩镇守门人"
+          "new_value": "青岩镇守门人",
+          "change_basis": "青岩镇守门人"
         }
       ],
       "forbidden_evidence_ids": [
@@ -2363,7 +2365,8 @@
           "evidence_ids": [
             "turn_1_p001"
           ],
-          "new_value": "白鹿堂"
+          "new_value": "白鹿堂",
+          "change_basis": "白鹿堂"
         }
       ],
       "gold_groups": [
@@ -2454,7 +2457,8 @@
           "evidence_ids": [
             "turn_1_p001"
           ],
-          "new_value": "北门巡检"
+          "new_value": "北门巡检",
+          "change_basis": "北门巡检"
         }
       ],
       "gold_groups": [
@@ -2537,7 +2541,8 @@
           "evidence_ids": [
             "turn_1_p001"
           ],
-          "new_value": "回春堂坐堂医师"
+          "new_value": "回春堂坐堂医师",
+          "change_basis": "回春堂坐堂医师"
         },
         {
           "log_ref": "npc-shenyan-faction-t2",
@@ -2548,7 +2553,8 @@
             "turn_2_p001"
           ],
           "new_value": "回春堂",
-          "hash_mode": "stale"
+          "hash_mode": "stale",
+          "change_basis": "回春堂"
         },
         {
           "log_ref": "npc-shenyan-appearance-t3",
@@ -2559,7 +2565,8 @@
             "turn_3_p999"
           ],
           "new_value": "常穿灰布长衫",
-          "hash_mode": "missing"
+          "hash_mode": "missing",
+          "change_basis": "常穿灰布长衫"
         }
       ],
       "gold_groups": [
@@ -2638,12 +2645,12 @@
         {
           "turn_index": 3,
           "scene_id": "scene_003",
-          "scene_text": "她摘下面具，露出左颊一道新月形伤痕。"
+          "scene_text": "她摘下面具，露出左颊有新月形伤痕。"
         },
         {
           "turn_index": 4,
           "scene_id": "scene_004",
-          "scene_text": "她救出被围商旅，此后以护送商队闻名。"
+          "scene_text": "她以护送商队闻名，是出了名的黑羽卫斥候。"
         },
         {
           "turn_index": 5,
@@ -2674,7 +2681,8 @@
           "evidence_ids": [
             "turn_1_p001"
           ],
-          "new_value": "黑羽卫斥候"
+          "new_value": "黑羽卫斥候",
+          "change_basis": "黑羽卫斥候"
         },
         {
           "log_ref": "npc-qinshuang-faction-t2",
@@ -2684,7 +2692,8 @@
           "evidence_ids": [
             "turn_2_p001"
           ],
-          "new_value": "黑羽卫"
+          "new_value": "黑羽卫",
+          "change_basis": "黑羽卫"
         },
         {
           "log_ref": "npc-qinshuang-appearance-t3",
@@ -2694,7 +2703,8 @@
           "evidence_ids": [
             "turn_3_p001"
           ],
-          "new_value": "左颊有新月形伤痕"
+          "new_value": "左颊有新月形伤痕",
+          "change_basis": "左颊有新月形伤痕"
         },
         {
           "log_ref": "npc-qinshuang-summary-t4",
@@ -2715,7 +2725,8 @@
           "evidence_ids": [
             "turn_5_p001"
           ],
-          "new_value": "南仓管事"
+          "new_value": "南仓管事",
+          "change_basis": "南仓管事"
         }
       ],
       "gold_groups": [
@@ -2822,7 +2833,8 @@
           "evidence_ids": [
             "turn_1_p001"
           ],
-          "new_value": "旧渡口账房"
+          "new_value": "旧渡口账房",
+          "change_basis": "旧渡口账房"
         },
         {
           "log_ref": "npc-zhaoqi-role-t2",
@@ -2832,7 +2844,8 @@
           "evidence_ids": [
             "turn_2_p001"
           ],
-          "new_value": "东街巡夜人"
+          "new_value": "东街巡夜人",
+          "change_basis": "东街巡夜人"
         }
       ],
       "gold_groups": [
@@ -2861,6 +2874,112 @@
           ]
         }
       ]
+    },
+    {
+      "case_id": "npc_multi_topic_trigger_funnel",
+      "description": "Three topic-triggered NPC nodes all enter admission (funnel candidates) while the budget admits only one; the funnel distinguishes node triggering from final selection (issue 16).",
+      "current_turn_index": 6,
+      "search_plan": {
+        "intents": [
+          {
+            "intent_id": "topic_shouzhi",
+            "focus": "entity",
+            "origin": "explicit_input",
+            "entities": [],
+            "topics": [
+              "值守"
+            ]
+          }
+        ]
+      },
+      "turns": [
+        {
+          "turn_index": 1,
+          "scene_id": "scene_001",
+          "scene_text": "她负责门房夜班。"
+        },
+        {
+          "turn_index": 3,
+          "scene_id": "scene_003",
+          "scene_text": "她负责门房换岗。"
+        },
+        {
+          "turn_index": 5,
+          "scene_id": "scene_005",
+          "scene_text": "她负责门房点卯。"
+        }
+      ],
+      "npc_profiles": [
+        {
+          "npc_id": "npc-a",
+          "name": "顾青",
+          "role": "门房值守"
+        }
+      ],
+      "npc_field_logs": [
+        {
+          "log_ref": "npc-a-role-t1",
+          "npc_id": "npc-a",
+          "field_name": "role",
+          "turn_index": 1,
+          "evidence_ids": [
+            "turn_1_p001"
+          ],
+          "new_value": "门房值守",
+          "change_basis": "门房值守"
+        },
+        {
+          "log_ref": "npc-a-role-t3",
+          "npc_id": "npc-a",
+          "field_name": "role",
+          "turn_index": 3,
+          "evidence_ids": [
+            "turn_3_p001"
+          ],
+          "new_value": "门房值守",
+          "change_basis": "门房值守"
+        },
+        {
+          "log_ref": "npc-a-role-t5",
+          "npc_id": "npc-a",
+          "field_name": "role",
+          "turn_index": 5,
+          "evidence_ids": [
+            "turn_5_p001"
+          ],
+          "new_value": "门房值守",
+          "change_basis": "门房值守"
+        }
+      ],
+      "gold_groups": [
+        {
+          "group_id": "newest_node",
+          "importance": "must",
+          "acceptable_evidence_ids": [
+            "turn_5_p001"
+          ]
+        }
+      ],
+      "forbidden_evidence_ids": [
+        "turn_1_p001"
+      ],
+      "provenance_expectations": [
+        {
+          "evidence_id": "turn_5_p001",
+          "direct": false,
+          "relation": true,
+          "linked_npc_changes": [
+            {
+              "npc_id": "npc-a",
+              "field_name": "role",
+              "log_ref": "npc-a-role-t5"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "max_hits": 1
+      }
     }
   ]
 }

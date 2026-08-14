@@ -293,17 +293,29 @@ def select_diverse_candidates(
                 candidate_preview.payload_chars - current_payload_chars
             )
             marginal_cost_band = marginal_chars // 128
+            # Shared key shape for every route.  Element 6 is the quality
+            # discriminator: for relation proposals it is channel_rank (the
+            # per-intent node-evidence support order), so within a triggered
+            # unit quality precedes trigger tier, recency and payload cost
+            # (issue 16).  Direct proposals keep a constant 0 there so their
+            # categorical tier (signal_rank) stays the deciding feature and
+            # the SPEC direct-tier semantics are untouched.
+            quality_tie_rank = (
+                0
+                if proposal.route == "direct"
+                else proposal.channel_rank
+            )
             key = (
                 _ORIGIN_PRIORITY[owner.origin],
                 coverage >= policy.intent_target,
                 coverage,
                 _FOCUS_PRIORITY[owner.focus],
                 -new_coverage,
+                quality_tie_rank,
                 proposal.signal_rank,
                 proposal.recency_rank,
                 not route_is_new,
                 marginal_cost_band,
-                proposal.channel_rank,
                 intent_order[owner.intent_id],
                 -turn_index(candidate),
                 marginal_chars,

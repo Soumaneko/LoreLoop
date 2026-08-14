@@ -46,10 +46,19 @@ class _EvidenceCarrying(BaseModel):
 
 
 class ScalarStableChange(_EvidenceCarrying):
-    """标量稳定字段的原子 set change。"""
+    """标量稳定字段的原子 set change。
+
+    ``change_basis`` 是本次变化的可信自由文本（LLM 在同一调用内产出，与
+    ``evidence_ids`` 共用同一轮正文依据）：只陈述本次真正新增/移除/改写了什么，
+    不搬运 retained 旧事实。它持久化为 field-change node 的 node basis
+    （``npc_field_change_logs.change_basis``），供 History bridge 触发与
+    node-evidence support 使用；缺失（仅限旧日志）时该 node 降级为
+    ``basis_complete=False``。
+    """
 
     field: Literal["role", "appearance", "faction"]
     value: str = Field(min_length=1)
+    change_basis: str = Field(min_length=1, max_length=80)
 
 
 class AbilityAddChange(_EvidenceCarrying):

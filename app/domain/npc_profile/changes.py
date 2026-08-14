@@ -60,6 +60,7 @@ class AcceptedNPCScalarChange(BaseModel):
     field: SCALAR_FIELD_LITERAL
     old_value: str | None = None
     new_value: str = Field(min_length=1)
+    change_basis: str | None = Field(default=None, min_length=1, max_length=80)
     evidence_ids: tuple[str, ...] = ()
     turn_index: int | None = None
     source: Literal["proposal", "current_state_sync"] = "proposal"
@@ -74,6 +75,8 @@ class AcceptedNPCScalarChange(BaseModel):
                 )
             if self.evidence_ids:
                 raise ValueError("current_state_sync changes must not carry evidence")
+            if self.change_basis is not None:
+                raise ValueError("current_state_sync changes carry no change_basis")
         return self
 
     @model_validator(mode="after")
@@ -88,6 +91,17 @@ class AcceptedNPCScalarChange(BaseModel):
         if self.field in _STABLE_PROPOSAL_FIELDS:
             if not self.evidence_ids:
                 raise ValueError("stable field changes require evidence_ids")
+        if self.field in ("role", "appearance", "faction"):
+            if not self.change_basis:
+                raise ValueError(
+                    "role/appearance/faction changes require a non-empty "
+                    "change_basis"
+                )
+        elif self.change_basis is not None:
+            raise ValueError(
+                "change_basis is only valid for accumulating stable fields "
+                f"(role/appearance/faction), got {self.field}"
+            )
         return self
 
 

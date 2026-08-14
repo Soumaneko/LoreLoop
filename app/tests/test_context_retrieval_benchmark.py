@@ -117,7 +117,8 @@ def test_context_retrieval_benchmark_captures_current_quality_signals(
     assert budget["payload_chars"] <= 520
 
     late_delta = cases["late_state_delta_evidence"]
-    assert late_delta["must_recalled"] == 0
+    # issue 16: 最新 update 的 delta evidence 现在能赢得席位（was must 0/1）。
+    assert late_delta["must_recalled"] == 1
     assert late_delta["must_total"] == 1
     assert late_delta["turn_contributions"] == {"1": 1, "5": 2}
     assert late_delta["relation_candidates_considered"] == 4
@@ -233,13 +234,13 @@ def test_npc_field_contracts_green_in_accepted_suite():
     assert repeated == report
 
     assert suite.version == 3
-    assert len(suite.cases) == 33
+    assert len(suite.cases) == 34
     npc_cases = {
         case["case_id"]: case
         for case in report["cases"]
         if case.get("npc_bridge_status") == "wired"
     }
-    assert len(npc_cases) == 8
+    assert len(npc_cases) == 9
 
     for case_id in (
         "npc_role_relation_exact",
@@ -270,10 +271,10 @@ def test_npc_field_contracts_green_in_accepted_suite():
     assert shared["visible_evidence_ids"] == ["turn_1_p001"]
     assert shared["invariant_violations"] == []
     aggregate = report["aggregate"]
-    assert aggregate["must_recalled"] == 36
-    assert aggregate["must_total"] == 37
-    assert aggregate["weighted_recalled"] == 117
-    assert aggregate["weighted_total"] == 122
+    assert aggregate["must_recalled"] == 38
+    assert aggregate["must_total"] == 38
+    assert aggregate["weighted_recalled"] == 123
+    assert aggregate["weighted_total"] == 125
     assert aggregate["invariant_violation_count"] == 0
     assert aggregate["forbidden_visible_count"] == 0
     assert aggregate["forbidden_main_visible_count"] == 0
@@ -301,13 +302,15 @@ def test_every_case_records_npc_field_funnel():
             assert all(case[field] == 0 for field in npc_fields), case["case_id"]
 
     aggregate = report["aggregate"]
-    assert aggregate["npc_valid_links"] == 11
+    assert aggregate["npc_valid_links"] == 14
     assert aggregate["npc_stale_links"] == 2
     assert aggregate["npc_invalid_links"] == 1
     assert aggregate["npc_degraded_links"] == 0
-    assert aggregate["matched_npc_profiles"] == 8
-    assert aggregate["npc_relation_candidates"] == 10
-    assert aggregate["npc_relation_hits_added"] == 8
+    assert aggregate["matched_npc_profiles"] == 9
+    # 触发(funnel candidates)与预算竞争(relation hits added)分离：
+    # multi-trigger case 3 个主题命中节点全部触发、仅 1 个入选（issue 16）。
+    assert aggregate["npc_relation_candidates"] == 13
+    assert aggregate["npc_relation_hits_added"] == 9
 
 
 def test_compare_reports_accepts_matching_custom_version():

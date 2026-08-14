@@ -47,8 +47,30 @@ _FIELD_ORDER: tuple[NPCFieldHistoryName, ...] = (
 NPCFieldRelationReason = Literal[
     "npc_name_match",
     "npc_alias_match",
+    "npc_delta_topic_match",
     "npc_value_topic_match",
 ]
+
+
+def _node_change_basis(
+    log: NPCFieldChangeLog,
+) -> tuple[str | None, str | None, NPCFieldRelationReason, bool]:
+    """Node-specific this-change basis for one field log.
+
+    ``last_scene_summary`` is a per-scene whole replacement: the full new value
+    is the node semantics (and its own delta), always complete.  Accumulative
+    stable fields use the persisted ``change_basis`` written by the batch
+    updater at accepted-change time -- the trusted statement of what this change
+    added/removed/rewrote -- with NO full-value context, so retained old facts
+    can neither trigger nor support a later node.  Legacy logs without a
+    persisted basis are marked ``basis_complete=False`` (incomplete, degraded
+    rescue only) instead of pretending a complete delta.
+    """
+    if log.field_name == "last_scene_summary":
+        return log.new_value, None, "npc_delta_topic_match", True
+    if log.change_basis and log.change_basis.strip():
+        return log.change_basis, None, "npc_delta_topic_match", True
+    return log.new_value, None, "npc_value_topic_match", False
 
 
 class NPCFieldHistoryLink(BaseModel):
@@ -159,28 +181,21 @@ class NPCProfileHistoryBridge:
     Identity matches use name / permanent alias exact keys (transient aliases
     are not a stable history index); a surface mapping to several profiles
     emits all of them deterministically.  An exact identity skeleton takes the
-    latest node per open field; explicit-input topics may add back up to
-    ``topic_addback_per_field`` older nodes per ``(intent, npc, field)``.
-    Topics are scoped with AND semantics: an intent that carries entities only
-    matches topics inside its own identity matches, while a pure-topic intent
-    scans every active profile.  No full current profile is attached as a
-    contextual basis, so a later aggregate never broadcasts onto an older node.
+    latest node per open field (the current-state default); every deterministically
+    topic-matched node -- not a fixed number -- also enters emission, and the
+    downstream node-evidence support layer plus selector budgets decide what
+    survives.  Topics are scoped with AND semantics: an intent that carries
+    entities only matches topics inside its own identity matches, while a
+    pure-topic intent scans every active profile.  No full current profile is
+    attached as a contextual basis, so a later aggregate never broadcasts onto
+    an older node.
     """
 
     def __init__(
         self,
         npc_store: NPCProfileStore,
-        *,
-        total_link_cap: int = 64,
-        topic_addback_per_field: int = 2,
     ):
-        if total_link_cap < 1:
-            raise ValueError("total_link_cap must be positive")
-        if topic_addback_per_field < 1:
-            raise ValueError("topic_addback_per_field must be positive")
         self.npc_store = npc_store
-        self.total_link_cap = total_link_cap
-        self.topic_addback_per_field = topic_addback_per_field
 
     def retrieve(
         self,
@@ -271,9 +286,9 @@ class NPCProfileHistoryBridge:
 
         links: list[NPCFieldHistoryLink] = []
         for emission in ordered:
-            if len(links) >= self.total_link_cap:
-                break
-            basis = emission.log.new_value
+            basis_primary, basis_context, _, basis_complete = (
+                _node_change_basis(emission.log)
+            )
             union_reasons = set().union(*(
                 reasons for reasons in emission.intent_reasons.values()
             ))
@@ -303,8 +318,9 @@ class NPCProfileHistoryBridge:
                         ),
                     )
                 },
-                evidence_basis_primary=basis,
-                basis_complete=True,
+                evidence_basis_primary=basis_primary,
+                evidence_basis_context=basis_context,
+                basis_complete=basis_complete,
             ))
 
         return NPCFieldHistoryBridgeResult(
@@ -388,12 +404,12 @@ class NPCProfileHistoryBridge:
                 if field_name not in _FIELD_ORDER:
                     continue
                 for log in logs:
-                    basis = log.new_value
+                    basis, _, reason, _ = _node_change_basis(log)
                     if basis and support_score(
                         normalized,
                         basis,
                     ) >= NPC_TOPIC_MATCH_THRESHOLD:
-                        reasons_by_log[log.log_id].add("npc_value_topic_match")
+                        reasons_by_log[log.log_id].add(reason)
         return dict(reasons_by_log)
 
     def _collect_emissions(
@@ -464,6 +480,14 @@ class NPCProfileHistoryBridge:
         identity_triggered: bool,
         topic_reasons_by_log: dict[int, set[NPCFieldRelationReason]],
     ) -> list[NPCFieldChangeLog]:
+        """Select the nodes this intent may emit for one field.
+
+        Identity-triggered intents always emit the latest node (the
+        current-state default); every deterministically topic-matched node is
+        also emitted -- no fixed per-field cap -- because each triggered node
+        is a distinct appearance -> evidence mapping that must reach the
+        node-evidence support layer before any budget competition.
+        """
         ordered = sorted(
             logs,
             key=lambda log: (-log.turn_index, -log.log_id),
@@ -473,11 +497,10 @@ class NPCProfileHistoryBridge:
         if identity_triggered:
             selected.append(ordered[0])
             selected_ids.add(ordered[0].log_id)
-        add_back = [
+        selected.extend(
             log
             for log in ordered
             if log.log_id in topic_reasons_by_log
             and log.log_id not in selected_ids
-        ]
-        selected.extend(add_back[: self.topic_addback_per_field])
+        )
         return selected
