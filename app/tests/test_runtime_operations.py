@@ -7,6 +7,7 @@ import pytest
 
 from app import api
 from app.core.cancellation import CancellationToken, commit_if_not_cancelled
+from app.core.client_error import ClientValidationError
 from app.core.diagnostics import DiagnosticLogger
 from app.core.llm.token_usage import get_trace_token_usage, publish_token_usage
 from app.runtime.operation_models import OperationEventBuffer
@@ -740,7 +741,7 @@ def test_public_api_rejects_model_operations_before_configuration(monkeypatch):
     runtime = get_campaign_runtime()
     monkeypatch.setattr(runtime, "is_model_configured", lambda: False)
 
-    with pytest.raises(RuntimeError, match="请先在模型设置中配置"):
+    with pytest.raises(ClientValidationError, match="请先在模型设置中配置"):
         api.start_generation_operation(
             "调查钟楼",
             difficulty="普通",

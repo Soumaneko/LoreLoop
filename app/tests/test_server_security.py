@@ -160,9 +160,10 @@ def test_player_json_shows_validation_message():
 
     handler._handle_player_json(explode)
     payload = json.loads(handler.wfile.getvalue().decode("utf-8"))
-    assert handler.recorded_status == 500
+    assert handler.recorded_status == 400
     assert payload["error"]["code"] == "validation_error"
     assert payload["error"]["message"] == "user_input is required"
+    assert "recoverable" not in payload["error"]
 
 
 def test_player_json_genericizes_internal_error():
@@ -186,21 +187,42 @@ def test_player_json_genericizes_internal_error():
     assert "/home" not in json.dumps(payload, ensure_ascii=False)
 
 
-def test_client_error_message_genericizes_save_archive_error():
-    from app.player_server import _client_error_message
+def test_save_import_validation_returns_400_validation_error():
+    handler = object.__new__(PlayerHandler)
+    handler.headers = {"Content-Type": "text/plain"}
+    handler.wfile = io.BytesIO()
+    handler.recorded_status = None
+    handler.send_response = lambda status, message=None: setattr(
+        handler, "recorded_status", status
+    )
+    handler.send_header = lambda _name, _value: None
+    handler.end_headers = lambda: None
+
+    handler._handle_save_import("new-save")
+    payload = json.loads(handler.wfile.getvalue().decode("utf-8"))
+    assert handler.recorded_status == 400
+    assert payload["error"]["code"] == "validation_error"
+    assert payload["error"]["message"] == "Import body must be a ZIP archive"
+    assert "recoverable" not in payload["error"]
+
+
+def test_client_error_projection_genericizes_save_archive_error():
+    from app.player_server import _project_client_error
     from app.runtime.save_archive import SaveArchiveError
 
-    message = _client_error_message(
+    status, code, message = _project_client_error(
         SaveArchiveError(
             "Save directory is not a regular directory: "
             "/home/secret/.loreloop/campaigns/c-1"
         ),
-        "save import",
+        label="save import",
     )
+    assert status == 500
+    assert code == "internal_error"
     assert message == "服务器内部错误，详情见服务端日志。"
 
 
-def test_operation_failure_message_shows_validation_only():
+def test_operation_failure_projection_shows_validation_only():
     from app.player_server import PlayerHandler
 
     validation = SimpleNamespace(
@@ -211,12 +233,47 @@ def test_operation_failure_message_shows_validation_only():
         error_type="RuntimeError",
         error_message="boom /home/secret/app.py",
     )
-    assert PlayerHandler._operation_failure_message(validation) == (
-        "Pending turn not found."
+    assert PlayerHandler._project_operation_failure(validation) == (
+        "validation_error",
+        "Pending turn not found.",
     )
-    assert PlayerHandler._operation_failure_message(internal) == (
-        "服务器内部错误，详情见服务端日志。"
+    assert PlayerHandler._project_operation_failure(internal) == (
+        "operation_failed",
+        "服务器内部错误，详情见服务端日志。",
     )
+
+
+def test_operation_stream_missing_operation_returns_validation_error(monkeypatch):
+    import urllib.parse
+
+    from app import player_server
+
+    handler = object.__new__(PlayerHandler)
+    handler.wfile = io.BytesIO()
+    handler.send_response = lambda _status, _message=None: None
+    handler.send_header = lambda _name, _value: None
+    handler.end_headers = lambda: None
+
+    class EmptyOperations:
+        def get(self, operation_id):
+            return None
+
+    monkeypatch.setattr(
+        player_server,
+        "get_campaign_runtime",
+        lambda: SimpleNamespace(operations=EmptyOperations()),
+    )
+    handler._handle_operation_event_stream(
+        "missing-op",
+        urllib.parse.urlparse("/api/player/operations/missing-op/events"),
+        player=True,
+        resumed=True,
+    )
+
+    payload = handler.wfile.getvalue().decode("utf-8")
+    assert "validation_error" in payload
+    assert "Operation not found" in payload
+    assert "recoverable" not in payload
 
 
 def test_operation_stream_exception_does_not_leak(monkeypatch):

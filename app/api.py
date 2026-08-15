@@ -79,7 +79,7 @@ def _submit_managed_operation(
     runtime = get_campaign_runtime()
     with runtime.operation_submission():
         if not runtime.is_model_configured():
-            raise RuntimeError("请先在模型设置中配置并测试连接")
+            raise ClientValidationError("请先在模型设置中配置并测试连接")
         return runtime.operations.submit_stream(
             policy.operation_type,
             stream_factory,

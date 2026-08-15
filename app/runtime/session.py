@@ -21,6 +21,7 @@ from app.runtime.stores import StoreBundle
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 from app.runtime.model_config import effective_gateway_factory
+from app.core.client_error import ClientValidationError
 from app.core.diagnostics import NullDiagnosticLogger
 from app.runtime.serialization import model_data
 from app.runtime.turn_history import CampaignHistory
@@ -298,7 +299,7 @@ class CampaignRuntime:
         with self._confirmation_lock:
             pending = self.pending_turns.get(turn_id)
             if pending is None:
-                raise ValueError("Pending turn not found")
+                raise ClientValidationError("Pending turn not found")
             variants = self.pending_turns.variants(pending.group_id)
             discarded_turn_ids = [variant.turn_id for variant in variants]
             self.pending_turns.discard_group(pending.group_id)
@@ -320,7 +321,7 @@ class CampaignRuntime:
             opening = self.pending_openings.get(turn_id)
             selected = pending or opening
             if selected is None:
-                raise ValueError("Pending turn not found")
+                raise ClientValidationError("Pending turn not found")
 
             source_text = (
                 selected.original_scene_text
@@ -329,7 +330,7 @@ class CampaignRuntime:
             )
             requested_text = source_text if scene_text is None else str(scene_text)
             if not requested_text.strip():
-                raise ValueError("Scene text cannot be empty")
+                raise ClientValidationError("Scene text cannot be empty")
 
             selected.scene_result = selected.scene_result.model_copy(
                 update={"scene_text": requested_text}

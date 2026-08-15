@@ -89,8 +89,8 @@ def _read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     return json.loads(raw)
 
 
-def _project_client_error(exc: Exception, *, label: str) -> tuple[str, str]:
-    """Project an exception into a (code, message) pair safe for the client.
+def _project_client_error(exc: Exception, *, label: str) -> tuple[int, str, str]:
+    """Project an exception into a (status, code, message) safe for the client.
 
     Only :class:`ClientValidationError` messages (deliberate validation) are
     surfaced verbatim. Every other exception -- including ``SaveArchiveError``,
@@ -98,14 +98,10 @@ def _project_client_error(exc: Exception, *, label: str) -> tuple[str, str]:
     server-side and replaced with a generic ``internal_error``.
     """
     if isinstance(exc, ClientValidationError):
-        return "validation_error", str(exc) or "请求参数不合法。"
+        return 400, "validation_error", str(exc) or "请求参数不合法。"
     print(f"[player-server] {label} failed: {exc}", file=sys.stderr)
     traceback.print_exc()
-    return "internal_error", "服务器内部错误，详情见服务端日志。"
-
-
-def _client_error_message(exc: Exception, label: str) -> str:
-    return _project_client_error(exc, label=label)[1]
+    return 500, "internal_error", "服务器内部错误，详情见服务端日志。"
 
 
 class PlayerHandler(BaseHTTPRequestHandler):
@@ -357,16 +353,15 @@ class PlayerHandler(BaseHTTPRequestHandler):
         try:
             _json_response(self, 200, {"ok": True, "data": fn()})
         except Exception as exc:
-            code, message = _project_client_error(exc, label="player request")
+            status, code, message = _project_client_error(exc, label="player request")
             _json_response(
                 self,
-                500,
+                status,
                 {
                     "ok": False,
                     "error": {
                         "code": code,
                         "message": message,
-                        "recoverable": True,
                     },
                 },
             )
@@ -401,14 +396,18 @@ class PlayerHandler(BaseHTTPRequestHandler):
             pass
         except Exception as exc:
             if not response_started and not self.wfile.closed:
+                status, code, message = _project_client_error(
+                    exc,
+                    label="save export",
+                )
                 _json_response(
                     self,
-                    500,
+                    status,
                     {
                         "ok": False,
                         "error": {
-                            "code": "export_failed",
-                            "message": _client_error_message(exc, "save export"),
+                            "code": code,
+                            "message": message,
                         },
                     },
                 )
@@ -438,14 +437,18 @@ class PlayerHandler(BaseHTTPRequestHandler):
             data = player_saves_payload(import_save_archive(temporary_path, name))
             _json_response(self, 200, {"ok": True, "data": data})
         except Exception as exc:
+            status, code, message = _project_client_error(
+                exc,
+                label="save import",
+            )
             _json_response(
                 self,
-                500,
+                status,
                 {
                     "ok": False,
                     "error": {
-                        "code": "import_failed",
-                        "message": _client_error_message(exc, "save import"),
+                        "code": code,
+                        "message": message,
                     },
                 },
             )
@@ -655,13 +658,12 @@ class PlayerHandler(BaseHTTPRequestHandler):
 
     def _write_operation_start_error(self, exc: Exception, *, player: bool) -> None:
         self._send_sse_headers()
-        code, message = _project_client_error(exc, label="operation start")
+        _, code, message = _project_client_error(exc, label="operation start")
         error = {
             "ok": False,
             "error": {
                 "code": code,
                 "message": message,
-                "recoverable": player,
             },
         }
         try:
@@ -671,14 +673,15 @@ class PlayerHandler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     @staticmethod
-    def _operation_failure_message(failed) -> str:
+    def _project_operation_failure(failed) -> tuple[str, str]:
+        """Project a failed Operation snapshot into a player-safe (code, message)."""
         if (
             failed is not None
             and failed.error_type == "ClientValidationError"
             and failed.error_message
         ):
-            return failed.error_message
-        return "服务器内部错误，详情见服务端日志。"
+            return "validation_error", failed.error_message
+        return "operation_failed", "服务器内部错误，详情见服务端日志。"
 
     def _handle_operation_event_stream(
         self,
@@ -702,7 +705,7 @@ class PlayerHandler(BaseHTTPRequestHandler):
             and operation.operation_type not in PLAYER_OPERATION_TYPES
         ):
             self._write_operation_start_error(
-                ValueError("Operation not found"),
+                ClientValidationError("Operation not found"),
                 player=player,
             )
             return
@@ -764,12 +767,12 @@ class PlayerHandler(BaseHTTPRequestHandler):
                     break
                 if batch.status == "failed":
                     failed = runtime.operations.get(operation_id)
+                    code, message = self._project_operation_failure(failed)
                     error = {
                         "ok": False,
                         "error": {
-                            "code": "operation_failed",
-                            "message": self._operation_failure_message(failed),
-                            "recoverable": player,
+                            "code": code,
+                            "message": message,
                         },
                     }
                     self._write_sse_payload(error)
@@ -780,13 +783,12 @@ class PlayerHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
         except Exception as exc:
-            code, message = _project_client_error(exc, label="operation stream")
+            _, code, message = _project_client_error(exc, label="operation stream")
             error = {
                 "ok": False,
                 "error": {
                     "code": code,
                     "message": message,
-                    "recoverable": player,
                 },
             }
             try:
