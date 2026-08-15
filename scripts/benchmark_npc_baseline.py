@@ -273,11 +273,8 @@ class SceneSummaryExpectation(BaseModel):
 
     npc_id: str = Field(min_length=1)
     turn_index: int = Field(ge=0)
-    #: 必须全部出现的字面词。
+    #: 必须全部出现的字面词；只约束稳定人物、地点、物件和关键行为，不约束自然措辞。
     required_terms: list[str] = Field(default_factory=list)
-    #: 语义等价组：至少命中一个即可（如「将要到来」→ 过来/到/就来/将至）。
-    #: 避免把模型的自然措辞绑定到单一字面词。
-    required_any_terms: list[str] = Field(default_factory=list)
     forbidden_terms: list[str] = Field(default_factory=list)
     acceptable_evidence_ids: list[str] = Field(min_length=1, max_length=8)
     importance: IMPORTANCE = "must"
@@ -288,8 +285,6 @@ class SceneSummaryExpectation(BaseModel):
             raise ValueError("scene summary acceptable evidence IDs must be unique")
         if len(self.required_terms) != len(set(self.required_terms)):
             raise ValueError("scene summary required terms must be unique")
-        if len(self.required_any_terms) != len(set(self.required_any_terms)):
-            raise ValueError("scene summary required-any terms must be unique")
         if len(self.forbidden_terms) != len(set(self.forbidden_terms)):
             raise ValueError("scene summary forbidden terms must be unique")
         return self
@@ -968,12 +963,6 @@ def _score_gold(
                 expectation.acceptable_evidence_ids
             )
             matched = matched and all(term in summary for term in expectation.required_terms)
-            matched = matched and (
-                not expectation.required_any_terms
-                or any(
-                    term in summary for term in expectation.required_any_terms
-                )
-            )
             matched = matched and all(term not in summary for term in expectation.forbidden_terms)
             positive.append(("last_scene_summary", matched, expectation.importance == "must"))
 

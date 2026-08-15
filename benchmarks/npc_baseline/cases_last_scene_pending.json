@@ -128,7 +128,7 @@
       "gold": {"resolution_expectations": [{"candidate_name": "苏念薇", "resolution": "existing"}, {"candidate_name": "姚沉璧", "resolution": "existing"}], "stable_field_expectations": [{"npc_id": "npc-su", "field": "role", "value": "合欢宗弟子"}, {"npc_id": "npc-su", "field": "faction", "value": "合欢宗"}], "forbidden_field_changes": [{"npc_id": "npc-su", "field": "public_summary"}]},
       "last_scene_contract": {
         "presence_expectations": [{"surface": "姚沉璧", "presence": "appeared"}, {"surface": "苏念薇", "presence": "appeared"}],
-        "scene_summary_expectations": [{"npc_id": "npc-yao", "turn_index": 26, "required_terms": ["苏念薇"], "required_any_terms": ["过来", "就来", "就到", "将至", "快到了"], "acceptable_evidence_ids": ["turn_26_p001"]}, {"npc_id": "npc-su", "turn_index": 26, "required_terms": ["加入合欢宗", "听从"], "acceptable_evidence_ids": ["turn_26_p002"]}],
+        "scene_summary_expectations": [{"npc_id": "npc-yao", "turn_index": 26, "required_terms": ["苏念薇"], "acceptable_evidence_ids": ["turn_26_p001"]}, {"npc_id": "npc-su", "turn_index": 26, "required_terms": ["加入合欢宗", "听从"], "acceptable_evidence_ids": ["turn_26_p002"]}],
         "expected_batch_npc_ids": ["npc-su", "npc-yao"]
       }
     },

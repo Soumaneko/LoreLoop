@@ -194,16 +194,6 @@ def prepare_accepted_field_changes(
                 "eligible NPC field change turn does not match record turn: "
                 f"{change.npc_id}/{change.field}"
             )
-        # 防御性断言：写入 API 不得为累积稳定字段制造无 basis 的日志
-        # （AcceptedNPCScalarChange 模型校验之外的第二道闸门）。
-        if (
-            change.field in ("role", "appearance", "faction")
-            and (not change.change_basis or not change.change_basis.strip())
-        ):
-            raise ValueError(
-                "role/appearance/faction changes require a non-empty "
-                f"change_basis: {change.npc_id}/{change.field}"
-            )
         eligible.append(change)
 
     node_keys = [(item.npc_id, item.field, item.turn_index) for item in eligible]
