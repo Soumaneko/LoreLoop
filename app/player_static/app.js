@@ -1,4 +1,5 @@
 import { acknowledgeOperation, cancelOperation, downloadSave, importSaveArchive, loadCoreMemory, loadEvents, loadRecords, request, saveCoreMemory, saveExperienceMode, stream, subscribe, updateRecord } from "./api.js";
+import { playerErrorFeedback } from "./error_feedback.js";
 import {
   enhanceCustomSelect,
   syncCustomSelect,
@@ -35,7 +36,7 @@ const els = {
   pendingCard: $("pendingCard"), suggestions: $("suggestions"), suggestionList: $("suggestionList"),
   turnNavigator: $("turnNavigator"), turnNavigatorList: $("turnNavigatorList"),
   turnNavigatorLatest: $("turnNavigatorLatest"),
-  errorCard: $("errorCard"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
+  errorCard: $("errorCard"), errorTitle: $("errorTitle"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
   composerModeBadge: $("composerModeBadge"),
   drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"),
@@ -213,11 +214,17 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => { els.toast.hidden = true; }, 2600);
 }
 
-function showError(error, fallback = "之前的故事没有受到影响，你可以重新尝试。") {
+function showError(
+  error,
+  fallback = "之前的故事没有受到影响，你可以重新尝试。",
+  options = {},
+) {
   reportClientError(error, "displayed_error");
   state.lastError = error;
+  const feedback = playerErrorFeedback(error, fallback, options);
   setMode("error");
-  els.errorMessage.textContent = error?.message || fallback;
+  els.errorTitle.textContent = feedback.title;
+  els.errorMessage.textContent = feedback.message;
   els.errorCard.hidden = false;
   renderControls();
   scrollToBottom();
@@ -1115,7 +1122,7 @@ function beginEdit(display, closing, actions, variant) {
     } catch (error) {
       save.disabled = false;
       cancel.disabled = false;
-      showError(error);
+      showError(error, undefined, { pendingPreserved: true });
     }
   };
   editActions.append(cancel, save);
@@ -1208,7 +1215,7 @@ async function restoreOriginalScene(variant) {
     renderPending();
     showToast("已恢复该版本的原始正文");
   } catch (error) {
-    showError(error);
+    showError(error, undefined, { pendingPreserved: true });
   }
 }
 
@@ -2475,7 +2482,7 @@ async function resumeGenerationOperation(operation) {
         autoSizeInput();
       }
     }
-    showError(error);
+    showError(error, undefined, { pendingPreserved: Boolean(retryMode) });
     await acknowledgeFailedOperation(error, operation.operation_id);
     return false;
   } finally {
@@ -2521,7 +2528,7 @@ async function resumeConfirmationOperation(operation) {
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
     setMode("pending");
     renderAll();
-    showError(error);
+    showError(error, undefined, { pendingPreserved: true });
     await acknowledgeFailedOperation(error, operation.operation_id);
     return false;
   }
@@ -2564,7 +2571,7 @@ async function rewriteFromFeedbackText(userFeedback) {
       showToast(feedbackNoRewriteMessage(decision.reason_code));
     }
   } catch (error) {
-    stopStreaming(); setMode("pending"); renderAll(); showError(error);
+    stopStreaming(); setMode("pending"); renderAll(); showError(error, undefined, { pendingPreserved: true });
     await acknowledgeFailedOperation(error);
   } finally {
     finishGenerationRun();
@@ -2646,7 +2653,7 @@ async function retryTurn(retryMode) {
     }
     showToast("新版本已生成，旧版本仍然保留");
   } catch (error) {
-    stopStreaming(); setMode("pending"); renderAll(); showError(error);
+    stopStreaming(); setMode("pending"); renderAll(); showError(error, undefined, { pendingPreserved: true });
     await acknowledgeFailedOperation(error);
   } finally {
     finishGenerationRun();
@@ -2686,7 +2693,7 @@ async function retryOpening() {
     }
     showToast("新开场已生成，原版本仍然保留");
   } catch (error) {
-    stopStreaming(); setMode("pending"); renderAll(); showError(error);
+    stopStreaming(); setMode("pending"); renderAll(); showError(error, undefined, { pendingPreserved: true });
     await acknowledgeFailedOperation(error);
   } finally {
     finishGenerationRun();
@@ -2751,7 +2758,7 @@ async function confirmTurn() {
     showToast("这一回合已经写入旅程");
     refreshRecordsAfterTurn();
   } catch (error) {
-    setMode("pending"); renderAll(); showError(error);
+    setMode("pending"); renderAll(); showError(error, undefined, { pendingPreserved: true });
     await acknowledgeFailedOperation(error);
   }
   finally {
@@ -2773,7 +2780,7 @@ async function discardPending() {
   try {
     const result = await request("/api/player/pending/discard", { method: "POST", body: JSON.stringify({ turn_id: variant.turn_id }) });
     await loadAll(); els.playerInput.value = result.user_input || ""; autoSizeInput(); renderControls(); els.playerInput.focus(); showToast("未确认内容已删除");
-  } catch (error) { showError(error); }
+  } catch (error) { showError(error, undefined, { pendingPreserved: true }); }
 }
 
 async function changeHistory(action) {

@@ -77,6 +77,22 @@ def test_player_themes_use_semantic_tokens_without_component_overrides():
     assert 'meta name="theme-color" content="#11110e"' in html
 
 
+def test_player_error_card_uses_frontend_safe_feedback():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    feedback_source = (STATIC_DIR / "error_feedback.js").read_text(encoding="utf-8")
+
+    assert 'id="errorTitle"' in html
+    assert 'from "./error_feedback.js"' in source
+    assert "pendingPreserved" in source
+    assert "playerErrorFeedback(error, fallback, options)" in source
+    assert '"操作未完成，待确认内容仍在"' in feedback_source
+    assert '"本次操作没有写入正式故事，待确认正文仍然保留在界面中。"' in feedback_source
+    assert '"这次操作没有完成"' in feedback_source
+    assert '"输入有误"' not in feedback_source
+    assert '"连接出现问题"' in feedback_source
+
+
 def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")

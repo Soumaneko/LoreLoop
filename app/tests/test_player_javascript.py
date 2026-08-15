@@ -17,6 +17,7 @@ def test_player_frontend_javascript_is_syntactically_valid():
         "app.js",
         "client_diagnostics.js",
         "custom_select.js",
+        "error_feedback.js",
         "prepaint.js",
         "popover_fallback.js",
         "reader_preferences.js",
@@ -34,6 +35,69 @@ def test_player_frontend_javascript_is_syntactically_valid():
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_player_error_feedback_uses_explicit_pending_context():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "error_feedback.js").resolve().as_uri()
+    script = f"""
+const {{ playerErrorFeedback }} = await import("{module_url}");
+
+const pending = playerErrorFeedback(
+  new Error("boom"),
+  undefined,
+  {{ pendingPreserved: true }},
+);
+if (pending.title !== "操作未完成，待确认内容仍在") {{
+  throw new Error("pending-preserved error must keep the pending title");
+}}
+if (pending.message !== "本次操作没有写入正式故事，待确认正文仍然保留在界面中。") {{
+  throw new Error("pending-preserved error must keep the pending-safe description");
+}}
+
+const generic = playerErrorFeedback(new Error("boom"));
+if (generic.title !== "这次回应没有完成") {{
+  throw new Error("generic error must keep the neutral title");
+}}
+
+const unrelatedWithPending = playerErrorFeedback(
+  new Error("boom"),
+  undefined,
+  {{ pendingPreserved: false }},
+);
+if (unrelatedWithPending.title !== "这次回应没有完成") {{
+  throw new Error("unrelated errors must not borrow pending context");
+}}
+
+const validation = playerErrorFeedback({{
+  code: "validation_error",
+  message: "Operation not found",
+}});
+if (validation.title !== "这次操作没有完成") {{
+  throw new Error("validation_error must use a neutral title");
+}}
+if (validation.message !== "Operation not found") {{
+  throw new Error("validation_error must keep the server message");
+}}
+
+const connection = playerErrorFeedback({{
+  code: "connection_failed",
+  message: "无法连接本地服务。",
+}});
+if (connection.title !== "连接出现问题") {{
+  throw new Error("connection_failed must use the connection title");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_player_saved_edits_are_projected_without_browser_storage():
