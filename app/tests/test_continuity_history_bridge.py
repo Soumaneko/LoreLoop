@@ -354,7 +354,10 @@ def test_relation_hit_competes_with_direct_without_claiming_direct_match():
     assert "linked_continuity_ids" not in projected[1]
 
 
-def test_degraded_rescue_capped_per_intent_at_intent_target():
+def test_degraded_weak_relation_not_rate_limited_by_intent_target():
+    # issue 17: weak (degraded) relation evidence competes like any other
+    # proposal; the old per-intent rescue quota is gone. Three weak relations
+    # for the same intent are each eligible and selected up to max_hits.
     links = []
     with ConfirmedHistoryStore() as history_store:
         for turn in range(1, 4):
@@ -388,8 +391,8 @@ def test_degraded_rescue_capped_per_intent_at_intent_target():
         )
 
     assert result.relation_candidates_considered == 3
-    assert result.relation_hits_added == 2
-    assert len(result.hits) == 2
+    assert result.relation_hits_added == 3
+    assert len(result.hits) == 3
 
 
 def test_strong_link_carries_degraded_attribution_beyond_rescue_cap():

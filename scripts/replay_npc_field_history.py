@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict, is_dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -44,7 +45,11 @@ from app.domain.npc_profile.batch_updater import apply_npc_batch_update
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_facts import SceneFactExtractor
-from app.domain.scene_facts.schemas import SceneFactExtractInput, SceneParagraphInput
+from app.domain.scene_facts.schemas import (
+    SceneFactExtractInput,
+    SceneFactSet,
+    SceneParagraphInput,
+)
 from app.runtime.model_config import ModelConfigStore
 
 
@@ -53,7 +58,10 @@ REPLAY_DB_NAME = "npc_profiles.replay.db"
 METADATA_NAME = "metadata.json"
 REPORTS_DIR_NAME = "reports"
 TRACE_NAME = "llm_traces.jsonl"
-SUPPORTED_MAIN_SCHEMA = 8
+#: The copied save's live ``npc_profiles.db`` must be on the current main
+#: schema (v9 as of the change_basis migration); older v8 saves must be
+#: migrated before replay.
+SUPPORTED_MAIN_SCHEMA = 9
 REPLAY_FIELDS = (
     "role",
     "appearance",
@@ -158,7 +166,8 @@ def _load_current_templates(save_dir: Path) -> dict[str, NPCProfile]:
     path = save_dir / "npc_profiles.db"
     if _schema_version(path, "npc_profile") != SUPPORTED_MAIN_SCHEMA:
         raise RuntimeError(
-            "live copied npc_profiles.db must be upgraded to schema v8 before replay"
+            "live copied npc_profiles.db must be upgraded to schema "
+            f"v{SUPPORTED_MAIN_SCHEMA} before replay"
         )
     with _connect_readonly(path) as connection:
         rows = connection.execute(
@@ -364,7 +373,7 @@ def _processed_turns(path: Path) -> list[int]:
     return [int(row["turn_index"]) for row in rows]
 
 
-def inspect_save(save_dir: Path) -> dict[str, Any]:
+def inspect_save(save_dir: Path, *, workspace_name: str = WORKSPACE_NAME) -> dict[str, Any]:
     save_dir = save_dir.resolve()
     npc_db = save_dir / "npc_profiles.db"
     specs = _turn_specs(save_dir)
@@ -377,16 +386,20 @@ def inspect_save(save_dir: Path) -> dict[str, Any]:
             specs[0]["snapshot_dir"] / "npc_profiles.db",
             "npc_profile",
         ),
-        "workspace": str(save_dir / WORKSPACE_NAME),
+        "workspace": str(save_dir / workspace_name),
     }
 
 
-def init_replay(save_dir: Path) -> dict[str, Any]:
+def init_replay(save_dir: Path, *, workspace_name: str = WORKSPACE_NAME) -> dict[str, Any]:
+    workspace_name = _validate_workspace_name(workspace_name)
     save_dir = save_dir.resolve()
-    audit = inspect_save(save_dir)
+    audit = inspect_save(save_dir, workspace_name=workspace_name)
     if audit["npc_schema_version"] != SUPPORTED_MAIN_SCHEMA:
-        raise RuntimeError("copied save is not schema v8")
-    workspace = save_dir / WORKSPACE_NAME
+        raise RuntimeError(
+            f"copied save is not schema v{SUPPORTED_MAIN_SCHEMA}; "
+            "migrate the live npc_profiles.db first"
+        )
+    workspace = save_dir / workspace_name
     replay_db = workspace / REPLAY_DB_NAME
     if replay_db.exists():
         raise FileExistsError(
@@ -415,9 +428,10 @@ def init_replay(save_dir: Path) -> dict[str, Any]:
     return {**audit, "initialized": True, "seeded_npc_ids": seeded}
 
 
-def replay_status(save_dir: Path) -> dict[str, Any]:
+def replay_status(save_dir: Path, *, workspace_name: str = WORKSPACE_NAME) -> dict[str, Any]:
+    workspace_name = _validate_workspace_name(workspace_name)
     save_dir = save_dir.resolve()
-    workspace = save_dir / WORKSPACE_NAME
+    workspace = save_dir / workspace_name
     replay_db = workspace / REPLAY_DB_NAME
     specs = _turn_specs(save_dir)
     available = [item["turn_index"] for item in specs]
@@ -447,9 +461,16 @@ def replay_status(save_dir: Path) -> dict[str, Any]:
     return result
 
 
-def run_turn(save_dir: Path, turn_index: int) -> dict[str, Any]:
+def run_turn(
+    save_dir: Path,
+    turn_index: int,
+    *,
+    workspace_name: str = WORKSPACE_NAME,
+    reuse_scene_facts: Path | None = None,
+) -> dict[str, Any]:
+    workspace_name = _validate_workspace_name(workspace_name)
     save_dir = save_dir.resolve()
-    workspace = save_dir / WORKSPACE_NAME
+    workspace = save_dir / workspace_name
     replay_db = workspace / REPLAY_DB_NAME
     if not replay_db.exists():
         raise RuntimeError("replay is not initialized; run the init command first")
@@ -458,7 +479,7 @@ def run_turn(save_dir: Path, turn_index: int) -> dict[str, Any]:
     by_turn = {item["turn_index"]: item for item in specs}
     if turn_index not in by_turn:
         raise ValueError(f"turn {turn_index} is not replayable")
-    status = replay_status(save_dir)
+    status = replay_status(save_dir, workspace_name=workspace_name)
     if turn_index in status["processed_turns"]:
         raise ValueError(f"turn {turn_index} was already replayed")
     if turn_index != status["next_turn"]:
@@ -531,23 +552,49 @@ def run_turn(save_dir: Path, turn_index: int) -> dict[str, Any]:
                 templates=templates,
             )
             before = _profile_projection(store.list_all(active_only=False))
-            scene_facts = SceneFactExtractor(gateway).extract(
-                SceneFactExtractInput(
-                    scene_text="\n\n".join(item.text for item in paragraph_documents),
-                    # Production extracts Scene Facts against the state entering
-                    # the scene, before confirmation applies state operations.
-                    current_state=state_before,
-                    core_memory=core_memory,
-                    scene_paragraphs=[
-                        SceneParagraphInput(
-                            document_id=item.document_id,
-                            text=item.text,
-                        )
+            if reuse_scene_facts is not None:
+                # 复用前一次 replay report 的结构化 scene extract 输出：
+                # npc 模块改动不影响 Scene Facts，无需再次调用 scene extract LLM。
+                previous_report_path = reuse_scene_facts / f"turn_{turn_index:04d}.json"
+                if not previous_report_path.exists():
+                    raise FileNotFoundError(
+                        f"reuse-scene-facts report missing: {previous_report_path}"
+                    )
+                previous = json.loads(previous_report_path.read_text(encoding="utf-8"))
+                scene_fingerprint = hashlib.sha256(
+                    "\n\n".join(
+                        item.text for item in paragraph_documents
+                    ).encode("utf-8")
+                ).hexdigest()
+                _validate_reused_report(
+                    previous,
+                    turn_index=turn_index,
+                    scene_id=scene_id,
+                    scene_text_fingerprint=scene_fingerprint,
+                    paragraph_texts={
+                        item.document_id: item.text
                         for item in paragraph_documents
-                    ],
-                ),
-                trace_id=trace_id,
-            )
+                    },
+                )
+                scene_facts = SceneFactSet.model_validate(previous["scene_facts"])
+            else:
+                scene_facts = SceneFactExtractor(gateway).extract(
+                    SceneFactExtractInput(
+                        scene_text="\n\n".join(item.text for item in paragraph_documents),
+                        # Production extracts Scene Facts against the state entering
+                        # the scene, before confirmation applies state operations.
+                        current_state=state_before,
+                        core_memory=core_memory,
+                        scene_paragraphs=[
+                            SceneParagraphInput(
+                                document_id=item.document_id,
+                                text=item.text,
+                            )
+                            for item in paragraph_documents
+                        ],
+                    ),
+                    trace_id=trace_id,
+                )
             result = apply_npc_batch_update(
                 npc_store=store,
                 gateway=gateway,
@@ -568,10 +615,16 @@ def run_turn(save_dir: Path, turn_index: int) -> dict[str, Any]:
                 scene_id=scene_id,
             )
             after = _profile_projection(store.list_all(active_only=False))
+            scene_fingerprint = hashlib.sha256(
+                "\n\n".join(item.text for item in paragraph_documents).encode(
+                    "utf-8"
+                )
+            ).hexdigest()
             report = {
                 "turn_index": turn_index,
                 "turn_id": spec["turn_id"],
                 "scene_id": scene_id,
+                "scene_text_fingerprint": scene_fingerprint,
                 "trace_id": trace_id,
                 "seeded_npc_ids": seeded,
                 "scene_facts": scene_facts,
@@ -613,9 +666,78 @@ def run_turn(save_dir: Path, turn_index: int) -> dict[str, Any]:
         "accepted_change_count": len(result.accepted_changes),
         "field_log_count": len(record_result.logs),
         "warning_count": len(result.warnings),
-        "next_turn": replay_status(save_dir)["next_turn"],
+        "next_turn": replay_status(save_dir, workspace_name=workspace_name)["next_turn"],
         "live_database_was_modified": False,
     }
+
+
+def _validate_reused_report(
+    report: dict,
+    *,
+    turn_index: int,
+    scene_id: str,
+    scene_text_fingerprint: str,
+    paragraph_texts: dict[str, str],
+) -> None:
+    """Refuse to reuse a scene-extract report from a different save/turn/scene.
+
+    The report is only valid if it was produced for this exact turn of this
+    save's confirmed History, and every paragraph it cites exists with the
+    same text in the current document set — otherwise the reused extraction
+    could belong to a different archive or a re-imported history that happens
+    to reuse the same document IDs.
+    """
+    if int(report.get("turn_index", -1)) != turn_index:
+        raise ValueError(
+            f"reuse-scene-facts report is for turn {report.get('turn_index')}, "
+            f"expected {turn_index}"
+        )
+    if report.get("scene_id") != scene_id:
+        raise ValueError(
+            f"reuse-scene-facts report scene {report.get('scene_id')!r} "
+            f"does not match current scene {scene_id!r}"
+        )
+    if report.get("scene_text_fingerprint") != scene_text_fingerprint:
+        raise ValueError(
+            "reuse-scene-facts report scene text fingerprint does not match "
+            "the current save's confirmed History for this turn"
+        )
+    for mention in (report.get("scene_facts") or {}).get("npc_mentions", []):
+        cited_ids = list(mention.get("evidence_paragraph_ids") or [])
+        for relation in mention.get("alias_relations") or []:
+            cited_ids.extend(
+                relation.get("evidence_paragraph_ids") or []
+            )
+        for paragraph_id in cited_ids:
+            current_text = paragraph_texts.get(paragraph_id)
+            if current_text is None:
+                raise ValueError(
+                    f"reuse-scene-facts report cites paragraph id absent from "
+                    f"this turn: {paragraph_id!r}"
+                )
+
+
+def _validate_workspace_name(workspace: str) -> str:
+    """Only a single safe relative directory name is allowed.
+
+    Absolute paths or ``..`` traversal would let replay files escape the save
+    directory; the workspace must stay inside the copied save.
+    """
+    name = workspace.strip()
+    if not name or name in {".", ".."}:
+        raise ValueError(
+            f"workspace must be a non-empty directory name, got {workspace!r}"
+        )
+    if Path(name).is_absolute():
+        raise ValueError(
+            f"workspace must be relative to the save, got absolute {workspace!r}"
+        )
+    parts = Path(name).parts
+    if len(parts) != 1 or any(part in {".", ".."} for part in parts):
+        raise ValueError(
+            f"workspace must be a single directory name, got {workspace!r}"
+        )
+    return name
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -626,9 +748,33 @@ def _parser() -> argparse.ArgumentParser:
     for name in ("inspect", "init", "status"):
         child = subparsers.add_parser(name)
         child.add_argument("save_dir", type=Path)
+        child.add_argument(
+            "--workspace",
+            type=_validate_workspace_name,
+            default=WORKSPACE_NAME,
+            help="single workspace directory name inside the save "
+            "(default: %(default)s)",
+        )
     run = subparsers.add_parser("run")
     run.add_argument("save_dir", type=Path)
     run.add_argument("--turn", type=int, required=True)
+    run.add_argument(
+        "--workspace",
+        type=_validate_workspace_name,
+        default=WORKSPACE_NAME,
+        help="single workspace directory name inside the save "
+        "(default: %(default)s)",
+    )
+    run.add_argument(
+        "--reuse-scene-facts",
+        type=Path,
+        default=None,
+        metavar="REPORTS_DIR",
+        help=(
+            "reuse structured scene extract output from a previous replay's "
+            "reports directory instead of calling the scene extract LLM again"
+        ),
+    )
     return parser
 
 
@@ -636,13 +782,18 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "inspect":
-            result = inspect_save(args.save_dir)
+            result = inspect_save(args.save_dir, workspace_name=args.workspace)
         elif args.command == "init":
-            result = init_replay(args.save_dir)
+            result = init_replay(args.save_dir, workspace_name=args.workspace)
         elif args.command == "status":
-            result = replay_status(args.save_dir)
+            result = replay_status(args.save_dir, workspace_name=args.workspace)
         else:
-            result = run_turn(args.save_dir, args.turn)
+            result = run_turn(
+                args.save_dir,
+                args.turn,
+                workspace_name=args.workspace,
+                reuse_scene_facts=args.reuse_scene_facts,
+            )
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

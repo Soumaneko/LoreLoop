@@ -379,3 +379,35 @@ def test_npc_fixtures_materialize_real_logs_and_pointer_modes():
     assert "turn_3_p999" not in documents
     assert final_profile is not None
     assert final_profile.appearance == "常穿灰布长衫"
+
+
+def test_issue17_relation_eligibility_diagnostics():
+    """issue 17: a weak relation enters the candidate funnel but loses the
+    shared single seat to predicate-supported direct evidence; forbidden stays
+    empty and the proposal-level funnel records eligibility separately."""
+    report = run_suite(
+        load_suite(DEFAULT_CASES),
+        fingerprint=_cases_fingerprint(DEFAULT_CASES),
+    )
+    case = next(
+        item
+        for item in report["cases"]
+        if item["case_id"] == "entity_overlap_without_predicate_support"
+    )
+    # Direct evidence with predicate support wins the single seat.
+    assert case["selected_main_ids"] == ["turn_2_p001"]
+    assert case["forbidden_visible_ids"] == []
+    assert case["documents_selected_by_direct"] == 1
+    assert case["documents_selected_by_relation"] == 0
+    # The entity-only weak relation was still eligible: it entered the funnel
+    # (per-intent, pre-cluster count is 2: one source, two intents) and was
+    # degraded, but lost the budget competition.
+    assert case["relation_proposals_considered"] == 2
+    assert case["relation_eligible_degraded"] == 2
+    assert case["relation_eligible_strong"] == 0
+    assert case["relation_zero_stripped"] == 0
+
+    aggregate = report["aggregate"]
+    assert aggregate["forbidden_visible_count"] == 0
+    assert aggregate["weighted_recalled"] == 123
+    assert aggregate["weighted_total"] == 125

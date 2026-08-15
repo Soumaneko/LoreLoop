@@ -1887,8 +1887,11 @@
     },
     {
       "case_id": "entity_overlap_without_predicate_support",
-      "description": "Shared entity mentions without predicate support for the matter's state change must not pass semantic validation.",
+      "description": "Entity-only weak relation enters the candidate funnel but loses the single shared seat to predicate-supported direct evidence.",
       "current_turn_index": 6,
+      "policy": {
+        "max_hits": 1
+      },
       "search_plan": {
         "intents": [
           {

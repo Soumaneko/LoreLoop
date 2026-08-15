@@ -55,13 +55,18 @@ Closed contracts:
   de-attributed per link; the unsupported matter (`gate-rebuild`) has a
   zero-support link suppressed while the supported matter (`copper-handoff`)
   keeps its attribution on the same document.
-- `entity_overlap_without_predicate_support`: shared entity/location mentions
-  without predicate support no longer pass. The create evidence overlaps the
+- `entity_overlap_without_predicate_support`: an entity-only weak relation
+  enters the candidate funnel but loses the single shared seat to
+  predicate-supported direct evidence. The create evidence overlaps the
   premise only through the location 青岩镇, which scores as weak support, so it
-  stays degraded and is barred from rescuing an intent that already has direct
-  coverage. (A genuinely zero-overlap mount would instead be stripped by
-  complete-basis attribution suppression, as in
-  `complete_zero_single_current_context`.)
+  stays degraded and is eligible — but with `max_hits=1` the direct evidence
+  (`turn_2_p001`, which states the actual agreement) wins the only seat and
+  the weak relation loses the budget competition rather than being barred by a
+  direct-coverage hard gate (issue 17). The proposal-level funnel records the
+  separation: `relation_proposals_considered=2`, `relation_eligible_degraded=2`,
+  `documents_selected_by_direct=1`, `documents_selected_by_relation=0`.
+  (A genuinely zero-overlap mount would instead be stripped by complete-basis
+  attribution suppression, as in `complete_zero_single_current_context`.)
 - `anonymized_spy_regression`: an archived matter matched through its later
   `current_state` no longer inherits strong relevance onto unrelated create
   evidence. The create `premise` describes a different concrete event
@@ -176,16 +181,17 @@ the node-evidence quality layer:
   unconditionally, even when it is the node's only evidence; it never removes a
   document, only stops a false link from claiming that matter.
 - `degraded_relation_links`: links whose evidence did not reach `strong` but
-  stay selectable. Each intent is capped at `intent_target` rescue admissions
-  dominated by that intent's own degraded proposal; degraded relation
-  attribution that rides in with a document admitted by another intent's
-  normal evidence is not bound by this seat cap. Degraded rescues never
-  accumulate normal intent coverage, and one is no longer allowed once the
-  intent has an actually selected direct hit. These constraints apply
-  simultaneously, not additively: per-intent degraded cap (`intent_target`),
-  per-turn (`turn_cap`), per-relation-owner (`relation_owner_cap`), global
-  (`max_hits`) and the serialized payload budget. `entity_cap` only constrains
-  the direct route and is not a degraded relation bound.
+  stay selectable. Since issue 17, degraded (weak) relation evidence competes
+  like any other proposal: there is no direct-coverage veto and no per-intent
+  rescue quota. Selection is bounded only by the ordinary limits — per-turn
+  (`turn_cap`), per-relation-owner (`relation_owner_cap`), global (`max_hits`)
+  and the serialized payload budget — and by final ranking. `entity_cap` only
+  constrains the direct route and is not a relation bound. The proposal-level
+  funnel (`relation_proposals_considered`, `relation_eligible_strong`,
+  `relation_eligible_degraded`, `relation_zero_stripped`,
+  `documents_selected_by_direct`, `documents_selected_by_relation`,
+  `relation_augmented_on_selected_document`) records eligibility separately
+  from final selection.
 
 `baseline.json` records the current accepted output and the SHA-256 of
 `cases.json`. Changing cases requires deliberate baseline review.

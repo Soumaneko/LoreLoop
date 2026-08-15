@@ -133,7 +133,7 @@ def test_unified_history_selector_breaks_exact_ties_by_evidence_id():
         policy=HistoryDiversityPolicy(max_hits=1),
         preview=lambda _candidate: AdmissionPreview(state=[], payload_chars=100),
         commit=lambda _preview: None,
-    )
+    ).selected
 
     assert [item.document.document_id for item in selected] == [
         "turn_1_p001"

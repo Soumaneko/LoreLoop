@@ -244,6 +244,14 @@ class RelationAdmission:
         default_factory=dict
     )
     intent_first_order: dict[str, int] = field(default_factory=dict)
+    #: Per-intent scoped attribution so a proposal only ever carries the
+    #: continuity/NPC provenance that serves its own intent (no cross-intent
+    #: attribution leaking onto a slice).
+    intent_continuity_ids: dict[str, frozenset[str]] = field(default_factory=dict)
+    intent_operations: dict[str, frozenset[str]] = field(default_factory=dict)
+    intent_npc_changes: dict[str, frozenset[tuple[str, str, int]]] = field(
+        default_factory=dict
+    )
 
     @property
     def served_intent_ids(self) -> set[str]:
@@ -398,6 +406,39 @@ class RelationAdmission:
                 )
             },
             intent_first_order=intent_first_order,
+            intent_continuity_ids={
+                intent_id: frozenset().union(*(
+                    admission.intent_continuity_ids.get(intent_id, frozenset())
+                    for admission in serving_members
+                ))
+                for intent_id in intent_ids
+                if any(
+                    intent_id in admission.intent_continuity_ids
+                    for admission in serving_members
+                )
+            },
+            intent_operations={
+                intent_id: frozenset().union(*(
+                    admission.intent_operations.get(intent_id, frozenset())
+                    for admission in serving_members
+                ))
+                for intent_id in intent_ids
+                if any(
+                    intent_id in admission.intent_operations
+                    for admission in serving_members
+                )
+            },
+            intent_npc_changes={
+                intent_id: frozenset().union(*(
+                    admission.intent_npc_changes.get(intent_id, frozenset())
+                    for admission in serving_members
+                ))
+                for intent_id in intent_ids
+                if any(
+                    intent_id in admission.intent_npc_changes
+                    for admission in serving_members
+                )
+            },
         )
 
 
@@ -418,6 +459,10 @@ class RelationLinkDiagnostics:
     npc_stale_links: int = 0
     npc_invalid_links: int = 0
     npc_degraded_links: int = 0
+    #: Unique (evidence document, intent) pairs whose complete-basis relation
+    #: attribution was suppressed for zero support. One source+intent is one
+    #: stripped proposal, regardless of how many links were stripped.
+    zero_stripped_source_intents: frozenset[tuple[str, str]] = frozenset()
 
 
 class _AdmissionAccumulator:
@@ -435,6 +480,9 @@ class _AdmissionAccumulator:
         "_intent_owner_keys",
         "_reasons",
         "_intent_reasons",
+        "_intent_continuity_ids",
+        "_intent_operations",
+        "_intent_npc_changes",
     )
 
     def __init__(self) -> None:
@@ -449,6 +497,9 @@ class _AdmissionAccumulator:
         self._intent_owner_keys: dict[str, set[str]] = {}
         self._reasons: set[str] = set()
         self._intent_reasons: dict[str, set[str]] = {}
+        self._intent_continuity_ids: dict[str, set[str]] = {}
+        self._intent_operations: dict[str, set[ContinuityOperationType]] = {}
+        self._intent_npc_changes: dict[str, set[tuple[str, str, int]]] = {}
 
     def absorb(self, link: RelationEvidenceLink, support, order: int) -> None:
         for intent_id in link.triggering_intent_ids:
@@ -479,6 +530,19 @@ class _AdmissionAccumulator:
             self._intent_reasons.setdefault(intent_id, set()).update(
                 link.intent_match_reasons.get(intent_id, link.match_reasons)
             )
+            if link.continuity is not None:
+                self._intent_continuity_ids.setdefault(intent_id, set()).add(
+                    link.continuity.continuity_id
+                )
+                self._intent_operations.setdefault(intent_id, set()).add(
+                    link.continuity.operation
+                )
+            if link.npc is not None:
+                self._intent_npc_changes.setdefault(intent_id, set()).add((
+                    link.npc.npc_id,
+                    link.npc.field_name,
+                    link.npc.log_id,
+                ))
         if link.continuity is not None:
             self._continuity_ids.add(link.continuity.continuity_id)
             self._operations.add(link.continuity.operation)
@@ -510,6 +574,18 @@ class _AdmissionAccumulator:
                 for intent_id, reasons in self._intent_reasons.items()
             },
             intent_first_order=dict(self._intent_first_order),
+            intent_continuity_ids={
+                intent_id: frozenset(ids)
+                for intent_id, ids in self._intent_continuity_ids.items()
+            },
+            intent_operations={
+                intent_id: frozenset(ops)
+                for intent_id, ops in self._intent_operations.items()
+            },
+            intent_npc_changes={
+                intent_id: frozenset(changes)
+                for intent_id, changes in self._intent_npc_changes.items()
+            },
         )
 
 
@@ -538,6 +614,8 @@ def judge_relation_links(
     admissions: dict[str, RelationAdmission] = {}
     accumulators: dict[str, _AdmissionAccumulator] = {}
     diagnostics = RelationLinkDiagnostics()
+    stripped_source_intents: set[tuple[str, str]] = set()
+    surviving_source_intents: set[tuple[str, str]] = set()
     for order, link in enumerate(links):
         document = documents_by_id.get(link.evidence_id)
         if (
@@ -588,12 +666,20 @@ def judge_relation_links(
                 diagnostics,
                 invalid_links=diagnostics.invalid_links + 1,
             )
+            stripped_source_intents.update(
+                (link.evidence_id, intent_id)
+                for intent_id in link.triggering_intent_ids
+            )
             if link.source == "npc_profile":
                 diagnostics = replace(
                     diagnostics,
                     npc_invalid_links=diagnostics.npc_invalid_links + 1,
                 )
             continue
+        surviving_source_intents.update(
+            (link.evidence_id, intent_id)
+            for intent_id in link.triggering_intent_ids
+        )
         if support.degraded:
             diagnostics = replace(
                 diagnostics,
@@ -613,6 +699,15 @@ def judge_relation_links(
 
     for document_id, accumulator in accumulators.items():
         admissions[document_id] = accumulator.admission()
+    # A (source, intent) pair is a stripped proposal only when every link
+    # serving it was suppressed; if any link survived, the proposal exists and
+    # the zero links are just noise within it (not a separate stripped unit).
+    diagnostics = replace(
+        diagnostics,
+        zero_stripped_source_intents=frozenset(
+            stripped_source_intents - surviving_source_intents
+        ),
+    )
     return admissions, diagnostics
 
 
@@ -628,16 +723,6 @@ def _suppress_attribution(
     attribution.
     """
     return support.basis_complete and support.support_class == "zero"
-
-
-def degraded_rescue_allowed(
-    owner_intent_id: str,
-    direct_covered_intents: set[str],
-) -> bool:
-    """A degraded relation proposal may only rescue an intent that has no
-    direct hit yet, judged by its own owner intent (never another intent's
-    coverage)."""
-    return owner_intent_id not in direct_covered_intents
 
 
 def partition_served(

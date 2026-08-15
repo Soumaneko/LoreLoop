@@ -478,6 +478,16 @@ def _score_case(
         "npc_degraded_links": evidence.npc_degraded_links,
         "npc_relation_candidates": evidence.npc_relation_candidates,
         "npc_relation_hits_added": evidence.npc_relation_hits_added,
+        "direct_proposals_considered": evidence.direct_proposals_considered,
+        "relation_proposals_considered": evidence.relation_proposals_considered,
+        "relation_zero_stripped": evidence.relation_zero_stripped,
+        "relation_eligible_strong": evidence.relation_eligible_strong,
+        "relation_eligible_degraded": evidence.relation_eligible_degraded,
+        "documents_selected_by_direct": evidence.documents_selected_by_direct,
+        "documents_selected_by_relation": evidence.documents_selected_by_relation,
+        "relation_augmented_on_selected_document": (
+            evidence.relation_augmented_on_selected_document
+        ),
         "invariant_violations": invariant_violations,
     }
     if case.npc_profiles or case.npc_field_logs:

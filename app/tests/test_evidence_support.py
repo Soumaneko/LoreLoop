@@ -353,30 +353,6 @@ class TestRelationAdmissionMerge:
         assert merged.evidence_class == "strong"
 
 
-class TestDegradedRescue:
-    def test_owner_without_direct_coverage_can_rescue(self):
-        from app.domain.context_facts.relation_admission import (
-            degraded_rescue_allowed,
-        )
-
-        assert degraded_rescue_allowed("intent_b", {"intent_a"})
-
-    def test_owner_with_direct_coverage_is_blocked(self):
-        from app.domain.context_facts.relation_admission import (
-            degraded_rescue_allowed,
-        )
-
-        assert not degraded_rescue_allowed("intent_a", {"intent_a"})
-
-    def test_covered_other_intent_does_not_block_owner(self):
-        from app.domain.context_facts.relation_admission import (
-            degraded_rescue_allowed,
-        )
-
-        assert degraded_rescue_allowed("intent_b", {"intent_a"})
-        assert not degraded_rescue_allowed("intent_a", {"intent_a"})
-
-
 class TestPartitionServed:
     def test_strong_and_degraded_relation_split_independently(self):
         from app.domain.context_facts.relation_admission import partition_served

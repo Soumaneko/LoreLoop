@@ -246,6 +246,16 @@ class ContextHistoryEvidenceSet(BaseModel):
     npc_degraded_links: int = Field(default=0, ge=0)
     npc_relation_candidates: int = Field(default=0, ge=0)
     npc_relation_hits_added: int = Field(default=0, ge=0)
+    # issue 17: proposal-level funnel (per-intent, pre-cluster counts) so the
+    # benchmark can see eligibility separately from final selection.
+    direct_proposals_considered: int = Field(default=0, ge=0)
+    relation_proposals_considered: int = Field(default=0, ge=0)
+    relation_zero_stripped: int = Field(default=0, ge=0)
+    relation_eligible_strong: int = Field(default=0, ge=0)
+    relation_eligible_degraded: int = Field(default=0, ge=0)
+    documents_selected_by_direct: int = Field(default=0, ge=0)
+    documents_selected_by_relation: int = Field(default=0, ge=0)
+    relation_augmented_on_selected_document: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def _validate_global_evidence_uniqueness(self):

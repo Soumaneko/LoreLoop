@@ -22,6 +22,7 @@ from .diversity import (
     SelectionProposal,
     select_diverse_candidates,
 )
+from .evidence_support import CLASS_RANK
 from .relation_admission import (
     RelationAdmission,
     continuity_link_to_evidence,
@@ -158,13 +159,17 @@ class ContextHistoryRetriever:
         relation_representatives: dict[str, _Candidate] = {}
         for document_id in relation_document_ids:
             representative = representative_for[document_id]
-            if representative.matched_intent_ids:
-                continue
             relation_representatives[
                 representative.document.document_id
             ] = representative
 
         proposals: list[SelectionProposal[_Candidate]] = []
+        # Pre-cluster per-intent direct counts (diagnostics): raw candidates
+        # before near-duplicate members collapse onto representatives.
+        pre_cluster_direct_considered = sum(
+            len(by_intent.get(intent.intent_id, []))
+            for intent in search_plan.intents
+        )
         for intent in search_plan.intents:
             for channel_rank, candidate in enumerate(
                 by_intent_clustered.get(intent.intent_id, [])
@@ -177,12 +182,24 @@ class ContextHistoryRetriever:
                     signal_rank=_direct_signal_rank(candidate, intent),
                 ))
 
-        relation_pairs: list[tuple[_Candidate, RelationAdmission]] = []
-        for candidate in relation_representatives.values():
-            admission = candidate.relation_admission
-            if admission is None:
-                continue
-            relation_pairs.append((candidate, admission))
+        # Source-scoped relation proposals: build one proposal per
+        # (original evidence document, intent) so scoped attribution survives
+        # clustering, then point its candidate at the cluster representative.
+        # ``RelationAdmission.merge`` only unions provenance for the payload;
+        # proposal identity must stay at the source document so the selector
+        # and the final provenance materialization know exactly which evidence
+        # backs which intent (no ghost provenance after budget compression).
+        relation_pairs: list[
+            tuple[_Candidate, RelationAdmission, str]
+        ] = []
+        for source_document_id in relation_document_ids:
+            source_admission = admissions[source_document_id]
+            representative = representative_for[source_document_id]
+            relation_pairs.append((
+                representative,
+                source_admission,
+                source_document_id,
+            ))
         for intent in search_plan.intents:
             channel = [
                 pair
@@ -201,7 +218,7 @@ class ContextHistoryRetriever:
                 ),
                 pair[0].document.document_id,
             ))
-            for channel_rank, (candidate, admission) in enumerate(channel):
+            for channel_rank, (candidate, admission, source_evidence_id) in enumerate(channel):
                 owners = admission.intent_owner_keys.get(
                     intent.intent_id,
                     frozenset(),
@@ -226,12 +243,46 @@ class ContextHistoryRetriever:
                         if is_pure_npc
                         else 0
                     ),
+                    source_evidence_id=source_evidence_id,
+                    # Source-scoped semantic verdicts: read directly from this
+                    # source document's admission, never from the cluster
+                    # representative's merged result, so one weak source can
+                    # never borrow another member's strong quality.
+                    scoped_quality=admission.intent_quality.get(
+                        intent.intent_id, 0.0
+                    ),
+                    scoped_class=admission.intent_class.get(
+                        intent.intent_id
+                    ),
+                    scoped_degraded=admission.intent_degraded.get(
+                        intent.intent_id, False
+                    ),
+                    scoped_match_reasons=admission.intent_match_reasons.get(
+                        intent.intent_id,
+                        admission.match_reasons,
+                    ),
+                    scoped_owner_keys=admission.intent_owner_keys.get(
+                        intent.intent_id,
+                        frozenset(),
+                    ),
+                    scoped_npc_changes=admission.intent_npc_changes.get(
+                        intent.intent_id,
+                        frozenset(),
+                    ),
+                    scoped_continuity_ids=admission.intent_continuity_ids.get(
+                        intent.intent_id,
+                        frozenset(),
+                    ),
+                    scoped_operations=admission.intent_operations.get(
+                        intent.intent_id,
+                        frozenset(),
+                    ),
                 ))
 
         hits: list[ContextHistoryHit] = []
 
         def preview(candidate: _Candidate) -> AdmissionPreview | None:
-            hit = _build_history_hit(
+            hit = _build_base_hit(
                 candidate,
                 members=member_clusters[candidate.document.document_id],
                 turn_documents=by_turn[candidate.document.turn_index],
@@ -246,24 +297,76 @@ class ContextHistoryRetriever:
             return AdmissionPreview(
                 state=fitted,
                 payload_chars=_projected_history_chars(fitted),
+                visible_evidence_ids=frozenset(
+                    evidence_id
+                    for fitted_hit in fitted
+                    for evidence_id in (
+                        fitted_hit.evidence_id,
+                        *fitted_hit.supporting_evidence_ids,
+                    )
+                ),
             )
 
         def commit(candidate_preview: AdmissionPreview) -> None:
             hits[:] = candidate_preview.state
 
-        select_diverse_candidates(
+        result = select_diverse_candidates(
             search_plan,
             proposals=proposals,
             policy=self.diversity_policy,
             preview=preview,
             commit=commit,
         )
+        # Materialize relation provenance from the accepted decisions only.
+        # Ghost provenance guard: a relation slice whose source evidence does
+        # not survive the final payload is dropped (its supporting member was
+        # stripped by budget compression), never claimed on the output.
+        payload_evidence_ids = {
+            evidence_id
+            for hit in hits
+            for evidence_id in (hit.evidence_id, *hit.supporting_evidence_ids)
+        }
+        accepted_relation_slices = [
+            entry.proposal
+            for entry in result.entries
+            if entry.proposal.route == "relation"
+            and entry.proposal.source_evidence_id in payload_evidence_ids
+        ]
+        accepted_relation_slices += [
+            augmentation.proposal
+            for augmentation in result.augmentations
+            if augmentation.source_evidence_id in payload_evidence_ids
+        ]
+        hits = [
+            _attach_relation_provenance(
+                hit,
+                relation_slices=[
+                    slice
+                    for slice in accepted_relation_slices
+                    if slice.candidate.document.document_id
+                    == hit.evidence_id
+                ],
+            )
+            for hit in hits
+        ]
         npc_relation_candidates = sum(
             1
             for candidate in relation_representatives.values()
             if candidate.relation_admission is not None
             and candidate.relation_admission.linked_npc_changes
         )
+        # issue 17 proposal-level funnel: per-intent pre-cluster proposal
+        # counts (direct vs relation), plus how the accepted decisions split.
+        direct_proposals_considered = pre_cluster_direct_considered
+        relation_proposals_considered = sum(
+            1 for proposal in proposals if proposal.route == "relation"
+        )
+        relation_zero_stripped = len(
+            diagnostics.zero_stripped_source_intents
+        )
+        selected_by_route: dict[str, int] = defaultdict(int)
+        for entry in result.entries:
+            selected_by_route[entry.proposal.route] += 1
         return ContextHistoryEvidenceSet(
             hits=hits,
             indexed_documents=self.store.count(),
@@ -291,6 +394,25 @@ class ContextHistoryRetriever:
                 for hit in hits
                 if hit.linked_npc_changes and not hit.matched_intent_ids
             ),
+            direct_proposals_considered=direct_proposals_considered,
+            relation_proposals_considered=relation_proposals_considered,
+            relation_zero_stripped=relation_zero_stripped,
+            relation_eligible_strong=sum(
+                1
+                for proposal in proposals
+                if proposal.route == "relation"
+                and proposal.scoped_class == "strong"
+            ),
+            relation_eligible_degraded=sum(
+                1
+                for proposal in proposals
+                if proposal.route == "relation"
+                and proposal.scoped_class is not None
+                and proposal.scoped_class != "strong"
+            ),
+            documents_selected_by_direct=selected_by_route.get("direct", 0),
+            documents_selected_by_relation=selected_by_route.get("relation", 0),
+            relation_augmented_on_selected_document=len(result.augmentations),
         )
 
     def _retrieve_intent(
@@ -588,12 +710,19 @@ def _direct_signal_rank(
     return category * 2 + int(source_penalty)
 
 
-def _build_history_hit(
+def _build_base_hit(
     candidate: _Candidate,
     *,
     members: list[_Candidate],
     turn_documents: list[HistoryDocument],
 ) -> ContextHistoryHit:
+    """Build the payload-only hit without any relation provenance.
+
+    Relation provenance is materialized after selection from the accepted
+    entry/augmentation proposals (``_attach_relation_provenance``), so a
+    document never carries attribution for a relation that did not win — the
+    selector decides eligibility, the retriever decides what the output claims.
+    """
     cluster_ids = {member.document.document_id for member in members}
     window = document_window(
         candidate.document,
@@ -636,7 +765,16 @@ def _build_history_hit(
         )
         for member in supporting_members
     ]
+    # A relation-only candidate has no direct intent; hold its served intents
+    # as the relation placeholder so the intermediate hit passes the schema
+    # check. Final provenance is rewritten after selection, so this is only a
+    # construction-time stand-in, never an output claim.
     admission = candidate.relation_admission
+    placeholder_relation_ids = (
+        sorted(admission.served_intent_ids)
+        if admission is not None and not candidate.matched_intent_ids
+        else []
+    )
     return ContextHistoryHit(
         evidence_id=candidate.document.document_id,
         source_type=candidate.document.source_type,
@@ -647,56 +785,73 @@ def _build_history_hit(
         context_before=context_before,
         context_after=context_after,
         matched_intent_ids=sorted(candidate.matched_intent_ids),
-        relation_intent_ids=(
-            sorted(admission.served_intent_ids) if admission is not None else []
-        ),
-        linked_continuity_ids=(
-            sorted(admission.matched_continuity_ids)
-            if admission is not None
-            else []
-        ),
-        linked_operations=(
-            sorted(admission.linked_operations)
-            if admission is not None
-            else []
-        ),
-        linked_npc_changes=(
-            [
-                LinkedNPCFieldChange(
-                    npc_id=npc_id,
-                    field_name=cast(NPCFieldHistoryName, field_name),
-                    log_id=log_id,
-                )
-                for npc_id, field_name, log_id in sorted(
-                    admission.linked_npc_changes
-                )
-            ]
-            if admission is not None
-            else []
-        ),
-        linked_npc_profile_ids=(
-            sorted({
-                npc_id
-                for npc_id, _, _ in admission.linked_npc_changes
-            })
-            if admission is not None
-            else []
-        ),
-        relation_match_reasons=(
-            sorted(admission.match_reasons) if admission is not None else []
-        ),
-        relation_evidence_quality=(
-            round(candidate.relation_evidence_quality, 6)
-            if candidate.relation_evidence_class is not None
-            else None
-        ),
-        relation_evidence_class=candidate.relation_evidence_class,
+        relation_intent_ids=placeholder_relation_ids,
         matched_entities=sorted(candidate.matched_entities),
         matched_topics=sorted(candidate.matched_topics),
         score=round(candidate.score, 6),
         supporting_evidence_ids=supporting_evidence_ids,
         supporting_evidence=supporting_evidence,
     )
+
+
+def _attach_relation_provenance(
+    hit: ContextHistoryHit,
+    *,
+    relation_slices: list[SelectionProposal[_Candidate]],
+) -> ContextHistoryHit:
+    """Merge the accepted relation provenance slices onto a base hit.
+
+    Only proposals that actually won (entries/augmentations) contribute:
+    relation intents, linked continuity ids/operations, linked NPC changes and
+    profile ids, plus the source-scoped match reasons and evidence quality.
+    Every verdict is read from the proposal's own scoped fields — never from
+    the merged cluster admission — so a deleted or weak source cannot leak
+    another member's reasons or quality, and ``incomplete`` is not relabeled.
+    """
+    relation_intent_ids: set[str] = set()
+    continuity_ids: set[str] = set()
+    operations: set[str] = set()
+    npc_changes: set[tuple[str, str, int]] = set()
+    reasons: set[str] = set()
+    quality: float | None = None
+    evidence_class: str | None = None
+    for slice in relation_slices:
+        relation_intent_ids.add(slice.owner_intent_id)
+        continuity_ids.update(slice.scoped_continuity_ids)
+        operations.update(slice.scoped_operations)
+        npc_changes.update(slice.scoped_npc_changes)
+        reasons.update(slice.scoped_match_reasons)
+        if slice.scoped_quality > 0:
+            quality = max(quality or 0.0, slice.scoped_quality)
+        scoped_class = slice.scoped_class
+        if scoped_class is not None:
+            if evidence_class is None:
+                evidence_class = scoped_class
+            elif CLASS_RANK.get(scoped_class, -1) > CLASS_RANK.get(
+                evidence_class, -1
+            ):
+                evidence_class = scoped_class
+    return hit.model_copy(update={
+        "relation_intent_ids": sorted(relation_intent_ids),
+        "linked_continuity_ids": sorted(continuity_ids),
+        "linked_operations": sorted(operations),
+        "linked_npc_changes": [
+            LinkedNPCFieldChange(
+                npc_id=npc_id,
+                field_name=cast(NPCFieldHistoryName, field_name),
+                log_id=log_id,
+            )
+            for npc_id, field_name, log_id in sorted(npc_changes)
+        ],
+        "linked_npc_profile_ids": sorted({
+            npc_id for npc_id, _, _ in npc_changes
+        }),
+        "relation_match_reasons": sorted(reasons),
+        "relation_evidence_quality": (
+            round(quality, 6) if quality is not None else None
+        ),
+        "relation_evidence_class": evidence_class,
+    })
 
 
 
