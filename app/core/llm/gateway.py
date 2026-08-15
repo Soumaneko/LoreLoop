@@ -19,6 +19,10 @@ from .errors import (
     PromptRenderError,
 )
 from .prompts import PromptLoader
+from .provider_classification import (
+    classify_provider_error,
+    is_permanent_provider_error,
+)
 from .providers import LLMProvider, ProviderResult
 from .schema import output_contract_guidance
 from .tracing import TraceLogger
@@ -181,6 +185,11 @@ class LLMGateway:
 
             except LLMProviderError as e:
                 last_error = str(e)
+                provider_code, _ = classify_provider_error(e)
+                will_retry = (
+                    attempt <= max_retries
+                    and not is_permanent_provider_error(provider_code)
+                )
                 self._tracer.log(
                     trace_id=trace_id,
                     task=task,
@@ -200,14 +209,14 @@ class LLMGateway:
                     call_id=call_id,
                 )
                 self._log_diagnostic(
-                    severity="warning" if attempt <= max_retries else "error",
+                    severity="warning" if will_retry else "error",
                     code="llm_provider_failed",
                     message=last_error,
                     trace_id=trace_id,
                     task=task,
                     attempt=attempt,
                 )
-                if attempt <= max_retries:
+                if will_retry:
                     continue
                 raise
 

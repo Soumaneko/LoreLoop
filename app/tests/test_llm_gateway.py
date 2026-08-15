@@ -6,6 +6,7 @@ from app.core.cancellation import CancellationToken
 from app.core.cancellation import bind_cancellation_token
 from app.core.cancellation import reset_cancellation_token
 from app.core.llm.errors import LLMOutputParseError
+from app.core.llm.errors import LLMProviderError
 from app.core.llm.errors import PromptNotFoundError
 from app.core.llm.gateway import LLMGateway
 from app.core.llm.mock import MockLLM
@@ -202,6 +203,93 @@ class TestLLMGatewayRetryFlow:
         )
 
         assert result.text == "hello"
+
+    def test_permanent_provider_error_is_not_retried(self):
+        calls = []
+
+        class PermanentProvider(MockProvider):
+            def generate(self, *_args, **_kwargs):
+                calls.append("called")
+                raise LLMProviderError("Authentication failed: 401")
+
+        gateway = LLMGateway(
+            provider=PermanentProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=NullTraceLogger(),
+        )
+
+        with pytest.raises(LLMProviderError, match="Authentication failed"):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                max_retries=2,
+            )
+
+        assert calls == ["called"]
+
+    def test_permanent_provider_error_diagnostic_is_error(self):
+        class CapturingDiagnostics:
+            def __init__(self):
+                self.entries = []
+
+            def warning(self, **fields):
+                self.entries.append({"severity": "warning", **fields})
+
+            def error(self, **fields):
+                self.entries.append({"severity": "error", **fields})
+
+        class CapturingTrace:
+            def __init__(self):
+                self.diagnostics = CapturingDiagnostics()
+
+            def log(self, **_kwargs):
+                pass
+
+        class PermanentProvider(MockProvider):
+            def generate(self, *_args, **_kwargs):
+                raise LLMProviderError("Authentication failed: 401")
+
+        trace = CapturingTrace()
+        gateway = LLMGateway(
+            provider=PermanentProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=trace,
+        )
+
+        with pytest.raises(LLMProviderError, match="Authentication failed"):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                max_retries=2,
+            )
+
+        assert trace.diagnostics.entries[-1]["severity"] == "error"
+
+    def test_transient_provider_error_retries_until_exhausted(self):
+        calls = []
+
+        class TransientProvider(MockProvider):
+            def generate(self, *_args, **_kwargs):
+                calls.append("called")
+                raise LLMProviderError("Rate limit exceeded: 429")
+
+        gateway = LLMGateway(
+            provider=TransientProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=NullTraceLogger(),
+        )
+
+        with pytest.raises(LLMProviderError, match="Rate limit exceeded"):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                max_retries=2,
+            )
+
+        assert calls == ["called", "called", "called"]
 
     def test_unexpected_programming_error_is_not_retried_or_retyped(self, monkeypatch):
         mock = MockLLM()
