@@ -197,40 +197,6 @@ def select_diverse_candidates(
     accepted_augmentation_slices: set[tuple[str, str, str]] = set()
     accepted_account_keys: set[tuple[str, str, str]] = set()
     committed_visible_evidence_ids: frozenset[str] = frozenset()
-    #: How each selected document entered: "direct" or "relation". Direct-owned
-    #: documents never consume relation owner budget (SPEC); relation-owned
-    #: documents count against every linked owner, including owners introduced
-    #: later by augmentation.
-    document_entry_route: dict[str, str] = {}
-    document_consumed_owners: dict[str, set[str]] = defaultdict(set)
-    #: (document, owner) -> accepted augmentations consuming that owner's
-    #: budget on that document. The owner cap counts one (document, owner)
-    #: group per slot regardless of how many source slices it carries, so all
-    #: slices of one document for one owner are evicted or kept together.
-    owner_groups: dict[
-        tuple[str, str], list[AcceptedAugmentation[CandidateT]]
-    ] = defaultdict(list)
-    #: owner -> (document, owner) groups currently occupying its budget via
-    #: augmentation.
-    augmentation_owner_occupancy: dict[
-        str, set[tuple[str, str]]
-    ] = defaultdict(set)
-    #: Reverse index: accepted augmentation -> the (document, owner) groups it
-    #: belongs to. Keyed by the unique (document, intent, source_evidence_id)
-    #: slice triple (deduped at registration) instead of the augmentation
-    #: object, which may wrap an unhashable candidate. A multi-owner
-    #: augmentation appears in several groups; eviction from any one group must
-    #: drop it from every group and only then roll back coverage once.
-    augmentation_membership: dict[
-        tuple[str, str, str], set[tuple[str, str]]
-    ] = defaultdict(set)
-    #: Membership keys of augmentations that actually credited their intent's
-    #: coverage when accepted (the first holder of a (document, intent,
-    #: relation) account). Owner-cap competition compares coverage
-    #: counterfactually — excluding the competing groups' own credits — so an
-    #: incumbent's self-credit can never make it look "covered" and a
-    #: challenger "uncovered" in the same comparison.
-    augmentation_coverage_credits: set[tuple[str, str, str]] = set()
     intent_coverage: dict[str, int] = defaultdict(int)
     route_coverage: dict[tuple[str, str], int] = defaultdict(int)
     entity_owner_counts: dict[str, int] = defaultdict(int)
@@ -282,36 +248,15 @@ def select_diverse_candidates(
                 return entity.name.casefold()
         return intent.entities[0].name.casefold()
 
-    def _owner_occupied(owner_key: str) -> int:
-        """Total owner occupancy: relation-entry seats plus (document, owner)
-        augmentation groups consuming this owner's budget."""
-        return relation_owner_counts[owner_key] + len(
-            augmentation_owner_occupancy[owner_key]
-        )
-
-    def _augmentation_priority(
+    def _augmentation_key(
         proposal: SelectionProposal[CandidateT],
-        *,
-        coverage_of: Callable[[str], int] | None = None,
     ) -> tuple:
-        """Shared augmentation comparison key (SPEC §8.1 public layers).
+        """Deterministic augmentation processing order.
 
-        Mirrors the main selection key's leading layers — intent origin,
-        remaining coverage, semantic focus — before the route-local quality
-        dimension (node-evidence support quality via ``scoped_quality``, which
-        is cross-intent comparable; ``channel_rank`` only resolves
-        same-quality ties inside one intent), then deterministic tie-breaks.
-        One key drives the initial processing order, the weakest owner-group
-        choice, and the replacement/eviction decision, so a lower-priority
-        origin can never evict higher-priority explicit-input evidence no
-        matter how strong its node evidence is.
-
-        ``coverage_of`` supplies the coverage value used in the comparison.
-        Owner-cap competition passes a counterfactual view that excludes the
-        competing groups' own coverage credits, so the comparison state is
-        symmetric between incumbent and challenger and the outcome depends
-        only on the shared priority layers plus quality — never on who
-        happened to be accepted first.
+        Uses the same public layers as main selection (origin, remaining
+        coverage, focus) before route-local node-evidence support quality and
+        deterministic tie-breaks.  There is no owner-budget competition among
+        augmentations, so this key only makes the output deterministic.
         """
         owner = intents.get(proposal.owner_intent_id)
         if owner is None:
@@ -321,11 +266,7 @@ def select_diverse_candidates(
         else:
             origin = _ORIGIN_PRIORITY[owner.origin]
             focus = _FOCUS_PRIORITY[owner.focus]
-            coverage = (
-                coverage_of(owner.intent_id)
-                if coverage_of is not None
-                else intent_coverage[owner.intent_id]
-            )
+            coverage = intent_coverage[owner.intent_id]
         return (
             origin,
             coverage >= policy.intent_target,
@@ -338,247 +279,6 @@ def select_diverse_candidates(
             intent_order.get(proposal.owner_intent_id, 1_000_000_000),
             proposal.candidate.document.document_id,
         )
-
-    def _group_priority(
-        group: list[AcceptedAugmentation[CandidateT]],
-        *,
-        coverage_of: Callable[[str], int] | None = None,
-    ) -> tuple:
-        """Priority of a (document, owner) group: its best slice (min key).
-
-        Eviction compares a proposal against this, so one strong slice
-        protects the whole group and a weak slice can never drag it down.
-        ``coverage_of`` is forwarded to every slice's comparison key.
-        """
-        return min(
-            (
-                _augmentation_priority(
-                    item.proposal,
-                    coverage_of=coverage_of,
-                )
-                for item in group
-            ),
-            default=(
-                9,
-                True,
-                1 << 30,
-                9,
-                0.0,
-                0,
-                0,
-                0,
-                1_000_000_000,
-                "",
-            ),
-        )
-
-    def _account_still_held(document_key: str, intent_id: str) -> bool:
-        """True when a surviving accepted entry or augmentation still provides
-        the (document, intent, relation) account, i.e. coverage must stay
-        credited.
-
-        Coverage is credited once per (document, intent, route); an
-        augmentation being dropped may share that account with a relation entry
-        (a cluster member augmenting the entry's own intent) or with another
-        surviving augmentation. Only when nothing survives does the rollback
-        decrement coverage.
-        """
-        for entry in entries:
-            if (
-                entry.candidate.document.document_id == document_key
-                and entry.proposal.owner_intent_id == intent_id
-                and entry.proposal.route == "relation"
-            ):
-                return True
-        for aug in augmentations:
-            if (
-                aug.candidate.document.document_id == document_key
-                and aug.proposal.owner_intent_id == intent_id
-            ):
-                return True
-        return False
-
-    def _entry_consumes_owner(document_key: str, owner_key: str) -> bool:
-        """True when the document's relation entry seat still consumes this
-        owner's budget. Such an owner must stay in ``document_consumed_owners``
-        even after its last augmentation group empties, so later slices keep
-        riding the entry seat instead of being re-checked against the cap."""
-        for entry in entries:
-            if (
-                entry.candidate.document.document_id == document_key
-                and entry.proposal.route == "relation"
-                and owner_key in entry.proposal.scoped_owner_keys
-            ):
-                return True
-        return False
-
-    def _membership_key(
-        augmentation: AcceptedAugmentation[CandidateT],
-    ) -> tuple[str, str, str]:
-        """Unique slice key: (document, intent, source evidence)."""
-        return (
-            augmentation.candidate.document.document_id,
-            augmentation.proposal.owner_intent_id,
-            augmentation.source_evidence_id,
-        )
-
-    def _drop_augmentation(
-        augmentation: AcceptedAugmentation[CandidateT],
-    ) -> None:
-        """Fully remove one augmentation: output entry, coverage accounting
-        (once, per its unique (doc, intent, route) account, and only while no
-        other survivor still holds that account), dedup keys, and every
-        (document, owner) membership — a multi-owner augmentation is dropped
-        from *all* its groups, and a group that empties frees the owner's
-        occupancy (unless the entry seat still consumes that owner)."""
-        document_key = augmentation.candidate.document.document_id
-        if augmentation in augmentations:
-            augmentations.remove(augmentation)
-        proposal = augmentation.proposal
-        intent_id = proposal.owner_intent_id
-        account_key = (document_key, intent_id, "relation")
-        if (
-            account_key in accepted_account_keys
-            and not _account_still_held(document_key, intent_id)
-        ):
-            accepted_account_keys.discard(account_key)
-            intent_coverage[intent_id] = max(
-                0, intent_coverage[intent_id] - 1
-            )
-            route_coverage[(intent_id, "relation")] = max(
-                0, route_coverage[(intent_id, "relation")] - 1
-            )
-        accepted_augmentation_slices.discard((
-            document_key,
-            intent_id,
-            augmentation.source_evidence_id,
-        ))
-        membership_key = _membership_key(augmentation)
-        augmentation_coverage_credits.discard(membership_key)
-        for group_key in list(augmentation_membership[membership_key]):
-            group_owner = group_key[1]
-            group = owner_groups.get(group_key)
-            if group is not None:
-                # Remove this augmentation from the group; if the group is now
-                # empty it no longer occupies the owner's budget.
-                remaining = [
-                    item for item in group if item is not augmentation
-                ]
-                if remaining:
-                    owner_groups[group_key] = remaining
-                else:
-                    owner_groups.pop(group_key, None)
-                    augmentation_owner_occupancy[group_owner].discard(
-                        group_key
-                    )
-                    if not _entry_consumes_owner(
-                        group_key[0], group_owner
-                    ):
-                        document_consumed_owners[group_key[0]].discard(
-                            group_owner
-                        )
-        augmentation_membership.pop(membership_key, None)
-
-    def _evict_owner_group(
-        document_key: str,
-        owner_key: str,
-    ) -> None:
-        """Remove an entire (document, owner) augmentation group: every
-        augmentation in it is dropped (from all its memberships, with single
-        coverage rollback); the group then frees its owner occupancy (unless a
-        relation entry seat still consumes that owner)."""
-        group = owner_groups.pop((document_key, owner_key), [])
-        for augmentation in list(group):
-            _drop_augmentation(augmentation)
-        augmentation_owner_occupancy[owner_key].discard(
-            (document_key, owner_key)
-        )
-        if not _entry_consumes_owner(document_key, owner_key):
-            document_consumed_owners[document_key].discard(owner_key)
-
-    def _try_consume_augmentation_owners(
-        proposal: SelectionProposal[CandidateT],
-        candidate: CandidateT,
-        new_owners: list[str],
-    ) -> bool:
-        """Reserve owner budget for a relation-owned augmentation, atomically.
-
-        The owner cap counts one ``(document, owner)`` group per slot: all
-        source slices of one document for one owner are evicted or kept
-        together. A later stronger proposal may evict an earlier weaker group
-        (node-evidence support quality first). Eviction is planned first and
-        committed only when every new owner can be satisfied, so a rejected
-        proposal never leaves partial state.
-
-        Group registration itself happens exactly once, in
-        ``run_augmentations`` — this function only *decides* and performs
-        evictions, it never appends the new augmentation.
-        """
-        document_key = document_id(candidate)
-        eviction_plan: dict[str, str] = {}
-        for owner_key in new_owners:
-            if _owner_occupied(owner_key) < policy.relation_owner_cap:
-                continue
-            # At cap: only a weaker already-accepted group may be evicted, and
-            # only if this proposal is strictly more prioritized under the
-            # shared public layers (origin, coverage, focus) then quality —
-            # never by raw quality alone (SPEC §8.1). Occupancy may come from
-            # a relation entry seat (no augmentation group to evict).
-            occupant_groups = augmentation_owner_occupancy[owner_key]
-            if not occupant_groups:
-                return False
-
-            # Counterfactual coverage: exclude every competing group's own
-            # coverage credits, so an incumbent's self-credit never makes it
-            # look "covered" against an unchallenged "uncovered" challenger
-            # (and vice versa after an eviction rolls back). The comparison
-            # state is then symmetric and the outcome depends only on the
-            # shared priority layers plus quality — never on acceptance order.
-            def competition_coverage(intent_id: str) -> int:
-                competing_credits = sum(
-                    1
-                    for (doc_id, owner) in occupant_groups
-                    for aug in owner_groups[(doc_id, owner)]
-                    if (
-                        aug.proposal.owner_intent_id == intent_id
-                        and _membership_key(aug)
-                        in augmentation_coverage_credits
-                    )
-                )
-                return max(0, intent_coverage[intent_id] - competing_credits)
-
-            proposal_key = _augmentation_priority(
-                proposal, coverage_of=competition_coverage
-            )
-            evictable = [
-                (doc_id, owner)
-                for (doc_id, owner) in occupant_groups
-                if proposal_key
-                < _group_priority(
-                    owner_groups[(doc_id, owner)],
-                    coverage_of=competition_coverage,
-                )
-            ]
-            if not evictable:
-                return False
-            # Evict the least-prioritized evictable group (largest key), so a
-            # higher-priority group is kept whenever possible.
-            weakest = max(
-                evictable,
-                key=lambda pair: _group_priority(
-                    owner_groups[pair],
-                    coverage_of=competition_coverage,
-                ),
-            )
-            eviction_plan[owner_key] = weakest[0]
-        # Atomic commit: only after every new owner is satisfiable. Re-check
-        # each owner's cap because evicting one group may cascade-free another
-        # owner (a multi-owner augmentation is dropped from every group at
-        # once); in that case the planned weaker group is left untouched.
-        for owner_key, evicted_doc in eviction_plan.items():
-            if _owner_occupied(owner_key) >= policy.relation_owner_cap:
-                _evict_owner_group(evicted_doc, owner_key)
-        return True
 
     def relation_owner_eligible(
         proposal: SelectionProposal[CandidateT],
@@ -595,7 +295,7 @@ def select_diverse_candidates(
         if not proposal.scoped_owner_keys:
             return False
         return all(
-            _owner_occupied(owner_key) < policy.relation_owner_cap
+            relation_owner_counts[owner_key] < policy.relation_owner_cap
             for owner_key in proposal.scoped_owner_keys
         )
 
@@ -651,13 +351,14 @@ def select_diverse_candidates(
     def run_augmentations() -> None:
         """Accept zero-cost relation augmentations for selected documents.
 
-        Runs after every ordinary admission so coverage and owner caps update
-        before the next seat competition. Each accepted augmentation adds
-        provenance only — never a seat, payload copy, or duplicate document.
+        Runs after every ordinary admission so coverage updates before the
+        next seat competition. Each accepted augmentation adds provenance only
+        — never a seat, payload copy, or duplicate document. The relation
+        owner cap does not apply here: a selected document already occupies a
+        main hit, and augmentation only adds attribution for other intents.
         Dedup is per ``(document, intent, source_evidence_id)`` — two cluster
         members serving the same intent may both augment (distinct slices);
-        coverage/owner accounting is per ``(document, intent, route)`` so the
-        same intent is credited once per document.
+        coverage is accounted once per ``(document, intent, route)``.
         """
         augmentable = [
             proposal
@@ -669,15 +370,7 @@ def select_diverse_candidates(
                 and proposal.candidate.document.document_id in selected_ids
             )
         ]
-        # Competition among augmentations that need the same owner budget uses
-        # the same shared comparison key as ordinary proposals (origin,
-        # coverage, focus), then node-evidence support quality: the initial
-        # processing order, the weakest owner-group choice, and the eviction
-        # decision all use `_augmentation_priority`.
-        def augmentation_key(proposal: SelectionProposal[CandidateT]) -> tuple:
-            return _augmentation_priority(proposal)
-
-        for proposal in sorted(augmentable, key=augmentation_key):
+        for proposal in sorted(augmentable, key=_augmentation_key):
             candidate = proposal.candidate
             document_key = document_id(candidate)
             source_evidence_id = proposal.source_evidence_id
@@ -686,8 +379,8 @@ def select_diverse_candidates(
             owner = intents.get(proposal.owner_intent_id)
             if owner is None or proposal.scoped_class == "zero":
                 continue
-            # Only the ghost guard (source evidence survives) and dedup apply
-            # before any owner-budget decision.
+            # Only the ghost guard (source evidence survives) and dedup apply;
+            # no owner-budget decision is made for augmentations.
             slice_key = (
                 document_key,
                 proposal.owner_intent_id,
@@ -700,34 +393,8 @@ def select_diverse_candidates(
                 candidate=candidate,
                 source_evidence_id=source_evidence_id,
             )
-            # Augmentation attaches provenance to an already-selected document.
-            # Direct-owned documents are never blocked by the relation owner
-            # cap (SPEC); relation-owned documents count against every linked
-            # owner, so a *new* owner introduced by this augmentation must
-            # still be within budget. A later stronger augmentation may
-            # *replace* an earlier weaker one under the same owner cap
-            # (node-evidence support quality first); each (document, owner)
-            # pair is consumed at most once — later slices for an already
-            # consumed owner join the same group for free.
-            entry_route = document_entry_route.get(document_key)
-            new_owners = [
-                owner_key
-                for owner_key in proposal.scoped_owner_keys
-                if owner_key not in document_consumed_owners[document_key]
-            ]
-            if entry_route == "relation" and new_owners:
-                accepted = _try_consume_augmentation_owners(
-                    proposal, candidate, new_owners
-                )
-                if not accepted:
-                    continue
             accepted_augmentation_slices.add(slice_key)
             account_key = (document_key, proposal.owner_intent_id, "relation")
-            membership_key = (
-                document_key,
-                proposal.owner_intent_id,
-                source_evidence_id,
-            )
             if account_key not in accepted_account_keys:
                 accepted_account_keys.add(account_key)
                 _account_proposal(
@@ -735,32 +402,7 @@ def select_diverse_candidates(
                     owner=owner,
                     direct_served=set(),
                 )
-                # This slice is the first holder of the (document, intent,
-                # relation) account: it credits coverage, so owner-cap
-                # competition must exclude its self-credit counterfactually.
-                augmentation_coverage_credits.add(membership_key)
             augmentations.append(augmentation)
-            # Single registration point: every slice joins each of its
-            # (document, owner) groups (and the reverse index), so eviction
-            # removes all slices of one document for one owner together and a
-            # multi-owner augmentation is cleaned from every group at once. A
-            # brand-new group occupies the owner's budget slot only for
-            # relation-owned documents and only when the document does not
-            # already consume that owner (its entry seat or an earlier
-            # augmentation group already counts it) — direct-owned documents
-            # never consume relation owner budget (SPEC).
-            for owner_key in proposal.scoped_owner_keys:
-                group_key = (document_key, owner_key)
-                is_new_group = group_key not in owner_groups
-                owner_groups[group_key].append(augmentation)
-                augmentation_membership[membership_key].add(group_key)
-                if (
-                    entry_route == "relation"
-                    and is_new_group
-                    and owner_key not in document_consumed_owners[document_key]
-                ):
-                    augmentation_owner_occupancy[owner_key].add(group_key)
-                document_consumed_owners[document_key].add(owner_key)
 
     while len(selected) < policy.max_hits:
         previews: dict[str, AdmissionPreview | None] = {}
@@ -902,19 +544,16 @@ def select_diverse_candidates(
             entity = owner_entity(owner, candidate)
             if entity is not None:
                 entity_owner_counts[entity] += 1
-            document_entry_route[document_id(candidate)] = "direct"
         else:
             # Source-scoped owner budget: only this proposal's own intent's
             # owner keys are consumed (never the merged admission).
             for owner_key in chosen.scoped_owner_keys:
                 relation_owner_counts[owner_key] += 1
-                document_consumed_owners[document_id(candidate)].add(owner_key)
-            document_entry_route[document_id(candidate)] = "relation"
 
         # Zero-cost augmentation after every ordinary admission: already
         # selected documents may accept relation proposals for other intents
-        # immediately, so coverage/owner caps are updated before the next seat
-        # competition instead of flooding extra documents first.
+        # immediately, so coverage is updated before the next seat competition
+        # instead of flooding extra documents first.
         run_augmentations()
 
     return SelectionResult(
