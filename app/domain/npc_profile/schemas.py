@@ -70,7 +70,7 @@ DISCLOSED_FIELD_SETS: dict[NPCDisclosureLevel, frozenset[str] | None] = {
 
 #: ``last_scene_summary`` 描述最近一次实际参与场景时的公开表现，程序 + evidence
 #: 驱动写入，不开放人工编辑。
-NPC_LAST_SCENE_SUMMARY_MAX_LENGTH = 160
+NPC_LAST_SCENE_SUMMARY_MAX_LENGTH = 240
 
 class NPCProfilePublicView(BaseModel):
     model_config = ConfigDict(extra="forbid")

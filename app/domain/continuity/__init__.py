@@ -12,6 +12,7 @@ from .schemas import (
     ContinuityOperation,
     ContinuityProjection,
     ContinuityProjectionOutput,
+    ContinuityProjectionOutputLoose,
     ContinuitySelection,
     ContinuityUpdateDraft,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "ContinuityOperation",
     "ContinuityProjection",
     "ContinuityProjectionOutput",
+    "ContinuityProjectionOutputLoose",
     "ContinuityProjector",
     "ContinuityRetriever",
     "ContinuitySelection",

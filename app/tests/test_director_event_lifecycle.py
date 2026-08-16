@@ -721,20 +721,22 @@ def test_present_event_rejects_engaged_event(tmp_path):
         }
     )
 
-    with pytest.raises(ValueError, match="requires a hidden event"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="继续在码头巡查。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-            touched_event_candidates=[],
-        )
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="继续在码头巡查。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+        touched_event_candidates=[],
+    )
+
+    assert decision.requests == []
+    assert stage.materials == []
 
 
 def test_intrude_engaged_event_rejects_hidden_resolved_and_unknown(tmp_path):
@@ -769,8 +771,8 @@ def test_intrude_engaged_event_rejects_hidden_resolved_and_unknown(tmp_path):
             ],
         }
     )
-    with pytest.raises(ValueError, match="requires an engaged event"):
-        run_generation_director_agent(
+    def assert_empty_decision(gateway):
+        stage, decision = run_generation_director_agent(
             gateway=gateway,
             stores=stores,
             core_memory=CoreMemory(items=[]),
@@ -783,6 +785,10 @@ def test_intrude_engaged_event_rejects_hidden_resolved_and_unknown(tmp_path):
             npc_profiles=[],
             touched_event_candidates=[],
         )
+        assert decision.requests == []
+        assert stage.materials == []
+
+    assert_empty_decision(gateway)
 
     gateway = ScriptedDirectorGateway(
         decision={
@@ -797,20 +803,7 @@ def test_intrude_engaged_event_rejects_hidden_resolved_and_unknown(tmp_path):
             ],
         }
     )
-    with pytest.raises(ValueError, match="requires an engaged event"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="巡查码头。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-            touched_event_candidates=[],
-        )
+    assert_empty_decision(gateway)
 
     gateway = ScriptedDirectorGateway(
         decision={
@@ -825,20 +818,7 @@ def test_intrude_engaged_event_rejects_hidden_resolved_and_unknown(tmp_path):
             ],
         }
     )
-    with pytest.raises(ValueError, match="unknown event"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="巡查码头。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-            touched_event_candidates=[],
-        )
+    assert_empty_decision(gateway)
 
 
 def test_intrude_engaged_event_produces_director_material(tmp_path):
@@ -948,20 +928,22 @@ def test_intrude_engaged_event_requires_guidance(tmp_path):
             ],
         }
     )
-    with pytest.raises(ValueError, match="require guidance"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="巡查码头。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-            touched_event_candidates=[],
-        )
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="巡查码头。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+        touched_event_candidates=[],
+    )
+
+    assert decision.requests == []
+    assert stage.materials == []
 
 
 def test_intrude_engaged_event_at_most_one_per_batch(tmp_path):
@@ -995,20 +977,22 @@ def test_intrude_engaged_event_at_most_one_per_batch(tmp_path):
             ],
         }
     )
-    with pytest.raises(ValueError, match="at most"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="巡查码头。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-            touched_event_candidates=[],
-        )
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="巡查码头。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+        touched_event_candidates=[],
+    )
+
+    assert decision.requests == []
+    assert stage.materials == []
 
 
 def test_self_check_preserves_touched_event_ids():

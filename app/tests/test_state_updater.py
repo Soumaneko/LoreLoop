@@ -6,6 +6,9 @@ import pytest
 
 from app.core.llm import MockLLM
 from app.core.llm.errors import LLMProviderError
+from app.core.llm.gateway import LLMGateway
+from app.core.llm.providers import MockProvider
+from app.core.llm.tracing import NullTraceLogger
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import (
     CurrentState,
@@ -446,17 +449,19 @@ def test_cancellation_is_never_swallowed():
     assert updater.last_warnings == []
 
 
-def test_infrastructure_error_is_never_swallowed():
+def test_provider_error_degrades_to_previous_state():
     updater = StateUpdater(_FailingGateway())
 
-    with pytest.raises(LLMProviderError):
-        updater.update(
-            _state(),
-            _facts(),
-            core_memory=CoreMemory(items=[]),
-        )
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
 
-    assert updater.last_warnings == []
+    assert result == _state()
+    assert len(updater.last_warnings) == 1
+    assert updater.last_warnings[0].code == "state_update_fallback"
+    assert "provider down" in updater.last_warnings[0].message
 
 
 def test_attitude_before_add_is_applied_in_two_pass():
@@ -550,7 +555,7 @@ def test_prompt_defines_incremental_state_contract():
     assert prompt.index("`decision`") < prompt.index("每项操作都必须填写")
     assert "资源数额与单位是否一致" in prompt
     assert prompt.index("- reason：") < prompt.index("- type：")
-    assert "判断 Scene Facts 是否真正支持一项合法、可执行的状态变化" in prompt
+    assert "判断 Scene Facts / 正文段落证据是否真正支持一项合法、可执行的状态变化" in prompt
 
 
 def test_operation_schema_places_reason_before_type():
@@ -573,3 +578,486 @@ def test_operation_schema_has_no_condition_operations():
     assert "npc_condition" not in schema_text
     assert "player_condition" not in schema_text
     assert "expires_after_phases" not in schema_text
+
+
+def test_paragraph_evidence_applies_state_operation():
+    state = _state()
+    response = {
+        "decision": "正文段落证据支持状态变化。",
+        "operations": [
+            {
+                "operation_id": "op1",
+                "type": "location_change",
+                "reason": "正文段落证据支持该变化。",
+                "evidence_fact_ids": [],
+                "evidence_paragraph_ids": ["turn_1_p001"],
+                "location": "城门",
+            }
+        ],
+    }
+    mock = MockLLM()
+    mock.set_responses([json.dumps(response, ensure_ascii=False)])
+    updater = StateUpdater(mock.build_gateway())
+    result = updater.update(
+        state,
+        json.dumps({"scene_focus": "降级", "facts": []}, ensure_ascii=False),
+        core_memory=CoreMemory(items=[]),
+        paragraph_texts={"turn_1_p001": "主角离开酒馆前往城门。"},
+    )
+
+    assert result.scene.location == "城门"
+    assert result.scene.scene_id == "scene_010"
+
+
+def test_retry_feedback_allows_paragraph_evidence_after_bad_paragraph_id():
+    state = _state()
+    bad = {
+        "decision": "首次输出使用了未知 paragraph ID。",
+        "operations": [
+            {
+                "operation_id": "op1",
+                "type": "location_change",
+                "reason": "正文段落证据支持该变化。",
+                "evidence_fact_ids": [],
+                "evidence_paragraph_ids": ["turn_99_p999"],
+                "location": "城门",
+            }
+        ],
+    }
+    good = {
+        "decision": "第二次输出使用有效 paragraph ID。",
+        "operations": [
+            {
+                "operation_id": "op1",
+                "type": "location_change",
+                "reason": "正文段落证据支持该变化。",
+                "evidence_fact_ids": [],
+                "evidence_paragraph_ids": ["turn_1_p001"],
+                "location": "城门",
+            }
+        ],
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(bad, ensure_ascii=False),
+        json.dumps(good, ensure_ascii=False),
+    ])
+    updater = StateUpdater(mock.build_gateway())
+    result = updater.update(
+        state,
+        json.dumps({"scene_focus": "降级", "facts": []}, ensure_ascii=False),
+        core_memory=CoreMemory(items=[]),
+        paragraph_texts={"turn_1_p001": "主角离开酒馆前往城门。"},
+    )
+
+    assert result.scene.location == "城门"
+    assert result.scene.scene_id == "scene_010"
+
+
+class _CountingProvider(MockProvider):
+    def __init__(self, responses=None):
+        super().__init__()
+        if responses is not None:
+            self.set_responses(responses)
+        self.calls = 0
+
+    def generate(self, *args, **kwargs):
+        self.calls += 1
+        return super().generate(*args, **kwargs)
+
+
+def _gateway(provider):
+    return LLMGateway(
+        provider=provider,
+        prompt_loader=MockLLM().prompt_loader,
+        tracer=NullTraceLogger(),
+    )
+
+
+def test_salvage_uses_second_attempt_valid_subset_only():
+    first = {
+        "decision": "第一次有合法与非法操作。",
+        "operations": [
+            _operation("op1", "location_change", location="城门"),
+            {
+                **_operation("op2", "money_delta", delta=1),
+                "evidence_fact_ids": ["missing"],
+            },
+        ],
+    }
+    second = {
+        "decision": "第二次只保留合法操作。",
+        "operations": [
+            _operation("op3", "money_delta", delta=5),
+            {
+                **_operation("op4", "money_delta", delta=10),
+                "evidence_fact_ids": ["missing"],
+            },
+        ],
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.scene.location == "酒馆"
+    assert result.resources.money == 25
+    assert [op.operation_id for op in updater.last_change_set.operations] == ["op3"]
+    assert updater.last_warnings[0].code == "state_update_operation_dropped"
+    assert updater.last_warnings[0].operation_id == "op4"
+
+
+def test_salvage_uses_first_attempt_when_second_has_no_valid_ops():
+    first = {
+        "decision": "第一次有合法操作。",
+        "operations": [
+            _operation("op1", "location_change", location="城门"),
+            {
+                **_operation("op2", "money_delta", delta=1),
+                "evidence_fact_ids": ["missing"],
+            },
+        ],
+    }
+    second = {
+        "decision": "第二次全部非法。",
+        "operations": [
+            {
+                **_operation("op3", "money_delta", delta=10),
+                "evidence_fact_ids": ["missing"],
+            }
+        ],
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.scene.location == "城门"
+    assert result.resources.money == 20
+    assert [op.operation_id for op in updater.last_change_set.operations] == ["op1"]
+    assert any(
+        warning.code == "state_update_operation_dropped"
+        and warning.operation_id == "op2"
+        for warning in updater.last_warnings
+    )
+
+
+def test_single_schema_error_does_not_drop_valid_siblings_on_salvage():
+    first = {
+        "decision": "首次含 schema 错误。",
+        "operations": [
+            _operation("op1", "location_change", location="城门"),
+            {
+                "operation_id": "op2",
+                "reason": "缺少 type",
+                "evidence_fact_ids": ["f1"],
+            },
+        ],
+    }
+    second = {
+        "decision": "第二次仍含 schema 错误。",
+        "operations": [
+            _operation("op3", "money_delta", delta=5),
+            {
+                "operation_id": "op4",
+                "reason": "缺少 type",
+                "evidence_fact_ids": ["f1"],
+            },
+        ],
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.scene.location == "酒馆"
+    assert result.resources.money == 25
+    assert [op.operation_id for op in updater.last_change_set.operations] == ["op3"]
+    dropped = updater.last_warnings[0]
+    assert dropped.code == "state_update_operation_dropped"
+    assert dropped.operation_id == "op4"
+    assert dropped.operation_type == "unknown"
+
+
+def test_duplicate_operation_id_keeps_first_valid_and_drops_duplicate():
+    first = {
+        "decision": "重复 op1。",
+        "operations": [
+            _operation("op1", "money_delta", delta=1),
+            _operation("op1", "money_delta", delta=2),
+        ],
+    }
+    second = {
+        "decision": "重复 op2。",
+        "operations": [
+            _operation("op2", "money_delta", delta=5),
+            _operation("op2", "money_delta", delta=6),
+        ],
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.resources.money == 25
+    assert [op.operation_id for op in updater.last_change_set.operations] == ["op2"]
+    assert [op.delta for op in updater.last_change_set.operations] == [5]
+    assert any(
+        warning.code == "state_update_operation_dropped"
+        and warning.operation_id == "op2"
+        for warning in updater.last_warnings
+    )
+
+
+def test_model_calls_do_not_exceed_two():
+    invalid = {
+        "decision": "非法证据。",
+        "operations": [
+            {
+                **_operation("op1", "money_delta", delta=1),
+                "evidence_fact_ids": ["missing"],
+            }
+        ],
+    }
+    provider = _CountingProvider([
+        json.dumps(invalid, ensure_ascii=False),
+        json.dumps(invalid, ensure_ascii=False),
+    ])
+    updater = StateUpdater(_gateway(provider))
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert provider.calls == 2
+
+
+def test_permanent_provider_error_is_not_retried():
+    class PermanentFailureProvider(_CountingProvider):
+        def generate(self, *args, **kwargs):
+            self.calls += 1
+            raise LLMProviderError("Authentication failed: 401")
+
+    provider = PermanentFailureProvider()
+    updater = StateUpdater(_gateway(provider))
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert provider.calls == 1
+    assert updater.last_warnings[0].code == "state_update_fallback"
+
+
+def test_transient_provider_error_retries_once_then_degrades():
+    class TransientFailureProvider(_CountingProvider):
+        def generate(self, *args, **kwargs):
+            self.calls += 1
+            raise LLMProviderError("Mock provider error")
+
+    provider = TransientFailureProvider()
+    updater = StateUpdater(_gateway(provider))
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert provider.calls == 2
+    assert updater.last_warnings[0].code == "state_update_fallback"
+
+
+def test_no_effect_does_not_trigger_retry():
+    response = {
+        "decision": "移除不在场角色。",
+        "operations": [_operation("op1", "participant_remove", name="莎拉")],
+    }
+    provider = _CountingProvider([json.dumps(response, ensure_ascii=False)])
+    updater = StateUpdater(_gateway(provider))
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result == _state()
+    assert provider.calls == 1
+    assert updater.last_warnings[0].code == "participant_not_present"
+
+
+def test_second_provider_failure_uses_first_valid_subset():
+    first = {
+        "decision": "第一次有合法操作。",
+        "operations": [
+            _operation("op1", "location_change", location="城门"),
+            {
+                **_operation("op2", "money_delta", delta=1),
+                "evidence_fact_ids": ["missing"],
+            },
+        ],
+    }
+
+    class FirstThenProviderFailure(_CountingProvider):
+        def generate(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return MockProvider.generate(self, *args, **kwargs)
+            raise LLMProviderError("provider down")
+
+    provider = FirstThenProviderFailure([
+        json.dumps(first, ensure_ascii=False),
+    ])
+    updater = StateUpdater(_gateway(provider))
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.scene.location == "城门"
+    assert [op.operation_id for op in updater.last_change_set.operations] == ["op1"]
+    assert provider.calls == 2
+
+
+def test_apply_state_integrity_error_is_not_swallowed(monkeypatch):
+    def boom(*args, **kwargs):
+        raise ValueError("final state invalid")
+
+    monkeypatch.setattr(
+        "app.domain.current_state.updater.apply_state_changes",
+        boom,
+    )
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps({"decision": "合法", "operations": []}, ensure_ascii=False),
+    ])
+    updater = StateUpdater(mock.build_gateway())
+
+    with pytest.raises(ValueError, match="final state invalid"):
+        updater.update(
+            _state(),
+            _facts(),
+            core_memory=CoreMemory(items=[]),
+        )
+
+
+def test_missing_decision_uses_fallback_and_applies_valid_ops():
+    response = {
+        "operations": [_operation("op1", "money_delta", delta=5)],
+    }
+    mock = MockLLM()
+    mock.set_responses([json.dumps(response, ensure_ascii=False)])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.resources.money == 25
+    assert updater.last_change_set.decision == (
+        "State update applied without a decision; kept valid operations."
+    )
+
+
+def test_extra_top_level_fields_do_not_block_salvage():
+    first = {
+        "decision": "第一次带额外顶层字段。",
+        "unexpected": True,
+        "operations": [_operation("op1", "money_delta", delta=1)],
+    }
+    second = {
+        "decision": "第二次仍带额外顶层字段。",
+        "unexpected": True,
+        "operations": [_operation("op2", "money_delta", delta=5)],
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.resources.money == 25
+    assert [op.operation_id for op in updater.last_change_set.operations] == ["op2"]
+    assert any(
+        warning.code == "state_update_operation_dropped"
+        and warning.operation_id == "top_level"
+        for warning in updater.last_warnings
+    )
+
+
+def test_over_limit_operations_preserve_first_thirty_valid_ops():
+    response = {
+        "decision": "超过 30 项。",
+        "operations": [
+            _operation(f"op{i}", "money_delta", delta=1)
+            for i in range(1, 32)
+        ],
+    }
+    mock = MockLLM()
+    mock.set_responses([json.dumps(response, ensure_ascii=False)])
+    updater = StateUpdater(mock.build_gateway())
+
+    result = updater.update(
+        _state(),
+        _facts(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.resources.money == 50
+    assert len(updater.last_change_set.operations) == 30
+    assert any(
+        warning.code == "state_update_operation_dropped"
+        and warning.operation_id == "operations"
+        for warning in updater.last_warnings
+    )

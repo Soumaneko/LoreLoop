@@ -136,6 +136,39 @@ class TestLLMGatewayRetryFlow:
         assert result.text == "hello"
         assert result.length == 5
 
+    def test_default_output_correction_retries_once(self):
+        mock = MockLLM()
+        mock.set_responses([
+            "not valid json",
+            '{"text": "hello", "length": 5}',
+        ])
+        gateway = make_llm_gateway(mock)
+
+        result = gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+        )
+
+        assert result.text == "hello"
+        assert result.length == 5
+
+    def test_default_output_correction_does_not_retry_twice(self):
+        mock = MockLLM()
+        mock.set_responses([
+            "not valid json",
+            "still not valid json",
+            '{"text": "hello", "length": 5}',
+        ])
+        gateway = make_llm_gateway(mock)
+
+        with pytest.raises(LLMOutputParseError):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+            )
+
     def test_schema_validation_failure_retries_then_succeeds(self):
         mock = MockLLM()
         mock.set_responses([

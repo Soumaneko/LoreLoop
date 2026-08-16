@@ -9,8 +9,9 @@ from app.domain.continuity import ContinuityProjection
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
-from app.domain.scene_facts.schemas import SceneFactSet
+from app.domain.scene_facts.schemas import SceneFact, SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
+from app.domain.scene_summary.summarizer import SceneSummaryWarning
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
 from app.graph import confirmation_nodes
 from app.graph.confirmation_graph import (
@@ -89,6 +90,54 @@ def test_state_update_warning_is_emitted_cached_and_diagnosed(
     diagnostic = diagnostics.read(trace_id="trace-1")[0]
     assert diagnostic["source"] == "state_update"
     assert diagnostic["code"] == "npc_target_not_present"
+
+
+def test_scene_summarize_warning_is_emitted_and_diagnosed(
+    monkeypatch,
+    tmp_path,
+):
+    summary = SceneSummary(
+        id="summary-current",
+        level=1,
+        content="本轮摘要",
+        scene_ids=["scene-current"],
+        turn_start=6,
+        turn_end=6,
+    )
+    warning = SceneSummaryWarning(
+        code="scene_summary_fallback",
+        message="No usable turn summary candidate; using placeholder.",
+    )
+
+    class _Summarizer:
+        def __init__(self, _gateway):
+            self.last_warnings = [warning]
+
+        def summarize_turn(self, **_kwargs):
+            return summary
+
+    monkeypatch.setattr(confirmation_nodes, "SceneSummarizer", _Summarizer)
+    monkeypatch.setattr(confirmation_nodes, "_gateway_for", lambda _state: object())
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
+    state = {
+        "pipeline_input": SimpleNamespace(turn_index=6),
+        "trace_id": "trace-summary",
+        "cache": {},
+        "confirmation_scene_text": "确认正文",
+        "updated_state": CurrentState(
+            scene=SceneState(scene_id="scene-current", location="新地点"),
+            player=PlayerState(name="主角"),
+        ),
+        "core_memory": CoreMemory(items=[]),
+        "runtime_services": SimpleNamespace(diagnostics=diagnostics),
+    }
+
+    result = confirmation_nodes.scene_summarize_node(state)
+
+    assert result["turn_summary"] is summary
+    diagnostic = diagnostics.read(trace_id="trace-summary")[0]
+    assert diagnostic["source"] == "scene_summary"
+    assert diagnostic["code"] == "scene_summary_fallback"
 
 
 def test_only_selection_summaries_append_current_turn_summary():
@@ -474,6 +523,49 @@ def test_dry_run_merge_does_not_cache_write_only_results():
     assert "recorded_setting_ids" not in state["cache"]
 
 
+def test_scene_fact_diagnostics_use_degraded_reasons_not_emptiness(
+    monkeypatch,
+    tmp_path,
+):
+    scene_facts = SceneFactSet(
+        scene_focus="部分内容保留",
+        facts=[SceneFact(fact_id="f1", fact="有效事实")],
+        degraded=True,
+        degraded_reasons=["npc_mentions"],
+    )
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
+
+    class _Extractor:
+        def __init__(self, _gateway):
+            pass
+
+        def extract(self, *_args, **_kwargs):
+            return scene_facts
+
+    monkeypatch.setattr(confirmation_nodes, "SceneFactExtractor", _Extractor)
+    state = {
+        "pipeline_input": SimpleNamespace(turn_index=1, user_input="输入"),
+        "trace_id": "trace-1",
+        "cache": {},
+        "core_memory": CoreMemory(items=[]),
+        "state_before_update": CurrentState(
+            scene=SceneState(scene_id="scene-1", location="门外"),
+            player=PlayerState(name="主角"),
+        ),
+        "effective_scene_text": "正文",
+        "events": [],
+        "runtime_services": SimpleNamespace(
+            gateway=lambda **_kwargs: object(),
+            diagnostics=diagnostics,
+        ),
+    }
+
+    confirmation_nodes.scene_fact_extract_node(state)
+
+    codes = {entry["code"] for entry in diagnostics.read()}
+    assert codes == {"npc_mentions_degraded"}
+
+
 def test_parallel_success_is_cacheable_when_sibling_node_fails():
     marker = object()
 
@@ -814,6 +906,83 @@ def test_continuity_project_node_computes_and_caches_projection(monkeypatch):
 
     assert result["continuity_projection"] is fresh
     assert state["cache"]["continuity_projection"] is fresh
+
+
+def test_continuity_project_node_emits_warning(monkeypatch, tmp_path):
+    state = _continuity_node_state(cache={"key": "正文"})
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
+    state["runtime_services"] = SimpleNamespace(
+        gateway=lambda **_kwargs: object(),
+        diagnostics=diagnostics,
+    )
+
+    class _Projector:
+        def __init__(self, *_args, **_kwargs):
+            self.last_warnings = [SimpleNamespace(
+                code="continuity_fallback",
+                message="fallback",
+            )]
+
+        def project(self, **_kwargs):
+            return ContinuityProjection(operations=[])
+
+    monkeypatch.setattr(confirmation_nodes, "ContinuityProjector", _Projector)
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, _name: _FakeStore,
+    )
+
+    confirmation_nodes.continuity_project_node(state)
+
+    diagnostic = diagnostics.read(trace_id="trace-1")[0]
+    assert diagnostic["source"] == "continuity"
+    assert diagnostic["code"] == "continuity_fallback"
+
+
+def test_action_preview_node_emits_warning(monkeypatch, tmp_path):
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
+    state = {
+        "pipeline_input": SimpleNamespace(
+            turn_index=1,
+            scene_result=SimpleNamespace(
+                scene_text="正文",
+                next_action_directions=[],
+            ),
+        ),
+        "trace_id": "trace-action",
+        "cache": {},
+        "effective_scene_text": "正文",
+        "updated_state": CurrentState(
+            scene=SceneState(scene_id="scene_001", location="新地点"),
+            player=PlayerState(name="主角"),
+        ),
+        "core_memory": CoreMemory(items=[]),
+        "recent_summaries": [],
+        "scene_facts": SceneFactSet(scene_focus="x", facts=[]),
+        "runtime_services": SimpleNamespace(
+            gateway=lambda **_kwargs: object(),
+            diagnostics=diagnostics,
+        ),
+    }
+
+    class _Agent:
+        def __init__(self, _gateway):
+            self.last_warnings = [SimpleNamespace(
+                code="action_preview_fallback",
+                message="fallback",
+            )]
+
+        def generate(self, **_kwargs):
+            return SimpleNamespace(previews=[])
+
+    monkeypatch.setattr(confirmation_nodes, "ActionPreviewAgent", _Agent)
+
+    confirmation_nodes.action_preview_node(state)
+
+    diagnostic = diagnostics.read(trace_id="trace-action")[0]
+    assert diagnostic["source"] == "action_preview"
+    assert diagnostic["code"] == "action_preview_fallback"
 
 
 def _state_update_node_state(*, cache):

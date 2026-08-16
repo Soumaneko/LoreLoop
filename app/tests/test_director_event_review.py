@@ -1,6 +1,7 @@
 import pytest
 
 from types import SimpleNamespace
+from app.core.llm.errors import LLMProviderError
 from app.domain.current_state import WorldClock
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
@@ -562,3 +563,81 @@ def test_review_input_uses_actor_names_only(tmp_path):
     hidden_input = gateway.input_data[0]["events_json"]
     assert '"港务署"' in hidden_input
     assert '"林澈"' in hidden_input
+
+
+def _review_selection(title):
+    from app.domain.director_event.schemas import (
+        DirectorEventSelectionResult,
+        EventHook,
+        WorldImpact,
+    )
+
+    return DirectorEventSelectionResult(
+        current_story_direction=f"{title} 出现异常动静。",
+        reason="独立世界事件。",
+        title=title,
+        duration_phases=7,
+        actor_roles=[],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    )
+
+
+def test_hidden_success_engaged_failure_keeps_hidden_result(tmp_path):
+    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event() as store:
+        hidden_id = store.save(
+            _review_selection("无灯船").to_event(
+                role="ambient", turn_index=1, current_clock=WorldClock()
+            )
+        )
+        engaged_id = store.save(
+            _review_selection("夜哨").to_event(
+                role="ambient", turn_index=1, current_clock=WorldClock()
+            )
+        )
+        store.set_stage(engaged_id, "engaged", turn_index=2)
+
+    class _FailEngagedGateway:
+        def __init__(self, hidden_output):
+            self.hidden_output = hidden_output
+
+        def run(self, **kwargs):
+            if kwargs["task"] == "director_event_review_hidden":
+                return kwargs["output_schema"].model_validate(self.hidden_output)
+            raise LLMProviderError("engaged review failed")
+
+    gateway = _FailEngagedGateway({
+        "reviews": [{
+            "event_id": hidden_id,
+            "reason": "保持隐藏。",
+            "action": "keep_hidden",
+            "consume_hook_ids": [],
+        }],
+    })
+    state = make_review_node_state(stores, gateway)
+    state["runtime_services"] = SimpleNamespace(
+        stores=stores,
+        gateway=lambda **kwargs: gateway,
+    )
+
+    result = confirmation_nodes.director_event_review_node(state)
+
+    assert any(
+        review["event_id"] == hidden_id
+        for review in result["director_event_reviews"]
+    )
+    with stores.director_event() as store:
+        assert store.get_by_id(hidden_id).stage == "hidden"
+        assert store.get_by_id(engaged_id).stage == "engaged"

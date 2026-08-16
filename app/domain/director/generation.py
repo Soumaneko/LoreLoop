@@ -19,6 +19,7 @@ from app.domain.director import (
     DirectorStageMaterial,
     DirectorStageResult,
 )
+from app.domain.director.agent import DirectorWarning
 from app.domain.director.skill_specs import (
     ForeshadowSettingArguments,
     IntroduceNPCArguments,
@@ -72,6 +73,7 @@ class DirectorGenerationExecutor:
         self._turn_resolution_json = turn_resolution_json
         self._touched_event_candidates = touched_event_candidates or []
         self._npc_profiles = npc_profiles
+        self.last_warnings: list[DirectorWarning] = []
 
     def run(self) -> tuple[DirectorStageResult, object]:
         recover_pending_director_mutation(self._stores)
@@ -250,10 +252,12 @@ class DirectorGenerationExecutor:
                     ],
                 },
             )
-            decision = DirectorAgent(self._gateway, service).decide_generation(
+            agent = DirectorAgent(self._gateway, service)
+            decision = agent.decide_generation(
                 observation,
                 trace_id=self._trace_id,
             )
+            self.last_warnings.extend(agent.last_warnings)
             executions = service.execute_batch(
                 decision,
                 phase="generation",

@@ -106,7 +106,7 @@ class PreparedNPCFieldChange(BaseModel):
     """One bridgeable accepted change ready for atomic persistence.
 
     This is the write-side contract: the batch field updater must persist a
-    non-empty ``change_basis`` (at most 80 characters) for every accumulating
+    non-empty ``change_basis`` (at most 120 characters) for every accumulating
     stable field change.  ``None`` is only legal for ``last_scene_summary``,
     whose whole new value is its basis.  Rejecting ``None`` here makes it
     impossible for the current write API to fabricate a pseudo-legacy log with
@@ -120,7 +120,7 @@ class PreparedNPCFieldChange(BaseModel):
     turn_index: int = Field(ge=0)
     old_value: str | None = None
     new_value: str = Field(min_length=1)
-    change_basis: str | None = Field(default=None, min_length=1, max_length=80)
+    change_basis: str | None = Field(default=None, min_length=1, max_length=120)
     summary_delta: str | None = None
     source: Literal["proposal"] = "proposal"
     evidence: list[PreparedNPCFieldEvidence] = Field(min_length=1, max_length=4)

@@ -109,7 +109,7 @@ def test_upgrade_disclosure_rejects_downgrade_or_equal(tmp_path):
                 "guidance": "使用新等级。",
             }],
         })
-        run_generation_director_agent(
+        stage, decision = run_generation_director_agent(
             gateway=gateway,
             stores=stores,
             core_memory=CoreMemory(items=[]),
@@ -121,11 +121,11 @@ def test_upgrade_disclosure_rejects_downgrade_or_equal(tmp_path):
             trace_id="generation-director",
             npc_profiles=[selected_profile],
         )
+        assert decision.requests == []
+        assert stage.materials == []
 
-    with pytest.raises(ValueError, match="only supports raising"):
-        run_with("face_to_face")
-    with pytest.raises(ValueError, match="only supports raising"):
-        run_with("remote")
+    run_with("face_to_face")
+    run_with("remote")
 
 
 def test_upgrade_disclosure_rejects_unprojected_npc(tmp_path):
@@ -149,19 +149,21 @@ def test_upgrade_disclosure_rejects_unprojected_npc(tmp_path):
         }],
     })
 
-    with pytest.raises(ValueError, match="only works on NPCs projected"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="继续对话。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-        )
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="继续对话。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+
+    assert decision.requests == []
+    assert stage.materials == []
 
 
 def test_upgrade_disclosure_rejects_unknown_npc(tmp_path):
@@ -179,19 +181,21 @@ def test_upgrade_disclosure_rejects_unknown_npc(tmp_path):
         }],
     })
 
-    with pytest.raises(ValueError, match="unknown npc_id"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="继续对话。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-        )
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="继续对话。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+
+    assert decision.requests == []
+    assert stage.materials == []
 
 
 def test_apply_staged_disclosure_upgrades_persists_and_never_downgrades(
@@ -355,19 +359,21 @@ def test_introduce_npc_allows_at_most_five_per_batch(tmp_path):
         ],
     })
 
-    with pytest.raises(ValueError, match="allows at most 5 request"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="让六位登场。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-        )
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="让六位登场。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+
+    assert decision.requests == []
+    assert stage.materials == []
 
 
 def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):

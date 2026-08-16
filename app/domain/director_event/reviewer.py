@@ -97,12 +97,36 @@ class DirectorEventHiddenReviewer:
             DirectorEventHiddenReviewBatch
         )
         expected_ids = {event.event_id for event in events}
+        events_by_id = {event.event_id: event for event in events}
 
         def validator(batch) -> None:
             if {review.event_id for review in batch.reviews} != expected_ids:
                 raise ValueError(
                     "hidden review batch must cover every supplied event"
                 )
+            for review in batch.reviews:
+                event = events_by_id[review.event_id]
+                known = {hook.hook_id for hook in event.hook_pool}
+                invalid = [
+                    hook_id
+                    for hook_id in review.consume_hook_ids
+                    if hook_id not in known
+                ]
+                if invalid:
+                    raise ValueError(
+                        "consume_hook_ids not part of this event: "
+                        + ", ".join(sorted(invalid))
+                    )
+                consumed = [
+                    hook.hook_id
+                    for hook in event.hook_pool
+                    if hook.hook_id in review.consume_hook_ids and hook.consumed
+                ]
+                if consumed:
+                    raise ValueError(
+                        "consume_hook_ids already consumed: "
+                        + ", ".join(sorted(consumed))
+                    )
 
         return cast(
             DirectorEventHiddenReviewBatch,

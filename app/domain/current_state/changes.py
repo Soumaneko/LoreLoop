@@ -2,16 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import re
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.text import normalize_key
 from .schemas import CurrentState, InventoryItem, ParticipantState
-
-
-class StateChangeError(ValueError):
-    pass
 
 
 @dataclass(frozen=True)
@@ -34,7 +30,17 @@ class _Operation(BaseModel):
 
     operation_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
-    evidence_fact_ids: list[str] = Field(min_length=1)
+    evidence_fact_ids: list[str] = Field(default_factory=list)
+    evidence_paragraph_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _requires_evidence(self):
+        if not (self.evidence_fact_ids or self.evidence_paragraph_ids):
+            raise ValueError(
+                "operation requires at least one evidence_fact_id or "
+                "evidence_paragraph_id"
+            )
+        return self
 
 
 class LocationChange(_Operation):
@@ -142,6 +148,19 @@ class StateChangeSet(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("operation_id values must be unique")
         return self
+
+
+class StateChangeSetLoose(BaseModel):
+    """顶层宽松容器：只约束 decision 与 operations 列表形态。
+
+    decision 可为空、顶层额外字段和超过 30 项都不会在 schema 层失败；这些
+    由 ``output_validator`` 反馈/裁剪，以便保留可用的合法 operation。
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    decision: str | None = None
+    operations: list[Any] = Field(default_factory=list)
 
 
 def apply_state_changes(

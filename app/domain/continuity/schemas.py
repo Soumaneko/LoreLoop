@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -16,7 +16,19 @@ from pydantic import (
 ContinuityKind = Literal["commitment", "open_thread"]
 ContinuityStatus = Literal["active", "resolved", "cancelled"]
 ContinuityOperationType = Literal["create", "update", "resolve", "cancel"]
-CURRENT_STATE_MAX_CHARS = 800
+
+SUBJECT_HARD_LIMIT = 80
+SUBJECT_SOFT_LIMIT = 120
+PREMISE_HARD_LIMIT = 240
+PREMISE_SOFT_LIMIT = 360
+STATE_DELTA_HARD_LIMIT = 240
+STATE_DELTA_SOFT_LIMIT = 360
+CURRENT_STATE_HARD_LIMIT = 800
+CURRENT_STATE_SOFT_LIMIT = 1200
+REASON_HARD_LIMIT = 160
+REASON_SOFT_LIMIT = 240
+CURRENT_STATE_MAX_CHARS = CURRENT_STATE_SOFT_LIMIT
+
 ContinuityRelationReason = Literal[
     "exact_entity_match",
     "alias_match",
@@ -34,8 +46,21 @@ class ContinuityItemDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: ContinuityKind
-    subject: str = Field(min_length=1, max_length=80)
-    premise: str = Field(min_length=1, max_length=240)
+    subject: str = Field(min_length=1, max_length=SUBJECT_SOFT_LIMIT)
+    premise: str = Field(min_length=1, max_length=PREMISE_SOFT_LIMIT)
+    entities: list[str] = Field(default_factory=list, max_length=12)
+    location: str | None = Field(default=None, max_length=80)
+    deadline: str | None = Field(default=None, max_length=80)
+
+
+class ContinuityItemDraftHard(BaseModel):
+    """prompt 展示 / 第一轮硬校验用的 create item（subject 80 / premise 240）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: ContinuityKind
+    subject: str = Field(min_length=1, max_length=SUBJECT_HARD_LIMIT)
+    premise: str = Field(min_length=1, max_length=PREMISE_HARD_LIMIT)
     entities: list[str] = Field(default_factory=list, max_length=12)
     location: str | None = Field(default=None, max_length=80)
     deadline: str | None = Field(default=None, max_length=80)
@@ -47,8 +72,8 @@ class ContinuityItem(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     kind: ContinuityKind
     status: ContinuityStatus = "active"
-    subject: str = Field(min_length=1, max_length=80)
-    premise: str = Field(min_length=1, max_length=240)
+    subject: str = Field(min_length=1, max_length=SUBJECT_SOFT_LIMIT)
+    premise: str = Field(min_length=1, max_length=PREMISE_SOFT_LIMIT)
     current_state: str | None = Field(
         default=None,
         min_length=1,
@@ -69,8 +94,8 @@ class ContinuityUpdateDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    subject: str = Field(min_length=1, max_length=80)
-    state_delta: str = Field(min_length=1, max_length=240)
+    subject: str = Field(min_length=1, max_length=SUBJECT_SOFT_LIMIT)
+    state_delta: str = Field(min_length=1, max_length=STATE_DELTA_SOFT_LIMIT)
     new_current_state: str = Field(
         min_length=1,
         max_length=CURRENT_STATE_MAX_CHARS,
@@ -96,7 +121,23 @@ class _OperationBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     evidence_ids: list[str] = Field(min_length=1, max_length=8)
-    reason: str = Field(min_length=1, max_length=160)
+    reason: str = Field(min_length=1, max_length=REASON_SOFT_LIMIT)
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def _unique_evidence_ids(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("evidence_ids must not contain duplicates")
+        return value
+
+
+class _OperationBaseHard(BaseModel):
+    """prompt 展示 / 第一轮硬校验用的 operation base（reason 硬上限 160）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_ids: list[str] = Field(min_length=1, max_length=8)
+    reason: str = Field(min_length=1, max_length=REASON_HARD_LIMIT)
 
     @field_validator("evidence_ids")
     @classmethod
@@ -114,8 +155,8 @@ class ContinuityCreateOperation(_OperationBase):
 class ContinuityUpdateOperation(_OperationBase):
     operation: Literal["update"]
     item_id: str = Field(min_length=1)
-    subject: str = Field(min_length=1, max_length=80)
-    state_delta: str = Field(min_length=1, max_length=240)
+    subject: str = Field(min_length=1, max_length=SUBJECT_SOFT_LIMIT)
+    state_delta: str = Field(min_length=1, max_length=STATE_DELTA_SOFT_LIMIT)
     new_current_state: str = Field(
         min_length=1,
         max_length=CURRENT_STATE_MAX_CHARS,
@@ -171,8 +212,50 @@ ContinuityOperation = Annotated[
 ]
 
 
-class ContinuityProjectionOutput(RootModel[list[ContinuityOperation]]):
-    """Wire contract: the Projector returns the operation list directly."""
+class ContinuityCreateOperationHard(_OperationBaseHard):
+    operation: Literal["create"]
+    item: ContinuityItemDraftHard
+
+
+class ContinuityUpdateOperationHard(_OperationBaseHard):
+    operation: Literal["update"]
+    item_id: str = Field(min_length=1)
+    subject: str = Field(min_length=1, max_length=SUBJECT_HARD_LIMIT)
+    state_delta: str = Field(min_length=1, max_length=STATE_DELTA_HARD_LIMIT)
+    new_current_state: str = Field(
+        min_length=1,
+        max_length=CURRENT_STATE_HARD_LIMIT,
+    )
+    entities: list[str] = Field(default_factory=list, max_length=12)
+    location: str | None = Field(default=None, max_length=80)
+    deadline: str | None = Field(default=None, max_length=80)
+
+
+class ContinuityResolveOperationHard(_OperationBaseHard):
+    operation: Literal["resolve"]
+    item_id: str = Field(min_length=1)
+
+
+class ContinuityCancelOperationHard(_OperationBaseHard):
+    operation: Literal["cancel"]
+    item_id: str = Field(min_length=1)
+
+
+ContinuityOperationHard = Annotated[
+    ContinuityCreateOperationHard
+    | ContinuityUpdateOperationHard
+    | ContinuityResolveOperationHard
+    | ContinuityCancelOperationHard,
+    Field(discriminator="operation"),
+]
+
+
+class ContinuityProjectionOutput(RootModel[list[ContinuityOperationHard]]):
+    """prompt 展示 / 第一轮硬校验用的 operation 数组 schema。"""
+
+
+class ContinuityProjectionOutputLoose(RootModel[list[Any]]):
+    """Gateway 宽松 wire：顶层仍是数组，元素由 output_validator 逐条解析。"""
 
 
 class ContinuityProjection(BaseModel):
@@ -206,8 +289,8 @@ class ContinuityLifecycleLog(BaseModel):
     item_id: str = Field(min_length=1)
     operation: ContinuityOperationType
     turn_index: int = Field(ge=0)
-    state_delta: str | None = Field(default=None, max_length=240)
-    reason: str = Field(min_length=1, max_length=160)
+    state_delta: str | None = Field(default=None, max_length=STATE_DELTA_SOFT_LIMIT)
+    reason: str = Field(min_length=1, max_length=REASON_SOFT_LIMIT)
     migration_created: bool = False
     evidence: list[ContinuityLogEvidence] = Field(default_factory=list)
 
@@ -237,7 +320,7 @@ class ContinuityHistoryLink(BaseModel):
         default_factory=list
     )
     evidence_position: int = Field(ge=0)
-    evidence_basis_primary: str | None = Field(default=None, max_length=512)
+    evidence_basis_primary: str | None = Field(default=None, max_length=640)
     evidence_basis_context: str | None = Field(default=None, max_length=900)
     basis_complete: bool = True
 

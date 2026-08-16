@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from app.core.llm import MockLLM
 from app.domain.action.schemas import Anchor
 from app.domain.confirmed_history import (
     build_turn_documents,
@@ -16,6 +17,7 @@ from app.domain.continuity import (
     ContinuityItemDraft,
     ContinuityProjection,
     ContinuityProjectionOutput,
+    ContinuityProjectionOutputLoose,
     ContinuityProjector,
     ContinuityRetriever,
     ContinuityService,
@@ -137,7 +139,7 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
 
     assert result.operations == []
     assert len(gateway.calls) == 1
-    assert gateway.calls[0]["output_schema"] is ContinuityProjectionOutput
+    assert gateway.calls[0]["output_schema"] is ContinuityProjectionOutputLoose
     output_schema = json.loads(
         gateway.calls[0]["input_data"]["output_schema_json"]
     )
@@ -198,7 +200,7 @@ def test_update_schema_cannot_modify_premise():
 
     output_schema = json.loads(schema_json(ContinuityProjectionOutput))
     update_properties = output_schema["$defs"][
-        "ContinuityUpdateOperation"
+        "ContinuityUpdateOperationHard"
     ]["properties"]
     assert "premise" not in update_properties
     assert "kind" not in update_properties
@@ -392,7 +394,7 @@ def test_manual_metadata_edit_validates_before_writing():
         with pytest.raises(ValidationError):
             store.edit_active_metadata(
                 "invalid-manual-edit",
-                subject="过长" * 41,
+                subject="过长" * 61,
                 entities=["A"],
                 location="临江客栈",
                 deadline=None,
@@ -705,6 +707,304 @@ def test_retriever_selects_only_relevant_active_items():
         by_id = {match.item.id: match for match in selection.items}
         assert by_id["npc"].matched_entities == ["顾晚棠"]
         assert by_id["deadline"].matched_deadline is True
+
+
+def _run_projector(mock, active=None, text="顾晚棠检查了账册。"):
+    projector = ContinuityProjector(mock.build_gateway())
+    result = projector.project(
+        current_documents=list(_evidence_documents(text).values()),
+        active_items=active or [_item("item-1")],
+        trace_id="trace-continuity",
+    )
+    return result, projector
+
+
+def test_projector_provider_failure_returns_empty_projection_with_fallback():
+    mock = MockLLM()
+    mock.set_fail_provider(True)
+
+    result, projector = _run_projector(mock)
+
+    assert result.operations == []
+    assert projector.last_warnings[0].code == "continuity_fallback"
+
+
+def test_projector_retries_invalid_operation_and_uses_second():
+    first = [{
+        "operation": "resolve",
+        "evidence_ids": ["turn_2_p001"],
+        "reason": "缺 item_id。",
+    }]
+    second = [_operation("resolve", item_id="item-1")]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock)
+
+    assert len(result.operations) == 1
+    assert result.operations[0].item_id == "item-1"
+    assert projector.last_warnings == []
+
+
+def test_projector_uses_first_valid_subset_when_second_has_no_valid_ops():
+    first = [
+        _operation("resolve", item_id="item-1"),
+        {
+            "operation": "resolve",
+            "evidence_ids": ["turn_2_p001"],
+            "reason": "缺 item_id。",
+        },
+    ]
+    second = [{
+        "operation": "resolve",
+        "evidence_ids": ["turn_2_p001"],
+        "reason": "仍缺 item_id。",
+    }]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock)
+
+    assert [op.item_id for op in result.operations] == ["item-1"]
+    assert any(
+        warning.code == "continuity_operation_dropped"
+        for warning in projector.last_warnings
+    )
+
+
+def test_projector_drops_duplicate_item_id_and_keeps_unrelated_operation():
+    active = [_item("item-1"), _item("item-2")]
+    first = [
+        _operation("resolve", item_id="item-1"),
+        _operation("resolve", item_id="item-1"),
+    ]
+    second = [
+        _operation("resolve", item_id="item-1"),
+        _operation("resolve", item_id="item-1"),
+        _operation("resolve", item_id="item-2"),
+    ]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock, active=active)
+
+    assert [op.item_id for op in result.operations] == ["item-2"]
+    assert any(
+        warning.code == "continuity_operation_dropped"
+        for warning in projector.last_warnings
+    )
+
+
+def test_projector_drops_non_active_item_id_and_keeps_active_operation():
+    active = [_item("item-1")]
+    first = [_operation("resolve", item_id="item-999")]
+    second = [
+        _operation("resolve", item_id="item-999"),
+        _operation("resolve", item_id="item-1"),
+    ]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock, active=active)
+
+    assert [op.item_id for op in result.operations] == ["item-1"]
+    assert any(
+        warning.code == "continuity_operation_dropped"
+        for warning in projector.last_warnings
+    )
+
+
+def test_projector_soft_accepts_premise_within_soft_limit_on_second_attempt():
+    def create(premise):
+        return {
+            "operation": "create",
+            "evidence_ids": ["turn_2_p001"],
+            "reason": "本轮建立了新事项。",
+            "item": _draft(premise=premise).model_dump(),
+        }
+
+    first = [create("长" * 300)]
+    second = [create("长" * 300)]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock)
+
+    assert len(result.operations[0].item.premise) == 300
+    assert projector.last_warnings == []
+
+
+def test_projector_truncates_premise_over_soft_limit_on_second_attempt():
+    def create(premise):
+        return {
+            "operation": "create",
+            "evidence_ids": ["turn_2_p001"],
+            "reason": "本轮建立了新事项。",
+            "item": {
+                "kind": "open_thread",
+                "subject": "追查失踪账册",
+                "premise": premise,
+                "entities": ["顾晚棠"],
+                "location": "临江客栈",
+                "deadline": None,
+            },
+        }
+
+    first = [create("长" * 400)]
+    second = [create("长" * 400)]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock)
+
+    assert len(result.operations[0].item.premise) == 360
+    assert any(
+        warning.code == "continuity_truncated"
+        for warning in projector.last_warnings
+    )
+
+
+def test_projector_drops_operation_with_unknown_evidence_on_second_attempt():
+    first = [{
+        "operation": "resolve",
+        "item_id": "item-1",
+        "evidence_ids": ["unknown"],
+        "reason": "引用未知证据。",
+    }]
+    second = [
+        {
+            "operation": "resolve",
+            "item_id": "item-1",
+            "evidence_ids": ["unknown"],
+            "reason": "仍引用未知证据。",
+        },
+        _operation("resolve", item_id="item-1"),
+    ]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock)
+
+    assert len(result.operations) == 1
+    assert any(
+        warning.code == "continuity_operation_dropped"
+        for warning in projector.last_warnings
+    )
+
+
+def test_projector_fallback_keeps_last_attempt_warnings():
+    first = [{
+        "operation": "resolve",
+        "evidence_ids": ["turn_2_p001"],
+        "reason": "缺 item_id。",
+    }]
+    second = [{
+        "operation": "resolve",
+        "item_id": "item-1",
+        "evidence_ids": ["unknown"],
+        "reason": "引用未知证据。",
+    }]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock)
+
+    assert result.operations == []
+    codes = {warning.code for warning in projector.last_warnings}
+    assert "continuity_fallback" in codes
+    assert "continuity_operation_dropped" in codes
+    dropped = [
+        warning for warning in projector.last_warnings
+        if warning.code == "continuity_operation_dropped"
+    ]
+    assert len(dropped) == 1
+    assert "unknown evidence" in dropped[0].message
+    assert "item_id" not in dropped[0].message
+
+
+def test_projector_strips_whitespace_around_text_before_soft_accept():
+    def create(premise):
+        return {
+            "operation": "create",
+            "evidence_ids": ["turn_2_p001"],
+            "reason": "本轮建立了新事项。",
+            "item": {
+                "kind": "open_thread",
+                "subject": "追查失踪账册",
+                "premise": "   " + premise + "   ",
+                "entities": ["顾晚棠"],
+                "location": "临江客栈",
+                "deadline": None,
+            },
+        }
+
+    first = [create("长" * 300)]
+    second = [create("长" * 300)]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock)
+
+    assert len(result.operations[0].item.premise) == 300
+    assert projector.last_warnings == []
+
+
+def test_projector_pure_whitespace_text_triggers_retry_and_uses_second():
+    def create(premise):
+        return {
+            "operation": "create",
+            "evidence_ids": ["turn_2_p001"],
+            "reason": "本轮建立了新事项。",
+            "item": {
+                "kind": "open_thread",
+                "subject": "追查失踪账册",
+                "premise": premise,
+                "entities": ["顾晚棠"],
+                "location": "临江客栈",
+                "deadline": None,
+            },
+        }
+
+    first = [create("   ")]
+    second = [create("真正的可接受前提。")]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    result, projector = _run_projector(mock)
+
+    assert len(result.operations) == 1
+    assert result.operations[0].item.premise == "真正的可接受前提。"
+    assert projector.last_warnings == []
 
 
 def test_continuity_prompt_defines_noop_and_immutable_premise():

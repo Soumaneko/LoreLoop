@@ -96,20 +96,21 @@ def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
         },
     )
 
-    with pytest.raises(ValidationError, match="setting_requirements"):
-        run_confirmation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="询问昨夜发生的事。",
-            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
-            recent_summaries=[],
-            selection_summaries=[],
-            turn_index=3,
-            trace_id="confirmation-director",
-        )
+    decision, executions = run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
 
+    assert decision.requests == []
+    assert executions.executions == []
     with stores.director_npc() as store:
         assert store.list_prepared() == []
     with stores.world_setting() as store:

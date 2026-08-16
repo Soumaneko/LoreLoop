@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -192,6 +192,8 @@ class SceneFactSet(BaseModel):
     scene_focus: str = Field(min_length=1)
     facts: list[SceneFact] = Field(default_factory=list, max_length=12)
     npc_mentions: list[SceneNpcMention] = Field(default_factory=list, max_length=12)
+    degraded: bool = False
+    degraded_reasons: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_unique_fact_ids(self):
@@ -268,6 +270,21 @@ class SceneFactDraftSet(BaseModel):
         return self
 
 
+class SceneFactDraftSetLoose(BaseModel):
+    """宽松顶层容器，允许 Scene Facts 输出在 salvage 时保留部分分量。
+
+    Gateway 只做宽松顶层校验；`facts` 与 `npc_mentions` 的详细校验由
+    SceneFactExtractor 的 `output_validator` 分别执行，以便第二次仍失败时
+    可以保留已通过的分量。
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    scene_focus: str | None = None
+    facts: list[Any] = Field(default_factory=list)
+    npc_mentions: list[Any] = Field(default_factory=list)
+
+
 class SceneParagraphInput(BaseModel):
     """本轮场景正文的带 ID 段落，供 Scene Fact LLM 引用 evidence_paragraph_ids。"""
 
@@ -280,7 +297,7 @@ class SceneParagraphInput(BaseModel):
 class SceneFactExtractInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    scene_text: str = Field(min_length=1)
+    scene_text: str = ""
     core_memory: CoreMemory
     current_state: CurrentState
     scene_paragraphs: list[SceneParagraphInput] = Field(default_factory=list)

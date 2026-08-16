@@ -25,6 +25,11 @@ from typing import Any, cast
 from pydantic import TypeAdapter, ValidationError
 
 from app.core.llm import LLMGateway
+from app.core.llm.errors import (
+    LLMOutputParseError,
+    LLMOutputValidationError,
+    LLMProviderError,
+)
 from app.core.llm.schema import schema_json
 from app.core.text import normalize_compact_key
 from app.domain.confirmed_history.schemas import HistoryDocument
@@ -47,11 +52,15 @@ from app.domain.npc_profile.identity_resolver import (
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.turn_contract import (
+    CHANGE_BASIS_SOFT_LIMIT,
     NPCBatchUpdate,
     NPCBatchUpdateDisplay,
     NPCBatchUpdateEntry,
     NPCSceneSummaryDraft,
+    NPCSceneSummaryDraftHard,
     NPCStableChange,
+    NPCStableChangeHard,
+    NPC_SCENE_SUMMARY_SOFT_LIMIT,
 )
 from app.domain.scene_facts.schemas import SceneFactSet
 
@@ -60,7 +69,11 @@ _SOURCE_SCENE_PARAGRAPH = "scene_paragraph"
 #: 与 ``NPCBatchUpdateEntry.stable_changes`` 的 ``max_length`` 保持一致。
 MAX_STABLE_CHANGES = 8
 
+#: 宽松 wire 的 updates 上限；由 output_validator 截断并反馈，不在 schema 层连坐。
+MAX_BATCH_UPDATES = 256
+
 _STABLE_CHANGE_ADAPTER = TypeAdapter(NPCStableChange)
+_STABLE_CHANGE_HARD_ADAPTER = TypeAdapter(NPCStableChangeHard)
 
 
 @dataclass(frozen=True)
@@ -106,31 +119,211 @@ class NPCBatchUpdater:
             evidence_documents=evidence_documents,
         )
         input_data["output_schema_json"] = schema_json(NPCBatchUpdateDisplay)
-        batch = cast(
-            NPCBatchUpdate,
-            self._gateway.run(
-                task="npc_batch_update",
-                input_data=input_data,
-                output_schema=NPCBatchUpdate,
-                trace_id=trace_id,
-            ),
-        )
-        entries, entry_warnings = parse_batch_updates(batch.updates)
-        return ParsedBatch(entries=entries, entry_warnings=entry_warnings)
+        expected_npc_ids = {item.npc_id for item in resolved}
+        attempt_records: dict[int, ParsedBatch] = {}
+        current_attempt = 0
+
+        def on_attempt_start(attempt: int) -> None:
+            nonlocal current_attempt
+            current_attempt = attempt
+
+        def validate_output(batch: NPCBatchUpdate) -> None:
+            top_warnings: list[NPCChangeAdmissionWarning] = []
+            extra_keys = sorted((batch.model_extra or {}).keys())
+            if extra_keys:
+                top_warnings.append(NPCChangeAdmissionWarning(
+                    npc_name="",
+                    field_name="batch",
+                    code="invalid_top_level_fields",
+                    message=f"unexpected top-level fields: {extra_keys}",
+                ))
+            updates = batch.updates
+            if len(updates) > MAX_BATCH_UPDATES:
+                top_warnings.append(NPCChangeAdmissionWarning(
+                    npc_name="",
+                    field_name="batch",
+                    code="batch_update_limit_exceeded",
+                    message=(
+                        f"updates exceed {MAX_BATCH_UPDATES}; extras dropped"
+                    ),
+                ))
+                updates = updates[:MAX_BATCH_UPDATES]
+            truncation_warnings: list[NPCChangeAdmissionWarning] = []
+            if current_attempt > 1:
+                updates, truncation_warnings = _soft_truncate_updates(updates)
+            entries, entry_warnings = parse_batch_updates(
+                updates,
+                soft_limits=(current_attempt > 1),
+            )
+            retry_errors = [
+                warning.message for warning in [*top_warnings, *entry_warnings]
+            ]
+            entry_npc_ids = {entry.npc_id for entry in entries}
+            for npc_id in sorted(expected_npc_ids - entry_npc_ids):
+                retry_errors.append(
+                    f"{npc_id} missing required scene_summary"
+                )
+            for entry in entries:
+                if entry.scene_summary is None:
+                    retry_errors.append(
+                        f"{entry.npc_id} missing required scene_summary"
+                    )
+            attempt_records[current_attempt] = ParsedBatch(
+                entries=entries,
+                entry_warnings=[
+                    *top_warnings,
+                    *entry_warnings,
+                    *truncation_warnings,
+                ],
+            )
+            if retry_errors:
+                raise ValueError("; ".join(retry_errors))
+
+        try:
+            batch = cast(
+                NPCBatchUpdate,
+                self._gateway.run(
+                    task="npc_batch_update",
+                    input_data=input_data,
+                    output_schema=NPCBatchUpdate,
+                    output_validator=validate_output,
+                    on_attempt_start=on_attempt_start,
+                    trace_id=trace_id,
+                ),
+            )
+            if current_attempt in attempt_records:
+                return attempt_records[current_attempt]
+            # StubGateway compatibility: real Gateway always calls output_validator.
+            entries, entry_warnings = parse_batch_updates(batch.updates)
+            return ParsedBatch(entries=entries, entry_warnings=entry_warnings)
+        except (
+            LLMOutputParseError,
+            LLMOutputValidationError,
+            LLMProviderError,
+        ) as exc:
+            return _salvage_parsed_batch(attempt_records, exc, expected_npc_ids)
+
+
+def _soft_truncate_updates(
+    updates: list[Any],
+) -> tuple[list[Any], list[NPCChangeAdmissionWarning]]:
+    """第二轮软截断预处理：超过软上限的 summary / change_basis 截到软上限。
+
+    在软上限内（含 160–240 / 80–120）原样保留，由 ``parse_batch_updates``
+    的 soft_limits 模式接受。实际发生截断时返回对应 warning。
+    """
+    result: list[Any] = []
+    warnings: list[NPCChangeAdmissionWarning] = []
+    for raw in updates:
+        if not isinstance(raw, dict):
+            result.append(raw)
+            continue
+        raw = dict(raw)
+        npc_id = str(raw.get("npc_id") or "")
+        raw_summary = raw.get("scene_summary")
+        if isinstance(raw_summary, dict):
+            summary = raw_summary.get("summary")
+            if isinstance(summary, str):
+                clean = summary.strip()
+                if len(clean) > NPC_SCENE_SUMMARY_SOFT_LIMIT:
+                    raw_summary = {
+                        **raw_summary,
+                        "summary": clean[:NPC_SCENE_SUMMARY_SOFT_LIMIT],
+                    }
+                    raw["scene_summary"] = raw_summary
+                    warnings.append(NPCChangeAdmissionWarning(
+                        npc_name=npc_id,
+                        field_name="last_scene_summary",
+                        code="scene_summary_truncated",
+                        message=(
+                            f"scene_summary exceeded soft limit "
+                            f"{NPC_SCENE_SUMMARY_SOFT_LIMIT} and was truncated."
+                        ),
+                    ))
+        raw_changes = raw.get("stable_changes")
+        if isinstance(raw_changes, list):
+            truncated_changes: list[Any] = []
+            for change in raw_changes:
+                if isinstance(change, dict):
+                    basis = change.get("change_basis")
+                    if isinstance(basis, str):
+                        clean = basis.strip()
+                        if len(clean) > CHANGE_BASIS_SOFT_LIMIT:
+                            change = {
+                                **change,
+                                "change_basis": clean[:CHANGE_BASIS_SOFT_LIMIT],
+                            }
+                            warnings.append(NPCChangeAdmissionWarning(
+                                npc_name=npc_id,
+                                field_name="stable_changes",
+                                code="change_basis_truncated",
+                                message=(
+                                    f"change_basis exceeded soft limit "
+                                    f"{CHANGE_BASIS_SOFT_LIMIT} and was truncated."
+                                ),
+                            ))
+                truncated_changes.append(change)
+            raw["stable_changes"] = truncated_changes
+        result.append(raw)
+    return result, warnings
+
+
+def _batch_has_usable_payload(
+    record: ParsedBatch,
+    expected_npc_ids: set[str],
+) -> bool:
+    return any(
+        entry.npc_id in expected_npc_ids
+        and (entry.scene_summary is not None or entry.stable_changes)
+        for entry in record.entries
+    )
+
+
+def _salvage_parsed_batch(
+    attempt_records: dict[int, ParsedBatch],
+    exception: Exception,
+    expected_npc_ids: set[str],
+) -> ParsedBatch:
+    record = attempt_records.get(2)
+    if record is None or not _batch_has_usable_payload(record, expected_npc_ids):
+        record = attempt_records.get(1)
+    if record is not None and _batch_has_usable_payload(record, expected_npc_ids):
+        return record
+    warnings = list(record.entry_warnings) if record is not None else []
+    warnings.append(NPCChangeAdmissionWarning(
+        npc_name="",
+        field_name="batch",
+        code="npc_batch_fallback",
+        message=(
+            "NPC batch update failed; no field changes applied: "
+            f"{exception}"
+        ),
+    ))
+    return ParsedBatch(entries=[], entry_warnings=warnings)
 
 
 def parse_batch_updates(
     raw_updates: list[Any],
+    *,
+    soft_limits: bool = False,
 ) -> tuple[list[NPCBatchUpdateEntry], list[NPCChangeAdmissionWarning]]:
     """逐字段 salvage 宽松 wire envelope（宁漏勿错）。
 
     - 非对象元素 / 缺或非 str ``npc_id`` → 丢整条（无法归因）；
     - ``scene_summary`` 非对象 / 摘要空、超长 / evidence 非法 → 丢该槽位
       （``invalid_scene_summary``）；其余字段照常存活；
-    - ``stable_changes`` 非列表 → 丢整字段；逐条 ``NPCStableChange.model_validate``，
-      失败只丢该 change（``invalid_stable_change``，带 index）；
+    - ``stable_changes`` 非列表 → 丢整字段；逐条解析，失败只丢该 change
+      （``invalid_stable_change``，带 index）；
+    - ``soft_limits=True`` 时使用软上限（summary 240 / change_basis 120）；
+      否则使用硬上限（160 / 80），供第一轮反馈重试判定。
     - 合法 npc_id + 剩余合法字段照常构造 typed 条目进入 admission。
     """
+    summary_model = (
+        NPCSceneSummaryDraft if soft_limits else NPCSceneSummaryDraftHard
+    )
+    change_adapter = (
+        _STABLE_CHANGE_ADAPTER if soft_limits else _STABLE_CHANGE_HARD_ADAPTER
+    )
     entries: list[NPCBatchUpdateEntry] = []
     warnings: list[NPCChangeAdmissionWarning] = []
     for index, raw in enumerate(raw_updates):
@@ -161,7 +354,13 @@ def parse_batch_updates(
         raw_summary = raw.get("scene_summary")
         if raw_summary is not None:
             try:
-                scene_summary = NPCSceneSummaryDraft.model_validate(raw_summary)
+                parsed_summary = summary_model.model_validate(raw_summary)
+                if soft_limits:
+                    scene_summary = parsed_summary
+                else:
+                    scene_summary = NPCSceneSummaryDraft.model_validate(
+                        parsed_summary.model_dump()
+                    )
             except ValidationError as exc:
                 warnings.append(NPCChangeAdmissionWarning(
                     npc_name=npc_id,
@@ -189,9 +388,13 @@ def parse_batch_updates(
             else:
                 for change_index, raw_change in enumerate(raw_changes):
                     try:
-                        parsed_change = _STABLE_CHANGE_ADAPTER.validate_python(
+                        parsed_change = change_adapter.validate_python(
                             raw_change
                         )
+                        if not soft_limits:
+                            parsed_change = _STABLE_CHANGE_ADAPTER.validate_python(
+                                parsed_change.model_dump()
+                            )
                     except ValidationError as exc:
                         warnings.append(NPCChangeAdmissionWarning(
                             npc_name=npc_id,

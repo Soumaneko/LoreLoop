@@ -24,6 +24,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.npc_profile.schemas import LLMKnownAbility
 
+NPC_SCENE_SUMMARY_HARD_LIMIT = 160
+NPC_SCENE_SUMMARY_SOFT_LIMIT = 240
+CHANGE_BASIS_HARD_LIMIT = 80
+CHANGE_BASIS_SOFT_LIMIT = 120
+
 
 class _EvidenceCarrying(BaseModel):
     """携带 ``evidence_ids`` 的稳定 change 基类。
@@ -58,7 +63,15 @@ class ScalarStableChange(_EvidenceCarrying):
 
     field: Literal["role", "appearance", "faction"]
     value: str = Field(min_length=1)
-    change_basis: str = Field(min_length=1, max_length=80)
+    change_basis: str = Field(min_length=1, max_length=CHANGE_BASIS_SOFT_LIMIT)
+
+
+class ScalarStableChangeHard(_EvidenceCarrying):
+    """prompt 展示 / 第一轮硬校验用的稳定 change（change_basis 硬上限 80）。"""
+
+    field: Literal["role", "appearance", "faction"]
+    value: str = Field(min_length=1)
+    change_basis: str = Field(min_length=1, max_length=CHANGE_BASIS_HARD_LIMIT)
 
 
 class AbilityAddChange(_EvidenceCarrying):
@@ -76,13 +89,16 @@ class NPCSceneSummaryDraft(BaseModel):
     """每个 appeared existing NPC 的本轮独立摘要草稿（``scene_summary`` 槽位）。
 
     只压缩本轮该 NPC 的公开言语、行动、决定与可观察状态；不接收旧摘要、不累积、
-    不写跨回合传记。``summary`` 20–160 字，``evidence_ids`` 1–4 条本轮本场景正文
-    段落（结构约束；语义归因由 prompt 保证）。
+    不写跨回合传记。``summary`` 20–240 字（软上限；prompt 展示仍为 160 硬上限），
+    ``evidence_ids`` 1–4 条本轮本场景正文段落（结构约束；语义归因由 prompt 保证）。
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    summary: str = Field(min_length=20, max_length=160)
+    summary: str = Field(
+        min_length=20,
+        max_length=NPC_SCENE_SUMMARY_SOFT_LIMIT,
+    )
     evidence_ids: list[str] = Field(min_length=1, max_length=4)
 
     @field_validator("evidence_ids")
@@ -93,9 +109,34 @@ class NPCSceneSummaryDraft(BaseModel):
         return values
 
 
-#: 稳定字段变化，以 ``field`` 作 discriminator。
+class NPCSceneSummaryDraftHard(BaseModel):
+    """prompt 展示 / 第一轮硬校验用的 scene_summary（summary 硬上限 160）。"""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    summary: str = Field(
+        min_length=20,
+        max_length=NPC_SCENE_SUMMARY_HARD_LIMIT,
+    )
+    evidence_ids: list[str] = Field(min_length=1, max_length=4)
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def _evidence_ids_no_duplicates(cls, values):
+        if len(values) != len(set(values)):
+            raise ValueError("scene_summary evidence_ids must not repeat")
+        return values
+
+
+#: 稳定字段变化，以 ``field`` 作 discriminator（软上限 120）。
 NPCStableChange = Annotated[
     ScalarStableChange,
+    Field(discriminator="field"),
+]
+
+#: 稳定字段变化（硬上限 80），用于 prompt 展示与第一轮硬校验。
+NPCStableChangeHard = Annotated[
+    ScalarStableChangeHard,
     Field(discriminator="field"),
 ]
 
@@ -123,12 +164,13 @@ class NPCBatchUpdate(BaseModel):
 
     ``updates`` 为 ``list[Any]``：null / 非对象元素 / 单条目内部字段非法都不拖垮
     整批解析。逐字段 salvage 由下游 ``parse_batch_updates`` 完成（宁漏勿错）。
+    顶层 extra 字段与 256 上限由 ``output_validator`` 处理，不在 schema 层连坐。
     该模型只用于 gateway 的宽容解析，不作为 prompt 展示 schema。
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
-    updates: list[Any] = Field(default_factory=list, max_length=256)
+    updates: list[Any] = Field(default_factory=list)
 
 
 class NPCBatchUpdateDisplayEntry(BaseModel):
@@ -143,8 +185,8 @@ class NPCBatchUpdateDisplayEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     npc_id: str = Field(min_length=1)
-    scene_summary: NPCSceneSummaryDraft
-    stable_changes: list[NPCStableChange] = Field(default_factory=list, max_length=8)
+    scene_summary: NPCSceneSummaryDraftHard
+    stable_changes: list[NPCStableChangeHard] = Field(default_factory=list, max_length=8)
 
 
 class NPCBatchUpdateDisplay(BaseModel):

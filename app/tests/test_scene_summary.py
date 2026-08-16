@@ -2,6 +2,10 @@ import json
 from pathlib import Path
 
 from app.core.llm import MockLLM
+from app.core.llm.errors import LLMProviderError
+from app.core.llm.gateway import LLMGateway
+from app.core.llm.providers import MockProvider
+from app.core.llm.tracing import NullTraceLogger
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.scene_summary import SceneSummarizer
@@ -184,3 +188,164 @@ class TestSceneSummaryPrompts:
         assert "硬性上限 300" in summarize_prompt
         assert "硬性上限 400" in condense_prompt
         assert "不得随 source summaries 数量线性增长" in condense_prompt
+
+
+class _CountingProvider(MockProvider):
+    def __init__(self, responses=None):
+        super().__init__()
+        if responses is not None:
+            self.set_responses(responses)
+        self.calls = 0
+
+    def generate(self, *args, **kwargs):
+        self.calls += 1
+        return super().generate(*args, **kwargs)
+
+
+def _gateway(provider):
+    return LLMGateway(
+        provider=provider,
+        prompt_loader=MockLLM().prompt_loader,
+        tracer=NullTraceLogger(),
+    )
+
+
+class _AlwaysFailProvider(_CountingProvider):
+    def generate(self, *args, **kwargs):
+        self.calls += 1
+        raise LLMProviderError("provider down")
+
+
+def test_summarize_turn_uses_first_candidate_when_second_provider_fails():
+    class FirstThenProviderFailure(_CountingProvider):
+        def generate(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return MockProvider.generate(self, *args, **kwargs)
+            raise LLMProviderError("provider down")
+
+    provider = FirstThenProviderFailure([
+        json.dumps({"content": "长" * 301}, ensure_ascii=False),
+    ])
+    summarizer = SceneSummarizer(_gateway(provider))
+
+    summary = summarizer.summarize_turn(
+        core_memory=CoreMemory(items=[]),
+        scene_text="正文。",
+        current_state=_state(),
+        scene_id="scene_010",
+        turn_index=10,
+    )
+
+    assert len(summary.content) == 301
+    assert summarizer.last_warnings == []
+
+
+def test_summarize_turn_uses_first_candidate_when_second_is_blank():
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps({"content": "长" * 301}, ensure_ascii=False),
+        json.dumps({"content": "   "}, ensure_ascii=False),
+    ])
+    summarizer = SceneSummarizer(mock.build_gateway())
+
+    summary = summarizer.summarize_turn(
+        core_memory=CoreMemory(items=[]),
+        scene_text="正文。",
+        current_state=_state(),
+        scene_id="scene_010",
+        turn_index=10,
+    )
+
+    assert len(summary.content) == 301
+    assert summarizer.last_warnings == []
+
+
+def test_summarize_turn_uses_second_candidate_and_truncates():
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps({"content": "长" * 301}, ensure_ascii=False),
+        json.dumps({"content": "长" * 500}, ensure_ascii=False),
+    ])
+    summarizer = SceneSummarizer(mock.build_gateway())
+
+    summary = summarizer.summarize_turn(
+        core_memory=CoreMemory(items=[]),
+        scene_text="正文。",
+        current_state=_state(),
+        scene_id="scene_010",
+        turn_index=10,
+    )
+
+    assert len(summary.content) == 450
+    assert summarizer.last_warnings[0].code == "scene_summary_truncated"
+
+
+def test_summarize_turn_fallback_placeholder_when_no_candidate():
+    summarizer = SceneSummarizer(_gateway(_AlwaysFailProvider()))
+
+    summary = summarizer.summarize_turn(
+        core_memory=CoreMemory(items=[]),
+        scene_text="正文。",
+        current_state=_state(),
+        scene_id="scene_010",
+        turn_index=10,
+    )
+
+    assert summary.content == "（本轮无可用摘要）"
+    assert summarizer.last_warnings[0].code == "scene_summary_fallback"
+
+
+def test_condense_returns_none_when_no_candidate():
+    summarizer = SceneSummarizer(_gateway(_AlwaysFailProvider()))
+
+    result = summarizer.condense(
+        core_memory=CoreMemory(items=[]),
+        source_summaries=[_summary(id="s1"), _summary(id="s2")],
+        target_level=2,
+    )
+
+    assert result is None
+    assert summarizer.last_warnings[0].code == "scene_summary_condense_skipped"
+
+
+def test_blank_scene_text_does_not_call_llm():
+    class FailIfCalled(_CountingProvider):
+        def generate(self, *args, **kwargs):
+            raise AssertionError("should not call LLM")
+
+    provider = FailIfCalled()
+    summarizer = SceneSummarizer(_gateway(provider))
+
+    summary = summarizer.summarize_turn(
+        core_memory=CoreMemory(items=[]),
+        scene_text="   ",
+        current_state=_state(),
+        scene_id="scene_010",
+        turn_index=10,
+    )
+
+    assert summary.content == "本轮无正文。"
+    assert provider.calls == 0
+
+
+def test_condense_skip_keeps_sources_active():
+    summarizer = SceneSummarizer(_gateway(_AlwaysFailProvider()))
+    with SceneSummaryStore(":memory:") as store:
+        store.save_one(_summary(id="s1", level=1, turn_start=1, turn_end=1))
+        store.save_one(_summary(id="s2", level=1, turn_start=2, turn_end=2))
+
+        result = run_scene_summary_maintenance(
+            scene_text="第3轮正文。",
+            current_state=_state(),
+            core_memory=CoreMemory(items=[]),
+            scene_id="scene_003",
+            turn_index=3,
+            summarizer=summarizer,
+            store=store,
+            threshold=2,
+        )
+
+        assert result.condensed_ids == []
+        assert store.count_uncondensed(1) == 3
+        assert store.count_uncondensed(2) == 0

@@ -1,10 +1,14 @@
 import json
+from types import SimpleNamespace
 
+from app.core.diagnostics import DiagnosticLogger
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
+from app.domain.scene_summary.maintenance import SceneSummaryMaintenanceResult
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.store import SceneSummaryStore
+from app.domain.scene_summary.summarizer import SceneSummaryWarning
 from app.graph import maintenance_graph
 from app.graph import maintenance_helpers, maintenance_nodes
 
@@ -170,3 +174,59 @@ def test_scene_summary_maintenance_sets_turn_trace_context(
         "turn_index": 7,
         "session_type": "maintenance",
     }
+
+
+def test_scene_summary_condense_skip_emits_diagnostic_and_keeps_sources(
+    monkeypatch,
+    tmp_path,
+):
+    store = SceneSummaryStore(":memory:")
+    store.save_one(SceneSummary(
+        id="s1", level=1, content="摘要1", turn_start=1, turn_end=1,
+    ))
+    store.save_one(SceneSummary(
+        id="s2", level=1, content="摘要2", turn_start=2, turn_end=2,
+    ))
+
+    class _StoreContext:
+        def __enter__(self):
+            return store
+
+        def __exit__(self, *_args):
+            return None
+
+    class _SkipSummarizer:
+        def __init__(self, _gateway):
+            self.last_warnings = [SceneSummaryWarning(
+                code="scene_summary_condense_skipped",
+                message="skip condense",
+            )]
+
+        def condense(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(maintenance_nodes, "SceneSummarizer", _SkipSummarizer)
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
+    state = {
+        "events": [],
+        "runtime_services": SimpleNamespace(
+            gateway=lambda **_kwargs: object(),
+            stores=SimpleNamespace(scene_summary=_StoreContext),
+            diagnostics=diagnostics,
+        ),
+        "trace_id": "trace-maintenance",
+        "turn_index": 1,
+        "core_memory": CoreMemory(items=[]),
+        "threshold": 2,
+        "result": SceneSummaryMaintenanceResult(),
+    }
+
+    result = maintenance_nodes.scene_summary_condense_node(state)
+
+    assert result["result"].condensed_ids == []
+    assert store.count_uncondensed(1) == 2
+    assert store.count_uncondensed(2) == 0
+    diagnostic = diagnostics.read(trace_id="trace-maintenance")[0]
+    assert diagnostic["source"] == "scene_summary"
+    assert diagnostic["code"] == "scene_summary_condense_skipped"
+    store.close()

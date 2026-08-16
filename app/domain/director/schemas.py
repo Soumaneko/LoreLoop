@@ -83,6 +83,15 @@ class DirectorDecisionBatch(BaseModel):
         return self
 
 
+class DirectorDecisionBatchLoose(BaseModel):
+    """Gateway 宽松容器：reasoning 可空、requests 由 output_validator 逐条解析。"""
+
+    model_config = ConfigDict(extra="allow")
+
+    reasoning: str | None = None
+    requests: list[Any] = Field(default_factory=list)
+
+
 class DirectorSkillSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

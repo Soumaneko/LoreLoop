@@ -4,6 +4,7 @@ from dataclasses import asdict
 import pytest
 from pydantic import ValidationError
 
+from app.core.llm import MockLLM
 from app.core.llm.prompts import PromptLoader
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.current_state.schemas import (
@@ -1092,6 +1093,361 @@ def test_scene_summary_same_text_new_turn_still_applies():
     (profile,) = result.updated_profiles
     assert profile.last_scene_summary == _summary().summary
     assert profile.last_scene_turn == _TURN_INDEX
+
+
+def _run_processor(mock):
+    return NPCBatchUpdater(mock.build_gateway()).process(
+        resolved=[
+            ResolvedNpc(
+                npc_id="npc_001",
+                canonical_name="沈孤鸿",
+                presence="appeared",
+                primary_surfaces=("沈孤鸿",),
+            )
+        ],
+        profiles=[_profile()],
+        scene_facts=_facts(),
+        evidence_documents=_evidence(),
+        turn_index=_TURN_INDEX,
+        scene_id=_SCENE_ID,
+    )
+
+
+def test_processor_provider_failure_returns_fallback_batch():
+    mock = MockLLM()
+    mock.set_fail_provider(True)
+
+    batch = _run_processor(mock)
+
+    assert batch.entries == []
+    assert batch.entry_warnings[0].code == "npc_batch_fallback"
+
+
+def test_processor_retries_invalid_entry_and_uses_second():
+    first = {
+        "updates": [
+            {"npc_id": "npc_001"},
+            {"bogus": True},
+        ]
+    }
+    second = {
+        "updates": [{
+            "npc_id": "npc_001",
+            "scene_summary": _summary().model_dump(),
+        }]
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert [entry.npc_id for entry in batch.entries] == ["npc_001"]
+    assert batch.entry_warnings == []
+
+
+def test_processor_uses_first_valid_subset_when_second_has_no_valid_entries():
+    first = {
+        "updates": [
+            {
+                "npc_id": "npc_001",
+                "scene_summary": _summary().model_dump(),
+            },
+            {"bogus": True},
+        ]
+    }
+    second = {"updates": [{"bogus": True}]}
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert [entry.npc_id for entry in batch.entries] == ["npc_001"]
+    assert any(
+        warning.code == "invalid_update_entry"
+        for warning in batch.entry_warnings
+    )
+
+
+def test_processor_soft_accepts_summary_within_soft_limit_on_second_attempt():
+    first = {
+        "updates": [{
+            "npc_id": "npc_001",
+            "scene_summary": {
+                "summary": "长" * 200,
+                "evidence_ids": ["turn_3_p001"],
+            },
+        }]
+    }
+    second = {
+        "updates": [{
+            "npc_id": "npc_001",
+            "scene_summary": {
+                "summary": "长" * 200,
+                "evidence_ids": ["turn_3_p001"],
+            },
+        }]
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert len(batch.entries[0].scene_summary.summary) == 200
+    assert batch.entry_warnings == []
+
+
+def test_processor_truncates_summary_over_soft_limit_on_second_attempt():
+    first = {
+        "updates": [{
+            "npc_id": "npc_001",
+            "scene_summary": {
+                "summary": "长" * 250,
+                "evidence_ids": ["turn_3_p001"],
+            },
+        }]
+    }
+    second = {
+        "updates": [{
+            "npc_id": "npc_001",
+            "scene_summary": {
+                "summary": "长" * 250,
+                "evidence_ids": ["turn_3_p001"],
+            },
+        }]
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert len(batch.entries[0].scene_summary.summary) == 240
+    assert any(
+        warning.code == "scene_summary_truncated"
+        for warning in batch.entry_warnings
+    )
+
+
+def test_processor_soft_accepts_change_basis_within_soft_limit_on_second_attempt():
+    def change(basis):
+        return {
+            "field": "role",
+            "value": "醉花楼主",
+            "change_basis": basis,
+            "evidence_ids": ["turn_3_p001"],
+        }
+
+    first = {"updates": [{"npc_id": "npc_001", "stable_changes": [change("基" * 100)]}]}
+    second = {"updates": [{"npc_id": "npc_001", "stable_changes": [change("基" * 100)]}]}
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert len(batch.entries[0].stable_changes[0].change_basis) == 100
+    assert batch.entry_warnings == []
+
+
+def test_processor_top_level_extra_fields_do_not_block_valid_entries():
+    first = {
+        "unexpected": True,
+        "updates": [{"npc_id": "npc_001", "scene_summary": _summary().model_dump()}],
+    }
+    second = {
+        "unexpected": True,
+        "updates": [{"npc_id": "npc_001", "scene_summary": _summary().model_dump()}],
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert [entry.npc_id for entry in batch.entries] == ["npc_001"]
+    assert any(
+        warning.code == "invalid_top_level_fields"
+        for warning in batch.entry_warnings
+    )
+
+
+def test_workflow_provider_failure_still_applies_deterministic_alias():
+    mentions = [
+        _mention(
+            "沈孤鸿",
+            relations=[
+                _relation("沈二爷", "explicit_fixed_alias", evidence=["f1"]),
+            ],
+        )
+    ]
+    mock = MockLLM()
+    mock.set_fail_provider(True)
+    with NPCProfileStore(":memory:") as store:
+        store.upsert(_profile())
+        result = apply_npc_batch_update(
+            npc_store=store,
+            gateway=mock.build_gateway(),  # type: ignore[arg-type]
+            scene_facts=_facts(mentions=mentions),
+            evidence_documents=_evidence(),
+            current_state=_state(),
+            turn_index=_TURN_INDEX,
+            admitted_at=_ADMITTED_AT,
+        )
+
+        assert len(result.accepted_alias_changes) == 1
+        assert any(
+            warning.code == "npc_batch_fallback"
+            for warning in result.warnings
+        )
+        profile = store.get_by_id("npc_001")
+        assert profile is not None
+        assert "沈二爷" in profile.aliases
+
+
+def test_processor_caps_updates_at_256_and_keeps_valid_entries():
+    def response():
+        return {
+            "updates": [
+                {"npc_id": "npc_001", "scene_summary": _summary().model_dump()}
+                for _ in range(257)
+            ]
+        }
+
+    first = response()
+    second = response()
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert len(batch.entries) == 256
+    assert any(
+        warning.code == "batch_update_limit_exceeded"
+        for warning in batch.entry_warnings
+    )
+
+
+def test_processor_truncates_change_basis_over_soft_limit_on_second_attempt():
+    def change(basis):
+        return {
+            "field": "role",
+            "value": "醉花楼主",
+            "change_basis": basis,
+            "evidence_ids": ["turn_3_p001"],
+        }
+
+    first = {"updates": [{"npc_id": "npc_001", "stable_changes": [change("基" * 130)]}]}
+    second = {"updates": [{"npc_id": "npc_001", "stable_changes": [change("基" * 130)]}]}
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert len(batch.entries[0].stable_changes[0].change_basis) == 120
+    assert any(
+        warning.code == "change_basis_truncated"
+        for warning in batch.entry_warnings
+    )
+
+
+def test_processor_empty_updates_trigger_retry_and_use_second():
+    first = {"updates": []}
+    second = {
+        "updates": [{
+            "npc_id": "npc_001",
+            "scene_summary": _summary().model_dump(),
+        }]
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert [entry.npc_id for entry in batch.entries] == ["npc_001"]
+    assert batch.entry_warnings == []
+
+
+def test_processor_second_empty_shell_does_not_override_first_usable():
+    first = {
+        "updates": [
+            {
+                "npc_id": "npc_001",
+                "scene_summary": _summary().model_dump(),
+            },
+            {"bogus": True},
+        ]
+    }
+    second = {"updates": [{"npc_id": "npc_001"}]}
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert len(batch.entries) == 1
+    assert batch.entries[0].scene_summary is not None
+    assert any(
+        warning.code == "invalid_update_entry"
+        for warning in batch.entry_warnings
+    )
+
+
+def test_processor_second_fictional_npc_does_not_override_first_target():
+    first = {
+        "updates": [
+            {
+                "npc_id": "npc_001",
+                "scene_summary": _summary().model_dump(),
+            },
+            {"bogus": True},
+        ]
+    }
+    second = {
+        "updates": [{
+            "npc_id": "npc_999",
+            "scene_summary": _summary().model_dump(),
+        }]
+    }
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ])
+
+    batch = _run_processor(mock)
+
+    assert [entry.npc_id for entry in batch.entries] == ["npc_001"]
+    assert batch.entries[0].scene_summary is not None
+    assert any(
+        warning.code == "invalid_update_entry"
+        for warning in batch.entry_warnings
+    )
 
 
 def test_scene_summary_full_pipeline_records_field_log_and_consistent_snapshot():

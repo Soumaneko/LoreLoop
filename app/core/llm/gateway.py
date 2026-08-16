@@ -72,7 +72,7 @@ class LLMGateway:
         *,
         model: str | None = None,
         temperature: float = 0.2,
-        max_retries: int = 2,
+        max_retries: int = 1,
         trace_id: str | None = None,
         on_chunk: Callable[[str], None] | None = None,
         on_attempt_start: Callable[[int], None] | None = None,

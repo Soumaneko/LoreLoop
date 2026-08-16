@@ -17,16 +17,23 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from app.core.llm.errors import (
+    LLMOutputParseError,
+    LLMOutputValidationError,
+    LLMProviderError,
+)
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.creative_brief import draw_creative_brief
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director import (
     DirectorAgent,
+    DirectorDecisionBatch,
     DirectorObservation,
     DirectorResourceRef,
     DirectorSkillExecutionBatch,
     DirectorSkillService,
 )
+from app.domain.director.agent import DirectorWarning
 from app.domain.director.skill_specs import (
     BindEventActorArguments,
     CreateEventArguments,
@@ -122,6 +129,7 @@ class DirectorConfirmationExecutor:
         self._service = DirectorSkillService()
         self._plan = DirectorPendingMutationPlan()
         self._plan_lock = threading.Lock()
+        self.last_warnings: list[DirectorWarning] = []
         # Fresh proxies created once: every operation opens its own SQLite
         # connection, so Wave B may run handlers concurrently without sharing a
         # connection. Never rebound afterwards.
@@ -132,6 +140,7 @@ class DirectorConfirmationExecutor:
         self._settings_by_id: dict[str, WorldSetting] = {}
 
     def run(self) -> tuple[object, DirectorSkillExecutionBatch]:
+        self.last_warnings = []
         recover_pending_director_mutation(self._stores)
         with self._stores.director_log() as log_store:
             recent_director_log = log_store.recent()
@@ -157,35 +166,61 @@ class DirectorConfirmationExecutor:
             available_settings=available_settings,
             recent_director_log=recent_director_log,
         )
-        decision = DirectorAgent(self._gateway, self._service).decide_confirmation(
-            observation,
-            trace_id=self._trace_id,
-        )
-        self._service.validate_batch(decision, phase="confirmation")
-        decision, created_settings = self._run_setting_creation_wave(
-            decision,
-            available_settings=available_settings,
-        )
-        # A Setting created in this same confirmation may already appear in the
-        # confirmed scene text; the appearance node runs before this stage, so
-        # its first mention would otherwise never be counted and the record
-        # stays hidden from the general archive view.
-        folded_text = self._scene_text.casefold()
-        for setting in created_settings:
-            if setting_appears_in_text(setting.name, folded_text):
-                setting.hit_count = 1
-        self._plan.settings.extend(created_settings)
-        for setting in created_settings:
-            self._settings_by_id[setting.setting_id] = setting
+        try:
+            agent = DirectorAgent(self._gateway, self._service)
+            decision = agent.decide_confirmation(
+                observation,
+                trace_id=self._trace_id,
+            )
+            self.last_warnings.extend(agent.last_warnings)
+            self._service.validate_batch(decision, phase="confirmation")
+            if not decision.requests:
+                return decision, DirectorSkillExecutionBatch()
 
-        # Wave B may execute every request concurrently. Each proxy opens a
-        # dedicated SQLite connection per operation; semantic conflicts are
-        # prevented by the upstream Director contract.
-        executions = self._service.execute_batch(
-            decision,
-            phase="confirmation",
-            max_workers=DIRECTOR_WAVE_MAX_WORKERS,
-        )
+            decision, created_settings = self._run_setting_creation_wave(
+                decision,
+                available_settings=available_settings,
+            )
+            # A Setting created in this same confirmation may already appear in
+            # the confirmed scene text; the appearance node runs before this
+            # stage, so its first mention would otherwise never be counted and
+            # the record stays hidden from the general archive view.
+            folded_text = self._scene_text.casefold()
+            for setting in created_settings:
+                if setting_appears_in_text(setting.name, folded_text):
+                    setting.hit_count = 1
+            self._plan.settings.extend(created_settings)
+            for setting in created_settings:
+                self._settings_by_id[setting.setting_id] = setting
+
+            # Wave B may execute every request concurrently. Each proxy opens a
+            # dedicated SQLite connection per operation; semantic conflicts are
+            # prevented by the upstream Director contract.
+            executions = self._service.execute_batch(
+                decision,
+                phase="confirmation",
+                max_workers=DIRECTOR_WAVE_MAX_WORKERS,
+            )
+        except (
+            LLMOutputParseError,
+            LLMOutputValidationError,
+            LLMProviderError,
+        ) as exc:
+            self.last_warnings.append(DirectorWarning(
+                code="director_execution_fallback",
+                message=(
+                    "Director execution failed; no mutations applied: "
+                    f"{exc}"
+                ),
+            ))
+            return (
+                DirectorDecisionBatch(
+                    reasoning="Director execution fallback: no mutations applied.",
+                    requests=[],
+                ),
+                DirectorSkillExecutionBatch(),
+            )
+
         commit_director_mutations(self._plan, self._stores)
         return decision, executions
 

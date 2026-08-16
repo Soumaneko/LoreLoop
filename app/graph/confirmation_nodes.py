@@ -4,6 +4,11 @@ import hashlib
 import json
 
 from app.core.diagnostics import NullDiagnosticLogger
+from app.core.llm.errors import (
+    LLMOutputParseError,
+    LLMOutputValidationError,
+    LLMProviderError,
+)
 from app.core.text import normalize_compact_key
 from app.core.time import utc_now
 from app.domain.action_preview.agent import ActionPreviewAgent
@@ -39,6 +44,15 @@ from .confirmation_helpers import merge_unique_ids
 from .confirmation_state import ConfirmationState
 from .npc_result import NpcCandidateContext, NpcTurnNodeResult
 from app.domain.director.confirmation import DirectorConfirmationExecutor
+
+
+def _diagnostics(state: ConfirmationState):
+    services = state.get("runtime_services")
+    return (
+        getattr(services, "diagnostics", None)
+        if services is not None
+        else None
+    ) or NullDiagnosticLogger()
 
 
 def _candidate_npc_id(
@@ -127,9 +141,14 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
             else continuity_store.list_active()
         )
         active_count = len(active_items)
+    computed = False
+    projector: ContinuityProjector | None = None
 
     def compute_projection():
-        return ContinuityProjector(_gateway_for(state)).project(
+        nonlocal computed, projector
+        computed = True
+        projector = ContinuityProjector(_gateway_for(state))
+        return projector.project(
             current_documents=documents,
             active_items=active_items,
             trace_id=state["trace_id"],
@@ -139,6 +158,17 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
         "continuity_projection",
         compute_projection,
     )
+    diagnostics = _diagnostics(state)
+    if computed and projector is not None:
+        for warning in getattr(projector, "last_warnings", []):
+            diagnostics.warning(
+                source="continuity",
+                code=warning.code,
+                message=warning.message,
+                trace_id=state["trace_id"],
+                task="continuity_project",
+                turn_index=getattr(pipeline_input, "turn_index", None),
+            )
     return {
         "continuity_projection": projection,
         "events": [{
@@ -170,7 +200,11 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
         if document.source_type == "scene_paragraph"
     ]
 
+    computed = False
+
     def compute_scene_facts():
+        nonlocal computed
+        computed = True
         return SceneFactExtractor(_gateway_for(state)).extract(
             SceneFactExtractInput(
                 scene_text=state["effective_scene_text"],
@@ -182,6 +216,27 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
         )
 
     scene_facts = cache.compute_if_missing("scene_facts", compute_scene_facts)
+    diagnostics = _diagnostics(state)
+    if computed and scene_facts.degraded:
+        reasons = set(scene_facts.degraded_reasons)
+        if reasons & {"facts", "provider", "parse", "structure"} or not reasons:
+            diagnostics.warning(
+                source="scene_facts",
+                code="scene_facts_degraded",
+                message="Scene Facts 降级：facts 或整体输出不可用。",
+                trace_id=trace_id,
+                task="scene_facts",
+                turn_index=getattr(pipeline_input, "turn_index", None),
+            )
+        if "npc_mentions" in reasons:
+            diagnostics.warning(
+                source="scene_facts",
+                code="npc_mentions_degraded",
+                message="Scene Facts 降级：npc_mentions 不可用或部分被清理。",
+                trace_id=trace_id,
+                task="scene_facts",
+                turn_index=getattr(pipeline_input, "turn_index", None),
+            )
     return {
         "scene_facts": scene_facts,
         "scene_facts_json": project_scene_facts(scene_facts),
@@ -214,11 +269,25 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
             if profile.name
             and (profile.aliases or profile.transient_aliases)
         }
+        paragraph_texts: dict[str, str] = {}
+        scene_facts = state.get("scene_facts")
+        if scene_facts is not None and not scene_facts.facts:
+            paragraph_texts = {
+                document.document_id: document.text
+                for document in build_turn_documents(
+                    scene_id=state["state_before_update"].scene.scene_id,
+                    turn_index=pipeline_input.turn_index,
+                    user_input=pipeline_input.user_input,
+                    scene_text=state["effective_scene_text"],
+                )
+                if document.source_type == "scene_paragraph"
+            }
         updated_state = updater.update(
             state["state_before_update"],
             state["scene_facts_json"],
             core_memory=state["core_memory"],
             npc_aliases=npc_aliases,
+            paragraph_texts=paragraph_texts,
             trace_id=trace_id,
         )
         state_change_set = getattr(
@@ -235,12 +304,7 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
         "state_update_warnings",
         factory=compute_update,
     )
-    services = state.get("runtime_services")
-    diagnostics = (
-        getattr(services, "diagnostics", None)
-        if services is not None
-        else None
-    ) or NullDiagnosticLogger()
+    diagnostics = _diagnostics(state)
     if computed:
         for warning in state_update_warnings:
             warning_data = model_data(warning)
@@ -271,9 +335,14 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
 def scene_summarize_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     cache = ConfirmationCache(state["cache"])
+    computed = False
+    summarizer: SceneSummarizer | None = None
 
     def compute_turn_summary():
-        return SceneSummarizer(_gateway_for(state)).summarize_turn(
+        nonlocal computed, summarizer
+        computed = True
+        summarizer = SceneSummarizer(_gateway_for(state))
+        return summarizer.summarize_turn(
             scene_text=state["confirmation_scene_text"],
             current_state=state["updated_state"],
             core_memory=state["core_memory"],
@@ -283,6 +352,17 @@ def scene_summarize_node(state: ConfirmationState) -> ConfirmationState:
         )
 
     turn_summary = cache.compute_if_missing("turn_summary", compute_turn_summary)
+    diagnostics = _diagnostics(state)
+    if computed and summarizer is not None:
+        for warning in getattr(summarizer, "last_warnings", []):
+            diagnostics.warning(
+                source="scene_summary",
+                code=warning.code,
+                message=warning.message,
+                trace_id=state["trace_id"],
+                task="scene_summarize",
+                turn_index=getattr(pipeline_input, "turn_index", None),
+            )
     return {
         "turn_summary": turn_summary,
         "events": [{
@@ -296,13 +376,18 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
     cache = ConfirmationCache(state["cache"])
+    computed = False
+    agent: ActionPreviewAgent | None = None
 
     def compute_action_preview():
+        nonlocal computed, agent
         scene_was_edited = (
             state["effective_scene_text"]
             != pipeline_input.scene_result.scene_text
         )
-        return ActionPreviewAgent(_gateway_for(state)).generate(
+        computed = True
+        agent = ActionPreviewAgent(_gateway_for(state))
+        return agent.generate(
             current_state=state["updated_state"],
             core_memory=state["core_memory"],
             recent_summaries=state.get("recent_summaries", []),
@@ -312,10 +397,26 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
                 else pipeline_input.scene_result.next_action_directions
             ),
             scene_facts=state["scene_facts"],
+            scene_text=(
+                state["effective_scene_text"]
+                if not state["scene_facts"].facts
+                else None
+            ),
             trace_id=trace_id,
         )
 
     action_preview = cache.compute_if_missing("action_preview", compute_action_preview)
+    diagnostics = _diagnostics(state)
+    if computed and agent is not None:
+        for warning in getattr(agent, "last_warnings", []):
+            diagnostics.warning(
+                source="action_preview",
+                code=warning.code,
+                message=warning.message,
+                trace_id=trace_id,
+                task="action_preview",
+                turn_index=getattr(pipeline_input, "turn_index", None),
+            )
     return {
         "action_preview": action_preview,
         "events": [{
@@ -337,9 +438,13 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
         }
 
     cache = ConfirmationCache(state["cache"])
+    computed = False
+    executor: DirectorConfirmationExecutor | None = None
 
     def compute_decision():
-        return DirectorConfirmationExecutor(
+        nonlocal computed, executor
+        computed = True
+        executor = DirectorConfirmationExecutor(
             gateway=_gateway_for(state),
             stores=state["runtime_services"].stores,
             core_memory=state["core_memory"],
@@ -358,13 +463,25 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
             director_log_entry=getattr(
                 state.get("pending"), "director_log_entry", None
             ),
-        ).run()
+        )
+        return executor.run()
 
     decision, executions = cache.atomic(
         "director_decision",
         "director_executions",
         factory=compute_decision,
     )
+    diagnostics = _diagnostics(state)
+    if computed and executor is not None:
+        for warning in getattr(executor, "last_warnings", []):
+            diagnostics.warning(
+                source="director",
+                code=warning.code,
+                message=warning.message,
+                trace_id=state["trace_id"],
+                task="director_agent_confirm",
+                turn_index=getattr(pipeline_input, "turn_index", None),
+            )
     return {
         "director_decision": decision,
         "director_executions": executions,
@@ -452,12 +569,7 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
         }
         for warning in warnings
     ]
-    services = state.get("runtime_services")
-    diagnostics = (
-        getattr(services, "diagnostics", None)
-        if services is not None
-        else None
-    ) or NullDiagnosticLogger()
+    diagnostics = _diagnostics(state)
     update_events = []
     if computed:
         for warning in warnings:
@@ -567,6 +679,7 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
     gateway = _gateway_for(state)
     turn_index = pipeline_input.turn_index
     reviews = []
+    review_warnings: list[tuple[str, str]] = []
     scene_facts_json = json.dumps(
         state["scene_facts"].model_dump(mode="json"),
         ensure_ascii=False,
@@ -583,39 +696,49 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
             event for event in active_events if event.stage == "engaged"
         ]
         if hidden_events:
-            hidden_results = review_hidden_events_workflow(
-                active_events=hidden_events,
-                user_input=pipeline_input.user_input,
-                scene_facts=scene_facts_json,
-                current_state=state["updated_state"],
-                core_memory=state["core_memory"],
-                scene_summaries=state.get("recent_summaries", []),
-                turn_index=turn_index,
-                store=event_store,
-                reviewer=DirectorEventHiddenReviewer(gateway),
-                trace_id=state["trace_id"],
-            )
-            reviews.extend(
-                result.model_dump(mode="json")
-                for result in hidden_results
-            )
-            engaged_ids = {event.event_id for event in engaged_events}
-            for result in hidden_results:
-                event = result.active_after
-                if (
-                    event is not None
-                    and event.stage == "engaged"
-                    and state["updated_state"].world_clock.has_reached(
-                        event.deadline_clock
-                    )
-                    and event.event_id not in engaged_ids
-                ):
-                    engaged_events.append(event)
-                    engaged_ids.add(event.event_id)
+            try:
+                hidden_results = review_hidden_events_workflow(
+                    active_events=hidden_events,
+                    user_input=pipeline_input.user_input,
+                    scene_facts=scene_facts_json,
+                    current_state=state["updated_state"],
+                    core_memory=state["core_memory"],
+                    scene_summaries=state.get("recent_summaries", []),
+                    turn_index=turn_index,
+                    store=event_store,
+                    reviewer=DirectorEventHiddenReviewer(gateway),
+                    trace_id=state["trace_id"],
+                )
+            except (
+                LLMOutputParseError,
+                LLMOutputValidationError,
+                LLMProviderError,
+            ) as exc:
+                review_warnings.append((
+                    "director_event_review_fallback",
+                    f"Hidden event review failed; skipped: {exc}",
+                ))
+            else:
+                reviews.extend(
+                    result.model_dump(mode="json")
+                    for result in hidden_results
+                )
+                engaged_ids = {event.event_id for event in engaged_events}
+                for result in hidden_results:
+                    event = result.active_after
+                    if (
+                        event is not None
+                        and event.stage == "engaged"
+                        and state["updated_state"].world_clock.has_reached(
+                            event.deadline_clock
+                        )
+                        and event.event_id not in engaged_ids
+                    ):
+                        engaged_events.append(event)
+                        engaged_ids.add(event.event_id)
         if engaged_events:
-            reviews.extend(
-                result.model_dump(mode="json")
-                for result in review_engaged_events_workflow(
+            try:
+                engaged_results = review_engaged_events_workflow(
                     active_events=engaged_events,
                     user_input=pipeline_input.user_input,
                     scene_facts=scene_facts_json,
@@ -627,8 +750,31 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
                     reviewer=DirectorEventEngagedReviewer(gateway),
                     trace_id=state["trace_id"],
                 )
-            )
+            except (
+                LLMOutputParseError,
+                LLMOutputValidationError,
+                LLMProviderError,
+            ) as exc:
+                review_warnings.append((
+                    "director_event_review_fallback",
+                    f"Engaged event review failed; skipped: {exc}",
+                ))
+            else:
+                reviews.extend(
+                    result.model_dump(mode="json")
+                    for result in engaged_results
+                )
 
+    diagnostics = _diagnostics(state)
+    for code, message in review_warnings:
+        diagnostics.warning(
+            source="director_event",
+            code=code,
+            message=message,
+            trace_id=state["trace_id"],
+            task="director_event_review",
+            turn_index=getattr(pipeline_input, "turn_index", None),
+        )
     return {
         "director_event_reviews": reviews,
         "events": [{

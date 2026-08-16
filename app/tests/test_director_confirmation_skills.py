@@ -587,20 +587,22 @@ def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
         },
     )
 
-    with pytest.raises(ValueError, match="enrich_npc requires a newly created npc_id"):
-        run_confirmation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="询问昨夜发生的事。",
-            scene_facts={"scene_focus": "主角走访社区。", "facts": []},
-            recent_summaries=[],
-            selection_summaries=[],
-            turn_index=3,
-            trace_id="confirmation-director",
-            new_npc_profiles=[other_new],
-        )
+    decision, executions = run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="询问昨夜发生的事。",
+        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+        new_npc_profiles=[other_new],
+    )
+
+    assert decision.requests == []
+    assert executions.executions == []
 
 
 def test_skill_guidance_flows_through_to_execution_handler():

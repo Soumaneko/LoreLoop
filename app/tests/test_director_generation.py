@@ -362,19 +362,21 @@ def test_introduce_npc_rejects_regular_profiles(tmp_path):
         }
     )
 
-    with pytest.raises(ValueError, match="prepared director NPC draft"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="去诊所询问昨夜发生的事。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-        )
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="去诊所询问昨夜发生的事。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+
+    assert decision.requests == []
+    assert stage.materials == []
 
 
 def test_generation_agent_receives_projected_turn_resolution(tmp_path):

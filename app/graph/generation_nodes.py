@@ -359,7 +359,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
             state.get("context_fact_npc_profiles", []),
             event_npc_profiles,
         )
-    stage, decision = DirectorGenerationExecutor(
+    executor = DirectorGenerationExecutor(
         gateway=gateway_for(state),
         stores=state["runtime_services"].stores,
         core_memory=state["core_memory"],
@@ -374,7 +374,18 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
         touched_event_candidates=state.get("touched_event_candidates", []),
         npc_profiles=director_npc_profiles,
-    ).run()
+    )
+    stage, decision = executor.run()
+    diagnostics = _diagnostics(state)
+    for warning in getattr(executor, "last_warnings", []):
+        diagnostics.warning(
+            source="director",
+            code=warning.code,
+            message=warning.message,
+            trace_id=state["trace_id"],
+            task="director_agent_generation",
+            turn_index=state["turn_index"],
+        )
     director_log_entry = assemble_director_log_entry(
         turn_index=state["turn_index"],
         phase="generation",

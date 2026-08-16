@@ -172,20 +172,22 @@ def test_present_event_requires_hook_id(tmp_path):
         }
     )
 
-    with pytest.raises(ValidationError, match="hook_id"):
-        run_generation_director_agent(
-            gateway=gateway,
-            stores=stores,
-            core_memory=CoreMemory(items=[]),
-            current_state=make_current_state(),
-            user_input="继续在码头巡查。",
-            context_facts=[],
-            recent_summaries=[],
-            turn_index=3,
-            trace_id="generation-director",
-            npc_profiles=[],
-            touched_event_candidates=[],
-        )
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="继续在码头巡查。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+        touched_event_candidates=[],
+    )
+
+    assert decision.requests == []
+    assert stage.materials == []
 
 
 def test_review_event_rejects_unknown_consume_hook(tmp_path):
@@ -230,7 +232,12 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
     )
 
     with pytest.raises(ValueError, match="consume_hook_ids not part of this event"):
-        confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
+        confirmation_nodes.director_event_review_node(
+            make_review_node_state(stores, gateway)
+        )
+
+    with stores.director_event() as store:
+        assert store.get_by_id(event_id).stage == "hidden"
 
 
 def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
@@ -276,7 +283,12 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
     )
 
     with pytest.raises(ValueError, match="consume_hook_ids already consumed"):
-        confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
+        confirmation_nodes.director_event_review_node(
+            make_review_node_state(stores, gateway)
+        )
+
+    with stores.director_event() as store:
+        assert store.get_by_id(event_id).stage == "hidden"
 
 
 def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):

@@ -54,6 +54,8 @@ def run_scene_summary_maintenance(
                 core_memory=core_memory,
                 trace_id=trace_id,
             )
+            if condensed is None:
+                break
             condensed_id = store.save_one(condensed)
             changed = store.mark_condensed(
                 [summary.id for summary in sources],

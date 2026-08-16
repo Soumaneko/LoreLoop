@@ -60,7 +60,7 @@ class AcceptedNPCScalarChange(BaseModel):
     field: SCALAR_FIELD_LITERAL
     old_value: str | None = None
     new_value: str = Field(min_length=1)
-    change_basis: str | None = Field(default=None, min_length=1, max_length=80)
+    change_basis: str | None = Field(default=None, min_length=1, max_length=120)
     evidence_ids: tuple[str, ...] = ()
     turn_index: int | None = None
     source: Literal["proposal", "current_state_sync"] = "proposal"

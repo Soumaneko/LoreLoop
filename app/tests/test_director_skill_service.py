@@ -1,8 +1,8 @@
+import json
 import pytest
 
 import threading
 from pydantic import ValidationError
-from app.core.llm import LLMOutputValidationError
 from app.core.llm import MockLLM
 from app.domain.director import DirectorAgent
 from app.domain.director import DirectorSkillRequest
@@ -17,6 +17,105 @@ from app.tests.factories.director_schemas import (
     SkillCreateNPCArguments,
     SkillEventSelectionArguments,
 )
+
+
+def test_director_agent_falls_back_when_reasoning_exceeds_500():
+    service = DirectorSkillService()
+    service.register(
+        name="present_event",
+        description="让已有事件进入本轮舞台。",
+        phases={"generation"},
+        mutates=False,
+        arguments_model=SkillEventSelectionArguments,
+        handler=lambda arguments, guidance=None: None,
+    )
+    response = {
+        "reasoning": "长" * 501,
+        "requests": [{
+            "request_id": "request_1",
+            "skill": "present_event",
+            "arguments": {"event_id": "event_1"},
+            "guidance": "呈现事件影响。",
+        }],
+    }
+    mock = MockLLM()
+    mock.set_responses([json.dumps(response, ensure_ascii=False)])
+
+    agent = DirectorAgent(mock.build_gateway(), service)
+    result = agent.decide_generation(make_director_observation())
+
+    assert len(result.reasoning) <= 500
+    assert result.requests[0].request_id == "request_1"
+
+
+def test_director_agent_provider_failure_returns_empty_decision():
+    service = DirectorSkillService()
+    service.register(
+        name="present_event",
+        description="让已有事件进入本轮舞台。",
+        phases={"generation"},
+        mutates=False,
+        arguments_model=SkillEventSelectionArguments,
+        handler=lambda arguments, guidance=None: None,
+    )
+    mock = MockLLM()
+    mock.set_fail_provider(True)
+
+    agent = DirectorAgent(mock.build_gateway(), service)
+    result = agent.decide_generation(make_director_observation())
+
+    assert result.requests == []
+    assert any(
+        warning.code == "director_decision_fallback"
+        for warning in agent.last_warnings
+    )
+
+
+def test_director_agent_keeps_earlier_request_on_batch_conflict():
+    service = DirectorSkillService()
+    service.register(
+        name="present_event",
+        description="让已有事件进入本轮舞台。",
+        phases={"generation"},
+        mutates=False,
+        arguments_model=SkillEventSelectionArguments,
+        handler=lambda arguments, guidance=None: None,
+    )
+
+    def request(request_id, event_id):
+        return DirectorSkillRequest(
+            request_id=request_id,
+            skill="present_event",
+            arguments={"event_id": event_id},
+            guidance="呈现事件影响。",
+        )
+
+    first = [request("one", "event_a"), request("two", "event_a")]
+    second = [
+        request("one", "event_a"),
+        request("two", "event_a"),
+        request("three", "event_b"),
+    ]
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps({
+            "reasoning": "重复请求。",
+            "requests": [r.model_dump(mode="json") for r in first],
+        }),
+        json.dumps({
+            "reasoning": "重复仍存在，但加入另一个合法请求。",
+            "requests": [r.model_dump(mode="json") for r in second],
+        }),
+    ])
+
+    agent = DirectorAgent(mock.build_gateway(), service)
+    result = agent.decide_generation(make_director_observation())
+
+    assert [r.request_id for r in result.requests] == ["one", "three"]
+    assert any(
+        warning.code == "director_request_dropped"
+        for warning in agent.last_warnings
+    )
 
 
 def test_skill_service_exposes_only_skills_available_in_phase():
@@ -497,13 +596,16 @@ def test_director_agent_rejects_unregistered_skill_selected_by_llm():
           ]
         }
         """
-    mock.set_responses([invalid_response, invalid_response, invalid_response])
+    mock.set_responses([invalid_response, invalid_response])
 
-    with pytest.raises(
-        LLMOutputValidationError,
-        match="unknown director skill: create_event",
-    ):
-        DirectorAgent(mock.build_gateway(), service).decide_generation(make_director_observation())
+    agent = DirectorAgent(mock.build_gateway(), service)
+    result = agent.decide_generation(make_director_observation())
+
+    assert result.requests == []
+    assert any(
+        warning.code == "director_decision_fallback"
+        for warning in agent.last_warnings
+    )
 
 
 def test_director_skill_specs_cover_every_registered_skill():

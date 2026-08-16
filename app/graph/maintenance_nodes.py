@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from app.core.diagnostics import NullDiagnosticLogger
 from app.domain.scene_summary.maintenance import _CONDENSE_LOCK
-from app.domain.scene_summary.summarizer import SceneSummarizer
+from app.domain.scene_summary.summarizer import SceneSummarizer, SceneSummaryWarning
 from app.runtime.serialization import model_data
 
 from .maintenance_helpers import maintenance_gateway
@@ -26,6 +27,7 @@ def scene_summary_condense_node(
     )
     result = state["result"]
     threshold = state.get("threshold", 10)
+    warnings: list[SceneSummaryWarning] = []
 
     # Preserve the original lock scope across recursive levels and their LLM calls.
     with _CONDENSE_LOCK, _store_factory(state, "scene_summary")() as store:
@@ -40,6 +42,9 @@ def scene_summary_condense_node(
                 core_memory=state["core_memory"],
                 trace_id=state["trace_id"],
             )
+            warnings.extend(summarizer.last_warnings)
+            if condensed is None:
+                break
             condensed_id = store.save_one(condensed)
             changed = store.mark_condensed(
                 [summary.id for summary in sources],
@@ -50,6 +55,22 @@ def scene_summary_condense_node(
             result.condensed_ids.append(condensed_id)
             result.created_summaries.append(condensed)
             level += 1
+
+    services = _services(state)
+    diagnostics = (
+        getattr(services, "diagnostics", None)
+        if services is not None
+        else None
+    ) or NullDiagnosticLogger()
+    for warning in warnings:
+        diagnostics.warning(
+            source="scene_summary",
+            code=warning.code,
+            message=warning.message,
+            trace_id=state["trace_id"],
+            task="scene_summary_condense",
+            turn_index=state["turn_index"],
+        )
 
     return {
         "result": result,

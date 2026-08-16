@@ -726,7 +726,7 @@ def test_pointer_validation_rejects_whole_batch(documents, match):
         (None, "require a non-empty change_basis"),
         ("", "at least 1 character"),
         ("   ", "at least 1 character"),
-        ("改" * 81, "at most 80 characters"),
+        ("改" * 121, "at most 120 characters"),
     ],
 )
 def test_write_api_rejects_missing_blank_or_too_long_change_basis(basis, match):
