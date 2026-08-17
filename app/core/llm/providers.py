@@ -194,15 +194,62 @@ def _extract_usage(usage_obj: Any) -> dict | None:
     if not usage_obj:
         return None
 
-    usage = {
-        key: value
-        for key in (
-            "prompt_tokens",
-            "completion_tokens",
-            "input_tokens",
-            "output_tokens",
-            "total_tokens",
-        )
-        if (value := getattr(usage_obj, key, None)) is not None
-    }
+    if hasattr(usage_obj, "model_dump") and callable(usage_obj.model_dump):
+        try:
+            usage_obj = usage_obj.model_dump()
+        except Exception:
+            pass
+
+    def _get(obj: Any, key: str) -> Any:
+        if isinstance(obj, dict):
+            return obj.get(key)
+        val = getattr(obj, key, None)
+        if val is None:
+            extra = getattr(obj, "model_extra", None)
+            if isinstance(extra, dict):
+                return extra.get(key)
+        return val
+
+    usage: dict[str, Any] = {}
+
+    for key in (
+        "prompt_tokens",
+        "completion_tokens",
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+    ):
+        if (value := _get(usage_obj, key)) is not None:
+            usage[key] = value
+
+    # Extract cached_tokens
+    # 1. OpenAI / DeepSeek: prompt_tokens_details.cached_tokens
+    details = _get(usage_obj, "prompt_tokens_details")
+    cached = _get(details, "cached_tokens") if details is not None else None
+    # 2. Anthropic: cache_read_input_tokens
+    if cached is None:
+        cached = _get(usage_obj, "cache_read_input_tokens")
+    # 3. Gemini / direct: cached_content_token_count or usage_metadata.cached_content_token_count
+    if cached is None:
+        cached = _get(usage_obj, "cached_content_token_count")
+    if cached is None:
+        meta = _get(usage_obj, "usage_metadata")
+        cached = _get(meta, "cached_content_token_count") if meta is not None else None
+    # 4. Direct cached_tokens fallback
+    if cached is None:
+        cached = _get(usage_obj, "cached_tokens")
+
+    if cached is not None:
+        usage["cached_tokens"] = cached
+
+    # Extract cache_creation_tokens
+    # Anthropic: cache_creation_input_tokens or cache_creation_tokens
+    creation = _get(usage_obj, "cache_creation_input_tokens")
+    if creation is None:
+        creation = _get(usage_obj, "cache_creation_tokens")
+
+    if creation is not None:
+        usage["cache_creation_tokens"] = creation
+
     return usage or None
+

@@ -194,6 +194,8 @@ class TestProviderCompatibility:
             "input_tokens": 12,
             "output_tokens": 4,
             "total_tokens": 16,
+            "cached_tokens": None,
+            "cache_creation_tokens": None,
             "reported": True,
         }
         assert normalize_token_usage({
@@ -203,5 +205,86 @@ class TestProviderCompatibility:
             "input_tokens": 8,
             "output_tokens": 3,
             "total_tokens": None,
+            "cached_tokens": None,
+            "cache_creation_tokens": None,
             "reported": True,
         }
+
+    def test_usage_extraction_openai_deepseek_cached_tokens(self):
+        usage = _extract_usage(SimpleNamespace(
+            prompt_tokens=100,
+            completion_tokens=20,
+            total_tokens=120,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=80),
+        ))
+        assert usage == {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "cached_tokens": 80,
+        }
+
+    def test_usage_extraction_anthropic_read_and_create(self):
+        usage = _extract_usage(SimpleNamespace(
+            input_tokens=100,
+            output_tokens=20,
+            cache_read_input_tokens=80,
+            cache_creation_input_tokens=10,
+        ))
+        assert usage == {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_tokens": 80,
+            "cache_creation_tokens": 10,
+        }
+
+    def test_usage_extraction_gemini_cached_tokens(self):
+        usage1 = _extract_usage(SimpleNamespace(
+            prompt_tokens=100,
+            completion_tokens=20,
+            usage_metadata=SimpleNamespace(cached_content_token_count=60),
+        ))
+        assert usage1 == {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 60,
+        }
+
+        usage2 = _extract_usage({
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_content_token_count": 50,
+        })
+        assert usage2 == {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 50,
+        }
+
+    def test_usage_extraction_pydantic_model_extra(self):
+        from pydantic import BaseModel, ConfigDict
+
+        class _MockUsage(BaseModel):
+            model_config = ConfigDict(extra="allow")
+            prompt_tokens: int = 100
+            completion_tokens: int = 20
+            total_tokens: int = 120
+
+        usage_obj = _MockUsage(
+            prompt_tokens=100,
+            completion_tokens=20,
+            total_tokens=120,
+            cached_content_token_count=75,
+            cache_creation_input_tokens=15,
+        )
+
+        usage = _extract_usage(usage_obj)
+        assert usage == {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "cached_tokens": 75,
+            "cache_creation_tokens": 15,
+        }
+
+

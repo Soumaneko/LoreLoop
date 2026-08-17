@@ -56,8 +56,12 @@ def bind_token_usage_trace(trace_id: str) -> bool:
             {
                 "input_tokens": 0,
                 "output_tokens": 0,
+                "cached_tokens": 0,
+                "cache_creation_tokens": 0,
                 "has_input": False,
                 "has_output": False,
+                "has_cached": False,
+                "has_cache_creation": False,
                 "calls": [],
                 "call_indexes": {},
                 "task_counts": {},
@@ -81,12 +85,24 @@ def get_trace_token_usage(trace_id: str) -> dict[str, Any] | None:
         totals = _TRACE_TOTALS.get(clean_trace_id)
         if totals is None:
             return None
-        has_input = totals["has_input"] is True
-        has_output = totals["has_output"] is True
-        if not has_input and not has_output:
+        has_input = totals.get("has_input") is True
+        has_output = totals.get("has_output") is True
+        has_cached = totals.get("has_cached") is True
+        has_cache_creation = totals.get("has_cache_creation") is True
+        if not has_input and not has_output and not has_cached and not has_cache_creation:
             return None
         input_tokens = int(totals["input_tokens"]) if has_input else None
         output_tokens = int(totals["output_tokens"]) if has_output else None
+        cached_tokens = int(totals["cached_tokens"]) if has_cached else None
+        cache_creation_tokens = (
+            int(totals["cache_creation_tokens"]) if has_cache_creation else None
+        )
+        cache_hit_rate = (
+            min(1.0, max(0.0, round(cached_tokens / input_tokens, 4)))
+            if cached_tokens is not None and input_tokens is not None and input_tokens > 0
+            else None
+        )
+
         calls = [dict(call) for call in totals["calls"]]
     return {
         "input_tokens": input_tokens,
@@ -96,6 +112,9 @@ def get_trace_token_usage(trace_id: str) -> dict[str, Any] | None:
             if input_tokens is not None and output_tokens is not None
             else None
         ),
+        "cached_tokens": cached_tokens,
+        "cache_creation_tokens": cache_creation_tokens,
+        "cache_hit_rate": cache_hit_rate,
         "calls": calls,
     }
 
@@ -132,6 +151,8 @@ def publish_token_usage(
             if totals is not None:
                 input_tokens = normalized["input_tokens"]
                 output_tokens = normalized["output_tokens"]
+                cached_tokens = normalized["cached_tokens"]
+                cache_creation_tokens = normalized["cache_creation_tokens"]
                 if input_tokens is not None:
                     totals["input_tokens"] = int(totals["input_tokens"]) + input_tokens
                     totals["has_input"] = True
@@ -140,6 +161,17 @@ def publish_token_usage(
                         int(totals["output_tokens"]) + output_tokens
                     )
                     totals["has_output"] = True
+                if cached_tokens is not None:
+                    totals["cached_tokens"] = (
+                        int(totals.get("cached_tokens", 0)) + cached_tokens
+                    )
+                    totals["has_cached"] = True
+                if cache_creation_tokens is not None:
+                    totals["cache_creation_tokens"] = (
+                        int(totals.get("cache_creation_tokens", 0))
+                        + cache_creation_tokens
+                    )
+                    totals["has_cache_creation"] = True
                 call_indexes = totals["call_indexes"]
                 task_counts = totals["task_counts"]
                 call_index = _next_call_index(
@@ -148,26 +180,42 @@ def publish_token_usage(
                     call_id=call_id,
                     task=str(task),
                 )
+                call_hit_rate = (
+                    min(1.0, max(0.0, round(cached_tokens / input_tokens, 4)))
+                    if cached_tokens is not None and input_tokens is not None and input_tokens > 0
+                    else None
+                )
                 totals["calls"].append({
                     "task": str(task),
                     "call_index": call_index,
                     "attempt": max(1, int(attempt or 1)),
+                    "cache_hit_rate": call_hit_rate,
                     **normalized,
                 })
+
     if call_index is None and binding is not None:
         call_index = binding.call_index(call_id, str(task))
     if call_index is None:
         return
+    sink_input = normalized["input_tokens"]
+    sink_cached = normalized["cached_tokens"]
+    sink_hit_rate = (
+        min(1.0, max(0.0, round(sink_cached / sink_input, 4)))
+        if sink_cached is not None and sink_input is not None and sink_input > 0
+        else None
+    )
     try:
         sink({
             "_call_id": call_id,
             "task": str(task),
             "call_index": call_index,
             "attempt": max(1, int(attempt or 1)),
+            "cache_hit_rate": sink_hit_rate,
             **normalized,
         })
     except Exception:
         pass
+
 
 
 def normalize_token_usage(token_usage: object) -> dict[str, Any]:
@@ -175,13 +223,23 @@ def normalize_token_usage(token_usage: object) -> dict[str, Any]:
     input_tokens = _count(usage, "input_tokens", "prompt_tokens")
     output_tokens = _count(usage, "output_tokens", "completion_tokens")
     total_tokens = _count(usage, "total_tokens")
+    cached_tokens = _count(usage, "cached_tokens")
+    cache_creation_tokens = _count(usage, "cache_creation_tokens")
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "total_tokens": total_tokens,
+        "cached_tokens": cached_tokens,
+        "cache_creation_tokens": cache_creation_tokens,
         "reported": any(
             value is not None
-            for value in (input_tokens, output_tokens, total_tokens)
+            for value in (
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                cached_tokens,
+                cache_creation_tokens,
+            )
         ),
     }
 

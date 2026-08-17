@@ -12,7 +12,7 @@ from app.core.diagnostics import (
 )
 from app.runtime.app_paths import APP_PATHS
 
-from .token_usage import publish_token_usage
+from .token_usage import normalize_token_usage, publish_token_usage
 
 
 TRACE_LOG_MAX_BYTES = 50 * 1024 * 1024
@@ -84,6 +84,22 @@ class TraceLogger:
             entry["attempt"] = attempt
         if token_usage is not None:
             entry["token_usage"] = token_usage
+            normalized = normalize_token_usage(token_usage)
+            cached_tokens = normalized["cached_tokens"]
+            cache_creation_tokens = normalized["cache_creation_tokens"]
+            input_tokens = normalized["input_tokens"]
+            if cached_tokens is not None:
+                entry["cached_tokens"] = cached_tokens
+            if cache_creation_tokens is not None:
+                entry["cache_creation_tokens"] = cache_creation_tokens
+            if (
+                cached_tokens is not None
+                and input_tokens is not None
+                and input_tokens > 0
+            ):
+                entry["cache_hit_rate"] = min(
+                    1.0, max(0.0, round(cached_tokens / input_tokens, 4))
+                )
         if turn_index is not None:
             entry["turn_index"] = turn_index
         if session_type is not None:
@@ -100,6 +116,7 @@ class TraceLogger:
                 payload,
                 max_bytes=self._max_bytes,
             )
+
         publish_token_usage(
             trace_id=trace_id,
             call_id=call_id or "",

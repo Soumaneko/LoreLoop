@@ -51,6 +51,22 @@ function formatted(value) {
   return value === null ? "未提供" : value.toLocaleString("zh-CN");
 }
 
+function _formatInputWithCache(inputTokens, cachedTokens, cacheHitRate) {
+  const inpStr = formatted(inputTokens);
+  if (cachedTokens != null) {
+    let rateStr = "";
+    if (cacheHitRate != null) {
+      rateStr = ` · ${Math.round(cacheHitRate * 100)}%`;
+    } else if (inputTokens != null && inputTokens > 0) {
+      rateStr = ` · ${Math.round((cachedTokens / inputTokens) * 100)}%`;
+    } else {
+      rateStr = ` · 0%`;
+    }
+    return `入 ${inpStr} (缓 ${formatted(cachedTokens)}${rateStr})`;
+  }
+  return `入 ${inpStr}`;
+}
+
 export function renderCardTokenFooter(usageData, { visible = true, detailButtons = false, appendToRow = null } = {}) {
   const gen = usageData?.generation;
   const conf = usageData?.confirmation;
@@ -77,7 +93,7 @@ export function renderCardTokenFooter(usageData, { visible = true, detailButtons
     tag.textContent = "生成管线";
     const val = document.createElement("span");
     val.className = "token-val";
-    val.textContent = `入 ${formatted(gen.input_tokens)} · 出 ${formatted(gen.output_tokens)}`;
+    val.textContent = `${_formatInputWithCache(gen.input_tokens, gen.cached_tokens, gen.cache_hit_rate)} · 出 ${formatted(gen.output_tokens)}`;
     item.append(tag, val);
     row.appendChild(item);
 
@@ -113,7 +129,7 @@ export function renderCardTokenFooter(usageData, { visible = true, detailButtons
     tag.textContent = "确认管线";
     const val = document.createElement("span");
     val.className = "token-val";
-    val.textContent = `入 ${formatted(conf.input_tokens)} · 出 ${formatted(conf.output_tokens)}`;
+    val.textContent = `${_formatInputWithCache(conf.input_tokens, conf.cached_tokens, conf.cache_hit_rate)} · 出 ${formatted(conf.output_tokens)}`;
     item.append(tag, val);
     row.appendChild(item);
 
@@ -135,12 +151,21 @@ export function renderCardTokenFooter(usageData, { visible = true, detailButtons
     }
   }
 
-
   if ((hasInput || hasOutput) && (gen && conf)) {
     const divider = document.createElement("span");
     divider.className = "turn-token-divider";
     divider.textContent = "│";
     row.appendChild(divider);
+
+    let totalCached = 0;
+    let hasCached = false;
+    if (gen?.cached_tokens != null) { totalCached += gen.cached_tokens; hasCached = true; }
+    if (conf?.cached_tokens != null) { totalCached += conf.cached_tokens; hasCached = true; }
+    let cachedTotalPart = "";
+    if (hasCached) {
+      const totalHitRate = totalInput > 0 ? ` · ${Math.round((totalCached / totalInput) * 100)}%` : " · 0%";
+      cachedTotalPart = ` (缓 ${totalCached.toLocaleString("zh-CN")}${totalHitRate})`;
+    }
 
     const totalItem = document.createElement("div");
     totalItem.className = "turn-token-item turn-token-total";
@@ -149,7 +174,7 @@ export function renderCardTokenFooter(usageData, { visible = true, detailButtons
     tag.textContent = "合计";
     const val = document.createElement("span");
     val.className = "token-val";
-    val.textContent = `${(totalInput + totalOutput).toLocaleString("zh-CN")} tok`;
+    val.textContent = `${(totalInput + totalOutput).toLocaleString("zh-CN")} tok${cachedTotalPart}`;
     totalItem.append(tag, val);
     row.appendChild(totalItem);
   }
@@ -216,15 +241,26 @@ export function createTokenUsageController({ node }) {
   const calculateCurrentSummary = () => {
     let input = 0;
     let output = 0;
+    let cached = 0;
+    let cacheCreation = 0;
     let hasInput = false;
     let hasOutput = false;
+    let hasCached = false;
+    let hasCacheCreation = false;
     for (const r of records) {
       if (r.input !== null) { input += r.input; hasInput = true; }
       if (r.output !== null) { output += r.output; hasOutput = true; }
+      if (r.cached !== null) { cached += r.cached; hasCached = true; }
+      if (r.cacheCreation !== null) { cacheCreation += r.cacheCreation; hasCacheCreation = true; }
     }
     return {
       input_tokens: hasInput ? input : null,
       output_tokens: hasOutput ? output : null,
+      cached_tokens: hasCached ? cached : null,
+      cache_creation_tokens: hasCacheCreation ? cacheCreation : null,
+      cache_hit_rate: (hasCached && hasInput && input > 0)
+        ? Math.min(1.0, Math.max(0.0, Math.round((cached / input) * 10000) / 10000))
+        : null,
     };
   };
 
@@ -248,6 +284,8 @@ export function createTokenUsageController({ node }) {
       attempt: Math.max(1, Number(data.attempt) || 1),
       input: tokenCount(data.input_tokens),
       output: tokenCount(data.output_tokens),
+      cached: tokenCount(data.cached_tokens),
+      cacheCreation: tokenCount(data.cache_creation_tokens),
     });
 
     const summary = calculateCurrentSummary();
@@ -379,6 +417,18 @@ export function openTokenUsagePipelineDialog({ dialog, contentEl, usageData, pip
       const attempt = Math.max(1, Number(call.attempt) || 1);
       const inp = tokenCount(call.input_tokens);
       const out = tokenCount(call.output_tokens);
+      const cached = tokenCount(call.cached_tokens);
+      const hitRate = (call.cache_hit_rate != null)
+        ? `${Math.round(call.cache_hit_rate * 100)}%`
+        : (cached != null && inp != null && inp > 0)
+          ? `${Math.round((cached / inp) * 100)}%`
+          : (cached != null)
+            ? `0%`
+            : null;
+
+      const inputPart = (cached != null)
+        ? `输入 ${formatted(inp)} (缓 ${formatted(cached)}${hitRate ? ` · ${hitRate}` : ""})`
+        : `输入 ${formatted(inp)}`;
 
       const row = _el("div", "token-usage-dialog-row");
       const name = _el(
@@ -390,7 +440,7 @@ export function openTokenUsagePipelineDialog({ dialog, contentEl, usageData, pip
       );
       const counts = _el("div", "token-usage-dialog-counts");
       counts.append(
-        _el("span", "", `输入 ${formatted(inp)}`),
+        _el("span", "", inputPart),
         _el("span", "", `输出 ${formatted(out)}`),
       );
       row.append(name, counts);

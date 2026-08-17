@@ -110,8 +110,13 @@ class TestTraceLogging:
             "input_tokens": 12,
             "output_tokens": 4,
             "total_tokens": 16,
+            "cached_tokens": None,
+            "cache_creation_tokens": None,
+            "cache_hit_rate": None,
             "reported": True,
         }
+
+
         assert events[0]["_call_id"]
         assert "private prompt input" not in str(events)
         assert "hello" not in str(events)
@@ -242,3 +247,94 @@ class TestTraceLogging:
             assert len(traces[0]["trace_id"]) == 32
         finally:
             os.unlink(trace_path)
+
+    def test_trace_logs_cached_tokens_and_hit_rate(self, tmp_path):
+        tracer = TraceLogger(log_path=str(tmp_path / "llm_traces.jsonl"))
+        tracer.log(
+            trace_id="test-cache-trace",
+            task="echo_test",
+            model="gpt-4o",
+            prompt_version="v1",
+            input_data={"text": "hi"},
+            raw_output='{"text": "hi"}',
+            parsed_output={"text": "hi"},
+            schema_valid=True,
+            latency_ms=10.0,
+            error=None,
+            token_usage={
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_tokens": 72,
+                "cache_creation_tokens": 10,
+            },
+        )
+
+        traces = tracer.read_traces(trace_id="test-cache-trace")
+        assert len(traces) == 1
+        assert traces[0]["cached_tokens"] == 72
+        assert traces[0]["cache_creation_tokens"] == 10
+        assert traces[0]["cache_hit_rate"] == 0.72
+
+    def test_trace_token_usage_accumulation_with_cache(self, tmp_path):
+        from app.core.llm.token_usage import (
+            bind_token_usage_sink,
+            bind_token_usage_trace,
+            get_trace_token_usage,
+            reset_token_usage_sink,
+            reset_token_usage_traces,
+        )
+
+        trace_id = "trace-accumulate-test"
+        events = []
+        token = bind_token_usage_sink(events.append)
+        try:
+            assert bind_token_usage_trace(trace_id) is True
+            tracer = TraceLogger(log_path=str(tmp_path / "llm_traces.jsonl"))
+            tracer.log(
+                trace_id=trace_id,
+                task="task_1",
+                model="gpt-4o",
+                prompt_version="v1",
+                input_data={},
+                raw_output="{}",
+                parsed_output={},
+                schema_valid=True,
+                latency_ms=10.0,
+                error=None,
+                token_usage={
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cached_tokens": 50,
+                },
+                session_type="generation",
+            )
+            tracer.log(
+                trace_id=trace_id,
+                task="task_2",
+                model="gpt-4o",
+                prompt_version="v1",
+                input_data={},
+                raw_output="{}",
+                parsed_output={},
+                schema_valid=True,
+                latency_ms=10.0,
+                error=None,
+                token_usage={
+                    "input_tokens": 100,
+                    "output_tokens": 30,
+                    "cached_tokens": 70,
+                },
+                session_type="generation",
+            )
+
+            usage = get_trace_token_usage(trace_id)
+            assert usage is not None
+            assert usage["input_tokens"] == 200
+            assert usage["output_tokens"] == 50
+            assert usage["total_tokens"] == 250
+            assert usage["cached_tokens"] == 120
+            assert usage["cache_hit_rate"] == 0.6  # 120 / 200
+        finally:
+            reset_token_usage_sink(token)
+            reset_token_usage_traces({trace_id})
+
