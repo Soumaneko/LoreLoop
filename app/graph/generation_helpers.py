@@ -10,16 +10,106 @@ from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director.schemas import DirectorStageResult
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
+from app.domain.npc_profile.selection import select_context_profiles
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.roll.schemas import Difficulty
 from app.domain.turn_resolution import build_player_turn_resolution
 from app.domain.turn_resolution.schemas import TurnResolutionResult
+from app.graph.generation_state import GenerationEvent, GenerationState
 from app.runtime.serialization import model_data
 from app.runtime.services import RuntimeServices
-from app.runtime.session import CampaignRuntime, PendingTurn, get_campaign_runtime
+from app.runtime.session import (
+    CampaignRuntime,
+    GenerationPrefixSnapshot,
+    PendingTurn,
+    get_campaign_runtime,
+)
 
-from .generation_state import GenerationEvent, GenerationState
-from app.domain.npc_profile.selection import select_context_profiles
+
+def extract_generation_prefix(state: GenerationState) -> GenerationPrefixSnapshot:
+    action_parse_result = state.get("action_parse_result")
+    raw_action_parse_result = state.get("raw_action_parse_result") or action_parse_result
+    action_self_check_result = state.get("action_self_check_result")
+    context_facts = state.get("context_facts")
+    context_search_plan = state.get("context_search_plan")
+    context_history_evidence = state.get("context_history_evidence")
+    continuity_selection = state.get("continuity_selection")
+    context_fact_npc_profiles = state.get("context_fact_npc_profiles") or []
+    matched_anchors = state.get("matched_anchors") or []
+    action_npc_profiles = state.get("action_npc_profiles") or []
+    action_npc_director_views = state.get("action_npc_director_views") or []
+    touched_event_candidates = state.get("touched_event_candidates") or []
+    modifier_batch = state.get("modifier_batch")
+
+    events = state.get("events", [])
+    has_action_context_fallback = bool(
+        state.get("action_extract_fallback")
+        or state.get("context_extract_failed")
+        or any(event.get("step") == "context_extract_failed" for event in events)
+        or action_parse_result is None
+        or context_facts is None
+    )
+
+    has_modifier_fallback = bool(state.get("roll_modifier_fallback"))
+    if has_modifier_fallback:
+        # Modifier evaluation fell back; clear modifier_batch so reroll/retry can
+        # re-evaluate modifiers while safely reusing healthy action and context facts.
+        modifier_batch = None
+
+    return GenerationPrefixSnapshot(
+        action_parse_result=action_parse_result,
+        raw_action_parse_result=raw_action_parse_result,
+        action_self_check_result=action_self_check_result,
+        context_facts=context_facts,
+        context_search_plan=context_search_plan,
+        context_history_evidence=context_history_evidence,
+        continuity_selection=continuity_selection,
+        context_fact_npc_profiles=context_fact_npc_profiles,
+        matched_anchors=matched_anchors,
+        action_npc_profiles=action_npc_profiles,
+        action_npc_director_views=action_npc_director_views,
+        touched_event_candidates=touched_event_candidates,
+        modifier_batch=modifier_batch,
+        has_fallback=has_action_context_fallback,
+    )
+
+
+def hydrate_generation_prefix(
+    state: GenerationState,
+    snapshot: GenerationPrefixSnapshot,
+) -> None:
+    state.update({
+        "action_parse_result": snapshot.action_parse_result,
+        "raw_action_parse_result": snapshot.raw_action_parse_result,
+        "action_self_check_result": snapshot.action_self_check_result,
+        "context_facts": snapshot.context_facts,
+        "context_search_plan": snapshot.context_search_plan,
+        "context_history_evidence": snapshot.context_history_evidence,
+        "continuity_selection": snapshot.continuity_selection,
+        "context_fact_npc_profiles": snapshot.context_fact_npc_profiles,
+        "matched_anchors": snapshot.matched_anchors,
+        "action_npc_profiles": snapshot.action_npc_profiles,
+        "action_npc_director_views": snapshot.action_npc_director_views,
+        "touched_event_candidates": snapshot.touched_event_candidates,
+        "modifier_batch": snapshot.modifier_batch,
+    })
+
+
+def reset_generation_suffix(state: GenerationState) -> None:
+    for key in [
+        "roll_results",
+        "turn_resolution",
+        "player_resolution",
+        "director_stage",
+        "director_log_entry",
+        "outline",
+        "scene_result",
+        "composer_empty",
+        "canon_queries",
+        "canon_evidence",
+        "consistency_review",
+    ]:
+        state.pop(key, None)
 
 
 def assemble_narrative_context(
@@ -142,6 +232,7 @@ def finalize_pending_turn(
         "generation": get_trace_token_usage(state["trace_id"]),
         "confirmation": None,
     }
+    snapshot = extract_generation_prefix(state)
     pending = PendingTurn(
         turn_id=turn_id,
         group_id=group_id,
@@ -160,7 +251,14 @@ def finalize_pending_turn(
         short_term_memory=state["short_term_memory"],
         token_usage=token_usage,
         director_log_entry=state.get("director_log_entry"),
+        prefix_snapshot=snapshot,
     )
+    if not snapshot.has_fallback:
+        runtime.generation_prefix_cache.set(
+            runtime.generation_cache_epoch,
+            state["user_input"],
+            snapshot,
+        )
     composer_empty = state.get("composer_empty", False)
     commit_if_not_cancelled(lambda: runtime.pending_turns.add(pending))
     finalized = {

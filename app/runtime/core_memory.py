@@ -75,6 +75,7 @@ def save_core_memory_items(payload: dict[str, Any]) -> dict[str, Any]:
         runtime.stores.core_memory().save(
             CoreMemory(version=core_memory.version, items=items)
         )
+        runtime.invalidate_generation_cache()
     return {
         "initialized": True,
         "items": [item.model_dump(mode="json") for item in items],

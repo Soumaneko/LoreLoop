@@ -16,12 +16,15 @@ from app.domain.roll.schemas import Difficulty
 from app.domain.short_term_memory import ShortTermMemory
 from app.domain.narrative_rewrite import RewriteStrategySelector
 from app.domain.narrative_rewrite.schemas import RewriteStrategyDecision
+from app.runtime.serialization import model_data
 from app.runtime.session import get_campaign_runtime
 
 from .generation_helpers import (
     finalize_pending_turn,
     gateway_for,
+    hydrate_generation_prefix,
     prepare_generation_state,
+    reset_generation_suffix,
 )
 from .generation_events import GenerationEventPresenter
 from .fold import fold_state_keys
@@ -36,11 +39,40 @@ from .generation_nodes import (
     rephrase_narrative_node,
     recompose_from_feedback_node,
     rewrite_from_source_node,
+    resolve_rolls_node,
     resolve_turn_node,
     generate_canon_queries_node,
     retrieve_canon_evidence_node,
     revise_narrative_node,
 )
+
+
+def _prefix_replay_events(state: GenerationState) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    if "action_parse_result" in state and state["action_parse_result"] is not None:
+        events.append({
+            "step": "action_parsed",
+            "data": {
+                "raw_action_parse_result": model_data(
+                    state.get("raw_action_parse_result") or state["action_parse_result"]
+                ),
+                "action_self_check_result": model_data(state.get("action_self_check_result")),
+                "action_parse_result": model_data(state["action_parse_result"]),
+                "touched_event_ids": list(state["action_parse_result"].touched_event_ids),
+            },
+        })
+    if "context_facts" in state and state["context_facts"] is not None:
+        events.append({
+            "step": "context_facts_done",
+            "data": {
+                "context_facts": model_data(state["context_facts"]),
+                "context_search_plan": model_data(state.get("context_search_plan")),
+                "context_history_evidence": model_data(state.get("context_history_evidence")),
+                "continuity_selection": model_data(state.get("continuity_selection")),
+                "salvaged": False,
+            },
+        })
+    return events
 from .generation_state import GenerationEvent, GenerationState
 
 
@@ -128,6 +160,48 @@ def _compile_rephrase_graph(*, canon_validation_is_enabled: bool):
     _add_canon_validation_tail(
         graph,
         source_nodes=("rephrase_narrative",),
+        enabled=canon_validation_is_enabled,
+        compose_routing=True,
+    )
+    return graph.compile()
+
+
+def build_reroll_graph(*, canon_validation_is_enabled: bool):
+    dependencies = (
+        resolve_rolls_node,
+        resolve_turn_node,
+        director_agent_stage_node,
+        compose_narrative_node,
+        generate_canon_queries_node,
+        retrieve_canon_evidence_node,
+        check_narrative_consistency_node,
+        revise_narrative_node,
+        _route_after_consistency_check,
+    )
+    return get_cached_graph(
+        f"generation_reroll:canon={int(canon_validation_is_enabled)}",
+        dependencies,
+        lambda: _compile_reroll_graph(
+            canon_validation_is_enabled=canon_validation_is_enabled,
+        ),
+    )
+
+
+def _compile_reroll_graph(*, canon_validation_is_enabled: bool):
+    graph = StateGraph(GenerationState)
+    graph.add_node("resolve_rolls", resolve_rolls_node)
+    graph.add_node("resolve_turn", resolve_turn_node)
+    graph.add_node("director_agent_stage", director_agent_stage_node)
+    graph.add_node("compose_narrative", compose_narrative_node)
+
+    graph.add_edge(START, "resolve_rolls")
+    graph.add_edge("resolve_rolls", "resolve_turn")
+    graph.add_edge("resolve_turn", "director_agent_stage")
+    graph.add_edge("director_agent_stage", "compose_narrative")
+
+    _add_canon_validation_tail(
+        graph,
+        source_nodes=("compose_narrative",),
         enabled=canon_validation_is_enabled,
         compose_routing=True,
     )
@@ -243,21 +317,44 @@ def reroll_turn_stream(turn_id: str):
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
         pending, version_index = _retry_source(runtime, turn_id)
+        trace_id = str(uuid.uuid4())
         yield {
             "step": "reroll_started",
             "data": {
                 "turn_id": turn_id,
                 "group_id": pending.group_id,
                 "version_index": version_index,
+                "trace_id": trace_id,
             },
         }
-        yield from _generate_turn_stream(
-            pending.user_input,
-            pending.difficulty,
-            pending.max_chars,
-            group_id=pending.group_id,
-            version_index=version_index,
-        )
+        prefix_snapshot = pending.prefix_snapshot
+        if prefix_snapshot is not None and not prefix_snapshot.has_fallback:
+            state = prepare_generation_state(
+                pending.user_input,
+                pending.difficulty,
+                pending.max_chars,
+            )
+            state["trace_id"] = trace_id
+            state["experience_mode"] = experience_mode()
+            hydrate_generation_prefix(state, prefix_snapshot)
+            reset_generation_suffix(state)
+            state.setdefault("events", []).extend(_prefix_replay_events(state))
+            yield from _stream_generation_graph(
+                state,
+                build_reroll_graph(
+                    canon_validation_is_enabled=canon_validation_enabled(),
+                ),
+                group_id=pending.group_id,
+                version_index=version_index,
+            )
+        else:
+            yield from _generate_turn_stream(
+                pending.user_input,
+                pending.difficulty,
+                pending.max_chars,
+                group_id=pending.group_id,
+                version_index=version_index,
+            )
 
 
 def rephrase_turn_stream(turn_id: str):
@@ -453,17 +550,45 @@ def _generate_turn_stream(
     group_id: str | None = None,
     version_index: int = 1,
 ):
+    runtime = get_campaign_runtime()
     mode = experience_mode()
-    state: dict[str, Any] = prepare_generation_state(user_input, difficulty, max_chars)
-    state["experience_mode"] = mode
-    yield from _stream_generation_graph(
-        state,
-        build_generation_graph(
-            canon_validation_is_enabled=canon_validation_enabled(),
-        ),
-        group_id=group_id,
-        version_index=version_index,
+    cached_snapshot = runtime.generation_prefix_cache.get(
+        runtime.generation_cache_epoch,
+        user_input,
     )
+    if cached_snapshot is not None and not cached_snapshot.has_fallback:
+        state: dict[str, Any] = prepare_generation_state(
+            user_input,
+            difficulty,
+            max_chars,
+        )
+        state["experience_mode"] = mode
+        hydrate_generation_prefix(state, cached_snapshot)
+        reset_generation_suffix(state)
+        state.setdefault("events", []).extend(_prefix_replay_events(state))
+        yield from _stream_generation_graph(
+            state,
+            build_reroll_graph(
+                canon_validation_is_enabled=canon_validation_enabled(),
+            ),
+            group_id=group_id,
+            version_index=version_index,
+        )
+    else:
+        state: dict[str, Any] = prepare_generation_state(
+            user_input,
+            difficulty,
+            max_chars,
+        )
+        state["experience_mode"] = mode
+        yield from _stream_generation_graph(
+            state,
+            build_generation_graph(
+                canon_validation_is_enabled=canon_validation_enabled(),
+            ),
+            group_id=group_id,
+            version_index=version_index,
+        )
 
 
 def _stream_generation_graph(

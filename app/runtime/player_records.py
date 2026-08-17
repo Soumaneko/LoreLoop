@@ -291,10 +291,13 @@ def update_player_record(
         raise ValueError("payload must be an object")
     with runtime.confirmation_lock:
         if kind == "continuity":
-            return _update_continuity(runtime, record_id, payload)
-        if kind == "npc":
-            return _update_npc_profile(runtime, record_id, payload, view=view)
-        return _update_world_setting(runtime, record_id, payload, view=view)
+            result = _update_continuity(runtime, record_id, payload)
+        elif kind == "npc":
+            result = _update_npc_profile(runtime, record_id, payload, view=view)
+        else:
+            result = _update_world_setting(runtime, record_id, payload, view=view)
+        runtime.invalidate_generation_cache()
+        return result
 
 
 def _latest_confirmed_turn(runtime: CampaignRuntime) -> int:

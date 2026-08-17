@@ -97,6 +97,7 @@ def save_settings(settings: dict[str, Any]) -> None:
     with runtime.operation_submission():
         with _SETTINGS_LOCK:
             _write_settings(settings)
+            runtime.invalidate_generation_cache()
 
 
 def _update_settings(updates: dict[str, Any]) -> dict[str, Any]:
@@ -109,6 +110,7 @@ def _update_settings(updates: dict[str, Any]) -> dict[str, Any]:
             settings = load_settings()
             settings.update(updates)
             _write_settings(settings)
+            runtime.invalidate_generation_cache()
             return settings
 
     with runtime.operation_submission():

@@ -250,14 +250,15 @@ class ConfirmationCache:
     # -- recovery validity -------------------------------------------------
 
     def begin(self, scene_text: str) -> None:
-        """Invalidate the cache when the confirmed scene text changed.
-
-        A different fingerprint means the pending variant (or a rephrase/edit)
-        produced a different scene, so prior results and completion guards no
-        longer apply.
-        """
+        """Invalidate result and marker slots when scene text changed, retaining preload."""
         if self._data.get(_KEY_SLOT) != scene_text:
+            retained_preload = {
+                slot: self._data[slot]
+                for slot in _SLOT_CATEGORIES["preload"]
+                if slot in self._data
+            }
             self._data.clear()
+            self._data.update(retained_preload)
             self._data[_KEY_SLOT] = scene_text
 
     # -- completion guards -------------------------------------------------

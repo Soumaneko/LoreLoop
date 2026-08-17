@@ -203,6 +203,7 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
         "context_history_evidence": result.history_evidence,
         "continuity_selection": result.continuity,
         "context_extract_error": extract_error,
+        "context_extract_failed": extract_error is not None,
         "context_fact_npc_profiles": context_fact_npc_profiles,
         "events": [{
             "step": step,
@@ -245,11 +246,16 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         state["current_state"],
     )
 
+    has_action_fallback = any(
+        getattr(w, "code", None) == "action_extract_fallback"
+        for w in parser.last_warnings
+    )
     return {
         "action_extraction_result": action_result,
         "raw_action_parse_result": raw_action_parse_result,
         "action_self_check_result": self_check.last_result,
         "action_parse_result": action_parse_result,
+        "action_extract_fallback": has_action_fallback,
         "touched_event_candidates": list(action_parse_result.touched_event_ids),
         "events": [
             {
@@ -307,6 +313,68 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
             task="roll_modifier",
             turn_index=state.get("next_turn_index") or state.get("turn_index"),
         )
+    roll_results = roll_resolver.resolve(
+        state["action_parse_result"],
+        modifier_batch=modifier_batch,
+        roll_actions=roll_actions,
+    )
+    has_modifier_fallback = any(
+        getattr(w, "code", None) == "roll_modifier_fallback"
+        for w in modifier_evaluator.last_warnings
+    )
+    return {
+        "roll_config": roll_config,
+        "roll_actions": roll_actions,
+        "modifier_batch": modifier_batch,
+        "roll_results": roll_results,
+        "roll_modifier_fallback": has_modifier_fallback,
+        "events": [
+            {
+                "step": "modifiers_done",
+                "data": {
+                    "roll_actions": model_data(roll_actions),
+                    "modifiers": model_data(modifier_batch),
+                },
+            },
+            {
+                "step": "rolls_done",
+                "data": {
+                    "roll_results": model_data(roll_results),
+                },
+            },
+        ],
+    }
+
+
+def resolve_rolls_node(state: GenerationState) -> GenerationState:
+    roll_config = RollConfig(seed=None, difficulty=state.get("difficulty", "困难"))
+    roll_resolver = RollResolver(roll_config)
+    roll_actions = roll_resolver.select_roll_actions(state["action_parse_result"])
+    if not roll_actions:
+        modifier_batch = state.get("modifier_batch") or RollModifierBatch()
+        roll_results = roll_resolver.resolve(
+            state["action_parse_result"],
+            modifier_batch=modifier_batch,
+            roll_actions=[],
+        )
+        return {
+            "roll_config": roll_config,
+            "roll_actions": [],
+            "modifier_batch": modifier_batch,
+            "roll_results": roll_results,
+            "events": [{
+                "step": "rolls_skipped",
+                "data": {
+                    "reason": "No actions require a roll.",
+                    "roll_results": model_data(roll_results),
+                },
+            }],
+        }
+
+    modifier_batch = state.get("modifier_batch")
+    if modifier_batch is None:
+        return evaluate_roll_modifiers_node(state)
+
     roll_results = roll_resolver.resolve(
         state["action_parse_result"],
         modifier_batch=modifier_batch,

@@ -1,15 +1,26 @@
-import threading
+from collections import OrderedDict
 from contextlib import contextmanager
+import copy
 from dataclasses import dataclass, field
+import threading
 from typing import Any, Callable, Generic, Protocol, TypeVar
 
+from app.domain.action.schemas import ActionParseResult, Anchor
+from app.domain.context_facts.schemas import (
+    ContextFactSet,
+    ContextHistoryEvidenceSet,
+    ContextSearchPlan,
+)
+from app.domain.continuity.schemas import ContinuitySelection
+from app.domain.npc_profile.schemas import NPCProfile, NPCProfileDirectorView
 from app.domain.core_memory import InitConfig
 from app.domain.current_state import CurrentState
-from app.domain.roll.schemas import Difficulty
+from app.domain.director.schemas import DirectorStageResult
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.plot_outline.schemas import PlotOutlineResult
+from app.domain.roll.schemas import Difficulty
+from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.scene_writer.schemas import SceneWriterResult
-from app.domain.director.schemas import DirectorStageResult
 from app.domain.short_term_memory import ShortTermMemory
 from app.domain.turn_resolution.schemas import PlayerTurnResolution
 from app.runtime.paths import (
@@ -26,6 +37,55 @@ from app.core.diagnostics import NullDiagnosticLogger
 from app.runtime.serialization import model_data
 from app.runtime.turn_history import CampaignHistory
 from app.runtime.director_mutation import recover_pending_director_mutation
+
+
+@dataclass
+class GenerationPrefixSnapshot:
+    action_parse_result: Any
+    raw_action_parse_result: Any
+    action_self_check_result: Any
+    context_facts: Any
+    context_search_plan: Any
+    context_history_evidence: Any
+    continuity_selection: Any
+    context_fact_npc_profiles: list
+    matched_anchors: list
+    action_npc_profiles: list
+    action_npc_director_views: list
+    touched_event_candidates: list
+    modifier_batch: Any | None = None
+    has_fallback: bool = False
+
+
+class GenerationPrefixCache:
+    def __init__(self, max_size: int = 16) -> None:
+        self._max_size = max_size
+        self._cache: OrderedDict[tuple[int, str], GenerationPrefixSnapshot] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, epoch: int, user_input: str) -> GenerationPrefixSnapshot | None:
+        with self._lock:
+            key = (epoch, user_input)
+            if key not in self._cache:
+                return None
+            snapshot = self._cache.pop(key)
+            self._cache[key] = snapshot
+            return copy.deepcopy(snapshot)
+
+    def set(self, epoch: int, user_input: str, snapshot: GenerationPrefixSnapshot) -> None:
+        if snapshot.has_fallback:
+            return
+        with self._lock:
+            key = (epoch, user_input)
+            if key in self._cache:
+                self._cache.pop(key)
+            elif len(self._cache) >= self._max_size:
+                self._cache.popitem(last=False)
+            self._cache[key] = copy.deepcopy(snapshot)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
 
 
 @dataclass
@@ -51,6 +111,7 @@ class PendingTurn:
     original_scene_text: str | None = None
     token_usage: dict[str, Any] | None = None
     director_log_entry: dict[str, Any] | None = None
+    prefix_snapshot: GenerationPrefixSnapshot | None = None
 
 
 @dataclass
@@ -206,6 +267,8 @@ class CampaignRuntime:
             max_workers=max_workers,
             operation_manager=self.operations,
         )
+        self.generation_cache_epoch: int = 0
+        self.generation_prefix_cache = GenerationPrefixCache(max_size=16)
         self._rebuild_runtime_services()
         self._confirmation_lock = threading.RLock()
         self._lifecycle_lock = threading.RLock()
@@ -223,6 +286,12 @@ class CampaignRuntime:
     def confirmation_lock(self) -> threading.RLock:
         """Serialize commits inside this campaign while allowing other runtimes."""
         return self._confirmation_lock
+
+    def invalidate_generation_cache(self) -> None:
+        """Advance epoch and clear runtime-level generation prefix cache on canonical mutations."""
+        with self._lifecycle_lock:
+            self.generation_cache_epoch += 1
+            self.generation_prefix_cache.clear()
 
     def has_pending_content(self) -> bool:
         return bool(len(self.pending_turns) or len(self.pending_openings))
@@ -396,6 +465,11 @@ class CampaignRuntime:
             "original_scene_text": pending.original_scene_text,
             "token_usage": pending.token_usage,
             "director_log_entry": pending.director_log_entry,
+            "prefix_snapshot": (
+                model_data(pending.prefix_snapshot)
+                if pending.prefix_snapshot is not None
+                else None
+            ),
             # Futures and locks in the in-process cache are deliberately not
             # durable. Confirmation will rebuild these values after restart.
             "confirmation_cache": {},
@@ -511,6 +585,72 @@ class CampaignRuntime:
                     original_scene_text=data["original_scene_text"],
                     token_usage=data.get("token_usage"),
                     director_log_entry=data.get("director_log_entry"),
+                    prefix_snapshot=(
+                        GenerationPrefixSnapshot(
+                            action_parse_result=ActionParseResult.model_validate(
+                                data["prefix_snapshot"]["action_parse_result"]
+                            ),
+                            raw_action_parse_result=(
+                                ActionParseResult.model_validate(
+                                    data["prefix_snapshot"]["raw_action_parse_result"]
+                                )
+                                if data["prefix_snapshot"].get("raw_action_parse_result")
+                                else None
+                            ),
+                            action_self_check_result=data["prefix_snapshot"].get("action_self_check_result"),
+                            context_facts=ContextFactSet.model_validate(
+                                data["prefix_snapshot"]["context_facts"]
+                            ),
+                            context_search_plan=(
+                                ContextSearchPlan.model_validate(
+                                    data["prefix_snapshot"]["context_search_plan"]
+                                )
+                                if data["prefix_snapshot"].get("context_search_plan")
+                                else None
+                            ),
+                            context_history_evidence=(
+                                ContextHistoryEvidenceSet.model_validate(
+                                    data["prefix_snapshot"]["context_history_evidence"]
+                                )
+                                if data["prefix_snapshot"].get("context_history_evidence")
+                                else None
+                            ),
+                            continuity_selection=(
+                                ContinuitySelection.model_validate(
+                                    data["prefix_snapshot"]["continuity_selection"]
+                                )
+                                if data["prefix_snapshot"].get("continuity_selection")
+                                else None
+                            ),
+                            context_fact_npc_profiles=[
+                                NPCProfile.model_validate(item)
+                                for item in data["prefix_snapshot"].get("context_fact_npc_profiles", [])
+                            ],
+                            matched_anchors=[
+                                Anchor.model_validate(item)
+                                for item in data["prefix_snapshot"].get("matched_anchors", [])
+                            ],
+                            action_npc_profiles=[
+                                NPCProfile.model_validate(item)
+                                for item in data["prefix_snapshot"].get("action_npc_profiles", [])
+                            ],
+                            action_npc_director_views=[
+                                NPCProfileDirectorView.model_validate(item)
+                                for item in data["prefix_snapshot"].get("action_npc_director_views", [])
+                            ],
+                            touched_event_candidates=data["prefix_snapshot"].get("touched_event_candidates", []),
+                            modifier_batch=(
+                                RollModifierBatch.model_validate(
+                                    data["prefix_snapshot"]["modifier_batch"]
+                                )
+                                if data["prefix_snapshot"].get("modifier_batch")
+                                else None
+                            ),
+                            has_fallback=bool(data["prefix_snapshot"].get("has_fallback", False)),
+                        )
+                        if data.get("prefix_snapshot") and data["prefix_snapshot"].get("action_parse_result") and data["prefix_snapshot"].get("context_facts")
+                        else None
+                    ),
                 ))
             else:
                 self.pending_openings.restore(PendingOpening(
@@ -551,6 +691,7 @@ class CampaignRuntime:
 
     def complete_confirmation(self, pending: PendingTurn | PendingOpening) -> None:
         self.history.complete_confirmation(pending.turn_id, pending.group_id)
+        self.invalidate_generation_cache()
         self._touch_save_played()
 
     def undo(self) -> dict[str, Any]:
@@ -561,6 +702,7 @@ class CampaignRuntime:
             result = self.history.undo()
             self._restore_pending_transactions()
             self._restart_jobs()
+            self.invalidate_generation_cache()
             self._touch_save_played()
             return result
 
@@ -578,6 +720,7 @@ class CampaignRuntime:
             self.pending_turns.clear(discard=False)
             self.pending_openings.clear(discard=False)
             self._restart_jobs()
+            self.invalidate_generation_cache()
             self._touch_save_played()
             return result
 
@@ -623,6 +766,7 @@ class CampaignRuntime:
             self.campaign_id = campaign_id
             self.paths = paths
             self.stores = StoreBundle(paths)
+            self.invalidate_generation_cache()
             recover_pending_director_mutation(self.stores)
             from app.runtime.initialization import InitializationStore
 
