@@ -257,3 +257,44 @@ def test_player_ack_removes_completed_operation_from_recovery():
         operation.operation_id
         for operation in runtime.operations.list(recoverable_only=True)
     }
+
+
+def test_feedback_rewrite_rejects_non_string_payload_fields(monkeypatch):
+    handler = object.__new__(player_server.PlayerHandler)
+    monkeypatch.setattr(
+        player_server,
+        "_read_json",
+        lambda _self: {
+            "turn_id": "turn_1",
+            "source_scene_text": None,
+            "user_feedback": "改一下",
+        },
+    )
+    monkeypatch.setattr(
+        player_server,
+        "start_feedback_rewrite_operation",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not start with non-string source_scene_text")
+        ),
+    )
+
+    with pytest.raises(
+        player_server.ClientValidationError,
+        match="source_scene_text must be a string",
+    ):
+        handler._start_feedback_rewrite_operation()
+
+    monkeypatch.setattr(
+        player_server,
+        "_read_json",
+        lambda _self: {
+            "turn_id": "turn_1",
+            "source_scene_text": "正文",
+            "user_feedback": [],
+        },
+    )
+    with pytest.raises(
+        player_server.ClientValidationError,
+        match="user_feedback must be a string",
+    ):
+        handler._start_feedback_rewrite_operation()

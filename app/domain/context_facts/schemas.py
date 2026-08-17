@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -97,6 +97,20 @@ class ContextFactDraftSet(BaseModel):
 
     turn_focus: str = Field(min_length=1)
     facts: list[ContextFactDraft] = Field(default_factory=list, max_length=12)
+
+
+class ContextFactDraftSetLoose(BaseModel):
+    """Gateway-only loose container so per-fact salvage can keep valid facts.
+
+    The prompt still displays :class:`ContextFactDraftSet`; detailed per-fact
+    validation (blank fields, evidence IDs, count) runs in
+    ``ContextExtractor.output_validator``.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    turn_focus: str | None = None
+    facts: list[Any] = Field(default_factory=list)
 
 
 class ContextSearchEntity(BaseModel):

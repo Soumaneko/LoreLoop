@@ -5,6 +5,11 @@ from concurrent.futures import CancelledError
 from langgraph.config import get_stream_writer
 
 from app.core.diagnostics import NullDiagnosticLogger
+from app.core.llm.errors import (
+    LLMOutputParseError,
+    LLMOutputValidationError,
+    LLMProviderError,
+)
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
 from app.domain.action.self_check import ActionSelfCheck
@@ -29,6 +34,7 @@ from app.domain.narrative_consistency import (
     NarrativeConsistencyAgent,
     render_revision_instruction,
 )
+from app.domain.narrative_consistency.schemas import NarrativeConsistencyReview
 from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
@@ -95,109 +101,112 @@ def _composition_output_state(
 
 
 def extract_context_facts_node(state: GenerationState) -> GenerationState:
-    action_parse_result = state.get("action_parse_result")
-    try:
-        with (
-            _store_factory(state, "confirmed_history")() as history_store,
-            _store_factory(state, "continuity")() as continuity_store,
-            _store_factory(state, "world_setting")() as setting_store,
-            _store_factory(state, "npc_profile")() as npc_profile_store,
-        ):
-            result = ContextFactsService(
-                gateway_for(state),
-                history_store,
-                continuity_store,
-                setting_store,
-                npc_profile_store,
-            ).build(
-                ContextFactsInput(
-                    user_input=state["user_input"],
-                    core_memory=state["core_memory"],
-                    current_state=state["current_state"],
-                    scene_summaries=state["scene_summaries"],
-                    matched_anchors=state.get("matched_anchors", []),
-                    retrieval_topics=(
-                        action_parse_result.retrieval_topics
-                        if action_parse_result is not None
-                        else []
-                    ),
-                    npc_profiles=[
-                        profile.disclosure_view()
-                        for profile in state.get("action_npc_profiles", [])
-                    ],
-                    current_turn_index=state["next_turn_index"],
-                ),
-                trace_id=state["trace_id"],
-            )
-    except CancelledError:
-        raise
-    except Exception as exc:
-        error = str(exc)
-        _diagnostics(state).warning(
-            source="context_extractor",
-            code="context_extract_failed",
-            message=error,
-            trace_id=state["trace_id"],
-            task="context_extract",
-            turn_index=state.get("next_turn_index") or state.get("turn_index"),
-        )
+    user_input = state.get("user_input") or ""
+    if not user_input.strip():
         return {
             "context_facts": ContextFactSet(
-                turn_focus="上下文事实提取失败",
+                turn_focus="无玩家输入",
                 facts=[],
             ),
             "context_search_plan": None,
             "context_history_evidence": None,
             "continuity_selection": None,
-            "context_extract_error": error,
+            "context_extract_error": None,
             "context_fact_npc_profiles": [],
             "events": [{
-                "step": "context_extract_failed",
+                "step": "context_facts_skipped",
                 "data": {
-                    "error": error,
+                    "reason": "No user input.",
                     "trace_id": state["trace_id"],
                 },
             }],
         }
-    try:
-        with _store_factory(state, "npc_profile")() as npc_store:
-            context_fact_npc_profiles = select_profiles_by_context_facts(
-                context_facts=result.context_facts,
-                npc_store=npc_store,
-            )
-    except Exception as exc:
-        _diagnostics(state).warning(
-            source="context_extractor",
-            code="context_fact_npc_selection_failed",
-            message=str(exc),
-            trace_id=state["trace_id"],
-            task="npc_selection",
-            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+
+    action_parse_result = state.get("action_parse_result")
+    with (
+        _store_factory(state, "confirmed_history")() as history_store,
+        _store_factory(state, "continuity")() as continuity_store,
+        _store_factory(state, "world_setting")() as setting_store,
+        _store_factory(state, "npc_profile")() as npc_profile_store,
+    ):
+        service = ContextFactsService(
+            gateway_for(state),
+            history_store,
+            continuity_store,
+            setting_store,
+            npc_profile_store,
         )
-        context_fact_npc_profiles = []
+        result = service.build(
+            ContextFactsInput(
+                user_input=state["user_input"],
+                core_memory=state["core_memory"],
+                current_state=state["current_state"],
+                scene_summaries=state["scene_summaries"],
+                matched_anchors=state.get("matched_anchors", []),
+                retrieval_topics=(
+                    action_parse_result.retrieval_topics
+                    if action_parse_result is not None
+                    else []
+                ),
+                npc_profiles=[
+                    profile.disclosure_view()
+                    for profile in state.get("action_npc_profiles", [])
+                ],
+                current_turn_index=state["next_turn_index"],
+            ),
+            trace_id=state["trace_id"],
+        )
+
+    extractor = getattr(service, "extractor", None)
+    extract_error = None
+    extract_salvaged = False
+    if extractor is not None:
+        for warning in getattr(extractor, "last_warnings", []):
+            _diagnostics(state).warning(
+                source="context_extractor",
+                code=warning.code,
+                message=warning.message,
+                trace_id=state["trace_id"],
+                task="context_extract",
+                turn_index=state.get("next_turn_index") or state.get("turn_index"),
+            )
+        extract_error = getattr(extractor, "last_error", None)
+        extract_salvaged = bool(getattr(extractor, "last_salvaged", False))
+
+    with _store_factory(state, "npc_profile")() as npc_store:
+        context_fact_npc_profiles = select_profiles_by_context_facts(
+            context_facts=result.context_facts,
+            npc_store=npc_store,
+        )
+
+    step = "context_extract_failed" if extract_error is not None else "context_facts_done"
+    event_data = {
+        "context_facts": model_data(result.context_facts),
+        "context_search_plan": model_data(result.search_plan),
+        "context_history_evidence": model_data(
+            result.history_evidence
+        ),
+        "continuity_selection": model_data(
+            result.continuity
+        ),
+        "world_settings": [
+            match.model_dump(mode="json")
+            for match in result.settings.settings
+        ],
+        "salvaged": extract_salvaged,
+    }
+    if extract_error is not None:
+        event_data["error"] = extract_error
     return {
         "context_facts": result.context_facts,
         "context_search_plan": result.search_plan,
         "context_history_evidence": result.history_evidence,
         "continuity_selection": result.continuity,
-        "context_extract_error": None,
+        "context_extract_error": extract_error,
         "context_fact_npc_profiles": context_fact_npc_profiles,
         "events": [{
-            "step": "context_facts_done",
-            "data": {
-                "context_facts": model_data(result.context_facts),
-                "context_search_plan": model_data(result.search_plan),
-                "context_history_evidence": model_data(
-                    result.history_evidence
-                ),
-                "continuity_selection": model_data(
-                    result.continuity
-                ),
-                "world_settings": [
-                    match.model_dump(mode="json")
-                    for match in result.settings.settings
-                ],
-            },
+            "step": step,
+            "data": event_data,
         }],
     }
 
@@ -213,6 +222,15 @@ def parse_action_node(state: GenerationState) -> GenerationState:
         events=hidden_events,
         trace_id=state["trace_id"],
     )
+    for warning in parser.last_warnings:
+        _diagnostics(state).warning(
+            source="action_parser",
+            code=warning.code,
+            message=warning.message,
+            trace_id=state["trace_id"],
+            task="action_extract",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+        )
     raw_action_parse_result = ActionParseResult(
         analysis=action_result.analysis,
         atomic_actions=action_result.atomic_actions,
@@ -272,13 +290,23 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
             }],
         }
 
-    modifier_batch = RollModifierEvaluator(gateway_for(state)).evaluate(
+    modifier_evaluator = RollModifierEvaluator(gateway_for(state))
+    modifier_batch = modifier_evaluator.evaluate(
         parse_result=state["action_parse_result"],
         current_state=state["current_state"],
         core_memory=state["core_memory"],
         roll_actions=roll_actions,
         trace_id=state["trace_id"],
     )
+    for warning in modifier_evaluator.last_warnings:
+        _diagnostics(state).warning(
+            source="roll_modifier",
+            code=warning.code,
+            message=warning.message,
+            trace_id=state["trace_id"],
+            task="roll_modifier",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+        )
     roll_results = roll_resolver.resolve(
         state["action_parse_result"],
         modifier_batch=modifier_batch,
@@ -321,7 +349,8 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
             }],
         }
 
-    turn_resolution = TurnResolutionAgent(gateway_for(state)).resolve(
+    resolution_agent = TurnResolutionAgent(gateway_for(state))
+    turn_resolution = resolution_agent.resolve(
         user_input=state["user_input"],
         current_state=state["current_state"],
         action_parse_result=state["action_parse_result"],
@@ -334,6 +363,15 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
         ],
         trace_id=state["trace_id"],
     )
+    for warning in getattr(resolution_agent, "last_warnings", []):
+        _diagnostics(state).warning(
+            source="turn_resolution",
+            code=warning.code,
+            message=warning.message,
+            trace_id=state["trace_id"],
+            task="turn_resolution",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+        )
     return {
         "turn_resolution": turn_resolution,
         "events": [{
@@ -421,26 +459,57 @@ def _compose_with_context(
     next_turn_index = state.get("next_turn_index") or (
         recent_scene.turn_index + 1 if recent_scene else 1
     )
-    composition = NarrativeComposerAgent(gateway_for(state)).compose(
-        context,
-        recent_scene=recent_scene,
-        turn_index=next_turn_index,
-        trace_id=state["trace_id"],
-        on_stream_start=lambda attempt: stream_writer({
-            "step": "scene_stream_started",
-            "data": {"attempt": attempt, "trace_id": state["trace_id"]},
-        }),
-        on_scene_text_delta=lambda delta: stream_writer({
-            "step": "scene_text_delta",
-            "data": {"delta": delta, "trace_id": state["trace_id"]},
-        }),
-    )
+    composition = None
+    try:
+        composition = NarrativeComposerAgent(gateway_for(state)).compose(
+            context,
+            recent_scene=recent_scene,
+            turn_index=next_turn_index,
+            trace_id=state["trace_id"],
+            on_stream_start=lambda attempt: stream_writer({
+                "step": "scene_stream_started",
+                "data": {"attempt": attempt, "trace_id": state["trace_id"]},
+            }),
+            on_scene_text_delta=lambda delta: stream_writer({
+                "step": "scene_text_delta",
+                "data": {"delta": delta, "trace_id": state["trace_id"]},
+            }),
+        )
+    except (
+        LLMOutputParseError,
+        LLMOutputValidationError,
+        LLMProviderError,
+    ) as exc:
+        composition = _empty_composition(context)
+        _diagnostics(state).warning(
+            source="composer",
+            code="composer_fallback",
+            message=f"Composer failed; using empty fallback: {exc}",
+            trace_id=state["trace_id"],
+            task="narrative_compose",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+        )
+
+    if composition is not None and not composition.scene_text.strip():
+        if composition.scene_reasoning and composition.scene_reasoning != "正文生成失败":
+            composition = _empty_composition(context)
+            _diagnostics(state).warning(
+                source="composer",
+                code="composer_empty",
+                message="Composer produced empty scene_text",
+                trace_id=state["trace_id"],
+                task="narrative_compose",
+                turn_index=state.get("next_turn_index") or state.get("turn_index"),
+            )
+
     output_state = _composition_output_state(state, composition)
+    composer_empty = not composition.scene_text.strip()
     return {
         "context": context,
         **output_state,
         "recent_scene": recent_scene,
         "next_turn_index": next_turn_index,
+        "composer_empty": composer_empty,
         "events": [
             {
                 "step": context_event,
@@ -455,6 +524,23 @@ def _compose_with_context(
             },
         ],
     }
+
+
+def _empty_composition(context) -> "NarrativeComposerResult":
+    from app.domain.narrative_composer.schemas import NarrativeComposerResult
+    from app.domain.plot_outline.schemas import PlotOutlineResult
+    return NarrativeComposerResult(
+        planning_reasoning="正文生成失败",
+        must_establish_facts=[],
+        must_not_establish_facts=[],
+        information_boundaries=[],
+        scene_stopping_point="等待重新措辞",
+        planned_events=[],
+        scene_reasoning="正文生成失败",
+        scene_text="",
+        closing_prompt="。",
+        next_action_directions=[],
+    )
 
 
 def compose_narrative_node(state: GenerationState) -> GenerationState:
@@ -570,12 +656,22 @@ def generate_canon_queries_node(state: GenerationState) -> GenerationState:
             player_name=state["current_state"].player.name,
             npc_profiles=npc_profiles,
         )
-    query_set = NarrativeCanonQueryAgent(gateway_for(state)).generate(
+    query_agent = NarrativeCanonQueryAgent(gateway_for(state))
+    query_set = query_agent.generate(
         scene_text=state["narrative_composition"].scene_text,
         player_name=state["current_state"].player.name,
         npc_profiles=npc_profiles,
         trace_id=state["trace_id"],
     )
+    for warning in getattr(query_agent, "last_warnings", []):
+        _diagnostics(state).warning(
+            source="narrative_canon_query",
+            code=warning.code,
+            message=warning.message,
+            trace_id=state["trace_id"],
+            task="narrative_canon_query",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+        )
     return {
         "canon_entity_catalog": entity_catalog,
         "canon_query_set": query_set,
@@ -622,29 +718,53 @@ def retrieve_canon_evidence_node(state: GenerationState) -> GenerationState:
 def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
     composition = state["narrative_composition"]
     agent = NarrativeConsistencyAgent(gateway_for(state))
-    review = agent.check(
-        user_input=state["user_input"],
-        current_state=state["current_state"],
-        turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
-        composition=composition,
-        canon_query_set=state.get("canon_query_set"),
-        canon_evidence_set=state.get("canon_evidence_set"),
-        trace_id=state["trace_id"],
-    )
-    warnings = list(agent.last_warnings)
-    for warning in warnings:
-        warning_data = model_data(warning)
+    validation_skipped = False
+    try:
+        review = agent.check(
+            user_input=state["user_input"],
+            current_state=state["current_state"],
+            turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
+            composition=composition,
+            canon_query_set=state.get("canon_query_set"),
+            canon_evidence_set=state.get("canon_evidence_set"),
+            trace_id=state["trace_id"],
+        )
+        warnings = list(agent.last_warnings)
+        for warning in warnings:
+            warning_data = model_data(warning)
+            _diagnostics(state).warning(
+                source="narrative_consistency",
+                code=warning.code,
+                message=(
+                    "Ignored a canon contradiction assertion without a valid "
+                    "finding/evidence chain"
+                ),
+                trace_id=state["trace_id"],
+                task="narrative_consistency_check",
+                turn_index=state.get("next_turn_index") or state.get("turn_index"),
+                details=warning_data,
+            )
+    except (
+        LLMOutputParseError,
+        LLMOutputValidationError,
+        LLMProviderError,
+    ) as exc:
+        validation_skipped = True
+        warnings = []
+        review = NarrativeConsistencyReview(
+            decision="pass",
+            audit_summary="一致性检查失败，跳过",
+            canon_findings=[],
+            assertions=[],
+        )
         _diagnostics(state).warning(
             source="narrative_consistency",
-            code=warning.code,
-            message=(
-                "Ignored a canon contradiction assertion without a valid "
-                "finding/evidence chain"
-            ),
+            code="narrative_consistency_fallback",
+            message=f"Narrative consistency check failed; skipped: {exc}",
             trace_id=state["trace_id"],
             task="narrative_consistency_check",
             turn_index=state.get("next_turn_index") or state.get("turn_index"),
-            details=warning_data,
+            details={"validation_skipped": True},
         )
     return {
         "narrative_consistency_review": review,
@@ -656,6 +776,7 @@ def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
                 "narrative_consistency_review": model_data(review),
                 "warnings": model_data(warnings),
                 "revision_required": review.decision == "revise",
+                "validation_skipped": validation_skipped,
             },
         }],
     }
@@ -664,14 +785,43 @@ def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
 def revise_narrative_node(state: GenerationState) -> GenerationState:
     review = state["narrative_consistency_review"]
     instruction = render_revision_instruction(review)
-    composition = _run_source_rewrite(
-        state,
-        SourceRewriteRequest(
-            source_scene_text=state["narrative_composition"].scene_text,
-            requirements=[instruction],
-        ),
-        event_kind="consistency",
-    )
+    try:
+        composition = _run_source_rewrite(
+            state,
+            SourceRewriteRequest(
+                source_scene_text=state["narrative_composition"].scene_text,
+                requirements=[instruction],
+            ),
+            event_kind="consistency",
+        )
+    except (
+        LLMOutputParseError,
+        LLMOutputValidationError,
+        LLMProviderError,
+    ) as exc:
+        _diagnostics(state).warning(
+            source="narrative_consistency",
+            code="narrative_revision_fallback",
+            message=(
+                "Narrative revision failed; original composition is preserved: "
+                f"{exc}"
+            ),
+            trace_id=state["trace_id"],
+            task="narrative_revision",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+            details={"revision_instruction": instruction},
+        )
+        return {
+            "narrative_revision_instruction": instruction,
+            "events": [{
+                "step": "narrative_revision_failed",
+                "data": {
+                    "trace_id": state["trace_id"],
+                    "error": str(exc),
+                    "revision_instruction": instruction,
+                },
+            }],
+        }
     output_state = _composition_output_state(state, composition)
     return {
         **output_state,

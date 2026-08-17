@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -71,6 +71,22 @@ class ActionExtractionResult(BaseModel):
         max_length=8,
     )
     atomic_actions: list[AtomicAction] = Field(default_factory=list)
+    touched_event_ids: list[str] = Field(default_factory=list)
+
+
+class ActionExtractionResultLoose(BaseModel):
+    """Gateway-only loose container for per-action/per-topic salvage.
+
+    The prompt still displays :class:`ActionExtractionResult`; detailed
+    validation and filtering happen in ``ActionParser.output_validator``.
+    ``touched_event_ids`` stays narrow: it is filtered, not salvaged item by item.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    analysis: str | None = None
+    retrieval_topics: list[Any] = Field(default_factory=list)
+    atomic_actions: list[Any] = Field(default_factory=list)
     touched_event_ids: list[str] = Field(default_factory=list)
 
 

@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 ModifierSource = Literal["situational", "attribute"]
@@ -39,3 +39,11 @@ class LLMRollModifier(BaseModel):
 
 class LLMRollModifierBatch(BaseModel):
     modifiers: list[LLMRollModifier] = Field(default_factory=list)
+
+
+class LLMRollModifierBatchLoose(BaseModel):
+    """Gateway-only loose container for per-modifier salvage."""
+
+    model_config = ConfigDict(extra="allow")
+
+    modifiers: list[Any] = Field(default_factory=list)

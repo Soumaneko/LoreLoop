@@ -529,6 +529,14 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 "scene_text": scene_result.get("scene_text", ""),
                 "closing_prompt": scene_result.get("closing_prompt", ""),
             }
+        elif step == "composer_empty":
+            public_data = {
+                "turn_id": data.get("turn_id"),
+                "group_id": data.get("group_id"),
+                "version_index": data.get("version_index"),
+                "turn_index": data.get("turn_index"),
+                "status": data.get("status"),
+            }
         elif step == "finish":
             public_data = {
                 "turn_id": data.get("turn_id"),
@@ -883,8 +891,14 @@ class PlayerHandler(BaseHTTPRequestHandler):
     def _start_feedback_rewrite_operation(self) -> str:
         payload = _read_json(self)
         turn_id = str(payload.get("turn_id", "")).strip()
-        source_scene_text = str(payload.get("source_scene_text", "")).strip()
-        user_feedback = str(payload.get("user_feedback", "")).strip()
+        raw_source_scene_text = payload.get("source_scene_text")
+        if not isinstance(raw_source_scene_text, str):
+            raise ClientValidationError("source_scene_text must be a string")
+        source_scene_text = raw_source_scene_text.strip()
+        raw_user_feedback = payload.get("user_feedback")
+        if not isinstance(raw_user_feedback, str):
+            raise ClientValidationError("user_feedback must be a string")
+        user_feedback = raw_user_feedback.strip()
         if not turn_id:
             raise ClientValidationError("turn_id is required")
         if not source_scene_text:

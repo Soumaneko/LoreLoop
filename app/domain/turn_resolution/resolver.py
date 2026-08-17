@@ -1,9 +1,15 @@
 import json
-from typing import cast
+from dataclasses import dataclass, field
+from typing import Any, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from app.core.llm import LLMGateway
+from app.core.llm.errors import (
+    LLMOutputParseError,
+    LLMOutputValidationError,
+    LLMProviderError,
+)
 from app.core.llm.schema import schema_json
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory.schemas import CoreMemory
@@ -36,9 +42,44 @@ class _ActionResolutionOutput(BaseModel):
     resolved_fact: str = Field(min_length=1, max_length=120)
 
 
+class _ActionResolutionOutputSoft(BaseModel):
+    action_id: str
+    effect_reasoning: str = Field(min_length=1)
+    resolved_fact: str = Field(min_length=1)
+
+
 class _TurnResolutionOutput(BaseModel):
     resolution_reasoning: str = Field(min_length=1)
     action_resolutions: list[_ActionResolutionOutput] = Field(default_factory=list)
+
+
+class _TurnResolutionOutputLoose(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    resolution_reasoning: str | None = None
+    action_resolutions: list[Any] = Field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class TurnResolutionWarning:
+    code: str
+    message: str
+
+
+@dataclass
+class _AttemptRecord:
+    reasoning: str = ""
+    resolutions: list[_ActionResolutionOutputSoft] = field(default_factory=list)
+    warnings: list[TurnResolutionWarning] = field(default_factory=list)
+
+
+_RESOLUTION_ADAPTER = TypeAdapter(_ActionResolutionOutputSoft)
+
+_HARD_LIMIT = 120
+_SOFT_LIMIT = 180
+_FALLBACK_REASONING = "行动判定未生成详细说明，按确定性结果继续。"
+_FALLBACK_EFFECT = "行动按判定推进，未生成详细效果说明。"
+_FALLBACK_FACT = "未生成额外事实。"
 
 
 def map_roll_to_band(value: int, sides: int) -> OutcomeBand:
@@ -163,9 +204,176 @@ def build_player_turn_resolution(
     return PlayerTurnResolution(actions=actions)
 
 
+def _parse_resolution(raw: Any) -> _ActionResolutionOutputSoft:
+    if isinstance(raw, dict):
+        cleaned = dict(raw)
+        for key in ("action_id", "effect_reasoning", "resolved_fact"):
+            value = cleaned.get(key)
+            if isinstance(value, str):
+                cleaned[key] = value.strip()
+        raw = cleaned
+    resolution = _RESOLUTION_ADAPTER.validate_python(raw)
+    if not resolution.action_id.strip():
+        raise ValueError("action_id must be non-blank")
+    if not resolution.effect_reasoning.strip() or not resolution.resolved_fact.strip():
+        raise ValueError("effect_reasoning and resolved_fact must be non-blank")
+    return resolution
+
+
+def _collect_record(
+    output: _TurnResolutionOutputLoose,
+    judgments: list[ActionJudgment],
+    attempt: int,
+) -> tuple[_AttemptRecord, list[str]]:
+    judgment_by_id = {judgment.action_id: judgment for judgment in judgments}
+    warnings: list[TurnResolutionWarning] = []
+    retry_errors: list[str] = []
+
+    reasoning = (output.resolution_reasoning or "").strip()
+
+    if not isinstance(output.action_resolutions, list):
+        return _AttemptRecord(
+            reasoning=reasoning,
+            warnings=warnings,
+        ), ["action_resolutions must be a list"]
+
+    seen: set[str] = set()
+    resolutions: list[_ActionResolutionOutputSoft] = []
+    for index, raw in enumerate(output.action_resolutions):
+        try:
+            resolution = _parse_resolution(raw)
+        except (ValidationError, ValueError) as exc:
+            retry_errors.append(f"action_resolutions[{index}]: {exc}")
+            warnings.append(TurnResolutionWarning(
+                code="turn_resolution_dropped",
+                message=f"action_resolutions[{index}] dropped: {exc}",
+            ))
+            continue
+
+        if resolution.action_id not in judgment_by_id:
+            retry_errors.append(
+                f"action_resolutions[{index}] unknown action_id: "
+                f"{resolution.action_id}"
+            )
+            warnings.append(TurnResolutionWarning(
+                code="turn_resolution_dropped",
+                message=(
+                    f"action_resolutions[{index}] dropped: unknown action_id "
+                    f"{resolution.action_id}"
+                ),
+            ))
+            continue
+        if resolution.action_id in seen:
+            retry_errors.append(
+                f"action_resolutions[{index}] duplicate action_id: "
+                f"{resolution.action_id}"
+            )
+            warnings.append(TurnResolutionWarning(
+                code="turn_resolution_dropped",
+                message=(
+                    f"action_resolutions[{index}] dropped: duplicate action_id "
+                    f"{resolution.action_id}"
+                ),
+            ))
+            continue
+
+        invalid = False
+        for field_name in ("effect_reasoning", "resolved_fact"):
+            value = getattr(resolution, field_name)
+            if attempt == 1 and len(value) > _HARD_LIMIT:
+                retry_errors.append(
+                    f"action_resolutions[{index}].{field_name} exceeds "
+                    f"hard limit {_HARD_LIMIT}"
+                )
+                invalid = True
+            elif attempt > 1 and len(value) > _SOFT_LIMIT:
+                warnings.append(TurnResolutionWarning(
+                    code="turn_resolution_truncated",
+                    message=(
+                        f"action_resolutions[{index}].{field_name} exceeded "
+                        f"soft limit {_SOFT_LIMIT} and was truncated"
+                    ),
+                ))
+                setattr(resolution, field_name, value[:_SOFT_LIMIT])
+        if invalid:
+            warnings.append(TurnResolutionWarning(
+                code="turn_resolution_dropped",
+                message=(
+                    f"action_resolutions[{index}] dropped: exceeds hard limit"
+                ),
+            ))
+            continue
+
+        seen.add(resolution.action_id)
+        resolutions.append(resolution)
+
+    missing = [
+        judgment.action_id
+        for judgment in judgments
+        if judgment.action_id not in seen
+    ]
+    if missing:
+        retry_errors.append(
+            "TurnResolution missing action resolutions: "
+            + ", ".join(missing)
+        )
+
+    return _AttemptRecord(
+        reasoning=reasoning,
+        resolutions=resolutions,
+        warnings=warnings,
+    ), retry_errors
+
+
+def _fallback_frame(judgment: ActionJudgment) -> ActionResolutionFrame:
+    return ActionResolutionFrame(
+        action_id=judgment.action_id,
+        sequence=judgment.sequence,
+        actor=judgment.actor,
+        action_type=judgment.action_type,
+        outcome_band=judgment.outcome_band,
+        resolution_source=judgment.resolution_source,
+        effect_reasoning=_FALLBACK_EFFECT,
+        resolved_fact=_FALLBACK_FACT,
+    )
+
+
+def _build_result(
+    record: _AttemptRecord,
+    judgments: list[ActionJudgment],
+) -> TurnResolutionResult:
+    by_id = {
+        resolution.action_id: resolution
+        for resolution in record.resolutions
+    }
+    frames: list[ActionResolutionFrame] = []
+    for judgment in judgments:
+        resolution = by_id.get(judgment.action_id)
+        if resolution is None:
+            frames.append(_fallback_frame(judgment))
+            continue
+        frames.append(
+            ActionResolutionFrame(
+                action_id=judgment.action_id,
+                sequence=judgment.sequence,
+                actor=judgment.actor,
+                action_type=judgment.action_type,
+                outcome_band=judgment.outcome_band,
+                resolution_source=judgment.resolution_source,
+                effect_reasoning=resolution.effect_reasoning,
+                resolved_fact=resolution.resolved_fact,
+            )
+        )
+    return TurnResolutionResult(
+        resolution_reasoning=record.reasoning or _FALLBACK_REASONING,
+        action_resolutions=frames,
+    )
+
+
 class TurnResolutionAgent:
     def __init__(self, llm: LLMGateway):
         self.llm = llm
+        self.last_warnings: list[TurnResolutionWarning] = []
 
     def resolve(
         self,
@@ -179,6 +387,7 @@ class TurnResolutionAgent:
         npc_profiles: list[NPCProfileDirectorView] | None = None,
         trace_id: str | None = None,
     ) -> TurnResolutionResult:
+        self.last_warnings = []
         judgments = build_action_judgments(action_parse_result, roll_results)
 
         if not judgments:
@@ -188,74 +397,116 @@ class TurnResolutionAgent:
             )
 
         schema = schema_json(_TurnResolutionOutput)
+        attempt_records: dict[int, _AttemptRecord] = {}
+        current_attempt = 0
 
-        decision = cast(
-            _TurnResolutionOutput,
-            self.llm.run(
-                task="turn_resolution",
-                input_data={
-                    "action_judgments_json": json.dumps(
-                        [judgment.model_dump(mode="json") for judgment in judgments],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    "core_memory_json": core_memory.model_dump_json(indent=2),
-                    "current_state_json": project_current_state(current_state),
-                    "user_input": user_input,
-                    "context_facts_json": project_context_facts(
-                        context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[])
-                    ),
-                    "npc_profiles_json": project_npc_profiles(npc_profiles or []),
-                    "output_schema_json": schema,
-                },
-                output_schema=_TurnResolutionOutput,
-                temperature=0.6,
-                trace_id=trace_id,
-            ),
-        )
+        def on_attempt_start(attempt: int) -> None:
+            nonlocal current_attempt
+            current_attempt = attempt
 
-        action_resolutions = _validate_action_resolutions(
-            decision.action_resolutions,
-            judgments,
-        )
-        return TurnResolutionResult(
-            resolution_reasoning=decision.resolution_reasoning,
-            action_resolutions=action_resolutions,
-        )
-
-
-def _validate_action_resolutions(
-    resolutions: list[_ActionResolutionOutput],
-    judgments: list[ActionJudgment],
-) -> list[ActionResolutionFrame]:
-    judgment_by_id = {judgment.action_id: judgment for judgment in judgments}
-    seen: set[str] = set()
-    cleaned: list[ActionResolutionFrame] = []
-
-    for resolution in resolutions:
-        judgment = judgment_by_id.get(resolution.action_id)
-        if judgment is None or resolution.action_id in seen:
-            continue
-        cleaned.append(
-            ActionResolutionFrame(
-                action_id=judgment.action_id,
-                sequence=judgment.sequence,
-                actor=judgment.actor,
-                action_type=judgment.action_type,
-                outcome_band=judgment.outcome_band,
-                resolution_source=judgment.resolution_source,
-                effect_reasoning=resolution.effect_reasoning,
-                resolved_fact=resolution.resolved_fact,
+        def validate_output(output: _TurnResolutionOutputLoose) -> None:
+            record, retry_errors = _collect_record(
+                output, judgments, current_attempt
             )
-        )
-        seen.add(resolution.action_id)
+            attempt_records[current_attempt] = record
+            if retry_errors:
+                raise ValueError("; ".join(retry_errors))
 
-    missing = [
-        judgment
-        for judgment in judgments
-        if judgment.action_id not in seen
-    ]
-    if missing:
-        missing_ids = ", ".join(judgment.action_id for judgment in missing)
-        raise ValueError(f"TurnResolution missing action resolutions: {missing_ids}")
-    return cleaned
+        try:
+            result = cast(
+                _TurnResolutionOutputLoose,
+                self.llm.run(
+                    task="turn_resolution",
+                    input_data={
+                        "action_judgments_json": json.dumps(
+                            [judgment.model_dump(mode="json") for judgment in judgments],
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                        "core_memory_json": core_memory.model_dump_json(indent=2),
+                        "current_state_json": project_current_state(current_state),
+                        "user_input": user_input,
+                        "context_facts_json": project_context_facts(
+                            context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[])
+                        ),
+                        "npc_profiles_json": project_npc_profiles(npc_profiles or []),
+                        "output_schema_json": schema,
+                    },
+                    output_schema=_TurnResolutionOutputLoose,
+                    output_validator=validate_output,
+                    on_attempt_start=on_attempt_start,
+                    temperature=0.6,
+                    trace_id=trace_id,
+                ),
+            )
+            if current_attempt in attempt_records:
+                record = attempt_records[current_attempt]
+            else:
+                # StubGateway compatibility.
+                record, _ = _collect_record(
+                    result, judgments, current_attempt or 1
+                )
+            self.last_warnings = list(record.warnings)
+            return _build_result(record, judgments)
+        except (
+            LLMOutputParseError,
+            LLMOutputValidationError,
+            LLMProviderError,
+        ) as exc:
+            return self._salvage(attempt_records, judgments, exc)
+
+    def _salvage(
+        self,
+        attempt_records: dict[int, _AttemptRecord],
+        judgments: list[ActionJudgment],
+        exception: Exception,
+    ) -> TurnResolutionResult:
+        latest = attempt_records.get(2)
+        if latest is None:
+            latest = attempt_records.get(1)
+        usable = attempt_records.get(2)
+        if usable is None or not usable.resolutions:
+            first = attempt_records.get(1)
+            if first is not None and first.resolutions:
+                usable = first
+        if usable is None:
+            usable = attempt_records.get(2) or attempt_records.get(1)
+
+        if usable is not None and usable.resolutions:
+            warnings = list(usable.warnings)
+            if latest is not None and latest is not usable:
+                for warning in latest.warnings:
+                    if warning not in warnings:
+                        warnings.append(warning)
+            missing = [
+                judgment.action_id
+                for judgment in judgments
+                if judgment.action_id not in {
+                    resolution.action_id for resolution in usable.resolutions
+                }
+            ]
+            if missing:
+                warnings.append(TurnResolutionWarning(
+                    code="turn_resolution_missing_filled",
+                    message=(
+                        "Turn resolution was incomplete; missing frames were "
+                        f"filled deterministically: {', '.join(missing)}"
+                    ),
+                ))
+            self.last_warnings = warnings
+            return _build_result(usable, judgments)
+
+        warnings: list[TurnResolutionWarning] = []
+        for record in attempt_records.values():
+            for warning in record.warnings:
+                if warning not in warnings:
+                    warnings.append(warning)
+        warnings.append(TurnResolutionWarning(
+            code="turn_resolution_fallback",
+            message=(
+                "Turn resolution failed; deterministic fallback frames were "
+                f"generated: {exception}"
+            ),
+        ))
+        self.last_warnings = warnings
+        return _build_result(_AttemptRecord(), judgments)

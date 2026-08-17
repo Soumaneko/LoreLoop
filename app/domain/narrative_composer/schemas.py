@@ -37,7 +37,7 @@ class NarrativeComposerResult(BaseModel):
     planned_events: list[PlannedEvent] = Field(default_factory=list)
 
     scene_reasoning: str = Field(min_length=1)
-    scene_text: str = Field(min_length=1)
+    scene_text: str = ""
     closing_prompt: str = Field(min_length=1)
     next_action_directions: list[NextActionDirection] = Field(
         default_factory=list,

@@ -233,9 +233,42 @@ function showError(
 function clearError() {
   state.lastError = null;
   els.errorCard.hidden = true;
+  els.errorCard.querySelector(".error-retry-btn")?.remove();
   const pending = activePending();
   setMode(!state.modelConfig?.configured ? "needs_model" : state.playerState?.needs_init ? "needs_init" : pending ? "pending" : "idle");
   renderControls();
+}
+
+function showComposerEmptyMessage() {
+  els.errorCard.querySelector(".error-retry-btn")?.remove();
+  const pending = activePending(); const variant = selectedVariant();
+  setMode(pending ? "pending" : "idle");
+  els.errorTitle.textContent = "正文生成失败";
+  if (pending && variant) {
+    els.errorMessage.textContent = "之前的故事没有受到影响，你可以重新措辞来重试。";
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "error-retry-btn";
+    retryBtn.type = "button";
+    retryBtn.textContent = "重新措辞";
+    retryBtn.onclick = () => { clearError(); retryTurn("rephrase"); };
+    els.errorCard.appendChild(retryBtn);
+  } else {
+    els.errorMessage.textContent = "之前的故事没有受到影响，你可以重试生成。";
+    const savedInput = state.composerEmptyUserInput || "";
+    if (savedInput) {
+      els.playerInput.value = savedInput;
+      autoSizeInput();
+    }
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "error-retry-btn";
+    retryBtn.type = "button";
+    retryBtn.textContent = "重试生成";
+    retryBtn.onclick = () => { clearError(); generateTurn(); };
+    els.errorCard.appendChild(retryBtn);
+  }
+  els.errorCard.hidden = false;
+  renderControls();
+  scrollToBottom();
 }
 
 function setInputHintText(actionText) {
@@ -2427,6 +2460,9 @@ function handleGenerationEvent(event, { retryMode = null } = {}) {
   if (event.step === "scene_text_delta") {
     appendStreamingText(event.data?.delta || "");
   }
+  if (event.step === "composer_empty") {
+    state.composerEmpty = true;
+  }
 }
 
 async function resumeGenerationOperation(operation) {
@@ -2464,6 +2500,13 @@ async function resumeGenerationOperation(operation) {
       return false;
     }
     stopStreaming();
+    if (state.composerEmpty) {
+      state.composerEmpty = false;
+      state.composerEmptyUserInput = userInput;
+      await loadAll({ scroll: "smooth" });
+      showComposerEmptyMessage();
+      return true;
+    }
     if (retryMode === "feedback_rewrite" && feedbackDecision?.strategy === "no_rewrite") {
       showToast(feedbackNoRewriteMessage(feedbackDecision.reason_code));
     } else if (retryMode) {
@@ -2595,6 +2638,7 @@ async function generateTurn() {
   if (!userInput || state.mode !== "idle") return;
   prepareGenerationRun("generation", userInput);
   clearError(); setMode("generating"); state.suggestions = []; renderSuggestions(); renderControls();
+  state.composerEmptyUserInput = userInput;
   showActivePlayerAction(userInput);
   els.playerInput.value = ""; autoSizeInput(); renderControls();
   startStreaming("正在理解你的行动");
@@ -2610,6 +2654,13 @@ async function generateTurn() {
       return;
     }
     stopStreaming();
+    if (state.composerEmpty) {
+      state.composerEmpty = false;
+      await loadAll({ scroll: "smooth" });
+      showComposerEmptyMessage();
+      return;
+    }
+    state.composerEmptyUserInput = null;
     await loadAll({ scroll: "smooth" });
     const pendingAfterGen = activePending();
     if (pendingAfterGen) {
@@ -2645,7 +2696,14 @@ async function retryTurn(retryMode) {
       settleCancelledGeneration({ retryMode });
       return;
     }
-    stopStreaming(); await loadAll({ scroll: "smooth" });
+    stopStreaming();
+    if (state.composerEmpty) {
+      state.composerEmpty = false;
+      await loadAll({ scroll: "smooth" });
+      showComposerEmptyMessage();
+      return;
+    }
+    await loadAll({ scroll: "smooth" });
     const pendingAfterRetry = activePending();
     if (pendingAfterRetry) {
       const latest = pendingAfterRetry.variants[pendingAfterRetry.variants.length - 1];
@@ -2717,6 +2775,9 @@ function feedbackNoRewriteMessage(reasonCode) {
   if (reasonCode === "no_actionable_request") {
     return "没有识别到明确可执行的修改要求";
   }
+  if (reasonCode === "strategy_unavailable") {
+    return "暂时无法判断修改方式，原文已保留，可重试";
+  }
   return "这项意见不适用于正文重写，原版本保持不变";
 }
 
@@ -2727,6 +2788,8 @@ async function maybeAutoConfirm() {
     pendingKind: activePending()?.kind,
   })) return;
   if (sessionStorage.getItem(CONFIRMATION_IN_FLIGHT_KEY) === "1") return;
+  const variant = selectedVariant();
+  if (variant && !readDraft(variant).trim()) return;
   await confirmTurn();
 }
 

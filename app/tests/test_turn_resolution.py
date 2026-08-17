@@ -149,7 +149,7 @@ class TestActionJudgment:
         assert judgments[0].outcome_band == "success"
         assert judgments[0].dice is None
 
-    def test_action_resolution_fact_is_length_limited(self):
+    def test_action_resolution_fact_is_length_limited_to_soft_limit(self):
         with pytest.raises(ValueError):
             ActionResolutionFrame(
                 action_id="a1",
@@ -158,7 +158,7 @@ class TestActionJudgment:
                 action_type="observe",
                 outcome_band="success",
                 effect_reasoning="支点：当前场景可观察；边界：只给克制发现。",
-                resolved_fact="超长事实边界" * 25,
+                resolved_fact="超长事实边界" * 31,
             )
 
     def test_builds_persistable_player_roll_summary(self):
@@ -362,3 +362,226 @@ def test_project_turn_resolution_adds_routine_mode():
     assert by_id["a2"]["resolution_mode"] == "roll"
     assert by_id["a2"]["outcome_band"] == "success"
     assert "effect_reasoning" not in by_id["a1"]
+
+
+def _two_action_parse() -> ActionParseResult:
+    return ActionParseResult(
+        atomic_actions=[
+            _action("a1").model_copy(update={"sequence": 1}),
+            _action("a2").model_copy(update={"sequence": 2}),
+        ],
+    )
+
+
+def _two_roll_batch() -> RollResultBatch:
+    return _roll_batch(
+        _roll(20, "a1"),
+        _roll(5, "a2"),
+    )
+
+
+def _two_action_response(only_a1: bool = False) -> str:
+    resolutions = [
+        {
+            "action_id": "a1",
+            "effect_reasoning": "观察成功。",
+            "resolved_fact": "主角发现异常。",
+        },
+    ]
+    if not only_a1:
+        resolutions.append({
+            "action_id": "a2",
+            "effect_reasoning": "第二次行动按掷骰结果推进。",
+            "resolved_fact": "主角承受失败后果。",
+        })
+    return json.dumps({
+        "resolution_reasoning": "两行动按判定推进。",
+        "action_resolutions": resolutions,
+    }, ensure_ascii=False)
+
+
+def test_turn_resolution_provider_failure_returns_deterministic_fallback():
+    from app.core.llm import MockLLM
+
+    mock = MockLLM()
+    mock.set_fail_provider(True)
+    agent = TurnResolutionAgent(mock.build_gateway())
+
+    result = agent.resolve(
+        user_input="观察并攻击",
+        current_state=_state(),
+        action_parse_result=_two_action_parse(),
+        roll_results=_two_roll_batch(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.total_resolutions == 2
+    assert all(
+        frame.effect_reasoning == "行动按判定推进，未生成详细效果说明。"
+        for frame in result.action_resolutions
+    )
+    assert [warning.code for warning in agent.last_warnings] == [
+        "turn_resolution_fallback"
+    ]
+
+
+def test_turn_resolution_first_missing_triggers_retry_second_complete():
+    from app.core.llm import MockLLM
+
+    mock = MockLLM()
+    mock.set_responses([
+        _two_action_response(only_a1=True),
+        _two_action_response(),
+    ])
+    agent = TurnResolutionAgent(mock.build_gateway())
+
+    result = agent.resolve(
+        user_input="观察并攻击",
+        current_state=_state(),
+        action_parse_result=_two_action_parse(),
+        roll_results=_two_roll_batch(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.total_resolutions == 2
+    assert {frame.action_id for frame in result.action_resolutions} == {
+        "a1", "a2"
+    }
+    assert agent.last_warnings == []
+
+
+def test_turn_resolution_second_missing_fills_deterministically():
+    from app.core.llm import MockLLM
+
+    mock = MockLLM()
+    mock.set_responses([
+        _two_action_response(only_a1=True),
+        _two_action_response(only_a1=True),
+    ])
+    agent = TurnResolutionAgent(mock.build_gateway())
+
+    result = agent.resolve(
+        user_input="观察并攻击",
+        current_state=_state(),
+        action_parse_result=_two_action_parse(),
+        roll_results=_two_roll_batch(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.total_resolutions == 2
+    by_id = {frame.action_id: frame for frame in result.action_resolutions}
+    assert by_id["a1"].effect_reasoning == "观察成功。"
+    assert by_id["a2"].effect_reasoning == "行动按判定推进，未生成详细效果说明。"
+    assert any(
+        warning.code == "turn_resolution_missing_filled"
+        for warning in agent.last_warnings
+    )
+
+
+def test_turn_resolution_soft_truncates_second_attempt_text():
+    from app.core.llm import MockLLM
+
+    first = json.dumps({
+        "resolution_reasoning": "软截断测试。",
+        "action_resolutions": [{
+            "action_id": "a1",
+            "effect_reasoning": "长" * 121,
+            "resolved_fact": "事实",
+        }],
+    }, ensure_ascii=False)
+    second = json.dumps({
+        "resolution_reasoning": "软截断测试。",
+        "action_resolutions": [{
+            "action_id": "a1",
+            "effect_reasoning": "长" * 150,
+            "resolved_fact": "超长" * 100,
+        }],
+    }, ensure_ascii=False)
+
+    mock = MockLLM()
+    mock.set_responses([first, second])
+    agent = TurnResolutionAgent(mock.build_gateway())
+
+    result = agent.resolve(
+        user_input="观察",
+        current_state=_state(),
+        action_parse_result=_parse(),
+        roll_results=_roll_batch(_roll(20)),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    frame = result.action_resolutions[0]
+    assert len(frame.effect_reasoning) == 150
+    assert len(frame.resolved_fact) == 180
+    assert any(
+        warning.code == "turn_resolution_truncated"
+        for warning in agent.last_warnings
+    )
+
+
+def test_turn_resolution_reasoning_only_after_retry_is_fallback_not_missing_filled():
+    from app.core.llm import MockLLM
+
+    response = json.dumps({
+        "resolution_reasoning": "只有推理没有合法 resolution。",
+        "action_resolutions": [],
+    }, ensure_ascii=False)
+    mock = MockLLM()
+    mock.set_responses([response, response])
+    agent = TurnResolutionAgent(mock.build_gateway())
+
+    result = agent.resolve(
+        user_input="观察并攻击",
+        current_state=_state(),
+        action_parse_result=_two_action_parse(),
+        roll_results=_two_roll_batch(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.total_resolutions == 2
+    assert all(
+        frame.effect_reasoning == "行动按判定推进，未生成详细效果说明。"
+        for frame in result.action_resolutions
+    )
+    assert [warning.code for warning in agent.last_warnings] == [
+        "turn_resolution_fallback"
+    ]
+
+
+def test_turn_resolution_reuse_first_preserves_second_dropped_warnings():
+    from app.core.llm import MockLLM
+
+    first = json.dumps({
+        "resolution_reasoning": "第一轮。",
+        "action_resolutions": [{
+            "action_id": "a1",
+            "effect_reasoning": "观察成功。",
+            "resolved_fact": "主角发现异常。",
+        }],
+    }, ensure_ascii=False)
+    second = json.dumps({
+        "resolution_reasoning": "第二轮。",
+        "action_resolutions": [{
+            "action_id": "missing",
+            "effect_reasoning": "未知行动。",
+            "resolved_fact": "未知事实。",
+        }],
+    }, ensure_ascii=False)
+    mock = MockLLM()
+    mock.set_responses([first, second])
+    agent = TurnResolutionAgent(mock.build_gateway())
+
+    result = agent.resolve(
+        user_input="观察并攻击",
+        current_state=_state(),
+        action_parse_result=_two_action_parse(),
+        roll_results=_two_roll_batch(),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    assert result.total_resolutions == 2
+    assert result.action_resolutions[0].action_id == "a1"
+    assert any(
+        warning.code == "turn_resolution_dropped"
+        for warning in agent.last_warnings
+    )

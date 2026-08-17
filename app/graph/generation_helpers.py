@@ -161,6 +161,7 @@ def finalize_pending_turn(
         token_usage=token_usage,
         director_log_entry=state.get("director_log_entry"),
     )
+    composer_empty = state.get("composer_empty", False)
     commit_if_not_cancelled(lambda: runtime.pending_turns.add(pending))
     finalized = {
         **state,
@@ -168,15 +169,21 @@ def finalize_pending_turn(
         "group_id": group_id,
         "version_index": version_index,
         "turn_index": state["next_turn_index"],
-        "status": "awaiting_confirm",
-        "pending_turn_status": "awaiting_confirm",
+        "status": "awaiting_confirm" if not composer_empty else "composer_empty",
+        "pending_turn_status": "awaiting_confirm" if not composer_empty else "composer_empty",
         "player_resolution": player_resolution,
         "token_usage": token_usage,
     }
-    finalized["events"] = [
-        *state.get("events", []),
-        scene_written_event(finalized),
-    ]
+    if composer_empty:
+        finalized["events"] = [
+            *state.get("events", []),
+            composer_empty_event(finalized),
+        ]
+    else:
+        finalized["events"] = [
+            *state.get("events", []),
+            scene_written_event(finalized),
+        ]
     return finalized
 
 
@@ -223,5 +230,21 @@ def scene_written_event(state: dict[str, Any]) -> GenerationEvent:
             "scene_result": model_data(state["scene_result"]),
             "context": model_data(state["context"]),
             "status": "awaiting_confirm",
+        },
+    }
+
+
+def composer_empty_event(state: dict[str, Any]) -> GenerationEvent:
+    return {
+        "step": "composer_empty",
+        "data": {
+            "turn_id": state["turn_id"],
+            "group_id": state["group_id"],
+            "version_index": state["version_index"],
+            "trace_id": state["trace_id"],
+            "turn_index": state["turn_index"],
+            "token_usage": state.get("token_usage"),
+            "context": model_data(state["context"]),
+            "status": "composer_empty",
         },
     }

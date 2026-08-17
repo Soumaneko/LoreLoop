@@ -605,3 +605,362 @@ class TestActionSelfCheck:
 def AtomicAction_model(**kwargs):
     from app.domain.action.schemas import AtomicAction
     return AtomicAction(**kwargs)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Failure policy: salvage, no-effect, and hidden-event filtering
+# ══════════════════════════════════════════════════════════════════
+
+def test_action_parser_provider_failure_falls_back_to_empty():
+    from app.core.llm import MockLLM
+
+    mock = MockLLM()
+    mock.set_fail_provider(True)
+    parser = ActionParser(mock.build_gateway())
+
+    result = parser.parse(
+        "我拔出剑。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert result.atomic_actions == []
+    assert result.retrieval_topics == []
+    assert [warning.code for warning in parser.last_warnings] == [
+        "action_extract_fallback"
+    ]
+
+
+def test_action_parser_blank_user_input_is_no_effect():
+    parser = ActionParser(object())
+    result = parser.parse(
+        "   \n  ",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert result.atomic_actions == []
+    assert parser.last_warnings == []
+
+
+def test_action_parser_first_invalid_retries_and_second_valid_subset_wins():
+    first = json.dumps({
+        "analysis": "第一次解析",
+        "atomic_actions": [
+            {
+                "action_id": "A1",
+                "sequence": 1,
+                "actor": ["主角"],
+                "action_type": "observe",
+                "raw_text": "观察四周",
+                "verb": "观察",
+                "likely_needs_roll": False,
+            },
+            {
+                "action_id": "  ",
+                "sequence": 2,
+                "actor": ["主角"],
+                "action_type": "attack",
+                "raw_text": "挥剑",
+                "verb": "挥",
+                "likely_needs_roll": True,
+            },
+        ],
+    }, ensure_ascii=False)
+    second = _build_response([{
+        "action_id": "A1",
+        "sequence": 1,
+        "actor": ["主角"],
+        "action_type": "observe",
+        "raw_text": "观察四周",
+        "verb": "观察",
+        "likely_needs_roll": False,
+    }])
+
+    parser = _make_parser([first, second])
+    result = parser.parse(
+        "我观察四周。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert [action.action_id for action in result.atomic_actions] == ["A1"]
+    assert parser.last_warnings == []
+
+
+def test_action_parser_second_invalid_reuses_first_valid_subset():
+    first = json.dumps({
+        "atomic_actions": [
+            {
+                "action_id": "A1",
+                "sequence": 1,
+                "actor": ["主角"],
+                "action_type": "observe",
+                "raw_text": "观察四周",
+                "verb": "观察",
+                "likely_needs_roll": False,
+            },
+            {
+                "action_id": "A2",
+                "sequence": 2,
+                "actor": ["主角"],
+                "action_type": "attack",
+                "raw_text": "挥剑",
+                "verb": "",
+                "likely_needs_roll": True,
+            },
+        ],
+    }, ensure_ascii=False)
+    second = json.dumps({
+        "atomic_actions": [{
+            "action_id": "B1",
+            "sequence": 1,
+            "actor": [],
+            "action_type": "speak",
+            "raw_text": "说话",
+            "verb": "",
+            "likely_needs_roll": False,
+        }],
+    }, ensure_ascii=False)
+
+    parser = _make_parser([first, second])
+    result = parser.parse(
+        "我观察四周。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert [action.action_id for action in result.atomic_actions] == ["A1"]
+    assert any(
+        warning.code == "action_dropped"
+        for warning in parser.last_warnings
+    )
+
+
+def test_action_parser_filters_unknown_touched_event_id_after_retry():
+    from types import SimpleNamespace
+
+    visible_event = SimpleNamespace(
+        event_id="evt_visible",
+        role="arc",
+        title="商路封锁",
+        subject="河务署",
+        intent="控制渡河通道",
+        hook_pool=[],
+    )
+    first = json.dumps({
+        "atomic_actions": [{
+            "action_id": "A1",
+            "sequence": 1,
+            "actor": ["主角"],
+            "action_type": "observe",
+            "raw_text": "观察四周",
+            "verb": "观察",
+            "likely_needs_roll": False,
+        }],
+        "touched_event_ids": ["unknown_event"],
+    }, ensure_ascii=False)
+    second = json.dumps({
+        "atomic_actions": [{
+            "action_id": "A1",
+            "sequence": 1,
+            "actor": ["主角"],
+            "action_type": "observe",
+            "raw_text": "观察四周",
+            "verb": "观察",
+            "likely_needs_roll": False,
+        }],
+        "touched_event_ids": ["evt_visible", "unknown_event_2"],
+    }, ensure_ascii=False)
+
+    parser = _make_parser([first, second])
+    result = parser.parse(
+        "我观察四周。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+        events=[visible_event],
+    )
+
+    assert result.touched_event_ids == ["evt_visible"]
+    assert any(
+        warning.code == "action_dropped"
+        for warning in parser.last_warnings
+    )
+
+
+def test_action_parser_reuse_first_preserves_second_dropped_warnings():
+    from app.core.llm import MockLLM
+
+    first = json.dumps({
+        "atomic_actions": [
+            {
+                "action_id": "A1",
+                "sequence": 1,
+                "actor": ["主角"],
+                "action_type": "observe",
+                "raw_text": "观察四周",
+                "verb": "观察",
+                "likely_needs_roll": False,
+            },
+            {
+                "action_id": "A2",
+                "sequence": 2,
+                "actor": ["主角"],
+                "action_type": "attack",
+                "raw_text": "挥剑",
+                "verb": "",
+                "likely_needs_roll": True,
+            },
+        ],
+    }, ensure_ascii=False)
+    second = json.dumps({
+        "atomic_actions": [{
+            "action_id": "A2",
+            "sequence": 2,
+            "actor": ["主角"],
+            "action_type": "attack",
+            "raw_text": "挥剑",
+            "verb": "",
+            "likely_needs_roll": True,
+        }],
+    }, ensure_ascii=False)
+    mock = MockLLM()
+    mock.set_responses([first, second])
+    parser = ActionParser(mock.build_gateway())
+
+    result = parser.parse(
+        "我观察四周。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert [action.action_id for action in result.atomic_actions] == ["A1"]
+    assert any(
+        warning.code == "action_dropped"
+        for warning in parser.last_warnings
+    )
+
+
+def test_action_parser_rejects_non_string_actor_and_retries():
+    from app.core.llm import MockLLM
+
+    first = json.dumps({
+        "atomic_actions": [{
+            "action_id": "A_bad",
+            "sequence": 1,
+            "actor": [123, "主角"],
+            "action_type": "observe",
+            "raw_text": "观察四周",
+            "verb": "观察",
+            "likely_needs_roll": False,
+        }],
+    }, ensure_ascii=False)
+    second = json.dumps({
+        "atomic_actions": [{
+            "action_id": "A_good",
+            "sequence": 1,
+            "actor": ["主角"],
+            "action_type": "observe",
+            "raw_text": "观察四周",
+            "verb": "观察",
+            "likely_needs_roll": False,
+        }],
+    }, ensure_ascii=False)
+    mock = MockLLM()
+    mock.set_responses([first, second])
+    parser = ActionParser(mock.build_gateway())
+
+    result = parser.parse(
+        "我观察四周。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert [action.action_id for action in result.atomic_actions] == ["A_good"]
+
+
+def test_action_parser_reports_retrieval_topic_count_dropped_on_salvage():
+    from app.core.llm import MockLLM
+
+    topics = [{"text": f"topic_{index}"} for index in range(9)]
+    response = json.dumps({
+        "atomic_actions": [{
+            "action_id": "A1",
+            "sequence": 1,
+            "actor": ["主角"],
+            "action_type": "observe",
+            "raw_text": "观察四周",
+            "verb": "观察",
+            "likely_needs_roll": False,
+        }],
+        "retrieval_topics": topics,
+    }, ensure_ascii=False)
+    mock = MockLLM()
+    mock.set_responses([response, response])
+    parser = ActionParser(mock.build_gateway())
+
+    result = parser.parse(
+        "我观察四周。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert [action.action_id for action in result.atomic_actions] == ["A1"]
+    assert len(result.retrieval_topics) == 8
+    assert any(
+        warning.code == "action_dropped"
+        and "keeping first 8" in warning.message
+        for warning in parser.last_warnings
+    )
+
+
+def test_action_parser_salvage_prefers_first_actions_over_second_topics():
+    from app.core.llm import MockLLM
+
+    first = json.dumps({
+        "atomic_actions": [
+            {
+                "action_id": "A1",
+                "sequence": 1,
+                "actor": ["主角"],
+                "action_type": "observe",
+                "raw_text": "观察四周",
+                "verb": "观察",
+                "likely_needs_roll": False,
+            },
+            {
+                "action_id": "A2",
+                "sequence": 2,
+                "actor": ["主角"],
+                "action_type": "attack",
+                "raw_text": "挥剑",
+                "verb": "",
+                "likely_needs_roll": True,
+            },
+        ],
+        "retrieval_topics": [],
+    }, ensure_ascii=False)
+    second = json.dumps({
+        "atomic_actions": [{
+            "action_id": "B1",
+            "sequence": 1,
+            "actor": ["主角"],
+            "action_type": "speak",
+            "raw_text": "说话",
+            "verb": "",
+            "likely_needs_roll": False,
+        }],
+        "retrieval_topics": [{"text": "第二次合法检索词"}],
+    }, ensure_ascii=False)
+    mock = MockLLM()
+    mock.set_responses([first, second])
+    parser = ActionParser(mock.build_gateway())
+
+    result = parser.parse(
+        "我观察四周。",
+        _make_current_state(),
+        core_memory=_core_memory(),
+    )
+
+    assert [action.action_id for action in result.atomic_actions] == ["A1"]
+    assert result.retrieval_topics == []

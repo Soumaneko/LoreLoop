@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,6 +42,15 @@ class NarrativeCanonQueryDraftSet(BaseModel):
 
     thought_process: str = Field(min_length=1)
     queries: list[NarrativeCanonQueryDraft] = Field(default_factory=list, max_length=12)
+
+
+class NarrativeCanonQueryDraftSetLoose(BaseModel):
+    """Gateway-only loose container for per-query salvage."""
+
+    model_config = ConfigDict(extra="allow")
+
+    thought_process: str | None = None
+    queries: list[Any] = Field(default_factory=list)
 
 
 class NarrativeCanonQuery(NarrativeCanonQueryDraft):

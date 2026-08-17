@@ -111,4 +111,5 @@ class GenerationState(TypedDict, total=False):
     recent_scene: ShortTermScene | None
 
     scene_result: SceneWriterResult
+    composer_empty: bool
     pending_turn_status: str

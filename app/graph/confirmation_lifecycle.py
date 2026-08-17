@@ -59,6 +59,8 @@ class ConfirmationPreparer:
             if scene_text is not None
             else pipeline_input.scene_result.scene_text
         )
+        if not effective_scene_text.strip():
+            raise ValueError("effective_scene_text is empty; cannot confirm empty body")
         cache = ConfirmationCache(pending.confirmation_cache)
         cache.begin(effective_scene_text)
 

@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import json
 
+import pytest
+
 from langgraph.graph import END, START, StateGraph
 
 from app.graph import generation_graph, generation_nodes
@@ -187,7 +189,6 @@ def test_director_agent_composer_and_consistency_checker_run_in_order():
     assert ("check_narrative_consistency", "revise_narrative") in edges
     assert ("revise_narrative", "__end__") in edges
     assert ("compose_narrative", "check_narrative_consistency") not in edges
-    assert ("compose_narrative", "__end__") not in edges
     assert ("extract_context_facts", "director_agent_stage") not in edges
 
 
@@ -1085,7 +1086,7 @@ def test_compose_narrative_uses_select_plus_context_fact_profiles_only(
     assert result["context"] is captured["context"]
 
 
-def test_extract_context_facts_preserves_facts_when_npc_selection_fails(
+def test_extract_context_facts_propagates_npc_selection_failure(
     tmp_path,
     monkeypatch,
 ):
@@ -1161,11 +1162,9 @@ def test_extract_context_facts_preserves_facts_when_npc_selection_fails(
         "trace_id": "trace-extract",
     }
 
-    result = generation_nodes.extract_context_facts_node(state)
+    with pytest.raises(RuntimeError, match="profile db unavailable"):
+        generation_nodes.extract_context_facts_node(state)
 
-    assert result["context_extract_error"] is None
-    assert result["context_facts"].facts[0].fact == "顾晚棠藏在客栈上房。"
-    assert result["context_fact_npc_profiles"] == []
     assert captured["retrieval_topics"] == [ActionRetrievalTopic(
         text="码头追踪",
     )]
@@ -1701,3 +1700,349 @@ def test_composer_hides_newly_touched_events_without_intrude(
     }
     assert injected_ids == set()
     assert unrelated.event_id not in injected_ids
+
+
+def test_check_narrative_consistency_node_skips_on_llm_error(monkeypatch):
+    from app.core.llm.errors import LLMProviderError
+    from app.domain.turn_resolution.schemas import TurnResolutionResult
+
+    recorded = []
+
+    class _Diagnostics:
+        def warning(self, **kwargs):
+            recorded.append(kwargs)
+
+    class _FakeAgent:
+        def __init__(self, _gateway):
+            pass
+
+        def check(self, **kwargs):
+            raise LLMProviderError("consistency provider down")
+
+    monkeypatch.setattr(generation_nodes, "NarrativeConsistencyAgent", _FakeAgent)
+    monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
+
+    result = generation_nodes.check_narrative_consistency_node({
+        "runtime_services": SimpleNamespace(diagnostics=_Diagnostics()),
+        "narrative_composition": SimpleNamespace(scene_text="风吹过窗沿。"),
+        "user_input": "观察。",
+        "current_state": SimpleNamespace(
+            player=SimpleNamespace(name="莱尔"),
+        ),
+        "turn_resolution": TurnResolutionResult(),
+        "trace_id": "trace-check",
+        "next_turn_index": 2,
+    })
+
+    assert result["narrative_consistency_review"].decision == "pass"
+    assert result["events"][0]["data"]["validation_skipped"] is True
+    assert recorded[0]["code"] == "narrative_consistency_fallback"
+    assert recorded[0]["details"] == {"validation_skipped": True}
+
+
+def test_revise_narrative_node_preserves_original_on_llm_error(monkeypatch):
+    from app.core.llm.errors import LLMProviderError
+
+    recorded = []
+
+    class _Diagnostics:
+        def warning(self, **kwargs):
+            recorded.append(kwargs)
+
+    def _boom(*_args, **_kwargs):
+        raise LLMProviderError("revision provider down")
+
+    monkeypatch.setattr(
+        generation_nodes,
+        "_run_source_rewrite",
+        _boom,
+    )
+    monkeypatch.setattr(
+        generation_nodes,
+        "render_revision_instruction",
+        lambda _review: "修订指令",
+    )
+
+    result = generation_nodes.revise_narrative_node({
+        "runtime_services": SimpleNamespace(diagnostics=_Diagnostics()),
+        "narrative_composition": SimpleNamespace(scene_text="原正文。"),
+        "narrative_consistency_review": object(),
+        "trace_id": "trace-revise",
+        "next_turn_index": 2,
+    })
+
+    assert result["narrative_revision_instruction"] == "修订指令"
+    assert result["events"][0]["step"] == "narrative_revision_failed"
+    assert recorded[0]["code"] == "narrative_revision_fallback"
+    assert "narrative_composition" not in result
+
+
+def test_feedback_rewrite_falls_back_to_strategy_unavailable(
+    monkeypatch,
+    configure_runtime_services,
+):
+    from app.core.llm.errors import LLMProviderError
+
+    turn_id = "turn_v1"
+    state_before = object()
+    context = SimpleNamespace(turn_resolution=object())
+    runtime = get_campaign_runtime()
+    runtime.pending_turns.add(PendingTurn(
+        turn_id=turn_id,
+        group_id="group_1",
+        version_index=1,
+        user_input="观察门外",
+        difficulty="普通",
+        max_chars=900,
+        experience_mode="creator",
+        state_before=state_before,
+        context=context,
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="版本一"),
+        turn_index=3,
+        short_term_memory=ShortTermMemory(),
+    ))
+
+    class _StateStore:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def load_or_default(self): return state_before
+
+    class _FailingSelector:
+        def __init__(self, _gateway): pass
+        def select(self, **_kwargs):
+            raise LLMProviderError("selector down")
+
+    configure_runtime_services(
+        current_state=_StateStore,
+        gateway_factory=lambda: SimpleNamespace(
+            set_trace_context=lambda **_kwargs: None
+        ),
+    )
+    monkeypatch.setattr(generation_graph, "RewriteStrategySelector", _FailingSelector)
+    monkeypatch.setattr(
+        generation_graph,
+        "_stream_generation_graph",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("fallback no_rewrite must not enter a generation graph")
+        ),
+    )
+
+    try:
+        events = list(generation_graph.feedback_rewrite_stream(
+            turn_id,
+            source_scene_text="版本一",
+            user_feedback="帮我改一下",
+        ))
+    finally:
+        runtime.pending_turns.remove(turn_id)
+
+    assert [event["step"] for event in events] == [
+        "feedback_rewrite_started",
+        "feedback_rewrite_strategy_selected",
+    ]
+    assert events[-1]["data"]["strategy"] == "no_rewrite"
+    assert events[-1]["data"]["reason_code"] == "strategy_unavailable"
+
+
+def test_feedback_rewrite_rejects_source_scene_text_over_pending_max_chars(
+    monkeypatch,
+    configure_runtime_services,
+):
+    turn_id = "turn_v1"
+    state_before = object()
+    context = SimpleNamespace(turn_resolution=object())
+    runtime = get_campaign_runtime()
+    runtime.pending_turns.add(PendingTurn(
+        turn_id=turn_id,
+        group_id="group_1",
+        version_index=1,
+        user_input="观察门外",
+        difficulty="普通",
+        max_chars=10,
+        experience_mode="creator",
+        state_before=state_before,
+        context=context,
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="版本一"),
+        turn_index=3,
+        short_term_memory=ShortTermMemory(),
+    ))
+
+    class _StateStore:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def load_or_default(self): return state_before
+
+    configure_runtime_services(
+        current_state=_StateStore,
+        gateway_factory=lambda: SimpleNamespace(
+            set_trace_context=lambda **_kwargs: None
+        ),
+    )
+
+    try:
+        with pytest.raises(ValueError, match="exceeds pending max_chars"):
+            list(generation_graph.feedback_rewrite_stream(
+                turn_id,
+                source_scene_text="这个正文明显超过十个字",
+                user_feedback="改一下",
+            ))
+    finally:
+        runtime.pending_turns.remove(turn_id)
+
+
+def _compose_test_state(**overrides):
+    class _Store:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def list_active(self): return []
+        def list_all(self): return []
+    stores = SimpleNamespace(
+        director_event=lambda: _Store(),
+        npc_profile=lambda: _Store(),
+    )
+    state = {
+        "runtime_services": SimpleNamespace(
+            diagnostics=generation_nodes.NullDiagnosticLogger(),
+            stores=stores,
+        ),
+        "user_input": "观察。",
+        "current_state": object(),
+        "action_npc_profiles": [],
+        "context_fact_npc_profiles": [],
+        "touched_event_candidates": [],
+        "director_stage": None,
+        "context": object(),
+        "core_memory": object(),
+        "context_facts": object(),
+        "short_term_memory": SimpleNamespace(recent_scenes=[]),
+        "trace_id": "trace-compose",
+        "next_turn_index": 1,
+        "turn_resolution": object(),
+    }
+    state.update(overrides)
+    return state
+
+
+def _fake_output(state, composition):
+    return {
+        "narrative_composition": composition,
+        "outline": SimpleNamespace(),
+        "scene_result": composition.to_scene_result(),
+        "beat_entity_anchors": [],
+        "composer_npc_public_views": [],
+    }
+
+
+def test_compose_narrative_node_returns_empty_fallback_when_composer_fails(
+    monkeypatch,
+):
+    from app.core.llm.errors import LLMProviderError
+
+    recorded = []
+
+    class _Diagnostics:
+        def warning(self, **kwargs):
+            recorded.append(kwargs)
+
+    class _FailingComposer:
+        def compose(self, _context, **_kwargs):
+            raise LLMProviderError("composer down")
+
+    monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: lambda _: None)
+    monkeypatch.setattr(
+        generation_nodes,
+        "NarrativeComposerAgent",
+        lambda _gateway: _FailingComposer(),
+    )
+    monkeypatch.setattr(
+        generation_nodes,
+        "assemble_narrative_context",
+        lambda **_kw: SimpleNamespace(user_input="观察。", current_state=object()),
+    )
+    monkeypatch.setattr(generation_nodes, "_composition_output_state", _fake_output)
+
+    result = generation_nodes.compose_narrative_node(_compose_test_state(
+        runtime_services=SimpleNamespace(
+            diagnostics=_Diagnostics(),
+            gateway=lambda **_kw: object(),
+            stores=SimpleNamespace(director_event=lambda: type("S", (), {
+                "__enter__": lambda s: s,
+                "__exit__": lambda s, *_: None,
+                "list_active": lambda s: [],
+            })()),
+        ),
+    ))
+
+    assert result["composer_empty"] is True
+    assert result["scene_result"].scene_text == ""
+    assert recorded[0]["code"] == "composer_fallback"
+
+
+def test_compose_narrative_node_returns_empty_when_scene_text_blank(monkeypatch):
+    from app.domain.narrative_composer.schemas import NarrativeComposerResult
+
+    class _FakeComposer:
+        def __init__(self, _gateway):
+            pass
+        def compose(self, _context, **_kwargs):
+            return NarrativeComposerResult(
+                planning_reasoning="。",
+                must_establish_facts=[],
+                must_not_establish_facts=[],
+                information_boundaries=[],
+                scene_stopping_point="。",
+                planned_events=[],
+                scene_reasoning="。",
+                scene_text="   ",
+                closing_prompt="。",
+            )
+
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: lambda _: None)
+    monkeypatch.setattr(
+        generation_nodes,
+        "assemble_narrative_context",
+        lambda **_kw: SimpleNamespace(user_input="观察。", current_state=object()),
+    )
+    monkeypatch.setattr(generation_nodes, "_composition_output_state", _fake_output)
+    original = generation_nodes.NarrativeComposerAgent
+    generation_nodes.NarrativeComposerAgent = _FakeComposer
+    try:
+        result = generation_nodes.compose_narrative_node(_compose_test_state(
+            runtime_services=SimpleNamespace(
+                diagnostics=generation_nodes.NullDiagnosticLogger(),
+                gateway=lambda **_kw: object(),
+                stores=SimpleNamespace(director_event=lambda: type("S", (), {
+                    "__enter__": lambda s: s,
+                    "__exit__": lambda s, *_: None,
+                    "list_active": lambda s: [],
+                })()),
+            ),
+        ))
+    finally:
+        generation_nodes.NarrativeComposerAgent = original
+
+    assert result["composer_empty"] is True
+    assert result["scene_result"].scene_text == ""
+
+
+def test_generation_graph_skips_canon_tail_when_composer_empty(monkeypatch):
+    graph = generation_graph.build_generation_graph(
+        canon_validation_is_enabled=True,
+    ).get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+
+    assert ("compose_narrative", "generate_canon_queries") in edges
+    assert ("compose_narrative", "__end__") in edges
+
+
+def test_rephrase_graph_skips_canon_tail_when_composer_empty(monkeypatch):
+    graph = generation_graph.build_rephrase_graph(
+        canon_validation_is_enabled=True,
+    ).get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+
+    assert ("rephrase_narrative", "generate_canon_queries") in edges
+    assert ("rephrase_narrative", "__end__") in edges

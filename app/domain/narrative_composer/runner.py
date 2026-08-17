@@ -3,7 +3,7 @@ import re
 from collections.abc import Callable
 from typing import Any, cast
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.llm import LLMGateway
 from app.core.llm.schema import schema_json
@@ -57,6 +57,11 @@ def run_narrative_composition(
             default_factory=list,
             max_length=5,
         )
+
+        @field_validator("scene_text", mode="before")
+        @classmethod
+        def _strip_scene_text(cls, v: str) -> str:
+            return v.strip() if isinstance(v, str) else v
 
         @model_validator(mode="after")
         def _require_all_turn_resolution_outcomes(self):

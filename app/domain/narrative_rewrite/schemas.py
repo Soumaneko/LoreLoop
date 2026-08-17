@@ -17,6 +17,7 @@ RewriteReasonCode = Literal[
     "changes_resolved_outcome",
     "conflicts_with_authority",
     "unsupported_request",
+    "strategy_unavailable",
 ]
 
 
@@ -46,6 +47,7 @@ class RewriteStrategyDecision(BaseModel):
                 "changes_resolved_outcome",
                 "conflicts_with_authority",
                 "unsupported_request",
+                "strategy_unavailable",
             },
         }
         if self.reason_code not in allowed_reasons[self.strategy]:

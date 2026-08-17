@@ -2472,3 +2472,206 @@ def test_setting_retriever_limits_and_never_exposes_hidden_facts():
     payload = json.loads(projected)
     assert len(payload) == 4
     assert all("hidden_facts" not in item for item in payload)
+
+
+def _context_extractor_input(*, evidence_ids=("e1",)):
+    hits = [
+        ContextHistoryHit(
+            evidence_id="e1",
+            source_type="scene_paragraph",
+            turn_index=1,
+            scene_id="scene_001",
+            paragraph_index=1,
+            text="顾晚棠说明账册不在身上。",
+            matched_intent_ids=["i1"],
+            score=0.5,
+        )
+    ]
+    return ContextExtractorInput(
+        user_input="问顾晚棠账册下落。",
+        core_memory=_core_memory(),
+        current_state=_state(),
+        scene_summaries=[],
+        history_evidence=ContextHistoryEvidenceSet(hits=hits),
+        continuity=ContinuitySelection(),
+        settings=SettingSelection(),
+        npc_profiles=[],
+    )
+
+
+def test_context_extractor_provider_failure_returns_empty_and_warning():
+    from app.core.llm.errors import LLMProviderError
+
+    class FailingGateway:
+        def run(self, **kwargs):
+            raise LLMProviderError("provider down")
+
+    extractor = ContextExtractor(FailingGateway())
+    result = extractor.extract(_context_extractor_input())
+
+    assert result.facts == []
+    assert result.turn_focus == "上下文事实提取失败"
+    assert [warning.code for warning in extractor.last_warnings] == [
+        "context_extract_failed"
+    ]
+    assert extractor.last_error is not None
+
+
+def test_context_extractor_first_invalid_retries_and_second_valid_subset_wins():
+    class RetryGateway:
+        def __init__(self):
+            self.attempt = 0
+
+        def run(self, **kwargs):
+            self.attempt += 1
+            attempt = self.attempt
+            on_attempt_start = kwargs["on_attempt_start"]
+            validate = kwargs["output_validator"]
+            on_attempt_start(attempt)
+            if attempt == 1:
+                output = kwargs["output_schema"].model_validate({
+                    "turn_focus": "询问账册。",
+                    "facts": [
+                        {
+                            "holder": "萧云痕",
+                            "source": "顾晚棠告知",
+                            "fact": "账册不在身上。",
+                            "evidence_ids": ["unknown_id"],
+                        },
+                        {
+                            "holder": "顾晚棠",
+                            "source": "顾晚棠告知",
+                            "fact": "盐帮仍在搜查。",
+                            "evidence_ids": ["e1"],
+                        },
+                    ],
+                })
+                try:
+                    validate(output)
+                except ValueError as exc:
+                    kwargs["last_error"] = str(exc)
+                    on_attempt_start(2)
+                    second = kwargs["output_schema"].model_validate({
+                        "turn_focus": "询问账册。",
+                        "facts": [{
+                            "holder": "顾晚棠",
+                            "source": "顾晚棠告知",
+                            "fact": "盐帮仍在搜查。",
+                            "evidence_ids": ["e1"],
+                        }],
+                    })
+                    validate(second)
+                    return second
+                raise AssertionError("first attempt should fail")
+            raise AssertionError("unexpected extra attempt")
+
+    extractor = ContextExtractor(RetryGateway())
+    result = extractor.extract(_context_extractor_input())
+
+    assert result.turn_focus == "询问账册。"
+    assert [fact.fact for fact in result.facts] == [
+        "顾晚棠已知(顾晚棠告知): 盐帮仍在搜查。"
+    ]
+    assert extractor.last_warnings == []
+
+
+def test_context_extractor_second_focus_without_facts_wins_over_first_facts():
+    from app.core.llm.errors import LLMOutputValidationError
+
+    class RetryGateway:
+        def __init__(self):
+            self.attempt = 0
+
+        def run(self, **kwargs):
+            self.attempt += 1
+            attempt = self.attempt
+            on_attempt_start = kwargs["on_attempt_start"]
+            validate = kwargs["output_validator"]
+            on_attempt_start(attempt)
+            if attempt == 1:
+                first = kwargs["output_schema"].model_validate({
+                    "turn_focus": "第一次焦点。",
+                    "facts": [
+                        {
+                            "holder": "顾晚棠",
+                            "source": "顾晚棠告知",
+                            "fact": "盐帮仍在搜查。",
+                            "evidence_ids": ["e1"],
+                        },
+                        {
+                            "holder": "顾晚棠",
+                            "source": "顾晚棠告知",
+                            "fact": "非法证据。",
+                            "evidence_ids": ["unknown_id"],
+                        },
+                    ],
+                })
+                try:
+                    validate(first)
+                except ValueError:
+                    pass
+                on_attempt_start(2)
+                second = kwargs["output_schema"].model_validate({
+                    "turn_focus": "第二次焦点。",
+                    "facts": [{
+                        "holder": "顾晚棠",
+                        "source": "顾晚棠告知",
+                        "fact": "非法证据。",
+                        "evidence_ids": ["unknown_id"],
+                    }],
+                })
+                try:
+                    validate(second)
+                except ValueError as exc:
+                    raise LLMOutputValidationError(str(exc)) from exc
+                raise AssertionError("second attempt should fail")
+
+    extractor = ContextExtractor(RetryGateway())
+    result = extractor.extract(_context_extractor_input())
+
+    assert result.turn_focus == "第二次焦点。"
+    assert result.facts == []
+    assert extractor.last_salvaged is True
+
+
+def test_context_extractor_reuse_first_preserves_second_dropped_warnings():
+    from app.core.llm import MockLLM
+
+    first = json.dumps({
+        "turn_focus": "第一次焦点。",
+        "facts": [
+            {
+                "holder": "顾晚棠",
+                "source": "顾晚棠告知",
+                "fact": "盐帮仍在搜查。",
+                "evidence_ids": ["e1"],
+            },
+            {
+                "holder": "顾晚棠",
+                "source": "顾晚棠告知",
+                "fact": "非法证据。",
+                "evidence_ids": ["unknown_id"],
+            },
+        ],
+    }, ensure_ascii=False)
+    second = json.dumps({
+        "turn_focus": "",
+        "facts": [{
+            "holder": "顾晚棠",
+            "source": "顾晚棠告知",
+            "fact": "非法证据。",
+            "evidence_ids": ["unknown_id"],
+        }],
+    }, ensure_ascii=False)
+    mock = MockLLM()
+    mock.set_responses([first, second])
+    extractor = ContextExtractor(mock.build_gateway())
+
+    result = extractor.extract(_context_extractor_input())
+
+    assert result.turn_focus == "第一次焦点。"
+    assert result.facts
+    assert any(
+        warning.code == "context_fact_dropped"
+        for warning in extractor.last_warnings
+    )

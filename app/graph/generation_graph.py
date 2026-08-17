@@ -7,9 +7,15 @@ from langgraph.graph import END, START, StateGraph
 from app.runtime.graph_cache import get_cached_graph
 from app.runtime.settings import canon_validation_enabled, experience_mode
 
+from app.core.llm.errors import (
+    LLMOutputParseError,
+    LLMOutputValidationError,
+    LLMProviderError,
+)
 from app.domain.roll.schemas import Difficulty
 from app.domain.short_term_memory import ShortTermMemory
 from app.domain.narrative_rewrite import RewriteStrategySelector
+from app.domain.narrative_rewrite.schemas import RewriteStrategyDecision
 from app.runtime.session import get_campaign_runtime
 
 from .generation_helpers import (
@@ -20,6 +26,7 @@ from .generation_helpers import (
 from .generation_events import GenerationEventPresenter
 from .fold import fold_state_keys
 from .generation_nodes import (
+    _diagnostics,
     check_narrative_consistency_node,
     compose_narrative_node,
     director_agent_stage_node,
@@ -89,6 +96,7 @@ def _compile_generation_graph(
         graph,
         source_nodes=("compose_narrative",),
         enabled=canon_validation_is_enabled,
+        compose_routing=True,
     )
 
     return graph.compile()
@@ -121,8 +129,13 @@ def _compile_rephrase_graph(*, canon_validation_is_enabled: bool):
         graph,
         source_nodes=("rephrase_narrative",),
         enabled=canon_validation_is_enabled,
+        compose_routing=True,
     )
     return graph.compile()
+
+
+def _route_after_compose(state: GenerationState) -> str:
+    return "empty" if state.get("composer_empty") else "canon"
 
 
 def _route_after_consistency_check(state: GenerationState) -> str:
@@ -180,10 +193,18 @@ def _add_canon_validation_tail(
     *,
     source_nodes: tuple[str, ...],
     enabled: bool,
+    compose_routing: bool = False,
 ) -> None:
     if not enabled:
         for source_node in source_nodes:
-            graph.add_edge(source_node, END)
+            if compose_routing:
+                graph.add_conditional_edges(
+                    source_node,
+                    _route_after_compose,
+                    {"empty": END, "canon": END},
+                )
+            else:
+                graph.add_edge(source_node, END)
         return
 
     graph.add_node("generate_canon_queries", generate_canon_queries_node)
@@ -191,7 +212,14 @@ def _add_canon_validation_tail(
     graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
     graph.add_node("revise_narrative", revise_narrative_node)
     for source_node in source_nodes:
-        graph.add_edge(source_node, "generate_canon_queries")
+        if compose_routing:
+            graph.add_conditional_edges(
+                source_node,
+                _route_after_compose,
+                {"empty": END, "canon": "generate_canon_queries"},
+            )
+        else:
+            graph.add_edge(source_node, "generate_canon_queries")
     graph.add_edge("generate_canon_queries", "retrieve_canon_evidence")
     graph.add_edge("retrieve_canon_evidence", "check_narrative_consistency")
     graph.add_conditional_edges(
@@ -279,6 +307,10 @@ def feedback_rewrite_stream(
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
         pending, version_index = _retry_source(runtime, turn_id)
+        if len(source_scene_text) > pending.max_chars:
+            raise ValueError(
+                "source_scene_text exceeds pending max_chars"
+            )
         trace_id = str(uuid.uuid4())
         state = _pending_context_state(
             runtime,
@@ -299,14 +331,38 @@ def feedback_rewrite_stream(
             "rewrite_feedback": user_feedback,
             "rewrite_source_scene_text": source_scene_text,
         })
-        decision = RewriteStrategySelector(gateway_for(state)).select(
-            context=pending.context,
-            source_scene_text=source_scene_text,
-            user_feedback=user_feedback,
-            recent_scene=state.get("recent_scene"),
-            turn_index=pending.turn_index,
-            trace_id=trace_id,
-        )
+        try:
+            decision = RewriteStrategySelector(gateway_for(state)).select(
+                context=pending.context,
+                source_scene_text=source_scene_text,
+                user_feedback=user_feedback,
+                recent_scene=state.get("recent_scene"),
+                turn_index=pending.turn_index,
+                trace_id=trace_id,
+            )
+        except (
+            LLMOutputParseError,
+            LLMOutputValidationError,
+            LLMProviderError,
+        ) as exc:
+            _diagnostics(state).warning(
+                source="rewrite_strategy",
+                code="rewrite_strategy_fallback",
+                message=(
+                    "Rewrite strategy selection failed; conservatively "
+                    f"keeping the original scene: {exc}"
+                ),
+                trace_id=trace_id,
+                task="narrative_rewrite_select",
+                turn_index=pending.turn_index,
+                details={"strategy_unavailable": True},
+            )
+            decision = RewriteStrategyDecision(
+                strategy="no_rewrite",
+                reason_code="strategy_unavailable",
+                reasoning="重试策略选择失败，保守不重写。",
+                rewrite_requirements=[],
+            )
         state["rewrite_strategy_decision"] = decision
         state["events"].append({
             "step": "feedback_rewrite_strategy_selected",
