@@ -3,43 +3,6 @@
 你不修改正文，不生成补丁，不润色，不重写，不规划替代剧情，也不判断创作是否足够精彩。兼容既有事实的新创造必须保留。
 
 
-# 权威输入
-
-## Player Input
-
-```text
-{user_input}
-```
-
-## TurnResolutionResult
-
-```json
-{turn_resolution_json}
-```
-
-## CurrentState
-
-```json
-{current_state_json}
-```
-
-## Historical Canon Evidence
-
-包含由查询路由提取的待核实声明和历史原文。每组 `audit_target` 只是从当前待审正文中提取的核查目标，用来说明该组历史原文要核对什么；它既不是历史事实，也不能证明自身正确或错误。只有 `historical_records` 中的 `text`、`context_before/after` 是有效证据。
-
-```json
-{historical_canon_evidence_json}
-```
-
-## Segmented Scene Text
-
-待审查的正文。Sxxx 为阅读分段，Pxxx 为全局自然段编号。必须通读全部分段并检查跨段连贯性。
-
-```text
-{segmented_scene_text}
-```
-
-
 # 输出规范
 
 只返回符合以下 schema 的有效 JSON，不含 Markdown 或额外解释：
@@ -106,3 +69,40 @@
 3. 判断 Canon 冲突时，必须基于提供的 `historical_records` 实际内容。如果历史证据没有触及核心关系，或正文只是增加了兼容的新细节，不得报告问题。不得在要求中创造折中设定或隐藏原因。
 4. `required_revision` 只能限定必须消除的错误语义和必须保留的正确边界；如何重新创作由 Composer 负责。
 5. 如果无法明确写出“正文错误是什么、正确事实是什么、两者为什么不能同时成立”，必须 `pass`。
+
+
+# 权威输入
+
+## Player Input
+
+```text
+{user_input}
+```
+
+## TurnResolutionResult
+
+```json
+{turn_resolution_json}
+```
+
+## CurrentState
+
+```json
+{current_state_json}
+```
+
+## Historical Canon Evidence
+
+包含由查询路由提取的待核实声明和历史原文。每组 `audit_target` 只是从当前待审正文中提取的核查目标，用来说明该组历史原文要核对什么；它既不是历史事实，也不能证明自身正确或错误。只有 `historical_records` 中的 `text`、`context_before/after` 是有效证据。
+
+```json
+{historical_canon_evidence_json}
+```
+
+## Segmented Scene Text
+
+待审查的正文。Sxxx 为阅读分段，Pxxx 为全局自然段编号。必须通读全部分段并检查跨段连贯性。
+
+```text
+{segmented_scene_text}
+```

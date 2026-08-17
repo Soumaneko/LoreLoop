@@ -534,12 +534,12 @@ def test_prompt_defines_incremental_state_contract():
     )
 
     template_sections = [
-        "# 上下文",
-        "# 输入",
         "# 输出规范",
         "# 核心规则",
         "# 禁止事项",
         "# 例子",
+        "# 上下文",
+        "# 输入",
     ]
     section_positions = [prompt.index(section) for section in template_sections]
     assert section_positions == sorted(section_positions)

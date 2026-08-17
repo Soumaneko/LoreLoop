@@ -3,60 +3,6 @@
 你只提取事实，不规划剧情，不判定行动成败，不写正文，不生成 NPC 下一步反应。
 
 
-# 上下文
-
-## 核心记忆
-
-```json
-{core_memory_json}
-```
-
-## 当前状态
-
-```json
-{current_state_json}
-```
-
-## 场景摘要
-
-```json
-{scene_summaries_json}
-```
-
-## 已确认历史正文
-
-```json
-{confirmed_history_json}
-```
-
-## 活跃连续性事项
-
-```json
-{continuity_json}
-```
-
-## 世界设定
-
-```json
-{settings_json}
-```
-
-## NPC 档案
-
-```json
-{npc_profiles_json}
-```
-
-
-# 输入
-
-## 玩家输入
-
-```text
-{user_input}
-```
-
-
 # 输出规范
 
 只返回符合以下 schema 的有效 JSON，不含任何 Markdown 标记、前缀、后缀或解释：
@@ -142,4 +88,58 @@
     }}
   ]
 }}
+```
+
+
+# 上下文
+
+## 核心记忆
+
+```json
+{core_memory_json}
+```
+
+## 当前状态
+
+```json
+{current_state_json}
+```
+
+## 场景摘要
+
+```json
+{scene_summaries_json}
+```
+
+## 已确认历史正文
+
+```json
+{confirmed_history_json}
+```
+
+## 活跃连续性事项
+
+```json
+{continuity_json}
+```
+
+## 世界设定
+
+```json
+{settings_json}
+```
+
+## NPC 档案
+
+```json
+{npc_profiles_json}
+```
+
+
+# 输入
+
+## 玩家输入
+
+```text
+{user_input}
 ```

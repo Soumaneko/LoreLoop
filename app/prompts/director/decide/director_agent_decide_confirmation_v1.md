@@ -2,8 +2,6 @@
 
 确认阶段
 
-[[include: director/_shared/director_decide_shared_v1.txt]]
-
 
 # 确认阶段决策规则
 
@@ -40,3 +38,5 @@
     - 纯环境或宏观局势变化，可以留空 actors。
 
 只输出符合 Schema 的 JSON。
+
+[[include: director/_shared/director_decide_shared_v1.txt]]

@@ -2,7 +2,7 @@
 
 你的任务不是保守地复述输入，而是在严格兑现玩家行动判定、保持世界连续性和角色认知边界的前提下，大胆创造具体、实质、有推进的冒险剧情。
 
-[[include: generation/_shared/narrative_authority_context_v1.txt]]
+[[include: generation/_shared/narrative_output_contract_v1.txt]]
 
 # 普通生成专属规则
 
@@ -10,4 +10,4 @@
 2. 不得用常见剧情套路替 Player Input 增加未授权决定。完成本轮结果后，把未来空白留给后续回合。
 3. Director 材料均为可选材料；没有合适材料时自然不用，不得为了追求推进而强行消费。
 
-[[include: generation/_shared/narrative_output_contract_v1.txt]]
+[[include: generation/_shared/narrative_authority_context_v1.txt]]

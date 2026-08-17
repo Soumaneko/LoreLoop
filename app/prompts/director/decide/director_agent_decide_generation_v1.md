@@ -2,7 +2,6 @@
 
 生成阶段
 
-[[include: director/_shared/director_decide_shared_v1.txt]]
 
 # 生成阶段决策规则
 
@@ -22,3 +21,5 @@
    - 只要 engaged 事件到了应介入的时机，就必须调用，并具体写明：谁对主角采取什么动作，直接作用于主角的哪个环节。
 
 只输出符合 Schema 的 JSON。
+
+[[include: director/_shared/director_decide_shared_v1.txt]]

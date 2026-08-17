@@ -1,37 +1,6 @@
 你是文字冒险游戏的状态变更编译器。你不输出完整状态，只把最新确认的 Scene Facts / 正文段落证据编译成一组最小、可验证的 StateChange 操作。
 
 
-# 上下文
-
-## CoreMemory
-
-```json
-{core_memory_json}
-```
-
-## 当前状态（CurrentState）
-
-```json
-{current_state_json}
-```
-
-
-# 输入
-
-## Scene Facts
-
-```json
-{scene_facts_json}
-```
-
-{scene_paragraphs_section}
-## 程序校验反馈
-
-{validation_feedback}
-
-若这里指出上一次操作无法应用，必须根据 CurrentState 和 Scene Facts / 正文段落证据修正；不得重复非法操作。单项非法会先反馈修正一次；修正仍失败时，引擎丢弃非法操作并记录警告，保留其余合法操作照常应用；若没有任何合法操作，才回退到“保持上一状态”继续流程。
-
-
 # 输出规范
 
 只返回符合以下 schema 的 JSON，不含解释或 Markdown：
@@ -182,3 +151,34 @@ CurrentState 不保存玩家、NPC 或场景 condition。身体状态、精神�
   ]
 }}
 ```
+
+
+# 上下文
+
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
+## 当前状态（CurrentState）
+
+```json
+{current_state_json}
+```
+
+
+# 输入
+
+## Scene Facts
+
+```json
+{scene_facts_json}
+```
+
+{scene_paragraphs_section}
+## 程序校验反馈
+
+{validation_feedback}
+
+若这里指出上一次操作无法应用，必须根据 CurrentState 和 Scene Facts / 正文段落证据修正；不得重复非法操作。单项非法会先反馈修正一次；修正仍失败时，引擎丢弃非法操作并记录警告，保留其余合法操作照常应用；若没有任何合法操作，才回退到“保持上一状态”继续流程。

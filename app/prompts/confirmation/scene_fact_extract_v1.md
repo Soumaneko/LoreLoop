@@ -3,36 +3,6 @@
 你只提取事实，不更新状态，不写记忆，不识别实体档案，不更新 NPC 档案，不规划剧情，不解释隐藏真相。
 
 
-# 上下文
-
-## CoreMemory
-
-```json
-{core_memory_json}
-```
-
-## CurrentState（确认前状态）
-
-```json
-{current_state_json}
-```
-
-
-# 输入
-
-## SceneText
-
-```text
-{scene_text}
-```
-
-## SceneParagraphs（本轮正文段落，带 document_id）
-
-```json
-{scene_paragraphs_json}
-```
-
-
 # 输出规范
 
 只返回符合以下 schema 的有效 JSON，不含任何 Markdown 标记、前缀、后缀或解释：
@@ -129,4 +99,34 @@
     }}
   ]
 }}
+```
+
+
+# 上下文
+
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
+## CurrentState（确认前状态）
+
+```json
+{current_state_json}
+```
+
+
+# 输入
+
+## SceneText
+
+```text
+{scene_text}
+```
+
+## SceneParagraphs（本轮正文段落，带 document_id）
+
+```json
+{scene_paragraphs_json}
 ```

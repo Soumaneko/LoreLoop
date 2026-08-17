@@ -3,45 +3,6 @@
 极其重要：请绝对不要把“系统不让你写细节”的限制，在剧情中曲解为“角色没有获得细节”或“NPC 隐瞒了细节”。
 你的任务是为下游模块开放“创作许可”。如果判定为成功/大成功，在世界观里角色必然获得了详细且完整的信息/战利品，你只需在判定中明确“授权下游生成具体内容”，绝不能在剧情里用“但具体内容不明”来给成功打折扣。
 
-# 上下文
-
-## CoreMemory
-
-```json
-{core_memory_json}
-```
-
-## CurrentState
-
-```json
-{current_state_json}
-```
-
-## Context Facts
-
-```json
-{context_facts_json}
-```
-
-## NPCProfiles
-
-```json
-{npc_profiles_json}
-```
-
-# 输入
-
-## 玩家输入
-
-```text
-{user_input}
-```
-
-## 行动判定
-
-```json
-{action_judgments_json}
-```
 
 # 输出规范
 
@@ -68,6 +29,7 @@
 1. 第一步，你需要根据上下文内容，理解当前剧情场景。CoreMemory 是剧情和世界核心设定；CurrentState 是此轮剧情之前的主角状态；Context Facts 是上游基于历史、摘要和当前上下文提取出的相关既有事实列表；NPC Profiles 是人物背景边界。
 2. 第二步，确定信息边界，主角知道什么不知道什么？NPC知道什么不知道什么？
 3. 第三步，你需要在不违背第一第二步的前提下，根据 ActionJudgments 确定每个行动的直接事实结果。
+
 
 # 核心规则
 
@@ -139,3 +101,45 @@
 
 正确认知（明确职责交接）："米莉的心理防线被魔法知识彻底击破，完全接受了利益交换框架，并详细说明了具体的帮助与回报条件。"
 (AI 潜台词：剧情里玩家已经大获成功，获得了所有细节，我只负责拉开这扇门，具体的台词内容让下游去写。)
+
+
+# 上下文
+
+## CoreMemory
+
+```json
+{core_memory_json}
+```
+
+## CurrentState
+
+```json
+{current_state_json}
+```
+
+## Context Facts
+
+```json
+{context_facts_json}
+```
+
+## NPCProfiles
+
+```json
+{npc_profiles_json}
+```
+
+
+# 输入
+
+## 玩家输入
+
+```text
+{user_input}
+```
+
+## 行动判定
+
+```json
+{action_judgments_json}
+```

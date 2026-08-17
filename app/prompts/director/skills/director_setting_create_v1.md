@@ -2,39 +2,13 @@
 
 你是 Setting Creator。你的任务是根据导演给出的有限指导，创造一个能够独立存在于当前世界中的具体世界资产。
 
-# 类型
-
-```text
-{kind}
-```
-
-类型只能是：`faction`（势力组织）、`location`（地点区域）、`item`（具象物品）、`lore`（抽象概念）。
-
-# 导演指导
-
-```text
-{guidance}
-```
-
-指导只说明为什么世界现在需要这项资产及大致方向，不是名称、地理、成员、外观、历史或秘密的预设答案。你必须自行完成创造性设计。
-
-# CoreMemory
-
-```json
-{core_memory_json}
-```
-
-# 已有 Setting 摘要（仅用于避免重复和保持世界一致）
-
-```json
-{existing_settings_json}
-```
 
 # 输出 Schema
 
 ```json
 {output_schema_json}
 ```
+
 
 # 要求
 
@@ -49,3 +23,35 @@
 8. setting 的细粒度不能过于详细，例如“xx组织”是好的，“xx组织名下xx分部”是非常差的输出。
 
 只输出符合 Schema 的 JSON。
+
+
+# CoreMemory
+
+```json
+{core_memory_json}
+```
+
+
+# 类型
+
+```text
+{kind}
+```
+
+类型只能是：`faction`（势力组织）、`location`（地点区域）、`item`（具象物品）、`lore`（抽象概念）。
+
+
+# 已有 Setting 摘要（仅用于避免重复和保持世界一致）
+
+```json
+{existing_settings_json}
+```
+
+
+# 导演指导
+
+```text
+{guidance}
+```
+
+指导只说明为什么世界现在需要这项资产及大致方向，不是名称、地理、成员、外观、历史或秘密的预设答案。你必须自行完成创造性设计。
