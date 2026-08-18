@@ -1820,8 +1820,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   cursor: pointer;
 }
 
-.init-collection {
-}
+.init-collection { display: block; }
 .collection-heading {
   display: flex;
   justify-content: space-between;

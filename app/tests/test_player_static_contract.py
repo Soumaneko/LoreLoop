@@ -255,9 +255,11 @@ def test_player_frontend_uses_only_player_api_and_hides_debug_controls():
     assert "0 0 12px var(--gold-glow)" not in styles
     assert ".init-modal [hidden]" in styles
     assert "select option, select optgroup" in styles
-    assert "confirmation-status" in source
-    assert "activePlayerAction" in source
+    assert 'id="activePlayerAction"' in html
     assert "showActivePlayerAction(userInput)" in source
+    assert '正在解析：尝试' in source
+    assert '检定已掷出：' in source
+    assert '机制判定达成：' in source
     assert 'const PLAYER_SHELL_CACHE_KEY = "loreloop:player-shell"' in source
     assert "function restorePlayerShell()" in source
     assert 'sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1")' in source

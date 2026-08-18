@@ -80,22 +80,23 @@ const els = {
 };
 
 const progressLabels = {
-  state_loaded: "正在唤醒世界",
-  npc_profiles_loaded: "正在理解场景",
-  action_parsed: "正在理解你的行动",
-  rolls_done: "命运已经掷下",
-  turn_resolution_done: "正在推演结果",
-  scene_stream_started: "世界正在回应",
+  state_loaded: "正在读取世界状态",
+  npc_profiles_loaded: "正在载入人物档案",
+  action_parsed: "正在解析行动意图",
+  context_facts_done: "前情已检索 · 正在推演因果",
+  rolls_done: "检定已结算 · 正在推演",
+  turn_resolution_done: "机制判定达成 · 正在构思正文",
+  scene_stream_started: "正在书写剧情正文",
   canon_query_started: "正在核对历史事实",
   canon_queries_generated: "历史查询已规划",
-  canon_evidence_retrieved: "历史证据已检索",
+  canon_evidence_retrieved: "历史证据已比对",
   narrative_check_started: "正在检查前后逻辑",
-  narrative_checked: "正在检查前后逻辑",
-  narrative_revision_started: "发现明确问题，正在重新编写",
-  narrative_revised: "修订完成",
+  narrative_checked: "前后逻辑检查完成",
+  narrative_revision_started: "发现逻辑偏差，正在自动修订",
+  narrative_revised: "正文修订完成",
   feedback_rewrite_started: "正在理解修改意见",
   feedback_rewrite_strategy_selected: "修改方式已经确定",
-  opening_rewrite_started: "正在重新生成开场",
+  opening_rewrite_started: "正在重新生成开场正文",
   feedback_source_rewrite_done: "局部修订完成",
   feedback_recompose_done: "重新构思完成",
   confirm_started: "正在读取最终正文",
@@ -110,7 +111,7 @@ const progressLabels = {
   opening_foundation_ready: "私有开局基础已经准备完成",
   opening_settings_started: "正在建立世界设定",
   opening_settings_done: "世界设定已经建立",
-  opening_scene_done: "开场已经生成",
+  opening_scene_done: "开场正文已经生成",
   initialization_pending: "正在保存待确认开场",
 };
 let streamBuffer = "";
@@ -2373,7 +2374,7 @@ function settleCancelledGeneration({ retryMode = null, userInput = "" } = {}) {
   showToast("已停止生成");
 }
 
-function startStreaming(label = "世界正在回应") {
+function startStreaming(label = "正在书写剧情正文") {
   streamBuffer = "";
   if (streamFrame) window.cancelAnimationFrame(streamFrame);
   streamFrame = 0;
@@ -2439,23 +2440,65 @@ function handleGenerationEvent(event, { retryMode = null } = {}) {
     els.streamingLabel.textContent = "正在恢复最新生成进度";
   }
   setProgress(event.step);
+  if (event.step === "action_parsed") {
+    const parsed = event.data?.action_parse_result;
+    const firstAction = parsed?.atomic_actions?.[0];
+    if (firstAction) {
+      const desc = [firstAction.verb, firstAction.target].filter(Boolean).join(" ");
+      if (desc) {
+        els.streamingLabel.textContent = `正在解析：尝试「${desc}」`;
+      }
+    }
+  }
+  if (event.step === "context_facts_done") {
+    els.streamingLabel.textContent = "前情已检索 · 正在推演因果";
+  }
+  if (event.step === "rolls_done") {
+    const rolls = event.data?.roll_results;
+    if (Array.isArray(rolls) && rolls.length > 0) {
+      const firstRoll = rolls[0];
+      const dice = firstRoll.dice || "检定";
+      const val = firstRoll.value ?? firstRoll.raw_value;
+      const sides = firstRoll.dice_sides ? `/${firstRoll.dice_sides}` : "";
+      const valStr = val != null ? ` ➜ ${val}${sides}` : "";
+      els.streamingLabel.textContent = `检定已掷出：${dice}${valStr} · 正在结算`;
+    }
+  }
+  if (event.step === "turn_resolution_done") {
+    const tr = event.data?.turn_resolution;
+    const firstResolution = tr?.action_resolutions?.[0];
+    const band = firstResolution?.outcome_band;
+    const bandMap = {
+      critical_success: "大成功",
+      success: "成功",
+      partial_success: "部分成功",
+      failure: "失败",
+      critical_failure: "大失败",
+    };
+    const bandText = bandMap[band] || band;
+    if (bandText) {
+      els.streamingLabel.textContent = `机制判定达成：${bandText} · 正在构思正文`;
+    } else {
+      els.streamingLabel.textContent = "机制判定达成 · 正在构思正文";
+    }
+  }
   if (event.step === "feedback_rewrite_strategy_selected") {
     const strategy = event.data?.strategy;
-    if (strategy === "revise_from_source") els.streamingLabel.textContent = "正在基于原文修订";
-    if (strategy === "recompose") els.streamingLabel.textContent = "正在重新构思正文";
+    if (strategy === "revise_from_source") els.streamingLabel.textContent = "正在基于原文修订正文";
+    if (strategy === "recompose") els.streamingLabel.textContent = "正在重新构思剧情正文";
   }
   if (event.step === "scene_stream_started") startStreaming(
     event.data?.rewrite_mode === "recompose"
-      ? "正在重新构思正文"
+      ? "正在重新构思剧情正文"
       : retryMode === "feedback_rewrite"
-        ? "正在基于原文修订"
+        ? "正在基于原文修订正文"
       : event.data?.revision
-      ? "正在根据问题断言重新编写"
+      ? "发现逻辑偏差，正在自动修订正文"
       : retryMode === "rephrase"
-        ? "正在重新措辞"
+        ? "正在重新措辞正文"
         : retryMode === "reroll"
-          ? "正在重新判定"
-        : "世界正在回应",
+          ? "正在重新判定并重写正文"
+        : "正在书写剧情正文",
   );
   if (event.step === "scene_text_delta") {
     appendStreamingText(event.data?.delta || "");
@@ -2583,7 +2626,7 @@ async function rewriteFromFeedbackText(userFeedback) {
   if (els.feedbackRewriteDialog?.open) els.feedbackRewriteDialog.close();
   prepareGenerationRun("feedback_rewrite", pending.user_input || "");
   setMode("generating"); renderControls();
-  startStreaming("正在理解修改意见");
+  startStreaming("正在分析修改意见");
   let decision = null;
   try {
     const operationId = await stream("/api/player/feedback-rewrite", {
@@ -2641,7 +2684,7 @@ async function generateTurn() {
   state.composerEmptyUserInput = userInput;
   showActivePlayerAction(userInput);
   els.playerInput.value = ""; autoSizeInput(); renderControls();
-  startStreaming("正在理解你的行动");
+  startStreaming("正在解析行动意图");
   try {
     const operationId = await stream("/api/player/generate", {
       user_input: userInput,
@@ -2685,7 +2728,7 @@ async function retryTurn(retryMode) {
   const endpoint = rephrase ? "rephrase" : "reroll";
   prepareGenerationRun(retryMode, pending.user_input || "");
   setMode("generating"); renderControls();
-  startStreaming(rephrase ? "正在重新措辞" : "正在重新判定");
+  startStreaming(rephrase ? "正在重新措辞正文" : "正在重新判定并重写正文");
   try {
     const operationId = await stream(`/api/player/${endpoint}`, {
       turn_id: variant.turn_id,

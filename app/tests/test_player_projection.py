@@ -341,6 +341,119 @@ def test_player_event_projection_removes_internal_generation_data():
     assert "private" not in str(event)
 
 
+def test_player_event_projection_exposes_milestone_data_safely():
+    action_event = DebugHandler._player_event({
+        "step": "action_parsed",
+        "data": {
+            "action_parse_result": {
+                "atomic_actions": [
+                    {
+                        "action_id": "act-1",
+                        "verb": "回想",
+                        "target": "姚沉璧的警告",
+                        "raw_text": "回想姚沉璧说过什么",
+                        "method": "心神冥想",
+                        "condition": "安全",
+                        "risk_level": "low",
+                        "likely_needs_roll": False,
+                    }
+                ],
+                "retrieval_topics": ["secret_topic"],
+            },
+            "touched_event_ids": ["hidden_event_99"],
+        },
+    })
+    assert action_event == {
+        "step": "action_parsed",
+        "data": {
+            "action_parse_result": {
+                "atomic_actions": [
+                    {
+                        "verb": "回想",
+                        "target": "姚沉璧的警告",
+                        "raw_text": "回想姚沉璧说过什么",
+                    }
+                ],
+            },
+        },
+    }
+    assert "hidden_event_99" not in str(action_event)
+    assert "secret_topic" not in str(action_event)
+    assert "likely_needs_roll" not in str(action_event)
+
+    rolls_event = DebugHandler._player_event({
+        "step": "rolls_done",
+        "data": {
+            "roll_results": [
+                {
+                    "action_id": "act-1",
+                    "sequence": 0,
+                    "actor": ["萧欢"],
+                    "action_type": "breakthrough",
+                    "dice": "1d20+2",
+                    "value": 18,
+                    "dice_sides": 20,
+                    "raw_value": 16,
+                    "all_raw_values": [16],
+                    "roll_hint": "GM hint",
+                    "modifiers": [{"label": "境界优势", "value": 2, "reason": "GM reasoning"}],
+                }
+            ],
+            "internal_roll_config": {"seed": 123},
+        },
+    })
+    assert rolls_event == {
+        "step": "rolls_done",
+        "data": {
+            "roll_results": [
+                {
+                    "dice": "1d20+2",
+                    "value": 18,
+                    "dice_sides": 20,
+                    "raw_value": 16,
+                }
+            ],
+        },
+    }
+    assert "seed" not in str(rolls_event)
+    assert "GM reasoning" not in str(rolls_event)
+    assert "all_raw_values" not in str(rolls_event)
+
+    turn_res_event = DebugHandler._player_event({
+        "step": "turn_resolution_done",
+        "data": {
+            "turn_resolution": {
+                "action_resolutions": [
+                    {
+                        "action_id": "act-1",
+                        "action_type": "breakthrough",
+                        "outcome_band": "success",
+                        "resolved_fact": "已成功突破屏障",
+                        "effect_reasoning": "根据判定规则大阵有薄弱点",
+                    }
+                ],
+                "resolution_reasoning": "internal reasoning",
+            },
+        },
+    })
+    assert turn_res_event == {
+        "step": "turn_resolution_done",
+        "data": {
+            "turn_resolution": {
+                "action_resolutions": [
+                    {
+                        "action_type": "breakthrough",
+                        "outcome_band": "success",
+                    }
+                ],
+            },
+        },
+    }
+    assert "internal reasoning" not in str(turn_res_event)
+    assert "effect_reasoning" not in str(turn_res_event)
+    assert "resolved_fact" not in str(turn_res_event)
+
+
 def test_player_event_projection_preserves_revision_stream_marker():
     event = DebugHandler._player_event({
         "step": "scene_stream_started",

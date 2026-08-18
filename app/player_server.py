@@ -470,6 +470,51 @@ class PlayerHandler(BaseHTTPRequestHandler):
             public_data = {
                 "first_available_sequence": data.get("first_available_sequence"),
             }
+        elif step == "action_parsed":
+            parse_result = data.get("action_parse_result") or {}
+            raw_actions = parse_result.get("atomic_actions") or []
+            public_data = {
+                "action_parse_result": {
+                    "atomic_actions": [
+                        {
+                            "verb": a.get("verb"),
+                            "target": a.get("target"),
+                            "raw_text": a.get("raw_text"),
+                        }
+                        for a in raw_actions
+                        if isinstance(a, dict)
+                    ],
+                },
+            }
+        elif step == "rolls_done":
+            raw_rolls = data.get("roll_results") or []
+            public_data = {
+                "roll_results": [
+                    {
+                        "dice": r.get("dice"),
+                        "value": r.get("value"),
+                        "dice_sides": r.get("dice_sides"),
+                        "raw_value": r.get("raw_value"),
+                    }
+                    for r in raw_rolls
+                    if isinstance(r, dict)
+                ],
+            }
+        elif step == "turn_resolution_done":
+            tr = data.get("turn_resolution") or {}
+            raw_resolutions = tr.get("action_resolutions") or []
+            public_data = {
+                "turn_resolution": {
+                    "action_resolutions": [
+                        {
+                            "action_type": ar.get("action_type"),
+                            "outcome_band": ar.get("outcome_band"),
+                        }
+                        for ar in raw_resolutions
+                        if isinstance(ar, dict)
+                    ],
+                },
+            }
         elif step == "scene_text_delta":
             public_data = {"delta": data.get("delta", "")}
         elif step == "scene_stream_started":
