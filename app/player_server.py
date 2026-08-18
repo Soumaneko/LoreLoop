@@ -104,12 +104,32 @@ def _project_client_error(exc: Exception, *, label: str) -> tuple[int, str, str]
     return 500, "internal_error", "服务器内部错误，详情见服务端日志。"
 
 
+TOKEN_META = '<meta name="loreloop-session-token" content="" />'
+
+
 class PlayerHandler(BaseHTTPRequestHandler):
+    def _serve_player_index(self, *, inject_token: bool = False) -> None:
+        template = (PLAYER_STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        if TOKEN_META not in template:
+            raise RuntimeError("player index is missing the desktop session token marker")
+        token_meta = (
+            '<meta name="loreloop-session-token" content="'
+            + html.escape(getattr(self, "session_token", "") if inject_token else "", quote=True)
+            + '" />'
+        )
+        payload = template.replace(TOKEN_META, token_meta, 1).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(payload)
+
     def do_GET(self) -> None:
         parsed_url = urlparse(self.path)
         path = parsed_url.path
         if path == "/":
-            self._static_file(PLAYER_STATIC_DIR / "index.html", PLAYER_STATIC_DIR)
+            self._serve_player_index(inject_token=False)
             return
         if path.startswith("/assets/"):
             self._static_file(
@@ -987,9 +1007,6 @@ class PlayerHandler(BaseHTTPRequestHandler):
         )
 
 
-TOKEN_META = '<meta name="loreloop-session-token" content="" />'
-
-
 class TokenAuthedPlayerHandler(PlayerHandler):
     """Player surface that requires a session token (and a loopback Host)."""
 
@@ -1005,23 +1022,6 @@ class TokenAuthedPlayerHandler(PlayerHandler):
     def _valid_host(self) -> bool:
         expected = f"127.0.0.1:{self.server.server_address[1]}"
         return hmac.compare_digest(self.headers.get("Host", ""), expected)
-
-    def _serve_player_index(self, *, inject_token: bool) -> None:
-        template = (PLAYER_STATIC_DIR / "index.html").read_text(encoding="utf-8")
-        if TOKEN_META not in template:
-            raise RuntimeError("player index is missing the desktop session token marker")
-        token_meta = (
-            '<meta name="loreloop-session-token" content="'
-            + html.escape(self.session_token if inject_token else "", quote=True)
-            + '" />'
-        )
-        payload = template.replace(TOKEN_META, token_meta, 1).encode("utf-8")
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(payload)
 
 
 class DesktopPlayerHandler(TokenAuthedPlayerHandler):

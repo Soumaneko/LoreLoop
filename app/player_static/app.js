@@ -56,7 +56,7 @@ const els = {
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
   difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), canonValidationBtn: $("canonValidationBtn"), canonInfoBtn: $("canonInfoBtn"), tokenUsageInfoBtn: $("tokenUsageInfoBtn"), oneClickInfoBtn: $("oneClickInfoBtn"), settingInfoDialog: $("settingInfoDialog"), settingInfoTitle: $("settingInfoTitle"), settingInfoContent: $("settingInfoContent"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), oneClickConfirm: $("oneClickConfirm"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
-  codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), closeCodexBtn: $("closeCodexBtn"),
+  codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), codexFooter: $("codexFooter"), closeCodexBtn: $("closeCodexBtn"),
   codexConfirmDialog: $("codexConfirmDialog"), codexConfirmEyebrow: $("codexConfirmEyebrow"), codexConfirmTitle: $("codexConfirmTitle"), codexConfirmMessage: $("codexConfirmMessage"), codexConfirmCancelBtn: $("codexConfirmCancelBtn"), codexConfirmOkBtn: $("codexConfirmOkBtn"),
   saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
   saveManagerDialog: $("saveManagerDialog"), closeSaveManagerBtn: $("closeSaveManagerBtn"), saveCardList: $("saveCardList"),
@@ -342,8 +342,18 @@ function renderControls({ updateNavigation = true } = {}) {
 
 function renderHeader() {
   const campaign = state.playerState?.campaign || {};
-  els.worldTime.textContent = campaign.world_time || "尚未启程";
-  els.worldLocation.textContent = campaign.location || "等待世界载入";
+  const time = campaign.world_time || "";
+  const location = campaign.location || "";
+  els.worldTime.textContent = time;
+  els.worldLocation.textContent = location;
+  const parent = els.worldTime?.parentElement;
+  if (parent) {
+    if (time || location) {
+      parent.classList.add("is-ready");
+    } else {
+      parent.classList.remove("is-ready");
+    }
+  }
 }
 
 function renderCanonValidation() {
@@ -680,6 +690,7 @@ function renderTurnNavigator() {
     refreshNavigationObserver();
     return;
   }
+  const previousActiveKey = navigationActiveKey;
   navigationRenderSignature = signature;
   navigationButtons = new Map();
   navigationActiveKey = null;
@@ -716,6 +727,12 @@ function renderTurnNavigator() {
     fragment.appendChild(button);
   }
   els.turnNavigatorList.appendChild(fragment);
+  const targetActiveKey = (previousActiveKey && navigationButtons.has(previousActiveKey))
+    ? previousActiveKey
+    : (entries.length > 0 ? entries[entries.length - 1].key : null);
+  if (targetActiveKey) {
+    setNavigationActive(targetActiveKey);
+  }
   refreshNavigationObserver({ force: true });
 }
 
@@ -1270,6 +1287,10 @@ function closeCodexProfile() {
     els.codexDialog.classList.remove("is-floating");
     els.codexDialog.style.top = "";
     els.codexDialog.style.left = "";
+    if (els.codexFooter) {
+      els.codexFooter.hidden = true;
+      els.codexFooter.replaceChildren();
+    }
     activeCodexProfile = null;
     activeCodexTrigger = null;
     document.removeEventListener("pointerdown", handleCodexOutsideClick);
@@ -1282,6 +1303,7 @@ function closeCodexProfile() {
 }
 
 function handleCodexOutsideClick(event) {
+  if (isDraggingCodex) return;
   if (els.codexDialog && els.codexDialog.open) {
     if (event.target === els.codexDialog) {
       const rect = els.codexDialog.getBoundingClientRect();
@@ -1306,7 +1328,7 @@ function handleCodexKeydown(event) {
   }
 }
 
-function positionCodexPopover(triggerElement) {
+function positionCodexPopover(triggerElement, keepCurrentPosition = false) {
   if (!els.codexDialog || !els.codexDialog.open) return;
 
   if (window.innerWidth < 640) {
@@ -1330,26 +1352,32 @@ function positionCodexPopover(triggerElement) {
   }
 
   const dialogWidth = Math.min(500, window.innerWidth - 24);
-  let left = 16;
-  if (triggerElement) {
-    const rect = triggerElement.getBoundingClientRect();
-    left = rect.left + rect.width / 2 - dialogWidth / 2;
-  }
-  left = Math.max(12, Math.min(left, window.innerWidth - dialogWidth - 12));
-
   const popoverHeight = els.codexDialog.offsetHeight || 220;
+
+  const triggerRect = triggerElement ? triggerElement.getBoundingClientRect() : null;
+  const isTriggerVisible = triggerRect && triggerRect.bottom > 0 && triggerRect.top < window.innerHeight;
+
+  let left = 16;
   let top = 80;
-  if (triggerElement) {
-    const rect = triggerElement.getBoundingClientRect();
-    top = rect.bottom + 10;
+
+  if (keepCurrentPosition || !isTriggerVisible) {
+    const curTop = parseFloat(els.codexDialog.style.top) || (window.innerHeight / 2 - popoverHeight / 2);
+    const curLeft = parseFloat(els.codexDialog.style.left) || 16;
+
+    top = Math.max(16, Math.min(curTop, window.innerHeight - popoverHeight - 16));
+    left = Math.max(12, Math.min(curLeft, window.innerWidth - dialogWidth - 12));
+  } else {
+    left = triggerRect.left + triggerRect.width / 2 - dialogWidth / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - dialogWidth - 12));
+
+    top = triggerRect.bottom + 10;
     if (top + popoverHeight > window.innerHeight - 16) {
-      top = Math.max(16, rect.top - popoverHeight - 10);
-      if (top < 16) {
+      top = Math.max(16, triggerRect.top - popoverHeight - 10);
+      if (top < 16 || top + popoverHeight > window.innerHeight - 16) {
         top = Math.max(16, window.innerHeight - popoverHeight - 16);
       }
     }
-  } else {
-    top = Math.max(16, window.innerHeight / 2 - popoverHeight / 2);
+    top = Math.max(16, Math.min(top, window.innerHeight - popoverHeight - 16));
   }
 
   els.codexDialog.style.position = "fixed";
@@ -1407,17 +1435,27 @@ function openSettingCodex(profile, triggerElement) {
   els.codexTitle.textContent = profile.name || "典籍条目";
   els.codexContent.replaceChildren();
 
-  const typeBadge = node("span", "codex-kind-tag", "世界设定");
-  const kindLabel = SETTING_KIND_LABELS[profile.setting_kind] || profile.setting_kind || "";
-  const subHeader = node("div", "codex-sub-header");
-  if (kindLabel) subHeader.appendChild(node("span", "codex-sub-text", kindLabel));
-  subHeader.appendChild(typeBadge);
-  els.codexContent.appendChild(subHeader);
+  // 1. 顶部结构：统一双列属性网格
+  const kindLabel = SETTING_KIND_LABELS[profile.setting_kind] || profile.setting_kind || "世界设定";
+  const metaGrid = node("div", "codex-meta-grid");
+  const appendMetaRow = (key, val) => {
+    if (!val) return;
+    const row = node("div", "codex-meta-row");
+    row.append(
+      node("span", "meta-key", key),
+      node("span", "meta-val", val),
+    );
+    metaGrid.appendChild(row);
+  };
+  appendMetaRow("类别", kindLabel);
+  els.codexContent.appendChild(metaGrid);
 
+  // 2. 核心引语区：设定概述 (summary)
   if (profile.summary) {
     els.codexContent.appendChild(node("div", "codex-quote-box", `“${profile.summary}”`));
   }
 
+  // 3. 渐进式折叠详查区：公开记载
   if (profile.public_facts?.length) {
     const factsPanel = node("div", "codex-details-panel");
     factsPanel.hidden = true;
@@ -1427,18 +1465,28 @@ function openSettingCodex(profile, triggerElement) {
     profile.public_facts.forEach((fact) => factList.appendChild(node("li", "", fact)));
     facts.appendChild(factList);
     factsPanel.appendChild(facts);
-    els.codexContent.appendChild(factsPanel);
-    const toggleBtn = node("button", "codex-toggle-more", "▸ 展开公开记载");
-    toggleBtn.onclick = () => {
-      const isExpanding = factsPanel.hidden;
-      factsPanel.hidden = !isExpanding;
-      toggleBtn.textContent = isExpanding ? "▾ 收起记载" : "▸ 展开公开记载";
-      els.codexDialog.classList.toggle("is-expanded", isExpanding);
-      window.requestAnimationFrame(() => positionCodexPopover(triggerElement));
-    };
-    const footerAction = node("div", "codex-footer-action");
-    footerAction.appendChild(toggleBtn);
-    els.codexContent.appendChild(footerAction);
+
+    if (factsPanel.childNodes.length > 0) {
+      els.codexContent.appendChild(factsPanel);
+      const toggleBtn = node("button", "codex-toggle-more", "▸ 展开完整记载");
+      toggleBtn.onclick = () => {
+        const isExpanding = factsPanel.hidden;
+        factsPanel.hidden = !isExpanding;
+        toggleBtn.textContent = isExpanding ? "▾ 收起记载" : "▸ 展开完整记载";
+        els.codexDialog.classList.toggle("is-expanded", isExpanding);
+        window.requestAnimationFrame(() => positionCodexPopover(triggerElement, true));
+      };
+      if (els.codexFooter) {
+        els.codexFooter.hidden = false;
+        els.codexFooter.replaceChildren(toggleBtn);
+      }
+    } else if (els.codexFooter) {
+      els.codexFooter.hidden = true;
+      els.codexFooter.replaceChildren();
+    }
+  } else if (els.codexFooter) {
+    els.codexFooter.hidden = true;
+    els.codexFooter.replaceChildren();
   }
 
   presentCodexDialog(triggerElement);
@@ -1464,30 +1512,38 @@ function openCodexProfile(profile, triggerElement) {
   els.codexTitle.textContent = profile.name || "典籍条目";
   els.codexContent.replaceChildren();
 
-  const typeBadge = node("span", "codex-kind-tag", "人物档案");
-  const roleText = profile.role || "未知身份";
-  const factionText = profile.faction || "无归属";
-  let subText = `${roleText} ｜ ${factionText}`;
+  // 1. 顶部结构：干净整齐的属性网格（对齐阵营、身份、特质）
+  const metaGrid = node("div", "codex-meta-grid");
 
-  if (subText.length > 28) subText = subText.slice(0, 28) + "…";
+  const appendMetaRow = (key, val) => {
+    if (!val) return;
+    const row = node("div", "codex-meta-row");
+    row.append(
+      node("span", "meta-key", key),
+      node("span", "meta-val", val),
+    );
+    metaGrid.appendChild(row);
+  };
 
-  const subHeader = node("div", "codex-sub-header");
-  if (subText) subHeader.appendChild(node("span", "codex-sub-text", subText));
-  subHeader.appendChild(typeBadge);
-  els.codexContent.appendChild(subHeader);
+  if (profile.faction) appendMetaRow("阵营", profile.faction);
+  if (profile.role) appendMetaRow("身份", profile.role);
+  if (profile.personality_trait) appendMetaRow("特质", profile.personality_trait);
 
-  // 2. 顶部引文区：展示外貌描写 (appearance) 或最近出场记录
-  const quoteText = profile.appearance || profile.last_scene_summary || "";
+  if (metaGrid.childNodes.length > 0) {
+    els.codexContent.appendChild(metaGrid);
+  }
 
+  // 2. 核心引语区：优先展示最近出场记录 (last_scene_summary)
+  const quoteText = profile.last_scene_summary || "";
   if (quoteText) {
     const quoteBox = node("div", "codex-quote-box", `“${quoteText}”`);
     els.codexContent.appendChild(quoteBox);
   }
 
-  // 3. 底部微型勋章区
+  // 3. 标签胶囊区：展示对玩家态度、已知能力胶囊（折叠状态展示，展开时由CSS隐藏避免重复）、别名
   const pillsContainer = node("div", "codex-pills");
-  if (profile.personality_trait) {
-    pillsContainer.appendChild(node("span", "codex-pill pill-trait", profile.personality_trait));
+  if (profile.attitude_to_player) {
+    pillsContainer.appendChild(node("span", "codex-pill pill-attitude", `态度 · ${profile.attitude_to_player}`));
   }
   if (profile.known_abilities?.length) {
     profile.known_abilities.forEach((a) => {
@@ -1508,25 +1564,53 @@ function openCodexProfile(profile, triggerElement) {
   detailsPanel.hidden = true;
 
   const appendDetailText = (label, value) => {
-    if (!value || value === quoteText) return;
+    if (!value) return;
     const row = node("section", "codex-field");
     row.append(node("span", "resource-label", label), node("p", "", value));
     detailsPanel.appendChild(row);
   };
 
-  if (profile.last_scene_summary && profile.last_scene_summary !== quoteText) {
-    appendDetailText("最近出场", profile.last_scene_summary);
+  // 已知能力：移至外貌特征上方
+  if (profile.known_abilities?.length) {
+    const abilitiesSection = node("section", "codex-field codex-abilities-field");
+    abilitiesSection.appendChild(node("span", "resource-label", "已知能力"));
+    const abilityList = node("div", "codex-ability-list");
+    profile.known_abilities.forEach((a) => {
+      const item = node("div", "codex-ability-item");
+      const pill = node("span", "codex-pill pill-ability", a.name);
+      const desc = node("span", "codex-ability-desc", a.description || "暂无详细描述");
+      item.append(pill, desc);
+      abilityList.appendChild(item);
+    });
+    abilitiesSection.appendChild(abilityList);
+    detailsPanel.appendChild(abilitiesSection);
   }
-  // 回合数显式 null 判断：turn=0（开场回合）也必须显示「第 0 回合」。
+
+  // 外貌特征（在已知能力下方）
+  if (profile.appearance) {
+    appendDetailText("外貌特征", profile.appearance);
+  }
+
+  // 回合数显式 null 判断：turn=0（开场回合）也必须显示「第 0 回合」，并支持点击跳转
   if (profile.last_scene_turn != null) {
-    const turnRow = node("section", "codex-field");
-    turnRow.append(
-      node("span", "resource-label", "出场回合"),
-      node("p", "", `第 ${profile.last_scene_turn} 回合`),
-    );
+    const turnRow = node("section", "codex-field codex-turn-field");
+    const turnLabel = node("span", "resource-label", "出场回合");
+    const turnJumpBtn = node("button", "codex-turn-jump-btn", `第 ${profile.last_scene_turn} 回合`);
+    turnJumpBtn.type = "button";
+    turnJumpBtn.title = `点击跳转至第 ${profile.last_scene_turn} 回合`;
+    turnJumpBtn.onclick = () => {
+      closeCodexProfile();
+      jumpToHistoryTurn(profile.last_scene_turn);
+    };
+    const turnP = node("p", "", "");
+    turnP.appendChild(turnJumpBtn);
+    turnRow.append(turnLabel, turnP);
     detailsPanel.appendChild(turnRow);
   }
-  if (profile.last_known_location) appendDetailText("最后活动地点", profile.last_known_location);
+
+  if (profile.last_known_location) {
+    appendDetailText("最后活动地点", profile.last_known_location);
+  }
 
   if (detailsPanel.childNodes.length > 0) {
     els.codexContent.appendChild(detailsPanel);
@@ -1536,11 +1620,15 @@ function openCodexProfile(profile, triggerElement) {
       detailsPanel.hidden = !isExpanding;
       toggleBtn.textContent = isExpanding ? "▾ 收起记载" : "▸ 展开完整记载";
       els.codexDialog.classList.toggle("is-expanded", isExpanding);
-      window.requestAnimationFrame(() => positionCodexPopover(triggerElement));
+      window.requestAnimationFrame(() => positionCodexPopover(triggerElement, true));
     };
-    const footerAction = node("div", "codex-footer-action");
-    footerAction.appendChild(toggleBtn);
-    els.codexContent.appendChild(footerAction);
+    if (els.codexFooter) {
+      els.codexFooter.hidden = false;
+      els.codexFooter.replaceChildren(toggleBtn);
+    }
+  } else if (els.codexFooter) {
+    els.codexFooter.hidden = true;
+    els.codexFooter.replaceChildren();
   }
 
   presentCodexDialog(triggerElement);
@@ -1851,18 +1939,21 @@ function renderSuggestions() {
 function renderAll() {
   applyUiMode();
   renderHeader(); renderHistory(); renderPending(); renderDrawer(); renderSaves(); renderSuggestions(); renderControls();
+  cachePlayerShell();
 }
 
 function cachePlayerShell() {
   if (!state.playerState) return;
   try {
-    sessionStorage.setItem(PLAYER_SHELL_CACHE_KEY, JSON.stringify({
+    localStorage.removeItem(PLAYER_SHELL_CACHE_KEY);
+    const serialized = JSON.stringify({
       version: 1,
       cachedAt: Date.now(),
       activeSave: state.activeSave,
       saves: state.saves,
       playerState: state.playerState,
-    }));
+    });
+    sessionStorage.setItem(PLAYER_SHELL_CACHE_KEY, serialized);
   } catch (_error) {
     // The cache is only a refresh-time display fallback.
   }
@@ -1951,7 +2042,9 @@ function restoreGenerationRunPlaceholder(run) {
 
 function restorePlayerShell() {
   try {
-    const cached = JSON.parse(sessionStorage.getItem(PLAYER_SHELL_CACHE_KEY) || "null");
+    localStorage.removeItem(PLAYER_SHELL_CACHE_KEY);
+    const raw = sessionStorage.getItem(PLAYER_SHELL_CACHE_KEY);
+    const cached = JSON.parse(raw || "null");
     if (cached?.version !== 1 || !cached.playerState) return false;
     state.activeSave = cached.activeSave || null;
     state.saves = cached.saves || [];
@@ -1976,6 +2069,7 @@ function restorePlayerShell() {
       );
       renderAll();
     }
+    renderRecordsRail();
     scrollToBottom("instant");
     return true;
   } catch (_error) {
@@ -2123,16 +2217,16 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   ++navigationJumpSequence;
   cancelNavigationSettlement();
   pinnedNavigationKey = null;
-  navigationRenderSignature = "";
   if (
-    resumeOperation
+    !state.playerState
+    && resumeOperation
     && !activeGenerationRun
     && !["booting", "generating", "confirming", "switching"].includes(state.mode)
   ) {
     setMode("booting");
+    renderControls();
   }
   renderSaves();
-  renderControls();
 
   const recoverableOperations = resumeOperation
     ? (await request("/api/player/operations/recoverable")).operations || []
@@ -4395,8 +4489,32 @@ els.modelSettingsBtn.onclick = () => {
 };
 els.closeModelConfigBtn.onclick = () => els.modelConfigDialog.close();
 
-// Global drawer close listeners
+async function refreshGameView() {
+  if (["generating", "confirming"].includes(state.mode) || activeGenerationRun) {
+    showToast("正在生成中，请稍候");
+    return;
+  }
+  try {
+    await loadAll({ scroll: "instant" });
+    showToast("已同步最新故事状态");
+  } catch (error) {
+    reportClientError(error, "refresh_game_view_failed");
+  }
+}
+
+// Global hotkeys (Escape, F5, Ctrl+R)
 document.addEventListener("keydown", (event) => {
+  if (
+    event.key === "F5"
+    || ((event.key === "r" || event.key === "R") && (event.ctrlKey || event.metaKey))
+  ) {
+    if (!event.shiftKey) {
+      event.preventDefault();
+      refreshGameView();
+      return;
+    }
+  }
+
   if (event.key === "Escape") {
     if (document.querySelector("dialog[open]")) return;
     let closed = false;
@@ -4573,6 +4691,88 @@ window.addEventListener("resize", () => {
   refreshNavigationObserver({ force: true });
 }, { passive: true });
 
+// Prevent wheel scroll chaining to background window from modals and drawers
+document.addEventListener("wheel", (event) => {
+  const scrollableParent = event.target.closest(".drawer, .modal, .codex-modal, .token-usage-popover");
+  if (!scrollableParent) return;
+
+  const content = event.target.closest(".codex-content, .records-list, .save-card-list, .core-memory-list, .drawer, .modal");
+  const scrollElem = content || scrollableParent;
+  const delta = event.deltaY;
+
+  const isAtTop = scrollElem.scrollTop <= 0 && delta < 0;
+  const isAtBottom = scrollElem.scrollTop + scrollElem.clientHeight >= scrollElem.scrollHeight - 1 && delta > 0;
+  const cannotScroll = scrollElem.scrollHeight <= scrollElem.clientHeight;
+
+  if (isAtTop || isAtBottom || cannotScroll) {
+    event.preventDefault();
+  }
+}, { passive: false });
+
+// Draggable codex modal handle
+let isDraggingCodex = false;
+let codexDragStartX = 0;
+let codexDragStartY = 0;
+let codexDragInitialLeft = 0;
+let codexDragInitialTop = 0;
+
+function initCodexDrag() {
+  const header = $("codexHeader") || els.codexDialog?.querySelector(".codex-modal-header");
+  if (!header || !els.codexDialog) return;
+
+  header.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button, a, input, select, textarea")) return;
+    if (e.button !== 0) return;
+
+    isDraggingCodex = true;
+    codexDragStartX = e.clientX;
+    codexDragStartY = e.clientY;
+
+    const rect = els.codexDialog.getBoundingClientRect();
+    codexDragInitialLeft = rect.left;
+    codexDragInitialTop = rect.top;
+
+    header.setPointerCapture(e.pointerId);
+    els.codexDialog.classList.add("is-dragging");
+  });
+
+  header.addEventListener("pointermove", (e) => {
+    if (!isDraggingCodex) return;
+
+    const deltaX = e.clientX - codexDragStartX;
+    const deltaY = e.clientY - codexDragStartY;
+
+    const dialogWidth = els.codexDialog.offsetWidth || 500;
+    const dialogHeight = els.codexDialog.offsetHeight || 300;
+
+    const rawLeft = codexDragInitialLeft + deltaX;
+    const rawTop = codexDragInitialTop + deltaY;
+
+    const clampedLeft = Math.max(8, Math.min(rawLeft, window.innerWidth - dialogWidth - 8));
+    const clampedTop = Math.max(8, Math.min(rawTop, window.innerHeight - dialogHeight - 8));
+
+    els.codexDialog.style.position = "fixed";
+    els.codexDialog.style.left = `${clampedLeft}px`;
+    els.codexDialog.style.top = `${clampedTop}px`;
+    els.codexDialog.style.margin = "0";
+  });
+
+  const stopDrag = (e) => {
+    if (!isDraggingCodex) return;
+    isDraggingCodex = false;
+    els.codexDialog.classList.remove("is-dragging");
+    try {
+      if (header.hasPointerCapture(e.pointerId)) {
+        header.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+  };
+
+  header.addEventListener("pointerup", stopDrag);
+  header.addEventListener("pointercancel", stopDrag);
+}
+
+initCodexDrag();
 toggleCustomAbilityField();
 toggleCustomWorldStyleField();
 bootstrap().catch(showError);

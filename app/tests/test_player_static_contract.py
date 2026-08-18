@@ -65,7 +65,6 @@ def test_player_themes_use_semantic_tokens_without_component_overrides():
     assert "校验正文与已确定事实的一致性" in html
     assert "显示 Token 消耗" in html
     assert "正文生成后自动确认" in html
-    assert "NPC/Setting 基础连续性维护始终运行" in html
     assert "可能产生与已确定事实冲突的内容" in source
     assert "不影响生成质量或实际成本" in source
     assert "增加 Token 消耗" in source

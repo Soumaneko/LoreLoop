@@ -424,3 +424,15 @@ def test_player_handler_raw_base_remains_unauthenticated():
     handler._handle_player_json = lambda callback: results.append(callback())
     handler.do_GET()
     assert results != []
+
+
+def test_player_index_serves_html():
+    handler = object.__new__(PlayerHandler)
+    handler.wfile = io.BytesIO()
+    handler.send_response = lambda status, message=None: None
+    handler.send_header = lambda name, value: None
+    handler.end_headers = lambda: None
+    handler._serve_player_index(inject_token=False)
+    content = handler.wfile.getvalue().decode("utf-8")
+    assert "<!doctype html>" in content
+    assert '<meta name="loreloop-session-token"' in content

@@ -1,4 +1,7 @@
 (() => {
+  if (typeof history !== "undefined" && "scrollRestoration" in history) {
+    history.scrollRestoration = "manual";
+  }
   const cacheKey = "loreloop:reader-preferences";
   const legacyCacheKey = "tvg:reader-preferences";
   try {

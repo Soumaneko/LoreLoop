@@ -13,16 +13,20 @@
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="/" aria-label="续章首页">
-        <span class="brand-mark">续</span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z"/>
+          </svg>
+        </span>
         <span><strong>续章</strong><small>LORELOOP</small></span>
       </a>
       <div class="world-meta" aria-live="polite">
-        <span id="worldTime">尚未启程</span>
+        <span id="worldTime"></span>
         <i></i>
-        <span id="worldLocation">等待世界载入</span>
+        <span id="worldLocation"></span>
       </div>
       <div class="top-actions">
-        <span id="statusPill" class="status-pill" data-mode="booting"><b></b><span>载入中</span></span>
+        <span id="statusPill" class="status-pill" data-mode="idle"><b></b><span>就绪</span></span>
         <div class="time-travel-group">
           <button id="undoBtn" class="icon-button time-travel-button" type="button" aria-label="撤销上一回合" title="撤销上一回合 (↶)" disabled>
             <span>↶</span>
@@ -42,7 +46,6 @@
       <section id="story" class="story" aria-live="polite">
         <div id="welcome" class="welcome-card" hidden>
           <div class="sigil">✦</div>
-          <p class="eyebrow">AN UNTOLD PATH</p>
           <h1>故事等待你的选择</h1>
           <p>这里没有预设答案。描述你想做的事，世界会记住已经发生的一切。</p>
           <button id="continueInitBtn" class="primary-action" type="button" hidden>继续初始化</button>
@@ -99,24 +102,30 @@
   <nav id="recordsRail" class="records-rail" aria-label="世界档案分类">
     <!-- Hero Button for In-Game Codex -->
     <button id="openLeftDrawerRailBtn" class="records-rail-hero-btn" type="button" title="角色与局内资产">
-      <span class="codex-icon">📜</span>
+      <span class="codex-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+      </span>
       <span class="hero-label">局内典籍</span>
+      <span class="hero-arrow" aria-hidden="true">›</span>
     </button>
     <button id="recordsTabContinuity" class="records-rail-tab is-active" type="button" title="连续性">
       <span class="rail-label">连续性</span>
-      <span class="rail-count">0</span>
+      <span class="rail-count"></span>
     </button>
     <button id="recordsTabNpc" class="records-rail-tab" type="button" title="人物档案">
       <span class="rail-label">人物档案</span>
-      <span class="rail-count">0</span>
+      <span class="rail-count"></span>
     </button>
     <button id="recordsTabSetting" class="records-rail-tab" type="button" title="世界设定">
       <span class="rail-label">世界设定</span>
-      <span class="rail-count">0</span>
+      <span class="rail-count"></span>
     </button>
     <button id="recordsTabEvent" class="records-rail-tab" type="button" title="导演事件" data-creator-only>
       <span class="rail-label">事件</span>
-      <span class="rail-count">0</span>
+      <span class="rail-count"></span>
     </button>
   </nav>
 
@@ -147,22 +156,22 @@
   <!-- Right Drawer: System Control & Saves -->
   <aside id="drawer" class="drawer" aria-hidden="true">
     <div class="drawer-header">
-      <div><p class="eyebrow">SYSTEM & CONTROL</p><h2>系统控制</h2></div>
-      <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭">×</button>
+      <h2>系统控制</h2>
+      <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
     </div>
     <section class="drawer-section">
-      <div class="section-title">体验模式</div>
       <div class="setting-row">
-        <span class="setting-label">界面</span>
+        <span class="setting-label">界面模式</span>
         <div class="records-view-toggle" role="group" aria-label="体验模式">
           <button id="experienceModePlayerBtn" class="is-active" type="button" title="只展示故事与公开信息">玩家</button>
           <button id="experienceModeCreatorBtn" type="button" title="完整世界管理、导演信息与调用细节">创作者</button>
         </div>
       </div>
-      <p class="setting-note">创作者模式开放完整档案、导演事件与核心记忆编辑。</p>
     </section>
     <section class="drawer-section">
-      <label for="saveSelect">存档切换</label>
+      <label for="saveSelect">存档选择</label>
       <div class="inline-control">
         <select id="saveSelect"></select>
         <button id="newSaveBtn" type="button" title="新建存档">＋</button>
@@ -170,9 +179,8 @@
       <button id="manageSavesBtn" class="manage-saves-button" type="button">管理本地存档</button>
     </section>
     <section class="drawer-section">
-      <div class="section-title">游戏运行</div>
       <div class="setting-row">
-        <span class="setting-label">难度</span>
+        <span class="setting-label">检定难度</span>
         <select id="difficultySelect">
           <option value="简单">简单 · 三骰取高</option>
           <option value="普通">普通 · 双骰取高</option>
@@ -180,7 +188,7 @@
         </select>
       </div>
       <div class="setting-row">
-        <span class="setting-label">骰点</span>
+        <span class="setting-label">骰点显示</span>
         <select id="diceDisplaySelect">
           <option value="hidden">完全不显示</option>
           <option value="outcome">只显示结果状态</option>
@@ -188,8 +196,7 @@
         </select>
       </div>
     </section>
-    <section class="drawer-section">
-      <div class="section-title">成本与质量</div>
+    <section class="drawer-section" aria-label="成本与质量">
       <div class="setting-row">
         <span class="setting-label">后校验<span class="setting-inline-note">校验正文与已确定事实的一致性</span><button type="button" id="canonInfoBtn" class="setting-info-btn" aria-label="后校验说明">ⓘ</button></span>
         <label class="toggle-switch">
@@ -211,7 +218,6 @@
           <span class="toggle-track"></span>
         </label>
       </div>
-      <p class="setting-note">NPC/Setting 基础连续性维护始终运行，无开关。</p>
     </section>
     <section class="drawer-section" data-creator-only>
       <div class="setting-row">
@@ -220,9 +226,8 @@
       </div>
     </section>
     <section class="drawer-section">
-      <div class="section-title">沉浸阅读</div>
       <div class="setting-row">
-        <span class="setting-label">字号</span>
+        <span class="setting-label">正文字号</span>
         <select id="fontSizeSelect">
           <option value="14">精小 (14px)</option>
           <option value="15">标准 (15px)</option>
@@ -232,7 +237,7 @@
         </select>
       </div>
       <div class="setting-row">
-        <span class="setting-label">字体</span>
+        <span class="setting-label">正文字体</span>
         <select id="fontFamilySelect">
           <option value="serif">沉香宋体 (典雅)</option>
           <option value="kaiti">苍劲楷体 (侠风)</option>
@@ -241,7 +246,7 @@
         </select>
       </div>
       <div class="setting-row">
-        <span class="setting-label">主题</span>
+        <span class="setting-label">界面主题</span>
         <select id="themeSelect">
           <option value="dark">玄金暗影 (深色)</option>
           <option value="sepia">宣纸护眼 (暖阳)</option>
@@ -259,7 +264,6 @@
 
   <dialog id="saveDialog" class="modal">
     <form method="dialog" id="saveForm">
-      <p class="eyebrow">NEW JOURNEY</p>
       <h2>新建存档</h2>
       <p>名称仅用于识别这段旅程，之后可以随时修改。</p>
       <input id="saveNameInput" maxlength="64" autocomplete="off" placeholder="例如：莱尔的旅程" />
@@ -270,8 +274,10 @@
   <dialog id="saveManagerDialog" class="modal save-manager-modal">
     <section class="save-manager-shell">
       <header class="save-manager-header">
-        <div><p class="eyebrow">LOCAL JOURNEYS</p><h2>管理存档</h2></div>
-        <button id="closeSaveManagerBtn" class="close-button" type="button" aria-label="关闭">×</button>
+        <h2>管理存档</h2>
+        <button id="closeSaveManagerBtn" class="close-button" type="button" aria-label="关闭">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </header>
       <div class="save-manager-toolbar">
         <button id="importSaveBtn" class="primary-action" type="button">从 ZIP 导入</button>
@@ -289,8 +295,10 @@
   <dialog id="modelConfigDialog" class="modal model-config-modal">
     <form id="modelConfigForm">
       <header class="model-config-header">
-        <div><p class="eyebrow">MODEL CONNECTION</p><h2>配置模型服务</h2></div>
-        <button id="closeModelConfigBtn" class="close-button" type="button" aria-label="关闭">×</button>
+        <h2>配置模型服务</h2>
+        <button id="closeModelConfigBtn" class="close-button" type="button" aria-label="关闭">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </header>
       <p id="modelConfigIntro">模型配置只保存在本机，不会写入或导出到任何故事存档。</p>
       <div class="model-config-fields">
@@ -322,7 +330,6 @@
 
   <dialog id="feedbackRewriteDialog" class="modal feedback-rewrite-modal">
     <form id="feedbackRewriteForm">
-      <p class="eyebrow">REWRITE WITH FEEDBACK</p>
       <h2>根据意见修改</h2>
       <p>说明正文哪里需要改变。系统会根据反馈进行重写。</p>
       <label>
@@ -338,7 +345,6 @@
 
   <dialog id="codexConfirmDialog" class="modal codex-confirm-modal">
     <div class="codex-confirm-shell">
-      <p class="eyebrow" id="codexConfirmEyebrow">CONFIRMATION</p>
       <h2 id="codexConfirmTitle">请确认操作</h2>
       <p id="codexConfirmMessage">是否确定继续执行此操作？</p>
       <div class="modal-actions codex-confirm-actions">
@@ -350,19 +356,29 @@
 
   <dialog id="codexDialog" class="modal codex-modal">
     <section class="codex-modal-shell">
-      <header class="codex-modal-header">
-        <div><p class="eyebrow">KNOWN RECORD</p><h2 id="codexTitle">典籍条目</h2></div>
-        <button id="closeCodexBtn" class="close-button" type="button" aria-label="关闭">×</button>
+      <header id="codexHeader" class="codex-modal-header" title="按住可拖拽移动卡片">
+        <div class="codex-header-drag-area">
+          <span class="codex-drag-handle" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="9" cy="19" r="2"/><circle cx="15" cy="5" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="15" cy="19" r="2"/></svg>
+          </span>
+          <h2 id="codexTitle">典籍条目</h2>
+        </div>
+        <button id="closeCodexBtn" class="close-button" type="button" aria-label="关闭">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </header>
       <div id="codexContent" class="codex-content"></div>
+      <footer id="codexFooter" class="codex-modal-footer" hidden></footer>
     </section>
   </dialog>
 
   <dialog id="initDialog" class="modal init-modal">
     <form method="dialog" id="initForm" autocomplete="off">
       <header class="init-modal-header">
-        <div><p class="eyebrow">BEGIN A NEW STORY</p><h2>塑造你的起点</h2></div>
-        <button id="closeInitDialogBtn" class="close-button" type="button" aria-label="返回故事界面">×</button>
+        <h2>塑造你的起点</h2>
+        <button id="closeInitDialogBtn" class="close-button" type="button" aria-label="返回故事界面">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </header>
       <p id="initStageHint">填写世界、主角与长期体验要求，然后生成可确认的公开世界惯例。</p>
       <fieldset id="initConfigFields" class="init-fieldset">
@@ -423,8 +439,10 @@
   <dialog id="coreMemoryDialog" class="modal core-memory-modal">
     <section class="core-memory-shell">
       <header class="core-memory-header">
-        <div><p class="eyebrow">CORE MEMORY</p><h2>核心记忆</h2></div>
-        <button id="closeCoreMemoryBtn" class="close-button" type="button" aria-label="关闭">×</button>
+        <h2>核心记忆</h2>
+        <button id="closeCoreMemoryBtn" class="close-button" type="button" aria-label="关闭">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </header>
       <p>核心记忆是长期稳定的世界基础设定，不会被后续剧情覆盖。新增条目来源为「玩家」。</p>
       <div id="coreMemoryError" class="form-error" role="alert" hidden></div>
