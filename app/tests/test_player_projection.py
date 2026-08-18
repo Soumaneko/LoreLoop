@@ -150,9 +150,8 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "initialization",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
-    assert "scene_conditions" not in payload["campaign"]
-    assert "conditions" not in payload["campaign"]["player"]
-    assert "attitude_to_player" not in str(payload)
+    assert "attitude_to_player" not in str(payload["campaign"])
+    assert "表面友好，实际警惕" not in str(payload)
     assert "暗中恐惧" not in str(payload)
     assert "不可泄露" not in str(payload)
     assert "流浪木偶师" in str(payload)

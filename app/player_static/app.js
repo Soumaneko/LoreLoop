@@ -40,6 +40,7 @@ const els = {
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
   composerModeBadge: $("composerModeBadge"),
   drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"),
+  closeLeftDrawerBtn: $("closeLeftDrawerBtn"), codexMetaBar: $("codexMetaBar"),
   recordsDrawer: $("recordsDrawer"),
   recordsRefreshState: $("recordsRefreshState"),
   openLeftDrawerRailBtn: $("openLeftDrawerRailBtn"),
@@ -1316,7 +1317,7 @@ function handleCodexOutsideClick(event) {
         return;
       }
     }
-    if (!els.codexDialog.contains(event.target) && !event.target.closest(".story-highlight")) {
+    if (!els.codexDialog.contains(event.target) && !event.target.closest(".story-highlight") && !event.target.closest(".codex-participant-chip")) {
       closeCodexProfile();
     }
   }
@@ -1332,16 +1333,11 @@ function positionCodexPopover(triggerElement, keepCurrentPosition = false) {
   if (!els.codexDialog || !els.codexDialog.open) return;
 
   if (window.innerWidth < 640) {
-    if (els.codexDialog.classList.contains("is-floating")) {
-      els.codexDialog.classList.remove("is-floating");
-      els.codexDialog.style.position = "";
-      els.codexDialog.style.top = "";
-      els.codexDialog.style.left = "";
-      els.codexDialog.style.margin = "";
-      els.codexDialog.style.width = "";
-      els.codexDialog.close();
-      els.codexDialog.showModal();
-    }
+    els.codexDialog.style.position = "";
+    els.codexDialog.style.top = "";
+    els.codexDialog.style.left = "";
+    els.codexDialog.style.margin = "";
+    els.codexDialog.style.width = "";
     return;
   }
 
@@ -1512,7 +1508,33 @@ function openCodexProfile(profile, triggerElement) {
   els.codexTitle.textContent = profile.name || "典籍条目";
   els.codexContent.replaceChildren();
 
-  // 1. 顶部结构：干净整齐的属性网格（对齐阵营、身份、特质）
+  // 1. 核心引语区：优先展示最近出场记录与出场回合（支持点击跳转），若无则展示外貌描述
+  const quoteText = profile.last_scene_summary || profile.appearance || "";
+  if (quoteText) {
+    const quoteBox = node("div", "codex-quote-box");
+    const subLabelEl = node("div", "codex-quote-sublabel");
+    if (profile.last_scene_summary) {
+      subLabelEl.appendChild(document.createTextNode("最近出场"));
+      if (profile.last_scene_turn != null) {
+        subLabelEl.appendChild(document.createTextNode(" · "));
+        const turnJumpBtn = node("button", "codex-turn-jump-btn", `第 ${profile.last_scene_turn} 回合`);
+        turnJumpBtn.type = "button";
+        turnJumpBtn.title = `点击跳转至第 ${profile.last_scene_turn} 回合`;
+        turnJumpBtn.onclick = () => {
+          closeCodexProfile();
+          jumpToHistoryTurn(profile.last_scene_turn);
+        };
+        subLabelEl.appendChild(turnJumpBtn);
+      }
+    } else {
+      subLabelEl.appendChild(document.createTextNode("外貌描述"));
+    }
+    quoteBox.appendChild(subLabelEl);
+    quoteBox.appendChild(node("div", "codex-quote-text", `“${quoteText}”`));
+    els.codexContent.appendChild(quoteBox);
+  }
+
+  // 2. 属性网格：阵营 -> 身份 -> 特质 -> 地点 -> 态度
   const metaGrid = node("div", "codex-meta-grid");
 
   const appendMetaRow = (key, val) => {
@@ -1528,30 +1550,15 @@ function openCodexProfile(profile, triggerElement) {
   if (profile.faction) appendMetaRow("阵营", profile.faction);
   if (profile.role) appendMetaRow("身份", profile.role);
   if (profile.personality_trait) appendMetaRow("特质", profile.personality_trait);
+  if (profile.last_known_location) appendMetaRow("地点", profile.last_known_location);
+  if (profile.attitude_to_player) appendMetaRow("态度", profile.attitude_to_player);
 
   if (metaGrid.childNodes.length > 0) {
     els.codexContent.appendChild(metaGrid);
   }
 
-  // 2. 核心引语区：优先展示最近出场记录 (last_scene_summary)
-  const quoteText = profile.last_scene_summary || "";
-  if (quoteText) {
-    const quoteBox = node("div", "codex-quote-box", `“${quoteText}”`);
-    els.codexContent.appendChild(quoteBox);
-  }
-
-  // 3. 标签胶囊区：展示对玩家态度、已知能力胶囊（折叠状态展示，展开时由CSS隐藏避免重复）、别名
+  // 3. 标签胶囊区：展示别名（已知能力在下方详述中展示，避免重复）
   const pillsContainer = node("div", "codex-pills");
-  if (profile.attitude_to_player) {
-    pillsContainer.appendChild(node("span", "codex-pill pill-attitude", `态度 · ${profile.attitude_to_player}`));
-  }
-  if (profile.known_abilities?.length) {
-    profile.known_abilities.forEach((a) => {
-      const pill = node("span", "codex-pill pill-ability", a.name);
-      if (a.description) pill.title = a.description;
-      pillsContainer.appendChild(pill);
-    });
-  }
   if (profile.aliases?.length) {
     profile.aliases.forEach((al) => pillsContainer.appendChild(node("span", "codex-pill pill-alias", al)));
   }
@@ -1591,25 +1598,9 @@ function openCodexProfile(profile, triggerElement) {
     appendDetailText("外貌特征", profile.appearance);
   }
 
-  // 回合数显式 null 判断：turn=0（开场回合）也必须显示「第 0 回合」，并支持点击跳转
-  if (profile.last_scene_turn != null) {
-    const turnRow = node("section", "codex-field codex-turn-field");
-    const turnLabel = node("span", "resource-label", "出场回合");
-    const turnJumpBtn = node("button", "codex-turn-jump-btn", `第 ${profile.last_scene_turn} 回合`);
-    turnJumpBtn.type = "button";
-    turnJumpBtn.title = `点击跳转至第 ${profile.last_scene_turn} 回合`;
-    turnJumpBtn.onclick = () => {
-      closeCodexProfile();
-      jumpToHistoryTurn(profile.last_scene_turn);
-    };
-    const turnP = node("p", "", "");
-    turnP.appendChild(turnJumpBtn);
-    turnRow.append(turnLabel, turnP);
-    detailsPanel.appendChild(turnRow);
-  }
-
+  // 最后出场地点
   if (profile.last_known_location) {
-    appendDetailText("最后活动地点", profile.last_known_location);
+    appendDetailText("最后出场地点", profile.last_known_location);
   }
 
   if (detailsPanel.childNodes.length > 0) {
@@ -1637,30 +1628,105 @@ function openCodexProfile(profile, triggerElement) {
 function renderDrawer() {
   const campaign = state.playerState?.campaign || {};
   const player = campaign.player || {};
-  els.playerSummary.replaceChildren();
-  els.playerSummary.appendChild(node("strong", "", player.name || "尚未命名"));
-  els.playerSummary.appendChild(node("div", "", player.visible_status || "暂无特殊外观"));
 
+  // 1. 时空概览药丸条 (真实字段：turn_index, location, world_time)
+  if (els.codexMetaBar) {
+    els.codexMetaBar.replaceChildren();
+    const metaRows = [];
+    if (campaign.turn_index != null) {
+      metaRows.push([`第 ${campaign.turn_index} 回合`, "turn"]);
+    }
+    if (campaign.location) {
+      metaRows.push([campaign.location, "loc"]);
+    }
+    if (campaign.world_time) {
+      metaRows.push([campaign.world_time, "time"]);
+    }
+    if (metaRows.length > 0) {
+      els.codexMetaBar.hidden = false;
+      const bar = node("div", "codex-meta-bar-inner");
+      for (const [text, kind] of metaRows) {
+        const pill = node("span", `codex-meta-pill codex-meta-pill-${kind}`, text);
+        bar.appendChild(pill);
+      }
+      els.codexMetaBar.appendChild(bar);
+    } else {
+      els.codexMetaBar.hidden = true;
+    }
+  }
+
+  // 2. 主角档案
+  els.playerSummary.replaceChildren();
+  const playerCard = node("div", "codex-player-card-inner");
+  const playerHead = node("div", "codex-player-head");
+  const nameEl = node("span", "codex-player-name", player.name || "尚未命名");
+  const badge = node("span", "codex-player-badge", "主角");
+  playerHead.append(nameEl, badge);
+  playerCard.appendChild(playerHead);
+
+  if (player.visible_status) {
+    const statusRow = node("div", "codex-player-status-row");
+    statusRow.append(
+      node("span", "codex-player-status-label", "外观状态："),
+      node("span", "codex-player-status-text", player.visible_status),
+    );
+    playerCard.appendChild(statusRow);
+  }
+  els.playerSummary.appendChild(playerCard);
+
+  // 3. 在场角色 (点击联动 NPC 档案)
   const participants = campaign.participants || [];
   els.sceneSummary.replaceChildren();
-  const appendSceneGroup = (label, items, emptyText) => {
-    const group = node("section", "scene-summary-group");
-    group.appendChild(node("span", "resource-label", label));
-    const list = node("div", "scene-summary-items");
-    if (items.length) {
-      items.forEach((item) => list.appendChild(node("span", "tag", item)));
-    } else {
-      list.appendChild(node("span", "resource-empty", emptyText));
-    }
-    group.appendChild(list);
-    els.sceneSummary.appendChild(group);
-  };
-  appendSceneGroup("在场角色", participants, "暂无");
+  const list = node("div", "scene-summary-items");
+  if (participants.length) {
+    participants.forEach((name) => {
+      const isPlayer = name === player.name;
+      const chip = node("button", `tag codex-participant-chip ${isPlayer ? "is-player" : ""}`, name);
+      chip.type = "button";
+      if (isPlayer) {
+        chip.title = `${name} (主角)`;
+      } else {
+        const npcList = state.records?.npc_profiles || [];
+        const nameTrimmed = String(name || "").trim().toLowerCase();
+        const match = npcList.find((n) => {
+          const d = n.public || n.fields?.public || n.fields || n || {};
+          const nName = String(d.name || "").trim().toLowerCase();
+          if (nName && (nName === nameTrimmed || nameTrimmed.includes(nName) || nName.includes(nameTrimmed))) {
+            return true;
+          }
+          if (Array.isArray(d.aliases)) {
+            return d.aliases.some((al) => {
+              const alTrim = String(al || "").trim().toLowerCase();
+              return alTrim && (alTrim === nameTrimmed || nameTrimmed.includes(alTrim) || alTrim.includes(nameTrimmed));
+            });
+          }
+          return false;
+        });
+        if (match) {
+          const profileData = {
+            ...(match.public || match.fields?.public || match.fields || match),
+            id: match.id,
+            ...(state.experienceMode === "creator" ? match.director_only : {}),
+          };
+          chip.title = `点击查看 ${name} 的人物档案`;
+          chip.onclick = (e) => {
+            e.stopPropagation();
+            openCodexProfile(profileData, chip);
+          };
+        }
+      }
+      list.appendChild(chip);
+    });
+  } else {
+    list.appendChild(node("span", "resource-empty", "暂无角色在场"));
+  }
+  els.sceneSummary.appendChild(list);
 
+  // 4. 资产与物品
   const resources = campaign.resources || {};
   const money = resources.money == null ? "无" : `${resources.money}${resources.money_unit ? ` ${resources.money_unit}` : ""}`;
   const moneyCard = node("div", "resource-money");
-  moneyCard.append(node("span", "resource-label", "可用金钱"), node("strong", "", money));
+  moneyCard.append(node("span", "resource-label", "可用资金"), node("strong", "", money));
 
   const resourceGroup = (label, items, kind) => {
     const group = node("section", `resource-group resource-group-${kind}`);
@@ -1669,21 +1735,21 @@ function renderDrawer() {
       node("span", "resource-label", label),
       node("span", "resource-count", String(items.length)),
     );
-    const list = node("div", "resource-items");
+    const groupList = node("div", "resource-items");
     if (!items.length) {
-      list.appendChild(node("div", "resource-empty", "暂无"));
+      groupList.appendChild(node("div", "resource-empty", "暂无"));
     } else if (kind === "inventory") {
       items.forEach((item) => {
         const row = node("div", "inventory-item");
-        const name = node("span", "inventory-name", item.name);
+        const itemName = node("span", "inventory-name", item.name);
         const quantity = node("span", "inventory-quantity", `×${item.quantity ?? 1}`);
-        row.append(name, quantity);
-        list.appendChild(row);
+        row.append(itemName, quantity);
+        groupList.appendChild(row);
       });
     } else {
-      items.forEach((item) => list.appendChild(node("div", "asset-item", item)));
+      items.forEach((item) => groupList.appendChild(node("div", "asset-item", item)));
     }
-    group.append(header, list);
+    group.append(header, groupList);
     return group;
   };
 
@@ -3421,6 +3487,7 @@ async function openLeftDrawer() {
   if (els.leftDrawer) {
     const closed = await closeRecordsDrawer();
     if (!closed) return;
+    renderDrawer();
     els.leftDrawer.classList.add("open");
     els.leftDrawer.setAttribute("aria-hidden", "false");
   }
@@ -3456,7 +3523,7 @@ const NPC_PUBLIC_FIELDS = [
   ["personality_trait", "性格倾向", false],
   ["known_abilities", "已知能力", true],
   ["faction", "阵营", false],
-  ["last_known_location", "最近已知地点", false],
+  ["last_known_location", "最后出场地点", false],
   ["attitude_to_player", "对玩家态度", false],
 ];
 
@@ -3733,6 +3800,7 @@ async function refreshRecords({ force = false } = {}) {
       renderRecords(records);
       recordsDirty = false;
     }
+    renderDrawer();
     if (state.experienceMode === "creator") {
       try {
         const events = await loadEvents();
@@ -3799,10 +3867,73 @@ function snapshotAbilityValues(editor) {
   return JSON.stringify(collectAbilityValues(editor));
 }
 
-function buildRecordCard({ id = null, title, statusText = "", statusActive = false, fields = [], editableFields = fields, quoteKey = null, viewFormatters = {}, onSave }) {
+const recordsGroupExpanded = new Set();
+
+function buildRecordsGroup({ id, title, count }) {
+  const group = node("div", "records-archive-group");
+  let expanded = recordsGroupExpanded.has(id);
+
+  const header = node("div", "records-archive-header");
+  header.tabIndex = 0;
+  header.setAttribute("role", "button");
+  header.setAttribute("aria-expanded", String(expanded));
+
+  const headerLeft = node("div", "records-archive-header-left");
+  const chevron = node("span", "records-archive-chevron", "▼");
+  const titleEl = node("span", "records-archive-title", title);
+  const countBadge = node("span", "records-archive-badge", String(count));
+  headerLeft.append(chevron, titleEl, countBadge);
+  header.appendChild(headerLeft);
+
+  const body = node("div", "records-archive-body");
+  body.hidden = !expanded;
+  if (expanded) {
+    group.classList.add("is-expanded");
+  }
+
+  const toggle = () => {
+    expanded = !expanded;
+    if (expanded) recordsGroupExpanded.add(id);
+    else recordsGroupExpanded.delete(id);
+    header.setAttribute("aria-expanded", String(expanded));
+    group.classList.toggle("is-expanded", expanded);
+    body.hidden = !expanded;
+  };
+
+  header.onclick = toggle;
+  header.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle();
+    }
+  };
+
+  group.append(header, body);
+  return { group, body };
+}
+
+function buildRecordCard({
+  id = null,
+  title,
+  statusText = "",
+  statusActive = false,
+  metaRows = [],
+  quote = null,
+  pills = [],
+  details = [],
+  fields = [],
+  editableFields = fields,
+  viewFormatters = {},
+  onSave,
+}) {
   const card = node("div", "record-card");
   const head = node("div", "record-card-head");
-  head.appendChild(node("div", "record-card-title", title));
+  
+  const titleWrap = node("div", "record-card-title-wrap");
+  const chevron = node("span", "record-card-chevron", "▼");
+  const titleEl = node("div", "record-card-title", title);
+  titleWrap.append(chevron, titleEl);
+  head.appendChild(titleWrap);
 
   const headActions = node("div", "record-head-actions");
   if (statusText) {
@@ -3816,13 +3947,16 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
   head.appendChild(headActions);
   card.appendChild(head);
 
-  const summaryEl = quoteKey ? node("div", "codex-quote-box") : null;
-  if (summaryEl) card.appendChild(summaryEl);
+  // 核心引语区（折叠与展开状态下均展示，保持内外一致）
+  const quoteBox = node("div", "codex-quote-box");
+  quoteBox.hidden = true;
+  card.appendChild(quoteBox);
 
-  const viewContainer = node("div", "record-view");
+  // 可折叠的内容区（属性网格、胶囊、深度详查）
+  const collapsibleBody = node("div", "record-collapsible-body");
   const editContainer = node("div", "record-edit");
   editContainer.hidden = true;
-  card.appendChild(viewContainer);
+  card.appendChild(collapsibleBody);
   card.appendChild(editContainer);
 
   let collapsed = !(id != null && recordsExpandedIds.has(id));
@@ -3834,13 +3968,8 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
 
   const syncCollapse = () => {
     card.classList.toggle("is-collapsed", collapsed);
-    if (summaryEl) {
-      const text = valueSource[quoteKey] == null ? "" : String(valueSource[quoteKey]).trim();
-      summaryEl.textContent = text;
-      summaryEl.hidden = !collapsed || !text;
-    }
     if (editing) return;
-    viewContainer.hidden = collapsed;
+    collapsibleBody.hidden = collapsed;
     editContainer.hidden = true;
   };
 
@@ -3854,7 +3983,6 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
     }
     syncCollapse();
   };
-
 
   const populate = (data) => {
     fields.forEach(([key]) => { valueSource[key] = data[key]; });
@@ -3877,33 +4005,142 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
           values.forEach((item) => factList.appendChild(node("li", "", _abilityText(item))));
           row.appendChild(factList);
         } else {
-          const pills = node("div", "codex-pills");
-          values.forEach((item) => pills.appendChild(node("span", "codex-pill pill-alias", String(item))));
-          row.appendChild(pills);
+          const pillsWrap = node("div", "codex-pills");
+          values.forEach((item) => pillsWrap.appendChild(node("span", "codex-pill pill-alias", String(item))));
+          row.appendChild(pillsWrap);
         }
       } else {
         row.appendChild(node("p", "", "—"));
       }
     } else {
-      // 显式 null 判断（turn=0 必须显示）；格式化器按字段名从
-      // viewFormatters 查找（typeof 防护，绝不把非函数当函数调用）。
       const format = viewFormatters[key];
       const text = raw == null || raw === ""
         ? "—"
         : (typeof format === "function" ? format(raw) : String(raw));
       row.appendChild(node("p", "", text));
     }
-    viewContainer.appendChild(row);
+    collapsibleBody.appendChild(row);
   };
 
   const renderView = () => {
-    viewContainer.replaceChildren();
-    if (quoteKey && valueSource[quoteKey] != null && valueSource[quoteKey] !== "") {
-      viewContainer.appendChild(node("div", "codex-quote-box", String(valueSource[quoteKey])));
+    collapsibleBody.replaceChildren();
+    quoteBox.replaceChildren();
+    quoteBox.hidden = true;
+
+    // 1. 渲染 Quote Box（内外完全一致）
+    if (quote) {
+      const quoteText = typeof quote === "object" ? quote.text : String(quote);
+      const quoteSub = typeof quote === "object" ? quote.subLabel : null;
+      const turnIndex = typeof quote === "object" ? quote.turnIndex : null;
+
+      if (quoteSub || turnIndex != null) {
+        const subLabelEl = node("div", "codex-quote-sublabel");
+        if (quoteSub) {
+          subLabelEl.appendChild(document.createTextNode(quoteSub));
+        }
+        if (turnIndex != null) {
+          if (quoteSub) {
+            subLabelEl.appendChild(document.createTextNode(" · "));
+          }
+          const turnBtn = node("button", "codex-turn-jump-btn", `第 ${turnIndex} 回合`);
+          turnBtn.type = "button";
+          turnBtn.title = `点击跳转至第 ${turnIndex} 回合`;
+          turnBtn.onclick = (e) => {
+            e.stopPropagation();
+            jumpToHistoryTurn(turnIndex);
+          };
+          subLabelEl.appendChild(turnBtn);
+        }
+        quoteBox.appendChild(subLabelEl);
+      }
+
+      if (quoteText) {
+        quoteBox.appendChild(node("div", "codex-quote-text", quoteText));
+        quoteBox.hidden = false;
+      }
     }
-    for (const field of fields) {
-      if (field[0] === quoteKey) continue;
-      appendViewField(field);
+
+    const hasStructuredLayout = (metaRows && metaRows.length > 0) || (pills && pills.length > 0) || (details && details.length > 0);
+
+    if (hasStructuredLayout) {
+      // 2. 属性网格
+      if (metaRows && metaRows.length > 0) {
+        const metaGrid = node("div", "codex-meta-grid");
+        metaRows.forEach(([k, v]) => {
+          if (v == null || v === "") return;
+          const row = node("div", "codex-meta-row");
+          row.append(
+            node("span", "meta-key", k),
+            node("span", "meta-val", String(v)),
+          );
+          metaGrid.appendChild(row);
+        });
+        if (metaGrid.childNodes.length > 0) {
+          collapsibleBody.appendChild(metaGrid);
+        }
+      }
+
+      // 3. 标签胶囊区
+      if (pills && pills.length > 0) {
+        const pillsWrap = node("div", "codex-pills");
+        pills.forEach((p) => {
+          const text = typeof p === "string" ? p : p?.text;
+          const kind = typeof p === "object" ? (p?.kind || "alias") : "alias";
+          if (text) {
+            pillsWrap.appendChild(node("span", `codex-pill pill-${kind}`, text));
+          }
+        });
+        if (pillsWrap.childNodes.length > 0) {
+          collapsibleBody.appendChild(pillsWrap);
+        }
+      }
+
+      // 4. 深度详查面板
+      if (details && details.length > 0) {
+        const detailsPanel = node("div", "codex-details-panel");
+        details.forEach(([key, label, isList, rawVal]) => {
+          if (rawVal == null || rawVal === "" || (Array.isArray(rawVal) && !rawVal.length)) return;
+          const row = node("div", "codex-field");
+          row.appendChild(node("span", "resource-label", label));
+
+          if (isList === "hooks" && Array.isArray(rawVal)) {
+            const list = node("div", "event-hooks-list");
+            rawVal.forEach((hook) => {
+              const kindLabel = EVENT_HOOK_KIND_LABELS[hook.kind] || hook.kind;
+              const hookEl = node("div", `event-hook${hook.consumed ? " is-consumed" : ""}`);
+              hookEl.textContent = `[${kindLabel}] ${hook.content}${hook.consumed ? "（已触发）" : ""}`;
+              list.appendChild(hookEl);
+            });
+            row.appendChild(list);
+          } else if (isList && Array.isArray(rawVal)) {
+            const factList = node("ul", "codex-fact-list");
+            rawVal.forEach((item) => factList.appendChild(node("li", "", String(item))));
+            row.appendChild(factList);
+          } else if (key === "known_abilities_detail" && Array.isArray(rawVal)) {
+            const abilityList = node("div", "codex-ability-list");
+            rawVal.forEach((a) => {
+              const item = node("div", "codex-ability-item");
+              const name = typeof a === "object" ? a.name : a;
+              const desc = typeof a === "object" ? a.description : "";
+              if (name) item.appendChild(node("span", "codex-pill pill-ability", name));
+              if (desc) item.appendChild(node("span", "codex-ability-desc", desc));
+              abilityList.appendChild(item);
+            });
+            row.appendChild(abilityList);
+          } else {
+            row.appendChild(node("p", "", String(rawVal)));
+          }
+          detailsPanel.appendChild(row);
+        });
+        if (detailsPanel.childNodes.length > 0) {
+          collapsibleBody.appendChild(detailsPanel);
+        }
+      }
+    } else {
+      // 兼容旧版 fields
+      for (const field of fields) {
+        appendViewField(field);
+      }
     }
   };
 
@@ -4106,7 +4343,8 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
     collapsed = false;
     if (id != null) recordsExpandedIds.add(id);
     card.classList.remove("is-collapsed");
-    viewContainer.hidden = true;
+    quoteBox.hidden = true;
+    collapsibleBody.hidden = true;
     editContainer.hidden = false;
     editButton.hidden = true;
     const firstControl = editContainer.querySelector("input, textarea");
@@ -4119,7 +4357,8 @@ function buildRecordCard({ id = null, title, statusText = "", statusActive = fal
   const switchToView = () => {
     editing = false;
     editContainer.hidden = true;
-    viewContainer.hidden = false;
+    quoteBox.hidden = !quote;
+    collapsibleBody.hidden = collapsed;
     editButton.hidden = false;
   };
 
@@ -4147,7 +4386,9 @@ function renderRecords(records) {
   renderNpcRecords(records.npc_profiles || []);
   renderSettingRecords(records.world_settings || []);
   renderRecordsRail();
-}function emptyState(message) {
+}
+
+function emptyState(message) {
   return node("div", "records-empty", message);
 }
 
@@ -4157,16 +4398,57 @@ function renderContinuityRecords(items) {
     els.recordsContinuityList.appendChild(emptyState("暂无连续性记录。"));
     return;
   }
-  for (const item of items) {
+
+  const activeItems = items.filter((i) => i.status === "active");
+  const inactiveItems = items.filter((i) => i.status !== "active");
+
+  const renderItem = (item, container) => {
     const active = item.status === "active";
+    const kindLabel = item.kind === "commitment" ? "承诺" : "悬念";
+    const statusLabel = item.status === "active" ? "进行中" : item.status === "resolved" ? "已解决" : "已取消";
+
+    // 1. 属性网格
+    const metaRows = [
+      ["类别", kindLabel],
+      ["状态", statusLabel],
+    ];
+    if (item.location) metaRows.push(["地点", item.location]);
+    if (item.deadline) metaRows.push(["期限", item.deadline]);
+    if (item.created_turn != null) metaRows.push(["始于", `第 ${item.created_turn} 回合`]);
+
+    // 2. 核心引语区 (优先展示当前进展，若无则回退至原始事项)
+    let quote = null;
+    if (item.current_state_text) {
+      quote = { text: `“${item.current_state_text}”`, subLabel: "当前进展" };
+    } else if (item.premise) {
+      quote = { text: `“${item.premise}”`, subLabel: "原始事项" };
+    }
+
+    // 3. 标签胶囊区 (关联实体)
+    const pills = [];
+    if (item.entities?.length) {
+      item.entities.forEach((entity) => {
+        if (entity) pills.push({ text: entity, kind: "alias" });
+      });
+    }
+
+    // 4. 深度详查区 (原始事项)
+    const details = [];
+    if (item.premise) {
+      details.push(["premise", "原始事项", false, item.premise]);
+    }
+
     const builder = buildRecordCard({
       id: item.id,
       title: item.subject || "（无主题）",
-      statusText: item.status,
+      statusText: `${kindLabel} · ${statusLabel}`,
       statusActive: active,
+      metaRows,
+      quote,
+      pills,
+      details,
       fields: CONTINUITY_VIEW_FIELDS,
       editableFields: CONTINUITY_EDITABLE_FIELDS,
-      quoteKey: "premise",
       onSave: active ? async (values) => {
         await updateRecord("continuity", item.id, values);
         showToast("连续性已更新");
@@ -4174,7 +4456,25 @@ function renderContinuityRecords(items) {
     });
     builder.populate(item);
     builder.render();
-    els.recordsContinuityList.appendChild(builder.card);
+    container.appendChild(builder.card);
+  };
+
+  // 1. 渲染进行中的活跃项
+  for (const item of activeItems) {
+    renderItem(item, els.recordsContinuityList);
+  }
+
+  // 2. 渲染非活跃项的分组（已解决/已取消，默认折叠）
+  if (inactiveItems.length > 0) {
+    const { group, body } = buildRecordsGroup({
+      id: "continuity_inactive",
+      title: "已结案 / 已归档",
+      count: inactiveItems.length,
+    });
+    for (const item of inactiveItems) {
+      renderItem(item, body);
+    }
+    els.recordsContinuityList.appendChild(group);
   }
 }
 
@@ -4207,19 +4507,72 @@ function renderNpcRecords(profiles) {
     return;
   }
   for (const profile of profiles) {
-    const data = { ...(profile.public || {}), ...(profile.director_only || {}) };
-    // 显示/编辑字段显式拆分：fields 含只读展示字段（含 last-scene pair），
-    // editableFields 保持现有可编辑字段（编辑模式无 pair 输入框）。
+    const pub = profile.public || {};
+    const dir = profile.director_only || {};
+    const data = { ...pub, ...dir };
+
+    // 1. 属性网格：阵营 -> 身份 -> 特质 -> 地点 -> 态度
+    const metaRows = [];
+    if (pub.faction) metaRows.push(["阵营", pub.faction]);
+    if (pub.role) metaRows.push(["身份", pub.role]);
+    if (pub.personality_trait) metaRows.push(["特质", pub.personality_trait]);
+    if (pub.last_known_location) metaRows.push(["地点", pub.last_known_location]);
+    if (pub.attitude_to_player) metaRows.push(["态度", pub.attitude_to_player]);
+
+    // 2. 核心引语区 (内外完全一致：优先展示最近出场记录与出场回合，若无最近出场则回退至外貌描述)
+    let quote = null;
+    if (pub.last_scene_summary) {
+      quote = {
+        text: `“${pub.last_scene_summary}”`,
+        subLabel: "最近出场",
+        turnIndex: pub.last_scene_turn,
+      };
+    } else if (pub.appearance) {
+      quote = {
+        text: `“${pub.appearance}”`,
+        subLabel: "外貌描述",
+      };
+    }
+
+    // 3. 标签胶囊区：仅展示别名（已知能力在下方详述中展示，避免重复）
+    const pills = [];
+    if (pub.aliases?.length) {
+      pub.aliases.forEach((alias) => {
+        if (alias) pills.push({ text: alias, kind: "alias" });
+      });
+    }
+
+    // 4. 深度详查区 (已知能力详述、外貌特征、最后出场地点与创作者私密字段)
+    const details = [];
+    if (pub.known_abilities?.length) {
+      details.push(["known_abilities_detail", "已知能力", false, pub.known_abilities]);
+    }
+    if (pub.appearance) {
+      details.push(["appearance", "外貌特征", false, pub.appearance]);
+    }
+    if (pub.last_known_location) {
+      details.push(["last_known_location", "最后出场地点", false, pub.last_known_location]);
+    }
+    if (dir.core_motivation) details.push(["core_motivation", "核心动机", false, dir.core_motivation]);
+    if (dir.hidden_secret) details.push(["hidden_secret", "隐藏秘密", false, dir.hidden_secret]);
+    if (dir.conflict_style) details.push(["conflict_style", "冲突风格", false, dir.conflict_style]);
+    if (dir.social_style) details.push(["social_style", "社交风格", false, dir.social_style]);
+    if (dir.director_notes) details.push(["director_notes", "导演备注", false, dir.director_notes]);
+
     const editableFields = _editableFieldsFor(data, NPC_FIELD_META)
       .filter(([key]) => !NPC_HIDDEN_FIELD_KEYS.has(key));
+
     const builder = buildRecordCard({
       id: profile.id,
-      title: profile.public?.name || "（未命名）",
-      statusText: "人物",
+      title: pub.name || "（未命名）",
+      statusText: "",
+      metaRows,
+      quote,
+      pills,
+      details,
       fields: [...editableFields, ...NPC_VIEW_FIELDS],
       editableFields,
       viewFormatters: NPC_VIEW_FORMATTERS,
-      quoteKey: "appearance",
       onSave: async (values) => {
         await updateRecord("npc", profile.id, values);
         showToast("人物档案已更新");
@@ -4239,12 +4592,40 @@ function renderSettingRecords(settings) {
   }
   for (const setting of settings) {
     const data = setting.fields || {};
+    // 1. 属性网格
+    const metaRows = [];
+    if (setting.hit_count != null && setting.hit_count > 0) {
+      metaRows.push(["登场", `${setting.hit_count} 次`]);
+    }
+    if (setting.created_turn != null) {
+      metaRows.push(["创建", `第 ${setting.created_turn} 回合`]);
+    }
+
+    // 2. 核心引语区 (设定概述)
+    const quote = data.summary ? { text: `“${data.summary}”`, subLabel: "设定概述" } : null;
+
+    // 3. 标签胶囊区
+    const pills = [];
+
+    // 4. 深度详查区 (公开事实与导演事实)
+    const details = [];
+    if (data.public_facts?.length) {
+      details.push(["public_facts", "公开事实", true, data.public_facts]);
+    }
+    if (data.hidden_facts?.length) {
+      details.push(["hidden_facts", "导演事实", true, data.hidden_facts]);
+    }
+
     const builder = buildRecordCard({
       id: setting.id,
       title: data.name || "（未命名）",
-      statusText: SETTING_KIND_LABELS[data.kind] || data.kind || "Setting",
+      statusText: "",
+      metaRows,
+      quote,
+      pills,
+      details,
       fields: _editableFieldsFor(data, SETTING_FIELD_META),
-      quoteKey: "summary",
+      editableFields: _editableFieldsFor(data, SETTING_FIELD_META),
       onSave: async (values) => {
         await updateRecord("setting", setting.id, values);
         showToast("世界设定已更新");
@@ -4274,52 +4655,82 @@ function renderEventRecords(events) {
     els.recordsEventList.appendChild(emptyState("暂无导演事件。"));
     return;
   }
-  for (const event of events) {
-    const card = node("div", "record-card event-card");
-    const head = node("div", "record-card-head event-card-head");
-    head.appendChild(node("div", "record-card-title", event.title || "（未命名事件）"));
-    const headActions = node("div", "record-head-actions");
+
+  const activeEvents = events.filter((e) => e.stage !== "resolved");
+  const resolvedEvents = events.filter((e) => e.stage === "resolved");
+
+  const renderEvent = (event, container) => {
+    const roleLabel = EVENT_ROLE_LABELS[event.role] || event.role;
+    const stageLabel = EVENT_STAGE_LABELS[event.stage] || event.stage;
     const statusActive = event.stage !== "resolved";
-    headActions.appendChild(node("span", `codex-kind-tag${statusActive ? " is-active" : ""}`, `${EVENT_ROLE_LABELS[event.role] || event.role} · ${EVENT_STAGE_LABELS[event.stage] || event.stage}`));
-    head.appendChild(headActions);
-    card.appendChild(head);
 
-    const body = node("div", "event-card-body");
-    body.hidden = true;
-    const detail = (label, value) => {
-      const row = node("div", "event-detail-row");
-      row.appendChild(node("span", "event-detail-label", label));
-      row.appendChild(node("div", "event-detail-value", value));
-      return row;
-    };
-    body.appendChild(detail("主题", event.subject || ""));
-    body.appendChild(detail("意图", event.intent || ""));
-    body.appendChild(detail("手法", event.method || ""));
-    if (event.macro_intent) body.appendChild(detail("宏观意图", event.macro_intent));
-    if (event.deadline_clock) body.appendChild(detail("期限", _formatEventClock(event.deadline_clock)));
+    // 1. 属性网格
+    const metaRows = [
+      ["定位", roleLabel],
+      ["阶段", stageLabel],
+    ];
+    if (event.deadline_clock) metaRows.push(["期限", _formatEventClock(event.deadline_clock)]);
+    if (event.created_turn != null) metaRows.push(["出现", `第 ${event.created_turn} 回合`]);
+
+    // 2. 核心引语区
+    const quoteText = event.macro_intent || event.intent || event.subject;
+    const quote = quoteText ? { text: `“${quoteText}”`, subLabel: event.macro_intent ? "宏观意图" : "事件意图" } : null;
+
+    // 3. 标签胶囊区 (参演角色)
+    const pills = [];
     if (event.actors?.length) {
-      body.appendChild(detail("参演", event.actors.map((actor) => actor.name || "?").join("、")));
+      event.actors.forEach((actor) => {
+        const name = typeof actor === "object" ? actor.name : actor;
+        if (name) pills.push({ text: `参演 · ${name}`, kind: "trait" });
+      });
     }
-    if (event.hook_pool?.length) {
-      const hookBlock = node("div", "event-detail-row");
-      hookBlock.appendChild(node("span", "event-detail-label", "钩子"));
-      const list = node("div", "event-detail-value");
-      for (const hook of event.hook_pool) {
-        const hookLine = node("div", `event-hook${hook.consumed ? " is-consumed" : ""}`, "");
-        hookLine.textContent = `[${EVENT_HOOK_KIND_LABELS[hook.kind] || hook.kind}] ${hook.content}${hook.consumed ? "（已触发）" : ""}`;
-        list.appendChild(hookLine);
-      }
-      hookBlock.appendChild(list);
-      body.appendChild(hookBlock);
-    }
-    if (event.world_impact) body.appendChild(detail("世界影响", event.world_impact.description));
-    if (event.final_world_impact) body.appendChild(detail("最终影响", event.final_world_impact.description));
-    if (event.resolved_reason) body.appendChild(detail("解决原因", event.resolved_reason));
-    if (event.created_turn != null) body.appendChild(detail("出现回合", String(event.created_turn)));
-    card.appendChild(body);
 
-    head.addEventListener("click", () => { body.hidden = !body.hidden; });
-    els.recordsEventList.appendChild(card);
+    // 4. 深度详查区 (钩子池、世界影响、解决原因等)
+    const details = [];
+    if (event.subject && quoteText !== event.subject) details.push(["subject", "主题", false, event.subject]);
+    if (event.intent && quoteText !== event.intent) details.push(["intent", "意图", false, event.intent]);
+    if (event.method) details.push(["method", "手法", false, event.method]);
+    if (event.hook_pool?.length) {
+      details.push(["hook_pool", "伏笔钩子", "hooks", event.hook_pool]);
+    }
+    if (event.world_impact?.description) details.push(["world_impact", "世界影响", false, event.world_impact.description]);
+    if (event.final_world_impact?.description) details.push(["final_world_impact", "最终影响", false, event.final_world_impact.description]);
+    if (event.resolved_reason) details.push(["resolved_reason", "解决原因", false, event.resolved_reason]);
+
+    const builder = buildRecordCard({
+      id: event.id || event.event_id || event.title,
+      title: event.title || event.subject || "（未命名事件）",
+      statusText: `${roleLabel} · ${stageLabel}`,
+      statusActive,
+      metaRows,
+      quote,
+      pills,
+      details,
+      fields: [],
+      editableFields: [],
+      onSave: null,
+    });
+    builder.populate(event);
+    builder.render();
+    container.appendChild(builder.card);
+  };
+
+  // 1. 渲染未解决的活跃事件
+  for (const event of activeEvents) {
+    renderEvent(event, els.recordsEventList);
+  }
+
+  // 2. 渲染已结案事件分组（默认折叠）
+  if (resolvedEvents.length > 0) {
+    const { group, body } = buildRecordsGroup({
+      id: "events_resolved",
+      title: "已结案事件",
+      count: resolvedEvents.length,
+    });
+    for (const event of resolvedEvents) {
+      renderEvent(event, body);
+    }
+    els.recordsEventList.appendChild(group);
   }
 }
 
@@ -4461,6 +4872,7 @@ els.generateBtn.onclick = generateTurn;
 els.stopGenerationBtn.onclick = stopActiveGeneration;
 els.dismissErrorBtn.onclick = clearError;
 els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer;
+if (els.closeLeftDrawerBtn) els.closeLeftDrawerBtn.onclick = closeLeftDrawer;
 if (els.openLeftDrawerRailBtn) els.openLeftDrawerRailBtn.onclick = () => { if (els.leftDrawer.classList.contains("open")) closeLeftDrawer(); else openLeftDrawer(); };
 
 if (els.experienceModePlayerBtn) els.experienceModePlayerBtn.onclick = () => switchExperienceMode("player");
@@ -4692,19 +5104,44 @@ window.addEventListener("resize", () => {
 }, { passive: true });
 
 // Prevent wheel scroll chaining to background window from modals and drawers
+function _findScrollableContainer(target, boundaryElement) {
+  let el = target;
+  while (el && el !== boundaryElement && el !== document.body && el !== document.documentElement) {
+    if (el.scrollHeight > el.clientHeight + 1) {
+      const style = window.getComputedStyle(el);
+      const overflowY = style.overflowY;
+      if (overflowY === "auto" || overflowY === "scroll") {
+        return el;
+      }
+    }
+    el = el.parentElement;
+  }
+  if (boundaryElement && boundaryElement.scrollHeight > boundaryElement.clientHeight + 1) {
+    const style = window.getComputedStyle(boundaryElement);
+    const overflowY = style.overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") {
+      return boundaryElement;
+    }
+  }
+  return null;
+}
+
 document.addEventListener("wheel", (event) => {
   const scrollableParent = event.target.closest(".drawer, .modal, .codex-modal, .token-usage-popover");
   if (!scrollableParent) return;
 
-  const content = event.target.closest(".codex-content, .records-list, .save-card-list, .core-memory-list, .drawer, .modal");
-  const scrollElem = content || scrollableParent;
+  const scrollElem = _findScrollableContainer(event.target, scrollableParent);
   const delta = event.deltaY;
+
+  if (!scrollElem) {
+    event.preventDefault();
+    return;
+  }
 
   const isAtTop = scrollElem.scrollTop <= 0 && delta < 0;
   const isAtBottom = scrollElem.scrollTop + scrollElem.clientHeight >= scrollElem.scrollHeight - 1 && delta > 0;
-  const cannotScroll = scrollElem.scrollHeight <= scrollElem.clientHeight;
 
-  if (isAtTop || isAtBottom || cannotScroll) {
+  if (isAtTop || isAtBottom) {
     event.preventDefault();
   }
 }, { passive: false });
@@ -4772,7 +5209,96 @@ function initCodexDrag() {
   header.addEventListener("pointercancel", stopDrag);
 }
 
+function initDrawerResizers() {
+  try {
+    const savedLeftW = localStorage.getItem("loreloop_left_drawer_w");
+    if (savedLeftW) {
+      const val = parseInt(savedLeftW, 10);
+      if (val >= 500 && val <= 1200) {
+        document.documentElement.style.setProperty("--drawer-left-w", `${val}px`);
+      }
+    }
+    const savedRightW = localStorage.getItem("loreloop_right_drawer_w");
+    if (savedRightW) {
+      const val = parseInt(savedRightW, 10);
+      if (val >= 440 && val <= 1200) {
+        document.documentElement.style.setProperty("--drawer-right-w", `${val}px`);
+      }
+    }
+  } catch (_) {}
+
+  const bindResizer = (drawer, side) => {
+    if (!drawer) return;
+    let handle = drawer.querySelector(`.drawer-resize-handle-${side}`);
+    if (!handle) {
+      handle = node("div", `drawer-resize-handle drawer-resize-handle-${side}`);
+      handle.title = "左右拖拽调整栏宽（双击恢复默认）";
+      drawer.appendChild(handle);
+    }
+
+    const isRightEdge = side === "right";
+    const defaultW = isRightEdge ? 500 : 440;
+
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const startX = e.clientX;
+      const startW = drawer.getBoundingClientRect().width;
+      const cssVar = isRightEdge ? "--drawer-left-w" : "--drawer-right-w";
+      const storageKey = isRightEdge ? "loreloop_left_drawer_w" : "loreloop_right_drawer_w";
+
+      handle.classList.add("is-dragging");
+      document.body.classList.add("is-resizing-drawer");
+
+      let currentW = startW;
+
+      const onPointerMove = (moveEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const rawW = isRightEdge ? startW + deltaX : startW - deltaX;
+        const minW = Math.min(defaultW, window.innerWidth - 60);
+        const maxW = Math.min(window.innerWidth - 120, 960);
+        currentW = Math.max(minW, Math.min(maxW, rawW));
+        document.documentElement.style.setProperty(cssVar, `${currentW}px`);
+      };
+
+      const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        handle.classList.remove("is-dragging");
+        document.body.classList.remove("is-resizing-drawer");
+        try {
+          localStorage.setItem(storageKey, String(Math.round(currentW)));
+        } catch (_) {}
+      };
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+    });
+
+    handle.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const cssVar = isRightEdge ? "--drawer-left-w" : "--drawer-right-w";
+      const storageKey = isRightEdge ? "loreloop_left_drawer_w" : "loreloop_right_drawer_w";
+      document.documentElement.style.setProperty(cssVar, `${defaultW}px`);
+      try {
+        localStorage.removeItem(storageKey);
+      } catch (_) {}
+      showToast("已恢复默认栏宽");
+    });
+  };
+
+  bindResizer(els.recordsDrawer, "right");
+  bindResizer(els.leftDrawer, "right");
+  bindResizer(els.drawer, "left");
+}
+
 initCodexDrag();
+initDrawerResizers();
 toggleCustomAbilityField();
 toggleCustomWorldStyleField();
 bootstrap().catch(showError);
