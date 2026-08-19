@@ -356,3 +356,97 @@ def test_only_ten_latest_confirmed_turn_snapshots_are_retained(tmp_path):
     assert status["undo_count"] == 10
     assert {item["turn_index"] for item in status["snapshots"]} == set(range(3, 13))
     assert len(list((data_dir / ".snapshots").glob("undo-*"))) == 10
+
+
+def test_turn_transactions_retained_for_same_window_as_undo_snapshots(tmp_path):
+    data_dir = tmp_path / "save"
+    data_dir.mkdir()
+    game_db = data_dir / "game.db"
+    _write_value(game_db, "0")
+    history = CampaignHistory(data_dir, max_undo=10)
+
+    for turn_index in range(1, 13):
+        turn_id = f"turn-{turn_index}"
+        history.save_pending(
+            turn_id=turn_id,
+            kind="turn",
+            group_id=turn_id,
+            turn_index=turn_index,
+            payload={"turn_id": turn_id},
+        )
+        history.begin_confirmation(turn_id, write_db=True, scene_text=None)
+        _write_value(game_db, str(turn_index))
+        history.complete_confirmation(turn_id, turn_id)
+
+    remaining = {
+        row["turn_id"] for row in history.pending_records()
+    } | {row["turn_id"] for row in _all_transactions(history)}
+    assert remaining == {f"turn-{index}" for index in range(3, 13)}
+    assert history.get_transaction("turn-1") is None
+    assert history.get_transaction("turn-3") is not None
+
+
+def test_turn_transaction_window_keeps_multiple_rows_per_turn(tmp_path):
+    data_dir = tmp_path / "save"
+    data_dir.mkdir()
+    game_db = data_dir / "game.db"
+    _write_value(game_db, "0")
+    history = CampaignHistory(data_dir, max_undo=10)
+
+    for turn_index in range(1, 13):
+        group_id = f"group-{turn_index}"
+        versions = [f"{group_id}-v{version}" for version in (1, 2)]
+        for turn_id in versions:
+            history.save_pending(
+                turn_id=turn_id,
+                kind="turn",
+                group_id=group_id,
+                turn_index=turn_index,
+                payload={"turn_id": turn_id},
+            )
+        history.begin_confirmation(
+            versions[1],
+            write_db=True,
+            scene_text=None,
+        )
+        _write_value(game_db, str(turn_index))
+        history.complete_confirmation(versions[1], group_id)
+
+    turn_ids = {row["turn_id"] for row in _all_transactions(history)}
+    assert {f"group-11-v{version}" for version in (1, 2)} <= turn_ids
+    assert {f"group-12-v{version}" for version in (1, 2)} <= turn_ids
+    assert not (turn_ids & {f"group-1-v{version}" for version in (1, 2)})
+    assert history.get_transaction("group-10-v1") is not None
+
+
+def test_transaction_trim_follows_max_undo_window(tmp_path):
+    data_dir = tmp_path / "save"
+    data_dir.mkdir()
+    game_db = data_dir / "game.db"
+    _write_value(game_db, "0")
+    history = CampaignHistory(data_dir, max_undo=3)
+
+    for turn_index in range(1, 6):
+        turn_id = f"turn-{turn_index}"
+        history.save_pending(
+            turn_id=turn_id,
+            kind="turn",
+            group_id=turn_id,
+            turn_index=turn_index,
+            payload={"turn_id": turn_id},
+        )
+        history.begin_confirmation(turn_id, write_db=True, scene_text=None)
+        _write_value(game_db, str(turn_index))
+        history.complete_confirmation(turn_id, turn_id)
+
+    turn_ids = {row["turn_id"] for row in _all_transactions(history)}
+    assert turn_ids == {f"turn-{index}" for index in range(3, 6)}
+    assert history.get_transaction("turn-2") is None
+
+
+def _all_transactions(history) -> list[dict]:
+    with history._connect() as conn:
+        rows = conn.execute(
+            "SELECT turn_id, turn_index, status FROM turn_transactions"
+        ).fetchall()
+    return [dict(row) for row in rows]

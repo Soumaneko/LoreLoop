@@ -302,6 +302,7 @@ class CampaignHistory:
             for snapshot in abandoned_snapshots:
                 shutil.rmtree(self._snapshot_path(snapshot["path"]), ignore_errors=True)
             self._trim_locked(conn)
+            self._trim_transactions_locked(conn)
 
     def discard(self, turn_ids: list[str]) -> None:
         if not turn_ids:
@@ -606,6 +607,24 @@ class CampaignHistory:
             if row["redo_path"]:
                 shutil.rmtree(self._snapshot_path(row["redo_path"]), ignore_errors=True)
             conn.execute("DELETE FROM turn_snapshots WHERE sequence=?", (row["sequence"],))
+        conn.commit()
+
+    def _trim_transactions_locked(self, conn) -> None:
+        # Keep transactions for the same window as the undo snapshot stack
+        # (``max_undo`` turns, anchor on the newest row's turn_index so pending
+        # drafts targeting a future turn stay covered). Older completed,
+        # discarded, failed and abandoned drafts are unreachable via undo/redo
+        # and only accumulate payload bytes.
+        row = conn.execute(
+            "SELECT MAX(turn_index) FROM turn_transactions"
+        ).fetchone()
+        if row is None or row[0] is None:
+            return
+        threshold = int(row[0]) - self.max_undo
+        conn.execute(
+            "DELETE FROM turn_transactions WHERE turn_index <= ?",
+            (threshold,),
+        )
         conn.commit()
 
     @staticmethod
