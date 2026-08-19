@@ -8,7 +8,6 @@ from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.llm.schema import schema_json
 from app.domain.confirmed_history import HistoryDocument
@@ -270,7 +269,6 @@ class ContinuityProjector:
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
-            LLMProviderError,
         ) as exc:
             return salvage(exc)
 

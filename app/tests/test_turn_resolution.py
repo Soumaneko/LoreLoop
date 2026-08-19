@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.core.llm import MockLLM
+from app.core.llm.errors import LLMProviderError
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
@@ -400,29 +401,22 @@ def _two_action_response(only_a1: bool = False) -> str:
     }, ensure_ascii=False)
 
 
-def test_turn_resolution_provider_failure_returns_deterministic_fallback():
+def test_turn_resolution_provider_failure_propagates():
     from app.core.llm import MockLLM
+    from app.core.llm.errors import LLMProviderError
 
     mock = MockLLM()
     mock.set_fail_provider(True)
     agent = TurnResolutionAgent(mock.build_gateway())
 
-    result = agent.resolve(
-        user_input="观察并攻击",
-        current_state=_state(),
-        action_parse_result=_two_action_parse(),
-        roll_results=_two_roll_batch(),
-        core_memory=CoreMemory(items=[]),
-    )
-
-    assert result.total_resolutions == 2
-    assert all(
-        frame.effect_reasoning == "行动按判定推进，未生成详细效果说明。"
-        for frame in result.action_resolutions
-    )
-    assert [warning.code for warning in agent.last_warnings] == [
-        "turn_resolution_fallback"
-    ]
+    with pytest.raises(LLMProviderError):
+        agent.resolve(
+            user_input="观察并攻击",
+            current_state=_state(),
+            action_parse_result=_two_action_parse(),
+            roll_results=_two_roll_batch(),
+            core_memory=CoreMemory(items=[]),
+        )
 
 
 def test_turn_resolution_first_missing_triggers_retry_second_complete():

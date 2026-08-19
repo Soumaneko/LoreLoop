@@ -8,7 +8,6 @@ from app.core.diagnostics import NullDiagnosticLogger
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import ActionParseResult
@@ -546,7 +545,6 @@ def _compose_with_context(
     except (
         LLMOutputParseError,
         LLMOutputValidationError,
-        LLMProviderError,
     ) as exc:
         composition = _empty_composition(context)
         _diagnostics(state).warning(
@@ -815,7 +813,6 @@ def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
     except (
         LLMOutputParseError,
         LLMOutputValidationError,
-        LLMProviderError,
     ) as exc:
         validation_skipped = True
         warnings = []
@@ -865,7 +862,6 @@ def revise_narrative_node(state: GenerationState) -> GenerationState:
     except (
         LLMOutputParseError,
         LLMOutputValidationError,
-        LLMProviderError,
     ) as exc:
         _diagnostics(state).warning(
             source="narrative_consistency",

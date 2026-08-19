@@ -17,6 +17,8 @@ from app.core.cancellation import (
     reset_cancellation_token,
 )
 from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger
+from app.core.llm.errors import LLMProviderError
+from app.core.llm.provider_classification import classify_provider_error
 from app.core.llm.token_usage import (
     bind_token_usage_sink,
     bind_token_usage_trace,
@@ -500,12 +502,22 @@ class OperationManager:
             }
             if current_step is not None:
                 details["current_step"] = current_step
-            details["error_type"] = type(exc).__name__
+            if isinstance(exc, LLMProviderError):
+                provider_code, provider_message = classify_provider_error(exc)
+                error_type = provider_code
+                error_message = provider_message
+                details["error_type"] = provider_code
+                details["provider_error_type"] = type(exc).__name__
+                details["provider_message"] = str(exc)
+            else:
+                error_type = type(exc).__name__
+                error_message = str(exc)
+                details["error_type"] = error_type
             details["traceback"] = traceback.format_exc()
             self.diagnostics.error(
                 source="operation_manager",
                 code="operation_failed",
-                message=str(exc),
+                message=error_message,
                 trace_id=metadata.get("trace_id"),
                 operation_id=operation_id,
                 campaign_id=self.campaign_id,
@@ -516,8 +528,8 @@ class OperationManager:
             self._finish(
                 operation_id,
                 status="failed",
-                error_type=type(exc).__name__,
-                error_message=str(exc),
+                error_type=error_type,
+                error_message=error_message,
             )
             raise
         finally:

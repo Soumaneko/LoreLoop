@@ -7,7 +7,6 @@ from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.llm.schema import schema_json
 from app.domain.scene_facts.schemas import (
@@ -177,10 +176,8 @@ class SceneFactExtractor:
                 structure_failed=structure_failed,
                 scene_focus=last_focus,
             )
-        except (LLMOutputParseError, LLMProviderError) as exc:
-            fallback_reason = (
-                "provider" if isinstance(exc, LLMProviderError) else "parse"
-            )
+        except LLMOutputParseError as exc:
+            fallback_reason = "parse"
             return _salvage_scene_fact_set(
                 valid_fact_entries=valid_fact_entries,
                 valid_mentions=valid_mentions,

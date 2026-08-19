@@ -10,7 +10,6 @@ from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.llm.schema import schema_json
 
@@ -262,7 +261,6 @@ class DirectorAgent:
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
-            LLMProviderError,
             ValueError,
         ) as exc:
             return salvage(exc)

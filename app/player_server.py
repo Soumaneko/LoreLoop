@@ -745,9 +745,22 @@ class PlayerHandler(BaseHTTPRequestHandler):
             pass
         self.close_connection = True
 
+    _PROVIDER_CODES = frozenset({
+        "auth_failed",
+        "permission_denied",
+        "model_not_found",
+        "thinking_unsupported",
+        "rate_limited",
+        "timeout",
+        "endpoint_unreachable",
+        "provider_error",
+    })
+
     @staticmethod
     def _project_operation_failure(failed) -> tuple[str, str]:
         """Project a failed Operation snapshot into a player-safe (code, message)."""
+        if failed is not None and failed.error_type in PlayerHandler._PROVIDER_CODES:
+            return failed.error_type, failed.error_message or "模型服务暂时不可用，请检查后重试。"
         if (
             failed is not None
             and failed.error_type == "ClientValidationError"

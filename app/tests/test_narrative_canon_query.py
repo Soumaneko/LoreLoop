@@ -1,4 +1,5 @@
 import json
+import pytest
 from pathlib import Path
 
 from app.domain.narrative_canon_query import NarrativeCanonQueryAgent
@@ -122,23 +123,20 @@ def test_prompt_keeps_query_generation_separate_from_retrieval_and_checking():
     assert "重新淬火、磨剑次数和之后如何携带" in prompt
 
 
-def test_agent_provider_failure_returns_empty_query_set():
+def test_agent_provider_failure_propagates():
     from app.core.llm import MockLLM
+    from app.core.llm.errors import LLMProviderError
 
     mock = MockLLM()
     mock.set_fail_provider(True)
     agent = NarrativeCanonQueryAgent(mock.build_gateway())
 
-    result = agent.generate(
-        scene_text="风吹过窗沿。",
-        player_name="莱尔",
-        npc_profiles=[],
-    )
-
-    assert result.queries == []
-    assert [warning.code for warning in agent.last_warnings] == [
-        "canon_query_fallback"
-    ]
+    with pytest.raises(LLMProviderError):
+        agent.generate(
+            scene_text="风吹过窗沿。",
+            player_name="莱尔",
+            npc_profiles=[],
+        )
 
 
 def test_agent_first_invalid_retries_and_second_valid_subset_wins():

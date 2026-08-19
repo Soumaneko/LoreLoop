@@ -2499,7 +2499,7 @@ def _context_extractor_input(*, evidence_ids=("e1",)):
     )
 
 
-def test_context_extractor_provider_failure_returns_empty_and_warning():
+def test_context_extractor_provider_failure_propagates():
     from app.core.llm.errors import LLMProviderError
 
     class FailingGateway:
@@ -2507,14 +2507,8 @@ def test_context_extractor_provider_failure_returns_empty_and_warning():
             raise LLMProviderError("provider down")
 
     extractor = ContextExtractor(FailingGateway())
-    result = extractor.extract(_context_extractor_input())
-
-    assert result.facts == []
-    assert result.turn_focus == "上下文事实提取失败"
-    assert [warning.code for warning in extractor.last_warnings] == [
-        "context_extract_failed"
-    ]
-    assert extractor.last_error is not None
+    with pytest.raises(LLMProviderError):
+        extractor.extract(_context_extractor_input())
 
 
 def test_context_extractor_first_invalid_retries_and_second_valid_subset_wins():

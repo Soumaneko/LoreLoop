@@ -4,6 +4,7 @@ import pytest
 import threading
 from pydantic import ValidationError
 from app.core.llm import MockLLM
+from app.core.llm.errors import LLMProviderError
 from app.domain.director import DirectorAgent
 from app.domain.director import DirectorSkillRequest
 from app.domain.director import DirectorSkillService
@@ -48,7 +49,7 @@ def test_director_agent_falls_back_when_reasoning_exceeds_500():
     assert result.requests[0].request_id == "request_1"
 
 
-def test_director_agent_provider_failure_returns_empty_decision():
+def test_director_agent_provider_failure_propagates():
     service = DirectorSkillService()
     service.register(
         name="present_event",
@@ -62,13 +63,8 @@ def test_director_agent_provider_failure_returns_empty_decision():
     mock.set_fail_provider(True)
 
     agent = DirectorAgent(mock.build_gateway(), service)
-    result = agent.decide_generation(make_director_observation())
-
-    assert result.requests == []
-    assert any(
-        warning.code == "director_decision_fallback"
-        for warning in agent.last_warnings
-    )
+    with pytest.raises(LLMProviderError):
+        agent.decide_generation(make_director_observation())
 
 
 def test_director_agent_keeps_earlier_request_on_batch_conflict():

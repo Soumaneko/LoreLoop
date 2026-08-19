@@ -10,7 +10,6 @@ from app.runtime.settings import canon_validation_enabled, experience_mode
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.domain.roll.schemas import Difficulty
 from app.domain.short_term_memory import ShortTermMemory
@@ -440,7 +439,6 @@ def feedback_rewrite_stream(
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
-            LLMProviderError,
         ) as exc:
             _diagnostics(state).warning(
                 source="rewrite_strategy",

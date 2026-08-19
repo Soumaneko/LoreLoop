@@ -243,6 +243,41 @@ def test_operation_failure_projection_shows_validation_only():
     )
 
 
+def test_operation_failure_projection_surfaces_classified_provider_error():
+    from app.player_server import PlayerHandler
+
+    provider = SimpleNamespace(
+        error_type="auth_failed",
+        error_message="API Key 无效或没有访问权限",
+    )
+    assert PlayerHandler._project_operation_failure(provider) == (
+        "auth_failed",
+        "API Key 无效或没有访问权限",
+    )
+
+    generic = SimpleNamespace(
+        error_type="provider_error",
+        error_message=None,
+    )
+    assert PlayerHandler._project_operation_failure(generic) == (
+        "provider_error",
+        "模型服务暂时不可用，请检查后重试。",
+    )
+
+
+def test_operation_failure_projection_never_surfaces_raw_provider_text():
+    from app.player_server import PlayerHandler
+
+    raw = SimpleNamespace(
+        error_type="LLMProviderError",
+        error_message="Authentication failed for secret-key /api/v1",
+    )
+    assert PlayerHandler._project_operation_failure(raw) == (
+        "operation_failed",
+        "服务器内部错误，详情见服务端日志。",
+    )
+
+
 def test_operation_stream_missing_operation_returns_validation_error(monkeypatch):
     import urllib.parse
 

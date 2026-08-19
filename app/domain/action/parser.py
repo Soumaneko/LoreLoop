@@ -8,7 +8,6 @@ from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.llm.schema import schema_json
 from app.domain.action.schemas import (
@@ -257,7 +256,6 @@ class ActionParser:
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
-            LLMProviderError,
         ) as exc:
             return self._salvage(attempt_records, exc)
 

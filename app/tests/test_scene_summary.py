@@ -1,8 +1,9 @@
 import json
+import pytest
 from pathlib import Path
 
 from app.core.llm import MockLLM
-from app.core.llm.errors import LLMProviderError
+from app.core.llm.errors import LLMOutputValidationError, LLMProviderError
 from app.core.llm.gateway import LLMGateway
 from app.core.llm.providers import MockProvider
 from app.core.llm.tracing import NullTraceLogger
@@ -213,10 +214,10 @@ def _gateway(provider):
 class _AlwaysFailProvider(_CountingProvider):
     def generate(self, *args, **kwargs):
         self.calls += 1
-        raise LLMProviderError("provider down")
+        raise LLMOutputValidationError("validation down")
 
 
-def test_summarize_turn_uses_first_candidate_when_second_provider_fails():
+def test_summarize_turn_second_provider_failure_propagates():
     class FirstThenProviderFailure(_CountingProvider):
         def generate(self, *args, **kwargs):
             self.calls += 1
@@ -229,16 +230,14 @@ def test_summarize_turn_uses_first_candidate_when_second_provider_fails():
     ])
     summarizer = SceneSummarizer(_gateway(provider))
 
-    summary = summarizer.summarize_turn(
-        core_memory=CoreMemory(items=[]),
-        scene_text="正文。",
-        current_state=_state(),
-        scene_id="scene_010",
-        turn_index=10,
-    )
-
-    assert len(summary.content) == 301
-    assert summarizer.last_warnings == []
+    with pytest.raises(LLMProviderError):
+        summarizer.summarize_turn(
+            core_memory=CoreMemory(items=[]),
+            scene_text="正文。",
+            current_state=_state(),
+            scene_id="scene_010",
+            turn_index=10,
+        )
 
 
 def test_summarize_turn_uses_first_candidate_when_second_is_blank():

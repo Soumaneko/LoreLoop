@@ -255,14 +255,12 @@ def _run(mock, **overrides):
     return result, agent
 
 
-def test_provider_failure_returns_empty_fallback():
+def test_provider_failure_propagates():
     mock = MockLLM()
     mock.set_fail_provider(True)
 
-    result, agent = _run(mock)
-
-    assert result.previews == []
-    assert agent.last_warnings[0].code == "action_preview_fallback"
+    with pytest.raises(LLMProviderError):
+        _run(mock)
 
 
 def test_retries_invalid_preview_and_uses_second():
@@ -302,7 +300,7 @@ class _FirstThenFailProvider(MockProvider):
         raise LLMProviderError("provider down")
 
 
-def test_second_provider_failure_uses_first_valid_subset():
+def test_second_provider_failure_propagates():
     first = [_preview(), _preview(label="二"), _preview(label="三"), _preview(good_result=None)]
     provider = _FirstThenFailProvider(_response(first))
     agent = ActionPreviewAgent(LLMGateway(
@@ -311,14 +309,12 @@ def test_second_provider_failure_uses_first_valid_subset():
         tracer=NullTraceLogger(),
     ))
 
-    result = agent.generate(
-        current_state=_make_state(),
-        core_memory=_make_core_memory(),
-        recent_summaries=_make_recent_summaries(),
-    )
-
-    assert len(result.previews) == 3
-    assert agent.last_warnings[0].code == "action_preview_dropped"
+    with pytest.raises(LLMProviderError):
+        agent.generate(
+            current_state=_make_state(),
+            core_memory=_make_core_memory(),
+            recent_summaries=_make_recent_summaries(),
+        )
 
 
 def test_both_no_valid_keeps_last_attempt_warnings():

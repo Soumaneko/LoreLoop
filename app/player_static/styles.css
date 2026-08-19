@@ -801,6 +801,8 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 
 .error-card { margin: 28px 0; padding: 20px 22px; border-left: 2px solid var(--danger); background: var(--negative-bg); }
 .error-card p { margin: 8px 0 14px; color: var(--muted); }.error-card button { border: 0; background: none; color: var(--negative-text); padding: 0; cursor: pointer; }
+.error-card .error-config-btn { display: inline-block; border: 1px solid var(--negative-border); border-radius: 6px; padding: 7px 14px; color: var(--negative-text); background: var(--negative-bg); margin-left: 10px; font-weight: 500; }
+.error-card .error-config-btn:hover { background: var(--negative-bg-hover, var(--negative-bg)); border-color: var(--negative-text); }
 
 /* Transparent turn rail */
 .turn-navigator {

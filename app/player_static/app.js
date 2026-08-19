@@ -228,6 +228,16 @@ function showError(
   els.errorTitle.textContent = feedback.title;
   els.errorMessage.textContent = feedback.message;
   els.errorCard.hidden = false;
+  els.errorCard.querySelector(".error-retry-btn")?.remove();
+  els.errorCard.querySelector(".error-config-btn")?.remove();
+  if (feedback.action === "openModelConfig") {
+    const configBtn = document.createElement("button");
+    configBtn.className = "error-config-btn";
+    configBtn.type = "button";
+    configBtn.textContent = "打开模型设置";
+    configBtn.onclick = () => openModelConfig();
+    els.errorCard.appendChild(configBtn);
+  }
   renderControls();
   scrollToBottom();
 }
@@ -236,6 +246,7 @@ function clearError() {
   state.lastError = null;
   els.errorCard.hidden = true;
   els.errorCard.querySelector(".error-retry-btn")?.remove();
+  els.errorCard.querySelector(".error-config-btn")?.remove();
   const pending = activePending();
   setMode(!state.modelConfig?.configured ? "needs_model" : state.playerState?.needs_init ? "needs_init" : pending ? "pending" : "idle");
   renderControls();

@@ -449,19 +449,15 @@ def test_cancellation_is_never_swallowed():
     assert updater.last_warnings == []
 
 
-def test_provider_error_degrades_to_previous_state():
+def test_provider_error_propagates():
     updater = StateUpdater(_FailingGateway())
 
-    result = updater.update(
-        _state(),
-        _facts(),
-        core_memory=CoreMemory(items=[]),
-    )
-
-    assert result == _state()
-    assert len(updater.last_warnings) == 1
-    assert updater.last_warnings[0].code == "state_update_fallback"
-    assert "provider down" in updater.last_warnings[0].message
+    with pytest.raises(LLMProviderError):
+        updater.update(
+            _state(),
+            _facts(),
+            core_memory=CoreMemory(items=[]),
+        )
 
 
 def test_attitude_before_add_is_applied_in_two_pass():
@@ -867,7 +863,7 @@ def test_model_calls_do_not_exceed_two():
     assert provider.calls == 2
 
 
-def test_permanent_provider_error_is_not_retried():
+def test_permanent_provider_error_propagates_without_retry():
     class PermanentFailureProvider(_CountingProvider):
         def generate(self, *args, **kwargs):
             self.calls += 1
@@ -876,18 +872,17 @@ def test_permanent_provider_error_is_not_retried():
     provider = PermanentFailureProvider()
     updater = StateUpdater(_gateway(provider))
 
-    result = updater.update(
-        _state(),
-        _facts(),
-        core_memory=CoreMemory(items=[]),
-    )
+    with pytest.raises(LLMProviderError):
+        updater.update(
+            _state(),
+            _facts(),
+            core_memory=CoreMemory(items=[]),
+        )
 
-    assert result == _state()
     assert provider.calls == 1
-    assert updater.last_warnings[0].code == "state_update_fallback"
 
 
-def test_transient_provider_error_retries_once_then_degrades():
+def test_transient_provider_error_retries_once_then_propagates():
     class TransientFailureProvider(_CountingProvider):
         def generate(self, *args, **kwargs):
             self.calls += 1
@@ -896,15 +891,14 @@ def test_transient_provider_error_retries_once_then_degrades():
     provider = TransientFailureProvider()
     updater = StateUpdater(_gateway(provider))
 
-    result = updater.update(
-        _state(),
-        _facts(),
-        core_memory=CoreMemory(items=[]),
-    )
+    with pytest.raises(LLMProviderError):
+        updater.update(
+            _state(),
+            _facts(),
+            core_memory=CoreMemory(items=[]),
+        )
 
-    assert result == _state()
     assert provider.calls == 2
-    assert updater.last_warnings[0].code == "state_update_fallback"
 
 
 def test_no_effect_does_not_trigger_retry():
@@ -926,7 +920,7 @@ def test_no_effect_does_not_trigger_retry():
     assert updater.last_warnings[0].code == "participant_not_present"
 
 
-def test_second_provider_failure_uses_first_valid_subset():
+def test_second_provider_failure_propagates():
     first = {
         "decision": "第一次有合法操作。",
         "operations": [
@@ -950,14 +944,13 @@ def test_second_provider_failure_uses_first_valid_subset():
     ])
     updater = StateUpdater(_gateway(provider))
 
-    result = updater.update(
-        _state(),
-        _facts(),
-        core_memory=CoreMemory(items=[]),
-    )
+    with pytest.raises(LLMProviderError):
+        updater.update(
+            _state(),
+            _facts(),
+            core_memory=CoreMemory(items=[]),
+        )
 
-    assert result.scene.location == "城门"
-    assert [op.operation_id for op in updater.last_change_set.operations] == ["op1"]
     assert provider.calls == 2
 
 

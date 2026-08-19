@@ -8,7 +8,6 @@ from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
@@ -194,7 +193,6 @@ class SceneSummarizer:
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
-            LLMProviderError,
         ):
             content, attempt = selected(None)
             warn_if_truncated(attempt)

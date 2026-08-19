@@ -20,7 +20,6 @@ from typing import Any
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.creative_brief import draw_creative_brief
@@ -204,7 +203,6 @@ class DirectorConfirmationExecutor:
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
-            LLMProviderError,
         ) as exc:
             self.last_warnings.append(DirectorWarning(
                 code="director_execution_fallback",

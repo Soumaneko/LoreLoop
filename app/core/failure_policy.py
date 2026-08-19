@@ -33,9 +33,11 @@ def decide_failure_action(
 
     The default base policy gives a correctable failure exactly one feedback
     retry; the second attempt (and any later attempt) degrades instead of
-    retrying again. Permanent provider errors are not a failure decision here:
-    they are classified by the LLM provider classifier, and the module then
-    chooses ``degradable``.
+    retrying again. Provider hard errors (``LLMProviderError`` — network,
+    timeout, auth, rate-limit, model config) are ``integrity`` failures that
+    abort the pipeline and surface a targeted diagnostic; they must not be
+    degraded. Only ``LLMOutputParseError``/``LLMOutputValidationError`` (model
+    format errors the player cannot fix) may degrade.
 
     Unknown decisions and non-positive attempts are programming errors and
     raise ``ValueError`` rather than silently degrading.

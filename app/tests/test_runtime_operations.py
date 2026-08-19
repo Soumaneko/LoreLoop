@@ -428,6 +428,49 @@ def test_operation_manager_records_stream_failure_without_losing_prior_events(
         manager.shutdown()
 
 
+def test_operation_manager_classifies_provider_error_for_operation_failure(
+    tmp_path,
+):
+    from app.core.llm.errors import LLMProviderError
+
+    diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
+    manager = OperationManager(
+        "campaign-1",
+        max_workers=1,
+        diagnostics=diagnostics,
+    )
+
+    def stream():
+        yield {"step": "started", "data": {}}
+        raise LLMProviderError("Authentication failed: 401")
+
+    try:
+        operation_id = manager.submit_stream(
+            "generation",
+            stream,
+            requires_ack=True,
+            metadata={"turn_index": 3},
+        )
+        snapshot = manager.wait(operation_id, timeout=2)
+
+        assert snapshot.status == "failed"
+        assert snapshot.error_type == "auth_failed"
+        assert snapshot.error_message == "API Key 无效或没有访问权限"
+        assert snapshot.metadata["turn_index"] == 3
+
+        diagnostic = diagnostics.read()[0]
+        assert diagnostic["severity"] == "error"
+        assert diagnostic["code"] == "operation_failed"
+        assert diagnostic["message"] == "API Key 无效或没有访问权限"
+        assert diagnostic["details"]["error_type"] == "auth_failed"
+        assert diagnostic["details"]["provider_error_type"] == "LLMProviderError"
+        assert diagnostic["details"]["provider_message"] == (
+            "Authentication failed: 401"
+        )
+    finally:
+        manager.shutdown()
+
+
 def test_terminal_operation_remains_recoverable_until_acknowledged():
     manager = OperationManager("campaign-1", max_workers=1)
 

@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.llm import MockLLM
+from app.core.llm.errors import LLMProviderError
 from app.core.llm.prompts import PromptLoader
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.current_state.schemas import (
@@ -1113,14 +1114,12 @@ def _run_processor(mock):
     )
 
 
-def test_processor_provider_failure_returns_fallback_batch():
+def test_processor_provider_failure_propagates():
     mock = MockLLM()
     mock.set_fail_provider(True)
 
-    batch = _run_processor(mock)
-
-    assert batch.entries == []
-    assert batch.entry_warnings[0].code == "npc_batch_fallback"
+    with pytest.raises(LLMProviderError):
+        _run_processor(mock)
 
 
 def test_processor_retries_invalid_entry_and_uses_second():
@@ -1286,7 +1285,7 @@ def test_processor_top_level_extra_fields_do_not_block_valid_entries():
     )
 
 
-def test_workflow_provider_failure_still_applies_deterministic_alias():
+def test_workflow_provider_failure_propagates():
     mentions = [
         _mention(
             "沈孤鸿",
@@ -1299,24 +1298,16 @@ def test_workflow_provider_failure_still_applies_deterministic_alias():
     mock.set_fail_provider(True)
     with NPCProfileStore(":memory:") as store:
         store.upsert(_profile())
-        result = apply_npc_batch_update(
-            npc_store=store,
-            gateway=mock.build_gateway(),  # type: ignore[arg-type]
-            scene_facts=_facts(mentions=mentions),
-            evidence_documents=_evidence(),
-            current_state=_state(),
-            turn_index=_TURN_INDEX,
-            admitted_at=_ADMITTED_AT,
-        )
-
-        assert len(result.accepted_alias_changes) == 1
-        assert any(
-            warning.code == "npc_batch_fallback"
-            for warning in result.warnings
-        )
-        profile = store.get_by_id("npc_001")
-        assert profile is not None
-        assert "沈二爷" in profile.aliases
+        with pytest.raises(LLMProviderError):
+            apply_npc_batch_update(
+                npc_store=store,
+                gateway=mock.build_gateway(),  # type: ignore[arg-type]
+                scene_facts=_facts(mentions=mentions),
+                evidence_documents=_evidence(),
+                current_state=_state(),
+                turn_index=_TURN_INDEX,
+                admitted_at=_ADMITTED_AT,
+            )
 
 
 def test_processor_caps_updates_at_256_and_keeps_valid_entries():

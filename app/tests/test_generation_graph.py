@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import json
 
 import pytest
+from app.core.llm.errors import LLMOutputValidationError
 
 from langgraph.graph import END, START, StateGraph
 
@@ -1703,7 +1704,7 @@ def test_composer_hides_newly_touched_events_without_intrude(
 
 
 def test_check_narrative_consistency_node_skips_on_llm_error(monkeypatch):
-    from app.core.llm.errors import LLMProviderError
+    from app.core.llm.errors import LLMOutputValidationError
     from app.domain.turn_resolution.schemas import TurnResolutionResult
 
     recorded = []
@@ -1717,7 +1718,7 @@ def test_check_narrative_consistency_node_skips_on_llm_error(monkeypatch):
             pass
 
         def check(self, **kwargs):
-            raise LLMProviderError("consistency provider down")
+            raise LLMOutputValidationError("consistency validation down")
 
     monkeypatch.setattr(generation_nodes, "NarrativeConsistencyAgent", _FakeAgent)
     monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
@@ -1741,8 +1742,6 @@ def test_check_narrative_consistency_node_skips_on_llm_error(monkeypatch):
 
 
 def test_revise_narrative_node_preserves_original_on_llm_error(monkeypatch):
-    from app.core.llm.errors import LLMProviderError
-
     recorded = []
 
     class _Diagnostics:
@@ -1750,7 +1749,7 @@ def test_revise_narrative_node_preserves_original_on_llm_error(monkeypatch):
             recorded.append(kwargs)
 
     def _boom(*_args, **_kwargs):
-        raise LLMProviderError("revision provider down")
+        raise LLMOutputValidationError("revision validation down")
 
     monkeypatch.setattr(
         generation_nodes,
@@ -1781,8 +1780,6 @@ def test_feedback_rewrite_falls_back_to_strategy_unavailable(
     monkeypatch,
     configure_runtime_services,
 ):
-    from app.core.llm.errors import LLMProviderError
-
     turn_id = "turn_v1"
     state_before = object()
     context = SimpleNamespace(turn_resolution=object())
@@ -1811,7 +1808,7 @@ def test_feedback_rewrite_falls_back_to_strategy_unavailable(
     class _FailingSelector:
         def __init__(self, _gateway): pass
         def select(self, **_kwargs):
-            raise LLMProviderError("selector down")
+            raise LLMOutputValidationError("selector validation down")
 
     configure_runtime_services(
         current_state=_StateStore,
@@ -1938,8 +1935,6 @@ def _fake_output(state, composition):
 def test_compose_narrative_node_returns_empty_fallback_when_composer_fails(
     monkeypatch,
 ):
-    from app.core.llm.errors import LLMProviderError
-
     recorded = []
 
     class _Diagnostics:
@@ -1948,7 +1943,7 @@ def test_compose_narrative_node_returns_empty_fallback_when_composer_fails(
 
     class _FailingComposer:
         def compose(self, _context, **_kwargs):
-            raise LLMProviderError("composer down")
+            raise LLMOutputValidationError("composer validation down")
 
     monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
     monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: lambda _: None)

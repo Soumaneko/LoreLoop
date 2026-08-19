@@ -3,6 +3,7 @@ import json
 import pytest
 
 from app.core.llm import MockLLM
+from app.core.llm.errors import LLMProviderError
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.context_facts.schemas import ContextFactSet
@@ -224,24 +225,20 @@ class TestRollModifierEvaluator:
         )
 
 
-def test_roll_modifier_provider_failure_returns_empty_batch():
+def test_roll_modifier_provider_failure_propagates():
     from app.core.llm import MockLLM
 
     mock = MockLLM()
     mock.set_fail_provider(True)
     evaluator = RollModifierEvaluator(mock.build_gateway())
 
-    batch = evaluator.evaluate(
-        _make_parse_result(),
-        _make_state(),
-        _make_core_memory(),
-        roll_actions=[_make_action("a1", True)],
-    )
-
-    assert batch.modifiers == []
-    assert [warning.code for warning in evaluator.last_warnings] == [
-        "roll_modifier_fallback"
-    ]
+    with pytest.raises(LLMProviderError):
+        evaluator.evaluate(
+            _make_parse_result(),
+            _make_state(),
+            _make_core_memory(),
+            roll_actions=[_make_action("a1", True)],
+        )
 
 
 def test_roll_modifier_first_invalid_retries_and_second_valid_subset_wins():

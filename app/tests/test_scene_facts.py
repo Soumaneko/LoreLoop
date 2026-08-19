@@ -427,7 +427,7 @@ def test_scene_fact_extractor_reports_cleaned_invalid_evidence_as_degraded():
     assert result.npc_mentions[0].evidence_paragraph_ids == ["turn_12_p001"]
 
 
-def test_scene_fact_extractor_preserves_first_attempt_partials_on_provider_failure():
+def test_scene_fact_extractor_provider_failure_propagates():
     class _RetryThenProviderFailGateway:
         def __init__(self, response):
             self.response = response
@@ -454,23 +454,20 @@ def test_scene_fact_extractor_preserves_first_attempt_partials_on_provider_failu
     }
     gateway = _RetryThenProviderFailGateway(response)
 
-    result = SceneFactExtractor(gateway).extract(
-        SceneFactExtractInput(
-            scene_text="沈孤鸿正式成为醉花楼主。",
-            current_state=_state(),
-            core_memory=CoreMemory(items=[]),
-            scene_paragraphs=[
-                SceneParagraphInput(
-                    document_id="turn_12_p001",
-                    text="他接过印信，正式成为醉花楼主。",
-                )
-            ],
+    with pytest.raises(LLMProviderError):
+        SceneFactExtractor(gateway).extract(
+            SceneFactExtractInput(
+                scene_text="沈孤鸿正式成为醉花楼主。",
+                current_state=_state(),
+                core_memory=CoreMemory(items=[]),
+                scene_paragraphs=[
+                    SceneParagraphInput(
+                        document_id="turn_12_p001",
+                        text="他接过印信，正式成为醉花楼主。",
+                    )
+                ],
+            )
         )
-    )
-
-    assert result.degraded is True
-    assert [fact.fact_id for fact in result.facts] == ["f1"]
-    assert result.npc_mentions == []
 
 
 def test_scene_fact_extractor_rejects_missing_top_level_fields():

@@ -1,7 +1,7 @@
 import pytest
 
 from types import SimpleNamespace
-from app.core.llm.errors import LLMProviderError
+from app.core.llm.errors import LLMOutputValidationError
 from app.domain.current_state import WorldClock
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
@@ -616,7 +616,7 @@ def test_hidden_success_engaged_failure_keeps_hidden_result(tmp_path):
         def run(self, **kwargs):
             if kwargs["task"] == "director_event_review_hidden":
                 return kwargs["output_schema"].model_validate(self.hidden_output)
-            raise LLMProviderError("engaged review failed")
+            raise LLMOutputValidationError("engaged review failed")
 
     gateway = _FailEngagedGateway({
         "reviews": [{

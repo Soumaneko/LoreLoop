@@ -8,7 +8,6 @@ from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.llm.schema import schema_json
 from app.domain.action_preview.schemas import (
@@ -245,7 +244,6 @@ class ActionPreviewAgent:
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
-            LLMProviderError,
         ) as exc:
             return salvage(exc)
 

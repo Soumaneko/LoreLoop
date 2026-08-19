@@ -89,6 +89,45 @@ const connection = playerErrorFeedback({{
 if (connection.title !== "连接出现问题") {{
   throw new Error("connection_failed must use the connection title");
 }}
+
+const auth = playerErrorFeedback({{
+  code: "auth_failed",
+  message: "API Key 无效或没有访问权限",
+}});
+if (auth.title !== "API Key 无效") {{
+  throw new Error("auth_failed must use the targeted title");
+}}
+if (auth.action !== "openModelConfig") {{
+  throw new Error("auth_failed must offer the model config action");
+}}
+if (auth.message !== "API Key 无效或没有访问权限") {{
+  throw new Error("auth_failed must keep the classified server message");
+}}
+
+const rateLimited = playerErrorFeedback({{
+  code: "rate_limited",
+  message: null,
+}});
+if (rateLimited.title !== "请求过于频繁") {{
+  throw new Error("rate_limited must use the targeted title");
+}}
+if (rateLimited.action !== "openModelConfig") {{
+  throw new Error("rate_limited must offer the model config action");
+}}
+if (!rateLimited.message) {{
+  throw new Error("rate_limited must fall back to a readable message");
+}}
+
+const endpoint = playerErrorFeedback({{
+  code: "endpoint_unreachable",
+  message: null,
+}});
+if (endpoint.title !== "无法连接服务") {{
+  throw new Error("endpoint_unreachable must use the targeted title");
+}}
+if (endpoint.action !== "openModelConfig") {{
+  throw new Error("endpoint_unreachable must offer the model config action");
+}}
 """
     result = subprocess.run(
         [node, "--input-type=module", "--eval", script],

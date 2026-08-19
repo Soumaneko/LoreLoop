@@ -28,7 +28,6 @@ from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.llm.schema import schema_json
 from app.core.text import normalize_compact_key
@@ -199,7 +198,6 @@ class NPCBatchUpdater:
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
-            LLMProviderError,
         ) as exc:
             return _salvage_parsed_batch(attempt_records, exc, expected_npc_ids)
 

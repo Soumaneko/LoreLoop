@@ -7,7 +7,6 @@ from app.core.diagnostics import NullDiagnosticLogger
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.text import normalize_compact_key
 from app.core.time import utc_now
@@ -712,7 +711,6 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
             except (
                 LLMOutputParseError,
                 LLMOutputValidationError,
-                LLMProviderError,
             ) as exc:
                 review_warnings.append((
                     "director_event_review_fallback",
@@ -753,7 +751,6 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
             except (
                 LLMOutputParseError,
                 LLMOutputValidationError,
-                LLMProviderError,
             ) as exc:
                 review_warnings.append((
                     "director_event_review_fallback",

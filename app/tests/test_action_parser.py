@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from app.core.llm import MockLLM
 from app.domain.action.parser import ActionParser
 from app.domain.action.schemas import (
@@ -611,24 +613,20 @@ def AtomicAction_model(**kwargs):
 #  Failure policy: salvage, no-effect, and hidden-event filtering
 # ══════════════════════════════════════════════════════════════════
 
-def test_action_parser_provider_failure_falls_back_to_empty():
+def test_action_parser_provider_failure_propagates():
     from app.core.llm import MockLLM
+    from app.core.llm.errors import LLMProviderError
 
     mock = MockLLM()
     mock.set_fail_provider(True)
     parser = ActionParser(mock.build_gateway())
 
-    result = parser.parse(
-        "我拔出剑。",
-        _make_current_state(),
-        core_memory=_core_memory(),
-    )
-
-    assert result.atomic_actions == []
-    assert result.retrieval_topics == []
-    assert [warning.code for warning in parser.last_warnings] == [
-        "action_extract_fallback"
-    ]
+    with pytest.raises(LLMProviderError):
+        parser.parse(
+            "我拔出剑。",
+            _make_current_state(),
+            core_memory=_core_memory(),
+        )
 
 
 def test_action_parser_blank_user_input_is_no_effect():

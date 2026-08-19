@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.llm import MockLLM
+from app.core.llm.errors import LLMProviderError
 from app.domain.action.schemas import Anchor
 from app.domain.confirmed_history import (
     build_turn_documents,
@@ -719,14 +720,12 @@ def _run_projector(mock, active=None, text="顾晚棠检查了账册。"):
     return result, projector
 
 
-def test_projector_provider_failure_returns_empty_projection_with_fallback():
+def test_projector_provider_failure_propagates():
     mock = MockLLM()
     mock.set_fail_provider(True)
 
-    result, projector = _run_projector(mock)
-
-    assert result.operations == []
-    assert projector.last_warnings[0].code == "continuity_fallback"
+    with pytest.raises(LLMProviderError):
+        _run_projector(mock)
 
 
 def test_projector_retries_invalid_operation_and_uses_second():

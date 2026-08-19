@@ -8,7 +8,6 @@ from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
-    LLMProviderError,
 )
 from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
@@ -237,7 +236,6 @@ class StateUpdater:
         except (
             LLMOutputValidationError,
             LLMOutputParseError,
-            LLMProviderError,
         ) as exc:
             return salvage(exc)
 
