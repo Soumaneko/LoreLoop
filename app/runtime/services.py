@@ -19,13 +19,14 @@ class RuntimeServices:
     )
 
     def uow(self, *, write: bool = False) -> CampaignUnitOfWork:
-        """Return the campaign unit of work bound to this runtime.
+        """Return a fresh operation-level unit of work.
 
-        In production ``stores`` is a :class:`CampaignUnitOfWork`; under tests it
-        may be a lightweight namespace of store instances. Both expose the same
-        ``current_state`` / ``npc_profile`` / ... accessors the nodes rely on.
+        The shared ``stores`` field is the session projection used by graph
+        nodes that are already inside a pipeline-provided UoW. Callers that need
+        an independent transaction boundary must create a fresh unit so writes
+        do not share a connection with other operations.
         """
-        return self.stores
+        return CampaignUnitOfWork(self.stores.paths, write=write)
 
     def gateway(
         self,

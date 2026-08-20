@@ -22,7 +22,7 @@ Use cases
 - Inspect *why* a document entered (route / intent / quality / provenance).
 - Measure how the NPC field-history bridge changes retrieval, via
   ``--without-npc-field`` (the comparison used to show that
-  npc_profiles.db's field-change logs are what brings the warning paragraph
+  campaign.db's field-change logs are what brings the warning paragraph
   turn_3_p006 into the results).
 
 Usage
@@ -71,16 +71,11 @@ RETRIEVAL_TOPICS = ["姚沉璧", "接头", "警告"]
 # Realistic matched_anchors produced by select_context_profiles: the two
 # characters mentioned in the user input / present in the scene.
 ANCHOR_NAMES = ["姚沉璧", "苏念薇"]
-DB_FILES = (
-    "confirmed_history.db",
-    "continuity.db",
-    "npc_profiles.db",
-    "current_state.db",
-)
+DB_FILES = ("campaign.db",)
 
 
 def build_inputs(save: Path, current_turn: int):
-    """Copy the save's db files to a temp dir and open the stores read-safely.
+    """Copy the save's db file to a temp dir and open the stores read-safely.
 
     Returns the search plan, bridge results and evidence set, plus the
     selector's captured proposal list and SelectionResult.
@@ -89,11 +84,11 @@ def build_inputs(save: Path, current_turn: int):
     for name in DB_FILES:
         shutil.copy2(save / name, workdir / name)
 
-    history_store = open_confirmed_history_store(str(workdir / "confirmed_history.db"))
-    continuity_store = open_continuity_store(str(workdir / "continuity.db"))
-    npc_store = open_npc_profile_store(str(workdir / "npc_profiles.db"))
+    history_store = open_confirmed_history_store(str(workdir / "campaign.db"))
+    continuity_store = open_continuity_store(str(workdir / "campaign.db"))
+    npc_store = open_npc_profile_store(str(workdir / "campaign.db"))
     current_state = open_current_state_store(
-        str(workdir / "current_state.db")
+        str(workdir / "campaign.db")
     ).load_or_default()
 
     profiles = npc_store.list_all(active_only=False)
@@ -267,7 +262,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not (args.save / "confirmed_history.db").exists():
+    if not (args.save / "campaign.db").exists():
         print(f"save not found: {args.save}")
         return 2
 

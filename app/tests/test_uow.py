@@ -4,18 +4,38 @@ from app.runtime.paths import CampaignPaths
 from app.runtime.session import CampaignRuntime
 from app.runtime.uow import CampaignUnitOfWork
 
+STORE_NAMES = (
+    "current_state",
+    "continuity",
+    "short_term",
+    "scene_summary",
+    "confirmed_history",
+    "npc_profile",
+    "director_event",
+    "director_npc",
+    "director_log",
+    "world_setting",
+)
+
 
 def _paths(tmp_path):
     return CampaignPaths.from_data_dir(tmp_path / "save")
 
 
-def test_connection_reuse_same_path(tmp_path):
+def test_single_shared_connection(tmp_path):
     uow = CampaignUnitOfWork(_paths(tmp_path))
-    first = uow._get_conn(uow.paths.state_db)
-    second = uow._get_conn(uow.paths.state_db)
+    first = uow._get_conn()
+    second = uow._get_conn()
     assert first is second
-    other = uow._get_conn(uow.paths.continuity_db)
-    assert other is not first
+    uow.close()
+
+
+def test_all_stores_share_one_connection(tmp_path):
+    uow = CampaignUnitOfWork(_paths(tmp_path))
+    conn = uow._get_conn()
+    for name in STORE_NAMES:
+        store = getattr(uow, name)
+        assert getattr(store, "_conn", None) is conn or getattr(store, "_db", None) is conn
     uow.close()
 
 
@@ -26,37 +46,71 @@ def test_close_is_idempotent(tmp_path):
     uow.close()
 
 
+def test_bootstrap_runs_before_business_transaction(tmp_path):
+    uow = CampaignUnitOfWork(_paths(tmp_path))
+    with uow.transaction():
+        tables = {
+            row[0]
+            for row in uow._get_conn().execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    assert "schema_versions" in tables
+    assert "continuity_items" in tables
+    assert "npc_profiles" in tables
+    uow.close()
+
+
+def test_transaction_commits_atomically(tmp_path):
+    paths = _paths(tmp_path)
+    with CampaignUnitOfWork(paths, write=True) as uow:
+        with uow.transaction():
+            uow._get_conn().execute(
+                "CREATE TABLE t(x INTEGER PRIMARY KEY)"
+            )
+            uow._get_conn().execute("INSERT INTO t VALUES (1)")
+            uow._get_conn().execute("INSERT INTO t VALUES (2)")
+    with CampaignUnitOfWork(paths) as uow:
+        rows = uow._get_conn().execute("SELECT x FROM t").fetchall()
+    assert [row[0] for row in rows] == [1, 2]
+
+
+def test_transaction_rolls_back_on_exception(tmp_path):
+    paths = _paths(tmp_path)
+    with CampaignUnitOfWork(paths, write=True) as uow:
+        uow._get_conn().execute("CREATE TABLE t(x INTEGER PRIMARY KEY)")
+    with pytest.raises(RuntimeError):
+        with CampaignUnitOfWork(paths, write=True) as uow:
+            with uow.transaction():
+                uow._get_conn().execute("INSERT INTO t VALUES (1)")
+                raise RuntimeError("boom")
+    with CampaignUnitOfWork(paths) as uow:
+        rows = uow._get_conn().execute("SELECT x FROM t").fetchall()
+    assert rows == []
+
+
 def test_write_unit_commits_on_clean_exit(tmp_path):
     paths = _paths(tmp_path)
     with CampaignUnitOfWork(paths, write=True) as uow:
-        conn = uow._get_conn(paths.state_db)
+        conn = uow._get_conn()
         conn.execute("CREATE TABLE t(x)")
         conn.execute("INSERT INTO t VALUES (1)")
-    with CampaignUnitOfWork(paths, write=False) as uow:
-        row = uow._get_conn(paths.state_db).execute(
-            "SELECT x FROM t"
-        ).fetchone()
+    with CampaignUnitOfWork(paths) as uow:
+        row = uow._get_conn().execute("SELECT x FROM t").fetchone()
     assert row is not None
-
-
-def _with_table(uow, paths):
-    conn = uow._get_conn(paths.state_db)
-    conn.execute("CREATE TABLE IF NOT EXISTS t(x)")
 
 
 def test_write_unit_rolls_back_on_exception(tmp_path):
     paths = _paths(tmp_path)
     with CampaignUnitOfWork(paths, write=True) as uow:
-        _with_table(uow, paths)
+        uow._get_conn().execute("CREATE TABLE t(x)")
     with pytest.raises(RuntimeError):
         with CampaignUnitOfWork(paths, write=True) as uow:
-            conn = uow._get_conn(paths.state_db)
+            conn = uow._get_conn()
             conn.execute("INSERT INTO t VALUES (1)")
             raise RuntimeError("boom")
-    with CampaignUnitOfWork(paths, write=False) as uow:
-        rows = uow._get_conn(paths.state_db).execute(
-            "SELECT x FROM t"
-        ).fetchall()
+    with CampaignUnitOfWork(paths) as uow:
+        rows = uow._get_conn().execute("SELECT x FROM t").fetchall()
     assert rows == []
 
 
@@ -65,24 +119,21 @@ def test_exit_closes_opened_connections(tmp_path):
 
     paths = _paths(tmp_path)
     with CampaignUnitOfWork(paths, write=True) as uow:
-        conn = uow._get_conn(paths.state_db)
+        conn = uow._get_conn()
         conn.execute("CREATE TABLE t(x)")
     with pytest.raises(sqlite3.ProgrammingError):
         conn.execute("SELECT 1")
 
 
 def test_read_unit_does_not_commit(tmp_path):
-    # A read unit (write=False) leaves uncommitted work rolled back.
     paths = _paths(tmp_path)
     with CampaignUnitOfWork(paths, write=True) as uow:
-        _with_table(uow, paths)
+        uow._get_conn().execute("CREATE TABLE t(x)")
     with CampaignUnitOfWork(paths, write=False) as uow:
-        conn = uow._get_conn(paths.state_db)
+        conn = uow._get_conn()
         conn.execute("INSERT INTO t VALUES (1)")
-    with CampaignUnitOfWork(paths, write=False) as uow:
-        rows = uow._get_conn(paths.state_db).execute(
-            "SELECT x FROM t"
-        ).fetchall()
+    with CampaignUnitOfWork(paths) as uow:
+        rows = uow._get_conn().execute("SELECT x FROM t").fetchall()
     assert rows == []
 
 

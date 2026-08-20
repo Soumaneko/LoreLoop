@@ -3,7 +3,7 @@
 
 This is a migration/audit tool, not part of the production confirmation graph.
 It deliberately writes to ``<save>/.npc-field-replay`` and never mutates the
-save's live ``npc_profiles.db``.  The replay uses:
+save's live ``campaign.db``.  The replay uses:
 
 * the pre-confirmation NPC snapshot captured for each applied turn;
 * that turn's persisted ``state_before`` and Core Memory;
@@ -57,7 +57,7 @@ REPLAY_DB_NAME = "npc_profiles.replay.db"
 METADATA_NAME = "metadata.json"
 REPORTS_DIR_NAME = "reports"
 TRACE_NAME = "llm_traces.jsonl"
-#: The copied save's live ``npc_profiles.db`` must be on the current main
+#: The copied save's live ``campaign.db`` must be on the current main
 #: schema (v9 as of the change_basis migration); older v8 saves must be
 #: migrated before replay.
 SUPPORTED_MAIN_SCHEMA = 9
@@ -116,9 +116,9 @@ def _field_history_counts(path: Path) -> dict[str, int]:
 
 def _turn_specs(save_dir: Path) -> list[dict[str, Any]]:
     history_db = save_dir / ".runtime" / "turn_history.db"
-    confirmed_db = save_dir / "confirmed_history.db"
+    confirmed_db = save_dir / "campaign.db"
     if not history_db.exists() or not confirmed_db.exists():
-        raise FileNotFoundError("save is missing turn_history.db or confirmed_history.db")
+        raise FileNotFoundError("save is missing turn_history.db or campaign.db")
 
     with _connect_readonly(confirmed_db) as connection:
         confirmed_turns = {
@@ -144,7 +144,7 @@ def _turn_specs(save_dir: Path) -> list[dict[str, Any]]:
             continue
         snapshot_dir = save_dir / str(row["path"])
         required = (
-            snapshot_dir / "npc_profiles.db",
+            snapshot_dir / "campaign.db",
             snapshot_dir / "core_memory.json",
         )
         if not all(path.exists() for path in required):
@@ -162,10 +162,10 @@ def _turn_specs(save_dir: Path) -> list[dict[str, Any]]:
 
 
 def _load_current_templates(save_dir: Path) -> dict[str, NPCProfile]:
-    path = save_dir / "npc_profiles.db"
+    path = save_dir / "campaign.db"
     if _schema_version(path, "npc_profile") != SUPPORTED_MAIN_SCHEMA:
         raise RuntimeError(
-            "live copied npc_profiles.db must be upgraded to schema "
+            "live copied campaign.db must be upgraded to schema "
             f"v{SUPPORTED_MAIN_SCHEMA} before replay"
         )
     with _connect_readonly(path) as connection:
@@ -254,7 +254,7 @@ def _seed_missing_profiles(
 
 
 def _history_documents(save_dir: Path, turn_index: int) -> list[HistoryDocument]:
-    path = save_dir / "confirmed_history.db"
+    path = save_dir / "campaign.db"
     with _connect_readonly(path) as connection:
         rows = connection.execute(
             """
@@ -374,7 +374,7 @@ def _processed_turns(path: Path) -> list[int]:
 
 def inspect_save(save_dir: Path) -> dict[str, Any]:
     save_dir = save_dir.resolve()
-    npc_db = save_dir / "npc_profiles.db"
+    npc_db = save_dir / "campaign.db"
     specs = _turn_specs(save_dir)
     return {
         "save_dir": str(save_dir),
@@ -382,7 +382,7 @@ def inspect_save(save_dir: Path) -> dict[str, Any]:
         "live_field_history": _field_history_counts(npc_db),
         "replayable_turns": [item["turn_index"] for item in specs],
         "first_snapshot_schema": _schema_version(
-            specs[0]["snapshot_dir"] / "npc_profiles.db",
+            specs[0]["snapshot_dir"] / "campaign.db",
             "npc_profile",
         ),
         "workspace": str(save_dir / WORKSPACE_NAME),
@@ -395,7 +395,7 @@ def init_replay(save_dir: Path) -> dict[str, Any]:
     if audit["npc_schema_version"] != SUPPORTED_MAIN_SCHEMA:
         raise RuntimeError(
             f"copied save is not schema v{SUPPORTED_MAIN_SCHEMA}; "
-            "migrate the live npc_profiles.db first"
+            "migrate the live campaign.db first"
         )
     workspace = save_dir / WORKSPACE_NAME
     replay_db = workspace / REPLAY_DB_NAME
@@ -406,7 +406,7 @@ def init_replay(save_dir: Path) -> dict[str, Any]:
     workspace.mkdir(parents=True, exist_ok=True)
     specs = _turn_specs(save_dir)
     templates = _load_current_templates(save_dir)
-    first_snapshot_db = specs[0]["snapshot_dir"] / "npc_profiles.db"
+    first_snapshot_db = specs[0]["snapshot_dir"] / "campaign.db"
     with open_npc_profile_store(str(replay_db)) as store:
         seeded = _seed_missing_profiles(
             store,
@@ -501,7 +501,7 @@ def run_turn(
     candidate_db = workspace / f".{REPLAY_DB_NAME}.turn-{turn_index}.tmp"
     templates = _load_current_templates(save_dir)
     historical_before = _legacy_snapshot_projection(
-        spec["snapshot_dir"] / "npc_profiles.db",
+        spec["snapshot_dir"] / "campaign.db",
         templates,
     )
     following_spec = next(
@@ -514,7 +514,7 @@ def run_turn(
     )
     historical_after = (
         _legacy_snapshot_projection(
-            following_spec["snapshot_dir"] / "npc_profiles.db",
+            following_spec["snapshot_dir"] / "campaign.db",
             templates,
         )
         if following_spec is not None
@@ -541,7 +541,7 @@ def run_turn(
         with open_npc_profile_store(str(candidate_db)) as store:
             seeded = _seed_missing_profiles(
                 store,
-                snapshot_db=spec["snapshot_dir"] / "npc_profiles.db",
+                snapshot_db=spec["snapshot_dir"] / "campaign.db",
                 templates=templates,
             )
             before = _profile_projection(store.list_all(active_only=False))

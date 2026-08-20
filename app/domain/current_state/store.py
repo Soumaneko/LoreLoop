@@ -9,7 +9,7 @@ from app.domain.current_state.schemas import (
     SceneState,
     WorldClock,
 )
-from app.runtime.sqlite import ensure_schema_version
+from app.runtime.sqlite import ensure_schema_version, transaction
 
 
 def make_default_state(scene_id: str = "scene_001") -> CurrentState:
@@ -78,14 +78,14 @@ class CurrentStateStore:
 
     def save(self, state: CurrentState) -> None:
         now = utc_now()
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO current_state (id, state_json, updated_at)
-            VALUES (1, ?, ?)
-            """,
-            (state.model_dump_json(), now),
-        )
-        self._conn.commit()
+        with transaction(self._conn):
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO current_state (id, state_json, updated_at)
+                VALUES (1, ?, ?)
+                """,
+                (state.model_dump_json(), now),
+            )
 
     def load(self) -> CurrentState | None:
         row = self._conn.execute(

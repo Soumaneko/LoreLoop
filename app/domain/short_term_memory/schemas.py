@@ -228,8 +228,8 @@ class ShortTermMemoryStore:
         )
 
     def clear(self) -> None:
-        self._conn.execute("DELETE FROM short_term_scenes")
-        self._conn.commit()
+        with transaction(self._conn):
+            self._conn.execute("DELETE FROM short_term_scenes")
 
     def close(self) -> None:
         if self._owns_connection:

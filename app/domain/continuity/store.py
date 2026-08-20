@@ -353,12 +353,17 @@ class ContinuityStore:
         ).fetchone() is not None
 
     def mark_turn_processed(self, turn_index: int) -> None:
-        self._conn.execute(
-            "INSERT INTO continuity_processed_turns(turn_index) VALUES (?)",
-            (turn_index,),
-        )
+        with transaction(self._conn):
+            self._conn.execute(
+                "INSERT INTO continuity_processed_turns(turn_index) VALUES (?)",
+                (turn_index,),
+            )
 
     def insert(self, item: ContinuityItem) -> None:
+        with transaction(self._conn):
+            self._insert_item(item)
+
+    def _insert_item(self, item: ContinuityItem) -> None:
         values = self._item_values(item)
         if "current_state_json" in self._table_columns("continuity_items"):
             self._conn.execute(
@@ -440,24 +445,25 @@ class ContinuityStore:
         return updated
 
     def _write_active_item(self, item: ContinuityItem) -> None:
-        self._conn.execute(
-            """
-            UPDATE continuity_items SET
-                subject = ?, current_state = ?, entities_json = ?,
-                location = ?, deadline = ?, updated_turn = ?
-            WHERE id = ?
-            """,
-            (
-                item.subject,
-                item.current_state,
-                json.dumps(item.entities, ensure_ascii=False),
-                item.location,
-                item.deadline,
-                item.updated_turn,
-                item.id,
-            ),
-        )
-        self._replace_fts(item)
+        with transaction(self._conn):
+            self._conn.execute(
+                """
+                UPDATE continuity_items SET
+                    subject = ?, current_state = ?, entities_json = ?,
+                    location = ?, deadline = ?, updated_turn = ?
+                WHERE id = ?
+                """,
+                (
+                    item.subject,
+                    item.current_state,
+                    json.dumps(item.entities, ensure_ascii=False),
+                    item.location,
+                    item.deadline,
+                    item.updated_turn,
+                    item.id,
+                ),
+            )
+            self._replace_fts(item)
 
     def close_item(
         self,
@@ -471,18 +477,19 @@ class ContinuityStore:
             raise ValueError(f"continuity item is not active: {item_id}")
         if status not in {"resolved", "cancelled"}:
             raise ValueError(f"invalid continuity close status: {status}")
-        self._conn.execute(
-            """
-            UPDATE continuity_items
-            SET status = ?, updated_turn = ?, closed_turn = ?
-            WHERE id = ?
-            """,
-            (status, turn_index, turn_index, item_id),
-        )
-        self._conn.execute(
-            "DELETE FROM continuity_items_fts WHERE item_id = ?",
-            (item_id,),
-        )
+        with transaction(self._conn):
+            self._conn.execute(
+                """
+                UPDATE continuity_items
+                SET status = ?, updated_turn = ?, closed_turn = ?
+                WHERE id = ?
+                """,
+                (status, turn_index, turn_index, item_id),
+            )
+            self._conn.execute(
+                "DELETE FROM continuity_items_fts WHERE item_id = ?",
+                (item_id,),
+            )
 
     def add_lifecycle_log(
         self,
@@ -495,21 +502,22 @@ class ContinuityStore:
         evidence: Iterable[tuple[str, str]],
         migration_created: bool = False,
     ) -> int:
-        log_id = self._insert_log_row(
-            item_id=item_id,
-            operation=operation,
-            turn_index=turn_index,
-            state_delta=state_delta,
-            reason=reason,
-            migration_created=migration_created,
-        )
-        for position, (evidence_id, evidence_hash) in enumerate(evidence):
-            self._insert_log_evidence(
-                log_id=log_id,
-                position=position,
-                evidence_id=evidence_id,
-                evidence_hash=evidence_hash,
+        with transaction(self._conn):
+            log_id = self._insert_log_row(
+                item_id=item_id,
+                operation=operation,
+                turn_index=turn_index,
+                state_delta=state_delta,
+                reason=reason,
+                migration_created=migration_created,
             )
+            for position, (evidence_id, evidence_hash) in enumerate(evidence):
+                self._insert_log_evidence(
+                    log_id=log_id,
+                    position=position,
+                    evidence_id=evidence_id,
+                    evidence_hash=evidence_hash,
+                )
         return log_id
 
     def _insert_log_row(
@@ -770,6 +778,10 @@ class ContinuityStore:
         ).fetchall()
         for row in rows:
             self._replace_fts(self._row_to_item(row))
+
+    def rebuild_fts(self) -> None:
+        with transaction(self._conn):
+            self._rebuild_fts()
 
     @staticmethod
     def _item_values(item: ContinuityItem) -> tuple:

@@ -195,11 +195,11 @@ class DirectorEventStore:
         return int(row[0])
 
     def delete_by_id(self, event_id: str) -> None:
-        self._conn.execute(
-            "DELETE FROM director_events WHERE event_id = ?",
-            (event_id,),
-        )
-        self._conn.commit()
+        with transaction(self._conn):
+            self._conn.execute(
+                "DELETE FROM director_events WHERE event_id = ?",
+                (event_id,),
+            )
 
     def _list_by_stages(self, stages: list[str]) -> list[DirectorEvent]:
         placeholders = ", ".join("?" for _ in stages)
@@ -210,24 +210,24 @@ class DirectorEventStore:
         return [self._event_from_row(row) for row in rows]
 
     def _write(self, event: DirectorEvent) -> None:
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO director_events (
-                event_id, stage, event_json, created_turn, updated_turn, created_at, updated_at
+        with transaction(self._conn):
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO director_events (
+                    event_id, stage, event_json, created_turn, updated_turn, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.event_id,
+                    event.stage,
+                    event.model_dump_json(),
+                    event.created_turn,
+                    event.updated_turn,
+                    event.created_at,
+                    event.updated_at,
+                ),
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                event.event_id,
-                event.stage,
-                event.model_dump_json(),
-                event.created_turn,
-                event.updated_turn,
-                event.created_at,
-                event.updated_at,
-            ),
-        )
-        self._conn.commit()
 
     @staticmethod
     def _event_from_row(row) -> DirectorEvent:

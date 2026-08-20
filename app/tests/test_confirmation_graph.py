@@ -258,7 +258,20 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
             calls.append("events")
             return []
 
+    class _DirectorLog:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def save_entries(self, _entries):
+            calls.append("director_log")
+
     runtime = SimpleNamespace(
+        services=SimpleNamespace(
+            diagnostics=SimpleNamespace(warning=lambda **_kwargs: None)
+        ),
         history=SimpleNamespace(
             record_state_audit=lambda *_args, **_kwargs: calls.append("audit")
         ),
@@ -274,12 +287,27 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
         "write_db": True,
         "journaled": True,
         "turn_id": "turn-1",
-        "pending": SimpleNamespace(group_id="opening-group"),
+        "pending": SimpleNamespace(
+            group_id="opening-group",
+            director_log_entry={
+                "phase": "generation",
+                "turn_index": 1,
+                "reasoning": "r",
+                "measures": "m",
+            },
+        ),
         "pipeline_input": SimpleNamespace(state_before=current_state),
         "state_change_set": {},
         "updated_state": current_state,
         "cache": {},
+        "trace_id": "trace-finalizer",
         "events": [],
+        # Phase 2: the in-transaction finalizer reads Director log stores from
+        # the operation-level runtime services in state.
+        "runtime_services": SimpleNamespace(
+            stores=SimpleNamespace(director_log=_DirectorLog()),
+            diagnostics=SimpleNamespace(warning=lambda **_kwargs: None),
+        ),
     }
 
     ConfirmationFinalizer(
@@ -291,6 +319,7 @@ def test_journal_completes_before_any_maintenance_is_scheduled():
 
     assert calls == [
         "business_commit",
+        "director_log",
         "audit",
         "journal_completed",
         "pending_removed",
@@ -344,15 +373,21 @@ def test_initialization_phase_is_revalidated_before_confirmation_writes():
     assert commit_called is False
 
 
-def test_confirmation_second_wave_starts_after_helper_state_is_ready():
+def test_confirmation_second_wave_is_serialized_for_shared_connection():
     graph = build_confirmation_second_wave_graph().get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
+    # Phase 2 uses one shared sqlite connection per confirmation. The second
+    # wave is deliberately sequential so store-level SAVEPOINTs never interleave
+    # across threads.
     assert ("__start__", "action_preview") in edges
-    assert ("__start__", "continuity_project") in edges
-    assert ("__start__", "npc_profile_update") in edges
-    assert ("__start__", "setting_appearance_update") in edges
+    assert ("action_preview", "continuity_project") in edges
+    assert ("continuity_project", "npc_profile_update") in edges
+    assert ("npc_profile_update", "setting_appearance_update") in edges
     assert ("setting_appearance_update", "__end__") in edges
+    assert ("__start__", "continuity_project") not in edges
+    assert ("__start__", "npc_profile_update") not in edges
+    assert ("__start__", "setting_appearance_update") not in edges
 
     director_graph = confirmation_graph.build_confirmation_director_graph().get_graph()
     director_edges = {(edge.source, edge.target) for edge in director_graph.edges}

@@ -163,13 +163,67 @@ def commit_director_mutations(
     before-images in a durable journal before the first write, then applies every
     deferred write in deterministic order. Any failure rolls the whole batch back
     through the journal before re-raising.
+
+    New confirmations commit their Director batch inside the campaign transaction
+    instead and call :func:`apply_director_mutations`; this journaled path is kept
+    for legacy startup recovery and direct tests.
     """
+    recover_pending_director_mutation(uow)
+
+    validation = _validate_director_plan(plan, uow)
+
+    journal_store = DirectorMutationJournalStore(
+        uow.paths.director_mutation_journal
+    )
+    journal_store.save(
+        DirectorMutationJournal(
+            new_setting_ids=[item.setting_id for item in plan.settings],
+            new_npc_ids=[item.draft_id for item in plan.npc_drafts],
+            new_event_ids=[item.event_id for item in plan.events],
+            profile_before_images=validation.profile_before,
+            event_before_images=validation.event_before,
+        )
+    )
+
+    try:
+        _apply_director_plan(plan, uow)
+        journal_store.clear()
+    except BaseException:
+        recover_pending_director_mutation(uow)
+        raise
+
+
+def apply_director_mutations(
+    plan: DirectorPendingMutationPlan,
+    uow,
+) -> None:
+    """Apply one Director batch inside the confirmation's campaign transaction.
+
+    Phase 2 consolidates the canonical databases into ``campaign.db``, so the
+    whole confirmation (including the Director batch) commits as one transaction.
+    No durable journal is written; the surrounding transaction provides the
+    atomicity. Validation still runs up front so an invalid batch fails the
+    confirmation before any write is staged.
+    """
+    _validate_director_plan(plan, uow)
+    _apply_director_plan(plan, uow)
+
+
+@dataclass(frozen=True)
+class _DirectorPlanValidation:
+    event_before: list[DirectorEventBeforeImage]
+    profile_before: list[DirectorProfileBeforeImage]
+
+
+def _validate_director_plan(
+    plan: DirectorPendingMutationPlan,
+    uow,
+) -> _DirectorPlanValidation:
     settings = plan.settings
     npc_drafts = plan.npc_drafts
     events = plan.events
     profile_upserts = plan.profile_upserts
     actor_bindings = plan.actor_bindings
-    recover_pending_director_mutation(uow)
 
     world_setting_store = uow.world_setting
     if any(world_setting_store.get_by_id(item.setting_id) for item in settings):
@@ -210,46 +264,43 @@ def commit_director_mutations(
             )
         )
 
-    journal_store = DirectorMutationJournalStore(
-        uow.paths.director_mutation_journal
-    )
-    journal_store.save(
-        DirectorMutationJournal(
-            new_setting_ids=[item.setting_id for item in settings],
-            new_npc_ids=[item.draft_id for item in npc_drafts],
-            new_event_ids=[item.event_id for item in events],
-            profile_before_images=profile_before,
-            event_before_images=event_before,
-        )
+    return _DirectorPlanValidation(
+        event_before=event_before,
+        profile_before=profile_before,
     )
 
-    try:
-        if settings:
-            store = uow.world_setting
-            for setting in settings:
-                store.save(setting)
-        if npc_drafts:
-            store = uow.director_npc
-            for draft in npc_drafts:
-                store.save(draft)
-        if events:
-            store = uow.director_event
-            for event in events:
-                store.save(event)
-        if profile_upserts:
-            store = uow.npc_profile
-            for profile in profile_upserts:
-                store.upsert(profile)
-        if actor_bindings:
-            store = uow.director_event
-            for binding in actor_bindings:
-                store.bind_actor(
-                    binding.event_id,
-                    actor_name=binding.actor_name,
-                    actor_ref=binding.actor_ref,
-                    turn_index=binding.turn_index,
-                )
-        journal_store.clear()
-    except BaseException:
-        recover_pending_director_mutation(uow)
-        raise
+
+def _apply_director_plan(
+    plan: DirectorPendingMutationPlan,
+    uow,
+) -> None:
+    settings = plan.settings
+    npc_drafts = plan.npc_drafts
+    events = plan.events
+    profile_upserts = plan.profile_upserts
+    actor_bindings = plan.actor_bindings
+    if settings:
+        store = uow.world_setting
+        for setting in settings:
+            store.save(setting)
+    if npc_drafts:
+        store = uow.director_npc
+        for draft in npc_drafts:
+            store.save(draft)
+    if events:
+        store = uow.director_event
+        for event in events:
+            store.save(event)
+    if profile_upserts:
+        store = uow.npc_profile
+        for profile in profile_upserts:
+            store.upsert(profile)
+    if actor_bindings:
+        store = uow.director_event
+        for binding in actor_bindings:
+            store.bind_actor(
+                binding.event_id,
+                actor_name=binding.actor_name,
+                actor_ref=binding.actor_ref,
+                turn_index=binding.turn_index,
+            )

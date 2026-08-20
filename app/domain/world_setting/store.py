@@ -158,30 +158,30 @@ class WorldSettingStore:
             raise ValueError(f"setting not found: {setting.setting_id}")
         self._require_related_settings(setting.related_setting_ids)
         updated = setting.model_copy(update={"updated_at": utc_now()})
-        try:
-            self._conn.execute(
-                """
-                UPDATE world_settings
-                SET kind = ?, name = ?, normalized_name = ?, summary = ?,
-                    public_facts_json = ?, hidden_facts_json = ?,
-                    related_setting_ids_json = ?, updated_at = ?
-                WHERE setting_id = ?
-                """,
-                (
-                    updated.kind,
-                    updated.name,
-                    normalize_compact_key(updated.name),
-                    updated.summary,
-                    json.dumps(updated.public_facts, ensure_ascii=False),
-                    json.dumps(updated.hidden_facts, ensure_ascii=False),
-                    json.dumps(updated.related_setting_ids, ensure_ascii=False),
-                    updated.updated_at,
-                    updated.setting_id,
-                ),
-            )
-        except sqlite3.IntegrityError as exc:
-            raise ValueError(f"setting name already exists: {setting.name}") from exc
-        self._conn.commit()
+        with transaction(self._conn):
+            try:
+                self._conn.execute(
+                    """
+                    UPDATE world_settings
+                    SET kind = ?, name = ?, normalized_name = ?, summary = ?,
+                        public_facts_json = ?, hidden_facts_json = ?,
+                        related_setting_ids_json = ?, updated_at = ?
+                    WHERE setting_id = ?
+                    """,
+                    (
+                        updated.kind,
+                        updated.name,
+                        normalize_compact_key(updated.name),
+                        updated.summary,
+                        json.dumps(updated.public_facts, ensure_ascii=False),
+                        json.dumps(updated.hidden_facts, ensure_ascii=False),
+                        json.dumps(updated.related_setting_ids, ensure_ascii=False),
+                        updated.updated_at,
+                        updated.setting_id,
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(f"setting name already exists: {setting.name}") from exc
 
     def list_all(self) -> list[WorldSetting]:
         rows = self._conn.execute(
@@ -209,15 +209,15 @@ class WorldSettingStore:
         ).fetchone()
         if row is None:
             return False
-        self._conn.execute(
-            """
-            UPDATE world_settings
-            SET hit_count = hit_count + 1, updated_at = ?
-            WHERE setting_id = ?
-            """,
-            (utc_now(), setting_id),
-        )
-        self._conn.commit()
+        with transaction(self._conn):
+            self._conn.execute(
+                """
+                UPDATE world_settings
+                SET hit_count = hit_count + 1, updated_at = ?
+                WHERE setting_id = ?
+                """,
+                (utc_now(), setting_id),
+            )
         return True
 
     def _require_related_settings(self, setting_ids: list[str]) -> None:
@@ -252,11 +252,11 @@ class WorldSettingStore:
         )
 
     def delete_by_id(self, setting_id: str) -> None:
-        self._conn.execute(
-            "DELETE FROM world_settings WHERE setting_id = ?",
-            (setting_id,),
-        )
-        self._conn.commit()
+        with transaction(self._conn):
+            self._conn.execute(
+                "DELETE FROM world_settings WHERE setting_id = ?",
+                (setting_id,),
+            )
 
     def close(self) -> None:
         if self._owns_connection:

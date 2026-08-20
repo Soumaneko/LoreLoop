@@ -99,11 +99,15 @@ def test_load_rejects_invalid_manifest(change, tmp_path):
 
 
 def test_load_save_metadata_reads_state_and_confirmed_turn_count(tmp_path):
-    state_db = tmp_path / "current_state.db"
-    with sqlite3.connect(state_db) as connection:
+    database = tmp_path / "campaign.db"
+    with sqlite3.connect(database) as connection:
         connection.execute(
             "CREATE TABLE current_state "
             "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL)"
+        )
+        connection.execute(
+            "CREATE TABLE short_term_scenes "
+            "(id INTEGER PRIMARY KEY, turn_index INTEGER NOT NULL)"
         )
         connection.execute(
             "INSERT INTO current_state VALUES (1, ?)",
@@ -116,13 +120,6 @@ def test_load_save_metadata_reads_state_and_confirmed_turn_count(tmp_path):
                     ensure_ascii=False,
                 ),
             ),
-        )
-
-    short_term_db = tmp_path / "short_term.db"
-    with sqlite3.connect(short_term_db) as connection:
-        connection.execute(
-            "CREATE TABLE short_term_scenes "
-            "(id INTEGER PRIMARY KEY, turn_index INTEGER NOT NULL)"
         )
         connection.executemany(
             "INSERT INTO short_term_scenes(turn_index) VALUES (?)",
@@ -142,37 +139,45 @@ def test_load_save_metadata_does_not_create_missing_databases(tmp_path):
     assert metadata.protagonist_name is None
     assert metadata.location is None
     assert metadata.turn_count == 0
-    assert not (tmp_path / "current_state.db").exists()
-    assert not (tmp_path / "short_term.db").exists()
+    assert not (tmp_path / "campaign.db").exists()
 
 
 def test_load_save_metadata_handles_uninitialized_and_corrupt_databases(tmp_path):
     # A valid SQLite file without application tables must remain untouched.
-    current_state_db = tmp_path / "current_state.db"
-    with sqlite3.connect(current_state_db) as connection:
+    database = tmp_path / "campaign.db"
+    with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE unrelated (value TEXT)")
-    before = current_state_db.read_bytes()
-    (tmp_path / "short_term.db").write_bytes(b"not sqlite")
+    before = database.read_bytes()
 
     metadata = load_save_metadata(tmp_path)
 
     assert metadata.protagonist_name is None
     assert metadata.location is None
     assert metadata.turn_count == 0
-    assert current_state_db.read_bytes() == before
+    assert database.read_bytes() == before
+
+    database.write_bytes(b"not sqlite")
+    metadata = load_save_metadata(tmp_path)
+
+    assert metadata.protagonist_name is None
+    assert metadata.location is None
+    assert metadata.turn_count == 0
 
 
 def test_state_corruption_does_not_hide_valid_turn_count(tmp_path):
-    with sqlite3.connect(tmp_path / "current_state.db") as connection:
+    database = tmp_path / "campaign.db"
+    with sqlite3.connect(database) as connection:
         connection.execute(
             "CREATE TABLE current_state "
             "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL)"
         )
+        connection.execute(
+            "CREATE TABLE short_term_scenes "
+            "(id INTEGER PRIMARY KEY, turn_index INTEGER NOT NULL)"
+        )
         connection.execute("INSERT INTO current_state VALUES (1, '{broken')")
-    with sqlite3.connect(tmp_path / "short_term.db") as connection:
-        connection.execute("CREATE TABLE short_term_scenes (id INTEGER)")
         connection.executemany(
-            "INSERT INTO short_term_scenes VALUES (?)", [(1,), (2,)]
+            "INSERT INTO short_term_scenes(turn_index) VALUES (?)", [(1,), (2,)]
         )
 
     metadata = load_save_metadata(tmp_path)

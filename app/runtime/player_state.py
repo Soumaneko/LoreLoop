@@ -41,8 +41,9 @@ def _user_input_excerpt(user_input: str) -> str:
 
 
 def _history_navigation(runtime: CampaignRuntime) -> list[dict[str, Any]]:
-    with runtime.uow().short_term as short_store:
-        entries = short_store.list_navigation_entries()
+    with runtime.uow() as uow:
+        with uow.short_term as short_store:
+            entries = short_store.list_navigation_entries()
     return [
         {
             "turn_index": turn_index,
@@ -63,42 +64,44 @@ def _project_text_highlights(
         return []
 
     candidates: list[tuple[str, str, dict[str, Any] | None]] = []
-    with runtime.uow().npc_profile as store:
-        for profile in store.list_all():
-            public_profile = {
-                "kind": "npc",
-                "name": profile.name,
-                "aliases": list(profile.aliases),
-                "role": profile.role,
-                "appearance": profile.appearance,
-                "personality_trait": profile.personality_trait,
-                "known_abilities": [
-                    ability.model_dump(mode="json")
-                    for ability in profile.known_abilities
-                ],
-                "faction": profile.faction,
-                "last_known_location": profile.last_known_location,
-                "attitude_to_player": profile.attitude_to_player,
-                "last_scene_summary": profile.last_scene_summary,
-                "last_scene_turn": profile.last_scene_turn,
-            }
-            candidates.extend(
-                (surface, "npc", public_profile)
-                for surface in [profile.name, *profile.aliases]
-            )
-    with runtime.uow().world_setting as store:
-        for setting in store.list_all():
-            if not eligible_highlight_term(setting.name):
-                continue
-            public_profile = {
-                "kind": "setting",
-                "setting_kind": setting.kind,
-                "setting_id": setting.setting_id,
-                "name": setting.name,
-                "summary": setting.summary,
-                "public_facts": list(setting.public_facts),
-            }
-            candidates.append((setting.name, "setting", public_profile))
+    with runtime.uow() as uow:
+        with uow.npc_profile as store:
+            for profile in store.list_all():
+                public_profile = {
+                    "kind": "npc",
+                    "name": profile.name,
+                    "aliases": list(profile.aliases),
+                    "role": profile.role,
+                    "appearance": profile.appearance,
+                    "personality_trait": profile.personality_trait,
+                    "known_abilities": [
+                        ability.model_dump(mode="json")
+                        for ability in profile.known_abilities
+                    ],
+                    "faction": profile.faction,
+                    "last_known_location": profile.last_known_location,
+                    "attitude_to_player": profile.attitude_to_player,
+                    "last_scene_summary": profile.last_scene_summary,
+                    "last_scene_turn": profile.last_scene_turn,
+                }
+                candidates.extend(
+                    (surface, "npc", public_profile)
+                    for surface in [profile.name, *profile.aliases]
+                )
+    with runtime.uow() as uow:
+        with uow.world_setting as store:
+            for setting in store.list_all():
+                if not eligible_highlight_term(setting.name):
+                    continue
+                public_profile = {
+                    "kind": "setting",
+                    "setting_kind": setting.kind,
+                    "setting_id": setting.setting_id,
+                    "name": setting.name,
+                    "summary": setting.summary,
+                    "public_facts": list(setting.public_facts),
+                }
+                candidates.append((setting.name, "setting", public_profile))
     projected: list[dict[str, Any]] = []
     seen: set[str] = set()
     player_key = player_name.strip().casefold()
@@ -127,14 +130,16 @@ def _project_text_highlights(
 
 
 def _history_page(runtime: CampaignRuntime, *, before_turn_index=None, limit=5):
-    with runtime.uow().short_term as short_store:
-        history, has_more = short_store.list_page(
-            before_turn_index=before_turn_index,
-            limit=limit,
-        )
+    with runtime.uow() as uow:
+        with uow.short_term as short_store:
+            history, has_more = short_store.list_page(
+                before_turn_index=before_turn_index,
+                limit=limit,
+            )
     projected_history = _project_history(history)
-    with runtime.uow().current_state as state_store:
-        player_name = state_store.load_or_default().player.name
+    with runtime.uow() as uow:
+        with uow.current_state as state_store:
+            player_name = state_store.load_or_default().player.name
     return {
         "history": projected_history,
         "highlights": _project_text_highlights(

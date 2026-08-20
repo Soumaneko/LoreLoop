@@ -109,11 +109,12 @@ def commit_campaign_setup(
             raise RuntimeError(
                 "Committed CoreMemory does not match its config and campaign setup"
             )
-        saved_core = runtime.uow().core_memory.load()
-        if saved_core is None and existing.phase == "proposal_committing":
-            runtime.uow().core_memory.save(existing.core_memory)
-        elif saved_core != existing.core_memory:
-            raise RuntimeError("Committed CoreMemory does not match initialization")
+        with runtime.uow() as uow:
+            saved_core = uow.core_memory.load()
+            if saved_core is None and existing.phase == "proposal_committing":
+                uow.core_memory.save(existing.core_memory)
+            elif saved_core != existing.core_memory:
+                raise RuntimeError("Committed CoreMemory does not match initialization")
         if existing.phase == "proposal_committing":
             existing = existing.model_copy(
                 update={"phase": "core_memory_committed"}
@@ -122,8 +123,9 @@ def commit_campaign_setup(
         _clear_draft_without_invalidating_commit(runtime)
         return existing
 
-    if runtime.uow().core_memory.load() is not None:
-        raise RuntimeError("CoreMemory exists without an initialization record")
+    with runtime.uow() as uow:
+        if uow.core_memory.load() is not None:
+            raise RuntimeError("CoreMemory exists without an initialization record")
 
     record = InitializationRecord(
         phase="proposal_committing",
@@ -133,7 +135,8 @@ def commit_campaign_setup(
         core_memory=core_memory,
     )
     store.save(record)
-    runtime.uow().core_memory.save(core_memory)
+    with runtime.uow() as uow:
+        uow.core_memory.save(core_memory)
     record = record.model_copy(update={"phase": "core_memory_committed"})
     store.save(record)
     _clear_draft_without_invalidating_commit(runtime)

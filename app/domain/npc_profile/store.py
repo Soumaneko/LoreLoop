@@ -509,35 +509,35 @@ class NPCProfileStore:
         NPCProfile.model_validate(profile.model_dump(mode="python"))
         now = profile.updated_at or utc_now()
         profile.updated_at = now
-        self._db.execute(
-            """
-            INSERT INTO npc_profiles (
-                id, name, aliases_json, profile_json, source_scene_ids_json,
-                updated_at, active, name_hit_count, alias_hit_counts_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name,
-                aliases_json = excluded.aliases_json,
-                profile_json = excluded.profile_json,
-                source_scene_ids_json = excluded.source_scene_ids_json,
-                updated_at = excluded.updated_at,
-                active = excluded.active,
-                name_hit_count = excluded.name_hit_count,
-                alias_hit_counts_json = excluded.alias_hit_counts_json
-            """,
-            (
-                profile.npc_id,
-                profile.name,
-                json.dumps(profile.aliases, ensure_ascii=False),
-                profile.model_dump_json(),
-                json.dumps(profile.source_scene_ids, ensure_ascii=False),
-                now,
-                int(profile.active),
-                profile.name_hit_count,
-                json.dumps(profile.alias_hit_counts, ensure_ascii=False),
-            ),
-        )
-        self._db.commit()
+        with transaction(self._db):
+            self._db.execute(
+                """
+                INSERT INTO npc_profiles (
+                    id, name, aliases_json, profile_json, source_scene_ids_json,
+                    updated_at, active, name_hit_count, alias_hit_counts_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    aliases_json = excluded.aliases_json,
+                    profile_json = excluded.profile_json,
+                    source_scene_ids_json = excluded.source_scene_ids_json,
+                    updated_at = excluded.updated_at,
+                    active = excluded.active,
+                    name_hit_count = excluded.name_hit_count,
+                    alias_hit_counts_json = excluded.alias_hit_counts_json
+                """,
+                (
+                    profile.npc_id,
+                    profile.name,
+                    json.dumps(profile.aliases, ensure_ascii=False),
+                    profile.model_dump_json(),
+                    json.dumps(profile.source_scene_ids, ensure_ascii=False),
+                    now,
+                    int(profile.active),
+                    profile.name_hit_count,
+                    json.dumps(profile.alias_hit_counts, ensure_ascii=False),
+                ),
+            )
         return profile.npc_id
 
     def get_by_id(self, npc_id: str) -> NPCProfile | None:

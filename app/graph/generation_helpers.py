@@ -152,64 +152,73 @@ def prepare_generation_state(
     runtime: CampaignRuntime | None = None,
 ) -> GenerationState:
     runtime = runtime or get_campaign_runtime()
-    services = runtime.services
-    stores = services.stores
     trace_id = str(uuid.uuid4())
-    core_memory = stores.core_memory.load_required()
+    uow = runtime.uow()
+    stores = uow
+    try:
+        core_memory = stores.core_memory.load_required()
 
-    with stores.current_state as state_store:
-        current_state = state_store.load_or_default()
+        with stores.current_state as state_store:
+            current_state = state_store.load_or_default()
 
-    with stores.short_term as short_store:
-        short_term_memory = short_store.get_recent()
+        with stores.short_term as short_store:
+            short_term_memory = short_store.get_recent()
 
-    turn_index = (
-        short_term_memory.recent_scenes[-1].turn_index + 1
-        if short_term_memory.recent_scenes
-        else 1
-    )
-
-    with stores.scene_summary as summary_store:
-        scene_summaries = summary_store.list_active()
-        recent_summaries = summary_store.get_recent(5)
-
-    state: GenerationState = {
-        "events": [],
-        "runtime_services": services,
-        "runtime": runtime,
-        "user_input": user_input,
-        "difficulty": difficulty,
-        "max_chars": max_chars,
-        "trace_id": trace_id,
-        "core_memory": core_memory,
-        "current_state": current_state,
-        "short_term_memory": short_term_memory,
-        "turn_index": turn_index,
-        "next_turn_index": turn_index,
-        "scene_summaries": scene_summaries,
-        "recent_summaries": recent_summaries,
-    }
-
-    with stores.npc_profile as npc_store:
-        selection = select_context_profiles(
-            user_input=user_input,
-            current_state=current_state,
-            npc_store=npc_store,
+        turn_index = (
+            short_term_memory.recent_scenes[-1].turn_index + 1
+            if short_term_memory.recent_scenes
+            else 1
         )
 
-    state.update({
-        "matched_anchors": selection.anchors,
-        "action_npc_profiles": selection.npc_profiles,
-        "action_npc_director_views": [
-            profile.director_view()
-            for profile in selection.npc_profiles
-        ],
-    })
-    state["events"] = [
-        state_loaded_event(state),
-        profiles_loaded_event(state),
-    ]
-    return state
+        with stores.scene_summary as summary_store:
+            scene_summaries = summary_store.list_active()
+            recent_summaries = summary_store.get_recent(5)
+
+        state: GenerationState = {
+            "events": [],
+            "runtime_services": RuntimeServices(
+                stores=uow,
+                gateway_factory=runtime.services.gateway_factory,
+                jobs=runtime.services.jobs,
+                diagnostics=runtime.services.diagnostics,
+            ),
+            "runtime": runtime,
+            "user_input": user_input,
+            "difficulty": difficulty,
+            "max_chars": max_chars,
+            "trace_id": trace_id,
+            "core_memory": core_memory,
+            "current_state": current_state,
+            "short_term_memory": short_term_memory,
+            "turn_index": turn_index,
+            "next_turn_index": turn_index,
+            "scene_summaries": scene_summaries,
+            "recent_summaries": recent_summaries,
+        }
+
+        with stores.npc_profile as npc_store:
+            selection = select_context_profiles(
+                user_input=user_input,
+                current_state=current_state,
+                npc_store=npc_store,
+            )
+
+        state.update({
+            "matched_anchors": selection.anchors,
+            "action_npc_profiles": selection.npc_profiles,
+            "action_npc_director_views": [
+                profile.director_view()
+                for profile in selection.npc_profiles
+            ],
+        })
+        state["events"] = [
+            state_loaded_event(state),
+            profiles_loaded_event(state),
+        ]
+        return state
+    except BaseException:
+        uow.close()
+        raise
 
 
 def finalize_pending_turn(

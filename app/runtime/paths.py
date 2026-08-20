@@ -137,44 +137,8 @@ class CampaignPaths:
         return cls(data_dir=Path(data_dir))
 
     @property
-    def state_db(self) -> Path:
-        return self.data_dir / "current_state.db"
-
-    @property
-    def continuity_db(self) -> Path:
-        return self.data_dir / "continuity.db"
-
-    @property
-    def short_term_db(self) -> Path:
-        return self.data_dir / "short_term.db"
-
-    @property
-    def scene_summary_db(self) -> Path:
-        return self.data_dir / "scene_summaries.db"
-
-    @property
-    def confirmed_history_db(self) -> Path:
-        return self.data_dir / "confirmed_history.db"
-
-    @property
-    def npc_profile_db(self) -> Path:
-        return self.data_dir / "npc_profiles.db"
-
-    @property
-    def director_event_db(self) -> Path:
-        return self.data_dir / "director_events.db"
-
-    @property
-    def director_npc_db(self) -> Path:
-        return self.data_dir / "director_npcs.db"
-
-    @property
-    def director_log_db(self) -> Path:
-        return self.data_dir / "director_log.db"
-
-    @property
-    def world_setting_db(self) -> Path:
-        return self.data_dir / "world_settings.db"
+    def campaign_db(self) -> Path:
+        return self.data_dir / "campaign.db"
 
     @property
     def director_mutation_journal(self) -> Path:

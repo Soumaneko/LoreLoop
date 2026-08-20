@@ -265,6 +265,7 @@ def test_finalizer_writes_gen_and_confirm_entries(configure_runtime_services):
             reasoning="确认端决定培育事件。",
             requests=[],
         ),
+        "runtime_services": services,
     }
 
     finalizer._write_recent_director_log(state)

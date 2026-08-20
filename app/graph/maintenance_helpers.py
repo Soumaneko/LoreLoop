@@ -25,8 +25,17 @@ def prepare_scene_summary_state(
     *,
     core_memory: CoreMemory,
     threshold: int = 10,
+    services: RuntimeServices | None = None,
 ) -> SceneSummaryMaintenanceState:
-    services = get_campaign_runtime().services
+    runtime = get_campaign_runtime()
+    if services is None:
+        uow = runtime.uow()
+        services = RuntimeServices(
+            stores=uow,
+            gateway_factory=runtime.services.gateway_factory,
+            jobs=runtime.services.jobs,
+            diagnostics=runtime.services.diagnostics,
+        )
     return {
         "events": [],
         "runtime_services": services,

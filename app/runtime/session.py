@@ -29,6 +29,7 @@ from app.runtime.paths import (
 )
 from app.runtime.services import RuntimeServices
 from app.runtime.uow import CampaignUnitOfWork
+from app.runtime.campaign_migration import ensure_campaign_database
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 from app.runtime.model_config import effective_gateway_factory
@@ -247,6 +248,8 @@ class CampaignRuntime:
     ) -> None:
         self.campaign_id = campaign_id
         self.paths = paths or default_campaign_paths()
+        if stores is None:
+            ensure_campaign_database(self.paths)
         self.stores = stores or CampaignUnitOfWork(self.paths)
         recover_pending_director_mutation(self.stores)
         self.gateway_factory = gateway_factory or effective_gateway_factory()
@@ -283,8 +286,14 @@ class CampaignRuntime:
         self._restore_pending_transactions()
 
     def uow(self, *, write: bool = False) -> CampaignUnitOfWork:
-        """Return the campaign unit of work bound to this runtime."""
-        return self.stores
+        """Return a fresh operation-level unit of work.
+
+        Phase 2 keeps the session-lifetime ``self.stores`` for the in-memory
+        runtime projection, but every business operation must use its own UoW so
+        writes cannot join another operation's transaction on a shared
+        connection.
+        """
+        return CampaignUnitOfWork(self.paths, write=write)
 
     @property
     def confirmation_lock(self) -> threading.RLock:
@@ -769,6 +778,7 @@ class CampaignRuntime:
             self.pending_openings.clear(discard=False)
             self.campaign_id = campaign_id
             self.paths = paths
+            ensure_campaign_database(paths)
             self.stores.close()
             self.stores = CampaignUnitOfWork(paths)
             self.invalidate_generation_cache()

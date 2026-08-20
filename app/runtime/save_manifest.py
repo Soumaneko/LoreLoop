@@ -180,13 +180,12 @@ class SaveManifestRepository:
 
 
 def load_save_metadata(save_dir: str | Path) -> SaveMetadata:
-    """Project list metadata without creating or migrating either database."""
+    """Project list metadata without creating or migrating the database."""
 
     data_dir = Path(save_dir)
-    protagonist_name, location = _read_current_state_metadata(
-        data_dir / "current_state.db"
-    )
-    turn_count = _read_turn_count(data_dir / "short_term.db")
+    database = data_dir / "campaign.db"
+    protagonist_name, location = _read_current_state_metadata(database)
+    turn_count = _read_turn_count(database)
     return SaveMetadata(
         protagonist_name=protagonist_name,
         location=location,

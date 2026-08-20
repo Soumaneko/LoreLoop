@@ -10,6 +10,7 @@ from app.domain.npc_profile.director_promotion import (
 )
 from app.domain.npc_profile.schemas import NPC_DISCLOSURE_ORDER
 from app.runtime.serialization import model_data
+from app.runtime.services import RuntimeServices
 from app.runtime.session import (
     get_campaign_runtime,
 )
@@ -210,9 +211,17 @@ def prepare_confirmation_state(
     write_db: bool = True,
     scene_text: str | None = None,
     journaled: bool = False,
+    stores=None,
 ) -> ConfirmationState:
     runtime = get_campaign_runtime()
     runtime_services = runtime.services
+    if stores is not None:
+        runtime_services = RuntimeServices(
+            stores=stores,
+            gateway_factory=runtime.services.gateway_factory,
+            jobs=runtime.services.jobs,
+            diagnostics=runtime.services.diagnostics,
+        )
     stores = runtime_services.stores
     services = ConfirmationPreparationServices(
         current_state_store=stores.current_state,
@@ -275,7 +284,9 @@ def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationSt
     return state
 
 
-def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
+def finalize_confirmation_state_in_transaction(
+    state: ConfirmationState,
+) -> tuple[ConfirmationState, Any]:
     runtime = get_campaign_runtime()
     stores = state["runtime_services"].stores
     committer = ConfirmationCommitter(
@@ -299,4 +310,34 @@ def finalize_confirmation_state(state: ConfirmationState) -> ConfirmationState:
         committer,
         scheduler,
         ConfirmationEventBuilder(),
-    ).finalize(state)
+    ).finalize_in_transaction(state)
+
+
+def finalize_confirmation_state_after_commit(
+    state: ConfirmationState,
+    commit_result: Any,
+) -> ConfirmationState:
+    runtime = get_campaign_runtime()
+    stores = state["runtime_services"].stores
+    committer = ConfirmationCommitter(
+        ConfirmationCommitServices(
+            current_state_store=stores.current_state,
+            short_term_memory_store=stores.short_term,
+            confirmed_history_store=stores.confirmed_history,
+            npc_profile_store=stores.npc_profile,
+            continuity_store=stores.continuity,
+            scene_summary_store=stores.scene_summary,
+        )
+    )
+    scheduler = ConfirmationMaintenanceScheduler(
+        runtime,
+        ConfirmationMaintenanceServices(
+            run_scene_summary_maintenance=run_scene_summary_maintenance,
+        ),
+    )
+    return ConfirmationFinalizer(
+        runtime,
+        committer,
+        scheduler,
+        ConfirmationEventBuilder(),
+    ).finalize_after_commit(state, commit_result)

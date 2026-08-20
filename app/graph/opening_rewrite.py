@@ -37,7 +37,8 @@ def rewrite_opening_stream(turn_id: str):
             },
         }
 
-        core_memory = runtime.services.stores.core_memory.load_required()
+        with runtime.uow() as uow:
+            core_memory = uow.core_memory.load_required()
         scene_result = OpeningSceneAgent(
             runtime.services.gateway(session_type="init")
         ).generate(

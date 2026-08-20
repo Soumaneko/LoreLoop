@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from app.runtime.sqlite import ensure_schema_version
+from app.runtime.sqlite import ensure_schema_version, transaction
 
 from app.domain.scene_summary.schemas import SceneSummary
 
@@ -46,27 +46,27 @@ class SceneSummaryStore:
         self._conn.commit()
 
     def save_one(self, summary: SceneSummary) -> str:
-        self._conn.execute(
-            """
-            INSERT OR IGNORE INTO scene_summaries (
-                id, level, content, scene_ids_json, source_ids_json,
-                turn_start, turn_end, active, condensed_into, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                summary.id,
-                summary.level,
-                summary.content,
-                json.dumps(summary.scene_ids, ensure_ascii=False),
-                json.dumps(summary.source_ids, ensure_ascii=False),
-                summary.turn_start,
-                summary.turn_end,
-                int(summary.active),
-                summary.condensed_into,
-                summary.created_at,
-            ),
-        )
-        self._conn.commit()
+        with transaction(self._conn):
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO scene_summaries (
+                    id, level, content, scene_ids_json, source_ids_json,
+                    turn_start, turn_end, active, condensed_into, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    summary.id,
+                    summary.level,
+                    summary.content,
+                    json.dumps(summary.scene_ids, ensure_ascii=False),
+                    json.dumps(summary.source_ids, ensure_ascii=False),
+                    summary.turn_start,
+                    summary.turn_end,
+                    int(summary.active),
+                    summary.condensed_into,
+                    summary.created_at,
+                ),
+            )
         return summary.id
 
     def list_uncondensed(
@@ -124,15 +124,15 @@ class SceneSummaryStore:
     def mark_condensed(self, ids: list[str], *, condensed_into: str) -> int:
         if not ids:
             return 0
-        cursor = self._conn.executemany(
-            """
-            UPDATE scene_summaries
-            SET active = 0, condensed_into = ?
-            WHERE id = ? AND active = 1
-            """,
-            [(condensed_into, summary_id) for summary_id in ids],
-        )
-        self._conn.commit()
+        with transaction(self._conn):
+            cursor = self._conn.executemany(
+                """
+                UPDATE scene_summaries
+                SET active = 0, condensed_into = ?
+                WHERE id = ? AND active = 1
+                """,
+                [(condensed_into, summary_id) for summary_id in ids],
+            )
         return cursor.rowcount
 
     def should_condense(self, level: int, *, threshold: int = 10) -> bool:

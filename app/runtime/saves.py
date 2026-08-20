@@ -16,6 +16,7 @@ from .paths import (
     resolve_active_save_id,
     validate_save_name,
 )
+from .campaign_migration import ensure_campaign_database
 from .initialization import InitializationStore
 from .save_archive import (
     ArchiveInspection,
@@ -143,6 +144,11 @@ class SaveManager:
         with self.runtime.save_task(), self._lock:
             self._require_no_pending_source(source_id, "copy")
             source = self._require_save(source_id)
+            # A save that has never been opened since Phase 2 may still be in
+            # the legacy ten-database layout. Copying it without migrating would
+            # silently drop all canonical data because snapshots only accept
+            # campaign.db.
+            ensure_campaign_database(CampaignPaths.from_data_dir(source))
             if str(name).strip():
                 clean_name = self._available_name(name)
             else:
@@ -219,6 +225,9 @@ class SaveManager:
         with self.runtime.save_task(), self._lock:
             self._require_no_pending_source(clean_id, "export")
             source = self._require_save(clean_id)
+            # See copy(): migrate an unopened legacy save before snapshotting so
+            # export does not silently omit all canonical data.
+            ensure_campaign_database(CampaignPaths.from_data_dir(source))
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination_path.with_name(
                 f".{destination_path.name}.{uuid4().hex}.tmp"

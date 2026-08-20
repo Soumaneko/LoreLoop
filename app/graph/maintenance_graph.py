@@ -38,6 +38,7 @@ def run_scene_summary_maintenance(
     *,
     core_memory,
 ) -> None:
+    state = None
     try:
         state = prepare_scene_summary_state(
             trace_id,
@@ -54,3 +55,8 @@ def run_scene_summary_maintenance(
     except Exception:
         traceback.print_exc()
         raise
+    finally:
+        if state is not None:
+            stores = getattr(state.get("runtime_services"), "stores", None)
+            if stores is not None and getattr(stores, "close", None) is not None:
+                stores.close()

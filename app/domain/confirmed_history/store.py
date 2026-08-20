@@ -112,6 +112,21 @@ class ConfirmedHistoryStore:
             self._conn.execute("DELETE FROM history_documents")
             self._conn.execute("DELETE FROM history_turns")
 
+    def rebuild_fts(self) -> None:
+        with transaction(self._conn):
+            self._conn.execute("DELETE FROM history_documents_fts")
+            rows = self._conn.execute(
+                "SELECT document_id, text FROM history_documents"
+            ).fetchall()
+            for row in rows:
+                self._conn.execute(
+                    """
+                    INSERT INTO history_documents_fts(document_id, text)
+                    VALUES (?, ?)
+                    """,
+                    (row["document_id"], row["text"]),
+                )
+
     def _delete_turn(self, turn_index: int) -> None:
         rows = self._conn.execute(
             "SELECT document_id FROM history_documents WHERE turn_index = ?",

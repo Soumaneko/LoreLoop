@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from app.runtime.sqlite import ensure_exact_schema_version
+from app.runtime.sqlite import ensure_exact_schema_version, transaction
 
 from .schemas import DirectorNPCDraft, utc_now
 
@@ -50,25 +50,25 @@ class DirectorNPCStore:
 
     def save(self, draft: DirectorNPCDraft) -> str:
         updated = draft.model_copy(update={"updated_at": utc_now()})
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO director_npcs (
-                draft_id, status, draft_json, created_turn,
-                introduced_turn, created_at, updated_at
+        with transaction(self._conn):
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO director_npcs (
+                    draft_id, status, draft_json, created_turn,
+                    introduced_turn, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    updated.draft_id,
+                    updated.status,
+                    updated.model_dump_json(),
+                    updated.created_turn,
+                    updated.introduced_turn,
+                    updated.created_at,
+                    updated.updated_at,
+                ),
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                updated.draft_id,
-                updated.status,
-                updated.model_dump_json(),
-                updated.created_turn,
-                updated.introduced_turn,
-                updated.created_at,
-                updated.updated_at,
-            ),
-        )
-        self._conn.commit()
         return updated.draft_id
 
     def get_by_id(self, draft_id: str) -> DirectorNPCDraft | None:
@@ -129,11 +129,11 @@ class DirectorNPCStore:
         return updated
 
     def delete_by_id(self, draft_id: str) -> None:
-        self._conn.execute(
-            "DELETE FROM director_npcs WHERE draft_id = ?",
-            (draft_id,),
-        )
-        self._conn.commit()
+        with transaction(self._conn):
+            self._conn.execute(
+                "DELETE FROM director_npcs WHERE draft_id = ?",
+                (draft_id,),
+            )
 
     @staticmethod
     def _draft_from_row(row: sqlite3.Row) -> DirectorNPCDraft:

@@ -2,13 +2,12 @@
 
 LangGraph 节点只调用 :class:`DirectorConfirmationExecutor`（或薄包装
 ``run_confirmation_director_agent``）。本模块拥有技能 handler 及其参数
-validator、两波执行（Wave A 生成 Setting / Wave B 并发执行技能）以及跨库
-延迟提交。持久化细节由 :mod:`app.runtime.director_mutation` 负责。
+validator、两波执行（Wave A 生成 Setting / Wave B 并发执行技能）以及延迟提交。
+持久化细节由 :mod:`app.runtime.director_mutation` 负责。
 
-并发与连接：每个技能操作通过 ``_FreshStoreProxy`` 各开一条 SQLite 连接，
-因此在 :meth:`DirectorConfirmationExecutor.run` 开头一次性创建代理并存入
-实例属性、此后不再重绑定——handler 始终从 ``self._*_store`` 读取，不依赖
-闭包晚绑定语义。
+并发与连接：Phase 2 起整个确认共享同一份操作级 Store（单一 SQLite 连接），
+handler 只读、写入全部延迟到 :func:`apply_director_mutations`，因此 Wave B 的
+并发 handler 只并发执行只读查询。
 """
 
 from __future__ import annotations
@@ -63,31 +62,11 @@ from app.domain.world_setting.schemas import WorldSetting, setting_appears_in_te
 from app.runtime.director_mutation import (
     DirectorPendingActorBinding,
     DirectorPendingMutationPlan,
-    commit_director_mutations,
+    apply_director_mutations,
     recover_pending_director_mutation,
-)
-from app.runtime.stores import (
-    open_director_event_store,
-    open_director_npc_store,
-    open_npc_profile_store,
-    open_world_setting_store,
 )
 
 DIRECTOR_WAVE_MAX_WORKERS = 3
-
-
-class _FreshStoreProxy:
-    """Give each concurrent skill operation its own SQLite connection."""
-
-    def __init__(self, factory):
-        self._factory = factory
-
-    def __getattr__(self, name):
-        def invoke(*args, **kwargs):
-            with self._factory() as store:
-                return getattr(store, name)(*args, **kwargs)
-
-        return invoke
 
 
 class DirectorConfirmationExecutor:
@@ -135,21 +114,14 @@ class DirectorConfirmationExecutor:
         self._plan = DirectorPendingMutationPlan()
         self._plan_lock = threading.Lock()
         self.last_warnings: list[DirectorWarning] = []
-        # Fresh proxies created once: every operation opens its own SQLite
-        # connection, so Wave B may run handlers concurrently without sharing a
-        # connection. Never rebound afterwards.
-        self._event_store: Any = _FreshStoreProxy(
-            lambda: open_director_event_store(stores.paths.director_event_db)
-        )
-        self._director_npc_store: Any = _FreshStoreProxy(
-            lambda: open_director_npc_store(stores.paths.director_npc_db)
-        )
-        self._npc_profile_store: Any = _FreshStoreProxy(
-            lambda: open_npc_profile_store(stores.paths.npc_profile_db)
-        )
-        self._setting_store: Any = _FreshStoreProxy(
-            lambda: open_world_setting_store(stores.paths.world_setting_db)
-        )
+        # Phase 2 shares one connection per confirmation: handlers read through
+        # the operation-level stores that also carry the commit. All handler
+        # reads are plain SELECTs and may run concurrently; writes are deferred
+        # to ``apply_director_mutations`` after every request succeeds.
+        self._event_store: Any = stores.director_event
+        self._director_npc_store: Any = stores.director_npc
+        self._npc_profile_store: Any = stores.npc_profile
+        self._setting_store: Any = stores.world_setting
         self._settings_by_id: dict[str, WorldSetting] = {}
 
     def run(self) -> tuple[object, DirectorSkillExecutionBatch]:
@@ -233,7 +205,7 @@ class DirectorConfirmationExecutor:
                 DirectorSkillExecutionBatch(),
             )
 
-        commit_director_mutations(self._plan, self._stores)
+        apply_director_mutations(self._plan, self._stores)
         return decision, executions
 
     def _register_skills(self) -> None:

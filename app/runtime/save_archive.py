@@ -26,21 +26,31 @@ ARCHIVE_SAVE_ROOT = "save"
 _ALLOWED_SUFFIXES = {".db", ".json"}
 _ALLOWED_SUBTREES = {".runtime", ".snapshots"}
 _ROOT_FILES = {
-    "confirmed_history.db",
-    "continuity.db",
+    "campaign.db",
     "core_memory.json",
-    "current_state.db",
-    "director_events.db",
-    "director_log.db",
-    "director_npcs.db",
     "initialization.json",
-    "npc_profiles.db",
     "save_manifest.json",
-    "scene_summaries.db",
     "settings.json",
+}
+# Phase 2 still imports archives created by the legacy ten-database save format.
+# Keep the legacy root database names accepted so old ZIPs can be extracted and
+# then migrated by ensure_campaign_database() before they are installed.
+_LEGACY_ROOT_DB_FILES = {
+    "current_state.db",
+    "continuity.db",
     "short_term.db",
+    "scene_summaries.db",
+    "confirmed_history.db",
+    "npc_profiles.db",
+    "director_events.db",
+    "director_npcs.db",
+    "director_log.db",
     "world_settings.db",
 }
+
+
+def _is_legacy_root_db_name(name: str) -> bool:
+    return name in _LEGACY_ROOT_DB_FILES
 
 
 class SaveArchiveError(ValueError):
@@ -208,6 +218,22 @@ def extract_archive(
         for database in destination.rglob("*.db"):
             quick_check_database(database)
         rebase_history_paths(destination)
+        # Legacy archives may contain the old ten-database layout both at the
+        # save root and inside Undo/Redo snapshot directories. Migrate the root
+        # first, then migrate each legacy snapshot directory into a campaign.db
+        # and rewrite its manifest so Undo/Redo still resolves the new layout.
+        from .campaign_migration import ensure_campaign_database
+        from .paths import CampaignPaths
+
+        ensure_campaign_database(CampaignPaths.from_data_dir(destination))
+        for snapshot_dir in sorted((destination / ".snapshots").glob("*")):
+            if not snapshot_dir.is_dir():
+                continue
+            if any(_is_legacy_root_db_name(item.name) for item in snapshot_dir.iterdir()):
+                ensure_campaign_database(
+                    CampaignPaths.from_data_dir(snapshot_dir)
+                )
+                _rewrite_snapshot_manifest(snapshot_dir)
         _validate_save_payload(destination)
     except BaseException:
         _remove_staging_contents(destination)
@@ -461,14 +487,17 @@ def _is_allowed_relative_path(value: str) -> bool:
     if path.is_absolute() or not path.parts or ".." in path.parts or "." in path.parts:
         return False
     if len(path.parts) == 1:
-        return path.name in _ROOT_FILES
+        return path.name in _ROOT_FILES or path.name in _LEGACY_ROOT_DB_FILES
     if path.parts[0] == ".runtime":
         return path.parts in {
             (".runtime", "turn_history.db"),
             (".runtime", "director_mutation.json"),
         }
     if path.parts[0] == ".snapshots" and len(path.parts) == 3:
-        return path.name in (_ROOT_FILES - {"save_manifest.json"}) | {"manifest.json"}
+        return (
+            path.name in (_ROOT_FILES - {"save_manifest.json"}) | {"manifest.json"}
+            or _is_legacy_root_db_name(path.name)
+        )
     return False
 
 
@@ -491,7 +520,7 @@ def _validate_save_payload(data_dir: Path) -> None:
             InitializationRecord.model_validate_json(
                 initialization.read_text(encoding="utf-8")
             )
-        state_db = data_dir / "current_state.db"
+        state_db = data_dir / "campaign.db"
         if state_db.is_file():
             uri = f"file:{state_db.resolve().as_posix()}?mode=ro"
             with closing(sqlite3.connect(uri, uri=True)) as connection:
@@ -532,3 +561,51 @@ def _remove_staging_contents(destination: Path) -> None:
             shutil.rmtree(item)
         else:
             item.unlink(missing_ok=True)
+
+
+def _rewrite_snapshot_manifest(snapshot_dir: Path) -> None:
+    """Rewrite a legacy snapshot manifest to reference the new campaign.db.
+
+    Production snapshot manifests use a string list::
+
+        {"files": ["current_state.db", "core_memory.json"]}
+
+    Old archives stored the legacy ten databases in each snapshot. After
+    migration only ``campaign.db`` remains, so every legacy database name is
+    removed and ``campaign.db`` is appended. Missing or malformed manifests are
+    rejected because Undo/Redo depends on an exact file list.
+    """
+    manifest_path = snapshot_dir / "manifest.json"
+    if not manifest_path.is_file():
+        raise SaveArchiveError(
+            f"Legacy snapshot is missing manifest.json: {snapshot_dir}"
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SaveArchiveError(
+            f"Legacy snapshot manifest is not valid JSON: {snapshot_dir}"
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise SaveArchiveError(
+            f"Legacy snapshot manifest must be an object: {snapshot_dir}"
+        )
+    files = manifest.get("files")
+    if not isinstance(files, list) or not all(
+        isinstance(item, str) for item in files
+    ):
+        raise SaveArchiveError(
+            f"Legacy snapshot manifest files must be a string list: {snapshot_dir}"
+        )
+    rewritten = [
+        name
+        for name in files
+        if name not in _LEGACY_ROOT_DB_FILES
+    ]
+    if (snapshot_dir / "campaign.db").is_file() and "campaign.db" not in rewritten:
+        rewritten.append("campaign.db")
+    manifest["files"] = rewritten
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
+        encoding="utf-8",
+    )

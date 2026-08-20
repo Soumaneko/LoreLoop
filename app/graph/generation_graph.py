@@ -16,6 +16,7 @@ from app.domain.short_term_memory import ShortTermMemory
 from app.domain.narrative_rewrite import RewriteStrategySelector
 from app.domain.narrative_rewrite.schemas import RewriteStrategyDecision
 from app.runtime.serialization import model_data
+from app.runtime.services import RuntimeServices
 from app.runtime.session import get_campaign_runtime
 
 from .generation_helpers import (
@@ -498,9 +499,15 @@ def _pending_context_state(
     # so it inherits that variant's experience_mode and Director materials. Mode
     # switching only affects brand-new generations (new turn, reroll), which run
     # the full generation graph including the Director stage.
+    uow = runtime.uow()
     return {
         "events": events,
-        "runtime_services": runtime.services,
+        "runtime_services": RuntimeServices(
+            stores=uow,
+            gateway_factory=runtime.services.gateway_factory,
+            jobs=runtime.services.jobs,
+            diagnostics=runtime.services.diagnostics,
+        ),
         "runtime": runtime,
         "user_input": pending.user_input,
         "difficulty": pending.difficulty,
@@ -525,6 +532,10 @@ def _retry_source(runtime, turn_id: str):
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before retrying.")
 
+    # Keep reading through the configured services so tests that inject a fake
+    # current_state store continue to work. In production runtime.services.stores
+    # is the session-level projection; the operation-level UoW is created by the
+    # generation state preparation that follows.
     with runtime.services.stores.current_state as state_store:
         current_state = state_store.load_or_default()
     if current_state != pending.state_before:
@@ -598,41 +609,48 @@ def _stream_generation_graph(
     emitted_event_count: int = 0,
 ):
     event_count = emitted_event_count
-    for event in state.get("events", [])[emitted_event_count:]:
-        event_count += 1
-        yield event
+    try:
+        for event in state.get("events", [])[emitted_event_count:]:
+            event_count += 1
+            yield event
 
-    event_presenter = GenerationEventPresenter()
+        event_presenter = GenerationEventPresenter()
 
-    def append_and_yield(event: GenerationEvent):
-        nonlocal event_count
-        state["events"] = [*state.get("events", []), event]
-        event_count += 1
-        yield event
+        def append_and_yield(event: GenerationEvent):
+            nonlocal event_count
+            state["events"] = [*state.get("events", []), event]
+            event_count += 1
+            yield event
 
-    for stream_mode, update in graph.stream(
-        state,
-        stream_mode=["updates", "custom"],
-    ):
-        if stream_mode == "custom":
-            yield update
-            continue
-        for node_name, node_update in update.items():
-            fold_state_keys(state, node_update)
-            for event in event_presenter.present(
-                node_name,
-                node_update.get("events", []),
-            ):
-                yield from append_and_yield(event)
+        for stream_mode, update in graph.stream(
+            state,
+            stream_mode=["updates", "custom"],
+        ):
+            if stream_mode == "custom":
+                yield update
+                continue
+            for node_name, node_update in update.items():
+                fold_state_keys(state, node_update)
+                for event in event_presenter.present(
+                    node_name,
+                    node_update.get("events", []),
+                ):
+                    yield from append_and_yield(event)
 
-    for event in event_presenter.finish():
-        yield from append_and_yield(event)
+        for event in event_presenter.finish():
+            yield from append_and_yield(event)
 
-    state = finalize_pending_turn(
-        state,
-        group_id=group_id,
-        version_index=version_index,
-    )
-    for event in state.get("events", [])[event_count:]:
-        event_count += 1
-        yield event
+        state = finalize_pending_turn(
+            state,
+            group_id=group_id,
+            version_index=version_index,
+        )
+        for event in state.get("events", [])[event_count:]:
+            event_count += 1
+            yield event
+    finally:
+        runtime_services = state.get("runtime_services")
+        if runtime_services is not None:
+            stores = getattr(runtime_services, "stores", None)
+            if stores is not None and getattr(stores, "close", None) is not None:
+                stores.close()

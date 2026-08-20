@@ -10,10 +10,12 @@ from app.runtime.graph_cache import get_cached_graph
 from app.runtime.session import (
     get_campaign_runtime,
 )
+from app.runtime.uow import CampaignUnitOfWork
 
 from .confirmation_cache import ConfirmationCache
 from .confirmation_helpers import (
-    finalize_confirmation_state,
+    finalize_confirmation_state_after_commit,
+    finalize_confirmation_state_in_transaction,
     merge_confirmation_node_update,
     prepare_confirmation_second_wave,
     prepare_confirmation_state,
@@ -131,13 +133,14 @@ def _compile_confirmation_second_wave_graph():
         ),
     )
 
+    # Phase 2 uses one shared connection per confirmation. These nodes may all
+    # write through the same sqlite connection, so they are deliberately
+    # serialized here. Parallel execution on one connection would interleave
+    # store-level SAVEPOINTs and randomly fail with "no such savepoint".
     graph.add_edge(START, "action_preview")
-    graph.add_edge(START, "continuity_project")
-    graph.add_edge(START, "npc_profile_update")
-    graph.add_edge(START, "setting_appearance_update")
-    graph.add_edge("action_preview", END)
-    graph.add_edge("continuity_project", END)
-    graph.add_edge("npc_profile_update", END)
+    graph.add_edge("action_preview", "continuity_project")
+    graph.add_edge("continuity_project", "npc_profile_update")
+    graph.add_edge("npc_profile_update", "setting_appearance_update")
     graph.add_edge("setting_appearance_update", END)
 
     return graph.compile()
@@ -188,42 +191,62 @@ def stream_confirmation_pipeline(
     scene_text: str | None = None,
     journaled: bool = False,
 ):
-    state: ConfirmationState = prepare_confirmation_state(
-        pipeline_input,
-        write_db=write_db,
-        scene_text=scene_text,
-        journaled=journaled,
-    )
+    """Stream one confirmation.
+
+    Phase 2: every canonical write of a real confirmation runs inside one
+    ``BEGIN IMMEDIATE ... COMMIT`` transaction on the campaign database. A fresh
+    operation-level unit of work owns the transaction for the whole pipeline so
+    the graph nodes, the Director executor, and the in-transaction finalizer all
+    write to the same connection. The control-plane follow-ups (audit, journal
+    completion, pending cleanup, maintenance scheduling, finish events) run only
+    after the transaction commits.
+    """
+    runtime = get_campaign_runtime()
+    uow = CampaignUnitOfWork(runtime.paths, write=write_db)
     event_count = 0
-    for event in state.get("events", []):
-        event_count += 1
-        yield event
+    commit_result = None
+    with uow:
+        with uow.transaction(immediate=write_db):
+            state: ConfirmationState = prepare_confirmation_state(
+                pipeline_input,
+                write_db=write_db,
+                scene_text=scene_text,
+                journaled=journaled,
+                stores=uow,
+            )
+            for event in state.get("events", []):
+                event_count += 1
+                yield event
 
-    first_wave_graph = build_confirmation_first_wave_graph()
-    second_wave_graph = build_confirmation_second_wave_graph()
-    for event in stream_confirmation_graph(first_wave_graph, state):
-        event_count += 1
-        yield event
+            first_wave_graph = build_confirmation_first_wave_graph()
+            second_wave_graph = build_confirmation_second_wave_graph()
+            for event in stream_confirmation_graph(first_wave_graph, state):
+                event_count += 1
+                yield event
 
-    state = prepare_confirmation_second_wave(state)
-    state["node_errors"] = []
-    for event in state.get("events", [])[event_count:]:
-        event_count += 1
-        yield event
+            state = prepare_confirmation_second_wave(state)
+            state["node_errors"] = []
+            for event in state.get("events", [])[event_count:]:
+                event_count += 1
+                yield event
 
-    for event in stream_confirmation_graph(second_wave_graph, state):
-        event_count += 1
-        yield event
+            for event in stream_confirmation_graph(second_wave_graph, state):
+                event_count += 1
+                yield event
 
-    director_graph = build_confirmation_director_graph()
-    for event in stream_confirmation_graph(director_graph, state):
-        event_count += 1
-        yield event
+            director_graph = build_confirmation_director_graph()
+            for event in stream_confirmation_graph(director_graph, state):
+                event_count += 1
+                yield event
 
-    state = finalize_confirmation_state(state)
-    for event in state.get("events", [])[event_count:]:
-        event_count += 1
-        yield event
+            state, commit_result = finalize_confirmation_state_in_transaction(
+                state
+            )
+
+        state = finalize_confirmation_state_after_commit(state, commit_result)
+        for event in state.get("events", [])[event_count:]:
+            event_count += 1
+            yield event
 
 
 def confirm_stream(

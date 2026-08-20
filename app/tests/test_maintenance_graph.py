@@ -11,6 +11,7 @@ from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.summarizer import SceneSummaryWarning
 from app.graph import maintenance_graph
 from app.graph import maintenance_helpers, maintenance_nodes
+from app.runtime.session import get_campaign_runtime
 
 
 def _state() -> CurrentState:
@@ -93,11 +94,13 @@ def test_scene_summary_graph_preserves_recursive_condensation(
     )
 
     try:
+        services = get_campaign_runtime().services
         state = maintenance_helpers.prepare_scene_summary_state(
             "trace-2",
             2,
             core_memory=CoreMemory(items=[]),
             threshold=2,
+            services=services,
         )
         result = maintenance_graph.build_scene_summary_maintenance_graph().invoke(state)
 

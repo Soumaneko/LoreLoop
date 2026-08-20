@@ -2041,3 +2041,30 @@ def test_rephrase_graph_skips_canon_tail_when_composer_empty(monkeypatch):
 
     assert ("rephrase_narrative", "generate_canon_queries") in edges
     assert ("rephrase_narrative", "__end__") in edges
+
+
+def test_prepare_generation_state_closes_uow_on_error(monkeypatch):
+    from app.graph import generation_helpers
+    from app.runtime.session import get_campaign_runtime
+
+    runtime = get_campaign_runtime()
+    original_uow = runtime.uow
+
+    created = []
+
+    def failing_uow():
+        uow = original_uow()
+        created.append(uow)
+        # Force failure before state is returned.
+        monkeypatch.setattr(
+            type(uow),
+            "core_memory",
+            property(lambda self: (_ for _ in ()).throw(RuntimeError("boom"))),
+        )
+        return uow
+
+    monkeypatch.setattr(runtime, "uow", failing_uow)
+    with pytest.raises(RuntimeError, match="boom"):
+        generation_helpers.prepare_generation_state("观察", "普通", 900)
+    assert len(created) == 1
+    assert created[0].is_closed is True

@@ -418,7 +418,15 @@ class ConfirmationEventBuilder:
 
 
 class ConfirmationFinalizer:
-    """Coordinate commit, maintenance scheduling, cleanup, and presentation."""
+    """Coordinate commit, maintenance scheduling, cleanup, and presentation.
+
+    Phase 2 splits the finalizer across the campaign transaction boundary: the
+    canonical writes (``committer.commit`` + the recent Director log) run inside
+    ``BEGIN IMMEDIATE ... COMMIT``; everything that must only happen after a
+    committed confirmation (audit, journal completion, pending cleanup,
+    maintenance scheduling, user-facing events) runs in
+    :meth:`finalize_after_commit`.
+    """
 
     def __init__(
         self,
@@ -433,6 +441,15 @@ class ConfirmationFinalizer:
         self.event_builder = event_builder
 
     def finalize(self, state: ConfirmationState) -> ConfirmationState:
+        """Run the two finalize phases in sequence (single-process helpers)."""
+        state, commit_result = self.finalize_in_transaction(state)
+        return self.finalize_after_commit(state, commit_result)
+
+    def finalize_in_transaction(
+        self,
+        state: ConfirmationState,
+    ) -> tuple[ConfirmationState, ConfirmationCommitResult]:
+        """Canonical writes that must be atomic with the confirmation."""
         pipeline_input = state["pipeline_input"]
         pending = state["pending"]
         initialization_record = None
@@ -453,9 +470,22 @@ class ConfirmationFinalizer:
                 )
 
         commit_result = self.committer.commit(state)
+        state["initialization_record"] = initialization_record
 
         if state.get("write_db", True):
             self._write_recent_director_log(state)
+
+        return state, commit_result
+
+    def finalize_after_commit(
+        self,
+        state: ConfirmationState,
+        commit_result: ConfirmationCommitResult,
+    ) -> ConfirmationState:
+        """Control-plane follow-up that must only run after the transaction commits."""
+        pipeline_input = state["pipeline_input"]
+        pending = state["pending"]
+        if state.get("write_db", True):
             self.runtime.history.record_state_audit(
                 state["turn_id"],
                 state_changes=model_data(state["state_change_set"]),
@@ -463,6 +493,7 @@ class ConfirmationFinalizer:
                 state_before=model_data(pipeline_input.state_before),
                 state_after=model_data(state["updated_state"]),
             )
+            initialization_record = state.get("initialization_record")
             if initialization_record is not None:
                 self.runtime.initialization.save(
                     initialization_record.model_copy(update={"phase": "completed"})
@@ -496,11 +527,15 @@ class ConfirmationFinalizer:
     def _write_recent_director_log(self, state: ConfirmationState) -> None:
         """Persist the confirmed turn's generation + confirmation decisions.
 
-        Runs only after the confirmation commit succeeds so rerolls, failed
-        confirmations, and rollbacks never leave stale log entries.
+        Runs inside the confirmation transaction, so it must use the
+        operation-level stores from ``state``. Using the session-level
+        ``self.runtime.services.stores`` would open a second connection to the
+        same campaign.db while this transaction holds ``BEGIN IMMEDIATE`` and
+        deadlock/timeout on the lock.
         """
         from app.domain.director.log import assemble_director_log_entry
 
+        stores = state["runtime_services"].stores
         pipeline_input = state["pipeline_input"]
         entries: list[dict] = []
         gen_entry = getattr(state["pending"], "director_log_entry", None)
@@ -512,24 +547,26 @@ class ConfirmationFinalizer:
                 turn_index=pipeline_input.turn_index,
                 phase="confirmation",
                 decision=decision,
-                stores=self.runtime.services.stores,
+                stores=stores,
                 executions=state.get("director_executions"),
             ))
         if not entries:
             return
-        self._write_recent_director_log_with_retry(entries, state)
+        self._write_recent_director_log_with_retry(entries, state, stores=stores)
 
     def _write_recent_director_log_with_retry(
         self,
         entries: list[dict],
         state: ConfirmationState,
         *,
+        stores=None,
         attempts: int = 3,
     ) -> None:
         last_error: Exception | None = None
+        stores = stores or state["runtime_services"].stores
         for attempt in range(1, attempts + 1):
             try:
-                with self.runtime.services.stores.director_log as log_store:
+                with stores.director_log as log_store:
                     log_store.save_entries(entries)
                 return
             except Exception as exc:
