@@ -1,3 +1,7 @@
+from app.runtime.stores import open_continuity_store
+from app.runtime.stores import open_confirmed_history_store
+from app.runtime.stores import open_npc_profile_store
+from app.runtime.stores import open_world_setting_store
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -53,7 +57,6 @@ from app.domain.current_state import (
     SceneState,
 )
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.short_term_memory import ShortTermScene
 from app.domain.world_setting import WorldSetting, WorldSettingStore
@@ -465,7 +468,7 @@ def test_contiguous_parser_topics_retrieve_natural_history_wording():
             ActionRetrievalTopic(text="刺探我宗情报"),
         ],
     )
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_history_1",
@@ -596,7 +599,7 @@ def test_explicit_two_character_event_from_player_input_is_retrievable():
     )
     assert explicit_topic.origin == "explicit_input"
 
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [ShortTermScene(
             scene_id="scene_history",
             turn_index=1,
@@ -736,7 +739,7 @@ def test_history_retriever_allows_single_alias_and_diversifies_turns():
             topics=["账册摹本"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_001",
@@ -773,7 +776,7 @@ def test_history_retriever_caps_entity_owned_hits_independently_of_fact_limit():
             entities=[ContextSearchEntity(name="顾晚棠")],
         )
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id=f"scene_{turn_index:03d}",
@@ -833,7 +836,7 @@ def test_history_diversity_balances_intent_coverage_then_fills():
             scene_text="河湾旅店的后门通向码头。",
         ),
     ]
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, scenes)
         result = ContextHistoryRetriever(
             store,
@@ -867,7 +870,7 @@ def test_explicit_entity_and_event_outrank_higher_scored_context_intent():
             topics=["黑塔密约"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_001",
@@ -916,7 +919,7 @@ def test_explicit_origin_candidates_finish_before_context_candidates():
             topics=["显式事件"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             *[
                 ShortTermScene(
@@ -969,7 +972,7 @@ def test_one_hit_updates_three_intent_coverages_without_duplicate_payload():
             entities=[ContextSearchEntity(name="河湾旅店")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [ShortTermScene(
             scene_id="scene_001",
             turn_index=1,
@@ -1002,7 +1005,7 @@ def test_topic_can_own_hit_after_entity_owner_cap_is_full():
             topics=["黑塔"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id=f"scene_{turn:03d}",
@@ -1036,7 +1039,7 @@ def test_relationship_intent_cannot_bypass_entity_cap_with_one_entity_match():
             ],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id=f"scene_{turn:03d}",
@@ -1069,7 +1072,7 @@ def test_genuine_relationship_match_can_own_hits_after_entity_cap():
             ],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id=f"scene_{turn:03d}",
@@ -1098,7 +1101,7 @@ def test_short_exact_topic_receives_direct_match_score():
             topics=["黑塔"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [ShortTermScene(
             scene_id="scene_001",
             turn_index=1,
@@ -1132,7 +1135,7 @@ def test_high_priority_intents_exhaust_max_hits_deterministically():
             for index in range(1, 4)
         ],
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_001",
@@ -1176,7 +1179,7 @@ def test_history_retriever_merges_multi_intent_alias_and_topic_hits_on_one_evide
             topics=["账册摹本"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_001",
@@ -1205,7 +1208,7 @@ def test_adjacent_paragraph_hit_does_not_create_duplicate_candidate():
             entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_001",
@@ -1236,7 +1239,7 @@ def test_identical_text_across_adjacent_turns_is_not_merged():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id=f"scene_{turn_index:02d}",
@@ -1263,7 +1266,7 @@ def test_identical_adjacent_paragraphs_in_same_turn_merge():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1290,7 +1293,7 @@ def test_non_adjacent_identical_paragraphs_do_not_merge():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1322,7 +1325,7 @@ def test_numeric_and_negation_differences_block_merge():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1336,7 +1339,7 @@ def test_numeric_and_negation_differences_block_merge():
         )
     assert len(numeric.hits) == 2
 
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1359,7 +1362,7 @@ def test_clustered_evidence_ids_remain_valid_for_context_facts():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1407,7 +1410,7 @@ def test_adjacent_context_ids_remain_valid_for_context_facts():
             entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_001",
@@ -1460,7 +1463,7 @@ def test_cluster_representative_merges_member_metadata_and_max_score():
             topics=["点头示意"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1495,7 +1498,7 @@ def test_disjoint_topics_do_not_merge():
             topics=["账册", "盐帮"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1529,7 +1532,7 @@ def test_state_change_and_time_differences_do_not_merge():
         ("艾琳清晨来到客栈。", "艾琳黄昏来到客栈。"),
     )
     for first, second in pairs:
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             _upsert_scenes(store, [
                 ShortTermScene(
                     scene_id="scene_030",
@@ -1559,7 +1562,7 @@ def test_negated_content_difference_blocks_merge():
             topics=["盐帮", "万象阁"],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1594,7 +1597,7 @@ def test_numeric_quantity_differences_block_merge():
         ("艾琳携带两把钥匙。", "艾琳携带三把钥匙。"),
     )
     for first, second in pairs:
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             _upsert_scenes(store, [
                 ShortTermScene(
                     scene_id="scene_030",
@@ -1622,7 +1625,7 @@ def test_different_subject_entities_do_not_merge():
             ],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1647,7 +1650,7 @@ def test_distant_identical_text_is_not_merged():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id=f"scene_{turn_index:03d}",
@@ -1674,7 +1677,7 @@ def test_adjacent_identical_pair_merges_and_non_adjacent_stays_separate():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1706,7 +1709,7 @@ def test_supporting_evidence_ids_match_provided_texts():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1734,7 +1737,7 @@ def test_supporting_evidence_carries_member_full_text():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -1762,7 +1765,7 @@ def test_history_payload_budget_drops_optional_context_before_main_text():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [ShortTermScene(
             scene_id="scene_001",
             turn_index=1,
@@ -1819,7 +1822,7 @@ def test_history_payload_budget_retains_explicit_main_before_context_candidate()
         max_evidence_text_chars=240,
         min_excerpt_chars=80,
     )
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [ShortTermScene(
             scene_id="scene_001",
             turn_index=1,
@@ -1854,7 +1857,7 @@ def test_history_payload_budget_uses_marked_bounded_excerpt():
         max_evidence_text_chars=240,
         min_excerpt_chars=80,
     )
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [ShortTermScene(
             scene_id="scene_001",
             turn_index=1,
@@ -1886,7 +1889,7 @@ def test_history_payload_budget_skips_evidence_when_minimum_excerpt_cannot_fit()
         max_evidence_text_chars=80,
         min_excerpt_chars=40,
     )
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [ShortTermScene(
             scene_id="scene_001",
             turn_index=1,
@@ -1926,7 +1929,7 @@ def test_history_payload_budget_retries_after_global_dedup_frees_space():
     # cannot fit beside alpha's large adjacent paragraph, then fits after beta
     # becomes a main hit and global evidence de-duplication removes that copy.
     policy = HistoryDiversityPolicy(max_hits=3, max_payload_chars=6_000)
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_001",
@@ -2028,7 +2031,7 @@ def test_cluster_members_are_excluded_from_adjacent_context():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -2063,7 +2066,7 @@ def test_evidence_documents_are_globally_unique_across_hits():
             entities=[ContextSearchEntity(name="艾琳")],
         ),
     ])
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         _upsert_scenes(store, [
             ShortTermScene(
                 scene_id="scene_030",
@@ -2263,10 +2266,10 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
 
     gateway = SpyGateway()
     with (
-        ConfirmedHistoryStore() as store,
-        ContinuityStore() as continuity_store,
-        WorldSettingStore() as setting_store,
-        NPCProfileStore(":memory:") as npc_store,
+        open_confirmed_history_store() as store,
+        open_continuity_store() as continuity_store,
+        open_world_setting_store() as setting_store,
+        open_npc_profile_store(":memory:") as npc_store,
     ):
         store.upsert_turn(
             scene_id="scene_003",
@@ -2325,7 +2328,7 @@ def test_context_facts_projection_hides_internal_evidence_ids():
 
 
 def test_select_context_profiles_matches_state_and_user_input(tmp_path):
-    npc_store = NPCProfileStore(str(tmp_path / "npcs.db"))
+    npc_store = open_npc_profile_store(str(tmp_path / "npcs.db"))
     try:
         npc_store.upsert(
             NPCProfile(
@@ -2348,7 +2351,7 @@ def test_select_context_profiles_matches_state_and_user_input(tmp_path):
 
 
 def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
-    npc_store = NPCProfileStore(str(tmp_path / "npcs.db"))
+    npc_store = open_npc_profile_store(str(tmp_path / "npcs.db"))
     try:
         npc_store.upsert(
             NPCProfile(
@@ -2395,7 +2398,7 @@ def test_setting_retriever_selects_relevant_public_settings():
             entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
         ),
     ])
-    with WorldSettingStore() as store:
+    with open_world_setting_store() as store:
         store.save_many([
             WorldSetting(
                 kind="location",
@@ -2446,7 +2449,7 @@ def test_setting_retriever_limits_and_never_exposes_hidden_facts():
             topics=["帮派"],
         ),
     ])
-    with WorldSettingStore() as store:
+    with open_world_setting_store() as store:
         store.save_many([
             WorldSetting(
                 kind="faction",

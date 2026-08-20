@@ -119,35 +119,35 @@ class DirectorMutationJournalStore:
         self.path.unlink(missing_ok=True)
 
 
-def recover_pending_director_mutation(stores) -> bool:
+def recover_pending_director_mutation(uow) -> bool:
     """Rollback an interrupted Director commit; safe to call repeatedly."""
     journal_store = DirectorMutationJournalStore(
-        stores.paths.director_mutation_journal
+        uow.paths.director_mutation_journal
     )
     journal = journal_store.load()
     if journal is None:
         return False
 
-    with stores.npc_profile() as store:
-        for before in journal.profile_before_images:
-            if before.profile is None:
-                store.delete_by_id(before.npc_id)
-            else:
-                store.upsert(before.profile)
+    npc_store = uow.npc_profile
+    for before in journal.profile_before_images:
+        if before.profile is None:
+            npc_store.delete_by_id(before.npc_id)
+        else:
+            npc_store.upsert(before.profile)
 
-    with stores.director_event() as store:
-        for before in journal.event_before_images:
-            store.restore_snapshot(before.event)
-        for event_id in reversed(journal.new_event_ids):
-            store.delete_by_id(event_id)
+    event_store = uow.director_event
+    for before in journal.event_before_images:
+        event_store.restore_snapshot(before.event)
+    for event_id in reversed(journal.new_event_ids):
+        event_store.delete_by_id(event_id)
 
-    with stores.director_npc() as store:
-        for npc_id in reversed(journal.new_npc_ids):
-            store.delete_by_id(npc_id)
+    npc_draft_store = uow.director_npc
+    for npc_id in reversed(journal.new_npc_ids):
+        npc_draft_store.delete_by_id(npc_id)
 
-    with stores.world_setting() as store:
-        for setting_id in reversed(journal.new_setting_ids):
-            store.delete_by_id(setting_id)
+    setting_store = uow.world_setting
+    for setting_id in reversed(journal.new_setting_ids):
+        setting_store.delete_by_id(setting_id)
 
     journal_store.clear()
     return True
@@ -155,7 +155,7 @@ def recover_pending_director_mutation(stores) -> bool:
 
 def commit_director_mutations(
     plan: DirectorPendingMutationPlan,
-    stores,
+    uow,
 ) -> None:
     """Persist one Director batch with durable cross-database rollback data.
 
@@ -169,49 +169,49 @@ def commit_director_mutations(
     events = plan.events
     profile_upserts = plan.profile_upserts
     actor_bindings = plan.actor_bindings
-    recover_pending_director_mutation(stores)
+    recover_pending_director_mutation(uow)
 
-    with stores.world_setting() as store:
-        if any(store.get_by_id(item.setting_id) for item in settings):
-            raise RuntimeError("Director commit would overwrite an existing Setting")
-    with stores.director_npc() as store:
-        if any(store.get_by_id(item.draft_id) for item in npc_drafts):
-            raise RuntimeError("Director commit would overwrite an existing NPC draft")
-    with stores.director_event() as store:
-        if any(store.get_by_id(item.event_id) for item in events):
-            raise RuntimeError("Director commit would overwrite an existing Event")
-        event_before = []
-        seen_event_ids: set[str] = set()
-        for binding in actor_bindings:
-            if binding.event_id in seen_event_ids:
-                continue
-            existing = store.get_by_id(binding.event_id)
-            if existing is None:
-                raise ValueError("actor binding references an unknown DirectorEvent")
-            seen_event_ids.add(binding.event_id)
-            event_before.append(
-                DirectorEventBeforeImage(
-                    event_id=binding.event_id,
-                    event=existing,
-                )
+    world_setting_store = uow.world_setting
+    if any(world_setting_store.get_by_id(item.setting_id) for item in settings):
+        raise RuntimeError("Director commit would overwrite an existing Setting")
+    director_npc_store = uow.director_npc
+    if any(director_npc_store.get_by_id(item.draft_id) for item in npc_drafts):
+        raise RuntimeError("Director commit would overwrite an existing NPC draft")
+    director_event_store = uow.director_event
+    if any(director_event_store.get_by_id(item.event_id) for item in events):
+        raise RuntimeError("Director commit would overwrite an existing Event")
+    event_before = []
+    seen_event_ids: set[str] = set()
+    for binding in actor_bindings:
+        if binding.event_id in seen_event_ids:
+            continue
+        existing = director_event_store.get_by_id(binding.event_id)
+        if existing is None:
+            raise ValueError("actor binding references an unknown DirectorEvent")
+        seen_event_ids.add(binding.event_id)
+        event_before.append(
+            DirectorEventBeforeImage(
+                event_id=binding.event_id,
+                event=existing,
             )
+        )
 
-    with stores.npc_profile() as store:
-        profile_before = []
-        seen_profile_ids: set[str] = set()
-        for profile in profile_upserts:
-            if profile.npc_id in seen_profile_ids:
-                continue
-            seen_profile_ids.add(profile.npc_id)
-            profile_before.append(
-                DirectorProfileBeforeImage(
-                    npc_id=profile.npc_id,
-                    profile=store.get_by_id(profile.npc_id),
-                )
+    npc_profile_store = uow.npc_profile
+    profile_before = []
+    seen_profile_ids: set[str] = set()
+    for profile in profile_upserts:
+        if profile.npc_id in seen_profile_ids:
+            continue
+        seen_profile_ids.add(profile.npc_id)
+        profile_before.append(
+            DirectorProfileBeforeImage(
+                npc_id=profile.npc_id,
+                profile=npc_profile_store.get_by_id(profile.npc_id),
             )
+        )
 
     journal_store = DirectorMutationJournalStore(
-        stores.paths.director_mutation_journal
+        uow.paths.director_mutation_journal
     )
     journal_store.save(
         DirectorMutationJournal(
@@ -225,31 +225,31 @@ def commit_director_mutations(
 
     try:
         if settings:
-            with stores.world_setting() as store:
-                for setting in settings:
-                    store.save(setting)
+            store = uow.world_setting
+            for setting in settings:
+                store.save(setting)
         if npc_drafts:
-            with stores.director_npc() as store:
-                for draft in npc_drafts:
-                    store.save(draft)
+            store = uow.director_npc
+            for draft in npc_drafts:
+                store.save(draft)
         if events:
-            with stores.director_event() as store:
-                for event in events:
-                    store.save(event)
+            store = uow.director_event
+            for event in events:
+                store.save(event)
         if profile_upserts:
-            with stores.npc_profile() as store:
-                for profile in profile_upserts:
-                    store.upsert(profile)
+            store = uow.npc_profile
+            for profile in profile_upserts:
+                store.upsert(profile)
         if actor_bindings:
-            with stores.director_event() as store:
-                for binding in actor_bindings:
-                    store.bind_actor(
-                        binding.event_id,
-                        actor_name=binding.actor_name,
-                        actor_ref=binding.actor_ref,
-                        turn_index=binding.turn_index,
-                    )
+            store = uow.director_event
+            for binding in actor_bindings:
+                store.bind_actor(
+                    binding.event_id,
+                    actor_name=binding.actor_name,
+                    actor_ref=binding.actor_ref,
+                    turn_index=binding.turn_index,
+                )
         journal_store.clear()
     except BaseException:
-        recover_pending_director_mutation(stores)
+        recover_pending_director_mutation(uow)
         raise

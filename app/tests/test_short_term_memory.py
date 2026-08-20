@@ -1,3 +1,4 @@
+from app.runtime.stores import open_short_term_store
 import tempfile
 
 import pytest
@@ -37,7 +38,7 @@ def _player_resolution() -> PlayerTurnResolution:
 
 class TestShortTermMemoryStore:
     def test_add_and_get_recent(self):
-        store = ShortTermMemoryStore(max_items=5)
+        store = open_short_term_store(max_items=5)
         store.add_turn(
             "s1", 1, "观察四周", "第一段剧情", "接下来做什么？",
             action_preview=_action_preview(),
@@ -84,7 +85,7 @@ class TestShortTermMemoryStore:
         assert memory.max_items == 5
 
     def test_evicts_oldest_when_exceeded(self):
-        store = ShortTermMemoryStore(max_items=3)
+        store = open_short_term_store(max_items=3)
         for i in range(1, 6):
             store.add_turn(f"s{i}", i, "action", f"第{i}段剧情")
 
@@ -98,7 +99,7 @@ class TestShortTermMemoryStore:
         assert [s.scene_id for s in all_scenes] == ["s1", "s2", "s3", "s4", "s5"]
 
     def test_custom_max_items(self):
-        store = ShortTermMemoryStore(max_items=2)
+        store = open_short_term_store(max_items=2)
         store.add_turn("s1", 1, "action", "剧情1")
         store.add_turn("s2", 2, "action", "剧情2")
         store.add_turn("s3", 3, "action", "剧情3")
@@ -111,7 +112,7 @@ class TestShortTermMemoryStore:
         assert len(all_scenes) == 3
 
     def test_list_page_uses_exclusive_turn_cursor(self):
-        store = ShortTermMemoryStore(max_items=2)
+        store = open_short_term_store(max_items=2)
         for i in range(1, 13):
             store.add_turn(f"s{i}", i, "action", f"剧情{i}")
 
@@ -128,7 +129,7 @@ class TestShortTermMemoryStore:
         assert has_more is False
 
     def test_list_navigation_entries_returns_only_ordered_index_fields(self):
-        store = ShortTermMemoryStore(max_items=2)
+        store = open_short_term_store(max_items=2)
         store.add_turn("s2", 2, "第二个行动", "不应进入导航的正文")
         store.add_turn("s1", 1, "第一个行动", "同样不应进入导航的正文")
 
@@ -138,13 +139,13 @@ class TestShortTermMemoryStore:
         ]
 
     def test_empty_store_returns_empty(self):
-        store = ShortTermMemoryStore()
+        store = open_short_term_store()
         memory = store.get_recent()
         assert memory.recent_scenes == []
         assert memory.max_items == 5
 
     def test_clear_removes_existing_scenes(self):
-        store = ShortTermMemoryStore(max_items=5)
+        store = open_short_term_store(max_items=5)
         store.add_turn("s1", 1, "观察四周", "第一段剧情")
         store.add_turn("s2", 2, "继续前进", "第二段剧情")
 
@@ -154,7 +155,7 @@ class TestShortTermMemoryStore:
         assert store.list_all() == []
 
     def test_scenes_returns_in_order(self):
-        store = ShortTermMemoryStore(max_items=3)
+        store = open_short_term_store(max_items=3)
         store.add_turn("s1", 1, "action", "剧情1")
         store.add_turn("s2", 2, "action", "剧情2")
 
@@ -165,7 +166,7 @@ class TestShortTermMemoryStore:
 
     def test_invalid_max_items_rejected(self):
         with pytest.raises(ValueError):
-            ShortTermMemoryStore(max_items=0)
+            open_short_term_store(max_items=0)
 
 
 class TestShortTermMemoryModel:
@@ -196,7 +197,7 @@ class TestShortTermMemoryPersistence:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        store1 = ShortTermMemoryStore(db_path=db_path)
+        store1 = open_short_term_store(db_path=db_path)
         store1.add_turn("s1", 1, "探索酒馆", "主角环顾四周。")
         store1.add_turn(
             "s2",
@@ -209,7 +210,7 @@ class TestShortTermMemoryPersistence:
         )
         store1.close()
 
-        store2 = ShortTermMemoryStore(db_path=db_path)
+        store2 = open_short_term_store(db_path=db_path)
         memory = store2.get_recent()
         store2.close()
 
@@ -256,7 +257,7 @@ class TestShortTermMemoryPersistence:
         con.commit()
         con.close()
 
-        store = ShortTermMemoryStore(db_path=db_path)
+        store = open_short_term_store(db_path=db_path)
         memory = store.get_recent()
         store.add_turn("s2", 2, "继续", "新剧情")
         updated = store.get_recent()
@@ -274,12 +275,12 @@ class TestShortTermMemoryPersistence:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        store = ShortTermMemoryStore(db_path=db_path, max_items=3)
+        store = open_short_term_store(db_path=db_path, max_items=3)
         for i in range(1, 6):
             store.add_turn(f"s{i}", i, "action", f"剧情{i}")
         store.close()
 
-        store2 = ShortTermMemoryStore(db_path=db_path, max_items=3)
+        store2 = open_short_term_store(db_path=db_path, max_items=3)
         memory = store2.get_recent()
         all_scenes = store2.list_all()
         store2.close()
@@ -297,7 +298,7 @@ class TestShortTermMemoryPersistence:
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        store = ShortTermMemoryStore(db_path=db_path)
+        store = open_short_term_store(db_path=db_path)
         memory = store.get_recent()
         store.close()
 
@@ -309,7 +310,7 @@ class TestShortTermMemoryPersistence:
 
 class TestListAll:
     def test_list_all_returns_all_in_order(self):
-        store = ShortTermMemoryStore(max_items=2)
+        store = open_short_term_store(max_items=2)
         for i in range(1, 8):
             store.add_turn(f"s{i}", i, f"action{i}", f"剧情{i}")
 
@@ -322,11 +323,11 @@ class TestListAll:
         assert [s.scene_id for s in memory.recent_scenes] == ["s6", "s7"]
 
     def test_list_all_empty_store(self):
-        store = ShortTermMemoryStore()
+        store = open_short_term_store()
         assert store.list_all() == []
 
     def test_list_all_returns_short_term_scene_objects(self):
-        store = ShortTermMemoryStore(max_items=5)
+        store = open_short_term_store(max_items=5)
         store.add_turn("s1", 1, "观察", "剧情")
 
         all_scenes = store.list_all()

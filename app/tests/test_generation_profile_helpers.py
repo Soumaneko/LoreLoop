@@ -1,3 +1,4 @@
+from app.runtime.stores import open_npc_profile_store
 import pytest
 
 from app.domain.context_facts.schemas import ContextFact, ContextFactSet
@@ -13,9 +14,8 @@ from app.domain.npc_profile.selection import (
 
 
 def _profile_store(tmp_path, profiles):
-    from app.domain.npc_profile.store import NPCProfileStore
 
-    store = NPCProfileStore(str(tmp_path / "npcs.db"))
+    store = open_npc_profile_store(str(tmp_path / "npcs.db"))
     for profile in profiles:
         store.upsert(profile)
     return store

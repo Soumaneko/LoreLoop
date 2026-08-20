@@ -1,3 +1,4 @@
+from app.runtime.stores import open_current_state_store
 import json
 import sqlite3
 
@@ -162,7 +163,7 @@ class TestCurrentState:
 
     def test_store_migration_persistently_removes_legacy_conditions(self, tmp_path):
         db_path = tmp_path / "current_state.db"
-        with CurrentStateStore(db_path):
+        with open_current_state_store(db_path):
             pass
         legacy_state = {
             "scene": {
@@ -209,7 +210,7 @@ class TestCurrentState:
         connection.commit()
         connection.close()
 
-        with CurrentStateStore(db_path) as store:
+        with open_current_state_store(db_path) as store:
             state = store.load()
 
         persisted = sqlite3.connect(db_path).execute(

@@ -1,70 +1,106 @@
-from dataclasses import dataclass
+from __future__ import annotations
 
-from app.domain.core_memory import CoreMemoryStore
-from app.domain.continuity import ContinuityStore
-from app.domain.current_state import CurrentStateStore
+import sqlite3
+from pathlib import Path
+
+from app.domain.confirmed_history.store import ConfirmedHistoryStore
+from app.domain.continuity.store import ContinuityStore
+from app.domain.core_memory.store import CoreMemoryStore
+from app.domain.current_state.store import CurrentStateStore
+from app.domain.director.log_store import RecentDirectorLogStore
 from app.domain.director_event.store import DirectorEventStore
 from app.domain.director_npc.store import DirectorNPCStore
-from app.domain.director.log_store import RecentDirectorLogStore
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.store import SceneSummaryStore
-from app.domain.short_term_memory import ShortTermMemoryStore
-from app.domain.confirmed_history import ConfirmedHistoryStore
-from app.domain.world_setting import WorldSettingStore
-
-from .paths import CampaignPaths
+from app.domain.short_term_memory.schemas import ShortTermMemoryStore
+from app.domain.world_setting.store import WorldSettingStore
+from app.runtime.sqlite import connect_sqlite
 
 
-@dataclass(frozen=True)
-class StoreBundle:
-    """Store factory collection scoped to one campaign data directory."""
+def _resolve_conn(
+    db_path: str | Path | sqlite3.Connection,
+) -> tuple[sqlite3.Connection, bool]:
+    """Return ``(conn, owns)``.
 
-    paths: CampaignPaths
+    When given a path (including ``:memory:``) the factory creates and owns the
+    connection, so ``close()`` on the returned store closes it. When given an
+    existing connection, ownership stays with the caller (e.g. a test sharing a
+    connection or the Unit of Work), so ``close()`` is a no-op.
+    """
+    if isinstance(db_path, sqlite3.Connection):
+        return db_path, False
+    return connect_sqlite(db_path), True
 
-    def _ensure_data_dir(self) -> None:
-        self.paths.data_dir.mkdir(parents=True, exist_ok=True)
 
-    def current_state(self) -> CurrentStateStore:
-        self._ensure_data_dir()
-        return CurrentStateStore(str(self.paths.state_db))
+def open_current_state_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> CurrentStateStore:
+    conn, owns = _resolve_conn(db_path)
+    return CurrentStateStore(conn, owns_connection=owns)
 
-    def continuity(self) -> ContinuityStore:
-        self._ensure_data_dir()
-        return ContinuityStore(str(self.paths.continuity_db))
 
-    def short_term(self) -> ShortTermMemoryStore:
-        self._ensure_data_dir()
-        return ShortTermMemoryStore(str(self.paths.short_term_db), max_items=5)
+def open_continuity_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> ContinuityStore:
+    conn, owns = _resolve_conn(db_path)
+    return ContinuityStore(conn, owns_connection=owns)
 
-    def scene_summary(self) -> SceneSummaryStore:
-        self._ensure_data_dir()
-        return SceneSummaryStore(str(self.paths.scene_summary_db))
 
-    def confirmed_history(self) -> ConfirmedHistoryStore:
-        self._ensure_data_dir()
-        return ConfirmedHistoryStore(str(self.paths.confirmed_history_db))
+def open_short_term_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:", *, max_items: int = 5
+) -> ShortTermMemoryStore:
+    conn, owns = _resolve_conn(db_path)
+    return ShortTermMemoryStore(conn, owns_connection=owns, max_items=max_items)
 
-    def npc_profile(self) -> NPCProfileStore:
-        self._ensure_data_dir()
-        return NPCProfileStore(str(self.paths.npc_profile_db))
 
-    def core_memory(self) -> CoreMemoryStore:
-        self._ensure_data_dir()
-        return CoreMemoryStore(self.paths.core_memory_json)
+def open_scene_summary_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> SceneSummaryStore:
+    conn, owns = _resolve_conn(db_path)
+    return SceneSummaryStore(conn, owns_connection=owns)
 
-    def director_event(self) -> DirectorEventStore:
-        self._ensure_data_dir()
-        return DirectorEventStore(str(self.paths.director_event_db))
 
-    def director_npc(self) -> DirectorNPCStore:
-        self._ensure_data_dir()
-        return DirectorNPCStore(str(self.paths.director_npc_db))
+def open_confirmed_history_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> ConfirmedHistoryStore:
+    conn, owns = _resolve_conn(db_path)
+    return ConfirmedHistoryStore(conn, owns_connection=owns)
 
-    def director_log(self) -> RecentDirectorLogStore:
-        self._ensure_data_dir()
-        return RecentDirectorLogStore(str(self.paths.director_log_db))
 
-    def world_setting(self) -> WorldSettingStore:
-        self._ensure_data_dir()
-        return WorldSettingStore(str(self.paths.world_setting_db))
-from dataclasses import dataclass
+def open_npc_profile_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> NPCProfileStore:
+    conn, owns = _resolve_conn(db_path)
+    return NPCProfileStore(conn, owns_connection=owns)
+
+
+def open_director_event_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> DirectorEventStore:
+    conn, owns = _resolve_conn(db_path)
+    return DirectorEventStore(conn, owns_connection=owns)
+
+
+def open_director_npc_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> DirectorNPCStore:
+    conn, owns = _resolve_conn(db_path)
+    return DirectorNPCStore(conn, owns_connection=owns)
+
+
+def open_director_log_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> RecentDirectorLogStore:
+    conn, owns = _resolve_conn(db_path)
+    return RecentDirectorLogStore(conn, owns_connection=owns)
+
+
+def open_world_setting_store(
+    db_path: str | Path | sqlite3.Connection = ":memory:",
+) -> WorldSettingStore:
+    conn, owns = _resolve_conn(db_path)
+    return WorldSettingStore(conn, owns_connection=owns)
+
+
+def open_core_memory_store(path: str | Path) -> CoreMemoryStore:
+    return CoreMemoryStore(path)

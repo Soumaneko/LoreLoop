@@ -1,3 +1,4 @@
+from app.runtime.stores import open_npc_profile_store
 import json
 from dataclasses import asdict
 
@@ -23,7 +24,6 @@ from app.domain.npc_profile.change_admission import admit_npc_batch_update
 from app.domain.npc_profile.changes import AcceptedNPCAliasChange, NPCBatchCoverage
 from app.domain.npc_profile.identity_resolver import ResolvedNpc
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.turn_contract import (
     NPCBatchUpdate,
     NPCBatchUpdateDisplay,
@@ -385,7 +385,7 @@ def test_store_rejects_mutated_invalid_profile_before_write():
     profile = _profile(personality_trait="稳重")
     profile.personality_trait = "过" * 41
 
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         with pytest.raises(ValidationError, match="personality_trait"):
             store.upsert(profile)
         assert store.get_by_id(profile.npc_id) is None
@@ -431,7 +431,7 @@ def test_alias_change_carries_evidence():
         )
     ]
     response = {"updates": [{"npc_id": "npc_001"}]}
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
@@ -461,7 +461,7 @@ def test_alias_change_carries_paragraph_only_evidence():
         )
     ]
     response = {"updates": [{"npc_id": "npc_001"}]}
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
@@ -626,7 +626,7 @@ def test_workflow_loose_envelope_applies_valid_and_drops_invalid():
             {"bogus": True},
         ]
     }
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
@@ -660,7 +660,7 @@ def test_workflow_rejects_trait_update_and_keeps_role_change():
             ],
         }],
     }
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile(personality_trait=original_trait))
 
         result = apply_npc_batch_update(
@@ -785,7 +785,7 @@ def test_workflow_resolves_and_applies_to_store():
             }
         ]
     })
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile(aliases=["沈二"]))
         result = apply_npc_batch_update(
             npc_store=store,
@@ -815,7 +815,7 @@ def test_workflow_is_deterministic():
     response = {"updates": [{"npc_id": "npc_001"}]}
 
     def run_once():
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             store.upsert(_profile())
             return apply_npc_batch_update(
                 npc_store=store,
@@ -844,7 +844,7 @@ def test_mentioned_only_npc_excluded_from_batch_and_field_output():
             }
         ]
     }
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         gateway = StubGateway(response)  # type: ignore[arg-type]
         result = apply_npc_batch_update(
@@ -877,7 +877,7 @@ def test_mentioned_only_alias_still_admitted():
         )
     ]
     response = {"updates": []}
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
@@ -904,7 +904,7 @@ def test_scan_union_records_mention_hit_but_never_enters_batch():
             }
         ]
     }
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         gateway = StubGateway(response)  # type: ignore[arg-type]
         result = apply_npc_batch_update(
@@ -1296,7 +1296,7 @@ def test_workflow_provider_failure_propagates():
     ]
     mock = MockLLM()
     mock.set_fail_provider(True)
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         with pytest.raises(LLMProviderError):
             apply_npc_batch_update(
@@ -1453,7 +1453,7 @@ def test_scene_summary_full_pipeline_records_field_log_and_consistent_snapshot()
             "stable_changes": [],
         }],
     }
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,

@@ -1,3 +1,4 @@
+from app.runtime.stores import open_npc_profile_store
 import json
 import sqlite3
 
@@ -93,7 +94,7 @@ def _record(
 
 def test_record_rejects_change_that_does_not_match_committed_snapshot():
     document = _document()
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
 
         with pytest.raises(ValueError, match="committed profile snapshot"):
@@ -110,7 +111,7 @@ def test_record_rejects_change_that_does_not_match_committed_snapshot():
 
 def test_fresh_store_creates_v9_field_history_schema(tmp_path):
     db_path = tmp_path / "npcs.db"
-    with NPCProfileStore(str(db_path)):
+    with open_npc_profile_store(str(db_path)):
         pass
 
     connection = sqlite3.connect(db_path)
@@ -172,7 +173,7 @@ def test_v6_migration_is_additive_and_preserves_profile_json(tmp_path):
     connection.commit()
     connection.close()
 
-    with NPCProfileStore(str(db_path)) as store:
+    with open_npc_profile_store(str(db_path)) as store:
         assert store.get_by_id(profile.npc_id) is not None
 
     connection = sqlite3.connect(db_path)
@@ -296,7 +297,7 @@ def test_v7_migration_role_fallback_from_legacy_public_summary(tmp_path):
         ],
     )
 
-    with NPCProfileStore(str(db_path)) as store:
+    with open_npc_profile_store(str(db_path)) as store:
         fallback = store.get_by_id("npc-a")
         assert fallback is not None
         assert fallback.role == "北门巡检，刚正不阿。"
@@ -333,7 +334,7 @@ def test_v7_migration_whitespace_role_triggers_public_summary_fallback(tmp_path)
         ],
     )
 
-    with NPCProfileStore(str(db_path)) as store:
+    with open_npc_profile_store(str(db_path)) as store:
         profile = store.get_by_id("npc-a")
         assert profile is not None
         assert profile.role == "北门巡检。"
@@ -356,7 +357,7 @@ def test_v7_migration_fails_closed_on_orphaned_field_history_rows(tmp_path):
     connection.close()
 
     with pytest.raises(RuntimeError, match="orphaned field-history rows"):
-        NPCProfileStore(str(db_path))
+        open_npc_profile_store(str(db_path))
 
     connection = sqlite3.connect(db_path)
     version = connection.execute(
@@ -396,7 +397,7 @@ def test_v7_migration_preserves_legacy_public_summary_logs_as_readonly_audit(
     connection.commit()
     connection.close()
 
-    with NPCProfileStore(str(db_path)) as store:
+    with open_npc_profile_store(str(db_path)) as store:
         logs = store.list_field_change_logs()
         assert len(logs) == 1
         assert logs[0].field_name == "public_summary"
@@ -431,7 +432,7 @@ def test_v9_migration_keeps_legacy_role_log_without_change_basis_readable(tmp_pa
     connection.commit()
     connection.close()
 
-    with NPCProfileStore(str(db_path)) as store:
+    with open_npc_profile_store(str(db_path)) as store:
         logs = store.list_field_change_logs()
         assert len(logs) == 1
         assert logs[0].field_name == "role"
@@ -448,7 +449,7 @@ def test_v8_logs_accept_last_scene_summary_and_reject_legacy_public_summary_writ
         db_path,
         rows=[("npc-a", "顾青", {"role": "北门巡检"})],
     )
-    with NPCProfileStore(str(db_path)) as store:
+    with open_npc_profile_store(str(db_path)) as store:
         profile = store.get_by_id("npc-a")
         assert profile is not None
         profile.last_scene_summary = "她当众接任北门巡检。"
@@ -484,7 +485,7 @@ def test_v8_logs_accept_last_scene_summary_and_reject_legacy_public_summary_writ
 
 def test_store_rejects_last_scene_summary_turn_mismatch():
     document = _document(turn_index=3)
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         profile = _profile()
         profile.last_scene_summary = "她当众接任北门巡检。"
         profile.last_scene_turn = 2
@@ -539,7 +540,7 @@ def test_failed_v6_migration_rolls_back_version_and_new_tables(tmp_path):
     connection.close()
 
     with pytest.raises((RuntimeError, sqlite3.OperationalError)):
-        NPCProfileStore(str(db_path))
+        open_npc_profile_store(str(db_path))
 
     connection = sqlite3.connect(db_path)
     version = connection.execute(
@@ -566,7 +567,7 @@ def test_record_round_trip_preserves_exact_values_position_and_hash():
         basis="长值仍需短 basis",
     )
 
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         result = _record(store, [change], [second, first])
         reverse = store.field_change_logs_for_evidence([second.document_id])
@@ -614,7 +615,7 @@ def test_all_bridgeable_scalar_fields_round_trip(
         turn_index=3,
         source="proposal",
     )
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         result = _record(store, [change], [document])
 
@@ -642,7 +643,7 @@ def test_only_proposal_stable_scalar_changes_are_recorded():
         turn_index=3,
     )
 
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         result = _record(
             store,
@@ -711,7 +712,7 @@ def test_batch_hash_is_document_order_independent_but_change_order_sensitive():
     ],
 )
 def test_pointer_validation_rejects_whole_batch(documents, match):
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         with pytest.raises(ValueError, match=match):
             _record(store, [_role_change()], documents)
@@ -804,7 +805,7 @@ def test_duplicate_node_or_evidence_rejects_whole_batch():
     duplicate_evidence = _role_change(
         evidence_ids=(document.document_id, document.document_id),
     )
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         with pytest.raises(ValueError, match="duplicate evidence"):
             _record(store, [duplicate_evidence], [document])
@@ -815,7 +816,7 @@ def test_duplicate_node_or_evidence_rejects_whole_batch():
 
 def test_unknown_profile_rejects_before_resetting_existing_history():
     document = _document()
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         original = _record(store, [_role_change()], [document])
         unknown = _role_change("客卿", npc_id="missing")
@@ -829,7 +830,7 @@ def test_unknown_profile_rejects_before_resetting_existing_history():
 
 def test_same_replay_is_noop_and_different_replay_fails_closed():
     document = _document()
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         first = _record(store, [_role_change()], [document])
         replay = _record(store, [_role_change()], [document])
@@ -843,7 +844,7 @@ def test_same_replay_is_noop_and_different_replay_fails_closed():
 
 def test_different_batch_reset_replaces_same_turn_atomically():
     document = _document()
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         first = _record(store, [_role_change()], [document])
         replacement = _record(
@@ -863,7 +864,7 @@ def test_different_batch_reset_replaces_same_turn_atomically():
 
 def test_reset_rolls_back_old_batch_when_insert_fails(monkeypatch):
     document = _document()
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         first = _record(store, [_role_change()], [document])
         original_insert = store._insert_prepared_field_batch
@@ -904,7 +905,7 @@ def test_reset_atomically_replaces_old_turns_and_marker_gap_retry_is_noop():
         evidence_ids=(turn_four.document_id,),
         turn_index=4,
     )
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         _record(store, [_role_change()], [turn_three])
         second = _record(
@@ -944,7 +945,7 @@ def test_reset_atomically_replaces_old_turns_and_marker_gap_retry_is_noop():
 
 def test_profile_delete_invalidates_whole_affected_turn_batch():
     document = _document()
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         store.upsert(_profile("npc-b", "陆衡"))
         other = AcceptedNPCScalarChange(
@@ -973,7 +974,7 @@ def test_profile_delete_invalidates_whole_affected_turn_batch():
 
 def test_clear_field_history_keeps_profiles():
     document = _document()
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
         _record(store, [_role_change()], [document])
         store.clear_field_change_history()
@@ -1011,7 +1012,7 @@ def test_newer_or_unknown_version_is_rejected_without_creating_v7_tables(tmp_pat
     connection.close()
 
     with pytest.raises(RuntimeError, match="expected 9, got 10"):
-        NPCProfileStore(str(db_path))
+        open_npc_profile_store(str(db_path))
 
     connection = sqlite3.connect(db_path)
     table = connection.execute(
@@ -1063,4 +1064,4 @@ def test_claimed_v8_without_required_constraints_is_rejected(tmp_path):
     connection.close()
 
     with pytest.raises(RuntimeError, match="field-history contract"):
-        NPCProfileStore(str(db_path))
+        open_npc_profile_store(str(db_path))

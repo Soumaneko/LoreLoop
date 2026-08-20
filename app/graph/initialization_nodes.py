@@ -55,7 +55,7 @@ def opening_foundation_node(
         money=foundation.initial_resources.money,
         fixed_assets=foundation.initial_resources.fixed_assets,
     )
-    with state["runtime_services"].stores.current_state() as state_store:
+    with state["runtime_services"].stores.current_state as state_store:
         state_store.save(current_state)
     return {
         "initialization_record": record,
@@ -86,7 +86,7 @@ def opening_scene_node(state: InitializationState) -> InitializationState:
 
 def opening_setting_node(state: InitializationState) -> InitializationState:
     runtime = get_campaign_runtime()
-    with state["runtime_services"].stores.world_setting() as store:
+    with state["runtime_services"].stores.world_setting as store:
         existing = store.list_all()
     if existing:
         return {
@@ -125,7 +125,7 @@ def opening_setting_node(state: InitializationState) -> InitializationState:
     if len({setting.name for setting in settings}) != len(settings):
         raise RuntimeError("opening settings must have unique names")
 
-    with state["runtime_services"].stores.world_setting() as store:
+    with state["runtime_services"].stores.world_setting as store:
         store.save_many(settings)
     return {
         "opening_settings": settings,

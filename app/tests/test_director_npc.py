@@ -1,3 +1,4 @@
+from app.runtime.stores import open_director_npc_store
 import sqlite3
 
 import pytest
@@ -144,7 +145,7 @@ def test_known_ability_rejects_unknown_fields():
 
 
 def test_store_uses_prepared_introduced_retired_lifecycle():
-    store = DirectorNPCStore()
+    store = open_director_npc_store()
     draft = _draft()
     store.save(draft)
 
@@ -181,7 +182,7 @@ def test_store_rejects_dispatch_schema_instead_of_migrating_it(tmp_path):
     conn.close()
 
     try:
-        DirectorNPCStore(str(db_path))
+        open_director_npc_store(str(db_path))
     except RuntimeError as exc:
         assert "current Director Agent contract" in str(exc)
     else:

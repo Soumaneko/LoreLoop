@@ -279,7 +279,7 @@ def test_canon_query_node_uses_one_full_catalog_for_llm_and_retrieval(monkeypatc
     monkeypatch.setattr(
         generation_nodes,
         "_store_factory",
-        lambda _state, name: lambda: stores[name],
+        lambda _state, name: stores[name],
     )
     monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
     monkeypatch.setattr(generation_nodes, "build_entity_catalog", _build_catalog)
@@ -885,17 +885,17 @@ def test_director_agent_stage_node_passes_select_plus_context_fact_plus_event_pr
     from app.domain.npc_profile.schemas import NPCProfile
     from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
-    from app.runtime.stores import StoreBundle
+    from app.runtime.uow import CampaignUnitOfWork
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     base = NPCProfile(name="码头常客")
     fact_hit = NPCProfile(name="柴行简")
     unrelated = NPCProfile(name="无关路人")
     event_hit = NPCProfile(name="林澈")
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         for profile in (base, fact_hit, unrelated, event_hit):
             store.upsert(profile)
-    with stores.director_event() as event_store:
+    with stores.director_event as event_store:
         event_store.save(DirectorEvent(
             role="arc",
             title="商路封锁",
@@ -985,17 +985,17 @@ def test_compose_narrative_uses_select_plus_context_fact_profiles_only(
     from app.domain.npc_profile.schemas import NPCProfile
     from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
-    from app.runtime.stores import StoreBundle
+    from app.runtime.uow import CampaignUnitOfWork
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     base = NPCProfile(name="码头常客")
     fact_hit = NPCProfile(name="柴行简")
     unrelated = NPCProfile(name="无关路人")
     event_hit = NPCProfile(name="林澈")
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         for profile in (base, fact_hit, unrelated, event_hit):
             store.upsert(profile)
-    with stores.director_event() as event_store:
+    with stores.director_event as event_store:
         event_store.save(DirectorEvent(
             role="arc",
             title="商路封锁",
@@ -1104,9 +1104,9 @@ def test_extract_context_facts_propagates_npc_selection_failure(
         SceneState,
     )
     from app.runtime.paths import CampaignPaths
-    from app.runtime.stores import StoreBundle
+    from app.runtime.uow import CampaignUnitOfWork
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     captured = {}
 
     class _FakeContextFactsService:
@@ -1190,15 +1190,15 @@ def test_director_agent_stage_node_keeps_event_actors_when_action_saturates(
     from app.domain.npc_profile.schemas import NPCProfile
     from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
-    from app.runtime.stores import StoreBundle
+    from app.runtime.uow import CampaignUnitOfWork
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     action_profiles = [NPCProfile(name=f"在场人物{i}") for i in range(20)]
     event_hit = NPCProfile(name="事件演员")
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         for profile in (*action_profiles, event_hit):
             store.upsert(profile)
-    with stores.director_event() as event_store:
+    with stores.director_event as event_store:
         event_store.save(DirectorEvent(
             role="arc",
             title="商路封锁",
@@ -1278,9 +1278,9 @@ def test_composer_npc_profiles_respect_disclosure_levels(
     from app.domain.npc_profile.schemas import NPCProfile
     from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
-    from app.runtime.stores import StoreBundle
+    from app.runtime.uow import CampaignUnitOfWork
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     remote_npc = NPCProfile(
         name="林澈",
         role="社区医生",
@@ -1295,7 +1295,7 @@ def test_composer_npc_profiles_respect_disclosure_levels(
         hidden_secret="暗中资助商会。",
         disclosure_level="intimate",
     )
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         store.upsert(remote_npc)
         store.upsert(intimate_npc)
 
@@ -1370,9 +1370,9 @@ def test_context_facts_npc_profiles_respect_disclosure_levels(
     )
     from app.domain.npc_profile.schemas import NPCProfile
     from app.runtime.paths import CampaignPaths
-    from app.runtime.stores import StoreBundle
+    from app.runtime.uow import CampaignUnitOfWork
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     remote_npc = NPCProfile(
         name="林澈",
         role="社区医生",
@@ -1380,7 +1380,7 @@ def test_context_facts_npc_profiles_respect_disclosure_levels(
         hidden_secret="曾目击一宗未结案件。",
         disclosure_level="remote",
     )
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         store.upsert(remote_npc)
 
     captured = {}
@@ -1459,10 +1459,10 @@ def test_composer_receives_engaged_events_only_via_intrude(
     from app.domain.npc_profile.schemas import NPCProfile
     from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
-    from app.runtime.stores import StoreBundle
+    from app.runtime.uow import CampaignUnitOfWork
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         store.upsert(NPCProfile(name="码头常客"))
     engaged = DirectorEvent(
         role="arc",
@@ -1500,7 +1500,7 @@ def test_composer_receives_engaged_events_only_via_intrude(
         updated_turn=1,
         stage="hidden",
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         store.save(engaged)
         store.save(just_engaged_hidden)
         store.save(unrelated_hidden)
@@ -1618,10 +1618,10 @@ def test_composer_hides_newly_touched_events_without_intrude(
     from app.domain.npc_profile.schemas import NPCProfile
     from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
-    from app.runtime.stores import StoreBundle
+    from app.runtime.uow import CampaignUnitOfWork
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         store.upsert(NPCProfile(name="码头常客"))
 
     def _event(event_id: str, title: str) -> DirectorEvent:
@@ -1641,7 +1641,7 @@ def test_composer_hides_newly_touched_events_without_intrude(
     first = _event("director_event_touch_a", "夜路响动")
     second = _event("director_event_touch_b", "河面浮灯")
     unrelated = _event("director_event_touch_unrelated", "旧巷传闻")
-    with stores.director_event() as store:
+    with stores.director_event as store:
         store.save(first)
         store.save(second)
         store.save(unrelated)

@@ -55,7 +55,8 @@ from .generation_state import GenerationState
 
 
 def _store_factory(state: GenerationState, name: str):
-    return getattr(state["runtime_services"].stores, name)
+    value = getattr(state["runtime_services"].stores, name)
+    return value() if callable(value) else value
 
 
 def _diagnostics(state: GenerationState):
@@ -81,7 +82,7 @@ def _composition_output_state(
     ]
     # Context profiles were selected before composition. Re-select from the final
     # outline so newly planned entities are represented and NPCs use public views.
-    with _store_factory(state, "npc_profile")() as npc_store:
+    with _store_factory(state, "npc_profile") as npc_store:
         composer_npc_profiles = gather_npc_profiles_from_state_and_anchors(
             current_state=state["current_state"],
             anchors=anchors,
@@ -123,10 +124,10 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
 
     action_parse_result = state.get("action_parse_result")
     with (
-        _store_factory(state, "confirmed_history")() as history_store,
-        _store_factory(state, "continuity")() as continuity_store,
-        _store_factory(state, "world_setting")() as setting_store,
-        _store_factory(state, "npc_profile")() as npc_profile_store,
+        _store_factory(state, "confirmed_history") as history_store,
+        _store_factory(state, "continuity") as continuity_store,
+        _store_factory(state, "world_setting") as setting_store,
+        _store_factory(state, "npc_profile") as npc_profile_store,
     ):
         service = ContextFactsService(
             gateway_for(state),
@@ -172,7 +173,7 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
         extract_error = getattr(extractor, "last_error", None)
         extract_salvaged = bool(getattr(extractor, "last_salvaged", False))
 
-    with _store_factory(state, "npc_profile")() as npc_store:
+    with _store_factory(state, "npc_profile") as npc_store:
         context_fact_npc_profiles = select_profiles_by_context_facts(
             context_facts=result.context_facts,
             npc_store=npc_store,
@@ -213,7 +214,7 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
 
 def parse_action_node(state: GenerationState) -> GenerationState:
     parser = ActionParser(gateway_for(state))
-    with _store_factory(state, "director_event")() as event_store:
+    with _store_factory(state, "director_event") as event_store:
         hidden_events = event_store.list_hidden()
     action_result = parser.parse(
         user_input=state["user_input"],
@@ -452,8 +453,8 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
 
 def director_agent_stage_node(state: GenerationState) -> GenerationState:
     with (
-        _store_factory(state, "npc_profile")() as npc_store,
-        _store_factory(state, "director_event")() as event_store,
+        _store_factory(state, "npc_profile") as npc_store,
+        _store_factory(state, "director_event") as event_store,
     ):
         event_npc_profiles = select_profiles_by_active_events(
             events=event_store.list_active(),
@@ -615,7 +616,7 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
         state.get("context_fact_npc_profiles") or [],
     )
     touched_event_ids = set(state.get("touched_event_candidates", []))
-    with _store_factory(state, "director_event")() as event_store:
+    with _store_factory(state, "director_event") as event_store:
         engaged_events = [
             event
             for event in event_store.list_active()
@@ -713,7 +714,7 @@ def generate_canon_queries_node(state: GenerationState) -> GenerationState:
         "step": "canon_query_started",
         "data": {"trace_id": state["trace_id"]},
     })
-    with _store_factory(state, "npc_profile")() as npc_store:
+    with _store_factory(state, "npc_profile") as npc_store:
         npc_profiles = [
             profile.director_view()
             for profile in npc_store.list_all()
@@ -752,7 +753,7 @@ def generate_canon_queries_node(state: GenerationState) -> GenerationState:
 
 
 def retrieve_canon_evidence_node(state: GenerationState) -> GenerationState:
-    with _store_factory(state, "confirmed_history")() as history_store:
+    with _store_factory(state, "confirmed_history") as history_store:
         evidence_set = CanonEvidenceRetriever(
             history_store,
             state["canon_entity_catalog"],

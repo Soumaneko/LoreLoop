@@ -85,7 +85,7 @@ def seed_deadline_event(stores, *, stage="hidden"):
         turn_index=1,
         current_clock=WorldClock(day=1, phase="清晨"),
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(event)
         if stage == "engaged":
             store.set_stage(event_id, "engaged", turn_index=2)

@@ -5,7 +5,7 @@ from app.core.llm.errors import LLMOutputValidationError
 from app.domain.current_state import WorldClock
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
 from app.tests.factories.director import make_review_node_state
 
@@ -13,7 +13,7 @@ from app.tests.factories.director import make_review_node_state
 def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -38,7 +38,7 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
         turn_index=1,
         current_clock=WorldClock(),
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -58,7 +58,7 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
     node_state = make_review_node_state(stores, gateway)
     confirmation_nodes.director_event_review_node(node_state)
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "hidden"
@@ -80,7 +80,7 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
     node_state = make_review_node_state(stores, gateway)
     confirmation_nodes.director_event_review_node(node_state)
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "engaged"
@@ -92,7 +92,7 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
 def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -113,11 +113,11 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(decision={"reasoning": "无调度。", "requests": []})
-    with stores.director_event() as store:
+    with stores.director_event as store:
         node_state = {
             "write_db": False,
             "pipeline_input": SimpleNamespace(),
@@ -128,7 +128,7 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
 
         confirmation_nodes.director_agent_confirm_node(node_state)
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "hidden"
@@ -137,7 +137,7 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
 def test_hidden_review_engages_event(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -158,7 +158,7 @@ def test_hidden_review_engages_event(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -177,7 +177,7 @@ def test_hidden_review_engages_event(tmp_path):
 
     confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "engaged"
@@ -186,7 +186,7 @@ def test_hidden_review_engages_event(tmp_path):
 def test_engaged_review_resolves_event(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -207,7 +207,7 @@ def test_engaged_review_resolves_event(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
         store.set_stage(event_id, "engaged", turn_index=2)
 
@@ -227,7 +227,7 @@ def test_engaged_review_resolves_event(tmp_path):
 
     confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "resolved"
@@ -237,7 +237,7 @@ def test_engaged_review_resolves_event(tmp_path):
 def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -258,7 +258,7 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
         store.set_stage(event_id, "engaged", turn_index=2)
 
@@ -277,7 +277,7 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
 
     confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "engaged"
@@ -286,7 +286,7 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
 def test_review_node_skips_events_created_this_turn(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -307,7 +307,7 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=3, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -326,7 +326,7 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
 
     confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "hidden"
@@ -336,7 +336,7 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
 def test_keep_hidden_does_not_transition_stage(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -357,7 +357,7 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -376,7 +376,7 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
 
     confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "hidden"
@@ -385,7 +385,7 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
 def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     ids = []
     for index, title in enumerate(["无灯船", "夜探码头"], start=1):
         selection = DirectorEventSelectionResult(
@@ -410,7 +410,7 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
         ).to_event(
             role="ambient", turn_index=index, current_clock=WorldClock()
         )
-        with stores.director_event() as store:
+        with stores.director_event as store:
             ids.append(store.save(selection))
 
     gateway = ScriptedDirectorGateway(
@@ -436,7 +436,7 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
     confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
 
     assert gateway.tasks == ["director_event_review_hidden"]
-    with stores.director_event() as store:
+    with stores.director_event as store:
         first = store.get_by_id(ids[0])
         second = store.get_by_id(ids[1])
         assert first is not None and first.stage == "hidden"
@@ -449,7 +449,7 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
 def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     ids = []
     for index, title in enumerate(["无灯船", "夜探码头"], start=1):
         selection = DirectorEventSelectionResult(
@@ -474,7 +474,7 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
         ).to_event(
             role="ambient", turn_index=index, current_clock=WorldClock()
         )
-        with stores.director_event() as store:
+        with stores.director_event as store:
             ids.append(store.save(selection))
             store.set_stage(ids[-1], "engaged", turn_index=index)
 
@@ -500,7 +500,7 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
     confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
 
     assert gateway.tasks == ["director_event_review_engaged"]
-    with stores.director_event() as store:
+    with stores.director_event as store:
         first = store.get_by_id(ids[0])
         second = store.get_by_id(ids[1])
         assert first is not None and first.stage == "resolved"
@@ -515,7 +515,7 @@ def test_review_input_uses_actor_names_only(tmp_path):
         WorldImpact,
     )
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -541,7 +541,7 @@ def test_review_input_uses_actor_names_only(tmp_path):
         current_clock=WorldClock(),
         actors=[DirectorActorRef(name="港务署"), DirectorActorRef(name="林澈")],
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -595,8 +595,8 @@ def _review_selection(title):
 
 
 def test_hidden_success_engaged_failure_keeps_hidden_result(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_event() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event as store:
         hidden_id = store.save(
             _review_selection("无灯船").to_event(
                 role="ambient", turn_index=1, current_clock=WorldClock()
@@ -638,6 +638,6 @@ def test_hidden_success_engaged_failure_keeps_hidden_result(tmp_path):
         review["event_id"] == hidden_id
         for review in result["director_event_reviews"]
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         assert store.get_by_id(hidden_id).stage == "hidden"
         assert store.get_by_id(engaged_id).stage == "engaged"

@@ -1,4 +1,7 @@
 from __future__ import annotations
+from app.runtime.stores import open_continuity_store
+from app.runtime.stores import open_confirmed_history_store
+from app.runtime.stores import open_npc_profile_store
 
 import argparse
 import hashlib
@@ -674,9 +677,9 @@ def _materialize_npc_field_fixtures(
 def run_case(case: BenchmarkCase) -> dict:
     policy = HistoryDiversityPolicy(**case.policy)
     with (
-        ConfirmedHistoryStore() as history_store,
-        ContinuityStore() as continuity_store,
-        NPCProfileStore(":memory:") as npc_store,
+        open_confirmed_history_store() as history_store,
+        open_continuity_store() as continuity_store,
+        open_npc_profile_store(":memory:") as npc_store,
     ):
         for turn in case.turns:
             history_store.upsert_turn(**turn.model_dump())

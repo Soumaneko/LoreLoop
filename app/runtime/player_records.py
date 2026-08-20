@@ -141,11 +141,11 @@ def load_player_records(view: str = "general") -> dict[str, Any]:
 
 
 def _load_player_records(runtime: CampaignRuntime, *, view: str = "general") -> dict[str, Any]:
-    with runtime.stores.continuity() as store:
+    with runtime.uow().continuity as store:
         continuity_items = store.list_all()
-    with runtime.stores.npc_profile() as store:
+    with runtime.uow().npc_profile as store:
         npc_profiles = store.list_all(active_only=False)
-    with runtime.stores.world_setting() as store:
+    with runtime.uow().world_setting as store:
         world_settings = store.list_all()
     return {
         "maintenance_running": _maintenance_running(runtime),
@@ -190,7 +190,7 @@ def load_player_events() -> dict[str, Any]:
         raise ClientValidationError("Director events are only visible in creator mode")
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
-        with runtime.stores.director_event() as store:
+        with runtime.uow().director_event as store:
             events = store.list_all()
     return {
         "events": [
@@ -301,7 +301,7 @@ def update_player_record(
 
 
 def _latest_confirmed_turn(runtime: CampaignRuntime) -> int:
-    with runtime.stores.short_term() as store:
+    with runtime.uow().short_term as store:
         entries = store.list_navigation_entries()
     if not entries:
         return 0
@@ -313,7 +313,7 @@ def _update_continuity(
     item_id: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    with runtime.stores.continuity() as store:
+    with runtime.uow().continuity as store:
         current = store.get(item_id)
         if current is None:
             raise ValueError(f"continuity item not found: {item_id}")
@@ -372,7 +372,7 @@ def _update_npc_profile(
         raise ValueError(
             f"NPC {view} fields only: " + ", ".join(sorted(allowed))
         )
-    with runtime.stores.npc_profile() as store:
+    with runtime.uow().npc_profile as store:
         current = store.get_by_id(npc_id)
         if current is None:
             raise ValueError(f"NPC profile not found: {npc_id}")
@@ -466,7 +466,7 @@ def _update_world_setting(
         raise ValueError(
             f"Setting {view} fields only: " + ", ".join(sorted(allowed))
         )
-    with runtime.stores.world_setting() as store:
+    with runtime.uow().world_setting as store:
         current = store.get_by_id(setting_id)
         if current is None:
             raise ValueError(f"Setting not found: {setting_id}")

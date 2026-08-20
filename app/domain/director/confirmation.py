@@ -66,6 +66,12 @@ from app.runtime.director_mutation import (
     commit_director_mutations,
     recover_pending_director_mutation,
 )
+from app.runtime.stores import (
+    open_director_event_store,
+    open_director_npc_store,
+    open_npc_profile_store,
+    open_world_setting_store,
+)
 
 DIRECTOR_WAVE_MAX_WORKERS = 3
 
@@ -132,17 +138,25 @@ class DirectorConfirmationExecutor:
         # Fresh proxies created once: every operation opens its own SQLite
         # connection, so Wave B may run handlers concurrently without sharing a
         # connection. Never rebound afterwards.
-        self._event_store: Any = _FreshStoreProxy(stores.director_event)
-        self._director_npc_store: Any = _FreshStoreProxy(stores.director_npc)
-        self._npc_profile_store: Any = _FreshStoreProxy(stores.npc_profile)
-        self._setting_store: Any = _FreshStoreProxy(stores.world_setting)
+        self._event_store: Any = _FreshStoreProxy(
+            lambda: open_director_event_store(stores.paths.director_event_db)
+        )
+        self._director_npc_store: Any = _FreshStoreProxy(
+            lambda: open_director_npc_store(stores.paths.director_npc_db)
+        )
+        self._npc_profile_store: Any = _FreshStoreProxy(
+            lambda: open_npc_profile_store(stores.paths.npc_profile_db)
+        )
+        self._setting_store: Any = _FreshStoreProxy(
+            lambda: open_world_setting_store(stores.paths.world_setting_db)
+        )
         self._settings_by_id: dict[str, WorldSetting] = {}
 
     def run(self) -> tuple[object, DirectorSkillExecutionBatch]:
         self.last_warnings = []
         recover_pending_director_mutation(self._stores)
-        with self._stores.director_log() as log_store:
-            recent_director_log = log_store.recent()
+        log_store = self._stores.director_log
+        recent_director_log = log_store.recent()
         if self._director_log_entry:
             recent_director_log = [
                 self._director_log_entry,

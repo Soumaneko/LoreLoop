@@ -28,7 +28,7 @@ from app.runtime.paths import (
     default_campaign_paths,
 )
 from app.runtime.services import RuntimeServices
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 from app.runtime.model_config import effective_gateway_factory
@@ -241,13 +241,13 @@ class CampaignRuntime:
         campaign_id: str = "default",
         *,
         paths: CampaignPaths | None = None,
-        stores: StoreBundle | None = None,
+        stores: CampaignUnitOfWork | None = None,
         gateway_factory: Callable | None = None,
         max_workers: int = 2,
     ) -> None:
         self.campaign_id = campaign_id
         self.paths = paths or default_campaign_paths()
-        self.stores = stores or StoreBundle(self.paths)
+        self.stores = stores or CampaignUnitOfWork(self.paths)
         recover_pending_director_mutation(self.stores)
         self.gateway_factory = gateway_factory or effective_gateway_factory()
         self.diagnostics = getattr(
@@ -281,6 +281,10 @@ class CampaignRuntime:
         self.history.recover_interrupted()
         self._configure_pending_persistence()
         self._restore_pending_transactions()
+
+    def uow(self, *, write: bool = False) -> CampaignUnitOfWork:
+        """Return the campaign unit of work bound to this runtime."""
+        return self.stores
 
     @property
     def confirmation_lock(self) -> threading.RLock:
@@ -765,7 +769,8 @@ class CampaignRuntime:
             self.pending_openings.clear(discard=False)
             self.campaign_id = campaign_id
             self.paths = paths
-            self.stores = StoreBundle(paths)
+            self.stores.close()
+            self.stores = CampaignUnitOfWork(paths)
             self.invalidate_generation_cache()
             recover_pending_director_mutation(self.stores)
             from app.runtime.initialization import InitializationStore
@@ -789,6 +794,7 @@ class CampaignRuntime:
     def close(self, *, wait_for_jobs: bool = True) -> None:
         self.operations.shutdown(wait=wait_for_jobs)
         self.jobs.shutdown(wait=wait_for_jobs)
+        self.stores.close()
 
     def begin_shutdown(self) -> int:
         return self.operations.cancel_active(stop_accepting_new=True)

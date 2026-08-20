@@ -14,7 +14,8 @@ def _services(state):
 
 
 def _store_factory(state, name: str):
-    return getattr(_services(state).stores, name)
+    value = getattr(_services(state).stores, name)
+    return value() if callable(value) else value
 
 
 def scene_summary_condense_node(
@@ -30,7 +31,7 @@ def scene_summary_condense_node(
     warnings: list[SceneSummaryWarning] = []
 
     # Preserve the original lock scope across recursive levels and their LLM calls.
-    with _CONDENSE_LOCK, _store_factory(state, "scene_summary")() as store:
+    with _CONDENSE_LOCK, _store_factory(state, "scene_summary") as store:
         level = 1
         while store.should_condense(level, threshold=threshold):
             sources = store.list_uncondensed(level, limit=threshold)

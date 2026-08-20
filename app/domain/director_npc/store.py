@@ -1,14 +1,15 @@
 import json
 import sqlite3
 
-from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version
+from app.runtime.sqlite import ensure_exact_schema_version
 
 from .schemas import DirectorNPCDraft, utc_now
 
 
 class DirectorNPCStore:
-    def __init__(self, db_path: str = ":memory:"):
-        self._conn = connect_sqlite(db_path)
+    def __init__(self, conn: sqlite3.Connection, *, owns_connection: bool = False):
+        self._conn = conn
+        self._owns_connection = owns_connection
         self._init_table()
 
     def _init_table(self) -> None:
@@ -134,15 +135,16 @@ class DirectorNPCStore:
         )
         self._conn.commit()
 
-    def close(self) -> None:
-        self._conn.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        self.close()
-
     @staticmethod
     def _draft_from_row(row: sqlite3.Row) -> DirectorNPCDraft:
         return DirectorNPCDraft.model_validate(json.loads(row["draft_json"]))
+
+    def close(self) -> None:
+        if self._owns_connection:
+            self._conn.close()
+
+    def __enter__(self) -> "DirectorNPCStore":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()

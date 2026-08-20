@@ -1,3 +1,4 @@
+from app.runtime.stores import open_confirmed_history_store
 from app.domain.confirmed_history import (
     ConfirmedHistoryStore,
     adjacent_context,
@@ -22,7 +23,7 @@ def _scene(
 
 def test_persistent_store_incrementally_indexes_confirmed_turns(tmp_path):
     path = tmp_path / "confirmed_history.db"
-    with ConfirmedHistoryStore(path) as store:
+    with open_confirmed_history_store(path) as store:
         assert store.upsert_turn(
             scene_id="scene_001",
             turn_index=1,
@@ -36,7 +37,7 @@ def test_persistent_store_incrementally_indexes_confirmed_turns(tmp_path):
             scene_text="希尔达说出了图书馆的位置。",
         )
 
-    with ConfirmedHistoryStore(path) as reopened:
+    with open_confirmed_history_store(path) as reopened:
         assert reopened.turn_count() == 1
         assert reopened.count() == 2
         assert "turn_1_input" in reopened.fts_search("灰烬图书馆")
@@ -44,7 +45,7 @@ def test_persistent_store_incrementally_indexes_confirmed_turns(tmp_path):
 
 def test_upsert_repairs_changed_turn_without_touching_other_history(tmp_path):
     path = tmp_path / "confirmed_history.db"
-    with ConfirmedHistoryStore(path) as store:
+    with open_confirmed_history_store(path) as store:
         for scene in [_scene(1, "旧正文。"), _scene(2, "应继续保留。")]:
             store.upsert_turn(
                 scene_id=scene.scene_id,
@@ -73,7 +74,7 @@ def test_upsert_repairs_changed_turn_without_touching_other_history(tmp_path):
 
 
 def test_clear_removes_documents_and_fts_rows():
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         store.upsert_turn(
             scene_id="scene_001",
             turn_index=1,
@@ -88,7 +89,7 @@ def test_clear_removes_documents_and_fts_rows():
 
 
 def test_paragraph_windows_are_available_to_all_history_consumers():
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         store.upsert_turn(
             scene_id="scene_001",
             turn_index=1,

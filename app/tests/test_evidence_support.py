@@ -1,3 +1,4 @@
+from app.runtime.stores import open_confirmed_history_store
 import pytest
 from collections import defaultdict
 from contextlib import contextmanager
@@ -122,7 +123,7 @@ class TestClassifyLinkSupport:
 
 class TestLinkWindowText:
     def test_excludes_node_sibling_evidence(self):
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001",
                 turn_index=1,
@@ -152,7 +153,7 @@ class TestLinkWindowText:
             assert "对岸灯火" not in middle_window
 
     def test_keeps_non_sibling_adjacent_context(self):
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001",
                 turn_index=1,
@@ -414,7 +415,7 @@ class TestMergeClassTieBreak:
 
 @contextmanager
 def _scene_store(scene_text, user_input=""):
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         store.upsert_turn(
             scene_id="scene_001",
             turn_index=1,

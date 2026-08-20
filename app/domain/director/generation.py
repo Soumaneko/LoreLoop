@@ -79,12 +79,11 @@ class DirectorGenerationExecutor:
         recover_pending_director_mutation(self._stores)
         service = DirectorSkillService()
         touched_event_ids = set(self._touched_event_candidates)
-        with (
-            self._stores.director_event() as event_store,
-            self._stores.director_npc() as director_npc_store,
-            self._stores.npc_profile() as npc_profile_store,
-            self._stores.world_setting() as setting_store,
-        ):
+        with self._stores as uow:
+            event_store = uow.director_event
+            director_npc_store = uow.director_npc
+            npc_profile_store = uow.npc_profile
+            setting_store = uow.world_setting
             active_events = event_store.list_active()
             hidden_events = [
                 event
@@ -107,8 +106,8 @@ class DirectorGenerationExecutor:
             ]
             selected_npc_profiles = self._npc_profiles
             settings = setting_store.list_all()
-            with self._stores.director_log() as log_store:
-                recent_director_log = log_store.recent()
+            log_store = uow.director_log
+            recent_director_log = log_store.recent()
 
             register_skill(
                 service,

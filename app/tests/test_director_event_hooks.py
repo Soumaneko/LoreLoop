@@ -6,7 +6,7 @@ from app.domain.current_state import WorldClock
 from app.domain.director.generation import run_generation_director_agent
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
 from app.tests.factories.director import make_current_state
 from app.tests.factories.director import make_review_node_state
@@ -15,7 +15,7 @@ from app.tests.factories.director import make_review_node_state
 def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -42,7 +42,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -61,7 +61,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
 
     confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert {hook.hook_id for hook in persisted.hook_pool if hook.consumed} == {
@@ -73,7 +73,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
 def test_present_event_rejects_already_consumed_hook(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -94,7 +94,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
         store.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
 
@@ -134,7 +134,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
 def test_present_event_requires_hook_id(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -155,7 +155,7 @@ def test_present_event_requires_hook_id(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -193,7 +193,7 @@ def test_present_event_requires_hook_id(tmp_path):
 def test_review_event_rejects_unknown_consume_hook(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -214,7 +214,7 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -236,14 +236,14 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
             make_review_node_state(stores, gateway)
         )
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         assert store.get_by_id(event_id).stage == "hidden"
 
 
 def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -264,7 +264,7 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
         store.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
 
@@ -287,14 +287,14 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
             make_review_node_state(stores, gateway)
         )
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         assert store.get_by_id(event_id).stage == "hidden"
 
 
 def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -315,7 +315,7 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(

@@ -1,3 +1,5 @@
+from app.runtime.stores import open_director_event_store
+from app.runtime.stores import open_world_setting_store
 import json
 import sqlite3
 
@@ -73,7 +75,7 @@ def test_event_contract_has_generic_actor_refs_without_npc_dependency():
 def test_event_store_binds_existing_resources_without_owning_their_lifecycle():
     from app.domain.director_event.schemas import DirectorActorRef
 
-    store = DirectorEventStore()
+    store = open_director_event_store()
     event = _event()
     store.save(event)
 
@@ -96,7 +98,7 @@ def test_event_store_binds_existing_resources_without_owning_their_lifecycle():
 def test_bind_actor_upgrades_same_name_unreferenced_actor_instead_of_duplicating():
     from app.domain.director_event.schemas import DirectorActorRef, DirectorEventSelectionResult
 
-    store = DirectorEventStore()
+    store = open_director_event_store()
     event = _event_selection().to_event(
         role="ambient",
         turn_index=3,
@@ -123,7 +125,7 @@ def test_bind_actor_upgrades_same_name_unreferenced_actor_instead_of_duplicating
 def test_bind_actor_does_not_duplicate_same_resource_ref():
     from app.domain.director_event.schemas import DirectorActorRef
 
-    store = DirectorEventStore()
+    store = open_director_event_store()
     event = _event_selection().to_event(
         role="ambient",
         turn_index=3,
@@ -164,7 +166,7 @@ def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
     conn.close()
 
     try:
-        DirectorEventStore(str(db_path))
+        open_director_event_store(str(db_path))
     except RuntimeError as exc:
         assert "expected 11" in str(exc)
     else:
@@ -214,7 +216,7 @@ def test_project_director_events_forces_engaged_view():
 
 
 def test_multiple_active_events_allowed_without_role_limit():
-    store = DirectorEventStore()
+    store = open_director_event_store()
     first = _event_selection().to_event(
         role="arc", turn_index=1, current_clock=WorldClock()
     )
@@ -231,7 +233,7 @@ def test_multiple_active_events_allowed_without_role_limit():
 
 
 def test_stage_transitions_and_hook_consumption():
-    store = DirectorEventStore()
+    store = open_director_event_store()
     event = _event()
     store.save(event)
 
@@ -265,9 +267,7 @@ def test_stage_transitions_and_hook_consumption():
 
 
 def test_world_impact_is_stored_but_not_applied_to_setting():
-    from app.domain.world_setting.store import WorldSettingStore
-
-    store = DirectorEventStore()
+    store = open_director_event_store()
     event = _event()
     store.save(event)
     store.resolve_event(
@@ -276,14 +276,14 @@ def test_world_impact_is_stored_but_not_applied_to_setting():
         resolved_reason="猎户离开码头。",
     )
 
-    setting_store = WorldSettingStore()
+    setting_store = open_world_setting_store()
     assert setting_store.count() == 0
     setting_store.close()
     store.close()
 
 
 def test_consuming_a_new_hook_does_not_reopen_previous_hook():
-    store = DirectorEventStore()
+    store = open_director_event_store()
     event = _event()
     store.save(event)
 
@@ -308,7 +308,7 @@ def test_consuming_a_new_hook_does_not_reopen_previous_hook():
 
 
 def test_reconsuming_a_hook_preserves_original_consumed_turn():
-    store = DirectorEventStore()
+    store = open_director_event_store()
     event = _event()
     store.save(event)
 

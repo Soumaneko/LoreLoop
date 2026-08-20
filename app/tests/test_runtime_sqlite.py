@@ -1,8 +1,8 @@
+from app.runtime.stores import open_npc_profile_store
 import sqlite3
 
 import pytest
 
-from app.domain.npc_profile.store import NPCProfileStore
 from app.runtime.services import RuntimeServices
 from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
 
@@ -56,7 +56,7 @@ def test_npc_profile_store_rejects_pre_versioned_columns(tmp_path):
         RuntimeError,
         match="current NPCProfile contract",
     ):
-        NPCProfileStore(str(db_path))
+        open_npc_profile_store(str(db_path))
 
 
 def test_runtime_services_creates_trace_isolated_gateways():

@@ -164,7 +164,7 @@ def test_committed_core_memory_must_match_config_and_proposal_projection():
     runtime.initialization.save(record.model_copy(update={
         "core_memory": corrupted_core,
     }))
-    runtime.stores.core_memory().save(corrupted_core)
+    runtime.stores.core_memory.save(corrupted_core)
 
     with pytest.raises(
         RuntimeError,

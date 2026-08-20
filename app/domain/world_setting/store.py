@@ -5,7 +5,6 @@ import sqlite3
 
 from app.core.text import normalize_compact_key
 from app.runtime.sqlite import (
-    connect_sqlite,
     ensure_column,
     ensure_exact_schema_version,
     transaction,
@@ -15,8 +14,9 @@ from .schemas import WorldSetting, utc_now
 
 
 class WorldSettingStore:
-    def __init__(self, db_path: str = ":memory:"):
-        self._conn = connect_sqlite(db_path)
+    def __init__(self, conn: sqlite3.Connection, *, owns_connection: bool = False):
+        self._conn = conn
+        self._owns_connection = owns_connection
         self._init_tables()
 
     def _init_tables(self) -> None:
@@ -259,10 +259,11 @@ class WorldSettingStore:
         self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        if self._owns_connection:
+            self._conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> "WorldSettingStore":
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, *args) -> None:
         self.close()

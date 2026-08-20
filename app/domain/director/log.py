@@ -139,14 +139,14 @@ def _npc_name(stores, npc_id) -> str:
     if not npc_id:
         return "?"
     try:
-        with stores.director_npc() as store:
+        with stores.director_npc as store:
             draft = store.get_by_id(npc_id)
             if draft is not None and draft.status != "retired":
                 return draft.name
     except Exception:
         pass
     try:
-        with stores.npc_profile() as store:
+        with stores.npc_profile as store:
             profile = store.get_by_id(npc_id)
             if profile is not None:
                 return profile.name
@@ -160,7 +160,7 @@ def _event_title(stores, event_id) -> str:
     if not event_id:
         return "?"
     try:
-        with stores.director_event() as store:
+        with stores.director_event as store:
             event = store.get_by_id(event_id)
             if event is not None:
                 return event.title
@@ -174,7 +174,7 @@ def _setting_name(stores, setting_id) -> str:
     if not setting_id:
         return "?"
     try:
-        with stores.world_setting() as store:
+        with stores.world_setting as store:
             setting = store.get_by_id(setting_id)
             if setting is not None:
                 return setting.name

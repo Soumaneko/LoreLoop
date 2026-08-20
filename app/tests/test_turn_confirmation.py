@@ -64,7 +64,7 @@ def _opening_initialization(*, experience_mode: str):
         }
     )
     runtime.initialization.save(record)
-    with runtime.stores.current_state() as state_store:
+    with runtime.stores.current_state as state_store:
         state_store.save(_state())
     return config, record
 

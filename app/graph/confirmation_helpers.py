@@ -79,7 +79,7 @@ def apply_staged_disclosure_upgrades(
         else []
     )
 
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         for material in materials:
             if (
                 material.kind != "npc"
@@ -113,7 +113,7 @@ def ensure_director_npc_profile(
     stores,
     disclosure_level=None,
 ) -> DirectorNPCConfirmation | None:
-    with stores.director_npc() as director_store, stores.npc_profile() as npc_store:
+    with stores.director_npc as director_store, stores.npc_profile as npc_store:
         draft = director_store.get_by_id(draft_id)
         if draft is None or draft.status == "retired":
             return None
@@ -264,7 +264,7 @@ def merge_confirmation_node_update(
 
 
 def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationState:
-    with state["runtime_services"].stores.scene_summary() as summary_store:
+    with state["runtime_services"].stores.scene_summary as summary_store:
         turn_summary = state["turn_summary"]
         state["scene_summaries"] = summary_store.list_active()
         state["recent_summaries"] = summary_store.get_recent(5)

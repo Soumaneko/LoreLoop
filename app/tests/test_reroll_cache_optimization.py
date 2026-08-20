@@ -173,7 +173,7 @@ def test_reroll_turn_stream_uses_reroll_graph(monkeypatch, configure_runtime_ser
     from app.runtime.session import PendingTurn, get_campaign_runtime
 
     runtime = get_campaign_runtime()
-    runtime.stores.core_memory().save(CoreMemory(items=[]))
+    runtime.stores.core_memory.save(CoreMemory(items=[]))
     turn_id = "turn_reroll_test"
     group_id = "group_reroll_test"
     state_before = _make_state()
@@ -387,7 +387,7 @@ def test_record_update_invalidates_prefix_cache():
 
     runtime = get_campaign_runtime()
     # Seed records
-    with runtime.stores.continuity() as store:
+    with runtime.stores.continuity as store:
         with store.transaction():
             store.insert(ContinuityItem(
                 kind="commitment",
@@ -397,12 +397,12 @@ def test_record_update_invalidates_prefix_cache():
                 created_turn=1,
                 updated_turn=1,
             ))
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         npc_id = store.upsert(NPCProfile(
             name="埃利奥",
             role="木偶师",
         ))
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         setting_id = store.save(WorldSetting(
             kind="location",
             name="灰烬图书馆",
@@ -560,7 +560,7 @@ def test_modifier_fallback_reroll_retries_modifier_evaluator_while_reusing_prefi
     from app.runtime.session import PendingTurn, get_campaign_runtime
 
     runtime = get_campaign_runtime()
-    runtime.stores.core_memory().save(CoreMemory(items=[]))
+    runtime.stores.core_memory.save(CoreMemory(items=[]))
     turn_id = "turn_mod_fallback_test"
     state_before = _make_state()
     # Snapshot where modifier_batch is None (cleared due to roll_modifier_fallback)

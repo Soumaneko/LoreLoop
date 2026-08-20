@@ -39,6 +39,10 @@ Defaults:
 No production code is modified.
 """
 from __future__ import annotations
+from app.runtime.stores import open_current_state_store
+from app.runtime.stores import open_continuity_store
+from app.runtime.stores import open_confirmed_history_store
+from app.runtime.stores import open_npc_profile_store
 
 import argparse
 import shutil
@@ -85,10 +89,10 @@ def build_inputs(save: Path, current_turn: int):
     for name in DB_FILES:
         shutil.copy2(save / name, workdir / name)
 
-    history_store = ConfirmedHistoryStore(str(workdir / "confirmed_history.db"))
-    continuity_store = ContinuityStore(str(workdir / "continuity.db"))
-    npc_store = NPCProfileStore(str(workdir / "npc_profiles.db"))
-    current_state = CurrentStateStore(
+    history_store = open_confirmed_history_store(str(workdir / "confirmed_history.db"))
+    continuity_store = open_continuity_store(str(workdir / "continuity.db"))
+    npc_store = open_npc_profile_store(str(workdir / "npc_profiles.db"))
+    current_state = open_current_state_store(
         str(workdir / "current_state.db")
     ).load_or_default()
 

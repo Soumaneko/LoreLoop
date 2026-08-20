@@ -8,7 +8,7 @@ from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.director.confirmation import run_confirmation_director_agent
 from app.domain.director.generation import run_generation_director_agent
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
 from app.tests.factories.director import make_current_state
 from app.tests.factories.director import make_event_selection_output
@@ -18,7 +18,7 @@ from app.tests.factories.director import make_intrude_event
 def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="盐雾港",
@@ -27,7 +27,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         hidden_facts=["旧盐仓下有走私暗渠"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
     gateway = ScriptedDirectorGateway(
         decision={
@@ -105,7 +105,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         "director_npc_create",
     ]
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         events = store.list_all()
         assert [event.title for event in events] == ["沉船账本"]
         bound = store.get_by_id(output["event_id"])
@@ -115,7 +115,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
             ("npc", npc_id) for npc_id in output["new_npc_ids"]
         }
         assert set(output["actor_names"]) <= {actor.name for actor in bound.actors}
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         prepared = store.list_prepared()
         assert {draft.draft_id for draft in prepared} == set(output["new_npc_ids"])
 
@@ -150,7 +150,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
 def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="盐雾港",
@@ -159,9 +159,9 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
         hidden_facts=["旧盐仓下有走私暗渠"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         existing_id = npc_store.upsert(
             NPCProfile(
                 name="陆远舟",
@@ -241,7 +241,7 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
 
     output = executions.executions[0].output
     assert len(output["new_npc_ids"]) == 1
-    with stores.director_event() as event_store:
+    with stores.director_event as event_store:
         event = event_store.get_by_id(output["event_id"])
     assert event is not None
     assert {actor.name for actor in event.actors} == {"陆远舟", "闻潮"}
@@ -268,7 +268,7 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
 def test_create_event_rejects_missing_required_actor_role(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="盐雾港",
@@ -277,7 +277,7 @@ def test_create_event_rejects_missing_required_actor_role(tmp_path):
         hidden_facts=["旧盐仓下有走私暗渠"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
     gateway = ScriptedDirectorGateway(
         decision={
@@ -321,7 +321,7 @@ def test_create_event_rejects_missing_required_actor_role(tmp_path):
 def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="盐雾港",
@@ -330,7 +330,7 @@ def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
         hidden_facts=["旧盐仓下有走私暗渠"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
     gateway = ScriptedDirectorGateway(
         decision={
@@ -381,7 +381,7 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
     from app.domain.director_npc.creator import DirectorNPCCreator
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="盐雾港",
@@ -390,7 +390,7 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
         hidden_facts=["旧盐仓下有走私暗渠"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
     gateway = ScriptedDirectorGateway(
         decision={
@@ -468,9 +468,9 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
             trace_id="confirmation-director",
         )
 
-    with stores.director_event() as store:
+    with stores.director_event as store:
         assert store.list_all() == []
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         assert store.list_all() == []
 
 
@@ -479,7 +479,7 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
 ):
     from app.domain.director_npc.creator import DirectorNPCCreator
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     gateway = ScriptedDirectorGateway(
         decision={
             "reasoning": "同批一个 NPC 和一个事件都缺 Setting，事件侧演员创建失败。",
@@ -557,18 +557,18 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
             trace_id="confirmation-director",
         )
 
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         assert store.list_all() == []
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         assert store.list_all() == []
-    with stores.director_event() as store:
+    with stores.director_event as store:
         assert store.list_all() == []
 
 
 def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="河岸船坞",
@@ -582,7 +582,7 @@ def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
         "name": "北岭矿场",
         "summary": "为内陆城镇供应铁矿的露天矿场。",
     })
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
         store.save(unrelated)
     gateway = ScriptedDirectorGateway(
@@ -631,7 +631,7 @@ def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
     assert setting.name in selector_input[0]["settings_json"]
     assert unrelated.name not in selector_input[0]["settings_json"]
     assert "director_npc_create" not in gateway.tasks
-    with stores.director_event() as store:
+    with stores.director_event as store:
         [saved] = store.list_all()
     assert saved.source_setting_ids == [setting.setting_id]
 
@@ -661,8 +661,8 @@ def test_director_event_semantic_view_hides_internal_state(tmp_path):
     event = selection.to_event(
         role="arc", turn_index=3, current_clock=WorldClock()
     )
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_event() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event as store:
         store.save(event)
         saved = store.get_by_id(event.event_id)
     assert saved is not None
@@ -675,7 +675,7 @@ def test_director_event_semantic_view_hides_internal_state(tmp_path):
 def test_present_event_rejects_engaged_event(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -700,7 +700,7 @@ def test_present_event_rejects_engaged_event(tmp_path):
         turn_index=1,
         current_clock=WorldClock(),
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
         store.set_stage(event_id, "engaged", turn_index=2)
 
@@ -740,9 +740,9 @@ def test_present_event_rejects_engaged_event(tmp_path):
 
 
 def test_intrude_engaged_event_rejects_hidden_resolved_and_unknown(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     hidden = make_intrude_event()
-    with stores.director_event() as store:
+    with stores.director_event as store:
         hidden_id = store.save(hidden)
         engaged_id = store.save(make_intrude_event().model_copy(
             update={"event_id": "director_event_engaged_intrude"}
@@ -822,9 +822,9 @@ def test_intrude_engaged_event_rejects_hidden_resolved_and_unknown(tmp_path):
 
 
 def test_intrude_engaged_event_produces_director_material(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     event = make_intrude_event()
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(event)
         store.set_stage(event_id, "engaged", turn_index=2)
 
@@ -872,8 +872,8 @@ def test_intrude_engaged_event_produces_director_material(tmp_path):
 
 
 def test_intrude_engaged_event_allows_just_engaged_pending_event(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_event() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event as store:
         event_id = store.save(make_intrude_event())
 
     gateway = ScriptedDirectorGateway(
@@ -910,8 +910,8 @@ def test_intrude_engaged_event_allows_just_engaged_pending_event(tmp_path):
 
 
 def test_intrude_engaged_event_requires_guidance(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_event() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event as store:
         event_id = store.save(make_intrude_event())
         store.set_stage(event_id, "engaged", turn_index=2)
 
@@ -947,8 +947,8 @@ def test_intrude_engaged_event_requires_guidance(tmp_path):
 
 
 def test_intrude_engaged_event_at_most_one_per_batch(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_event() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event as store:
         first_id = store.save(make_intrude_event().model_copy(
             update={"event_id": "director_event_first_intrude"}
         ))

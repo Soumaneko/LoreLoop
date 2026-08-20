@@ -6,7 +6,7 @@ from app.domain.current_state import WorldClock
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.director.generation import run_generation_director_agent
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 
 from app.tests.factories.director import (
     ScriptedDirectorGateway,
@@ -18,7 +18,7 @@ from app.tests.factories.director import (
 def test_generation_director_observes_setting_without_facts(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="lore",
         name="潮汐旧约",
@@ -32,7 +32,7 @@ def test_generation_director_observes_setting_without_facts(tmp_path):
         "name": "山邮驿",
         "summary": "负责内陆山路信件转运的驿站。",
     })
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
         store.save(unrelated)
     gateway = ScriptedDirectorGateway(
@@ -64,7 +64,7 @@ def test_generation_director_observes_setting_without_facts(tmp_path):
 
 
 def test_generation_agent_observes_only_prepared_director_npcs(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     prepared = make_director_npc().model_copy(
         update={"draft_id": "director_npc_prepared"}
     )
@@ -76,7 +76,7 @@ def test_generation_agent_observes_only_prepared_director_npcs(tmp_path):
             "introduced_turn": 2,
         }
     )
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(prepared)
         store.save(introduced)
     gateway = ScriptedDirectorGateway(
@@ -116,8 +116,8 @@ def test_generation_agent_observes_only_prepared_director_npcs(tmp_path):
 
 
 def test_generation_observation_npcs_carry_disclosure_level(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         profile_id = store.upsert(NPCProfile(
             name="顾晚棠",
             role="阁主",
@@ -129,7 +129,7 @@ def test_generation_observation_npcs_carry_disclosure_level(tmp_path):
     prepared = make_director_npc().model_copy(
         update={"draft_id": "director_npc_plain_draft"}
     )
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(prepared)
     gateway = ScriptedDirectorGateway(
         decision={"reasoning": "本轮无需导演介入。", "requests": []},
@@ -162,8 +162,8 @@ def test_generation_observation_npcs_carry_disclosure_level(tmp_path):
 
 
 def test_generation_agent_observation_includes_recent_director_log(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_log() as log_store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_log as log_store:
         log_store.save_entries([{
             "turn_index": 2,
             "phase": "confirmation",
@@ -200,9 +200,9 @@ def test_generation_agent_observation_includes_recent_director_log(tmp_path):
 
 
 def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     draft = make_director_npc()
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(draft)
     gateway = ScriptedDirectorGateway(
         decision={
@@ -244,16 +244,16 @@ def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
     assert "core_motivation" not in stage.materials[0].payload
     assert "appearance" not in stage.materials[0].payload
     assert "draft_id" in stage.materials[0].payload
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         assert store.get_by_id(draft.draft_id).status == "prepared"
 
 
 def test_generation_agent_remote_view_filters_nonexistent_fields_for_director_npc(
     tmp_path,
 ):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     draft = make_director_npc()
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(draft)
     gateway = ScriptedDirectorGateway(
         decision={
@@ -294,9 +294,9 @@ def test_generation_agent_remote_view_filters_nonexistent_fields_for_director_np
 
 
 def test_generation_agent_intimate_view_reveals_director_npc_secrets(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     draft = make_director_npc()
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(draft)
     gateway = ScriptedDirectorGateway(
         decision={
@@ -335,8 +335,8 @@ def test_generation_agent_intimate_view_reveals_director_npc_secrets(tmp_path):
 
 
 def test_introduce_npc_rejects_regular_profiles(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         profile_id = store.upsert(
             NPCProfile(
                 name="林澈",
@@ -382,7 +382,7 @@ def test_introduce_npc_rejects_regular_profiles(tmp_path):
 def test_generation_agent_receives_projected_turn_resolution(tmp_path):
     import json
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     gateway = ScriptedDirectorGateway(
         decision={
             "reasoning": "本轮无额外舞台调度。",
@@ -430,9 +430,9 @@ def test_generation_agent_receives_projected_turn_resolution(tmp_path):
 def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     draft = make_director_npc()
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(draft)
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
@@ -458,7 +458,7 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
         turn_index=1,
         current_clock=WorldClock(),
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         event_id = store.save(selection)
 
     gateway = ScriptedDirectorGateway(
@@ -494,18 +494,18 @@ def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
 
     assert stage.materials[0].kind == "npc"
     assert stage.materials[0].payload.get("source") == "director_npc"
-    with stores.director_event() as store:
+    with stores.director_event as store:
         persisted = store.get_by_id(event_id)
         assert persisted is not None
         assert persisted.stage == "hidden"
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         assert store.get_by_id(draft.draft_id).status == "prepared"
 
 
 def test_generation_observation_exposes_engaged_events_channel(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     engaged = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
         reason="独立世界事件。",
@@ -549,7 +549,7 @@ def test_generation_observation_exposes_engaged_events_channel(tmp_path):
     just_engaged = hidden.model_copy(
         update={"event_id": "director_event_just_engaged"}
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         engaged_id = store.save(engaged)
         store.set_stage(engaged_id, "engaged", turn_index=2)
         hidden_id = store.save(hidden)

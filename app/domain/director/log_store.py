@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import sqlite3
+
 from app.core.time import utc_now
 from app.runtime.sqlite import (
-    connect_sqlite,
     ensure_exact_schema_version,
     transaction,
 )
@@ -22,8 +23,9 @@ class RecentDirectorLogStore:
     with confirmation commit.
     """
 
-    def __init__(self, db_path: str = ":memory:"):
-        self._conn = connect_sqlite(db_path)
+    def __init__(self, conn: sqlite3.Connection, *, owns_connection: bool = False):
+        self._conn = conn
+        self._owns_connection = owns_connection
         self._init_tables()
 
     def _init_tables(self) -> None:
@@ -113,10 +115,11 @@ class RecentDirectorLogStore:
         return int(row["count"])
 
     def close(self) -> None:
-        self._conn.close()
+        if self._owns_connection:
+            self._conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> "RecentDirectorLogStore":
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, *args) -> None:
         self.close()

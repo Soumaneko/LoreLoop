@@ -1,3 +1,4 @@
+from app.runtime.stores import open_confirmed_history_store
 import pytest
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -336,7 +337,7 @@ class TestAdapters:
 
 
 def _scene_context(scene_text, user_input=""):
-    with ConfirmedHistoryStore() as store:
+    with open_confirmed_history_store() as store:
         store.upsert_turn(
             scene_id="scene_001",
             turn_index=1,
@@ -407,7 +408,7 @@ class TestJudgeSourceAware:
 
     def test_judge_rejects_hash_matching_evidence_from_another_turn(self):
         text = "她接过铜印，正式成为北门巡检。"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001",
                 turn_index=1,
@@ -815,7 +816,7 @@ class TestRetrieverSeam:
     def test_retriever_npc_recency_is_scoped_to_the_proposal_intent(self):
         text_one = "她接过铜印，正式成为北门巡检。"
         text_three = "他换上新甲，改任南门守备。"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001",
                 turn_index=1,
@@ -890,7 +891,7 @@ class TestRetrieverSeam:
         # 之前；recency 只在关联质量相等后决胜。
         text_older = "她接过铜印，正式成为北门巡检。"
         text_newer = "她巡防北门，责任重大。"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001",
                 turn_index=1,
@@ -953,7 +954,7 @@ class TestRetrieverSeam:
         # 不再把完整 new_value 作为 context —— 只支持 retained 旧事实的
         # evidence 对 change_basis 得 zero，被 complete-basis 剥离。
         text = "她仍是北门巡检，今日照常巡视北门。"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_005",
                 turn_index=5,
@@ -994,7 +995,7 @@ class TestRetrieverSeam:
     def test_bridge_basis_positive_control_passes(self):
         # 对照：真正支持 change_basis 的 evidence 仍 strong 入选。
         text = "她接手东市巡务，兼管东市。"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_005",
                 turn_index=5,
@@ -1033,7 +1034,7 @@ class TestRetrieverSeam:
 
     def test_npc_recency_clamps_when_document_turn_is_ahead(self):
         text = "她接过铜印，正式成为北门巡检。"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_003",
                 turn_index=3,
@@ -1065,7 +1066,7 @@ class TestRetrieverSeam:
 
     def test_npc_field_links_flow_into_relation_hits(self):
         text = "她接过铜印，正式成为北门巡检。"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001",
                 turn_index=1,
@@ -1104,7 +1105,7 @@ class TestRetrieverSeam:
     def test_npc_owner_cap_limits_relation_hits_end_to_end(self):
         text_one = "她接过铜印，正式成为北门巡检。"
         text_two = "她换上新甲，改任南门守备。"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001",
                 turn_index=1,
@@ -1494,7 +1495,7 @@ class TestIssue17EndToEnd:
         # the direct entity (same entity set, so they merge); the relation
         # attribution from member B must survive on the representative output.
         base = "艾琳与那女人约定在青岩镇以铜牌接头"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001", turn_index=1, user_input="",
                 # Only punctuation differs (no negation tokens), so normalized
@@ -1544,7 +1545,7 @@ class TestIssue17EndToEnd:
         # (p001) is dropped, and the relation slice vanishes (no ghost
         # attribution, no augmentation).
         base = "艾琳与那女人约定在青岩镇以铜牌接头，商定次日交付信物"
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             store.upsert_turn(
                 scene_id="scene_001", turn_index=1, user_input="",
                 # Identical normalized text (only punctuation differs, no
@@ -1607,7 +1608,7 @@ class TestIssue17EndToEnd:
     def test_dual_route_direct_and_relation_same_document(self):
         # Same document: direct intent A and relation intent B coexist. A
         # direct selection must not extinguish B's relation eligibility.
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             self._turn(store, 1, "艾琳与那女人约定三日后在青岩镇以铜牌接头。")
             doc = self._paragraphs(store, 1)[0]
             # A matches directly (艾琳 present); B matches only via relation.
@@ -1636,7 +1637,7 @@ class TestIssue17EndToEnd:
     def test_multi_source_same_intent_both_attributions_survive(self):
         # Two distinct source documents serving the same intent keep their own
         # continuity attribution (not merged into one).
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             self._turn(store, 1, "艾琳与那女人约定三日后在青岩镇以铜牌接头。")
             self._turn(store, 2, "那女人将信物交予艾琳，约定次日会面。")
             docs = {
@@ -1685,7 +1686,7 @@ class TestIssue17EndToEnd:
     def test_relation_entry_owner_cap_not_blocked_by_direct_augmentation(self):
         # A direct document's relation augmentation must not consume the owner
         # cap that a genuine relation document needs for its own seat.
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             self._turn(store, 1, "艾琳与那女人约定三日后在青岩镇以铜牌接头。")
             self._turn(store, 2, "他在青岩镇库房盘点存货。")
             direct_doc = self._paragraphs(store, 1)[0]
@@ -1738,7 +1739,7 @@ class TestIssue17EndToEnd:
     def test_zero_relation_proposal_stripped_never_rides_direct(self):
         # A zero-support relation proposal is stripped at the link level and
         # never reaches the selector, so it cannot ride on a direct hit.
-        with ConfirmedHistoryStore() as store:
+        with open_confirmed_history_store() as store:
             self._turn(store, 1, "艾琳与那女人约定三日后在青岩镇以铜牌接头。")
             doc = self._paragraphs(store, 1)[0]
             zero_link = ContinuityHistoryLink(

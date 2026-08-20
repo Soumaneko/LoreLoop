@@ -147,10 +147,10 @@ def test_setup_and_initial_state_are_persisted_before_their_consumers(
                 record = runtime.initialization.load()
                 assert record is not None
                 assert record.phase == "core_memory_committed"
-                assert runtime.stores.core_memory().load() == record.core_memory
-                assert runtime.stores.current_state().load() is None
+                assert runtime.stores.core_memory.load() == record.core_memory
+                assert runtime.stores.current_state.load() is None
             if task == "opening_scene":
-                persisted = runtime.stores.current_state().load()
+                persisted = runtime.stores.current_state.load()
                 assert persisted is not None
                 assert persisted.scene.location == "白塔港"
                 assert persisted.player.name == "卢西安"
@@ -203,7 +203,7 @@ def test_setup_and_initial_state_are_persisted_before_their_consumers(
     ]
     assert record is not None and record.phase == "opening_pending"
     assert record.foundation is not None
-    persisted = runtime.stores.current_state().load()
+    persisted = runtime.stores.current_state.load()
     assert persisted is not None
     assert persisted.scene.location == "白塔港"
     assert persisted.player.name == "卢西安"
@@ -212,7 +212,7 @@ def test_setup_and_initial_state_are_persisted_before_their_consumers(
     assert [item.name for item in persisted.resources.inventory] == ["旅行包"]
     assert len(runtime.pending_openings.values()) == 1
 
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         settings = store.list_all()
     assert {setting.kind for setting in settings} == {"faction", "location", "lore"}
     assert {setting.name for setting in settings} == {"北境商盟", "白塔港", "大陆律法"}
@@ -228,7 +228,7 @@ def test_opening_retry_reuses_same_persisted_foundation(
 
     with pytest.raises(RuntimeError, match="opening failed"):
         list(initialization_graph.initialization_stream(_payload()))
-    state_after_failure = get_campaign_runtime().stores.current_state().load()
+    state_after_failure = get_campaign_runtime().stores.current_state.load()
     assert state_after_failure is not None
     assert state_after_failure.scene.location == "白塔港"
     assert state_after_failure.resources.money == 8
@@ -260,8 +260,8 @@ def test_opening_retry_reuses_same_persisted_foundation(
         if event["step"] == "opening_settings_done"
     )
     assert settings_done["data"]["reused"] is True
-    assert get_campaign_runtime().stores.current_state().load() == state_after_failure
-    with get_campaign_runtime().stores.world_setting() as store:
+    assert get_campaign_runtime().stores.current_state.load() == state_after_failure
+    with get_campaign_runtime().stores.world_setting as store:
         assert len(store.list_all()) == 3
 
 
@@ -283,7 +283,7 @@ def test_opening_settings_node_generates_once_and_reuses(
 
     first = opening_setting_node(state)
     assert first["events"][0]["data"]["reused"] is False
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         assert len(store.list_all()) == 3
 
     second = opening_setting_node(state)
@@ -293,7 +293,7 @@ def test_opening_settings_node_generates_once_and_reuses(
         "director_setting_create",
         "director_setting_create",
     ]
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         assert len(store.list_all()) == 3
 
 
@@ -336,7 +336,7 @@ def test_pending_persistence_failure_keeps_foundation_retryable_without_ghost(
     assert record is not None
     assert record.phase == "foundation_ready"
     assert record.foundation is not None
-    persisted = runtime.stores.current_state().load()
+    persisted = runtime.stores.current_state.load()
     assert persisted is not None
     assert persisted.scene.location == "白塔港"
     assert persisted.resources.money == 8

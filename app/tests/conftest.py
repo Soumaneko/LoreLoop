@@ -23,8 +23,14 @@ def configure_runtime_services(monkeypatch):
 
     def configure(*, gateway_factory=None, **store_factories):
         base_stores = runtime.stores
+
+        def _store(name):
+            if name in store_factories:
+                return store_factories[name]()
+            return getattr(base_stores, name)
+
         stores = SimpleNamespace(**{
-            name: store_factories.get(name, getattr(base_stores, name))
+            name: _store(name)
             for name in (
                 "current_state",
                 "continuity",

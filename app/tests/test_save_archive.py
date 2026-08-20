@@ -1,3 +1,4 @@
+from app.runtime.stores import open_director_log_store
 import hashlib
 import json
 import sqlite3
@@ -103,12 +104,10 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
 
 
 def test_export_accepts_director_log_schema(tmp_path):
-    from app.domain.director.log_store import RecentDirectorLogStore
-
     source = tmp_path / "source"
     source.mkdir()
     SaveManifestRepository(source).create("Beta")
-    with RecentDirectorLogStore(str(source / "director_log.db")) as store:
+    with open_director_log_store(str(source / "director_log.db")) as store:
         store.save_entries([{
             "turn_index": 1,
             "phase": "generation",

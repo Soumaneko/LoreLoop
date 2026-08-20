@@ -65,7 +65,7 @@ class ConfirmationPreparer:
         cache.begin(effective_scene_text)
 
         if write_db and not cache.completed("state_saved"):
-            with services.current_state_store() as state_store:
+            with services.current_state_store as state_store:
                 persisted_state = state_store.load_or_default()
             if persisted_state != pipeline_input.state_before:
                 raise ValueError(pipeline_input.stale_message)
@@ -104,11 +104,11 @@ class ConfirmationPreparer:
 
         existing_npc_profiles = cache.result("existing_npc_profiles") or []
         if write_db and not cache.produced("existing_npc_profiles"):
-            with services.npc_profile_store() as npc_store:
+            with services.npc_profile_store as npc_store:
                 existing_npc_profiles = npc_store.list_all()
             cache.set_result("existing_npc_profiles", existing_npc_profiles)
 
-        core_memory = services.core_memory_store().load_required()
+        core_memory = services.core_memory_store.load_required()
         return {
             "runtime_services": services.runtime_services,
             "events": [{
@@ -168,9 +168,9 @@ class ConfirmationCommitter:
         updated_state = state["updated_state"]
 
         if not write_db:
-            with services.short_term_memory_store() as short_store:
+            with services.short_term_memory_store as short_store:
                 short_term_after = short_store.get_recent()
-            with services.continuity_store() as continuity_store:
+            with services.continuity_store as continuity_store:
                 continuity_total = continuity_store.count()
             return ConfirmationCommitResult(
                 short_term_after=short_term_after,
@@ -179,18 +179,18 @@ class ConfirmationCommitter:
             )
 
         if not cache.completed("state_saved"):
-            with services.current_state_store() as state_store:
+            with services.current_state_store as state_store:
                 state_store.save(updated_state)
             cache.mark_completed("state_saved")
 
         if not cache.completed("turn_summary_saved"):
-            with services.scene_summary_store() as summary_store:
+            with services.scene_summary_store as summary_store:
                 cache.set_result("turn_summary_id", summary_store.save_one(
                     state["turn_summary"]
                 ))
             cache.mark_completed("turn_summary_saved")
 
-        with services.short_term_memory_store() as short_store:
+        with services.short_term_memory_store as short_store:
             if not cache.completed("short_term_saved"):
                 if pipeline_input.clear_short_term_before_save:
                     short_store.clear()
@@ -218,7 +218,7 @@ class ConfirmationCommitter:
             short_term_after = short_store.get_recent()
 
         if not cache.completed("confirmed_history_saved"):
-            with services.confirmed_history_store() as history_store:
+            with services.confirmed_history_store as history_store:
                 if pipeline_input.clear_confirmed_history_before_save:
                     history_store.clear()
                 history_store.upsert_turn(
@@ -230,8 +230,8 @@ class ConfirmationCommitter:
             cache.mark_completed("confirmed_history_saved")
 
         with (
-            services.confirmed_history_store() as history_store,
-            services.continuity_store() as continuity_store,
+            services.confirmed_history_store as history_store,
+            services.continuity_store as continuity_store,
         ):
             if pipeline_input.clear_continuity_before_save:
                 continuity_store.clear()
@@ -252,7 +252,7 @@ class ConfirmationCommitter:
                 accepted_changes = (
                     npc_turn_result.process_result.accepted_changes
                 )
-                with services.npc_profile_store() as npc_store:
+                with services.npc_profile_store as npc_store:
                     npc_store.record_accepted_field_changes(
                         changes=accepted_changes,
                         evidence_documents=list(evidence_documents.values()),
@@ -529,7 +529,7 @@ class ConfirmationFinalizer:
         last_error: Exception | None = None
         for attempt in range(1, attempts + 1):
             try:
-                with self.runtime.services.stores.director_log() as log_store:
+                with self.runtime.services.stores.director_log as log_store:
                     log_store.save_entries(entries)
                 return
             except Exception as exc:

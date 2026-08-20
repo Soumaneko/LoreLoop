@@ -24,7 +24,7 @@ def load_core_memory_items() -> dict[str, Any]:
         raise ClientValidationError("Core memory editing is only available in creator mode")
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
-        core_memory = runtime.stores.core_memory().load()
+        core_memory = runtime.uow().core_memory.load()
     return {
         "initialized": core_memory is not None,
         "items": (
@@ -44,7 +44,7 @@ def save_core_memory_items(payload: dict[str, Any]) -> dict[str, Any]:
         raise ClientValidationError("items must be a list")
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
-        core_memory = runtime.stores.core_memory().load()
+        core_memory = runtime.uow().core_memory.load()
         if core_memory is None:
             raise ClientValidationError("core memory is not initialized yet")
         existing = {item.id: item for item in core_memory.items}
@@ -72,7 +72,7 @@ def save_core_memory_items(payload: dict[str, Any]) -> dict[str, Any]:
                 raise ClientValidationError(f"duplicate core memory item id: {item.id}")
             seen.add(item.id)
             items.append(item)
-        runtime.stores.core_memory().save(
+        runtime.uow().core_memory.save(
             CoreMemory(version=core_memory.version, items=items)
         )
         runtime.invalidate_generation_cache()

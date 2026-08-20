@@ -15,32 +15,32 @@ def _load_debug_state(runtime) -> dict:
     current_state = load_effective_current_state(runtime)
     initialization = runtime.initialization.load()
 
-    with stores.short_term() as short_store:
+    with stores.short_term as short_store:
         short_term = short_store.get_recent()
         chat_history = short_store.list_all()
 
-    with stores.continuity() as continuity_store:
+    with stores.continuity as continuity_store:
         continuity_items = continuity_store.list_all()
         active_continuity_items = continuity_store.list_active()
 
-    with stores.scene_summary() as summary_store:
+    with stores.scene_summary as summary_store:
         scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)
 
-    with stores.world_setting() as setting_store:
+    with stores.world_setting as setting_store:
         world_settings = setting_store.list_all()
 
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         npc_profiles = npc_store.list_all()
         npc_profiles_active = npc_store.list_all(active_only=True)
         npc_profile_count = len(npc_profiles)
         npc_active_profile_count = len(npc_profiles_active)
 
-    with stores.director_event() as director_store:
+    with stores.director_event as director_store:
         active_director_events = director_store.list_active()
         resolved_director_events = director_store.list_resolved()
 
-    with stores.director_npc() as npc_store:
+    with stores.director_npc as npc_store:
         director_npcs = npc_store.list_all()
         prepared_director_npcs = [
             npc for npc in director_npcs if npc.status == "prepared"
@@ -50,7 +50,7 @@ def _load_debug_state(runtime) -> dict:
         ]
 
     settings = load_settings()
-    core_memory = stores.core_memory().load()
+    core_memory = stores.core_memory.load()
     group_ids = list(dict.fromkeys(
         pending.group_id for pending in runtime.pending_turns.values()
     ))

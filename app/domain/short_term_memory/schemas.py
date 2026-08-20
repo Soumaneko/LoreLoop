@@ -6,7 +6,6 @@ from app.core.time import utc_now
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.turn_resolution.schemas import PlayerTurnResolution
 from app.runtime.sqlite import (
-    connect_sqlite,
     ensure_column,
     ensure_schema_version,
     transaction,
@@ -31,12 +30,18 @@ class ShortTermMemory(BaseModel):
 
 
 class ShortTermMemoryStore:
-    def __init__(self, db_path: str = ":memory:", max_items: int = 5):
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        owns_connection: bool = False,
+        max_items: int = 5,
+    ):
         if max_items < 1:
             raise ValueError("max_items must be >= 1")
         self.max_items = max_items
-        self._db_path = db_path
-        self._conn = connect_sqlite(db_path)
+        self._conn = conn
+        self._owns_connection = owns_connection
         self._init_table()
 
     def _init_table(self) -> None:
@@ -227,10 +232,11 @@ class ShortTermMemoryStore:
         self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        if self._owns_connection:
+            self._conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> "ShortTermMemoryStore":
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args) -> None:
         self.close()

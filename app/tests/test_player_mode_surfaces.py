@@ -22,7 +22,7 @@ from app.runtime.settings import save_experience_mode
 
 def _seed_core_memory():
     runtime = get_campaign_runtime()
-    runtime.stores.core_memory().save(CoreMemory(items=[
+    runtime.stores.core_memory.save(CoreMemory(items=[
         CoreMemoryItem(
             id="base_rule",
             kind="world_invariant",
@@ -35,7 +35,7 @@ def _seed_core_memory():
 
 def _seed_event():
     runtime = get_campaign_runtime()
-    with runtime.stores.director_event() as store:
+    with runtime.stores.director_event as store:
         store.save(DirectorEvent(
             role="ambient",
             title="旧桥封锁",

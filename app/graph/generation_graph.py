@@ -525,7 +525,7 @@ def _retry_source(runtime, turn_id: str):
     if pending is None:
         raise ValueError("Pending turn not found. Generate a scene before retrying.")
 
-    with runtime.services.stores.current_state() as state_store:
+    with runtime.services.stores.current_state as state_store:
         current_state = state_store.load_or_default()
     if current_state != pending.state_before:
         raise ValueError(

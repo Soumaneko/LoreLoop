@@ -1,3 +1,4 @@
+from app.runtime.stores import open_director_log_store
 import json
 from pathlib import Path
 
@@ -7,7 +8,6 @@ from app.domain.director.log import (
     assemble_director_log_entry,
     summarize_decision,
 )
-from app.domain.director.log_store import RecentDirectorLogStore
 from app.domain.director.schemas import (
     DirectorDecisionBatch,
     DirectorGuidance,
@@ -21,7 +21,7 @@ from app.domain.scene_writer import SceneWriterResult
 from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import PendingTurn, get_campaign_runtime
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 
 
 def _state() -> CurrentState:
@@ -41,8 +41,8 @@ def _request(skill: str, arguments: dict, guidance=None) -> DirectorSkillRequest
 
 
 def test_summarize_decision_covers_every_skill(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_npc() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_npc as store:
         draft = DirectorNPCDraft(
             name="林澈",
             role="社区医生",
@@ -56,7 +56,7 @@ def test_summarize_decision_covers_every_skill(tmp_path):
             created_turn=1,
         )
         store.save(draft)
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         npc_id = store.upsert(NPCProfile(name="顾晚棠", role="阁主"))
 
     generation_decision = DirectorDecisionBatch(
@@ -126,13 +126,13 @@ def test_summarize_decision_covers_every_skill(tmp_path):
 
 
 def test_summarize_decision_empty_batch(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     decision = DirectorDecisionBatch(reasoning="本轮无需干预。")
     assert summarize_decision(decision, stores) == "无措施"
 
 
 def test_assemble_entry_shape(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     decision = DirectorDecisionBatch(reasoning="引入林澈。")
     entry = assemble_director_log_entry(
         turn_index=3,
@@ -149,7 +149,7 @@ def test_assemble_entry_shape(tmp_path):
 
 
 def test_recent_director_log_store_upserts_prunes_and_orders():
-    with RecentDirectorLogStore() as store:
+    with open_director_log_store() as store:
         store.save_entries([
             {"turn_index": 1, "phase": "generation", "reasoning": "g1", "measures": "m1"},
             {"turn_index": 1, "phase": "confirmation", "reasoning": "c1", "measures": "m1c"},
@@ -269,7 +269,7 @@ def test_finalizer_writes_gen_and_confirm_entries(configure_runtime_services):
 
     finalizer._write_recent_director_log(state)
 
-    with services.stores.director_log() as log_store:
+    with services.stores.director_log as log_store:
         recent = log_store.recent()
     assert {entry["phase"] for entry in recent} == {
         "generation",
@@ -284,7 +284,7 @@ def test_confirmation_entry_records_actual_execution_results(tmp_path):
         DirectorSkillExecutionBatch,
     )
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     executions = DirectorSkillExecutionBatch(executions=[
         DirectorSkillExecution(
             request_id="r1",

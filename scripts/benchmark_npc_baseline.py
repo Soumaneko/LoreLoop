@@ -34,6 +34,7 @@ recorded outputs and the deterministic downstream results.
 """
 
 from __future__ import annotations
+from app.runtime.stores import open_npc_profile_store
 
 import argparse
 import hashlib
@@ -675,7 +676,7 @@ def _run_offline_batch(
         if recorded.npc_batch_update is not None
         else []
     )
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
         gateway = StubGateway(responses)
@@ -1263,7 +1264,7 @@ def _record_case(
             scene_text=case.scene_text,
         )
     }
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
         _run_live_pipeline(
@@ -1309,7 +1310,7 @@ def _expected_batch_input(case: BenchmarkCase) -> dict[str, str] | None:
         if document.source_type == "scene_paragraph"
     }
     scene_facts = SceneFactSet.model_validate_json(case.scene_facts)
-    with NPCProfileStore(":memory:") as store:
+    with open_npc_profile_store(":memory:") as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
         profiles = store.list_all()

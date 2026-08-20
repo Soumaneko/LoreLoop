@@ -118,7 +118,7 @@ def test_save_manager_creates_lists_switches_and_isolates_state(tmp_path):
     try:
         alpha = manager.create("alpha")
         assert alpha.active is True
-        with runtime.stores.current_state() as store:
+        with runtime.stores.current_state as store:
             store.save(
                 make_default_state().model_copy(
                     update={"player": PlayerState(name="Alpha")}
@@ -127,7 +127,7 @@ def test_save_manager_creates_lists_switches_and_isolates_state(tmp_path):
 
         beta = manager.create("beta")
         assert beta.active is True
-        with runtime.stores.current_state() as store:
+        with runtime.stores.current_state as store:
             store.save(
                 make_default_state().model_copy(
                     update={"player": PlayerState(name="Beta")}
@@ -135,7 +135,7 @@ def test_save_manager_creates_lists_switches_and_isolates_state(tmp_path):
             )
 
         manager.switch(alpha.save_id)
-        with runtime.stores.current_state() as store:
+        with runtime.stores.current_state as store:
             assert store.load().player.name == "Alpha"
 
         assert manager.active_file.read_text(encoding="utf-8") == alpha.save_id
@@ -300,7 +300,7 @@ def test_rename_copy_export_import_and_delete_are_identity_safe(tmp_path):
     try:
         original = manager.rename(manager.active_id, "原始旅程")
         original_dir = root / original.save_id
-        with runtime.stores.current_state() as store:
+        with runtime.stores.current_state as store:
             store.save(
                 make_default_state().model_copy(
                     update={"player": PlayerState(name="甲")}
@@ -312,7 +312,7 @@ def test_rename_copy_export_import_and_delete_are_identity_safe(tmp_path):
         assert copied.save_id != original.save_id
         assert (root / copied.save_id).is_dir()
         manager.switch(copied.save_id)
-        with runtime.stores.current_state() as store:
+        with runtime.stores.current_state as store:
             assert store.load().player.name == "甲"
 
         archive = tmp_path / "journey.zip"

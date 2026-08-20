@@ -1,3 +1,4 @@
+from app.runtime.stores import open_npc_profile_store
 import pytest
 from collections import defaultdict
 
@@ -175,7 +176,7 @@ def _seed_legacy_log_without_basis(
 class TestIdentity:
     def test_long_field_value_basis_does_not_crash(self):
         long_value = "北门巡检" + "甲" * 508
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [{
                 "npc_id": "npc-a",
@@ -195,7 +196,7 @@ class TestIdentity:
         assert basis == "北门巡检"
 
     def test_name_match_emits_latest_field_node(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [{
                 "npc_id": "npc-a",
@@ -217,7 +218,7 @@ class TestIdentity:
         assert link.basis_complete is True
 
     def test_alias_match_uses_npc_alias_reason(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青", aliases=("阿青",))
             _logs(store, [{
                 "npc_id": "npc-a",
@@ -233,7 +234,7 @@ class TestIdentity:
         assert result.links[0].match_reasons == ["npc_alias_match"]
 
     def test_transient_alias_is_not_a_history_index(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(
                 store,
                 "npc-a",
@@ -254,7 +255,7 @@ class TestIdentity:
         assert result.links == []
 
     def test_identity_conflict_emits_every_profile_deterministically(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-b", "顾青")
             _profile(store, "npc-a", "顾青")
             _logs(store, [
@@ -281,7 +282,7 @@ class TestIdentity:
         assert {link.npc_id for link in result.links} == {"npc-a", "npc-b"}
 
     def test_inactive_profile_requires_explicit_identity(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-liu", "柳伯", active=False)
             _logs(store, [{
                 "npc_id": "npc-liu",
@@ -301,7 +302,7 @@ class TestIdentity:
         assert len(explicit.links) == 1
 
     def test_identity_takes_latest_node_per_field(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [
                 {
@@ -332,7 +333,7 @@ class TestIdentity:
 
 class TestTopic:
     def test_entity_topic_intent_is_scoped_to_identity(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-liulan", "柳岚")
             _profile(store, "npc-zhang", "张三")
             _logs(store, [
@@ -359,7 +360,7 @@ class TestTopic:
         assert {link.npc_id for link in result.links} == {"npc-liulan"}
 
     def test_entity_intent_without_identity_hit_does_not_topic_scan(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-zhang", "张三")
             _logs(store, [{
                 "npc_id": "npc-zhang",
@@ -375,7 +376,7 @@ class TestTopic:
         assert result.links == []
 
     def test_value_topic_match_only_emits_matched_last_scene_node(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-shalan", "沙岚")
             _logs(store, [
                 {
@@ -408,7 +409,7 @@ class TestTopic:
         )
 
     def test_pure_topic_intent_does_not_add_identity_baseline(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [{
                 "npc_id": "npc-a",
@@ -427,7 +428,7 @@ class TestTopic:
         # 同一 (intent, npc, field) 的 ≥3 个主题命中节点全部进入发射：
         # 每次出场都是一条独立的 appearance -> evidence 映射，不得按新旧
         # 截断为最新两个（issue 16）。
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [
                 {
@@ -448,7 +449,7 @@ class TestTopic:
         assert sorted(link.turn_index for link in result.links) == [1, 3, 5]
 
     def test_identity_plus_topic_unions_and_prefers_identity(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [
                 {
@@ -481,7 +482,7 @@ class TestTopic:
     def test_retained_old_fact_does_not_trigger_later_node(self):
         # issue 16 缺陷 2：累积字段的 retained 旧事实不得触发只改新内容的
         # 后续节点；本次新增事实仍触发并桥接其 evidence（持久化 change_basis）。
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [
                 {
@@ -522,7 +523,7 @@ class TestTopic:
         # basis_complete=False（incomplete，degraded rescue only）。
         # 写入 API 已拒绝为累积字段制造 NULL basis，因此 legacy 行只能来自
         # v8->v9 迁移读取；这里直接以 SQL 注入模拟迁移后的持久化状态。
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _seed_legacy_log_without_basis(
                 store,
@@ -546,7 +547,7 @@ class TestTopic:
 
     def test_replaced_value_triggers_via_change_basis(self):
         # 替换型变化：change_basis 承载语义，retained 旧值不触发（issue 16 P1）。
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [
                 {
@@ -572,7 +573,7 @@ class TestTopic:
 
     def test_removed_value_triggers_via_change_basis(self):
         # 删除型变化：被移除的职责仍可通过 change_basis 检索到；retained 不触发。
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [
                 {
@@ -599,7 +600,7 @@ class TestTopic:
 
 class TestMultiIntent:
     def test_per_intent_reasons_preserved_on_shared_node(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _logs(store, [{
                 "npc_id": "npc-a",
@@ -630,7 +631,7 @@ class TestMultiIntent:
 class TestEmission:
     def test_identity_and_topic_nodes_all_emit_without_total_cap(self):
         # 无 total_link_cap 截断：身份命中与主题命中节点全部发射（issue 16）。
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-zhang", "张三")
             _profile(store, "npc-liu", "柳伯")
             _logs(store, [
@@ -660,7 +661,7 @@ class TestEmission:
         assert result.matched_profile_ids == ["npc-liu", "npc-zhang"]
 
     def test_deterministic_newest_first_order(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-qin", "秦霜")
             _logs(store, [
                 {
@@ -685,7 +686,7 @@ class TestEmission:
         assert [link.turn_index for link in result.links] == [4, 3, 2, 1]
 
     def test_all_triggered_nodes_emit_without_total_link_cap(self):
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             _profile(store, "npc-b", "陆衡")
             logs = []
@@ -713,7 +714,7 @@ class TestEmission:
 
     def test_multi_evidence_node_is_not_partially_emitted(self):
         # issue 16 必测 2：多 evidence 节点不得因桥级总 cap 被部分静默发射。
-        with NPCProfileStore(":memory:") as store:
+        with open_npc_profile_store(":memory:") as store:
             _profile(store, "npc-a", "顾青")
             turn = 3
             evidence_ids = [f"turn_3_p00{index}" for index in range(1, 5)]

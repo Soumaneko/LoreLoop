@@ -1,3 +1,5 @@
+from app.runtime.stores import open_confirmed_history_store
+from app.runtime.stores import open_npc_profile_store
 import json
 
 import pytest
@@ -18,7 +20,6 @@ from app.domain.confirmed_history import (
     ConfirmedHistoryStore,
     history_document_text_hash,
 )
-from app.domain.npc_profile.store import NPCProfileStore
 
 
 LAST_SCENE_PENDING_CASES = (
@@ -347,8 +348,8 @@ def test_npc_fixtures_materialize_real_logs_and_pointer_modes():
     case = next(item for item in suite.cases if item.case_id == "npc_stale_hash")
 
     with (
-        ConfirmedHistoryStore() as history_store,
-        NPCProfileStore(":memory:") as npc_store,
+        open_confirmed_history_store() as history_store,
+        open_npc_profile_store(":memory:") as npc_store,
     ):
         for turn in case.turns:
             history_store.upsert_turn(**turn.model_dump())

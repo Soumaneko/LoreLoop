@@ -155,12 +155,12 @@ def prepare_generation_state(
     services = runtime.services
     stores = services.stores
     trace_id = str(uuid.uuid4())
-    core_memory = stores.core_memory().load_required()
+    core_memory = stores.core_memory.load_required()
 
-    with stores.current_state() as state_store:
+    with stores.current_state as state_store:
         current_state = state_store.load_or_default()
 
-    with stores.short_term() as short_store:
+    with stores.short_term as short_store:
         short_term_memory = short_store.get_recent()
 
     turn_index = (
@@ -169,7 +169,7 @@ def prepare_generation_state(
         else 1
     )
 
-    with stores.scene_summary() as summary_store:
+    with stores.scene_summary as summary_store:
         scene_summaries = summary_store.list_active()
         recent_summaries = summary_store.get_recent(5)
 
@@ -190,7 +190,7 @@ def prepare_generation_state(
         "recent_summaries": recent_summaries,
     }
 
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         selection = select_context_profiles(
             user_input=user_input,
             current_state=current_state,

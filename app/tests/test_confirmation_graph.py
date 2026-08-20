@@ -1,3 +1,4 @@
+from app.runtime.stores import open_world_setting_store
 from concurrent.futures import CancelledError
 from types import SimpleNamespace
 
@@ -181,7 +182,7 @@ def test_only_selection_summaries_append_current_turn_summary():
         ),
         "turn_summary": current,
         "runtime_services": SimpleNamespace(
-            stores=SimpleNamespace(scene_summary=_Store)
+            stores=SimpleNamespace(scene_summary=_Store())
         ),
         "events": [],
     }
@@ -364,7 +365,7 @@ def test_setting_appearance_node_counts_once_and_is_cached(monkeypatch, tmp_path
     from app.domain.world_setting import WorldSetting, WorldSettingStore
 
     db_path = tmp_path / "world_settings.db"
-    with WorldSettingStore(str(db_path)) as seed_store:
+    with open_world_setting_store(str(db_path)) as seed_store:
         library = WorldSetting(
             kind="location",
             name="灰烬图书馆",
@@ -385,7 +386,7 @@ def test_setting_appearance_node_counts_once_and_is_cached(monkeypatch, tmp_path
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
-        lambda _state, name: lambda: WorldSettingStore(str(db_path)),
+        lambda _state, name: open_world_setting_store(str(db_path)),
     )
     state = {
         "write_db": True,
@@ -397,13 +398,13 @@ def test_setting_appearance_node_counts_once_and_is_cached(monkeypatch, tmp_path
     assert result["recorded_setting_ids"] == [library.setting_id]
     merge_confirmation_node_update(state, result)
     assert state["cache"]["recorded_setting_ids"] == [library.setting_id]
-    with WorldSettingStore(str(db_path)) as check:
+    with open_world_setting_store(str(db_path)) as check:
         assert check.get_by_id(library.setting_id).hit_count == 1
         assert check.get_by_id(guild.setting_id).hit_count == 0
 
     replayed = confirmation_nodes.setting_appearance_update_node(state)
     assert replayed["recorded_setting_ids"] == [library.setting_id]
-    with WorldSettingStore(str(db_path)) as check:
+    with open_world_setting_store(str(db_path)) as check:
         assert check.get_by_id(library.setting_id).hit_count == 1
 
 
@@ -413,7 +414,7 @@ def test_setting_appearance_node_skips_when_not_writing_db(monkeypatch):
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
-        lambda _state, name: lambda: WorldSettingStore(":memory:"),
+        lambda _state, _name: _FakeStore(),
     )
     state = {
         "write_db": False,
@@ -429,7 +430,7 @@ def test_setting_appearance_node_ignores_single_character_names(monkeypatch, tmp
     from app.domain.world_setting import WorldSetting, WorldSettingStore
 
     db_path = tmp_path / "world_settings.db"
-    with WorldSettingStore(str(db_path)) as seed_store:
+    with open_world_setting_store(str(db_path)) as seed_store:
         single = WorldSetting(
             kind="lore",
             name="道",
@@ -450,7 +451,7 @@ def test_setting_appearance_node_ignores_single_character_names(monkeypatch, tmp
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
-        lambda _state, name: lambda: WorldSettingStore(str(db_path)),
+        lambda _state, name: open_world_setting_store(str(db_path)),
     )
     state = {
         "write_db": True,
@@ -461,7 +462,7 @@ def test_setting_appearance_node_ignores_single_character_names(monkeypatch, tmp
     result = confirmation_nodes.setting_appearance_update_node(state)
     assert guild.setting_id in result["recorded_setting_ids"]
     assert single.setting_id not in result["recorded_setting_ids"]
-    with WorldSettingStore(str(db_path)) as check:
+    with open_world_setting_store(str(db_path)) as check:
         assert check.get_by_id(single.setting_id).hit_count == 0
         assert check.get_by_id(guild.setting_id).hit_count == 1
 
@@ -757,9 +758,9 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         ),
         player=PlayerState(name="主角"),
     )
-    with services.stores.current_state() as store:
+    with services.stores.current_state as store:
         store.save(state)
-    services.stores.core_memory().save(CoreMemory(items=[]))
+    services.stores.core_memory.save(CoreMemory(items=[]))
 
     draft = DirectorNPCDraft(
         name="林澈",
@@ -773,7 +774,7 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         social_style="克制而友善。",
         created_turn=1,
     )
-    with services.stores.director_npc() as store:
+    with services.stores.director_npc as store:
         store.save(draft)
 
     scene_result = SceneWriterResult(scene_text="林澈走进来。")
@@ -819,10 +820,10 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         "主角"
     }
     assert "林澈" in prepared["confirmation_scene_text"]
-    with services.stores.director_npc() as store:
+    with services.stores.director_npc as store:
         saved = store.get_by_id(draft.draft_id)
     assert saved.status == "introduced"
-    with services.stores.npc_profile() as store:
+    with services.stores.npc_profile as store:
         assert [profile.name for profile in store.list_all()] == ["林澈"]
 
 
@@ -874,7 +875,7 @@ def test_continuity_project_node_reuses_cached_projection(monkeypatch):
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
-        lambda _state, _name: _FakeStore,
+        lambda _state, _name: _FakeStore(),
     )
 
     result = confirmation_nodes.continuity_project_node(state)
@@ -899,7 +900,7 @@ def test_continuity_project_node_computes_and_caches_projection(monkeypatch):
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
-        lambda _state, _name: _FakeStore,
+        lambda _state, _name: _FakeStore(),
     )
 
     result = confirmation_nodes.continuity_project_node(state)
@@ -930,7 +931,7 @@ def test_continuity_project_node_emits_warning(monkeypatch, tmp_path):
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
-        lambda _state, _name: _FakeStore,
+        lambda _state, _name: _FakeStore(),
     )
 
     confirmation_nodes.continuity_project_node(state)
@@ -1092,7 +1093,7 @@ def _patch_npc_pipeline(monkeypatch):
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
-        lambda _state, _name: _FakeStore,
+        lambda _state, _name: _FakeStore(),
     )
     monkeypatch.setattr(
         confirmation_nodes,

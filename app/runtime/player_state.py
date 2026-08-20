@@ -41,7 +41,7 @@ def _user_input_excerpt(user_input: str) -> str:
 
 
 def _history_navigation(runtime: CampaignRuntime) -> list[dict[str, Any]]:
-    with runtime.stores.short_term() as short_store:
+    with runtime.uow().short_term as short_store:
         entries = short_store.list_navigation_entries()
     return [
         {
@@ -63,7 +63,7 @@ def _project_text_highlights(
         return []
 
     candidates: list[tuple[str, str, dict[str, Any] | None]] = []
-    with runtime.stores.npc_profile() as store:
+    with runtime.uow().npc_profile as store:
         for profile in store.list_all():
             public_profile = {
                 "kind": "npc",
@@ -86,7 +86,7 @@ def _project_text_highlights(
                 (surface, "npc", public_profile)
                 for surface in [profile.name, *profile.aliases]
             )
-    with runtime.stores.world_setting() as store:
+    with runtime.uow().world_setting as store:
         for setting in store.list_all():
             if not eligible_highlight_term(setting.name):
                 continue
@@ -127,13 +127,13 @@ def _project_text_highlights(
 
 
 def _history_page(runtime: CampaignRuntime, *, before_turn_index=None, limit=5):
-    with runtime.stores.short_term() as short_store:
+    with runtime.uow().short_term as short_store:
         history, has_more = short_store.list_page(
             before_turn_index=before_turn_index,
             limit=limit,
         )
     projected_history = _project_history(history)
-    with runtime.stores.current_state() as state_store:
+    with runtime.uow().current_state as state_store:
         player_name = state_store.load_or_default().player.name
     return {
         "history": projected_history,
@@ -185,7 +185,7 @@ def _pending_scene_projection(pending) -> dict[str, str | None]:
 
 def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
     stores = runtime.stores
-    core_memory = stores.core_memory().load()
+    core_memory = stores.core_memory.load()
     current_state = load_effective_current_state(runtime)
     initialization = runtime.initialization.load()
     if initialization is None and core_memory is not None:

@@ -106,14 +106,14 @@ def test_campaign_runtimes_isolate_paths_stores_pending_and_locks(tmp_path):
         second_state = make_default_state().model_copy(
             update={"player": PlayerState(name="乙")}
         )
-        with first.stores.current_state() as store:
+        with first.stores.current_state as store:
             store.save(first_state)
-        with second.stores.current_state() as store:
+        with second.stores.current_state as store:
             store.save(second_state)
 
-        with first.stores.current_state() as store:
+        with first.stores.current_state as store:
             assert store.load().player.name == "甲"
-        with second.stores.current_state() as store:
+        with second.stores.current_state as store:
             assert store.load().player.name == "乙"
     finally:
         first.close()

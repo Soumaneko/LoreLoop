@@ -36,7 +36,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             content="不可泄露",
         )
     ])
-    runtime.stores.core_memory().save(core_memory)
+    runtime.stores.core_memory.save(core_memory)
     runtime.initialization.save(InitializationRecord(
         phase="completed",
         fingerprint="test-fingerprint",
@@ -62,7 +62,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         ),
         core_memory=core_memory,
     ))
-    with runtime.stores.current_state() as store:
+    with runtime.stores.current_state as store:
         store.save(CurrentState(
             scene=SceneState(
                 scene_id="scene_7",
@@ -79,7 +79,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             player=PlayerState(name="莱尔"),
             resources=ResourcesState(money=17, money_unit="金币"),
         ))
-    with runtime.stores.short_term() as store:
+    with runtime.stores.short_term as store:
         store.add_turn(
             "scene_7",
             6,
@@ -101,7 +101,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
                 },
             },
         )
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         store.upsert(NPCProfile(
             name="埃利奥",
             aliases=["木偶师", "莱尔"],
@@ -110,7 +110,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             last_scene_summary="他在图书馆当众修好了木偶。",
             last_scene_turn=6,
         ))
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         store.save(WorldSetting(
             kind="location",
             name="图书馆",
@@ -195,12 +195,12 @@ def test_text_highlights_exclude_single_char_settings_and_prefer_npc_on_collisio
     from app.runtime.player_state import _project_text_highlights
 
     runtime = get_campaign_runtime()
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         store.upsert(NPCProfile(
             name="商会",
             role="行商首领",
         ))
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         store.save(WorldSetting(
             kind="lore",
             name="道",
@@ -241,7 +241,7 @@ def test_text_highlights_exclude_single_char_settings_and_prefer_npc_on_collisio
 
 def test_player_history_loads_five_turn_pages_oldest_to_newest():
     runtime = get_campaign_runtime()
-    with runtime.stores.short_term() as store:
+    with runtime.stores.short_term as store:
         for turn_index in range(1, 13):
             store.add_turn(
                 f"scene-{turn_index}",
@@ -266,7 +266,7 @@ def test_player_history_loads_five_turn_pages_oldest_to_newest():
 
 def test_player_history_navigation_normalizes_and_truncates_user_input():
     runtime = get_campaign_runtime()
-    with runtime.stores.short_term() as store:
+    with runtime.stores.short_term as store:
         store.add_turn("opening", 0, "", "开场正文")
         store.add_turn(
             "scene-1",
@@ -289,7 +289,7 @@ def test_player_history_navigation_normalizes_and_truncates_user_input():
 
 def test_player_history_navigation_preserves_sparse_turn_indexes():
     runtime = get_campaign_runtime()
-    with runtime.stores.short_term() as store:
+    with runtime.stores.short_term as store:
         store.add_turn("scene-2", 2, "第二回合行动", "第二回合正文")
         store.add_turn("scene-7", 7, "第七回合行动", "第七回合正文")
 

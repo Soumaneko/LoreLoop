@@ -1,3 +1,4 @@
+from app.runtime.stores import open_scene_summary_store
 import json
 from types import SimpleNamespace
 
@@ -7,7 +8,6 @@ from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.scene_summary.maintenance import SceneSummaryMaintenanceResult
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.scene_summary.summarizer import SceneSummaryWarning
 from app.graph import maintenance_graph
 from app.graph import maintenance_helpers, maintenance_nodes
@@ -45,7 +45,7 @@ def test_scene_summary_graph_preserves_recursive_condensation(
             json.dumps({"content": "L3 汇总。"}, ensure_ascii=False),
         ]
     )
-    store = SceneSummaryStore(":memory:")
+    store = open_scene_summary_store(":memory:")
     store.save_one(
         SceneSummary(
             id="l1-current",
@@ -180,7 +180,7 @@ def test_scene_summary_condense_skip_emits_diagnostic_and_keeps_sources(
     monkeypatch,
     tmp_path,
 ):
-    store = SceneSummaryStore(":memory:")
+    store = open_scene_summary_store(":memory:")
     store.save_one(SceneSummary(
         id="s1", level=1, content="摘要1", turn_start=1, turn_end=1,
     ))

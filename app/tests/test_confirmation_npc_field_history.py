@@ -13,12 +13,12 @@ from app.graph.confirmation_lifecycle import (
     ConfirmationCommitter,
 )
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 from app.runtime.turn_history import CampaignHistory
 
 
-def _services(tmp_path) -> tuple[StoreBundle, ConfirmationCommitServices]:
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path / "save"))
+def _services(tmp_path) -> tuple[CampaignUnitOfWork, ConfirmationCommitServices]:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path / "save"))
     return stores, ConfirmationCommitServices(
         current_state_store=stores.current_state,
         short_term_memory_store=stores.short_term,
@@ -88,7 +88,7 @@ def _evidence_document() -> HistoryDocument:
 
 def test_confirmation_commits_npc_field_logs_from_persisted_history(tmp_path):
     stores, services = _services(tmp_path)
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         npc_store.upsert(NPCProfile(
             npc_id="npc-a",
             name="顾青",
@@ -107,7 +107,7 @@ def test_confirmation_commits_npc_field_logs_from_persisted_history(tmp_path):
 
     assert cache["confirmed_history_saved"] is True
     assert cache["npc_field_logs_saved"] is True
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         logs = npc_store.list_field_change_logs(turn_index=3)
         assert [(item.npc_id, item.field_name) for item in logs] == [
             ("npc-a", "role")
@@ -121,7 +121,7 @@ def test_confirmation_npc_field_log_marker_gap_replays_without_duplicates(
     tmp_path,
 ):
     stores, services = _services(tmp_path)
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         npc_store.upsert(NPCProfile(
             npc_id="npc-a",
             name="顾青",
@@ -143,7 +143,7 @@ def test_confirmation_npc_field_log_marker_gap_replays_without_duplicates(
     committer.commit(state)
 
     assert cache["npc_field_logs_saved"] is True
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         assert len(npc_store.list_field_change_logs(turn_index=3)) == 1
 
 
@@ -159,7 +159,7 @@ def test_confirmation_records_empty_npc_field_batch_and_dry_run_does_not(
     ConfirmationCommitter(services).commit(_state(cache=empty_cache))
 
     assert empty_cache["npc_field_logs_saved"] is True
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         assert npc_store.field_change_batch_hash(3) is not None
 
     dry_stores, dry_services = _services(tmp_path / "dry")
@@ -168,7 +168,7 @@ def test_confirmation_records_empty_npc_field_batch_and_dry_run_does_not(
         _state(cache=dry_cache, write_db=False)
     )
     assert "npc_field_logs_saved" not in dry_cache
-    with dry_stores.npc_profile() as npc_store:
+    with dry_stores.npc_profile as npc_store:
         assert npc_store.field_change_batch_hash(3) is None
 
 
@@ -180,13 +180,13 @@ def test_confirmation_rejects_missing_npc_turn_result(tmp_path):
         ConfirmationCommitter(services).commit(_state(cache=cache))
 
     assert "npc_field_logs_saved" not in cache
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         assert npc_store.field_change_batch_hash(3) is None
 
 
 def test_opening_reset_clears_older_npc_field_history(tmp_path):
     stores, services = _services(tmp_path)
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         npc_store.upsert(NPCProfile(
             npc_id="npc-a",
             name="顾青",
@@ -210,15 +210,15 @@ def test_opening_reset_clears_older_npc_field_history(tmp_path):
     }
     committer.commit(_state(cache=reset_cache, reset=True))
 
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         assert npc_store.list_field_change_logs() == []
         assert npc_store.field_change_batch_hash(3) is not None
 
 
 def test_failed_confirmation_snapshot_restores_npc_field_history(tmp_path):
     data_dir = tmp_path / "save"
-    stores = StoreBundle(CampaignPaths.from_data_dir(data_dir))
-    with stores.npc_profile() as npc_store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
+    with stores.npc_profile as npc_store:
         npc_store.upsert(NPCProfile(
             npc_id="npc-a",
             name="顾青",
@@ -234,7 +234,7 @@ def test_failed_confirmation_snapshot_restores_npc_field_history(tmp_path):
         payload={"turn_id": "turn-3"},
     )
     history.begin_confirmation("turn-3", write_db=True, scene_text=None)
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         npc_store.record_accepted_field_changes(
             changes=[_accepted_role_change()],
             evidence_documents=[_evidence_document()],
@@ -245,15 +245,15 @@ def test_failed_confirmation_snapshot_restores_npc_field_history(tmp_path):
 
     history.fail_confirmation("turn-3", RuntimeError("commit failed"))
 
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         assert npc_store.list_field_change_logs() == []
         assert npc_store.field_change_batch_hash(3) is None
 
 
 def test_undo_redo_restore_npc_field_history_with_profile_database(tmp_path):
     data_dir = tmp_path / "save"
-    stores = StoreBundle(CampaignPaths.from_data_dir(data_dir))
-    with stores.npc_profile() as npc_store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
+    with stores.npc_profile as npc_store:
         npc_store.upsert(NPCProfile(
             npc_id="npc-a",
             name="顾青",
@@ -269,7 +269,7 @@ def test_undo_redo_restore_npc_field_history_with_profile_database(tmp_path):
         payload={"turn_id": "turn-3"},
     )
     history.begin_confirmation("turn-3", write_db=True, scene_text=None)
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         npc_store.record_accepted_field_changes(
             changes=[_accepted_role_change()],
             evidence_documents=[_evidence_document()],
@@ -279,9 +279,9 @@ def test_undo_redo_restore_npc_field_history_with_profile_database(tmp_path):
     history.complete_confirmation("turn-3", "group-3")
 
     history.undo()
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         assert npc_store.list_field_change_logs() == []
 
     history.redo()
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         assert len(npc_store.list_field_change_logs()) == 1

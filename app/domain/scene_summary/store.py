@@ -1,14 +1,14 @@
 import json
 import sqlite3
-from app.runtime.sqlite import connect_sqlite, ensure_schema_version
+from app.runtime.sqlite import ensure_schema_version
 
 from app.domain.scene_summary.schemas import SceneSummary
 
 
 class SceneSummaryStore:
-    def __init__(self, db_path: str = ":memory:"):
-        self._db_path = db_path
-        self._conn = connect_sqlite(db_path)
+    def __init__(self, conn: sqlite3.Connection, *, owns_connection: bool = False):
+        self._conn = conn
+        self._owns_connection = owns_connection
         self._init_table()
 
     def _init_table(self) -> None:
@@ -166,10 +166,11 @@ class SceneSummaryStore:
         )
 
     def close(self) -> None:
-        self._conn.close()
+        if self._owns_connection:
+            self._conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> "SceneSummaryStore":
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args) -> None:
         self.close()

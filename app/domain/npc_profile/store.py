@@ -17,7 +17,6 @@ from app.domain.npc_profile.schemas import (
     utc_now,
 )
 from app.runtime.sqlite import (
-    connect_sqlite,
     ensure_exact_schema_version,
     transaction,
 )
@@ -27,9 +26,9 @@ SCHEMA_VERSION = 9
 
 
 class NPCProfileStore:
-    def __init__(self, db_path: str = "data/npc_profiles.db"):
-        self._db_path = db_path
-        self._db = connect_sqlite(db_path)
+    def __init__(self, conn: sqlite3.Connection, *, owns_connection: bool = False):
+        self._db = conn
+        self._owns_connection = owns_connection
         self._create_tables()
 
     def _create_tables(self) -> None:
@@ -920,15 +919,6 @@ class NPCProfileStore:
             for row in rows
         ]
 
-    def close(self) -> None:
-        self._db.close()
-
-    def __enter__(self) -> "NPCProfileStore":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        self.close()
-
     def _ensure_given_name_alias(self, profile: NPCProfile) -> None:
         given_name = profile.name.split("·", 1)[0].strip()
         if given_name == profile.name or not given_name:
@@ -950,6 +940,16 @@ class NPCProfileStore:
             if key in {normalize_key(other.name), *[normalize_key(alias) for alias in other.aliases]}:
                 return True
         return False
+
+    def close(self) -> None:
+        if self._owns_connection:
+            self._db.close()
+
+    def __enter__(self) -> "NPCProfileStore":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()
 
 
 def _name_matches(term: str, profile: NPCProfile) -> bool:

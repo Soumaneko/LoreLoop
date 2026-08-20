@@ -15,12 +15,12 @@ from app.runtime.session import get_campaign_runtime
 
 def _seed_records():
     runtime = get_campaign_runtime()
-    with runtime.stores.current_state() as store:
+    with runtime.stores.current_state as store:
         store.save(CurrentState(
             scene=SceneState(scene_id="scene_1", location="老橡树镇"),
             player=PlayerState(name="莱尔"),
         ))
-    with runtime.stores.continuity() as store:
+    with runtime.stores.continuity as store:
         with store.transaction():
             store.insert(ContinuityItem(
                 kind="commitment",
@@ -32,7 +32,7 @@ def _seed_records():
                 created_turn=1,
                 updated_turn=1,
             ))
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         store.upsert(NPCProfile(
             name="埃利奥",
             aliases=["木偶师"],
@@ -43,7 +43,7 @@ def _seed_records():
             last_scene_turn=3,
             name_hit_count=2,
         ))
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         store.save(WorldSetting(
             kind="location",
             name="灰烬图书馆",
@@ -87,14 +87,14 @@ def test_load_player_records_advanced_view_includes_director_and_hidden_fields()
 def test_load_player_records_general_view_filters_unappeared_records():
     _seed_records()
     runtime = get_campaign_runtime()
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         store.upsert(NPCProfile(
             name="柳千帆",
             role="镖师",
             core_motivation="押送一箱封条货物。",
             name_hit_count=0,
         ))
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         store.save(WorldSetting(
             kind="faction",
             name="北陆商盟",
@@ -120,7 +120,7 @@ def test_load_player_records_general_view_filters_unappeared_records():
 
 def test_load_player_records_general_view_hides_unmentioned_npcs():
     runtime = get_campaign_runtime()
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         store.upsert(NPCProfile(
             name="沈栖舟",
             role="北境行商",
@@ -167,7 +167,7 @@ def test_update_continuity_can_remove_an_entity_from_archive_metadata():
     _seed_records()
     item = load_player_records()["continuity"][0]
     runtime = get_campaign_runtime()
-    with runtime.stores.continuity() as store:
+    with runtime.stores.continuity as store:
         store.edit_active_metadata(
             item["id"],
             subject=item["subject"],
@@ -184,7 +184,7 @@ def test_update_continuity_can_remove_an_entity_from_archive_metadata():
     )
 
     assert result["entities"] == ["埃利奥"]
-    with runtime.stores.continuity() as store:
+    with runtime.stores.continuity as store:
         assert store.get(item["id"]).entities == ["埃利奥"]
 
 
@@ -233,7 +233,7 @@ def test_update_npc_public_fields_preserves_last_scene_record():
             npc_id,
             {"last_scene_turn": 0},
         )
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         saved = store.get_by_id(npc_id)
         assert saved is not None
         assert saved.role == "巡回木偶师"
@@ -280,7 +280,7 @@ def test_update_npc_clearing_personality_trait_persists_none():
     _seed_records()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
     update_player_record("npc", npc_id, {"personality_trait": ""})
-    with get_campaign_runtime().stores.npc_profile() as store:
+    with get_campaign_runtime().stores.npc_profile as store:
         assert store.get_by_id(npc_id).personality_trait is None
 
 
@@ -376,7 +376,7 @@ def test_update_setting_rejects_hidden_facts_in_general_and_unknown_fields():
 def test_update_setting_rejects_duplicate_name():
     _seed_records()
     runtime = get_campaign_runtime()
-    with runtime.stores.world_setting() as store:
+    with runtime.stores.world_setting as store:
         second = WorldSetting(
             kind="item",
             name="旧钥匙",
@@ -451,7 +451,7 @@ def test_update_npc_preserves_disclosure_level():
     _seed_records()
     runtime = get_campaign_runtime()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         profile = store.get_by_id(npc_id)
         profile.disclosure_level = "intimate"
         store.upsert(profile)
@@ -462,5 +462,5 @@ def test_update_npc_preserves_disclosure_level():
         {"role": "巡回木偶师"},
     )
     assert result["public"]["role"] == "巡回木偶师"
-    with runtime.stores.npc_profile() as store:
+    with runtime.stores.npc_profile as store:
         assert store.get_by_id(npc_id).disclosure_level == "intimate"

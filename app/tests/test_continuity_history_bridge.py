@@ -1,3 +1,7 @@
+from app.runtime.stores import open_continuity_store
+from app.runtime.stores import open_confirmed_history_store
+from app.runtime.stores import open_npc_profile_store
+from app.runtime.stores import open_world_setting_store
 import hashlib
 
 from app.domain.confirmed_history import ConfirmedHistoryStore
@@ -20,7 +24,6 @@ from app.domain.continuity import (
     ContinuityStore,
 )
 from app.domain.context_facts.continuity_bridge import ContinuityHistoryBridge
-from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.world_setting import WorldSettingStore
 
 
@@ -74,7 +77,7 @@ def _explicit_entity_plan(name="苏念薇"):
 
 
 def test_bridge_selects_create_and_latest_update_for_active_item():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("thread"))
         _add_log(
             store,
@@ -123,7 +126,7 @@ def test_archived_item_requires_strong_trigger_and_uses_terminal_plus_create():
         origin="current_context",
         entities=[ContextSearchEntity(name="陷空山")],
     )])
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item(
             "archived",
             status="resolved",
@@ -169,7 +172,7 @@ def test_archived_location_repetition_cannot_become_a_strong_trigger():
         origin="explicit_input",
         topics=["陷空山"],
     )])
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item(
             "archived-place",
             status="resolved",
@@ -202,7 +205,7 @@ def test_archived_current_state_event_is_a_strong_trigger():
         origin="explicit_input",
         topics=["周姓探子刺探"],
     )])
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         item = _item(
             "archived-event",
             status="resolved",
@@ -242,7 +245,7 @@ def test_location_improves_ranking_without_becoming_eligibility():
             entities=[ContextSearchEntity(name="陷空山")],
         ),
     ])
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item(
             "a-without-location",
             entities=["苏念薇"],
@@ -275,7 +278,7 @@ def test_location_improves_ranking_without_becoming_eligibility():
 
 def test_bridge_emits_every_evidence_seed_in_persisted_position_order():
     texts = ["第一条证据。", "第二条证据。", "第三条证据。"]
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("multi-evidence", entities=["苏念薇"]))
         store.add_lifecycle_log(
             item_id="multi-evidence",
@@ -304,7 +307,7 @@ def test_bridge_emits_every_evidence_seed_in_persisted_position_order():
 def test_relation_hit_competes_with_direct_without_claiming_direct_match():
     relation_text = "那女人提醒他，姓周的看人不像是在看行情。"
     direct_text = "苏念薇决定继续调查山路。"
-    with ConfirmedHistoryStore() as history_store:
+    with open_confirmed_history_store() as history_store:
         history_store.upsert_turn(
             scene_id="scene_001",
             turn_index=1,
@@ -359,7 +362,7 @@ def test_degraded_weak_relation_not_rate_limited_by_intent_target():
     # proposal; the old per-intent rescue quota is gone. Three weak relations
     # for the same intent are each eligible and selected up to max_hits.
     links = []
-    with ConfirmedHistoryStore() as history_store:
+    with open_confirmed_history_store() as history_store:
         for turn in range(1, 4):
             text = f"那女人在第{turn}次会面留下了线索。"
             history_store.upsert_turn(
@@ -411,7 +414,7 @@ def test_strong_link_carries_degraded_attribution_beyond_rescue_cap():
         ),
     ])
     links = []
-    with ConfirmedHistoryStore() as history_store:
+    with open_confirmed_history_store() as history_store:
         for turn in range(1, 4):
             text = f"那女人在第{turn}次会面留下了线索。"
             history_store.upsert_turn(
@@ -473,7 +476,7 @@ def test_strong_link_carries_degraded_attribution_beyond_rescue_cap():
 
 def test_relation_only_hits_are_not_globally_capped_and_hash_mismatch_is_skipped():
     links = []
-    with ConfirmedHistoryStore() as history_store:
+    with open_confirmed_history_store() as history_store:
         for turn in range(1, 6):
             text = f"那女人在第{turn}次会面留下了不同线索。"
             history_store.upsert_turn(
@@ -525,7 +528,7 @@ def test_relation_only_hits_are_not_globally_capped_and_hash_mismatch_is_skipped
 
 def test_relation_only_hits_are_capped_per_continuity_item():
     links = []
-    with ConfirmedHistoryStore() as history_store:
+    with open_confirmed_history_store() as history_store:
         for turn in range(1, 6):
             text = f"那女人留下了第{turn}条同一事项的证据。"
             history_store.upsert_turn(
@@ -585,7 +588,7 @@ def test_shared_relation_evidence_counts_against_every_linked_item_cap():
         "turn_4_p001": "乙事项自有证据。",
         "turn_5_p001": "乙事项自有证据。",
     }
-    with ConfirmedHistoryStore() as history_store:
+    with open_confirmed_history_store() as history_store:
         for turn, text in enumerate(texts.values(), start=1):
             history_store.upsert_turn(
                 scene_id=f"scene_{turn:03d}",
@@ -647,10 +650,10 @@ def test_context_facts_service_wires_forward_bridge_into_history_retrieval():
 
     text = "那女人提醒他，姓周的看人不像是在看行情。"
     with (
-        ConfirmedHistoryStore() as history_store,
-        ContinuityStore() as continuity_store,
-        WorldSettingStore() as setting_store,
-        NPCProfileStore(":memory:") as npc_store,
+        open_confirmed_history_store() as history_store,
+        open_continuity_store() as continuity_store,
+        open_world_setting_store() as setting_store,
+        open_npc_profile_store(":memory:") as npc_store,
     ):
         history_store.upsert_turn(
             scene_id="scene_001",

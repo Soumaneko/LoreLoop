@@ -1,3 +1,4 @@
+from app.runtime.stores import open_scene_summary_store
 import json
 import pytest
 from pathlib import Path
@@ -11,7 +12,6 @@ from app.domain.core_memory import CoreMemory
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
 from app.domain.scene_summary import SceneSummarizer
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.scene_summary.store import SceneSummaryStore
 from app.domain.scene_summary.maintenance import run_scene_summary_maintenance
 
 
@@ -40,7 +40,7 @@ def _summary(**overrides) -> SceneSummary:
 
 class TestSceneSummaryStore:
     def test_save_list_and_mark_condensed(self):
-        with SceneSummaryStore(":memory:") as store:
+        with open_scene_summary_store(":memory:") as store:
             first = _summary(turn_start=1, turn_end=1, scene_ids=["scene_001"])
             second = _summary(turn_start=2, turn_end=2, scene_ids=["scene_002"])
             target = _summary(level=2, turn_start=1, turn_end=2, scene_ids=["scene_001", "scene_002"])
@@ -59,7 +59,7 @@ class TestSceneSummaryStore:
             assert active[0].level == 2
 
     def test_get_recent_prefers_recent_turn_then_lower_level(self):
-        with SceneSummaryStore(":memory:") as store:
+        with open_scene_summary_store(":memory:") as store:
             store.save_one(_summary(id="old_l1", level=1, turn_start=1, turn_end=1))
             store.save_one(_summary(id="recent_l2", level=2, turn_start=8, turn_end=10))
             store.save_one(_summary(id="recent_l1", level=1, turn_start=10, turn_end=10))
@@ -157,7 +157,7 @@ class TestSceneSummaryMaintenance:
             json.dumps({"content": "L3 汇总。"}, ensure_ascii=False),
         ])
 
-        with SceneSummaryStore(":memory:") as store:
+        with open_scene_summary_store(":memory:") as store:
             store.save_one(_summary(id="l1_existing", level=1, turn_start=1, turn_end=1))
             store.save_one(_summary(id="l2_existing", level=2, turn_start=1, turn_end=1, source_ids=["old_l1"]))
 
@@ -330,7 +330,7 @@ def test_blank_scene_text_does_not_call_llm():
 
 def test_condense_skip_keeps_sources_active():
     summarizer = SceneSummarizer(_gateway(_AlwaysFailProvider()))
-    with SceneSummaryStore(":memory:") as store:
+    with open_scene_summary_store(":memory:") as store:
         store.save_one(_summary(id="s1", level=1, turn_start=1, turn_end=1))
         store.save_one(_summary(id="s2", level=1, turn_start=2, turn_end=2))
 

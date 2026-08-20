@@ -1,3 +1,4 @@
+from app.runtime.stores import open_world_setting_store
 import sqlite3
 
 import pytest
@@ -80,7 +81,7 @@ def test_setting_dedup_view_omits_id_and_facts():
 
 
 def test_static_setting_store_round_trip_and_rejects_duplicate_name():
-    store = WorldSettingStore()
+    store = open_world_setting_store()
     setting = _setting()
     store.save(setting)
 
@@ -91,7 +92,7 @@ def test_static_setting_store_round_trip_and_rejects_duplicate_name():
 
 
 def test_setting_store_save_many_persists_all_atomically():
-    store = WorldSettingStore()
+    store = open_world_setting_store()
     ids = store.save_many([
         _setting(name="北港", kind="location"),
         _setting(name="夜航司", kind="faction"),
@@ -102,7 +103,7 @@ def test_setting_store_save_many_persists_all_atomically():
 
 
 def test_setting_store_save_many_rolls_back_entire_batch_on_collision():
-    store = WorldSettingStore()
+    store = open_world_setting_store()
     store.save(_setting())
     first = _setting(name="北港", kind="location")
     second = _setting(name=" 北港 ", kind="lore")
@@ -117,7 +118,7 @@ def test_setting_store_save_many_rolls_back_entire_batch_on_collision():
 
 
 def test_setting_store_record_mention_increments_hit_count():
-    store = WorldSettingStore()
+    store = open_world_setting_store()
     setting = _setting()
     store.save(setting)
 
@@ -189,7 +190,7 @@ def test_setting_store_migrates_v11_to_v12_adding_hit_count(tmp_path):
     conn.commit()
     conn.close()
 
-    store = WorldSettingStore(str(db_path))
+    store = open_world_setting_store(str(db_path))
     setting = store.get_by_id("setting_v11")
     assert setting is not None
     assert setting.hit_count == 0
@@ -205,7 +206,7 @@ def test_setting_store_migrates_v11_to_v12_adding_hit_count(tmp_path):
 
 
 def test_setting_store_requires_existing_explicit_relations():
-    store = WorldSettingStore()
+    store = open_world_setting_store()
     with pytest.raises(ValueError, match="unknown related"):
         store.save(_setting(related_setting_ids=["setting_missing"]))
     store.close()
@@ -271,7 +272,7 @@ def test_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
     conn.close()
 
     with pytest.raises(RuntimeError, match="static Setting contract"):
-        WorldSettingStore(str(db_path))
+        open_world_setting_store(str(db_path))
 
 
 def test_setting_domain_has_no_extraction_or_maintenance_layer():

@@ -1,3 +1,4 @@
+from app.runtime.stores import open_continuity_store
 import hashlib
 import json
 import sqlite3
@@ -208,7 +209,7 @@ def test_update_schema_cannot_modify_premise():
 
 
 def test_service_applies_operations_and_persists_hashed_evidence_logs():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("update-me"))
         store.insert(_item("resolve-me", subject="偿还欠款", kind="commitment"))
         store.insert(_item("cancel-me", subject="赴约", kind="commitment"))
@@ -273,7 +274,7 @@ def test_history_document_hash_uses_exact_utf8_text_without_normalization():
 
 
 def test_update_replaces_current_snapshot_while_logs_keep_each_delta():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("bounded"))
         store.update_active(
             "bounded",
@@ -301,7 +302,7 @@ def test_update_replaces_current_snapshot_while_logs_keep_each_delta():
 
 
 def test_update_merges_entities_and_null_metadata_preserves_existing_values():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item(
             "monotonic-metadata",
             entities=["主角", "合欢宗"],
@@ -347,7 +348,7 @@ def test_update_merges_entities_and_null_metadata_preserves_existing_values():
 
 def test_long_lived_item_can_accumulate_more_than_twelve_entities():
     initial_entities = [f"实体{index}" for index in range(12)]
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("many-entities", entities=initial_entities))
 
         updated = store.update_active(
@@ -370,7 +371,7 @@ def test_long_lived_item_can_accumulate_more_than_twelve_entities():
 
 
 def test_manual_metadata_edit_replaces_entities_instead_of_merging():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("manual-edit", entities=["A", "B"]))
 
         updated = store.edit_active_metadata(
@@ -389,7 +390,7 @@ def test_manual_metadata_edit_replaces_entities_instead_of_merging():
 
 
 def test_manual_metadata_edit_validates_before_writing():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("invalid-manual-edit", entities=["A", "B"]))
 
         with pytest.raises(ValidationError):
@@ -410,7 +411,7 @@ def test_manual_metadata_edit_validates_before_writing():
 
 
 def test_bridge_lifecycle_query_cost_is_constant_for_many_updates():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("long-lived"))
         store.add_lifecycle_log(
             item_id="long-lived",
@@ -447,7 +448,7 @@ def test_bridge_lifecycle_query_cost_is_constant_for_many_updates():
 
 
 def test_service_rejects_unknown_evidence_and_rolls_back_all_operations():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         projection = ContinuityProjection.model_validate({"operations": [
             _operation(
                 "create",
@@ -474,7 +475,7 @@ def test_service_rejects_unknown_evidence_and_rolls_back_all_operations():
 def test_service_rejects_evidence_from_another_turn():
     documents = _evidence_documents()
     wrong_turn = documents["turn_2_p001"].model_copy(update={"turn_index": 1})
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         projection = ContinuityProjection.model_validate({"operations": [
             _operation("create", item=_draft()),
         ]})
@@ -487,7 +488,7 @@ def test_service_rejects_evidence_from_another_turn():
 
 
 def test_service_is_idempotent_by_confirmed_turn():
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         projection = ContinuityProjection.model_validate({"operations": [
             _operation("create", item=_draft()),
         ]})
@@ -549,7 +550,7 @@ def test_v1_store_migrates_statement_and_evidence_relationship(tmp_path):
     connection.commit()
     connection.close()
 
-    with ContinuityStore(str(db_path)) as store:
+    with open_continuity_store(str(db_path)) as store:
         item = store.get("legacy")
         assert item.premise == "旧版陈述"
         assert item.current_state is None
@@ -636,7 +637,7 @@ def test_v2_store_adds_positions_and_preserves_legacy_state_as_snapshot(tmp_path
     connection.commit()
     connection.close()
 
-    with ContinuityStore(str(db_path)) as store:
+    with open_continuity_store(str(db_path)) as store:
         item = store.get("v2")
         log = store.logs_for_item("v2")[0]
         with store.transaction():
@@ -658,7 +659,7 @@ def test_v2_store_adds_positions_and_preserves_legacy_state_as_snapshot(tmp_path
         "turn_1_p002",
     ]
     assert log.migration_created is False
-    with ContinuityStore(str(db_path)) as reopened:
+    with open_continuity_store(str(db_path)) as reopened:
         assert reopened.get("post-migration").current_state == (
             "迁移后仍可继续写入新的替换快照。"
         )
@@ -674,7 +675,7 @@ def test_retriever_selects_only_relevant_active_items():
         player=PlayerState(name="玩家"),
         world_clock=WorldClock(day=3, phase="晚上"),
     )
-    with ContinuityStore() as store:
+    with open_continuity_store() as store:
         store.insert(_item("npc", entities=["顾晚棠"]))
         store.insert(_item(
             "deadline", entities=["盐帮"], location="码头", deadline="第3日晚上"

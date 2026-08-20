@@ -1,3 +1,4 @@
+from app.runtime.stores import open_confirmed_history_store
 import json
 
 from app.domain.canon_evidence import (
@@ -75,7 +76,7 @@ def test_store_indexes_only_raw_confirmed_inputs_and_paragraphs():
             "埃利奥把这个名字低声念了一遍。"
         ),
     )]
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         _seed(store, scenes)
         documents = store.list_documents()
@@ -115,7 +116,7 @@ def test_retriever_finds_prior_entity_cooccurrence_and_returns_raw_context():
             scene_text="埃利奥同意支付预付款，并借出马车。",
         ),
     ]
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         _seed(store, scenes)
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
@@ -151,7 +152,7 @@ def test_each_lookup_query_is_scored_independently_and_best_match_wins():
 
 
 def test_retriever_admits_entities_and_relation_cues_across_three_paragraphs():
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         _seed(store, [
             ShortTermScene(
@@ -186,7 +187,7 @@ def test_retriever_admits_entities_and_relation_cues_across_three_paragraphs():
 
 
 def test_strong_candidate_suppresses_entity_only_fallback():
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         _seed(store, [
             ShortTermScene(
@@ -214,7 +215,7 @@ def test_strong_candidate_suppresses_entity_only_fallback():
 
 
 def test_entity_only_fallback_returns_at_most_one_when_no_strong_candidate():
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         _seed(store, [
             ShortTermScene(
@@ -247,7 +248,7 @@ def test_retriever_keeps_player_input_as_lower_weight_intent_evidence():
         user_input="告诉埃利奥灰烬图书馆的位置。",
         scene_text="莱尔没有找到合适的开口时机。",
     )]
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         _seed(store, scenes)
         result = CanonEvidenceRetriever(store, _catalog()).retrieve(_query_set())
@@ -261,7 +262,7 @@ def test_retriever_keeps_player_input_as_lower_weight_intent_evidence():
 
 
 def test_store_uses_fts5_trigram_for_chinese_substrings():
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         _seed(store, [
             ShortTermScene(
@@ -278,7 +279,7 @@ def test_store_uses_fts5_trigram_for_chinese_substrings():
 
 
 def test_single_entity_does_not_admit_unrelated_mentions():
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     query_set = NarrativeCanonQuerySet(
         thought_process="P008 建立了埃利奥过去的旅行经历。",
         queries=[NarrativeCanonQuery(
@@ -307,7 +308,7 @@ def test_single_entity_does_not_admit_unrelated_mentions():
 
 
 def test_semantic_threshold_can_admit_without_known_entities():
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     query_set = NarrativeCanonQuerySet(
         thought_process="P008 建立了霜痕城旧神殿的既有状态。",
         queries=[NarrativeCanonQuery(
@@ -338,7 +339,7 @@ def test_semantic_threshold_can_admit_without_known_entities():
 
 
 def test_multiple_entities_must_share_one_evidence_window():
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     distant_paragraphs = ["没有相关内容。"] * 5
     scene_text = "\n\n".join([
         "埃利奥正在整理木偶。",
@@ -375,7 +376,7 @@ def test_check_projection_omits_queries_without_evidence():
             ),
         ],
     )
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         evidence_set = CanonEvidenceRetriever(store, _catalog()).retrieve(query_set)
     finally:
@@ -386,7 +387,7 @@ def test_check_projection_omits_queries_without_evidence():
 
 def test_check_projection_orders_each_record_as_before_text_after():
     query_set = _query_set()
-    store = ConfirmedHistoryStore()
+    store = open_confirmed_history_store()
     try:
         _seed(store, [
             ShortTermScene(

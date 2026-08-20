@@ -23,6 +23,7 @@ current archives.
 """
 
 from __future__ import annotations
+from app.runtime.stores import open_npc_profile_store
 
 import argparse
 from dataclasses import asdict, is_dataclass
@@ -406,7 +407,7 @@ def init_replay(save_dir: Path) -> dict[str, Any]:
     specs = _turn_specs(save_dir)
     templates = _load_current_templates(save_dir)
     first_snapshot_db = specs[0]["snapshot_dir"] / "npc_profiles.db"
-    with NPCProfileStore(str(replay_db)) as store:
+    with open_npc_profile_store(str(replay_db)) as store:
         seeded = _seed_missing_profiles(
             store,
             snapshot_db=first_snapshot_db,
@@ -443,7 +444,7 @@ def replay_status(save_dir: Path) -> dict[str, Any]:
     if replay_db.exists():
         result["replay_field_history"] = _field_history_counts(replay_db)
         templates = _load_current_templates(save_dir)
-        with NPCProfileStore(str(replay_db)) as store:
+        with open_npc_profile_store(str(replay_db)) as store:
             replay_profiles = _profile_projection(store.list_all(active_only=False))
         live_profiles = _profile_projection(templates.values())
         result["profile_diff"] = {
@@ -537,7 +538,7 @@ def run_turn(
     _checkpoint_wal(replay_db)
     shutil.copy2(replay_db, candidate_db)
     try:
-        with NPCProfileStore(str(candidate_db)) as store:
+        with open_npc_profile_store(str(candidate_db)) as store:
             seeded = _seed_missing_profiles(
                 store,
                 snapshot_db=spec["snapshot_dir"] / "npc_profiles.db",

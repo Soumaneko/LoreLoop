@@ -7,7 +7,7 @@ from app.domain.director_npc import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.director.generation import run_generation_director_agent
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 
 from app.tests.factories.director import (
     ScriptedDirectorGateway,
@@ -41,8 +41,8 @@ def test_director_npc_output_rejects_blank_name():
 
 
 def test_upgrade_disclosure_material_renders_at_new_level(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         profile_id = store.upsert(NPCProfile(
             name="林澈",
             role="社区医生",
@@ -87,8 +87,8 @@ def test_upgrade_disclosure_material_renders_at_new_level(tmp_path):
 
 
 def test_upgrade_disclosure_rejects_downgrade_or_equal(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         profile_id = store.upsert(NPCProfile(
             name="林澈",
             role="社区医生",
@@ -129,8 +129,8 @@ def test_upgrade_disclosure_rejects_downgrade_or_equal(tmp_path):
 
 
 def test_upgrade_disclosure_rejects_unprojected_npc(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         profile_id = store.upsert(NPCProfile(
             name="林澈",
             role="社区医生",
@@ -167,7 +167,7 @@ def test_upgrade_disclosure_rejects_unprojected_npc(tmp_path):
 
 
 def test_upgrade_disclosure_rejects_unknown_npc(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     gateway = ScriptedDirectorGateway(decision={
         "reasoning": "升级不存在的档案。",
         "requests": [{
@@ -204,8 +204,8 @@ def test_apply_staged_disclosure_upgrades_persists_and_never_downgrades(
     from app.domain.director.schemas import DirectorStageMaterial
     from app.graph.confirmation_helpers import apply_staged_disclosure_upgrades
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         upgrade_id = store.upsert(NPCProfile(
             name="林澈",
             role="社区医生",
@@ -244,7 +244,7 @@ def test_apply_staged_disclosure_upgrades_persists_and_never_downgrades(
 
     apply_staged_disclosure_upgrades(pending, stores=stores)
 
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         assert store.get_by_id(upgrade_id).disclosure_level == "intimate"
         assert store.get_by_id(downgrade_id).disclosure_level == "intimate"
 
@@ -253,9 +253,9 @@ def test_promote_staged_director_npc_profile_writes_disclosure_level(tmp_path):
     from app.domain.director.schemas import DirectorStageMaterial
     from app.graph.confirmation_helpers import promote_staged_director_npc_profile
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     draft = make_director_npc()
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(draft)
 
     pending = SimpleNamespace(director_stage=SimpleNamespace(materials=[
@@ -278,7 +278,7 @@ def test_promote_staged_director_npc_profile_writes_disclosure_level(tmp_path):
     )
 
     assert len(confirmations) == 1
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         profile = store.get_by_id(confirmations[0].npc_id)
         assert profile.disclosure_level == "face_to_face"
 
@@ -289,14 +289,14 @@ def test_promote_staged_director_npc_profile_promotes_all_introduced_drafts(
     from app.domain.director.schemas import DirectorStageMaterial
     from app.graph.confirmation_helpers import promote_staged_director_npc_profile
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     draft_a = make_director_npc().model_copy(
         update={"draft_id": "director_npc_a", "name": "林澈"}
     )
     draft_b = make_director_npc().model_copy(
         update={"draft_id": "director_npc_b", "name": "顾晚棠"}
     )
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(draft_a)
         store.save(draft_b)
 
@@ -325,7 +325,7 @@ def test_promote_staged_director_npc_profile_promotes_all_introduced_drafts(
         "director_npc_a",
         "director_npc_b",
     }
-    with stores.npc_profile() as store:
+    with stores.npc_profile as store:
         by_source = {
             profile.name: profile
             for profile in store.list_all()
@@ -335,12 +335,12 @@ def test_promote_staged_director_npc_profile_promotes_all_introduced_drafts(
 
 
 def test_introduce_npc_allows_at_most_five_per_batch(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     drafts = [
         make_director_npc().model_copy(update={"draft_id": f"director_npc_{i}"})
         for i in range(6)
     ]
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         for draft in drafts:
             store.save(draft)
     gateway = ScriptedDirectorGateway(decision={

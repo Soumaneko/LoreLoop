@@ -4,7 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterable
 
-from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
+from app.runtime.sqlite import ensure_schema_version, transaction
 
 from .schemas import (
     ContinuityItem,
@@ -19,8 +19,9 @@ SCHEMA_VERSION = 3
 
 
 class ContinuityStore:
-    def __init__(self, db_path: str = ":memory:"):
-        self._conn = connect_sqlite(db_path)
+    def __init__(self, conn: sqlite3.Connection, *, owns_connection: bool = False):
+        self._conn = conn
+        self._owns_connection = owns_connection
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -805,12 +806,13 @@ class ContinuityStore:
         )
 
     def close(self) -> None:
-        self._conn.close()
+        if self._owns_connection:
+            self._conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> "ContinuityStore":
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args) -> None:
         self.close()
 
 

@@ -9,7 +9,7 @@ from app.domain.core_memory import CoreMemory
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.director.confirmation import run_confirmation_director_agent
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
 from app.tests.factories.director import make_current_state
 from app.tests.factories.director import make_decision_batch
@@ -21,7 +21,7 @@ def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
     from app.domain.world_setting import WorldSettingStore
 
     def run_with(scene_text, data_dir):
-        stores = StoreBundle(CampaignPaths.from_data_dir(data_dir))
+        stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
         gateway = ScriptedDirectorGateway(
             decision={
                 "reasoning": "创建一名以本地航运为生的人物。",
@@ -80,7 +80,7 @@ def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
             trace_id="confirmation-director",
             scene_text=scene_text,
         )
-        with stores.world_setting() as store:
+        with stores.world_setting as store:
             return store.list_all()
 
     [counted] = run_with(
@@ -135,7 +135,7 @@ def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
 
 
 def test_confirmation_agent_creates_missing_setting_then_event_in_same_turn(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     gateway = ScriptedDirectorGateway(
         decision={
             "reasoning": "事件需要一块尚未存在的生态土壤。",
@@ -182,10 +182,10 @@ def test_confirmation_agent_creates_missing_setting_then_event_in_same_turn(tmp_
         "director_setting_create",
         "director_event_select_arc",
     ]
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         [setting] = store.list_all()
     assert setting.name == "北陆商盟"
-    with stores.director_event() as store:
+    with stores.director_event as store:
         [event] = store.list_all()
     assert event.source_setting_ids == [setting.setting_id]
 
@@ -195,7 +195,7 @@ def test_confirmation_agent_replaces_kind_mismatched_setting_before_execution(
 ):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="盐雾港",
@@ -204,7 +204,7 @@ def test_confirmation_agent_replaces_kind_mismatched_setting_before_execution(
         hidden_facts=["旧盐仓下有走私暗渠"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
     gateway = ScriptedDirectorGateway(
         decision={
@@ -248,11 +248,11 @@ def test_confirmation_agent_replaces_kind_mismatched_setting_before_execution(
     )
 
     assert executions.executions[0].output["event_id"].startswith("director_event_")
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         settings = store.list_all()
     assert {item.kind for item in settings} == {"location", "faction"}
     created = next(item for item in settings if item.kind == "faction")
-    with stores.director_event() as store:
+    with stores.director_event as store:
         [event] = store.list_all()
     assert event.source_setting_ids == [created.setting_id]
 
@@ -260,7 +260,7 @@ def test_confirmation_agent_replaces_kind_mismatched_setting_before_execution(
 def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
     tmp_path,
 ):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting_barrier = threading.Barrier(2)
     setting_worker_ids: set[int] = set()
 
@@ -353,17 +353,17 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
     assert len(setting_worker_ids) == 2
     assert executions.executions[0].output["name"] == "沈栖舟"
     assert executions.executions[1].output["event_id"].startswith("director_event_")
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         settings = store.list_all()
     assert {setting.name for setting in settings} == {"北陆商盟", "寒川驿"}
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         assert [npc.name for npc in store.list_all()] == ["沈栖舟"]
-    with stores.director_event() as store:
+    with stores.director_event as store:
         assert len(store.list_all()) == 1
 
 
 def test_confirmation_agent_replaces_unknown_setting_reference(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     gateway = ScriptedDirectorGateway(
         decision={
             "reasoning": "引用了尚不存在的设定，应改为补建该设定。",
@@ -421,10 +421,10 @@ def test_confirmation_agent_replaces_unknown_setting_reference(tmp_path):
     )
 
     assert executions.executions[0].output["name"] == "沈栖舟"
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         [setting] = store.list_all()
     assert setting.kind == "faction"
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         [npc] = store.list_all()
     assert npc.source_setting_ids == [setting.setting_id]
 
@@ -434,7 +434,7 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
 
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="醉花楼",
@@ -443,7 +443,7 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
         hidden_facts=["掌柜暗中把持着几条商路。"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
     new_profile = NPCProfile(
         name="二楼女子",
@@ -519,7 +519,7 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
         "desire_pattern",
         "baseline_temperament",
     }
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         saved = npc_store.get_by_id(new_id)
     assert saved.name == "苏锦屏"
     assert "二楼女子" not in saved.aliases
@@ -532,7 +532,7 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
 def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="醉花楼",
@@ -541,9 +541,9 @@ def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
         hidden_facts=["掌柜暗中把持着几条商路。"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         existing_id = npc_store.upsert(NPCProfile(name="陆远舟", role="镖师"))
         other_new_id = npc_store.upsert(NPCProfile(name="二楼女子", role="生意谈判方"))
         other_new = npc_store.get_by_id(other_new_id)
@@ -655,7 +655,7 @@ def test_skill_guidance_flows_through_to_execution_handler():
 def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="醉花楼",
@@ -664,9 +664,9 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
         hidden_facts=["掌柜暗中把持着几条商路。"],
         created_turn=1,
     )
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
-    with stores.npc_profile() as npc_store:
+    with stores.npc_profile as npc_store:
         new_id = npc_store.upsert(
             NPCProfile(
                 name="二楼女子",

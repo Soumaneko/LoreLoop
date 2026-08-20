@@ -1,3 +1,4 @@
+from app.runtime.stores import open_npc_profile_store
 import pytest
 
 import json
@@ -10,7 +11,7 @@ from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.director.confirmation import run_confirmation_director_agent
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import StoreBundle
+from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
 from app.tests.factories.director import make_current_state
 from app.tests.factories.director import make_director_npc
@@ -19,8 +20,8 @@ from app.tests.factories.director import make_director_npc
 def test_confirmation_agent_observation_prepends_current_turn_gen_entry(
     tmp_path,
 ):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_log() as log_store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_log as log_store:
         log_store.save_entries([{
             "turn_index": 1,
             "phase": "confirmation",
@@ -62,7 +63,7 @@ def test_confirmation_agent_observation_prepends_current_turn_gen_entry(
 
 
 def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     gateway = ScriptedDirectorGateway(
         decision={
             "reasoning": "错误地在没有任何 Setting 依托的情况下创建人物。",
@@ -111,16 +112,16 @@ def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
 
     assert decision.requests == []
     assert executions.executions == []
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         assert store.list_prepared() == []
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         assert store.list_all() == []
 
 
 def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
     from app.domain.world_setting import WorldSetting
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
         name="盐雾港",
@@ -134,7 +135,7 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
         "name": "山邮驿",
         "summary": "负责内陆山路信件转运的驿站。",
     })
-    with stores.world_setting() as store:
+    with stores.world_setting as store:
         store.save(setting)
         store.save(unrelated)
     gateway = ScriptedDirectorGateway(
@@ -203,13 +204,13 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
     } == {setting.setting_id, unrelated.setting_id}
     assert all("public_facts" not in item for item in observed_settings)
     assert all("hidden_facts" not in item for item in observed_settings)
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         [saved] = store.list_prepared()
     assert saved.source_setting_ids == [setting.setting_id]
 
 
 def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     prepared = make_director_npc().model_copy(
         update={"draft_id": "director_npc_conf_prepared"}
     )
@@ -221,7 +222,7 @@ def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
             "introduced_turn": 2,
         }
     )
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(prepared)
         store.save(introduced)
     gateway = ScriptedDirectorGateway(
@@ -261,7 +262,6 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
     monkeypatch,
 ):
     from app.domain.npc_profile.identity_resolver import NpcCandidate
-    from app.domain.npc_profile.store import NPCProfileStore
 
     candidate = NpcCandidate(
         primary_surface="练气巅峰采药女",
@@ -285,7 +285,7 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
-        lambda _state, name: lambda: NPCProfileStore(":memory:"),
+        lambda _state, name: open_npc_profile_store(":memory:"),
     )
     monkeypatch.setattr(
         confirmation_nodes,
@@ -324,7 +324,7 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
     monkeypatch,
     tmp_path,
 ):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     new_profile = NPCProfile(
         name="练气巅峰采药女",
         role="采药女",
@@ -376,7 +376,7 @@ def test_director_confirm_node_receives_stashed_temporary_profiles(
 
 
 def test_confirmation_observation_surfaces_new_npc_candidate_context(tmp_path):
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     candidate = NPCProfile(npc_id="cand_abc123", name="采药女")
     gateway = ScriptedDirectorGateway(
         decision={"reasoning": "本轮无需导演介入。", "requests": []}
@@ -425,8 +425,8 @@ def test_confirmation_observation_two_tier_npcs(tmp_path):
     from app.domain.director import DirectorResourceRef
     from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
 
-    stores = StoreBundle(CampaignPaths.from_data_dir(tmp_path))
-    with stores.npc_profile() as store:
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
         fact_hit_id = store.upsert(NPCProfile(
             name="顾晚棠",
             role="阁主",
@@ -450,7 +450,7 @@ def test_confirmation_observation_two_tier_npcs(tmp_path):
             "name": "林澈",
         }
     )
-    with stores.director_npc() as store:
+    with stores.director_npc as store:
         store.save(prepared_draft)
     event = DirectorEvent(
         role="ambient",
@@ -469,7 +469,7 @@ def test_confirmation_observation_two_tier_npcs(tmp_path):
             ),
         ],
     )
-    with stores.director_event() as store:
+    with stores.director_event as store:
         store.save(event)
 
     gateway = ScriptedDirectorGateway(

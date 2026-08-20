@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from app.runtime.sqlite import connect_sqlite, ensure_exact_schema_version, transaction
+from app.runtime.sqlite import ensure_exact_schema_version, transaction
 
 from app.domain.director.schemas import DirectorResourceRef
 
@@ -14,8 +14,9 @@ from .schemas import (
 
 
 class DirectorEventStore:
-    def __init__(self, db_path: str = ":memory:"):
-        self._conn = connect_sqlite(db_path)
+    def __init__(self, conn: sqlite3.Connection, *, owns_connection: bool = False):
+        self._conn = conn
+        self._owns_connection = owns_connection
         self._init_table()
 
     def _init_table(self) -> None:
@@ -200,15 +201,6 @@ class DirectorEventStore:
         )
         self._conn.commit()
 
-    def close(self) -> None:
-        self._conn.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.close()
-
     def _list_by_stages(self, stages: list[str]) -> list[DirectorEvent]:
         placeholders = ", ".join("?" for _ in stages)
         rows = self._conn.execute(
@@ -241,3 +233,13 @@ class DirectorEventStore:
     def _event_from_row(row) -> DirectorEvent:
         data = json.loads(row["event_json"])
         return DirectorEvent.model_validate(data)
+
+    def close(self) -> None:
+        if self._owns_connection:
+            self._conn.close()
+
+    def __enter__(self) -> "DirectorEventStore":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()

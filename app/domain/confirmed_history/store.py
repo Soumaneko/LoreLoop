@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 import sqlite3
-from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
+from app.runtime.sqlite import ensure_schema_version, transaction
 
 from .schemas import HistoryDocument
 
@@ -11,9 +11,9 @@ from .schemas import HistoryDocument
 class ConfirmedHistoryStore:
     """Persistent FTS5 index over raw confirmed player inputs and scene prose."""
 
-    def __init__(self, db_path: str = ":memory:"):
-        self._db_path = db_path
-        self._conn = connect_sqlite(db_path)
+    def __init__(self, conn: sqlite3.Connection, *, owns_connection: bool = False):
+        self._conn = conn
+        self._owns_connection = owns_connection
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -198,12 +198,13 @@ class ConfirmedHistoryStore:
         )
 
     def close(self) -> None:
-        self._conn.close()
+        if self._owns_connection:
+            self._conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> "ConfirmedHistoryStore":
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args) -> None:
         self.close()
 
 
