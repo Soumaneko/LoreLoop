@@ -63,7 +63,6 @@ from app.runtime.director_mutation import (
     DirectorPendingActorBinding,
     DirectorPendingMutationPlan,
     apply_director_mutations,
-    recover_pending_director_mutation,
 )
 
 DIRECTOR_WAVE_MAX_WORKERS = 3
@@ -126,7 +125,6 @@ class DirectorConfirmationExecutor:
 
     def run(self) -> tuple[object, DirectorSkillExecutionBatch]:
         self.last_warnings = []
-        recover_pending_director_mutation(self._stores)
         log_store = self._stores.director_log
         recent_director_log = log_store.recent()
         if self._director_log_entry:

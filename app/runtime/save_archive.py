@@ -32,13 +32,8 @@ _ROOT_FILES = {
     "save_manifest.json",
     "settings.json",
 }
-# Phase 3: control DB is .runtime/control.db; legacy .runtime/turn_history.db
-# remains import-compatible.
-_RUNTIME_EXPORT_FILES = {
-    ".runtime/control.db",
-    ".runtime/director_mutation.json",
-}
-_RUNTIME_IMPORT_FILES = _RUNTIME_EXPORT_FILES | {".runtime/turn_history.db"}
+# Phase 5: export only .runtime/control.db; import still accepts legacy turn_history.db;
+# director_mutation.json is rejected everywhere (fail closed).
 # Snapshots: new exports never contain settings.json or legacy ten-db files.
 _SNAPSHOT_EXPORT_FILES = {
     "campaign.db",
@@ -89,6 +84,16 @@ class ArchiveInspection:
     metadata: dict[str, Any]
 
 
+def _assert_no_legacy_journal(save_dir: Path) -> None:
+    journal = Path(save_dir).resolve() / ".runtime" / "director_mutation.json"
+    if journal.is_file():
+        raise SaveArchiveError(
+            "Save contains legacy .runtime/director_mutation.json from an interrupted cross-database commit. "
+            "Open this save with a Phase 4 build and close it normally to clear the journal, then retry on Phase 5. "
+            "Refusing to copy/export at Phase 5."
+        )
+
+
 def create_consistent_snapshot(source_dir: Path, destination_dir: Path) -> list[str]:
     """Copy a quiesced save into an empty staging directory.
 
@@ -104,6 +109,7 @@ def create_consistent_snapshot(source_dir: Path, destination_dir: Path) -> list[
     destination = Path(destination_dir).resolve()
     if not source.is_dir() or source.is_symlink():
         raise SaveArchiveError(f"Save directory is not a regular directory: {source}")
+    _assert_no_legacy_journal(source)
     _prepare_empty_directory(destination)
 
     # Copy the current-format whitelist normally.  Root-level legacy ten-DB
@@ -194,14 +200,6 @@ def _normalize_snapshot_manifests(data_dir: Path) -> None:
 
             ensure_campaign_database(CampaignPaths.from_data_dir(snapshot_dir))
         _rewrite_snapshot_manifest(snapshot_dir)
-        # Clean up stray legacy archive dir inside snapshot if migration created it
-        legacy_archive = snapshot_dir / ".runtime" / "legacy-db-v1"
-        if legacy_archive.exists():
-            shutil.rmtree(legacy_archive, ignore_errors=True)
-            try:
-                (snapshot_dir / ".runtime").rmdir()
-            except OSError:
-                pass
         (snapshot_dir / "settings.json").unlink(missing_ok=True)
 
 
@@ -577,6 +575,11 @@ def _validate_manifest(manifest: Any) -> dict[str, dict[str, Any]]:
         path = entry.get("path")
         size = entry.get("size")
         digest = entry.get("sha256")
+        if path == ".runtime/director_mutation.json":
+            raise SaveArchiveError(
+                "Archive manifest contains legacy .runtime/director_mutation.json from an interrupted cross-database commit. "
+                "Open the save with a Phase 4 build and close it normally to clear the journal, then re-export."
+            )
         if not isinstance(path, str) or not _is_allowed_relative_path(path):
             raise SaveArchiveError(f"Invalid save path in manifest: {path!r}")
         if path in expected:
@@ -597,7 +600,11 @@ def _validate_manifest(manifest: Any) -> dict[str, dict[str, Any]]:
 
 
 def _is_allowed_relative_path(value: str) -> bool:
-    """Import-compatible whitelist (accepts legacy control DB and snapshot files)."""
+    """Import-compatible whitelist (accepts legacy control DB and snapshot files).
+
+    Phase 5: .runtime/director_mutation.json is no longer allowed for import
+    or export; it fails closed.
+    """
     if "\\" in value:
         return False
     path = PurePosixPath(value)
@@ -609,7 +616,6 @@ def _is_allowed_relative_path(value: str) -> bool:
         return path.parts in {
             (".runtime", "control.db"),
             (".runtime", "turn_history.db"),
-            (".runtime", "director_mutation.json"),
         }
     if path.parts[0] == ".snapshots" and len(path.parts) == 3:
         # Import allows legacy snapshot DBs and snapshot settings for migration;

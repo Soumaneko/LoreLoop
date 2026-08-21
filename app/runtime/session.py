@@ -29,7 +29,7 @@ from app.runtime.paths import (
 )
 from app.runtime.services import RuntimeServices
 from app.runtime.uow import CampaignUnitOfWork
-from app.runtime.campaign_migration import ensure_campaign_database
+from app.runtime.campaign_migration import LEGACY_JOURNAL_MESSAGE, ensure_campaign_database
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 from app.runtime.model_config import effective_gateway_factory
@@ -37,7 +37,6 @@ from app.core.client_error import ClientValidationError
 from app.core.diagnostics import NullDiagnosticLogger
 from app.runtime.serialization import model_data
 from app.runtime.turn_history import CampaignHistory
-from app.runtime.director_mutation import recover_pending_director_mutation
 
 
 @dataclass
@@ -248,16 +247,11 @@ class CampaignRuntime:
     ) -> None:
         self.campaign_id = campaign_id
         self.paths = paths or default_campaign_paths()
-        # Phase 4 ordering: ensure campaign.db, use short-lived UoW for
-        # legacy director journal, close it, then run offline interrupted
-        # recovery before creating the formal session UoW.
+        # Phase 5: ensure campaign.db/control.db, offline interrupted recovery,
+        # then formal UoW. Director journal recovery removed. ensure_campaign_database
+        # also rejects any legacy journal before touching the save.
         if stores is None:
             ensure_campaign_database(self.paths)
-            _tmp = CampaignUnitOfWork(self.paths)
-            try:
-                recover_pending_director_mutation(_tmp)
-            finally:
-                _tmp.close()
             self.history = CampaignHistory(self.paths.data_dir)
             self.history.recover_interrupted()
             try:
@@ -267,8 +261,10 @@ class CampaignRuntime:
             self.stores = CampaignUnitOfWork(self.paths, expected_epoch=_epoch)
             self._history_already_recovered = True
         else:
+            _journal = self.paths.data_dir / ".runtime" / "director_mutation.json"
+            if _journal.is_file():
+                raise RuntimeError(LEGACY_JOURNAL_MESSAGE)
             self.stores = stores
-            recover_pending_director_mutation(self.stores)
             self._history_already_recovered = False
         self.gateway_factory = gateway_factory or effective_gateway_factory()
         self.diagnostics = getattr(
@@ -958,13 +954,9 @@ class CampaignRuntime:
             new_jobs: MaintenanceJobCoordinator | None = None
 
             try:
-                # Validate/build the target before mutating runtime identity.
+                # ensure_campaign_database rejects any legacy journal before
+                # touching the target save.
                 ensure_campaign_database(paths)
-                _tmp = CampaignUnitOfWork(paths)
-                try:
-                    recover_pending_director_mutation(_tmp)
-                finally:
-                    _tmp.close()
                 new_history = CampaignHistory(paths.data_dir)
                 new_history.recover_interrupted()
                 try:

@@ -129,9 +129,6 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     source.mkdir()
     SaveManifestRepository(source).create("Alpha")
     _make_campaign_database(source / "campaign.db")
-    journal = source / ".runtime" / "director_mutation.json"
-    journal.parent.mkdir(parents=True)
-    journal.write_text('{"version": 1}', encoding="utf-8")
     _make_database(source / ".snapshots" / "undo-one" / "campaign.db", "old")
     (source / ".snapshots" / "undo-one" / "manifest.json").write_text(
         '{"files": ["campaign.db"]}', encoding="utf-8"
@@ -145,7 +142,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     with zipfile.ZipFile(archive) as bundle:
         assert "manifest.json" in bundle.namelist()
         assert "save/campaign.db" in bundle.namelist()
-        assert "save/.runtime/director_mutation.json" in bundle.namelist()
+        assert "save/.runtime/director_mutation.json" not in bundle.namelist()
         assert "save/ignored.txt" not in bundle.namelist()
 
     inspected = inspect_archive(archive)
@@ -153,9 +150,39 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     extracted = extract_archive(archive, destination)
     assert extracted == inspected
     assert SaveManifestRepository(destination).load().display_name == "Alpha"
-    assert (destination / ".runtime" / "director_mutation.json").is_file()
+    assert not (destination / ".runtime" / "director_mutation.json").exists()
     with sqlite3.connect(destination / ".snapshots" / "undo-one" / "campaign.db") as db:
         assert db.execute("SELECT value FROM values_for_test").fetchone()[0] == "old"
+
+
+def test_export_fails_when_legacy_journal_present(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    SaveManifestRepository(source).create("Alpha")
+    _make_campaign_database(source / "campaign.db")
+    journal = source / ".runtime" / "director_mutation.json"
+    journal.parent.mkdir(parents=True)
+    journal.write_text('{"version": 1}', encoding="utf-8")
+    archive = tmp_path / "save.zip"
+    with pytest.raises(SaveArchiveError, match="director_mutation"):
+        export_save(source, archive)
+    # Also create_consistent_snapshot should fail
+    with pytest.raises(SaveArchiveError, match="director_mutation"):
+        create_consistent_snapshot(source, tmp_path / "staging")
+    # ZIP with journal in manifest should fail inspect
+    manifest = {
+        "format_version": 1,
+        "files": [{"path": ".runtime/director_mutation.json", "size": 2, "sha256": "a"*64}],
+        "metadata": {},
+    }
+    bad_zip = tmp_path / "bad.zip"
+    with zipfile.ZipFile(bad_zip, "w") as bundle:
+        bundle.writestr("manifest.json", json.dumps(manifest))
+        bundle.writestr("save/.runtime/director_mutation.json", "{}")
+    with pytest.raises(SaveArchiveError, match="director_mutation"):
+        inspect_archive(bad_zip)
+    with pytest.raises(SaveArchiveError, match="director_mutation"):
+        extract_archive(bad_zip, tmp_path / "dest")
 
 
 def test_export_accepts_director_log_schema(tmp_path):

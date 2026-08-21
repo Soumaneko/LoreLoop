@@ -163,6 +163,23 @@ def test_created_empty_save_has_all_schemas(tmp_path):
     assert ensure_campaign_database(paths) == "validated"
 
 
+def test_legacy_journal_blocks_migration_and_preserves_legacy(tmp_path):
+    paths = _paths(tmp_path)
+    paths.data_dir.mkdir(parents=True)
+    _seed_legacy(paths)
+    journal = paths.data_dir / ".runtime" / "director_mutation.json"
+    journal.parent.mkdir(parents=True)
+    journal.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="legacy director_mutation"):
+        ensure_campaign_database(paths)
+
+    # Fail-closed: no campaign.db created, legacy files preserved.
+    assert not paths.campaign_db.exists()
+    for name in LEGACY_DB_FILES:
+        assert (paths.data_dir / name).is_file()
+
+
 def test_legacy_save_migrates_atomically(tmp_path):
     paths = _paths(tmp_path)
     paths.data_dir.mkdir(parents=True)
@@ -193,11 +210,14 @@ def test_legacy_save_migrates_atomically(tmp_path):
 
     for name in LEGACY_DB_FILES:
         assert not (paths.data_dir / name).exists()
+        for suffix in ("-wal", "-shm", "-journal"):
+            assert not (paths.data_dir / f"{name}{suffix}").exists()
     archive = paths.data_dir / ".runtime" / "legacy-db-v1"
-    assert archive.is_dir()
-    assert len(list(archive.iterdir())) >= len(LEGACY_DB_FILES)
+    assert not archive.exists()
 
+    # Validated open should also clean any leftover archive (idempotent)
     assert ensure_campaign_database(paths) == "validated"
+    assert not archive.exists()
 
 
 def test_existing_campaign_db_wins(tmp_path):

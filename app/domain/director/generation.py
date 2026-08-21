@@ -35,7 +35,6 @@ from app.domain.npc_profile.schemas import (
     NPCProfile,
 )
 from app.domain.scene_summary.schemas import SceneSummary
-from app.runtime.director_mutation import recover_pending_director_mutation
 
 
 class DirectorGenerationExecutor:
@@ -76,7 +75,6 @@ class DirectorGenerationExecutor:
         self.last_warnings: list[DirectorWarning] = []
 
     def run(self) -> tuple[DirectorStageResult, object]:
-        recover_pending_director_mutation(self._stores)
         service = DirectorSkillService()
         touched_event_ids = set(self._touched_event_candidates)
         # The stores object is owned by the caller (an operation UoW or test

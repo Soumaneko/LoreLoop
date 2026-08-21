@@ -47,6 +47,40 @@ _LEGACY_STORE_FACTORIES = {
     "world_settings.db": WorldSettingStore,
 }
 
+def _cleanup_legacy_files(paths: CampaignPaths) -> None:
+    """Best-effort delete known legacy ten DBs and sidecars plus archive dir.
+
+    Scope is exactly the ten known files and ``.runtime/legacy-db-v1``;
+    failures are swallowed so a successful campaign.db is never reported as
+    failed. Used both after migration and when a validated campaign.db wins.
+    """
+    for name in LEGACY_DB_FILES:
+        base = paths.data_dir / name
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            try:
+                Path(str(base) + suffix).unlink(missing_ok=True)
+            except OSError:
+                pass
+    # Clean archive dir if it exists (Phase 2 leftovers)
+    archive = paths.data_dir / LEGACY_ARCHIVE_DIR
+    if archive.exists():
+        try:
+            shutil.rmtree(archive, ignore_errors=True)
+        except OSError:
+            pass
+        try:
+            (paths.data_dir / ".runtime").rmdir()
+        except OSError:
+            pass
+
+
+LEGACY_JOURNAL_MESSAGE = (
+    "Save contains legacy director_mutation.json from an interrupted cross-database commit. "
+    "Open this save with a Phase 4 build and close it normally to clear the journal, "
+    "then retry on Phase 5. Refusing to open at Phase 5."
+)
+
+
 def ensure_campaign_database(paths: CampaignPaths) -> str:
     """Return the outcome: ``"validated"``, ``"migrated"`` or ``"created"``.
 
@@ -55,9 +89,19 @@ def ensure_campaign_database(paths: CampaignPaths) -> str:
     valid ``campaign.db`` always wins and legacy files are never re-imported.
     """
     paths.data_dir.mkdir(parents=True, exist_ok=True)
+    # Phase 5 fail-closed: never migrate/open a save that still carries the
+    # legacy cross-database journal.
+    _journal = paths.data_dir / ".runtime" / "director_mutation.json"
+    if _journal.is_file():
+        raise RuntimeError(LEGACY_JOURNAL_MESSAGE)
     legacy_files = _legacy_file_paths(paths)
     if paths.campaign_db.exists():
         _validate(paths.campaign_db)
+        # Phase 5: validated campaign wins, clean any leftover legacy files/archive
+        try:
+            _cleanup_legacy_files(paths)
+        except OSError:
+            pass
         return "validated"
     if legacy_files:
         _migrate_legacy(paths, legacy_files)
@@ -176,11 +220,10 @@ def _migrate_legacy(paths: CampaignPaths, legacy_files: dict[str, Path]) -> None
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
-    # If archiving fails after the new campaign.db is already installed, do not
-    # report migration failure. The next startup validates the installed db and
-    # legacy files are still harmless leftovers; this keeps retries idempotent.
+    # Phase 5: directly delete legacy files/sidecars and archive dir; failures
+    # after a successful install must not be reported as migration failure.
     try:
-        _archive_legacy(paths, legacy_files)
+        _cleanup_legacy_files(paths)
     except OSError:
         pass
 
@@ -326,16 +369,6 @@ def _fsync_dir(path: Path) -> None:
         os.fsync(fd)
     finally:
         os.close(fd)
-
-
-def _archive_legacy(paths: CampaignPaths, legacy_files: dict[str, Path]) -> None:
-    archive = paths.data_dir / LEGACY_ARCHIVE_DIR
-    archive.mkdir(parents=True, exist_ok=True)
-    for path in legacy_files.values():
-        for suffix in ("", "-wal", "-shm"):
-            candidate = Path(str(path) + suffix)
-            if candidate.exists():
-                shutil.move(str(candidate), str(archive / candidate.name))
 
 
 def _fsync_file(path: Path) -> None:

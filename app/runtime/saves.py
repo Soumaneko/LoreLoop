@@ -21,6 +21,7 @@ from .turn_history import ensure_control_database
 from .initialization import InitializationStore
 from .save_archive import (
     ArchiveInspection,
+    SaveArchiveError,
     create_consistent_snapshot,
     export_save as write_save_archive,
     extract_archive,
@@ -148,7 +149,12 @@ class SaveManager:
             # the legacy ten-database layout. Copying it without migrating would
             # silently drop all canonical data because snapshots only accept
             # campaign.db.
-            ensure_campaign_database(CampaignPaths.from_data_dir(source))
+            try:
+                ensure_campaign_database(CampaignPaths.from_data_dir(source))
+            except RuntimeError as exc:
+                if "director_mutation" in str(exc):
+                    raise SaveArchiveError(str(exc)) from exc
+                raise
             ensure_control_database(CampaignPaths.from_data_dir(source))
             self._require_no_pending_source(source_id, "copy")
             if str(name).strip():
@@ -228,7 +234,12 @@ class SaveManager:
             source = self._require_save(clean_id)
             # See copy(): migrate an unopened legacy save before snapshotting so
             # export does not silently omit all canonical data.
-            ensure_campaign_database(CampaignPaths.from_data_dir(source))
+            try:
+                ensure_campaign_database(CampaignPaths.from_data_dir(source))
+            except RuntimeError as exc:
+                if "director_mutation" in str(exc):
+                    raise SaveArchiveError(str(exc)) from exc
+                raise
             ensure_control_database(CampaignPaths.from_data_dir(source))
             self._require_no_pending_source(clean_id, "export")
             destination_path.parent.mkdir(parents=True, exist_ok=True)

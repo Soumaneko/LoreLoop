@@ -1300,14 +1300,6 @@ class CampaignHistory:
                 raise RuntimeError(
                     f"snapshot campaign migration failed: {snapshot_dir}: {exc}"
                 ) from exc
-            # Clean up archive dir that ensure_campaign_database may have created inside snapshot
-            legacy_archive = snapshot_dir / ".runtime" / "legacy-db-v1"
-            if legacy_archive.exists():
-                shutil.rmtree(legacy_archive, ignore_errors=True)
-                try:
-                    (snapshot_dir / ".runtime").rmdir()
-                except OSError:
-                    pass
         # Delegate manifest rewriting to the single source of truth in save_archive
         # to keep settings.json/legacy handling consistent. Lazy import avoids cycle.
         try:
