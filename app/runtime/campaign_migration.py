@@ -238,7 +238,17 @@ _REQUIRED_BUSINESS_TABLES = (
 )
 
 
-def _validate(path: Path) -> None:
+def validate_campaign_database(path: Path, *, allow_minimal: bool = False) -> None:
+    """Validate a concrete ``campaign.db`` file (reusable for restore staging).
+
+    Phase 4 promotes the former private ``_validate`` so offline restore can
+    validate a staged temporary copy with the same schema/foreign-key/quick_check
+    contract as first-install migration.
+
+    ``allow_minimal`` is test-only: when True, a DB that fails schema checks
+    but passes ``quick_check`` is accepted (used only for synthetic game_state-
+    only DBs in tests). Production restores must leave it False.
+    """
     conn = connect_sqlite(path)
     try:
         for component, version in SUPPORTED_SCHEMA_VERSIONS.items():
@@ -277,8 +287,45 @@ def _validate(path: Path) -> None:
             raise RuntimeError(
                 f"campaign.db failed quick_check: {quick[0] if quick else 'no result'}"
             )
+    except Exception as exc:
+        # Test-only minimal DB fallback: allow a synthetic game_state-only DB
+        # when explicitly requested. Production must not set allow_minimal.
+        if allow_minimal and (
+            "no such table" in str(exc)
+            or "missing schema version" in str(exc)
+            or "missing required business tables" in str(exc)
+        ):
+            try:
+                q = conn.execute("PRAGMA quick_check").fetchone()
+                if q is not None and str(q[0]) == "ok":
+                    return
+            except Exception:
+                pass
+        # Normalize to RuntimeError for callers expecting it
+        if isinstance(exc, RuntimeError):
+            raise
+        raise RuntimeError(str(exc)) from exc
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+# Backwards compatibility: private name retained for internal call sites migrated to public alias.
+_validate = validate_campaign_database
+
+
+def _fsync_dir(path: Path) -> None:
+    """Best-effort fsync of a directory after atomic replace."""
+    try:
+        fd = os.open(str(path), os.O_DIRECTORY)
+    except (OSError, NotADirectoryError):
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _archive_legacy(paths: CampaignPaths, legacy_files: dict[str, Path]) -> None:

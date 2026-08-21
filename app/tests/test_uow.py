@@ -137,6 +137,30 @@ def test_read_unit_does_not_commit(tmp_path):
     assert rows == []
 
 
+def test_closed_uow_cannot_reopen(tmp_path):
+    uow = CampaignUnitOfWork(_paths(tmp_path))
+    uow.current_state
+    uow.close()
+    assert uow.is_closed
+    with pytest.raises(RuntimeError, match="UoW is closed"):
+        uow._get_conn()
+    with pytest.raises(RuntimeError, match="UoW is closed"):
+        with uow:
+            pass
+
+
+def test_bare_uow_is_closed_after_context_exit(tmp_path):
+    uow = CampaignUnitOfWork(_paths(tmp_path))
+    with uow:
+        uow._get_conn().execute("SELECT 1").fetchone()
+    assert uow.is_closed
+    with pytest.raises(RuntimeError, match="UoW is closed"):
+        uow._get_conn()
+    with pytest.raises(RuntimeError, match="UoW is closed"):
+        with uow:
+            pass
+
+
 def test_runtime_reconfigure_and_close_release_old_uow(tmp_path):
     runtime = CampaignRuntime()
     old = runtime.stores

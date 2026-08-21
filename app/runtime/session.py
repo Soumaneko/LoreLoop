@@ -248,14 +248,28 @@ class CampaignRuntime:
     ) -> None:
         self.campaign_id = campaign_id
         self.paths = paths or default_campaign_paths()
-        # CampaignHistory is the single control-DB migration entry; it creates
-        # the control DB and migrates legacy turn_history.db before the stores
-        # are used.  campaign.db is still ensured here because stores require a
-        # validated campaign database immediately.
+        # Phase 4 ordering: ensure campaign.db, use short-lived UoW for
+        # legacy director journal, close it, then run offline interrupted
+        # recovery before creating the formal session UoW.
         if stores is None:
             ensure_campaign_database(self.paths)
-        self.stores = stores or CampaignUnitOfWork(self.paths)
-        recover_pending_director_mutation(self.stores)
+            _tmp = CampaignUnitOfWork(self.paths)
+            try:
+                recover_pending_director_mutation(_tmp)
+            finally:
+                _tmp.close()
+            self.history = CampaignHistory(self.paths.data_dir)
+            self.history.recover_interrupted()
+            try:
+                _epoch = int(self.history.connection_epoch)
+            except Exception:
+                _epoch = None
+            self.stores = CampaignUnitOfWork(self.paths, expected_epoch=_epoch)
+            self._history_already_recovered = True
+        else:
+            self.stores = stores
+            recover_pending_director_mutation(self.stores)
+            self._history_already_recovered = False
         self.gateway_factory = gateway_factory or effective_gateway_factory()
         self.diagnostics = getattr(
             self.gateway_factory,
@@ -275,17 +289,26 @@ class CampaignRuntime:
             operation_manager=self.operations,
         )
         self.generation_cache_epoch: int = 0
+        # generation_cache_epoch is a runtime-local prefix-cache generation;
+        # it is distinct from control_state.connection_epoch (Phase 4 epoch guard).
         self.generation_prefix_cache = GenerationPrefixCache(max_size=16)
         self._rebuild_runtime_services()
         self._confirmation_lock = threading.RLock()
         self._lifecycle_lock = threading.RLock()
         self._save_task_active = False
+        # Phase 4: operation UoW quiesce set + gate for offline restore
+        self._active_uows: set[object] = set()
+        self._active_uows_cv = threading.Condition(threading.RLock())
+        self._restore_gate_closed = False
+        self._restore_error: str | None = None
         self._on_save_played = None
         from app.runtime.initialization import InitializationStore
 
         self.initialization = InitializationStore(self.paths.initialization_json)
-        self.history = CampaignHistory(self.paths.data_dir)
-        self.history.recover_interrupted()
+        if not getattr(self, "_history_already_recovered", False):
+            self.history = CampaignHistory(self.paths.data_dir)
+            self.history.recover_interrupted()
+        # else: history already created and recovered in stores is None branch
         self._configure_pending_persistence()
         self._restore_pending_transactions()
 
@@ -296,8 +319,128 @@ class CampaignRuntime:
         runtime projection, but every business operation must use its own UoW so
         writes cannot join another operation's transaction on a shared
         connection.
+
+        Phase 4: registers the UoW in the quiesce set, stamps expected
+        connection_epoch, and enforces the restore gate. Tests may still
+        construct ``CampaignUnitOfWork(paths)`` directly without a gate.
         """
-        return CampaignUnitOfWork(self.paths, write=write)
+        with self._active_uows_cv:
+            if self._restore_gate_closed:
+                raise RuntimeError(
+                    f"runtime is quiesced for offline restore: {self._restore_error or 'restore in progress'}"
+                )
+        # Stamp expected epoch at creation time
+        try:
+            expected = int(self.history.connection_epoch) if hasattr(self, "history") else None
+        except Exception:
+            expected = None
+        uow = CampaignUnitOfWork(
+            self.paths, write=write, expected_epoch=expected, runtime_ref=self
+        )
+        with self._active_uows_cv:
+            # Re-check gate once inside lock to avoid race between check and register
+            if self._restore_gate_closed:
+                raise RuntimeError("runtime is quiesced for offline restore")
+            self._active_uows.add(uow)
+        return uow
+
+    def _unregister_uow(self, uow: object) -> None:
+        with self._active_uows_cv:
+            self._active_uows.discard(uow)
+            self._active_uows_cv.notify_all()
+
+    def _wait_for_active_uows(self, *, timeout: float | None = 30.0) -> None:
+        with self._active_uows_cv:
+            import time as _time
+
+            end = None if timeout is None else _time.monotonic() + timeout
+            while self._active_uows:
+                remaining = None if end is None else max(0, end - _time.monotonic())
+                if remaining == 0:
+                    details = "; ".join(
+                        f"{type(u).__name__}(paths={getattr(u, 'paths', None)})"
+                        for u in list(self._active_uows)[:10]
+                    )
+                    raise RuntimeError(
+                        f"quiesce timeout: {len(self._active_uows)} active UoW(s) did not close: {details}"
+                    )
+                self._active_uows_cv.wait(timeout=min(0.2, remaining) if remaining is not None else 0.2)
+
+    # Phase 4 unified offline restore barrier
+    def _run_offline_restore(self, fn: Callable[[], Any], *, allow_retry: bool = True) -> Any:
+        """Quiesce, close session stores, run offline restore, rebuild.
+
+        fn is called with all operation UoWs and session stores closed, so it
+        may safely do ``os.replace`` on campaign.db and update control.db.
+        On failure the gate stays closed and the error is surfaced; callers
+        may retry via ``allow_retry=True`` or restart where durable intent
+        will complete recovery.
+        """
+        # 1. Close gate for new UoWs/operations
+        with self._active_uows_cv:
+            if self._restore_gate_closed:
+                if allow_retry and self._restore_error is not None:
+                    # Previous restore failed, allow same-process retry by resetting gate
+                    self._restore_gate_closed = False
+                    self._restore_error = None
+                else:
+                    raise RuntimeError(self._restore_error or "offline restore already in progress")
+            self._restore_gate_closed = True
+        # 2. Wait for jobs and already-created operation UoWs (bounded).  If
+        # quiesce fails before any file installation, reopen the gate so the
+        # runtime is not permanently wedged.
+        try:
+            self.jobs.wait_for_idle()
+            self._wait_for_active_uows(timeout=30.0)
+        except BaseException as exc:
+            with self._active_uows_cv:
+                self._restore_gate_closed = False
+                self._restore_error = None
+                self._active_uows_cv.notify_all()
+            raise
+        # 3. Close session UoW so no campaign connection remains
+        try:
+            self.stores.close()
+        except Exception:
+            pass
+        try:
+            result = fn()
+        except BaseException as exc:
+            self._restore_error = f"{type(exc).__name__}: {exc}"
+            raise
+        # 4. Success: rebuild session UoW/Services under new epoch, reopen gate
+        try:
+            try:
+                cur_epoch = int(self.history.connection_epoch)
+            except Exception:
+                cur_epoch = None
+            self.stores = CampaignUnitOfWork(
+                self.paths, expected_epoch=cur_epoch, runtime_ref=None
+            )
+            self._rebuild_runtime_services()
+        finally:
+            with self._active_uows_cv:
+                self._restore_gate_closed = False
+                self._restore_error = None
+                self._active_uows_cv.notify_all()
+        return result
+
+    def fail_confirmation_offline(self, turn_id: str, exc: BaseException) -> None:
+        """Offline restore path for confirmation failure (Phase 4).
+
+        Replaces the former direct ``history.fail_confirmation`` online backup.
+        """
+        def _do() -> None:
+            # history implements offline variant; keep import local to avoid cycle
+            # Prefer durable offline; fallback to online for backwards compat
+            if hasattr(self.history, "fail_confirmation_offline"):
+                return self.history.fail_confirmation_offline(turn_id, exc)  # type: ignore[attr-defined]
+            return self.history.fail_confirmation(turn_id, exc)
+
+        result = self._run_offline_restore(_do)
+        # Confirmation failure must not leave stale in-memory pending already popped?
+        # No extra pending restore needed; history already moved txn to failed.
+        return result
 
     @property
     def confirmation_lock(self) -> threading.RLock:
@@ -361,6 +504,11 @@ class CampaignRuntime:
         with self._lifecycle_lock:
             if self._save_task_active:
                 raise RuntimeError("A save management task is currently running")
+            with self._active_uows_cv:
+                if self._restore_gate_closed:
+                    raise RuntimeError(
+                        self._restore_error or "offline restore in progress"
+                    )
             yield
 
     @contextmanager
@@ -715,8 +863,7 @@ class CampaignRuntime:
         with self._confirmation_lock:
             if self.has_pending_content():
                 raise RuntimeError("Confirm or discard pending content before undo")
-            self.jobs.wait_for_idle()
-            result = self.history.undo()
+            result = self._run_offline_restore(lambda: self.history.undo())
             self._restore_pending_transactions()
             self._restart_jobs()
             self.invalidate_generation_cache()
@@ -732,8 +879,7 @@ class CampaignRuntime:
             }
             if pending_ids and pending_ids != restored_ids:
                 raise RuntimeError("Confirm or discard pending content before redo")
-            self.jobs.wait_for_idle()
-            result = self.history.redo()
+            result = self._run_offline_restore(lambda: self.history.redo())
             self.pending_turns.clear(discard=False)
             self.pending_openings.clear(discard=False)
             self._restart_jobs()
@@ -751,6 +897,7 @@ class CampaignRuntime:
             gateway_factory=gateway_factory or self.gateway_factory,
             jobs=self.jobs,
             diagnostics=self.diagnostics,
+            uow_factory=self.uow,
         )
 
     def _restart_jobs(self) -> None:
@@ -766,46 +913,153 @@ class CampaignRuntime:
         campaign_id: str,
         paths: CampaignPaths,
     ) -> None:
-        """Switch this runtime to another persisted campaign directory."""
+        """Switch this runtime to another persisted campaign directory.
+
+        The switch is transactional: the target campaign DB is validated and
+        the new stores are built before the runtime's identity/paths are
+        changed.  If anything fails, the previous campaign remains active and
+        the gate is reopened.
+        """
         with self._confirmation_lock:
             if self.has_active_operations():
                 raise RuntimeError(
                     "Current save has an active operation. Wait for it to finish "
                     "before switching saves."
                 )
+            # Close the gate for new UoWs and wait for already-created operation
+            # UoWs to exit before switching.  Old UoWs must not remain attached
+            # to the previous save.  Operations/jobs are shut down only after a
+            # successful quiesce so a wait failure leaves the old runtime fully
+            # usable.
+            with self._active_uows_cv:
+                if self._restore_gate_closed:
+                    raise RuntimeError(self._restore_error or "offline restore already in progress")
+                self._restore_gate_closed = True
+            try:
+                self._wait_for_active_uows(timeout=30.0)
+            except BaseException:
+                with self._active_uows_cv:
+                    self._restore_gate_closed = False
+                    self._restore_error = None
+                    self._active_uows_cv.notify_all()
+                raise
+
             self.operations.shutdown(wait=True)
             self.jobs.shutdown(wait=True)
-            # Pending content belongs to the source campaign's durable journal.
-            # Switching only unloads its in-memory projection; it must not
-            # mutate the source journal.
-            self.pending_turns.clear(discard=False)
-            self.pending_openings.clear(discard=False)
-            self.campaign_id = campaign_id
-            self.paths = paths
-            # campaign.db must be valid before stores open; CampaignHistory
-            # handles control.db migration as its single entry point.
-            ensure_campaign_database(paths)
-            self.stores.close()
-            self.stores = CampaignUnitOfWork(paths)
-            self.invalidate_generation_cache()
-            recover_pending_director_mutation(self.stores)
-            from app.runtime.initialization import InitializationStore
 
-            self.initialization = InitializationStore(paths.initialization_json)
-            self.operations = OperationManager(
-                campaign_id,
-                max_workers=self._max_workers,
-                diagnostics=self.diagnostics,
-            )
-            self.jobs = MaintenanceJobCoordinator(
-                max_workers=self._max_workers,
-                operation_manager=self.operations,
-            )
-            self._rebuild_runtime_services()
-            self.history = CampaignHistory(paths.data_dir)
-            self.history.recover_interrupted()
-            self._configure_pending_persistence()
-            self._restore_pending_transactions()
+            old_campaign_id = self.campaign_id
+            old_paths = self.paths
+            old_history = self.history
+            old_pending_turns = self.pending_turns
+            old_pending_openings = self.pending_openings
+            old_initialization = self.initialization
+            new_stores: CampaignUnitOfWork | None = None
+            new_operations: OperationManager | None = None
+            new_jobs: MaintenanceJobCoordinator | None = None
+
+            try:
+                # Validate/build the target before mutating runtime identity.
+                ensure_campaign_database(paths)
+                _tmp = CampaignUnitOfWork(paths)
+                try:
+                    recover_pending_director_mutation(_tmp)
+                finally:
+                    _tmp.close()
+                new_history = CampaignHistory(paths.data_dir)
+                new_history.recover_interrupted()
+                try:
+                    _epoch = int(new_history.connection_epoch)
+                except Exception:
+                    _epoch = None
+                new_stores = CampaignUnitOfWork(paths, expected_epoch=_epoch)
+                # Rebuild all target-scoped resources.
+                from app.runtime.initialization import InitializationStore
+
+                new_initialization = InitializationStore(paths.initialization_json)
+                new_operations = OperationManager(
+                    campaign_id,
+                    max_workers=self._max_workers,
+                    diagnostics=self.diagnostics,
+                )
+                new_jobs = MaintenanceJobCoordinator(
+                    max_workers=self._max_workers,
+                    operation_manager=new_operations,
+                )
+
+                # Commit the switch.
+                self.stores.close()
+                self.campaign_id = campaign_id
+                self.paths = paths
+                self.history = new_history
+                self.stores = new_stores
+                self.initialization = new_initialization
+                self.operations = new_operations
+                self.jobs = new_jobs
+                self.pending_turns.clear(discard=False)
+                self.pending_openings.clear(discard=False)
+                self.invalidate_generation_cache()
+                self._rebuild_runtime_services()
+                self._configure_pending_persistence()
+                self._restore_pending_transactions()
+            except BaseException:
+                # Close any target-scoped resources that were already created.
+                if new_jobs is not None:
+                    try:
+                        new_jobs.shutdown(wait=True)
+                    except Exception:
+                        pass
+                if new_operations is not None:
+                    try:
+                        new_operations.shutdown(wait=True)
+                    except Exception:
+                        pass
+                if new_stores is not None:
+                    try:
+                        new_stores.close()
+                    except Exception:
+                        pass
+                # Rebuild fresh resources for the previous campaign.  The old
+                # operations/jobs were shut down before the switch began and
+                # must not be reattached.
+                self.campaign_id = old_campaign_id
+                self.paths = old_paths
+                self.history = old_history
+                self.pending_turns = old_pending_turns
+                self.pending_openings = old_pending_openings
+                self.initialization = old_initialization
+                self.operations = OperationManager(
+                    old_campaign_id,
+                    max_workers=self._max_workers,
+                    diagnostics=self.diagnostics,
+                )
+                self.jobs = MaintenanceJobCoordinator(
+                    max_workers=self._max_workers,
+                    operation_manager=self.operations,
+                )
+                try:
+                    self.stores = CampaignUnitOfWork(
+                        old_paths,
+                        expected_epoch=(
+                            int(self.history.connection_epoch)
+                            if self.history is not None
+                            else None
+                        ),
+                    )
+                except Exception:
+                    # If even the old save cannot be reopened (e.g. its DB was
+                    # corrupted concurrently), fall back to a bare unit so the
+                    # runtime is not left without stores.
+                    self.stores = CampaignUnitOfWork(old_paths)
+                self._rebuild_runtime_services()
+                self._configure_pending_persistence()
+                self._restore_pending_transactions()
+                raise
+            finally:
+                # Reopen the gate whether the switch succeeded or failed.
+                with self._active_uows_cv:
+                    self._restore_gate_closed = False
+                    self._restore_error = None
+                    self._active_uows_cv.notify_all()
 
     def close(self, *, wait_for_jobs: bool = True) -> None:
         self.operations.shutdown(wait=wait_for_jobs)

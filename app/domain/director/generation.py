@@ -79,188 +79,191 @@ class DirectorGenerationExecutor:
         recover_pending_director_mutation(self._stores)
         service = DirectorSkillService()
         touched_event_ids = set(self._touched_event_candidates)
-        with self._stores as uow:
-            event_store = uow.director_event
-            director_npc_store = uow.director_npc
-            npc_profile_store = uow.npc_profile
-            setting_store = uow.world_setting
-            active_events = event_store.list_active()
-            hidden_events = [
-                event
-                for event in active_events
-                if event.event_id not in touched_event_ids
-                and event.stage != "engaged"
-            ]
-            engaged_events = [
-                event
-                for event in active_events
-                if event.stage == "engaged" or event.event_id in touched_event_ids
-            ]
-            # Only not-yet-introduced Director NPC drafts are observable during
-            # generation. Introduced Director NPCs are already regular NPC
-            # Profiles and stay visible through the profile channel.
-            director_npcs = [
-                npc
-                for npc in director_npc_store.list_all()
-                if npc.status == "prepared"
-            ]
-            selected_npc_profiles = self._npc_profiles
-            settings = setting_store.list_all()
-            log_store = uow.director_log
-            recent_director_log = log_store.recent()
+        # The stores object is owned by the caller (an operation UoW or test
+        # fixture); do not enter/exit it here because context exit now closes
+        # the UoW permanently.
+        uow = self._stores
+        event_store = uow.director_event
+        director_npc_store = uow.director_npc
+        npc_profile_store = uow.npc_profile
+        setting_store = uow.world_setting
+        active_events = event_store.list_active()
+        hidden_events = [
+            event
+            for event in active_events
+            if event.event_id not in touched_event_ids
+            and event.stage != "engaged"
+        ]
+        engaged_events = [
+            event
+            for event in active_events
+            if event.stage == "engaged" or event.event_id in touched_event_ids
+        ]
+        # Only not-yet-introduced Director NPC drafts are observable during
+        # generation. Introduced Director NPCs are already regular NPC
+        # Profiles and stay visible through the profile channel.
+        director_npcs = [
+            npc
+            for npc in director_npc_store.list_all()
+            if npc.status == "prepared"
+        ]
+        selected_npc_profiles = self._npc_profiles
+        settings = setting_store.list_all()
+        log_store = uow.director_log
+        recent_director_log = log_store.recent()
 
-            register_skill(
-                service,
-                "present_event",
-                handler=lambda args, guidance=None: _present_event(
-                    event_store,
-                    args,
-                    guidance=guidance,
-                    touched_event_ids=touched_event_ids,
-                ),
-                arguments_validator=lambda args: _get_hidden_event(
-                    event_store,
-                    args.event_id,
-                    touched_event_ids=touched_event_ids,
-                ),
-            )
-            register_skill(
-                service,
-                "introduce_npc",
-                handler=lambda args, guidance=None: _introduce_npc(
-                    director_npc_store,
-                    args,
-                    guidance=guidance,
-                ),
-                arguments_validator=lambda args: _get_director_draft(
-                    director_npc_store,
-                    args.npc_id,
-                ),
-            )
-            register_skill(
-                service,
-                "upgrade_disclosure",
-                handler=lambda args, guidance=None: _upgrade_disclosure(
-                    npc_profile_store,
-                    args,
-                    guidance=guidance,
-                    visible_profiles=selected_npc_profiles,
-                ),
-                arguments_validator=lambda args: _get_disclosure_profile(
-                    npc_profile_store,
-                    args.npc_id,
-                    args.new_disclosure_level,
-                    visible_profiles=selected_npc_profiles,
-                ),
-            )
-            register_skill(
-                service,
-                "foreshadow_setting",
-                handler=lambda args, guidance=None: _foreshadow_setting(
-                    setting_store,
-                    args,
-                    guidance=guidance,
-                ),
-                arguments_validator=lambda args: _get_setting(
-                    setting_store,
-                    args.setting_id,
-                ),
-            )
-            register_skill(
-                service,
-                "intrude_engaged_event",
-                handler=lambda args, guidance=None: _intrude_engaged_event(
-                    event_store,
-                    args,
-                    guidance=guidance,
-                    touched_event_ids=touched_event_ids,
-                ),
-                arguments_validator=lambda args: _get_engaged_event(
-                    event_store,
-                    args.event_id,
-                    touched_event_ids=touched_event_ids,
-                ),
-            )
-            observation = DirectorObservation(
-                phase="generation",
-                turn_index=self._turn_index,
-                player_input=self._user_input,
-                core_memory=self._core_memory.model_dump(mode="json"),
-                current_state=self._current_state.model_dump(mode="json"),
-                context_facts=self._context_facts,
-                recent_director_log=recent_director_log,
-                recent_summaries=[
-                    summary.model_dump(mode="json")
-                    for summary in self._recent_summaries
+        register_skill(
+            service,
+            "present_event",
+            handler=lambda args, guidance=None: _present_event(
+                event_store,
+                args,
+                guidance=guidance,
+                touched_event_ids=touched_event_ids,
+            ),
+            arguments_validator=lambda args: _get_hidden_event(
+                event_store,
+                args.event_id,
+                touched_event_ids=touched_event_ids,
+            ),
+        )
+        register_skill(
+            service,
+            "introduce_npc",
+            handler=lambda args, guidance=None: _introduce_npc(
+                director_npc_store,
+                args,
+                guidance=guidance,
+            ),
+            arguments_validator=lambda args: _get_director_draft(
+                director_npc_store,
+                args.npc_id,
+            ),
+        )
+        register_skill(
+            service,
+            "upgrade_disclosure",
+            handler=lambda args, guidance=None: _upgrade_disclosure(
+                npc_profile_store,
+                args,
+                guidance=guidance,
+                visible_profiles=selected_npc_profiles,
+            ),
+            arguments_validator=lambda args: _get_disclosure_profile(
+                npc_profile_store,
+                args.npc_id,
+                args.new_disclosure_level,
+                visible_profiles=selected_npc_profiles,
+            ),
+        )
+        register_skill(
+            service,
+            "foreshadow_setting",
+            handler=lambda args, guidance=None: _foreshadow_setting(
+                setting_store,
+                args,
+                guidance=guidance,
+            ),
+            arguments_validator=lambda args: _get_setting(
+                setting_store,
+                args.setting_id,
+            ),
+        )
+        register_skill(
+            service,
+            "intrude_engaged_event",
+            handler=lambda args, guidance=None: _intrude_engaged_event(
+                event_store,
+                args,
+                guidance=guidance,
+                touched_event_ids=touched_event_ids,
+            ),
+            arguments_validator=lambda args: _get_engaged_event(
+                event_store,
+                args.event_id,
+                touched_event_ids=touched_event_ids,
+            ),
+        )
+        observation = DirectorObservation(
+            phase="generation",
+            turn_index=self._turn_index,
+            player_input=self._user_input,
+            core_memory=self._core_memory.model_dump(mode="json"),
+            current_state=self._current_state.model_dump(mode="json"),
+            context_facts=self._context_facts,
+            recent_director_log=recent_director_log,
+            recent_summaries=[
+                summary.model_dump(mode="json")
+                for summary in self._recent_summaries
+            ],
+            turn_resolution=(
+                json.loads(self._turn_resolution_json)
+                if self._turn_resolution_json
+                else None
+            ),
+            resources={
+                "events": [
+                    {
+                        **event.semantic_view(),
+                        "hook_pool": [
+                            {
+                                "hook_id": hook.hook_id,
+                                "kind": hook.kind,
+                                "content": hook.content,
+                            }
+                            for hook in event.hook_pool
+                            if not hook.consumed
+                        ],
+                    }
+                    for event in hidden_events
                 ],
-                turn_resolution=(
-                    json.loads(self._turn_resolution_json)
-                    if self._turn_resolution_json
-                    else None
-                ),
-                resources={
-                    "events": [
-                        {
-                            **event.semantic_view(),
-                            "hook_pool": [
-                                {
-                                    "hook_id": hook.hook_id,
-                                    "kind": hook.kind,
-                                    "content": hook.content,
-                                }
-                                for hook in event.hook_pool
-                                if not hook.consumed
-                            ],
-                        }
-                        for event in hidden_events
-                    ],
-                    "engaged_events": [
-                        {
-                            **event.semantic_view(),
-                            "stage": "engaged",
-                            "touched_this_turn": (
-                                event.event_id in touched_event_ids
-                            ),
-                            "world_impact": (
-                                event.world_impact.model_dump(mode="json")
-                                if event.world_impact is not None
-                                else None
-                            ),
-                        }
-                        for event in engaged_events
-                    ],
-                    "drafts": [
-                        {
-                            "npc_id": npc.draft_id,
-                            "source": "director_npc",
-                            **npc.private_view().model_dump(mode="json"),
-                        }
-                        for npc in director_npcs
-                    ],
-                    "npcs": [
-                        {
-                            "npc_id": profile.npc_id,
-                            "source": "npc_profile",
-                            **profile.director_view().model_dump(mode="json"),
-                        }
-                        for profile in selected_npc_profiles
-                    ],
-                    "settings": [
-                        setting.reference_view()
-                        for setting in settings
-                    ],
-                },
-            )
-            agent = DirectorAgent(self._gateway, service)
-            decision = agent.decide_generation(
-                observation,
-                trace_id=self._trace_id,
-            )
-            self.last_warnings.extend(agent.last_warnings)
-            executions = service.execute_batch(
-                decision,
-                phase="generation",
-            )
+                "engaged_events": [
+                    {
+                        **event.semantic_view(),
+                        "stage": "engaged",
+                        "touched_this_turn": (
+                            event.event_id in touched_event_ids
+                        ),
+                        "world_impact": (
+                            event.world_impact.model_dump(mode="json")
+                            if event.world_impact is not None
+                            else None
+                        ),
+                    }
+                    for event in engaged_events
+                ],
+                "drafts": [
+                    {
+                        "npc_id": npc.draft_id,
+                        "source": "director_npc",
+                        **npc.private_view().model_dump(mode="json"),
+                    }
+                    for npc in director_npcs
+                ],
+                "npcs": [
+                    {
+                        "npc_id": profile.npc_id,
+                        "source": "npc_profile",
+                        **profile.director_view().model_dump(mode="json"),
+                    }
+                    for profile in selected_npc_profiles
+                ],
+                "settings": [
+                    setting.reference_view()
+                    for setting in settings
+                ],
+            },
+        )
+        agent = DirectorAgent(self._gateway, service)
+        decision = agent.decide_generation(
+            observation,
+            trace_id=self._trace_id,
+        )
+        self.last_warnings.extend(agent.last_warnings)
+        executions = service.execute_batch(
+            decision,
+            phase="generation",
+        )
         materials = [
             DirectorStageMaterial.model_validate(execution.output)
             for execution in executions.executions

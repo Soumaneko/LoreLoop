@@ -669,30 +669,86 @@ class CampaignHistory:
             return snapshot_id
 
     def fail_confirmation(self, turn_id: str, error: BaseException) -> None:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT s.path, s.revision_id FROM turn_transactions t
-                JOIN turn_snapshots s ON s.snapshot_id=t.pre_snapshot_id
-                WHERE t.turn_id=? AND s.status='provisional'
-                """,
-                (turn_id,),
-            ).fetchone()
-            snapshot_rev: str | None = None
-            if row is not None:
-                snapshot_rev = row["revision_id"]
-                self._restore_snapshot(self._snapshot_path(row["path"]))
-                # increment epoch and keep current at snapshot's pre revision
-                if snapshot_rev is not None:
+        # Phase 4 durable offline: confirming -> restoring -> failed
+        # Keep backwards compatible name; runtime uses fail_confirmation_offline wrapper
+        return self.fail_confirmation_offline(turn_id, error)
+
+    def fail_confirmation_offline(self, turn_id: str, error: BaseException) -> None:
+        with self._lock:
+            # 1. Fetch provisional snapshot + snapshot_id for durable intent
+            with self._connect() as conn:
+                row = conn.execute(
+                    """
+                    SELECT s.path, s.revision_id, s.snapshot_id, s.status as snap_status FROM turn_transactions t
+                    JOIN turn_snapshots s ON s.snapshot_id=t.pre_snapshot_id
+                    WHERE t.turn_id=? AND s.status IN ('provisional', 'restoring')
+                    """,
+                    (turn_id,),
+                ).fetchone()
+                txn_row = conn.execute(
+                    "SELECT status, pre_snapshot_id FROM turn_transactions WHERE turn_id=?", (turn_id,)
+                ).fetchone()
+                if txn_row is None:
+                    raise RuntimeError(f"Turn transaction not found: {turn_id}")
+                # Already failed is idempotent
+                if txn_row["status"] == "failed":
+                    return
+                snapshot_path: Path | None = None
+                snapshot_rev: str | None = None
+                snapshot_id: str | None = None
+                if row is not None:
+                    snapshot_path = self._snapshot_path(row["path"])
+                    snapshot_rev = row["revision_id"]
+                    snapshot_id = row["snapshot_id"]
+                # Durable intent: confirming -> restoring for both txn and snapshot
+                if txn_row["status"] == "confirming":
+                    conn.execute(
+                        "UPDATE turn_transactions SET status='restoring', updated_at=? WHERE turn_id=?",
+                        (_now(), turn_id),
+                    )
+                    if snapshot_id is not None:
+                        conn.execute(
+                            "UPDATE turn_snapshots SET status='restoring' WHERE snapshot_id=?",
+                            (snapshot_id,),
+                        )
+                    conn.commit()
+                elif txn_row["status"] == "restoring":
+                    # Ensure snapshot also in restoring (idempotent)
+                    if snapshot_id is not None and row is not None and row["snap_status"] == "provisional":
+                        conn.execute(
+                            "UPDATE turn_snapshots SET status='restoring' WHERE snapshot_id=?",
+                            (snapshot_id,),
+                        )
+                        conn.commit()
+                else:
+                    # e.g. awaiting_confirm retry: no restore needed
+                    pass
+            # 2. Offline install (outside control transaction, session UoW must be closed by caller)
+            if snapshot_path is not None:
+                self._restore_snapshot(snapshot_path)
+            # 3. Finalize: restoring -> failed + epoch bump.  The epoch must
+            # increase exactly once per completed durable restore, regardless
+            # of whether the current revision already equals the pre-revision.
+            with self._connect() as conn:
+                cur = conn.execute("SELECT status FROM turn_transactions WHERE turn_id=?", (turn_id,)).fetchone()
+                if cur is None or cur["status"] == "failed":
+                    return
+                if snapshot_path is not None and snapshot_rev is not None:
                     self._increment_epoch_and_set_revision(conn, snapshot_rev)
-            conn.execute(
-                """
-                UPDATE turn_transactions SET status='failed', error=?, updated_at=?
-                WHERE turn_id=?
-                """,
-                (f"{type(error).__name__}: {error}", _now(), turn_id),
-            )
-            conn.commit()
+                # Restore snapshot status to provisional before marking failed? Keep as restoring until finalize
+                if snapshot_id is not None:
+                    conn.execute(
+                        "UPDATE turn_snapshots SET status='provisional' WHERE snapshot_id=? AND status='restoring'",
+                        (snapshot_id,),
+                    )
+                conn.execute(
+                    """
+                    UPDATE turn_transactions SET status='failed', error=?, updated_at=?
+                    WHERE turn_id=?
+                    """,
+                    (f"{type(error).__name__}: {error}", _now(), turn_id),
+                )
+                conn.commit()
 
     def complete_confirmation(self, turn_id: str, group_id: str | None) -> None:
         with self._lock, self._connect() as conn:
@@ -788,154 +844,338 @@ class CampaignHistory:
                 shutil.rmtree(self._snapshot_path(snapshot["path"]), ignore_errors=True)
 
     def recover_interrupted(self) -> bool:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT t.*, s.path, s.revision_id as snapshot_revision FROM turn_transactions t
-                JOIN turn_snapshots s ON s.snapshot_id=t.pre_snapshot_id
-                WHERE t.status IN ('confirming', 'failed')
-                ORDER BY t.updated_at DESC LIMIT 1
-                """
-            ).fetchone()
-            if row is None:
-                return False
-            self._restore_snapshot(self._snapshot_path(row["path"]))
-            snapshot_rev = row["snapshot_revision"]
-            if snapshot_rev is not None:
-                self._increment_epoch_and_set_revision(conn, snapshot_rev)
-            conn.execute(
-                """
-                UPDATE turn_transactions SET status='awaiting_confirm',
-                    error='Recovered interrupted confirmation from pre-turn snapshot',
-                    updated_at=? WHERE turn_id=?
-                """,
-                (_now(), row["turn_id"]),
-            )
-            conn.execute(
-                "UPDATE turn_snapshots SET status='provisional' WHERE snapshot_id=?",
-                (row["pre_snapshot_id"],),
-            )
-            conn.commit()
-            return True
+        # Phase 4: recover durable intents idempotently (epoch only once in finalize)
+        recovered = False
+        with self._lock:
+            # 1. Undoing
+            undo_row = None
+            undo_path: Path | None = None
+            undo_rev: str | None = None
+            undo_seq: int | None = None
+            with self._connect() as conn:
+                r = conn.execute("SELECT * FROM turn_snapshots WHERE status='undoing' ORDER BY sequence DESC LIMIT 1").fetchone()
+                if r is not None:
+                    undo_row = dict(r)
+                    undo_path = self._snapshot_path(r["path"])
+                    undo_rev = r["revision_id"]
+                    undo_seq = int(r["sequence"])
+            if undo_path is not None and undo_row is not None and undo_seq is not None:
+                self._restore_snapshot(undo_path)
+                with self._connect() as conn:
+                    cur = conn.execute("SELECT status FROM turn_snapshots WHERE sequence=?", (undo_seq,)).fetchone()
+                    if cur is not None and cur["status"] == "undoing":
+                        conn.execute("UPDATE turn_snapshots SET status='undone' WHERE sequence=?", (undo_seq,))
+                        if undo_rev is not None:
+                            self._increment_epoch_and_set_revision(conn, undo_rev)
+                        txn = conn.execute("SELECT group_id FROM turn_transactions WHERE turn_id=?", (undo_row["turn_id"],)).fetchone()
+                        if txn is not None:
+                            if txn["group_id"]:
+                                conn.execute(
+                                    "UPDATE turn_transactions SET status='awaiting_confirm', error=NULL, updated_at=? WHERE group_id=? AND status IN ('completed','discarded')",
+                                    (_now(), txn["group_id"]),
+                                )
+                            else:
+                                conn.execute(
+                                    "UPDATE turn_transactions SET status='awaiting_confirm', error=NULL, updated_at=? WHERE turn_id=?",
+                                    (_now(), undo_row["turn_id"]),
+                                )
+                        conn.commit()
+                recovered = True
+
+            # 2. Redoing
+            redo_row = None
+            redo_path: Path | None = None
+            redo_seq: int | None = None
+            redo_post: dict | None = None
+            with self._connect() as conn:
+                r = conn.execute("SELECT * FROM turn_snapshots WHERE status='redoing' ORDER BY sequence ASC LIMIT 1").fetchone()
+                if r is not None and r["redo_path"]:
+                    redo_row = dict(r)
+                    redo_path = self._snapshot_path(r["redo_path"])
+                    redo_seq = int(r["sequence"])
+                    pr = conn.execute("SELECT revision_id, group_id FROM turn_transactions WHERE turn_id=?", (r["turn_id"],)).fetchone()
+                    redo_post = dict(pr) if pr is not None else None
+            if redo_path is not None and redo_row is not None and redo_seq is not None:
+                self._restore_snapshot(redo_path)
+                with self._connect() as conn:
+                    cur = conn.execute("SELECT status FROM turn_snapshots WHERE sequence=?", (redo_seq,)).fetchone()
+                    if cur is not None and cur["status"] == "redoing":
+                        conn.execute("UPDATE turn_snapshots SET status='applied' WHERE sequence=?", (redo_seq,))
+                        post_rev = redo_post["revision_id"] if redo_post and redo_post.get("revision_id") else None
+                        if post_rev is not None:
+                            self._increment_epoch_and_set_revision(conn, post_rev)
+                        else:
+                            post_rev = uuid.uuid4().hex
+                            conn.execute("UPDATE turn_transactions SET revision_id=? WHERE turn_id=?", (post_rev, redo_row["turn_id"]))
+                            self._increment_epoch_and_set_revision(conn, post_rev)
+                        if redo_post and redo_post.get("group_id"):
+                            conn.execute("UPDATE turn_transactions SET status='completed', error=NULL, updated_at=? WHERE turn_id=?", (_now(), redo_row["turn_id"]))
+                            conn.execute(
+                                "UPDATE turn_transactions SET status='discarded', updated_at=? WHERE group_id=? AND turn_id<>? AND status='awaiting_confirm'",
+                                (_now(), redo_post["group_id"], redo_row["turn_id"]),
+                            )
+                        else:
+                            conn.execute("UPDATE turn_transactions SET status='completed', error=NULL, updated_at=? WHERE turn_id=?", (_now(), redo_row["turn_id"]))
+                        conn.commit()
+                shutil.rmtree(redo_path, ignore_errors=True)
+                with self._connect() as conn:
+                    conn.execute("UPDATE turn_snapshots SET redo_path=NULL WHERE sequence=? AND status='applied'", (redo_seq,))
+                    conn.commit()
+                recovered = True
+
+            # 3. Restoring / Confirming (legacy confirming also treated as restoring)
+            crow = None
+            cr_path: Path | None = None
+            cr_rev: str | None = None
+            cr_turn: str | None = None
+            with self._connect() as conn:
+                r = conn.execute(
+                    """
+                    SELECT t.turn_id, t.status as txn_status, s.path, s.revision_id as snapshot_revision FROM turn_transactions t
+                    JOIN turn_snapshots s ON s.snapshot_id=t.pre_snapshot_id
+                    WHERE t.status IN ('restoring','confirming')
+                    ORDER BY t.updated_at DESC LIMIT 1
+                    """
+                ).fetchone()
+                if r is not None:
+                    crow = dict(r)
+                    cr_path = self._snapshot_path(r["path"])
+                    cr_rev = r["snapshot_revision"]
+                    cr_turn = r["turn_id"]
+            if cr_path is not None and cr_turn is not None:
+                self._restore_snapshot(cr_path)
+                with self._connect() as conn:
+                    cur = conn.execute("SELECT status, pre_snapshot_id FROM turn_transactions WHERE turn_id=?", (cr_turn,)).fetchone()
+                    if cur is not None and cur["status"] in ("restoring", "confirming"):
+                        if cr_rev is not None:
+                            self._increment_epoch_and_set_revision(conn, cr_rev)
+                        # Reset snapshot restoring -> provisional
+                        if cur["pre_snapshot_id"]:
+                            conn.execute(
+                                "UPDATE turn_snapshots SET status='provisional' WHERE snapshot_id=? AND status='restoring'",
+                                (cur["pre_snapshot_id"],),
+                            )
+                        conn.execute(
+                            "UPDATE turn_transactions SET status='failed', error='Recovered interrupted confirmation from pre-turn snapshot', updated_at=? WHERE turn_id=?",
+                            (_now(), cr_turn),
+                        )
+                        conn.commit()
+                recovered = True
+
+            # 4. Crash after redo directory delete but before redo_path clear:
+            # an applied snapshot with a non-null redo_path is a leftover that
+            # should simply have its path cleared (the directory is already gone).
+            with self._connect() as conn:
+                stale_redo = conn.execute(
+                    "SELECT sequence, redo_path FROM turn_snapshots WHERE status='applied' AND redo_path IS NOT NULL ORDER BY sequence"
+                ).fetchall()
+                for row in stale_redo:
+                    path = self._snapshot_path(row["redo_path"])
+                    if path.exists():
+                        shutil.rmtree(path, ignore_errors=True)
+                    conn.execute("UPDATE turn_snapshots SET redo_path=NULL WHERE sequence=?", (row["sequence"],))
+                if stale_redo:
+                    conn.commit()
+                    recovered = True
+            return recovered
 
     def undo(self) -> dict[str, Any]:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT * FROM turn_snapshots WHERE status='applied'
-                ORDER BY sequence DESC LIMIT 1
-                """
-            ).fetchone()
-            if row is None:
-                raise ValueError("No confirmed turn is available to undo")
-            redo_path = self.snapshots_dir / f"redo-{row['snapshot_id']}"
-            self._capture_snapshot(redo_path)
-            self._restore_snapshot(self._snapshot_path(row["path"]))
-            conn.execute(
-                "UPDATE turn_snapshots SET status='undone', redo_path=? WHERE sequence=?",
-                (self._stored_snapshot_path(redo_path), row["sequence"]),
-            )
-            snapshot_rev = row["revision_id"]
-            if snapshot_rev is not None:
-                self._increment_epoch_and_set_revision(conn, snapshot_rev)
-            transaction = conn.execute(
-                "SELECT group_id FROM turn_transactions WHERE turn_id=?",
-                (row["turn_id"],),
-            ).fetchone()
-            if transaction is None:
-                raise RuntimeError(
-                    f"Confirmed turn transaction is missing: {row['turn_id']}"
-                )
-            if transaction["group_id"]:
-                conn.execute(
+        # Phase 4 durable offline: applied -> undoing -> undone
+        with self._lock:
+            # 1. Select target (applied or already undoing for resume)
+            with self._connect() as conn:
+                row = conn.execute(
                     """
-                    UPDATE turn_transactions
-                    SET status='awaiting_confirm', error=NULL, updated_at=?
-                    WHERE group_id=? AND status IN ('completed', 'discarded')
-                    """,
-                    (_now(), transaction["group_id"]),
-                )
-            else:
-                conn.execute(
+                    SELECT * FROM turn_snapshots WHERE status IN ('applied','undoing')
+                    ORDER BY sequence DESC LIMIT 1
                     """
-                    UPDATE turn_transactions
-                    SET status='awaiting_confirm', error=NULL, updated_at=?
-                    WHERE turn_id=?
-                    """,
-                    (_now(), row["turn_id"]),
-                )
-            conn.commit()
-            result = self._snapshot_data(row, "undone")
-            result["restored_pending_turn_ids"] = self._redo_pending_turn_ids_locked(
-                conn, row["turn_id"]
-            )
-            return result
+                ).fetchone()
+                # Prefer applied; if latest is undoing resume that one, but if there is separate applied newer? Order ensures we handle correctly
+                # If the latest status is undone, the above won't find applied post-undo, but callers expect next applied.
+                # So fallback to applied only when no undoing found
+                if row is not None and row["status"] == "undoing":
+                    pass
+                else:
+                    # Re-query strictly applied if the undoing row was not the applied candidate or no row
+                    row2 = conn.execute(
+                        """
+                        SELECT * FROM turn_snapshots WHERE status='applied'
+                        ORDER BY sequence DESC LIMIT 1
+                        """
+                    ).fetchone()
+                    if row2 is not None:
+                        row = row2
+                    elif row is None or row["status"] != "undoing":
+                        raise ValueError("No confirmed turn is available to undo")
+                # Capture redo snapshot before intent if not already undoing
+                snapshot_seq = row["sequence"]
+                snapshot_id = row["snapshot_id"]
+                snapshot_path = self._snapshot_path(row["path"])
+                snapshot_rev = row["revision_id"]
+                redo_path: Path | None = None
+                redo_stored: str | None = None
+                if row["status"] == "applied":
+                    redo_path = self.snapshots_dir / f"redo-{snapshot_id}"
+                    self._capture_snapshot(redo_path)
+                    redo_stored = self._stored_snapshot_path(redo_path)
+                    conn.execute(
+                        "UPDATE turn_snapshots SET status='undoing', redo_path=? WHERE sequence=?",
+                        (redo_stored, snapshot_seq),
+                    )
+                    conn.commit()
+                else:
+                    # Resume: redo already captured; if missing, recapture (crash before capture)
+                    redo_stored = row["redo_path"]
+                    if redo_stored:
+                        redo_path = self._snapshot_path(redo_stored)
+                        if not redo_path.exists():
+                            # Recapture missing redo (idempotent)
+                            redo_path = self.snapshots_dir / f"redo-{snapshot_id}"
+                            self._capture_snapshot(redo_path)
+                            redo_stored = self._stored_snapshot_path(redo_path)
+                            conn.execute(
+                                "UPDATE turn_snapshots SET redo_path=? WHERE sequence=?",
+                                (redo_stored, snapshot_seq),
+                            )
+                            conn.commit()
+                    else:
+                        redo_path = self.snapshots_dir / f"redo-{snapshot_id}"
+                        self._capture_snapshot(redo_path)
+                        redo_stored = self._stored_snapshot_path(redo_path)
+                        conn.execute(
+                            "UPDATE turn_snapshots SET redo_path=? WHERE sequence=?",
+                            (redo_stored, snapshot_seq),
+                        )
+                        conn.commit()
+                        redo_path = self._snapshot_path(redo_stored)
+            # 2. Offline install pre snapshot (outside control txn)
+            self._restore_snapshot(snapshot_path)
+            # 3. Finalize in control txn
+            with self._connect() as conn:
+                cur = conn.execute("SELECT status, revision_id FROM turn_snapshots WHERE sequence=?", (snapshot_seq,)).fetchone()
+                if cur is None:
+                    raise RuntimeError("Undo snapshot disappeared")
+                if cur["status"] == "undone":
+                    # Already finalized (idempotent retry)
+                    pass
+                else:
+                    conn.execute(
+                        "UPDATE turn_snapshots SET status='undone' WHERE sequence=?",
+                        (snapshot_seq,),
+                    )
+                    if snapshot_rev is not None:
+                        self._increment_epoch_and_set_revision(conn, snapshot_rev)
+                    transaction = conn.execute(
+                        "SELECT group_id FROM turn_transactions WHERE turn_id=?",
+                        (row["turn_id"],),
+                    ).fetchone()
+                    if transaction is None:
+                        raise RuntimeError(f"Confirmed turn transaction is missing: {row['turn_id']}")
+                    if transaction["group_id"]:
+                        conn.execute(
+                            """
+                            UPDATE turn_transactions
+                            SET status='awaiting_confirm', error=NULL, updated_at=?
+                            WHERE group_id=? AND status IN ('completed', 'discarded')
+                            """,
+                            (_now(), transaction["group_id"]),
+                        )
+                    else:
+                        conn.execute(
+                            """
+                            UPDATE turn_transactions
+                            SET status='awaiting_confirm', error=NULL, updated_at=?
+                            WHERE turn_id=?
+                            """,
+                            (_now(), row["turn_id"]),
+                        )
+                    conn.commit()
+                result = self._snapshot_data(row, "undone")
+                result["restored_pending_turn_ids"] = self._redo_pending_turn_ids_locked(conn, row["turn_id"])
+                return result
 
     def redo(self) -> dict[str, Any]:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT * FROM turn_snapshots WHERE status='undone'
-                ORDER BY sequence ASC LIMIT 1
-                """
-            ).fetchone()
-            if row is None or not row["redo_path"]:
-                raise ValueError("No undone turn is available to redo")
-            redo_path = self._snapshot_path(row["redo_path"])
+        # Phase 4 durable offline: undone -> redoing -> applied
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    """
+                    SELECT * FROM turn_snapshots WHERE status IN ('undone','redoing')
+                    ORDER BY sequence ASC LIMIT 1
+                    """
+                ).fetchone()
+                # Prefer redoing if exists (resume), else earliest undone
+                if row is not None and row["status"] == "redoing":
+                    pass
+                else:
+                    row2 = conn.execute(
+                        """
+                        SELECT * FROM turn_snapshots WHERE status='undone' AND redo_path IS NOT NULL
+                        ORDER BY sequence ASC LIMIT 1
+                        """
+                    ).fetchone()
+                    if row2 is not None:
+                        row = row2
+                    elif row is None or row["status"] != "redoing":
+                        raise ValueError("No undone turn is available to redo")
+                seq = row["sequence"]
+                redo_stored = row["redo_path"]
+                if not redo_stored:
+                    raise ValueError("No undone turn is available to redo")
+                redo_path = self._snapshot_path(redo_stored)
+                if row["status"] == "undone":
+                    conn.execute("UPDATE turn_snapshots SET status='redoing' WHERE sequence=?", (seq,))
+                    conn.commit()
+            # Offline install redo snapshot
             self._restore_snapshot(redo_path)
+            # Finalize
+            with self._connect() as conn:
+                cur = conn.execute("SELECT status FROM turn_snapshots WHERE sequence=?", (seq,)).fetchone()
+                if cur is not None and cur["status"] == "applied":
+                    # Already applied (idempotent), ensure redo file cleaned
+                    shutil.rmtree(redo_path, ignore_errors=True)
+                    return self._snapshot_data(row, "redone")
+                conn.execute("UPDATE turn_snapshots SET status='applied' WHERE sequence=?", (seq,))
+                transaction = conn.execute(
+                    "SELECT revision_id, group_id FROM turn_transactions WHERE turn_id=?",
+                    (row["turn_id"],),
+                ).fetchone()
+                if transaction is None:
+                    raise RuntimeError(f"Undone turn transaction is missing: {row['turn_id']}")
+                post_rev = transaction["revision_id"]
+                if post_rev is not None:
+                    self._increment_epoch_and_set_revision(conn, post_rev)
+                else:
+                    post_rev = uuid.uuid4().hex
+                    conn.execute("UPDATE turn_transactions SET revision_id=? WHERE turn_id=?", (post_rev, row["turn_id"]))
+                    self._increment_epoch_and_set_revision(conn, post_rev)
+                if transaction["group_id"]:
+                    conn.execute(
+                        "UPDATE turn_transactions SET status='completed', error=NULL, updated_at=? WHERE turn_id=?",
+                        (_now(), row["turn_id"]),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE turn_transactions SET status='completed', error=NULL, updated_at=? WHERE turn_id=?",
+                        (_now(), row["turn_id"]),
+                    )
+                if transaction["group_id"]:
+                    conn.execute(
+                        """
+                        UPDATE turn_transactions
+                        SET status='discarded', updated_at=?
+                        WHERE group_id=? AND turn_id<>? AND status='awaiting_confirm'
+                        """,
+                        (_now(), transaction["group_id"], row["turn_id"]),
+                    )
+                conn.commit()
+            # Delete redo file only after control transaction commits, then clear
+            # redo_path in a separate durable step.  If the process exits between
+            # these steps, startup recovery still sees redo_path and can clean up.
             shutil.rmtree(redo_path, ignore_errors=True)
-            conn.execute(
-                "UPDATE turn_snapshots SET status='applied', redo_path=NULL WHERE sequence=?",
-                (row["sequence"],),
-            )
-            transaction = conn.execute(
-                "SELECT revision_id, group_id FROM turn_transactions WHERE turn_id=?",
-                (row["turn_id"],),
-            ).fetchone()
-            if transaction is None:
-                raise RuntimeError(
-                    f"Undone turn transaction is missing: {row['turn_id']}"
-                )
-            post_rev = transaction["revision_id"]
-            if post_rev is not None:
-                self._increment_epoch_and_set_revision(conn, post_rev)
-            else:
-                # Fallback: if no post revision stored (old DB before backfill), generate one
-                post_rev = uuid.uuid4().hex
-                conn.execute(
-                    "UPDATE turn_transactions SET revision_id=? WHERE turn_id=?",
-                    (post_rev, row["turn_id"]),
-                )
-                self._increment_epoch_and_set_revision(conn, post_rev)
-            if transaction["group_id"]:
-                conn.execute(
-                    """
-                    UPDATE turn_transactions
-                    SET status='completed', error=NULL, updated_at=?
-                    WHERE turn_id=?
-                    """,
-                    (_now(), row["turn_id"]),
-                )
-            else:
-                conn.execute(
-                    """
-                    UPDATE turn_transactions
-                    SET status='completed', error=NULL, updated_at=?
-                    WHERE turn_id=?
-                    """,
-                    (_now(), row["turn_id"]),
-                )
-            if transaction["group_id"]:
-                conn.execute(
-                    """
-                    UPDATE turn_transactions
-                    SET status='discarded', updated_at=?
-                    WHERE group_id=? AND turn_id<>?
-                      AND status='awaiting_confirm'
-                    """,
-                    (_now(), transaction["group_id"], row["turn_id"]),
-                )
-            conn.commit()
+            with self._connect() as conn:
+                conn.execute("UPDATE turn_snapshots SET redo_path=NULL WHERE sequence=? AND status='applied'", (seq,))
+                conn.commit()
             return self._snapshot_data(row, "redone")
 
     def redo_pending_turn_ids(self) -> list[str]:
@@ -1091,7 +1331,7 @@ class CampaignHistory:
             # Otherwise, if it was a no-op (no legacy/settings), it would not have raised
             raise
 
-    def _restore_snapshot(self, source: Path) -> None:
+    def _restore_snapshot(self, source: Path, *, _allow_minimal: bool = False) -> None:
         # First migrate old manifest if needed
         self._migrate_snapshot_manifest_if_needed(source)
         manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
@@ -1100,32 +1340,101 @@ class CampaignHistory:
         for name in expected:
             if name not in _SNAPSHOT_WHITELIST:
                 raise RuntimeError(f"Snapshot manifest contains unexpected file: {name}")
-        # Remove current db files not in expected, but respect whitelist separation for settings
-        for current in self.data_dir.glob("*.db"):
-            # Only campaign.db is whitelisted; any other db file should be removed if not expected, but campaign.db handling
-            if current.name not in expected:
-                for suffix in ("-wal", "-shm"):
-                    Path(f"{current}{suffix}").unlink(missing_ok=True)
-                current.unlink()
-        # For json files, only restore whitelisted; do not touch settings.json or drafts
-        for name in ("core_memory.json", "initialization.json"):
-            current = self.data_dir / name
-            if current.exists() and name not in expected:
-                current.unlink()
-        # settings.json is deliberately NOT removed/restored
-        for name in expected:
-            snapshot_file = source / name
-            destination = self.data_dir / name
-            if not snapshot_file.exists():
-                raise RuntimeError(f"Snapshot file missing: {snapshot_file}")
-            if snapshot_file.suffix == ".db":
-                self._restore_database(snapshot_file, destination)
-            else:
-                shutil.copy2(snapshot_file, destination)
+        # Stage all expected files first and validate every one before touching
+        # any live file.  A bad snapshot must never delete current JSON/db state.
+        staged: list[tuple[Path, Path, Path]] = []  # (source, dest, tmp)
+        try:
+            for name in expected:
+                snapshot_file = source / name
+                destination = self.data_dir / name
+                if not snapshot_file.exists():
+                    raise RuntimeError(f"Snapshot file missing: {snapshot_file}")
+                tmp = self.data_dir / f".{name}.{uuid.uuid4().hex}.tmp"
+                if snapshot_file.suffix == ".db":
+                    # Copy snapshot db to tmp, validate, fsync
+                    shutil.copy2(snapshot_file, tmp)
+                    try:
+                        from .campaign_migration import validate_campaign_database
+
+                        validate_campaign_database(tmp, allow_minimal=_allow_minimal)
+                    except Exception:
+                        tmp.unlink(missing_ok=True)
+                        raise
+                    # fsync tmp file
+                    try:
+                        with open(tmp, "rb") as h:
+                            os.fsync(h.fileno())
+                    except Exception:
+                        pass
+                else:
+                    # JSON: copy and validate JSON parse
+                    shutil.copy2(snapshot_file, tmp)
+                    try:
+                        json.loads(tmp.read_text(encoding="utf-8"))
+                    except Exception:
+                        tmp.unlink(missing_ok=True)
+                        raise RuntimeError(f"Snapshot JSON invalid: {snapshot_file}")
+                    try:
+                        with open(tmp, "rb") as h:
+                            os.fsync(h.fileno())
+                    except Exception:
+                        pass
+                staged.append((snapshot_file, destination, tmp))
+
+            # All staged files are valid.  Now it is safe to delete current
+            # files that are not in the restored snapshot.
+            for current in self.data_dir.glob("*.db"):
+                if current.name not in expected:
+                    for suffix in ("-wal", "-shm", "-journal"):
+                        Path(f"{current}{suffix}").unlink(missing_ok=True)
+                    current.unlink(missing_ok=True)
+            # For json files, only restore whitelisted; do not touch settings.json or drafts
+            for name in ("core_memory.json", "initialization.json"):
+                current = self.data_dir / name
+                if current.exists() and name not in expected:
+                    current.unlink()
+            # settings.json is deliberately NOT removed/restored
+
+            # Install all staged files atomically (campaign connections must be closed by caller)
+            for _src, dest, tmp in staged:
+                if dest.suffix == ".db":
+                    for suffix in ("-wal", "-shm", "-journal"):
+                        Path(f"{dest}{suffix}").unlink(missing_ok=True)
+                os.replace(tmp, dest)
+            # Best-effort fsync data_dir (reuse campaign_migration helper)
+            try:
+                from .campaign_migration import _fsync_dir
+
+                _fsync_dir(self.data_dir)
+            except Exception:
+                try:
+                    fd = os.open(str(self.data_dir), os.O_DIRECTORY)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+                except Exception:
+                    pass
+        finally:
+            for _src, _dest, tmp in staged:
+                if tmp.exists():
+                    tmp.unlink(missing_ok=True)
 
     @staticmethod
     def _restore_database(source: Path, destination: Path) -> None:
-        """Restore through SQLite so WAL readers cannot revive replaced pages."""
+        """Legacy online restore — deprecated, production uses offline staging.
+
+        Phase 4 requires offline ``os.replace`` via ``_restore_snapshot``.
+        This method remains only for historical direct calls; new code must
+        not use it (marked deprecated).
+        """
+        import warnings
+
+        warnings.warn(
+            "CampaignHistory._restore_database is deprecated; use offline _restore_snapshot",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         source_uri = f"file:{source.resolve()}?mode=ro"
         source_conn = sqlite3.connect(source_uri, uri=True, timeout=30)
         destination_conn = sqlite3.connect(str(destination), timeout=30)

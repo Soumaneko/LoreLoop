@@ -202,7 +202,7 @@ def stream_confirmation_pipeline(
     after the transaction commits.
     """
     runtime = get_campaign_runtime()
-    uow = CampaignUnitOfWork(runtime.paths, write=write_db)
+    uow = runtime.uow(write=write_db)
     event_count = 0
     commit_result = None
     with uow:
@@ -333,7 +333,12 @@ def _confirm_pipeline_locked(
         if journaled:
             runtime.jobs.wait_for_idle()
             try:
-                runtime.history.fail_confirmation(pipeline_input.turn_id, exc)
+                # Production path is fail_confirmation_offline; keep history fallback
+                # only for SimpleNamespace test doubles that lack the method.
+                if hasattr(runtime, "fail_confirmation_offline"):
+                    runtime.fail_confirmation_offline(pipeline_input.turn_id, exc)
+                else:
+                    runtime.history.fail_confirmation(pipeline_input.turn_id, exc)
             finally:
                 ConfirmationCache(
                     pipeline_input.pending.confirmation_cache

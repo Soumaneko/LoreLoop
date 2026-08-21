@@ -713,6 +713,59 @@ def test_rephrase_inherits_source_experience_mode(
     assert state["director_log_entry"] is None
 
 
+def test_feedback_rewrite_cancellation_after_first_event_closes_uow(
+    monkeypatch,
+    configure_runtime_services,
+):
+    turn_id = "turn_v1"
+    state_before = object()
+    context = SimpleNamespace(turn_resolution=object())
+    runtime = get_campaign_runtime()
+    runtime.pending_turns.add(PendingTurn(
+        turn_id=turn_id,
+        group_id="group_1",
+        version_index=1,
+        user_input="观察门外",
+        difficulty="普通",
+        max_chars=900,
+        experience_mode="creator",
+        state_before=state_before,
+        context=context,
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="版本一"),
+        turn_index=3,
+        short_term_memory=ShortTermMemory(),
+    ))
+
+    class _StateStore:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return None
+        def load_or_default(self): return state_before
+
+    configure_runtime_services(
+        current_state=_StateStore,
+        gateway_factory=lambda: SimpleNamespace(
+            set_trace_context=lambda **_kwargs: None
+        ),
+    )
+
+    try:
+        gen = generation_graph.feedback_rewrite_stream(
+            turn_id,
+            source_scene_text="版本一",
+            user_feedback="收紧",
+        )
+        first = next(gen)
+        assert first["step"] == "feedback_rewrite_started"
+        # Simulate SSE disconnect: abandon the generator without consuming rest.
+        gen.close()
+        # The operation UoW must be unregistered even though only the first
+        # event was emitted.
+        assert len(runtime._active_uows) == 0
+    finally:
+        runtime.pending_turns.remove(turn_id)
+
+
 def test_feedback_no_rewrite_does_not_create_or_stream_a_variant(
     monkeypatch,
     configure_runtime_services,

@@ -328,33 +328,41 @@ def reroll_turn_stream(turn_id: str):
             },
         }
         prefix_snapshot = pending.prefix_snapshot
-        if prefix_snapshot is not None and not prefix_snapshot.has_fallback:
-            state = prepare_generation_state(
-                pending.user_input,
-                pending.difficulty,
-                pending.max_chars,
-            )
-            state["trace_id"] = trace_id
-            state["experience_mode"] = experience_mode()
-            hydrate_generation_prefix(state, prefix_snapshot)
-            reset_generation_suffix(state)
-            state.setdefault("events", []).extend(_prefix_replay_events(state))
-            yield from _stream_generation_graph(
-                state,
-                build_reroll_graph(
-                    canon_validation_is_enabled=canon_validation_enabled(),
-                ),
-                group_id=pending.group_id,
-                version_index=version_index,
-            )
-        else:
-            yield from _generate_turn_stream(
-                pending.user_input,
-                pending.difficulty,
-                pending.max_chars,
-                group_id=pending.group_id,
-                version_index=version_index,
-            )
+        state: dict[str, Any] | None = None
+        try:
+            if prefix_snapshot is not None and not prefix_snapshot.has_fallback:
+                state = prepare_generation_state(
+                    pending.user_input,
+                    pending.difficulty,
+                    pending.max_chars,
+                )
+                state["trace_id"] = trace_id
+                state["experience_mode"] = experience_mode()
+                hydrate_generation_prefix(state, prefix_snapshot)
+                reset_generation_suffix(state)
+                state.setdefault("events", []).extend(_prefix_replay_events(state))
+                yield from _stream_generation_graph(
+                    state,
+                    build_reroll_graph(
+                        canon_validation_is_enabled=canon_validation_enabled(),
+                    ),
+                    group_id=pending.group_id,
+                    version_index=version_index,
+                )
+            else:
+                yield from _generate_turn_stream(
+                    pending.user_input,
+                    pending.difficulty,
+                    pending.max_chars,
+                    group_id=pending.group_id,
+                    version_index=version_index,
+                )
+        finally:
+            if state is not None:
+                services = state.get("runtime_services", {})
+                stores = services.stores if hasattr(services, "stores") else None
+                if stores is not None and getattr(stores, "close", None) is not None:
+                    stores.close()
 
 
 def rephrase_turn_stream(turn_id: str):
@@ -376,14 +384,20 @@ def rephrase_turn_stream(turn_id: str):
                 },
             }],
         )
-        yield from _stream_generation_graph(
-            state,
-            build_rephrase_graph(
-                canon_validation_is_enabled=canon_validation_enabled(),
-            ),
-            group_id=pending.group_id,
-            version_index=version_index,
-        )
+        try:
+            yield from _stream_generation_graph(
+                state,
+                build_rephrase_graph(
+                    canon_validation_is_enabled=canon_validation_enabled(),
+                ),
+                group_id=pending.group_id,
+                version_index=version_index,
+            )
+        finally:
+            services = state.get("runtime_services", {})
+            stores = services.stores if hasattr(services, "stores") else None
+            if stores is not None and getattr(stores, "close", None) is not None:
+                stores.close()
 
 
 def feedback_rewrite_stream(
@@ -423,63 +437,69 @@ def feedback_rewrite_stream(
                 },
             }],
         )
-        yield state["events"][0]
-        state.update({
-            "rewrite_feedback": user_feedback,
-            "rewrite_source_scene_text": source_scene_text,
-        })
         try:
-            decision = RewriteStrategySelector(gateway_for(state)).select(
-                context=pending.context,
-                source_scene_text=source_scene_text,
-                user_feedback=user_feedback,
-                recent_scene=state.get("recent_scene"),
-                turn_index=pending.turn_index,
-                trace_id=trace_id,
-            )
-        except (
-            LLMOutputParseError,
-            LLMOutputValidationError,
-        ) as exc:
-            _diagnostics(state).warning(
-                source="rewrite_strategy",
-                code="rewrite_strategy_fallback",
-                message=(
-                    "Rewrite strategy selection failed; conservatively "
-                    f"keeping the original scene: {exc}"
+            yield state["events"][0]
+            state.update({
+                "rewrite_feedback": user_feedback,
+                "rewrite_source_scene_text": source_scene_text,
+            })
+            try:
+                decision = RewriteStrategySelector(gateway_for(state)).select(
+                    context=pending.context,
+                    source_scene_text=source_scene_text,
+                    user_feedback=user_feedback,
+                    recent_scene=state.get("recent_scene"),
+                    turn_index=pending.turn_index,
+                    trace_id=trace_id,
+                )
+            except (
+                LLMOutputParseError,
+                LLMOutputValidationError,
+            ) as exc:
+                _diagnostics(state).warning(
+                    source="rewrite_strategy",
+                    code="rewrite_strategy_fallback",
+                    message=(
+                        "Rewrite strategy selection failed; conservatively "
+                        f"keeping the original scene: {exc}"
+                    ),
+                    trace_id=trace_id,
+                    task="narrative_rewrite_select",
+                    turn_index=pending.turn_index,
+                    details={"strategy_unavailable": True},
+                )
+                decision = RewriteStrategyDecision(
+                    strategy="no_rewrite",
+                    reason_code="strategy_unavailable",
+                    reasoning="重试策略选择失败，保守不重写。",
+                    rewrite_requirements=[],
+                )
+            state["rewrite_strategy_decision"] = decision
+            state["events"].append({
+                "step": "feedback_rewrite_strategy_selected",
+                "data": {
+                    "trace_id": trace_id,
+                    "strategy": decision.strategy,
+                    "reason_code": decision.reason_code,
+                },
+            })
+            if decision.strategy == "no_rewrite":
+                yield from state["events"][1:]
+                return
+            yield from _stream_generation_graph(
+                state,
+                build_feedback_rewrite_graph(
+                    canon_validation_is_enabled=canon_validation_enabled(),
                 ),
-                trace_id=trace_id,
-                task="narrative_rewrite_select",
-                turn_index=pending.turn_index,
-                details={"strategy_unavailable": True},
+                group_id=pending.group_id,
+                version_index=version_index,
+                emitted_event_count=1,
             )
-            decision = RewriteStrategyDecision(
-                strategy="no_rewrite",
-                reason_code="strategy_unavailable",
-                reasoning="重试策略选择失败，保守不重写。",
-                rewrite_requirements=[],
-            )
-        state["rewrite_strategy_decision"] = decision
-        state["events"].append({
-            "step": "feedback_rewrite_strategy_selected",
-            "data": {
-                "trace_id": trace_id,
-                "strategy": decision.strategy,
-                "reason_code": decision.reason_code,
-            },
-        })
-        if decision.strategy == "no_rewrite":
-            yield from state["events"][1:]
-            return
-        yield from _stream_generation_graph(
-            state,
-            build_feedback_rewrite_graph(
-                canon_validation_is_enabled=canon_validation_enabled(),
-            ),
-            group_id=pending.group_id,
-            version_index=version_index,
-            emitted_event_count=1,
-        )
+        finally:
+            services = state.get("runtime_services", {})
+            stores = services.stores if hasattr(services, "stores") else None
+            if stores is not None and getattr(stores, "close", None) is not None:
+                stores.close()
 
 
 def _pending_context_state(
@@ -565,39 +585,47 @@ def _generate_turn_stream(
         runtime.generation_cache_epoch,
         user_input,
     )
-    if cached_snapshot is not None and not cached_snapshot.has_fallback:
-        state: dict[str, Any] = prepare_generation_state(
-            user_input,
-            difficulty,
-            max_chars,
-        )
-        state["experience_mode"] = mode
-        hydrate_generation_prefix(state, cached_snapshot)
-        reset_generation_suffix(state)
-        state.setdefault("events", []).extend(_prefix_replay_events(state))
-        yield from _stream_generation_graph(
-            state,
-            build_reroll_graph(
-                canon_validation_is_enabled=canon_validation_enabled(),
-            ),
-            group_id=group_id,
-            version_index=version_index,
-        )
-    else:
-        state: dict[str, Any] = prepare_generation_state(
-            user_input,
-            difficulty,
-            max_chars,
-        )
-        state["experience_mode"] = mode
-        yield from _stream_generation_graph(
-            state,
-            build_generation_graph(
-                canon_validation_is_enabled=canon_validation_enabled(),
-            ),
-            group_id=group_id,
-            version_index=version_index,
-        )
+    state: dict[str, Any] | None = None
+    try:
+        if cached_snapshot is not None and not cached_snapshot.has_fallback:
+            state = prepare_generation_state(
+                user_input,
+                difficulty,
+                max_chars,
+            )
+            state["experience_mode"] = mode
+            hydrate_generation_prefix(state, cached_snapshot)
+            reset_generation_suffix(state)
+            state.setdefault("events", []).extend(_prefix_replay_events(state))
+            yield from _stream_generation_graph(
+                state,
+                build_reroll_graph(
+                    canon_validation_is_enabled=canon_validation_enabled(),
+                ),
+                group_id=group_id,
+                version_index=version_index,
+            )
+        else:
+            state = prepare_generation_state(
+                user_input,
+                difficulty,
+                max_chars,
+            )
+            state["experience_mode"] = mode
+            yield from _stream_generation_graph(
+                state,
+                build_generation_graph(
+                    canon_validation_is_enabled=canon_validation_enabled(),
+                ),
+                group_id=group_id,
+                version_index=version_index,
+            )
+    finally:
+        if state is not None:
+            services = state.get("runtime_services", {})
+            stores = services.stores if hasattr(services, "stores") else None
+            if stores is not None and getattr(stores, "close", None) is not None:
+                stores.close()
 
 
 def _stream_generation_graph(

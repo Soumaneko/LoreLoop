@@ -217,6 +217,8 @@ def test_opening_reset_clears_older_npc_field_history(tmp_path):
 
 def test_failed_confirmation_snapshot_restores_npc_field_history(tmp_path):
     data_dir = tmp_path / "save"
+    from app.runtime.campaign_migration import ensure_campaign_database
+    ensure_campaign_database(CampaignPaths.from_data_dir(data_dir))
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
     with stores.npc_profile as npc_store:
         npc_store.upsert(NPCProfile(
@@ -243,15 +245,20 @@ def test_failed_confirmation_snapshot_restores_npc_field_history(tmp_path):
         )
         assert len(npc_store.list_field_change_logs()) == 1
 
+    # Phase 4 offline restore requires closing campaign connections; reopen stores
+    stores.close()
     history.fail_confirmation("turn-3", RuntimeError("commit failed"))
 
-    with stores.npc_profile as npc_store:
+    stores2 = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
+    with stores2.npc_profile as npc_store:
         assert npc_store.list_field_change_logs() == []
         assert npc_store.field_change_batch_hash(3) is None
 
 
 def test_undo_redo_restore_npc_field_history_with_profile_database(tmp_path):
     data_dir = tmp_path / "save"
+    from app.runtime.campaign_migration import ensure_campaign_database
+    ensure_campaign_database(CampaignPaths.from_data_dir(data_dir))
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
     with stores.npc_profile as npc_store:
         npc_store.upsert(NPCProfile(
@@ -278,10 +285,14 @@ def test_undo_redo_restore_npc_field_history_with_profile_database(tmp_path):
         )
     history.complete_confirmation("turn-3", "group-3")
 
+    stores.close()
     history.undo()
-    with stores.npc_profile as npc_store:
+    stores2 = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
+    with stores2.npc_profile as npc_store:
         assert npc_store.list_field_change_logs() == []
+    stores2.close()
 
     history.redo()
-    with stores.npc_profile as npc_store:
+    stores3 = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
+    with stores3.npc_profile as npc_store:
         assert len(npc_store.list_field_change_logs()) == 1
