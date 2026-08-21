@@ -50,6 +50,8 @@ from app.domain.scene_facts.schemas import (
     SceneParagraphInput,
 )
 from app.runtime.model_config import ModelConfigStore
+from app.runtime.paths import CampaignPaths
+from app.runtime.turn_history import ensure_control_database
 
 
 WORKSPACE_NAME = ".npc-field-replay"
@@ -115,10 +117,13 @@ def _field_history_counts(path: Path) -> dict[str, int]:
 
 
 def _turn_specs(save_dir: Path) -> list[dict[str, Any]]:
-    history_db = save_dir / ".runtime" / "turn_history.db"
+    # Use the same migration entry as the runtime; migration failures must
+    # propagate instead of silently reading a legacy/ambiguous control DB.
+    ensure_control_database(CampaignPaths.from_data_dir(save_dir))
+    history_db = save_dir / ".runtime" / "control.db"
     confirmed_db = save_dir / "campaign.db"
     if not history_db.exists() or not confirmed_db.exists():
-        raise FileNotFoundError("save is missing turn_history.db or campaign.db")
+        raise FileNotFoundError("save is missing control.db or campaign.db")
 
     with _connect_readonly(confirmed_db) as connection:
         confirmed_turns = {
@@ -273,7 +278,10 @@ def _history_documents(save_dir: Path, turn_index: int) -> list[HistoryDocument]
 
 
 def _turn_states(save_dir: Path, turn_id: str) -> tuple[CurrentState, CurrentState]:
-    path = save_dir / ".runtime" / "turn_history.db"
+    # Use the same migration entry as the runtime; migration failures must
+    # propagate instead of silently reading a legacy/ambiguous control DB.
+    ensure_control_database(CampaignPaths.from_data_dir(save_dir))
+    path = save_dir / ".runtime" / "control.db"
     with _connect_readonly(path) as connection:
         row = connection.execute(
             """

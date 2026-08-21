@@ -183,9 +183,9 @@ def test_snapshot_preserves_portable_turn_history_paths(tmp_path):
     redo = snapshots / "redo-one"
     undo.mkdir()
     redo.mkdir()
-    (undo / "manifest.json").write_text("{}", encoding="utf-8")
-    (redo / "manifest.json").write_text("{}", encoding="utf-8")
-    history = source / ".runtime" / "turn_history.db"
+    (undo / "manifest.json").write_text('{"files": []}', encoding="utf-8")
+    (redo / "manifest.json").write_text('{"files": []}', encoding="utf-8")
+    history = source / ".runtime" / "control.db"
     history.parent.mkdir()
     with sqlite3.connect(history) as connection:
         connection.execute(
@@ -198,7 +198,7 @@ def test_snapshot_preserves_portable_turn_history_paths(tmp_path):
 
     copied = tmp_path / "copy"
     create_consistent_snapshot(source, copied)
-    with sqlite3.connect(copied / ".runtime" / "turn_history.db") as connection:
+    with sqlite3.connect(copied / ".runtime" / "control.db") as connection:
         path, redo_path = connection.execute(
             "SELECT path, redo_path FROM turn_snapshots"
         ).fetchone()
@@ -208,7 +208,7 @@ def test_snapshot_preserves_portable_turn_history_paths(tmp_path):
 
 def test_rebase_rejects_absolute_history_path(tmp_path):
     data_dir = tmp_path / "save"
-    history = data_dir / ".runtime" / "turn_history.db"
+    history = data_dir / ".runtime" / "control.db"
     history.parent.mkdir(parents=True)
     with sqlite3.connect(history) as connection:
         connection.execute(
@@ -226,7 +226,7 @@ def test_import_rebase_rejects_absolute_snapshot_path(tmp_path):
     data_dir = tmp_path / "imported"
     snapshot = data_dir / ".snapshots" / "undo-one"
     snapshot.mkdir(parents=True)
-    history = data_dir / ".runtime" / "turn_history.db"
+    history = data_dir / ".runtime" / "control.db"
     history.parent.mkdir()
     with sqlite3.connect(history) as connection:
         connection.execute(
@@ -244,7 +244,7 @@ def test_import_rebase_rejects_windows_absolute_snapshot_path(tmp_path):
     data_dir = tmp_path / "imported"
     snapshot = data_dir / ".snapshots" / "undo-one"
     snapshot.mkdir(parents=True)
-    history = data_dir / ".runtime" / "turn_history.db"
+    history = data_dir / ".runtime" / "control.db"
     history.parent.mkdir()
     with sqlite3.connect(history) as connection:
         connection.execute(

@@ -17,6 +17,7 @@ from .paths import (
     validate_save_name,
 )
 from .campaign_migration import ensure_campaign_database
+from .turn_history import ensure_control_database
 from .initialization import InitializationStore
 from .save_archive import (
     ArchiveInspection,
@@ -142,13 +143,14 @@ class SaveManager:
     def copy(self, save_id: str, name: str = "") -> SaveInfo:
         source_id = self._validate_save_id(save_id)
         with self.runtime.save_task(), self._lock:
-            self._require_no_pending_source(source_id, "copy")
             source = self._require_save(source_id)
             # A save that has never been opened since Phase 2 may still be in
             # the legacy ten-database layout. Copying it without migrating would
             # silently drop all canonical data because snapshots only accept
             # campaign.db.
             ensure_campaign_database(CampaignPaths.from_data_dir(source))
+            ensure_control_database(CampaignPaths.from_data_dir(source))
+            self._require_no_pending_source(source_id, "copy")
             if str(name).strip():
                 clean_name = self._available_name(name)
             else:
@@ -223,11 +225,12 @@ class SaveManager:
         clean_id = self._validate_save_id(save_id)
         destination_path = Path(destination)
         with self.runtime.save_task(), self._lock:
-            self._require_no_pending_source(clean_id, "export")
             source = self._require_save(clean_id)
             # See copy(): migrate an unopened legacy save before snapshotting so
             # export does not silently omit all canonical data.
             ensure_campaign_database(CampaignPaths.from_data_dir(source))
+            ensure_control_database(CampaignPaths.from_data_dir(source))
+            self._require_no_pending_source(clean_id, "export")
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination_path.with_name(
                 f".{destination_path.name}.{uuid4().hex}.tmp"
@@ -282,8 +285,14 @@ class SaveManager:
         save_id = str(uuid4())
         path = self._save_path(save_id)
         path.mkdir(parents=False, exist_ok=False)
+        paths = CampaignPaths.from_data_dir(path)
         try:
             SaveManifestRepository(path).create(display_name, save_id=save_id)
+            # New saves start with both databases even when they are not
+            # activated immediately (SPEC: new saves start as an empty
+            # campaign.db and a fresh control.db).
+            ensure_campaign_database(paths)
+            ensure_control_database(paths)
         except BaseException:
             shutil.rmtree(path, ignore_errors=True)
             raise

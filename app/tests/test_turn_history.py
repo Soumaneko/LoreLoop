@@ -103,7 +103,7 @@ def test_pending_opening_requires_the_current_storage_contract(tmp_path):
 def test_interrupted_confirmation_restores_pre_turn_database(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
-    game_db = data_dir / "game.db"
+    game_db = data_dir / "campaign.db"
     _write_value(game_db, "before")
     history = CampaignHistory(data_dir)
     history.save_pending(
@@ -148,11 +148,11 @@ def test_failed_opening_confirmation_restores_initialization_and_absent_state(
         scene_text=None,
     )
 
-    _write_value(data_dir / "current_state.db", "partially-created")
+    _write_value(data_dir / "campaign.db", "partially-created")
     initialization.write_text('{"phase":"completed"}', encoding="utf-8")
     history.fail_confirmation("opening-1", RuntimeError("confirmation failed"))
 
-    assert not (data_dir / "current_state.db").exists()
+    assert not (data_dir / "campaign.db").exists()
     assert initialization.read_text(encoding="utf-8") == (
         '{"phase":"opening_pending"}'
     )
@@ -161,7 +161,7 @@ def test_failed_opening_confirmation_restores_initialization_and_absent_state(
 def test_failed_confirmation_restores_wal_database_with_live_connection(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
-    game_db = data_dir / "game.db"
+    game_db = data_dir / "campaign.db"
     connection = connect_sqlite(game_db)
     try:
         connection.execute("CREATE TABLE game_state (value TEXT NOT NULL)")
@@ -223,7 +223,7 @@ def test_turn_journal_persists_incremental_state_audit(tmp_path):
 def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
-    game_db = data_dir / "game.db"
+    game_db = data_dir / "campaign.db"
     _write_value(game_db, "before")
     history = CampaignHistory(data_dir)
     history.save_pending(
@@ -254,7 +254,7 @@ def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
 def test_undo_restores_all_retry_variants_to_awaiting_confirmation(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
-    game_db = data_dir / "game.db"
+    game_db = data_dir / "campaign.db"
     _write_value(game_db, "before")
     history = CampaignHistory(data_dir)
     for turn_id, version in (("turn-v1", 1), ("turn-v2", 2)):
@@ -335,7 +335,7 @@ def test_runtime_undo_restores_edited_opening_as_pending_and_redo_clears_it(tmp_
 def test_only_ten_latest_confirmed_turn_snapshots_are_retained(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
-    game_db = data_dir / "game.db"
+    game_db = data_dir / "campaign.db"
     _write_value(game_db, "0")
     history = CampaignHistory(data_dir, max_undo=10)
 
@@ -361,7 +361,7 @@ def test_only_ten_latest_confirmed_turn_snapshots_are_retained(tmp_path):
 def test_turn_transactions_retained_for_same_window_as_undo_snapshots(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
-    game_db = data_dir / "game.db"
+    game_db = data_dir / "campaign.db"
     _write_value(game_db, "0")
     history = CampaignHistory(data_dir, max_undo=10)
 
@@ -389,7 +389,7 @@ def test_turn_transactions_retained_for_same_window_as_undo_snapshots(tmp_path):
 def test_turn_transaction_window_keeps_multiple_rows_per_turn(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
-    game_db = data_dir / "game.db"
+    game_db = data_dir / "campaign.db"
     _write_value(game_db, "0")
     history = CampaignHistory(data_dir, max_undo=10)
 
@@ -422,7 +422,7 @@ def test_turn_transaction_window_keeps_multiple_rows_per_turn(tmp_path):
 def test_transaction_trim_follows_max_undo_window(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
-    game_db = data_dir / "game.db"
+    game_db = data_dir / "campaign.db"
     _write_value(game_db, "0")
     history = CampaignHistory(data_dir, max_undo=3)
 

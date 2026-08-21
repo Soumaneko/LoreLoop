@@ -248,6 +248,10 @@ class CampaignRuntime:
     ) -> None:
         self.campaign_id = campaign_id
         self.paths = paths or default_campaign_paths()
+        # CampaignHistory is the single control-DB migration entry; it creates
+        # the control DB and migrates legacy turn_history.db before the stores
+        # are used.  campaign.db is still ensured here because stores require a
+        # validated campaign database immediately.
         if stores is None:
             ensure_campaign_database(self.paths)
         self.stores = stores or CampaignUnitOfWork(self.paths)
@@ -778,6 +782,8 @@ class CampaignRuntime:
             self.pending_openings.clear(discard=False)
             self.campaign_id = campaign_id
             self.paths = paths
+            # campaign.db must be valid before stores open; CampaignHistory
+            # handles control.db migration as its single entry point.
             ensure_campaign_database(paths)
             self.stores.close()
             self.stores = CampaignUnitOfWork(paths)

@@ -141,6 +141,20 @@ class CampaignPaths:
         return self.data_dir / "campaign.db"
 
     @property
+    def control_db(self) -> Path:
+        return self.data_dir / ".runtime" / "control.db"
+
+    @property
+    def turn_history_db(self) -> Path:
+        """Legacy control database path (``turn_history.db``).
+
+        Phase 3 renames the control database to :attr:`control_db`.
+        The legacy path is only used for the one-time migration and for
+        import-compatibility; new code must not write to it.
+        """
+        return self.data_dir / ".runtime" / "turn_history.db"
+
+    @property
     def director_mutation_journal(self) -> Path:
         return self.data_dir / ".runtime" / "director_mutation.json"
 

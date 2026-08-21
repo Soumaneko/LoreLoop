@@ -1,3 +1,5 @@
+import json
+import sqlite3
 import threading
 
 import pytest
@@ -144,6 +146,28 @@ def test_save_manager_creates_lists_switches_and_isolates_state(tmp_path):
     finally:
         runtime.close()
 
+def test_create_inactive_save_has_both_databases(tmp_path):
+    root = tmp_path / "saves"
+    runtime = CampaignRuntime(
+        "default",
+        paths=CampaignPaths.from_data_dir(root / "default"),
+        max_workers=1,
+    )
+    manager = SaveManager(root, runtime=runtime)
+    try:
+        save = manager.create("inactive", activate=False)
+        assert save.active is False
+        paths = CampaignPaths.from_data_dir(root / save.save_id)
+        assert paths.campaign_db.is_file()
+        assert paths.control_db.is_file()
+        # The control DB must be a valid control DB, not merely a zero-byte file.
+        from app.runtime.turn_history import ensure_control_database
+
+        assert ensure_control_database(paths) == "validated"
+    finally:
+        runtime.close()
+
+
 def test_switch_preserves_and_restores_pending_turn_variants(tmp_path):
     root = tmp_path / "saves"
     runtime = CampaignRuntime(
@@ -285,6 +309,45 @@ def test_save_manager_ignores_hidden_directories_and_symlinks(tmp_path):
         assert [save.name for save in manager.list()] == ["默认存档"]
         with pytest.raises(ValueError, match="canonical UUID"):
             manager.switch("linked")
+    finally:
+        runtime.close()
+
+
+def test_copy_does_not_install_root_legacy_database(tmp_path):
+    root = tmp_path / "saves"
+    runtime = CampaignRuntime(
+        "bootstrap",
+        paths=CampaignPaths.from_data_dir(tmp_path / "bootstrap"),
+        max_workers=1,
+    )
+    manager = SaveManager(root, runtime=runtime)
+    try:
+        original = manager.rename(manager.active_id, "带旧库")
+        original_dir = root / original.save_id
+        # Simulate an un-migrated legacy root DB next to campaign.db; the
+        # copy pipeline must not carry it into the new save.
+        legacy = original_dir / "current_state.db"
+        with sqlite3.connect(legacy) as conn:
+            conn.execute(
+                "CREATE TABLE current_state "
+                "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL, "
+                "updated_at TEXT NOT NULL DEFAULT '')"
+            )
+            conn.execute(
+                "INSERT INTO current_state VALUES (1, ?, '')",
+                (
+                    json.dumps({
+                        "scene": {"scene_id": "s", "location": "l"},
+                        "player": {"name": "n"},
+                    }),
+                ),
+            )
+
+        copied = manager.copy(original.save_id)
+        copied_dir = root / copied.save_id
+        assert not (copied_dir / "current_state.db").exists()
+        # Legacy files that already existed in the source are not listed or installed.
+        assert (copied_dir / "campaign.db").is_file()
     finally:
         runtime.close()
 

@@ -83,10 +83,33 @@ def _load_debug_state(runtime) -> dict:
         }
         for opening in runtime.pending_openings.values()
     ]
+    try:
+        control_state = runtime.history.get_control_state()
+    except Exception as exc:
+        # Keep debug page loadable but surface the failure for diagnostics
+        try:
+            runtime.diagnostics.warning(
+                source="debug_state",
+                code="control_state_unavailable",
+                message=str(exc),
+                trace_id=None,
+                operation_type="debug",
+                turn_index=None,
+            )
+        except Exception:
+            pass
+        control_state = {
+            "current_revision_id": None,
+            "connection_epoch": 0,
+            "error": str(exc),
+        }
     return {
         "save_name": runtime.campaign_id,
         "save_path": str(runtime.paths.data_dir.resolve()),
         "turn_history": runtime.history.status(),
+        "control_state": control_state,
+        "current_revision_id": control_state.get("current_revision_id"),
+        "connection_epoch": control_state.get("connection_epoch", 0),
         "needs_init": (
             (
                 initialization is None

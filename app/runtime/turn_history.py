@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sqlite3
 import threading
@@ -17,6 +18,425 @@ def _now() -> str:
     return utc_now()
 
 
+# Whitelisted files that travel with Undo/Redo.
+_SNAPSHOT_WHITELIST = {"campaign.db", "core_memory.json", "initialization.json"}
+# Legacy snapshot contents that must be migrated.
+_LEGACY_SNAPSHOT_DB_FILES = {
+    "current_state.db",
+    "continuity.db",
+    "short_term.db",
+    "scene_summaries.db",
+    "confirmed_history.db",
+    "npc_profiles.db",
+    "director_events.db",
+    "director_npcs.db",
+    "director_log.db",
+    "world_settings.db",
+}
+_SNAPSHOT_LEGACY_MIGRATION_FILES = _LEGACY_SNAPSHOT_DB_FILES | {"settings.json"}
+
+
+def ensure_control_database(paths) -> str:
+    """Ensure the control database exists at ``paths.control_db``.
+
+    Cases:
+    - only ``control.db``: validate and upgrade schema in place.
+    - only ``turn_history.db``: checkpoint WAL, then atomically rename to
+      ``control.db`` and upgrade schema.
+    - neither: create a fresh ``control.db`` via schema bootstrap.
+    - both: fail closed.
+
+    An existing control database must already contain the two base control
+    tables; an empty or unrelated file is rejected instead of being silently
+    replaced by a fresh schema.
+    """
+    control = Path(paths.control_db)
+    legacy = Path(paths.turn_history_db) if hasattr(paths, "turn_history_db") else paths.data_dir / ".runtime" / "turn_history.db"
+    has_control = control.is_file()
+    has_legacy = legacy.is_file()
+    if has_control and has_legacy:
+        raise RuntimeError(
+            f"Both control databases exist: {control} and {legacy}; "
+            "refusing to choose silently. Remove one."
+        )
+    if has_control:
+        _validate_control_database(control)
+        _ensure_control_schema(control)
+        return "validated"
+    if has_legacy:
+        # A legacy control DB is still a control DB: it must already contain the
+        # two base control tables.  An empty/illegal legacy file must fail closed
+        # instead of being renamed and silently upgraded into a fresh schema.
+        _validate_control_database(legacy)
+        _checkpoint_legacy_control(legacy)
+        # The issue's migration contract is an atomic rename.  The legacy file
+        # becomes control.db and any legacy WAL/SHM sidecars are removed only
+        # after the main file is in place.  If any cleanup fails we fail closed:
+        # a successful return must never leave both files behind.
+        control.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.replace(legacy, control)
+        except OSError:
+            raise
+        try:
+            _ensure_control_schema(control)
+        except BaseException:
+            # Do not claim success if schema upgrade fails; leave the renamed
+            # control.db in place and report the failure so the user can act.
+            raise
+        for suffix in ("-wal", "-shm", "-journal"):
+            legacy_side = Path(str(legacy) + suffix)
+            if legacy_side.exists():
+                try:
+                    legacy_side.unlink(missing_ok=True)
+                except OSError as exc:
+                    raise RuntimeError(
+                        f"control migration succeeded but failed to remove "
+                        f"{legacy_side}: {exc}"
+                    ) from exc
+        return "migrated"
+    # neither exists
+    control.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_control_schema(control)
+    return "created"
+
+
+def _validate_control_database(db_path: Path) -> None:
+    """Fail closed when an existing control database is not a valid control DB.
+
+    Only the two base control tables are checked here; the rest of the schema is
+    created/upgraded by :func:`_ensure_control_schema`.
+    """
+    conn = connect_sqlite(db_path)
+    try:
+        quick = conn.execute("PRAGMA quick_check").fetchone()
+        if quick is None or str(quick[0]) != "ok":
+            raise RuntimeError(
+                f"control.db failed quick_check: {quick[0] if quick else 'no result'}"
+            )
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        missing = [
+            name for name in ("turn_transactions", "turn_snapshots")
+            if name not in tables
+        ]
+        if missing:
+            raise RuntimeError(
+                "control.db is missing required control tables: "
+                + ", ".join(sorted(missing))
+            )
+    finally:
+        conn.close()
+
+
+def _checkpoint_legacy_control(legacy: Path) -> None:
+    """Checkpoint and close a legacy WAL before atomic rename.
+
+    ``os.replace`` moves the main database file only; uncheckpointed WAL
+    content would be stranded under the legacy name.  Opening with
+    ``connect_sqlite`` also persists ``journal_mode=WAL`` in the database
+    header, which is fine after the rename.
+    """
+    conn = connect_sqlite(legacy)
+    try:
+        # A plain commit after opening performs the checkpoint for a WAL-mode
+        # database.  Run a full explicit checkpoint and verify the WAL is gone
+        # before renaming.
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
+        conn.commit()
+    finally:
+        conn.close()
+    # After close SQLite may remove the WAL sidecar automatically.  If it still
+    # exists after a committed TRUNCATE checkpoint, the checkpoint did not fully
+    # absorb the WAL (e.g. another connection still holds it), so fail closed.
+    if Path(str(legacy) + "-wal").exists():
+        raise RuntimeError(
+            f"failed to checkpoint legacy control database WAL: {legacy}"
+        )
+
+
+def ensure_control_database_by_dir(data_dir: Path) -> str:
+    """Convenience for direct data_dir callers (tests/tools)."""
+    from .paths import CampaignPaths
+
+    return ensure_control_database(CampaignPaths.from_data_dir(data_dir))
+
+
+def _ensure_control_schema(db_path: Path) -> None:
+    """Create or upgrade the control database schema in place."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = connect_sqlite(db_path)
+    try:
+        # Base tables (create if not exists, without new columns initially)
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS turn_transactions (
+                turn_id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                group_id TEXT,
+                turn_index INTEGER NOT NULL,
+                payload_json TEXT NOT NULL,
+                status TEXT NOT NULL,
+                write_db INTEGER,
+                scene_text TEXT,
+                pre_snapshot_id TEXT,
+                error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS turn_snapshots (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_id TEXT NOT NULL UNIQUE,
+                turn_id TEXT NOT NULL,
+                turn_index INTEGER NOT NULL,
+                path TEXT NOT NULL,
+                status TEXT NOT NULL,
+                redo_path TEXT,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+        # Add audit columns
+        ensure_column(conn, "turn_transactions", "state_changes_json", "TEXT")
+        ensure_column(conn, "turn_transactions", "state_before_json", "TEXT")
+        ensure_column(conn, "turn_transactions", "state_after_json", "TEXT")
+        ensure_column(conn, "turn_transactions", "state_warnings_json", "TEXT")
+        # Phase 3 columns
+        ensure_column(conn, "turn_transactions", "commit_id", "TEXT")
+        ensure_column(conn, "turn_transactions", "revision_id", "TEXT")
+        ensure_column(conn, "turn_snapshots", "revision_id", "TEXT")
+
+        # control_state singleton
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS control_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                current_revision_id TEXT NOT NULL,
+                connection_epoch INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        # indexes for non-null commit/revision
+        conn.executescript(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_turn_transactions_commit_id
+                ON turn_transactions(commit_id) WHERE commit_id IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_turn_transactions_revision_id
+                ON turn_transactions(revision_id) WHERE revision_id IS NOT NULL;
+            """
+        )
+        # Ensure singleton row exists
+        row = conn.execute("SELECT current_revision_id, connection_epoch FROM control_state WHERE id=1").fetchone()
+        if row is None:
+            initial_rev = uuid.uuid4().hex
+            conn.execute(
+                "INSERT INTO control_state(id, current_revision_id, connection_epoch, updated_at) VALUES (1, ?, 0, ?)",
+                (initial_rev, _now()),
+            )
+        conn.commit()
+
+        # Backfill revision chain if needed
+        _backfill_revisions(conn)
+
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _backfill_revisions(conn: sqlite3.Connection) -> None:
+    """Backfill a linear revision chain for snapshots that lack revision_id.
+
+    The chain is linear: snapshot i pre = revisions[i], txn i post = revisions[i+1].
+    ``control_state.current_revision_id`` is set to revisions[applied_count]
+    (post of last applied, or pre of first undone).
+    """
+    # Fetch chain snapshots (applied/undone) ordered
+    chain = conn.execute(
+        "SELECT sequence, snapshot_id, turn_id, status, revision_id FROM turn_snapshots WHERE status IN ('applied','undone') ORDER BY sequence"
+    ).fetchall()
+    # Also check provisional missing revision
+    prov_missing = conn.execute(
+        "SELECT COUNT(*) FROM turn_snapshots WHERE status='provisional' AND revision_id IS NULL"
+    ).fetchone()[0] > 0
+
+    if not chain:
+        if prov_missing:
+            cur = conn.execute("SELECT current_revision_id FROM control_state WHERE id=1").fetchone()
+            cur_rev = cur["current_revision_id"] if cur and cur["current_revision_id"] else uuid.uuid4().hex
+            for row in conn.execute(
+                "SELECT snapshot_id FROM turn_snapshots WHERE status='provisional' AND revision_id IS NULL"
+            ).fetchall():
+                conn.execute(
+                    "UPDATE turn_snapshots SET revision_id=? WHERE snapshot_id=?",
+                    (cur_rev, row["snapshot_id"]),
+                )
+        return
+
+    # Map txn by snapshot
+    txn_by_snapshot: dict[str, Any] = {}
+    for s in chain:
+        txn = conn.execute(
+            "SELECT turn_id, revision_id, commit_id FROM turn_transactions WHERE pre_snapshot_id=?",
+            (s["snapshot_id"],),
+        ).fetchone()
+        txn_by_snapshot[s["snapshot_id"]] = txn
+
+    needs_snapshot = any(s["revision_id"] is None for s in chain)
+    needs_txn = any(
+        txn is None or txn["revision_id"] is None or txn["commit_id"] is None
+        for txn in txn_by_snapshot.values()
+    )
+
+    if not needs_snapshot and not needs_txn and not prov_missing:
+        return
+
+    # Full rebuild case: all chain snapshots missing revision (initial migration)
+    all_missing = all(s["revision_id"] is None for s in chain)
+    if all_missing:
+        revisions = [uuid.uuid4().hex for _ in range(len(chain) + 1)]
+        for idx, snap in enumerate(chain):
+            pre = revisions[idx]
+            post = revisions[idx + 1]
+            conn.execute(
+                "UPDATE turn_snapshots SET revision_id=? WHERE snapshot_id=?",
+                (pre, snap["snapshot_id"]),
+            )
+            txn = txn_by_snapshot[snap["snapshot_id"]]
+            if txn is not None:
+                # txn may have been fetched before updates, but we update directly
+                conn.execute(
+                    "UPDATE turn_transactions SET revision_id=?, commit_id=COALESCE(commit_id, ?) WHERE turn_id=?",
+                    (post, uuid.uuid4().hex, txn["turn_id"]),
+                )
+                # Ensure commit_id not null (COALESCE keeps existing)
+                # If txn had no commit, the above sets one; if it had, keeps it
+                # But we need to handle case where txn had revision None but commit existed: the above keeps commit
+                # For safety, ensure commit_id is set
+                cur = conn.execute(
+                    "SELECT commit_id FROM turn_transactions WHERE turn_id=?", (txn["turn_id"],)
+                ).fetchone()
+                if cur and cur["commit_id"] is None:
+                    conn.execute(
+                        "UPDATE turn_transactions SET commit_id=? WHERE turn_id=?",
+                        (uuid.uuid4().hex, txn["turn_id"]),
+                    )
+        applied_count = sum(1 for s in chain if s["status"] == "applied")
+        current_rev = revisions[applied_count]
+        conn.execute(
+            "UPDATE control_state SET current_revision_id=?, updated_at=? WHERE id=1",
+            (current_rev, _now()),
+        )
+    else:
+        # Incremental fill for partial chain (e.g., txn missing, or some snapshots missing)
+        # Walk chain in order, filling missing pieces while preserving existing pre values
+        # Determine starting current_rev (pre of first snapshot)
+        first = chain[0]
+        if first["revision_id"] is not None:
+            current_rev: str = first["revision_id"]
+        else:
+            # first missing, generate or use control_state's current before chain
+            # For partial where first is missing but later has, we generate for first
+            current_rev = uuid.uuid4().hex
+            conn.execute(
+                "UPDATE turn_snapshots SET revision_id=? WHERE snapshot_id=?",
+                (current_rev, first["snapshot_id"]),
+            )
+        # Now walk
+        for idx, snap in enumerate(chain):
+            # Ensure snapshot has pre; if missing, assign current_rev (post of previous)
+            if snap["revision_id"] is None:
+                # snap is not first (first already handled), assign current_rev
+                if idx != 0:
+                    conn.execute(
+                        "UPDATE turn_snapshots SET revision_id=? WHERE snapshot_id=?",
+                        (current_rev, snap["snapshot_id"]),
+                    )
+                    pre = current_rev
+                else:
+                    pre = current_rev
+            else:
+                pre = snap["revision_id"]
+                # keep current_rev aligned to this pre for next post calculation
+                current_rev = pre
+
+            txn = txn_by_snapshot[snap["snapshot_id"]]
+            if txn is not None:
+                # Refresh txn after potential snapshot update
+                txn_row = conn.execute(
+                    "SELECT revision_id, commit_id FROM turn_transactions WHERE turn_id=?",
+                    (txn["turn_id"],),
+                ).fetchone()
+                txn_rev = txn_row["revision_id"]
+                txn_commit = txn_row["commit_id"]
+                # Determine post: if txn already has revision, keep it; else derive from next snapshot's pre or generate
+                if txn_rev is None:
+                    next_pre = None
+                    if idx + 1 < len(chain):
+                        nxt = chain[idx + 1]
+                        # Need fresh read as chain list may have been updated
+                        nxt_row = conn.execute(
+                            "SELECT revision_id FROM turn_snapshots WHERE snapshot_id=?",
+                            (nxt["snapshot_id"],),
+                        ).fetchone()
+                        next_pre = nxt_row["revision_id"] if nxt_row else None
+                    post = next_pre if next_pre is not None else uuid.uuid4().hex
+                    conn.execute(
+                        "UPDATE turn_transactions SET revision_id=? WHERE turn_id=?",
+                        (post, txn["turn_id"]),
+                    )
+                    txn_rev = post
+                else:
+                    post = txn_rev
+                if txn_commit is None:
+                    conn.execute(
+                        "UPDATE turn_transactions SET commit_id=? WHERE turn_id=?",
+                        (uuid.uuid4().hex, txn["turn_id"]),
+                    )
+                current_rev = post
+            else:
+                # No txn, keep current_rev as pre (no post)
+                pass
+
+        # After walk, set control_state to boundary (post of last applied)
+        applied = [s for s in chain if s["status"] == "applied"]
+        if applied:
+            last = applied[-1]
+            txn_row = conn.execute(
+                "SELECT revision_id FROM turn_transactions WHERE pre_snapshot_id=?",
+                (last["snapshot_id"],),
+            ).fetchone()
+            boundary = txn_row["revision_id"] if txn_row and txn_row["revision_id"] else current_rev
+        else:
+            # all undone: boundary is pre of first snapshot
+            first_row = conn.execute(
+                "SELECT revision_id FROM turn_snapshots WHERE snapshot_id=?",
+                (chain[0]["snapshot_id"],),
+            ).fetchone()
+            boundary = first_row["revision_id"] if first_row else current_rev
+        conn.execute(
+            "UPDATE control_state SET current_revision_id=?, updated_at=? WHERE id=1",
+            (boundary, _now()),
+        )
+
+    # Handle provisional missing
+    prov_rows = conn.execute(
+        "SELECT snapshot_id FROM turn_snapshots WHERE status='provisional' AND revision_id IS NULL"
+    ).fetchall()
+    if prov_rows:
+        cur = conn.execute("SELECT current_revision_id FROM control_state WHERE id=1").fetchone()
+        cur_rev = cur["current_revision_id"] if cur else uuid.uuid4().hex
+        for r in prov_rows:
+            conn.execute(
+                "UPDATE turn_snapshots SET revision_id=? WHERE snapshot_id=?",
+                (cur_rev, r["snapshot_id"]),
+            )
+
+
 class CampaignHistory:
     """Durable pending-turn journal plus a bounded undo/redo snapshot stack."""
 
@@ -26,10 +446,17 @@ class CampaignHistory:
         self.snapshots_dir = self.data_dir / ".snapshots"
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
         self.snapshots_dir.mkdir(parents=True, exist_ok=True)
-        self.db_path = self.runtime_dir / "turn_history.db"
+        # Delegate to the shared migration entry so tests/tools and runtime share one path
+        try:
+            ensure_control_database_by_dir(self.data_dir)
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            # Any migration failure should be surfaced as RuntimeError for fail-closed
+            raise RuntimeError(str(exc)) from exc
+        self.db_path = self.runtime_dir / "control.db"
         self.max_undo = max_undo
         self._lock = threading.RLock()
-        self._init_schema()
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -53,41 +480,38 @@ class CampaignHistory:
             raise RuntimeError("Turn history snapshot path escapes the campaign")
         return resolved
 
-    def _init_schema(self) -> None:
+    # --- control-state helpers ---
+    def _get_control_state(self, conn: sqlite3.Connection) -> dict[str, Any]:
+        row = conn.execute("SELECT current_revision_id, connection_epoch FROM control_state WHERE id=1").fetchone()
+        if row is None:
+            raise RuntimeError("control_state missing")
+        return {"current_revision_id": row["current_revision_id"], "connection_epoch": int(row["connection_epoch"])}
+
+    def get_control_state(self) -> dict[str, Any]:
         with self._connect() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS turn_transactions (
-                    turn_id TEXT PRIMARY KEY,
-                    kind TEXT NOT NULL,
-                    group_id TEXT,
-                    turn_index INTEGER NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    write_db INTEGER,
-                    scene_text TEXT,
-                    pre_snapshot_id TEXT,
-                    error TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS turn_snapshots (
-                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-                    snapshot_id TEXT NOT NULL UNIQUE,
-                    turn_id TEXT NOT NULL,
-                    turn_index INTEGER NOT NULL,
-                    path TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    redo_path TEXT,
-                    created_at TEXT NOT NULL
-                );
-                """
-            )
-            ensure_column(conn, "turn_transactions", "state_changes_json", "TEXT")
-            ensure_column(conn, "turn_transactions", "state_before_json", "TEXT")
-            ensure_column(conn, "turn_transactions", "state_after_json", "TEXT")
-            ensure_column(conn, "turn_transactions", "state_warnings_json", "TEXT")
-            conn.commit()
+            return self._get_control_state(conn)
+
+    @property
+    def current_revision_id(self) -> str | None:
+        try:
+            return self.get_control_state()["current_revision_id"]
+        except Exception:
+            return None
+
+    @property
+    def connection_epoch(self) -> int:
+        try:
+            return int(self.get_control_state()["connection_epoch"])
+        except Exception:
+            return 0
+
+    def _increment_epoch_and_set_revision(self, conn: sqlite3.Connection, revision_id: str) -> None:
+        row = conn.execute("SELECT connection_epoch FROM control_state WHERE id=1").fetchone()
+        epoch = int(row["connection_epoch"]) if row is not None else 0
+        conn.execute(
+            "UPDATE control_state SET current_revision_id=?, connection_epoch=?, updated_at=? WHERE id=1",
+            (revision_id, epoch + 1, _now()),
+        )
 
     def save_pending(
         self,
@@ -190,7 +614,7 @@ class CampaignHistory:
             if row["pre_snapshot_id"]:
                 snapshot_id = row["pre_snapshot_id"]
                 snapshot = conn.execute(
-                    "SELECT status, redo_path FROM turn_snapshots WHERE snapshot_id=?",
+                    "SELECT status, redo_path, revision_id FROM turn_snapshots WHERE snapshot_id=?",
                     (snapshot_id,),
                 ).fetchone()
                 if snapshot is None:
@@ -212,18 +636,22 @@ class CampaignHistory:
                 self._discard_redo_locked(conn)
                 snapshot_id = uuid.uuid4().hex
                 path = self.snapshots_dir / f"undo-{snapshot_id}"
+                # capture current revision for snapshot
+                cur = conn.execute("SELECT current_revision_id FROM control_state WHERE id=1").fetchone()
+                cur_rev = cur["current_revision_id"] if cur is not None else uuid.uuid4().hex
                 self._capture_snapshot(path)
                 conn.execute(
                     """
                     INSERT INTO turn_snapshots (
-                        snapshot_id, turn_id, turn_index, path, status, created_at
-                    ) VALUES (?, ?, ?, ?, 'provisional', ?)
+                        snapshot_id, turn_id, turn_index, path, status, revision_id, created_at
+                    ) VALUES (?, ?, ?, ?, 'provisional', ?, ?)
                     """,
                     (
                         snapshot_id,
                         turn_id,
                         row["turn_index"],
                         self._stored_snapshot_path(path),
+                        cur_rev,
                         _now(),
                     ),
                 )
@@ -244,14 +672,19 @@ class CampaignHistory:
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT s.path FROM turn_transactions t
+                SELECT s.path, s.revision_id FROM turn_transactions t
                 JOIN turn_snapshots s ON s.snapshot_id=t.pre_snapshot_id
                 WHERE t.turn_id=? AND s.status='provisional'
                 """,
                 (turn_id,),
             ).fetchone()
+            snapshot_rev: str | None = None
             if row is not None:
+                snapshot_rev = row["revision_id"]
                 self._restore_snapshot(self._snapshot_path(row["path"]))
+                # increment epoch and keep current at snapshot's pre revision
+                if snapshot_rev is not None:
+                    self._increment_epoch_and_set_revision(conn, snapshot_rev)
             conn.execute(
                 """
                 UPDATE turn_transactions SET status='failed', error=?, updated_at=?
@@ -264,9 +697,11 @@ class CampaignHistory:
     def complete_confirmation(self, turn_id: str, group_id: str | None) -> None:
         with self._lock, self._connect() as conn:
             row = conn.execute(
-                "SELECT pre_snapshot_id FROM turn_transactions WHERE turn_id=?",
+                "SELECT pre_snapshot_id, commit_id, revision_id FROM turn_transactions WHERE turn_id=?",
                 (turn_id,),
             ).fetchone()
+            if row is None:
+                raise RuntimeError(f"Turn transaction not found: {turn_id}")
             abandoned_snapshots = []
             if group_id:
                 abandoned_snapshots = conn.execute(
@@ -277,10 +712,21 @@ class CampaignHistory:
                     """,
                     (group_id, turn_id),
                 ).fetchall()
-            conn.execute(
-                "UPDATE turn_transactions SET status='completed', updated_at=? WHERE turn_id=?",
-                (_now(), turn_id),
-            )
+            # idempotent commit/revision generation
+            commit_id = row["commit_id"]
+            post_rev = row["revision_id"]
+            if commit_id is None or post_rev is None:
+                commit_id = commit_id or uuid.uuid4().hex
+                post_rev = post_rev or uuid.uuid4().hex
+                conn.execute(
+                    "UPDATE turn_transactions SET commit_id=?, revision_id=?, status='completed', updated_at=? WHERE turn_id=?",
+                    (commit_id, post_rev, _now(), turn_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE turn_transactions SET status='completed', updated_at=? WHERE turn_id=?",
+                    (_now(), turn_id),
+                )
             if group_id:
                 conn.execute(
                     """
@@ -298,6 +744,11 @@ class CampaignHistory:
                     "UPDATE turn_snapshots SET status='applied' WHERE snapshot_id=?",
                     (row["pre_snapshot_id"],),
                 )
+            # update current_revision to post_rev; this is ordinary commit, not a restore, so epoch stays
+            conn.execute(
+                "UPDATE control_state SET current_revision_id=?, updated_at=? WHERE id=1",
+                (post_rev, _now()),
+            )
             conn.commit()
             for snapshot in abandoned_snapshots:
                 shutil.rmtree(self._snapshot_path(snapshot["path"]), ignore_errors=True)
@@ -340,7 +791,7 @@ class CampaignHistory:
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT t.*, s.path FROM turn_transactions t
+                SELECT t.*, s.path, s.revision_id as snapshot_revision FROM turn_transactions t
                 JOIN turn_snapshots s ON s.snapshot_id=t.pre_snapshot_id
                 WHERE t.status IN ('confirming', 'failed')
                 ORDER BY t.updated_at DESC LIMIT 1
@@ -349,6 +800,9 @@ class CampaignHistory:
             if row is None:
                 return False
             self._restore_snapshot(self._snapshot_path(row["path"]))
+            snapshot_rev = row["snapshot_revision"]
+            if snapshot_rev is not None:
+                self._increment_epoch_and_set_revision(conn, snapshot_rev)
             conn.execute(
                 """
                 UPDATE turn_transactions SET status='awaiting_confirm',
@@ -381,6 +835,9 @@ class CampaignHistory:
                 "UPDATE turn_snapshots SET status='undone', redo_path=? WHERE sequence=?",
                 (self._stored_snapshot_path(redo_path), row["sequence"]),
             )
+            snapshot_rev = row["revision_id"]
+            if snapshot_rev is not None:
+                self._increment_epoch_and_set_revision(conn, snapshot_rev)
             transaction = conn.execute(
                 "SELECT group_id FROM turn_transactions WHERE turn_id=?",
                 (row["turn_id"],),
@@ -432,21 +889,42 @@ class CampaignHistory:
                 (row["sequence"],),
             )
             transaction = conn.execute(
-                "SELECT group_id FROM turn_transactions WHERE turn_id=?",
+                "SELECT revision_id, group_id FROM turn_transactions WHERE turn_id=?",
                 (row["turn_id"],),
             ).fetchone()
             if transaction is None:
                 raise RuntimeError(
                     f"Undone turn transaction is missing: {row['turn_id']}"
                 )
-            conn.execute(
-                """
-                UPDATE turn_transactions
-                SET status='completed', error=NULL, updated_at=?
-                WHERE turn_id=?
-                """,
-                (_now(), row["turn_id"]),
-            )
+            post_rev = transaction["revision_id"]
+            if post_rev is not None:
+                self._increment_epoch_and_set_revision(conn, post_rev)
+            else:
+                # Fallback: if no post revision stored (old DB before backfill), generate one
+                post_rev = uuid.uuid4().hex
+                conn.execute(
+                    "UPDATE turn_transactions SET revision_id=? WHERE turn_id=?",
+                    (post_rev, row["turn_id"]),
+                )
+                self._increment_epoch_and_set_revision(conn, post_rev)
+            if transaction["group_id"]:
+                conn.execute(
+                    """
+                    UPDATE turn_transactions
+                    SET status='completed', error=NULL, updated_at=?
+                    WHERE turn_id=?
+                    """,
+                    (_now(), row["turn_id"]),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE turn_transactions
+                    SET status='completed', error=NULL, updated_at=?
+                    WHERE turn_id=?
+                    """,
+                    (_now(), row["turn_id"]),
+                )
             if transaction["group_id"]:
                 conn.execute(
                     """
@@ -488,8 +966,16 @@ class CampaignHistory:
                 ORDER BY sequence DESC LIMIT 10
                 """
             ).fetchall()
+            # also fetch control state for debug
+            try:
+                cs = conn.execute("SELECT current_revision_id, connection_epoch FROM control_state WHERE id=1").fetchone()
+                cur_rev = cs["current_revision_id"] if cs else None
+                epoch = int(cs["connection_epoch"]) if cs else 0
+            except Exception:
+                cur_rev = None
+                epoch = 0
         redo_pending_turn_ids = self.redo_pending_turn_ids() if undone else []
-        return {
+        result = {
             "can_undo": applied > 0,
             "can_redo": undone > 0,
             "undo_count": applied,
@@ -497,6 +983,11 @@ class CampaignHistory:
             "redo_pending_turn_ids": redo_pending_turn_ids,
             "snapshots": [dict(row) for row in rows],
         }
+        # expose for debug (player payload keeps existing fields; debug will use these)
+        if cur_rev is not None:
+            result["current_revision_id"] = cur_rev
+            result["connection_epoch"] = epoch
+        return result
 
     @staticmethod
     def _redo_pending_turn_ids_locked(conn, turn_id: str) -> list[str]:
@@ -530,17 +1021,19 @@ class CampaignHistory:
             shutil.rmtree(destination)
         destination.mkdir(parents=True)
         files = []
-        for source in sorted(self.data_dir.glob("*.db")):
-            target = destination / source.name
-            src_conn = sqlite3.connect(str(source))
+        # Whitelisted snapshot files
+        campaign = self.data_dir / "campaign.db"
+        if campaign.is_file():
+            target = destination / "campaign.db"
+            src_conn = sqlite3.connect(str(campaign))
             dst_conn = sqlite3.connect(str(target))
             try:
                 src_conn.backup(dst_conn)
             finally:
                 dst_conn.close()
                 src_conn.close()
-            files.append(source.name)
-        for name in ("core_memory.json", "settings.json", "initialization.json"):
+            files.append("campaign.db")
+        for name in ("core_memory.json", "initialization.json"):
             source = self.data_dir / name
             if source.is_file():
                 shutil.copy2(source, destination / name)
@@ -550,21 +1043,81 @@ class CampaignHistory:
             encoding="utf-8",
         )
 
+    def _migrate_snapshot_manifest_if_needed(self, snapshot_dir: Path) -> None:
+        """Migrate old snapshot manifests in place using the shared archive logic."""
+        # If snapshot still contains legacy ten-db files, migrate them to campaign.db first
+        has_legacy = any((snapshot_dir / name).is_file() for name in _LEGACY_SNAPSHOT_DB_FILES)
+        has_campaign = (snapshot_dir / "campaign.db").is_file()
+        if has_legacy:
+            # If snapshot still uses legacy DBs, migrate them to campaign.db first
+            # (has_campaign may be false or true if partially migrated)
+            try:
+                from .campaign_migration import ensure_campaign_database
+                from .paths import CampaignPaths
+
+                ensure_campaign_database(CampaignPaths.from_data_dir(snapshot_dir))
+            except Exception as exc:
+                raise RuntimeError(
+                    f"snapshot campaign migration failed: {snapshot_dir}: {exc}"
+                ) from exc
+            # Clean up archive dir that ensure_campaign_database may have created inside snapshot
+            legacy_archive = snapshot_dir / ".runtime" / "legacy-db-v1"
+            if legacy_archive.exists():
+                shutil.rmtree(legacy_archive, ignore_errors=True)
+                try:
+                    (snapshot_dir / ".runtime").rmdir()
+                except OSError:
+                    pass
+        # Delegate manifest rewriting to the single source of truth in save_archive
+        # to keep settings.json/legacy handling consistent. Lazy import avoids cycle.
+        try:
+            from .save_archive import _rewrite_snapshot_manifest
+        except ImportError:
+            return
+        # _rewrite_snapshot_manifest expects a legacy snapshot; it will raise SaveArchiveError
+        # on malformed manifests, which we surface as RuntimeError for fail-closed restore.
+        try:
+            _rewrite_snapshot_manifest(snapshot_dir)
+        except Exception as exc:
+            # If manifest is missing or already current, _rewrite_snapshot_manifest raises;
+            # for runtime restores we treat missing manifest as explicit failure, but
+            # ignore the case where manifest is already clean (no legacy/settings to rewrite).
+            # _rewrite_snapshot_manifest raises only on truly invalid manifests, so propagate.
+            # To keep idempotence, check if manifest exists and is already clean.
+            manifest_path = snapshot_dir / "manifest.json"
+            if not manifest_path.is_file():
+                raise RuntimeError(f"Snapshot manifest missing: {snapshot_dir}") from exc
+            # If manifest exists but _rewrite complained about unexpected file, propagate
+            # Otherwise, if it was a no-op (no legacy/settings), it would not have raised
+            raise
+
     def _restore_snapshot(self, source: Path) -> None:
+        # First migrate old manifest if needed
+        self._migrate_snapshot_manifest_if_needed(source)
         manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
         expected = set(manifest["files"])
+        # Validate whitelist; unknown file fails closed
+        for name in expected:
+            if name not in _SNAPSHOT_WHITELIST:
+                raise RuntimeError(f"Snapshot manifest contains unexpected file: {name}")
+        # Remove current db files not in expected, but respect whitelist separation for settings
         for current in self.data_dir.glob("*.db"):
+            # Only campaign.db is whitelisted; any other db file should be removed if not expected, but campaign.db handling
             if current.name not in expected:
                 for suffix in ("-wal", "-shm"):
                     Path(f"{current}{suffix}").unlink(missing_ok=True)
                 current.unlink()
-        for name in ("core_memory.json", "settings.json", "initialization.json"):
+        # For json files, only restore whitelisted; do not touch settings.json or drafts
+        for name in ("core_memory.json", "initialization.json"):
             current = self.data_dir / name
             if current.exists() and name not in expected:
                 current.unlink()
+        # settings.json is deliberately NOT removed/restored
         for name in expected:
             snapshot_file = source / name
             destination = self.data_dir / name
+            if not snapshot_file.exists():
+                raise RuntimeError(f"Snapshot file missing: {snapshot_file}")
             if snapshot_file.suffix == ".db":
                 self._restore_database(snapshot_file, destination)
             else:
