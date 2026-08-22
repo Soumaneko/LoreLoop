@@ -333,12 +333,7 @@ def _confirm_pipeline_locked(
         if journaled:
             runtime.jobs.wait_for_idle()
             try:
-                # Production path is fail_confirmation_offline; keep history fallback
-                # only for SimpleNamespace test doubles that lack the method.
-                if hasattr(runtime, "fail_confirmation_offline"):
-                    runtime.fail_confirmation_offline(pipeline_input.turn_id, exc)
-                else:
-                    runtime.history.fail_confirmation(pipeline_input.turn_id, exc)
+                runtime.fail_confirmation_offline(pipeline_input.turn_id, exc)
             finally:
                 ConfirmationCache(
                     pipeline_input.pending.confirmation_cache

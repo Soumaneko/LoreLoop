@@ -56,8 +56,6 @@ _LEGACY_ROOT_DB_FILES = {
     "director_log.db",
     "world_settings.db",
 }
-_SNAPSHOT_IMPORT_FILES = _SNAPSHOT_EXPORT_FILES | {"settings.json"} | _LEGACY_ROOT_DB_FILES
-_SNAPSHOT_LEGACY_FILES = _LEGACY_ROOT_DB_FILES | {"settings.json"}
 
 
 def _is_legacy_root_db_name(name: str) -> bool:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.diagnostics import NullDiagnosticLogger
+from app.core.diagnostics import diagnostics_from_state
 from app.domain.scene_summary.maintenance import _CONDENSE_LOCK
 from app.domain.scene_summary.summarizer import SceneSummarizer, SceneSummaryWarning
 from app.runtime.serialization import model_data
@@ -57,12 +57,7 @@ def scene_summary_condense_node(
             result.created_summaries.append(condensed)
             level += 1
 
-    services = _services(state)
-    diagnostics = (
-        getattr(services, "diagnostics", None)
-        if services is not None
-        else None
-    ) or NullDiagnosticLogger()
+    diagnostics = diagnostics_from_state(state)
     for warning in warnings:
         diagnostics.warning(
             source="scene_summary",

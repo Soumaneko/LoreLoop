@@ -18,8 +18,6 @@ from app.domain.world_setting.store import WorldSettingStore
 from app.runtime.sqlite import connect_sqlite
 from .paths import CampaignPaths
 
-import sqlite3 as _sqlite3  # for epoch guard error handling without cycle
-
 
 class CampaignUnitOfWork:
     """Owns one SQLite connection shared by every canonical domain store.
@@ -219,18 +217,21 @@ class CampaignUnitOfWork:
         # Stores participate in the top-level transaction through SAVEPOINTs;
         # the unit mirrors a final commit/rollback as a safety net so a ``write``
         # unit never leaves a dangling transaction.
-        if self._conn is not None:
-            if exc_type is None and self.write:
-                try:
-                    self._conn.commit()
-                except sqlite3.OperationalError:
-                    pass
-            else:
-                try:
-                    self._conn.rollback()
-                except sqlite3.OperationalError:
-                    pass
-        # Context exit always permanently closes the UoW.  There is no
-        # production/test reuse of a single UoW object across multiple
-        # ``with`` blocks; callers that need another unit construct a new one.
-        self.close()
+        try:
+            if self._conn is not None:
+                if exc_type is None and self.write:
+                    # Only commit when a transaction is actually open; otherwise
+                    # the explicit transaction() already committed and re-commit
+                    # would just raise "no transaction is active" noise.
+                    if self._conn.in_transaction:
+                        self._conn.commit()
+                else:
+                    try:
+                        self._conn.rollback()
+                    except sqlite3.OperationalError:
+                        pass
+        finally:
+            # Context exit always permanently closes the UoW — even when the
+            # final commit fails, so the connection is released and the UoW is
+            # unregistered from the runtime quiesce set (no stuck restore gate).
+            self.close()

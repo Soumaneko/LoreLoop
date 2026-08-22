@@ -164,7 +164,7 @@ def test_failed_opening_confirmation_restores_initialization_and_absent_state(
 
     _write_value(data_dir / "campaign.db", "partially-created")
     initialization.write_text('{"phase":"completed"}', encoding="utf-8")
-    history.fail_confirmation("opening-1", RuntimeError("confirmation failed"))
+    history.fail_confirmation_offline("opening-1", RuntimeError("confirmation failed"))
 
     assert not (data_dir / "campaign.db").exists()
     assert initialization.read_text(encoding="utf-8") == (
@@ -201,7 +201,7 @@ def test_failed_confirmation_restores_wal_database_with_live_connection(tmp_path
         connection.close()
         connection = None  # type: ignore[assignment]
 
-        history.fail_confirmation("turn-wal", RuntimeError("failed"))
+        history.fail_confirmation_offline("turn-wal", RuntimeError("failed"))
 
         assert _read_value(game_db) == "before"
     finally:

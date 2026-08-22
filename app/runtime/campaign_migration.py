@@ -4,6 +4,7 @@ import os
 import shutil
 import sqlite3
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 from app.domain.confirmed_history.store import ConfirmedHistoryStore
@@ -96,7 +97,7 @@ def ensure_campaign_database(paths: CampaignPaths) -> str:
         raise RuntimeError(LEGACY_JOURNAL_MESSAGE)
     legacy_files = _legacy_file_paths(paths)
     if paths.campaign_db.exists():
-        _validate(paths.campaign_db)
+        validate_campaign_database(paths.campaign_db)
         # Phase 5: validated campaign wins, clean any leftover legacy files/archive
         try:
             _cleanup_legacy_files(paths)
@@ -189,21 +190,24 @@ def _is_fts_table(name: str) -> bool:
     return "_fts" in name or name in {"history_documents_fts"}
 
 
-def _migrate_legacy(paths: CampaignPaths, legacy_files: dict[str, Path]) -> None:
-    _open_legacy_stores(paths)
+def _install_campaign_db(
+    paths: CampaignPaths,
+    populate: Callable[[sqlite3.Connection], None] | None,
+) -> None:
+    """Build ``campaign.db`` in a temporary file, validate, atomically install.
+
+    Shared by migration from the legacy ten databases and by first-install
+    creation of an empty database. Any failure before ``os.replace`` removes
+    the temporary file; a failure during replace cleans up and re-raises.
+    """
     temporary = paths.data_dir / f"campaign.db.{uuid.uuid4().hex}.tmp"
     conn = None
     try:
         conn = connect_sqlite(temporary)
         _build_campaign_schema(conn)
-        conn.execute("PRAGMA foreign_keys = OFF")
-        for name in LEGACY_DB_FILES:
-            path = legacy_files.get(name)
-            if path is not None:
-                _copy_business_tables(conn, path)
-        conn.execute("PRAGMA foreign_keys = ON")
-        _rebuild_fts(conn)
-        _validate(temporary)
+        if populate is not None:
+            populate(conn)
+        validate_campaign_database(temporary)
         conn.execute("PRAGMA journal_mode = DELETE")
         conn.commit()
         _fsync_file(temporary)
@@ -220,6 +224,21 @@ def _migrate_legacy(paths: CampaignPaths, legacy_files: dict[str, Path]) -> None
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
+
+
+def _migrate_legacy(paths: CampaignPaths, legacy_files: dict[str, Path]) -> None:
+    _open_legacy_stores(paths)
+
+    def _populate(conn: sqlite3.Connection) -> None:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        for name in LEGACY_DB_FILES:
+            path = legacy_files.get(name)
+            if path is not None:
+                _copy_business_tables(conn, path)
+        conn.execute("PRAGMA foreign_keys = ON")
+        _rebuild_fts(conn)
+
+    _install_campaign_db(paths, _populate)
     # Phase 5: directly delete legacy files/sidecars and archive dir; failures
     # after a successful install must not be reported as migration failure.
     try:
@@ -229,28 +248,7 @@ def _migrate_legacy(paths: CampaignPaths, legacy_files: dict[str, Path]) -> None
 
 
 def _create_empty(paths: CampaignPaths) -> None:
-    temporary = paths.data_dir / f"campaign.db.{uuid.uuid4().hex}.tmp"
-    conn = None
-    try:
-        conn = connect_sqlite(temporary)
-        _build_campaign_schema(conn)
-        _validate(temporary)
-        conn.execute("PRAGMA journal_mode = DELETE")
-        conn.commit()
-        _fsync_file(temporary)
-    except BaseException:
-        if conn is not None:
-            conn.close()
-        temporary.unlink(missing_ok=True)
-        raise
-    finally:
-        if conn is not None:
-            conn.close()
-    try:
-        os.replace(temporary, paths.campaign_db)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
+    _install_campaign_db(paths, None)
 
 
 def _rebuild_fts(conn: sqlite3.Connection) -> None:
@@ -353,10 +351,6 @@ def validate_campaign_database(path: Path, *, allow_minimal: bool = False) -> No
             conn.close()
         except Exception:
             pass
-
-
-# Backwards compatibility: private name retained for internal call sites migrated to public alias.
-_validate = validate_campaign_database
 
 
 def _fsync_dir(path: Path) -> None:

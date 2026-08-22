@@ -254,7 +254,7 @@ def test_snapshot_manifest_migrates_settings_and_legacy(tmp_path):
         (sdir2 / "settings.json").write_text('{"y":2}')
         (sdir2 / "manifest.json").write_text(json.dumps(man2))
     # fail should trigger restore which migrates manifest
-    hist.fail_confirmation("t2", RuntimeError("fail"))
+    hist.fail_confirmation_offline("t2", RuntimeError("fail"))
     # check manifest cleaned
     with hist._connect() as conn:
         # after fail, snapshot was provisional and deleted? Actually fail keeps provisional? No, fail keeps provisional? It does not delete. Check that settings was removed

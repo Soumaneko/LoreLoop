@@ -1,5 +1,8 @@
+import sqlite3
+
 import pytest
 
+from app.runtime import uow as uow_module
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import CampaignRuntime
 from app.runtime.uow import CampaignUnitOfWork
@@ -172,3 +175,53 @@ def test_runtime_reconfigure_and_close_release_old_uow(tmp_path):
 
     runtime.close()
     assert runtime.stores.is_closed
+
+
+class _CommitFailingConn:
+    """Proxy that fails every commit, simulating a real commit failure."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def commit(self):
+        raise sqlite3.OperationalError("injected commit failure")
+
+
+class _RecordingRuntimeRef:
+    def __init__(self):
+        self.unregistered = []
+
+    def _unregister_uow(self, uow):
+        self.unregistered.append(uow)
+
+
+def test_commit_failure_still_releases_resources(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    captured = {}
+    real_connect = uow_module.connect_sqlite
+
+    def failing_connect(db_path, **kwargs):
+        conn = real_connect(db_path, **kwargs)
+        captured["real_conn"] = conn
+        return _CommitFailingConn(conn)
+
+    monkeypatch.setattr(uow_module, "connect_sqlite", failing_connect)
+    ref = _RecordingRuntimeRef()
+    uow = CampaignUnitOfWork(paths, write=True, runtime_ref=ref)
+    with pytest.raises(sqlite3.OperationalError, match="injected commit failure"):
+        with uow:
+            conn = uow._get_conn()
+            # DDL autocommits; the INSERT opens the transaction whose final
+            # commit() hits the injected failure inside __exit__.
+            conn.execute("CREATE TABLE t(x)")
+            conn.execute("INSERT INTO t VALUES (1)")
+
+    # Commit raised inside __exit__, yet the UoW must still be fully released:
+    assert uow.is_closed
+    assert ref.unregistered == [uow]
+    assert uow._conn is None
+    with pytest.raises(sqlite3.ProgrammingError):
+        captured["real_conn"].execute("SELECT 1")

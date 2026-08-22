@@ -426,15 +426,9 @@ class CampaignRuntime:
 
         Replaces the former direct ``history.fail_confirmation`` online backup.
         """
-        def _do() -> None:
-            # history implements offline variant; keep import local to avoid cycle
-            # Prefer durable offline; fallback to online for backwards compat
-            if hasattr(self.history, "fail_confirmation_offline"):
-                return self.history.fail_confirmation_offline(turn_id, exc)  # type: ignore[attr-defined]
-            return self.history.fail_confirmation(turn_id, exc)
-
-        result = self._run_offline_restore(_do)
-        # Confirmation failure must not leave stale in-memory pending already popped?
+        result = self._run_offline_restore(
+            lambda: self.history.fail_confirmation_offline(turn_id, exc)
+        )
         # No extra pending restore needed; history already moved txn to failed.
         return result
 

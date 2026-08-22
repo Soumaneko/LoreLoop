@@ -33,7 +33,6 @@ _LEGACY_SNAPSHOT_DB_FILES = {
     "director_log.db",
     "world_settings.db",
 }
-_SNAPSHOT_LEGACY_MIGRATION_FILES = _LEGACY_SNAPSHOT_DB_FILES | {"settings.json"}
 
 
 def ensure_control_database(paths) -> str:
@@ -51,7 +50,7 @@ def ensure_control_database(paths) -> str:
     replaced by a fresh schema.
     """
     control = Path(paths.control_db)
-    legacy = Path(paths.turn_history_db) if hasattr(paths, "turn_history_db") else paths.data_dir / ".runtime" / "turn_history.db"
+    legacy = Path(paths.turn_history_db)
     has_control = control.is_file()
     has_legacy = legacy.is_file()
     if has_control and has_legacy:
@@ -668,12 +667,8 @@ class CampaignHistory:
                 shutil.rmtree(abandoned_redo_path, ignore_errors=True)
             return snapshot_id
 
-    def fail_confirmation(self, turn_id: str, error: BaseException) -> None:
-        # Phase 4 durable offline: confirming -> restoring -> failed
-        # Keep backwards compatible name; runtime uses fail_confirmation_offline wrapper
-        return self.fail_confirmation_offline(turn_id, error)
-
     def fail_confirmation_offline(self, turn_id: str, error: BaseException) -> None:
+        # Phase 4 durable offline: confirming -> restoring -> failed
         with self._lock:
             # 1. Fetch provisional snapshot + snapshot_id for durable intent
             with self._connect() as conn:
@@ -1302,10 +1297,7 @@ class CampaignHistory:
                 ) from exc
         # Delegate manifest rewriting to the single source of truth in save_archive
         # to keep settings.json/legacy handling consistent. Lazy import avoids cycle.
-        try:
-            from .save_archive import _rewrite_snapshot_manifest
-        except ImportError:
-            return
+        from .save_archive import _rewrite_snapshot_manifest
         # _rewrite_snapshot_manifest expects a legacy snapshot; it will raise SaveArchiveError
         # on malformed manifests, which we surface as RuntimeError for fail-closed restore.
         try:
@@ -1411,33 +1403,6 @@ class CampaignHistory:
             for _src, _dest, tmp in staged:
                 if tmp.exists():
                     tmp.unlink(missing_ok=True)
-
-    @staticmethod
-    def _restore_database(source: Path, destination: Path) -> None:
-        """Legacy online restore — deprecated, production uses offline staging.
-
-        Phase 4 requires offline ``os.replace`` via ``_restore_snapshot``.
-        This method remains only for historical direct calls; new code must
-        not use it (marked deprecated).
-        """
-        import warnings
-
-        warnings.warn(
-            "CampaignHistory._restore_database is deprecated; use offline _restore_snapshot",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        source_uri = f"file:{source.resolve()}?mode=ro"
-        source_conn = sqlite3.connect(source_uri, uri=True, timeout=30)
-        destination_conn = sqlite3.connect(str(destination), timeout=30)
-        try:
-            destination_conn.execute("PRAGMA busy_timeout = 30000")
-            source_conn.backup(destination_conn)
-            destination_conn.commit()
-            destination_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        finally:
-            destination_conn.close()
-            source_conn.close()
 
     def _discard_redo_locked(self, conn) -> None:
         rows = conn.execute(

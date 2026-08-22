@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from app.core.diagnostics import NullDiagnosticLogger
+from app.core.diagnostics import diagnostics_from_state as _diagnostics
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
@@ -44,14 +44,6 @@ from .confirmation_state import ConfirmationState
 from .npc_result import NpcCandidateContext, NpcTurnNodeResult
 from app.domain.director.confirmation import DirectorConfirmationExecutor
 
-
-def _diagnostics(state: ConfirmationState):
-    services = state.get("runtime_services")
-    return (
-        getattr(services, "diagnostics", None)
-        if services is not None
-        else None
-    ) or NullDiagnosticLogger()
 
 
 def _candidate_npc_id(

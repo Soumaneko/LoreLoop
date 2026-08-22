@@ -14,6 +14,20 @@ DiagnosticSeverity = Literal["warning", "error"]
 _WRITE_LOCK = threading.Lock()
 
 
+def diagnostics_from_state(state):
+    """Resolve the diagnostic logger from a graph state mapping.
+
+    Graph states carry ``runtime_services`` whose ``diagnostics`` attribute may
+    be absent or None (e.g. minimal test states); fall back to a null logger.
+    """
+    services = state.get("runtime_services")
+    return (
+        getattr(services, "diagnostics", None)
+        if services is not None
+        else None
+    ) or NullDiagnosticLogger()
+
+
 def diagnostic_path_for_trace(log_path: str | os.PathLike[str]) -> Path:
     path = Path(log_path)
     if path.name == "llm_traces.jsonl":

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import json
 
 import pytest
+from app.core.diagnostics import NullDiagnosticLogger
 from app.core.llm.errors import LLMOutputValidationError
 
 from langgraph.graph import END, START, StateGraph
@@ -1954,7 +1955,7 @@ def _compose_test_state(**overrides):
     )
     state = {
         "runtime_services": SimpleNamespace(
-            diagnostics=generation_nodes.NullDiagnosticLogger(),
+            diagnostics=NullDiagnosticLogger(),
             stores=stores,
         ),
         "user_input": "观察。",
@@ -2060,7 +2061,7 @@ def test_compose_narrative_node_returns_empty_when_scene_text_blank(monkeypatch)
     try:
         result = generation_nodes.compose_narrative_node(_compose_test_state(
             runtime_services=SimpleNamespace(
-                diagnostics=generation_nodes.NullDiagnosticLogger(),
+                diagnostics=NullDiagnosticLogger(),
                 gateway=lambda **_kw: object(),
                 stores=SimpleNamespace(director_event=lambda: type("S", (), {
                     "__enter__": lambda s: s,

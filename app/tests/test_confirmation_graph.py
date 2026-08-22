@@ -695,9 +695,7 @@ def test_journaled_confirmation_failure_resets_rolled_back_cache(monkeypatch):
     runtime = SimpleNamespace(
         begin_confirmation=lambda *_args, **_kwargs: True,
         jobs=SimpleNamespace(wait_for_idle=lambda: calls.append("wait")),
-        history=SimpleNamespace(
-            fail_confirmation=lambda *_args: calls.append("rollback")
-        ),
+        fail_confirmation_offline=lambda *_args: calls.append("rollback"),
     )
 
     def fail_pipeline(*_args, **_kwargs):

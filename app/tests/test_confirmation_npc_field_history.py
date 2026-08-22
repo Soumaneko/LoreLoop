@@ -247,7 +247,7 @@ def test_failed_confirmation_snapshot_restores_npc_field_history(tmp_path):
 
     # Phase 4 offline restore requires closing campaign connections; reopen stores
     stores.close()
-    history.fail_confirmation("turn-3", RuntimeError("commit failed"))
+    history.fail_confirmation_offline("turn-3", RuntimeError("commit failed"))
 
     stores2 = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
     with stores2.npc_profile as npc_store:

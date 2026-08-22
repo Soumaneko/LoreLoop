@@ -4,7 +4,7 @@ from concurrent.futures import CancelledError
 
 from langgraph.config import get_stream_writer
 
-from app.core.diagnostics import NullDiagnosticLogger
+from app.core.diagnostics import diagnostics_from_state as _diagnostics
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
@@ -57,15 +57,6 @@ from .generation_state import GenerationState
 def _store_factory(state: GenerationState, name: str):
     value = getattr(state["runtime_services"].stores, name)
     return value() if callable(value) else value
-
-
-def _diagnostics(state: GenerationState):
-    services = state.get("runtime_services")
-    return (
-        getattr(services, "diagnostics", None)
-        if services is not None
-        else None
-    ) or NullDiagnosticLogger()
 
 
 def _composition_output_state(
