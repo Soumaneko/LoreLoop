@@ -25,3 +25,4 @@ SPEC.md
 .bench/
 .scratch
 .saves
+benchmarks/narrative_quality/

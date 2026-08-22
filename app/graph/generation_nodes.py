@@ -409,6 +409,43 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
         }
 
     resolution_agent = TurnResolutionAgent(gateway_for(state))
+    short_term_memory = state.get("short_term_memory")
+    recent_scene = (
+        short_term_memory.recent_scenes[-1]
+        if short_term_memory and short_term_memory.recent_scenes
+        else None
+    )
+    next_turn_index = state.get("next_turn_index") or (
+        recent_scene.turn_index + 1 if recent_scene else 1
+    )
+    touched_event_ids = set(state.get("touched_event_candidates", []))
+    engaged_events = []
+    if "runtime_services" in state:
+        # Fail closed: a stale/closed UoW must surface here instead of
+        # silently degrading the turn resolution input.
+        with _store_factory(state, "director_event") as event_store:
+            engaged_events = [
+                event
+                for event in event_store.list_active()
+                if event.stage == "engaged" or event.event_id in touched_event_ids
+            ]
+    director_stage = state.get("director_stage")
+    intrude_ids = {
+        material.resource_id
+        for material in (
+            director_stage.materials if director_stage is not None else []
+        )
+        if material.kind == "engaged_event"
+    }
+    engaged_events = [
+        event
+        for event in engaged_events
+        if event.event_id in intrude_ids
+    ]
+    turn_npc_profiles = merge_profile_selections(
+        state.get("action_npc_profiles", []),
+        state.get("context_fact_npc_profiles") or [],
+    )
     turn_resolution = resolution_agent.resolve(
         user_input=state["user_input"],
         current_state=state["current_state"],
@@ -418,8 +455,12 @@ def resolve_turn_node(state: GenerationState) -> GenerationState:
         context_facts=state["context_facts"],
         npc_profiles=[
             profile.disclosure_view()
-            for profile in state.get("action_npc_profiles", [])
+            for profile in turn_npc_profiles
         ],
+        director_stage=director_stage,
+        recent_scene=recent_scene,
+        engaged_events=engaged_events,
+        turn_index=next_turn_index,
         trace_id=state["trace_id"],
     )
     for warning in getattr(resolution_agent, "last_warnings", []):
@@ -468,7 +509,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         recent_summaries=state.get("recent_summaries", []),
         turn_index=state["turn_index"],
         trace_id=state["trace_id"],
-        turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
+        turn_resolution_json="",
         touched_event_candidates=state.get("touched_event_candidates", []),
         npc_profiles=director_npc_profiles,
     )

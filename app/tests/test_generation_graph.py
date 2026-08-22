@@ -182,8 +182,9 @@ def test_director_agent_composer_and_consistency_checker_run_in_order():
     ).get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
-    assert ("resolve_turn", "director_agent_stage") in edges
-    assert ("director_agent_stage", "compose_narrative") in edges
+    assert ("extract_context_facts", "director_agent_stage") in edges
+    assert ("director_agent_stage", "resolve_turn") in edges
+    assert ("resolve_turn", "compose_narrative") in edges
     assert ("compose_narrative", "generate_canon_queries") in edges
     assert ("generate_canon_queries", "retrieve_canon_evidence") in edges
     assert ("retrieve_canon_evidence", "check_narrative_consistency") in edges
@@ -191,7 +192,7 @@ def test_director_agent_composer_and_consistency_checker_run_in_order():
     assert ("check_narrative_consistency", "revise_narrative") in edges
     assert ("revise_narrative", "__end__") in edges
     assert ("compose_narrative", "check_narrative_consistency") not in edges
-    assert ("extract_context_facts", "director_agent_stage") not in edges
+    assert ("resolve_turn", "director_agent_stage") not in edges
 
 
 def test_compact_generation_graph_skips_canon_nodes_only():
@@ -201,8 +202,9 @@ def test_compact_generation_graph_skips_canon_nodes_only():
     edges = {(edge.source, edge.target) for edge in graph.edges}
     node_ids = set(graph.nodes)
 
-    assert ("resolve_turn", "director_agent_stage") in edges
-    assert ("director_agent_stage", "compose_narrative") in edges
+    assert ("extract_context_facts", "director_agent_stage") in edges
+    assert ("director_agent_stage", "resolve_turn") in edges
+    assert ("resolve_turn", "compose_narrative") in edges
     assert ("compose_narrative", "__end__") in edges
     assert not {
         "generate_canon_queries",

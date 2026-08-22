@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
@@ -23,6 +25,14 @@ from app.domain.views import (
     project_npc_profiles,
 )
 
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from app.domain.short_term_memory.schemas import ShortTermScene
+from app.domain.director.schemas import DirectorStageResult
+from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director_event.views import project_director_events
+
 from .schemas import (
     ActionJudgment,
     ActionResolutionFrame,
@@ -35,16 +45,32 @@ from .schemas import (
 )
 
 
+def _project_recent_scene(scene: Any) -> str:
+    if scene is None:
+        return "null"
+    return json.dumps(
+        {
+            "scene_id": getattr(scene, "scene_id", ""),
+            "turn_index": getattr(scene, "turn_index", 0),
+            "scene_text": getattr(scene, "scene_text", ""),
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
 class _ActionResolutionOutput(BaseModel):
     action_id: str
     effect_reasoning: str = Field(min_length=1, max_length=120)
     resolved_fact: str = Field(min_length=1, max_length=120)
+    narrative_hook: str = Field(min_length=1, max_length=120)
 
 
 class _ActionResolutionOutputSoft(BaseModel):
     action_id: str
     effect_reasoning: str = Field(min_length=1)
     resolved_fact: str = Field(min_length=1)
+    narrative_hook: str = Field(min_length=1)
 
 
 class _TurnResolutionOutput(BaseModel):
@@ -206,7 +232,7 @@ def build_player_turn_resolution(
 def _parse_resolution(raw: Any) -> _ActionResolutionOutputSoft:
     if isinstance(raw, dict):
         cleaned = dict(raw)
-        for key in ("action_id", "effect_reasoning", "resolved_fact"):
+        for key in ("action_id", "effect_reasoning", "resolved_fact", "narrative_hook"):
             value = cleaned.get(key)
             if isinstance(value, str):
                 cleaned[key] = value.strip()
@@ -262,6 +288,7 @@ def _collect_record(
                 ),
             ))
             continue
+
         if resolution.action_id in seen:
             retry_errors.append(
                 f"action_resolutions[{index}] duplicate action_id: "
@@ -277,7 +304,7 @@ def _collect_record(
             continue
 
         invalid = False
-        for field_name in ("effect_reasoning", "resolved_fact"):
+        for field_name in ("effect_reasoning", "resolved_fact", "narrative_hook"):
             value = getattr(resolution, field_name)
             if attempt == 1 and len(value) > _HARD_LIMIT:
                 retry_errors.append(
@@ -334,6 +361,7 @@ def _fallback_frame(judgment: ActionJudgment) -> ActionResolutionFrame:
         resolution_source=judgment.resolution_source,
         effect_reasoning=_FALLBACK_EFFECT,
         resolved_fact=_FALLBACK_FACT,
+        narrative_hook="",
     )
 
 
@@ -361,6 +389,7 @@ def _build_result(
                 resolution_source=judgment.resolution_source,
                 effect_reasoning=resolution.effect_reasoning,
                 resolved_fact=resolution.resolved_fact,
+                narrative_hook=resolution.narrative_hook,
             )
         )
     return TurnResolutionResult(
@@ -384,6 +413,10 @@ class TurnResolutionAgent:
         core_memory: CoreMemory,
         context_facts: ContextFactSet | None = None,
         npc_profiles: list[NPCProfileDirectorView] | None = None,
+        director_stage: DirectorStageResult | None = None,
+        recent_scene: ShortTermScene | None = None,
+        engaged_events: list[DirectorEvent] | None = None,
+        turn_index: int | None = None,
         trace_id: str | None = None,
     ) -> TurnResolutionResult:
         self.last_warnings = []
@@ -417,6 +450,7 @@ class TurnResolutionAgent:
                 self.llm.run(
                     task="turn_resolution",
                     input_data={
+                        "turn_index": turn_index if turn_index is not None else 1,
                         "action_judgments_json": json.dumps(
                             [judgment.model_dump(mode="json") for judgment in judgments],
                             ensure_ascii=False,
@@ -429,6 +463,20 @@ class TurnResolutionAgent:
                             context_facts or ContextFactSet(turn_focus="No Context Facts", facts=[])
                         ),
                         "npc_profiles_json": project_npc_profiles(npc_profiles or []),
+                        "director_stage_json": json.dumps(
+                            (
+                                director_stage.model_dump(mode="json")
+                                if director_stage is not None
+                                else None
+                            ),
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                        "engaged_events_json": project_director_events(
+                            engaged_events or [],
+                            effective_stage="engaged",
+                        ),
+                        "recent_scene_json": _project_recent_scene(recent_scene),
                         "output_schema_json": schema,
                     },
                     output_schema=_TurnResolutionOutputLoose,

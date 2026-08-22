@@ -82,6 +82,7 @@ def _response(outcome_band: str = "critical_success") -> str:
                 "action_id": "a1",
                 "effect_reasoning": "支点：当前场景可观察；边界：只发现环境异常和可用优势。",
                 "resolved_fact": "主角发现四周最关键的异常，并获得一个可立即利用的优势。",
+                "narrative_hook": "异常的来源隐约可辨，主角可以决定是否立即追查。",
             }
         ],
     }, ensure_ascii=False)
@@ -252,6 +253,7 @@ class TestTurnResolutionAgent:
             "action_id",
             "effect_reasoning",
             "resolved_fact",
+            "narrative_hook",
         }
 
     def test_llm_interprets_consequence(self):
@@ -387,6 +389,7 @@ def _two_action_response(only_a1: bool = False) -> str:
             "action_id": "a1",
             "effect_reasoning": "观察成功。",
             "resolved_fact": "主角发现异常。",
+            "narrative_hook": "异常的源头留下了可追查的痕迹。",
         },
     ]
     if not only_a1:
@@ -394,6 +397,7 @@ def _two_action_response(only_a1: bool = False) -> str:
             "action_id": "a2",
             "effect_reasoning": "第二次行动按掷骰结果推进。",
             "resolved_fact": "主角承受失败后果。",
+            "narrative_hook": "失败的代价迫近，主角需要立即做出取舍。",
         })
     return json.dumps({
         "resolution_reasoning": "两行动按判定推进。",
@@ -481,6 +485,7 @@ def test_turn_resolution_soft_truncates_second_attempt_text():
             "action_id": "a1",
             "effect_reasoning": "长" * 121,
             "resolved_fact": "事实",
+            "narrative_hook": "抓手",
         }],
     }, ensure_ascii=False)
     second = json.dumps({
@@ -489,6 +494,7 @@ def test_turn_resolution_soft_truncates_second_attempt_text():
             "action_id": "a1",
             "effect_reasoning": "长" * 150,
             "resolved_fact": "超长" * 100,
+            "narrative_hook": "钩" * 200,
         }],
     }, ensure_ascii=False)
 
@@ -507,6 +513,7 @@ def test_turn_resolution_soft_truncates_second_attempt_text():
     frame = result.action_resolutions[0]
     assert len(frame.effect_reasoning) == 150
     assert len(frame.resolved_fact) == 180
+    assert len(frame.narrative_hook) == 180
     assert any(
         warning.code == "turn_resolution_truncated"
         for warning in agent.last_warnings
@@ -551,6 +558,7 @@ def test_turn_resolution_reuse_first_preserves_second_dropped_warnings():
             "action_id": "a1",
             "effect_reasoning": "观察成功。",
             "resolved_fact": "主角发现异常。",
+            "narrative_hook": "异常的源头留下了可追查的痕迹。",
         }],
     }, ensure_ascii=False)
     second = json.dumps({
@@ -559,6 +567,7 @@ def test_turn_resolution_reuse_first_preserves_second_dropped_warnings():
             "action_id": "missing",
             "effect_reasoning": "未知行动。",
             "resolved_fact": "未知事实。",
+            "narrative_hook": "未知的悬念。",
         }],
     }, ensure_ascii=False)
     mock = MockLLM()
@@ -577,5 +586,70 @@ def test_turn_resolution_reuse_first_preserves_second_dropped_warnings():
     assert result.action_resolutions[0].action_id == "a1"
     assert any(
         warning.code == "turn_resolution_dropped"
+        for warning in agent.last_warnings
+    )
+
+def test_turn_resolution_missing_hook_is_rejected_and_falls_back():
+    from app.core.llm import MockLLM
+
+    response = json.dumps({
+        "resolution_reasoning": "缺少 narrative_hook。",
+        "action_resolutions": [{
+            "action_id": "a1",
+            "effect_reasoning": "观察成功。",
+            "resolved_fact": "主角发现异常。",
+        }],
+    }, ensure_ascii=False)
+    mock = MockLLM()
+    mock.set_responses([response, response])
+    agent = TurnResolutionAgent(mock.build_gateway())
+
+    result = agent.resolve(
+        user_input="观察",
+        current_state=_state(),
+        action_parse_result=_parse(),
+        roll_results=_roll_batch(_roll(20)),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    # Missing hook fails validation on every attempt; domain fallback keeps "".
+    assert result.action_resolutions[0].narrative_hook == ""
+    assert any(
+        warning.code == "turn_resolution_fallback"
+        for warning in agent.last_warnings
+    )
+
+
+def test_turn_resolution_hook_over_hard_limit_is_dropped_then_retried():
+    from app.core.llm import MockLLM
+
+    first = json.dumps({
+        "resolution_reasoning": "抓手超长。",
+        "action_resolutions": [{
+            "action_id": "a1",
+            "effect_reasoning": "观察成功。",
+            "resolved_fact": "主角发现异常。",
+            "narrative_hook": "长" * 121,
+        }],
+    }, ensure_ascii=False)
+
+    mock = MockLLM()
+    mock.set_responses([first, _response()])
+    agent = TurnResolutionAgent(mock.build_gateway())
+
+    result = agent.resolve(
+        user_input="观察",
+        current_state=_state(),
+        action_parse_result=_parse(),
+        roll_results=_roll_batch(_roll(20)),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    frame = result.action_resolutions[0]
+    # First attempt exceeded the hard limit and was dropped; the retried
+    # second response's hook was adopted instead.
+    assert frame.narrative_hook.startswith("异常的来源隐约可辨")
+    assert all(
+        warning.code != "turn_resolution_truncated"
         for warning in agent.last_warnings
     )

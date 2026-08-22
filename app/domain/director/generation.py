@@ -110,78 +110,83 @@ class DirectorGenerationExecutor:
         log_store = uow.director_log
         recent_director_log = log_store.recent()
 
-        register_skill(
-            service,
-            "present_event",
-            handler=lambda args, guidance=None: _present_event(
-                event_store,
-                args,
-                guidance=guidance,
-                touched_event_ids=touched_event_ids,
-            ),
-            arguments_validator=lambda args: _get_hidden_event(
-                event_store,
-                args.event_id,
-                touched_event_ids=touched_event_ids,
-            ),
-        )
-        register_skill(
-            service,
-            "introduce_npc",
-            handler=lambda args, guidance=None: _introduce_npc(
-                director_npc_store,
-                args,
-                guidance=guidance,
-            ),
-            arguments_validator=lambda args: _get_director_draft(
-                director_npc_store,
-                args.npc_id,
-            ),
-        )
-        register_skill(
-            service,
-            "upgrade_disclosure",
-            handler=lambda args, guidance=None: _upgrade_disclosure(
-                npc_profile_store,
-                args,
-                guidance=guidance,
-                visible_profiles=selected_npc_profiles,
-            ),
-            arguments_validator=lambda args: _get_disclosure_profile(
-                npc_profile_store,
-                args.npc_id,
-                args.new_disclosure_level,
-                visible_profiles=selected_npc_profiles,
-            ),
-        )
-        register_skill(
-            service,
-            "foreshadow_setting",
-            handler=lambda args, guidance=None: _foreshadow_setting(
-                setting_store,
-                args,
-                guidance=guidance,
-            ),
-            arguments_validator=lambda args: _get_setting(
-                setting_store,
-                args.setting_id,
-            ),
-        )
-        register_skill(
-            service,
-            "intrude_engaged_event",
-            handler=lambda args, guidance=None: _intrude_engaged_event(
-                event_store,
-                args,
-                guidance=guidance,
-                touched_event_ids=touched_event_ids,
-            ),
-            arguments_validator=lambda args: _get_engaged_event(
-                event_store,
-                args.event_id,
-                touched_event_ids=touched_event_ids,
-            ),
-        )
+        if hidden_events:
+            register_skill(
+                service,
+                "present_event",
+                handler=lambda args, guidance=None: _present_event(
+                    event_store,
+                    args,
+                    guidance=guidance,
+                    touched_event_ids=touched_event_ids,
+                ),
+                arguments_validator=lambda args: _get_hidden_event(
+                    event_store,
+                    args.event_id,
+                    touched_event_ids=touched_event_ids,
+                ),
+            )
+        if director_npcs:
+            register_skill(
+                service,
+                "introduce_npc",
+                handler=lambda args, guidance=None: _introduce_npc(
+                    director_npc_store,
+                    args,
+                    guidance=guidance,
+                ),
+                arguments_validator=lambda args: _get_director_draft(
+                    director_npc_store,
+                    args.npc_id,
+                ),
+            )
+        if selected_npc_profiles:
+            register_skill(
+                service,
+                "upgrade_disclosure",
+                handler=lambda args, guidance=None: _upgrade_disclosure(
+                    npc_profile_store,
+                    args,
+                    guidance=guidance,
+                    visible_profiles=selected_npc_profiles,
+                ),
+                arguments_validator=lambda args: _get_disclosure_profile(
+                    npc_profile_store,
+                    args.npc_id,
+                    args.new_disclosure_level,
+                    visible_profiles=selected_npc_profiles,
+                ),
+            )
+        if settings:
+            register_skill(
+                service,
+                "foreshadow_setting",
+                handler=lambda args, guidance=None: _foreshadow_setting(
+                    setting_store,
+                    args,
+                    guidance=guidance,
+                ),
+                arguments_validator=lambda args: _get_setting(
+                    setting_store,
+                    args.setting_id,
+                ),
+            )
+        if engaged_events:
+            register_skill(
+                service,
+                "intrude_engaged_event",
+                handler=lambda args, guidance=None: _intrude_engaged_event(
+                    event_store,
+                    args,
+                    guidance=guidance,
+                    touched_event_ids=touched_event_ids,
+                ),
+                arguments_validator=lambda args: _get_engaged_event(
+                    event_store,
+                    args.event_id,
+                    touched_event_ids=touched_event_ids,
+                ),
+            )
         observation = DirectorObservation(
             phase="generation",
             turn_index=self._turn_index,

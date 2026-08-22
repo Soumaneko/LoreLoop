@@ -119,10 +119,10 @@ def _compile_generation_graph(
     graph.add_edge(START, "parse_action")
     graph.add_edge("parse_action", "extract_context_facts")
     graph.add_edge("parse_action", "evaluate_roll_modifiers")
-    graph.add_edge(["extract_context_facts", "evaluate_roll_modifiers"], "resolve_turn")
     graph.add_node("director_agent_stage", director_agent_stage_node)
-    graph.add_edge("resolve_turn", "director_agent_stage")
-    graph.add_edge("director_agent_stage", "compose_narrative")
+    graph.add_edge("extract_context_facts", "director_agent_stage")
+    graph.add_edge(["director_agent_stage", "evaluate_roll_modifiers"], "resolve_turn")
+    graph.add_edge("resolve_turn", "compose_narrative")
 
     _add_canon_validation_tail(
         graph,
@@ -190,14 +190,14 @@ def build_reroll_graph(*, canon_validation_is_enabled: bool):
 def _compile_reroll_graph(*, canon_validation_is_enabled: bool):
     graph = StateGraph(GenerationState)
     graph.add_node("resolve_rolls", resolve_rolls_node)
-    graph.add_node("resolve_turn", resolve_turn_node)
     graph.add_node("director_agent_stage", director_agent_stage_node)
+    graph.add_node("resolve_turn", resolve_turn_node)
     graph.add_node("compose_narrative", compose_narrative_node)
 
     graph.add_edge(START, "resolve_rolls")
-    graph.add_edge("resolve_rolls", "resolve_turn")
-    graph.add_edge("resolve_turn", "director_agent_stage")
-    graph.add_edge("director_agent_stage", "compose_narrative")
+    graph.add_edge(START, "director_agent_stage")
+    graph.add_edge(["resolve_rolls", "director_agent_stage"], "resolve_turn")
+    graph.add_edge("resolve_turn", "compose_narrative")
 
     _add_canon_validation_tail(
         graph,

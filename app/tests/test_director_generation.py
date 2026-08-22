@@ -163,6 +163,15 @@ def test_generation_observation_npcs_carry_disclosure_level(tmp_path):
 
 def test_generation_agent_observation_includes_recent_director_log(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    from app.domain.world_setting import WorldSetting
+    with stores.world_setting as store:
+        store.save(WorldSetting(
+            kind="lore",
+            name="潮汐旧约",
+            summary="约束沿海商会共同救援遇险船只的古老约定。",
+            public_facts=["拒绝救援会被同行抵制"],
+            created_turn=1,
+        ))
     with stores.director_log as log_store:
         log_store.save_entries([{
             "turn_index": 2,
@@ -404,6 +413,16 @@ def test_generation_agent_receives_projected_turn_resolution(tmp_path):
         ensure_ascii=False,
     )
 
+    from app.domain.world_setting import WorldSetting
+    with stores.world_setting as store:
+        store.save(WorldSetting(
+            kind="lore",
+            name="潮汐旧约",
+            summary="约束沿海商会共同救援遇险船只的古老约定。",
+            public_facts=["拒绝救援会被同行抵制"],
+            created_turn=1,
+        ))
+
     _, decision = run_generation_director_agent(
         gateway=gateway,
         stores=stores,
@@ -593,3 +612,39 @@ def test_generation_observation_exposes_engaged_events_channel(tmp_path):
     assert engaged_channel[just_engaged_id]["stage"] == "engaged"
     assert engaged_channel[just_engaged_id]["touched_this_turn"] is True
     assert "hooks" not in engaged_channel[engaged_id]
+
+
+def test_generation_director_omits_event_skills_when_no_events(tmp_path):
+    from app.domain.world_setting import WorldSetting
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.world_setting as store:
+        store.save(WorldSetting(
+            kind="lore",
+            name="潮汐旧约",
+            summary="约束沿海商会共同救援遇险船只的古老约定。",
+            public_facts=["拒绝救援会被同行抵制"],
+            created_turn=1,
+        ))
+    gateway = ScriptedDirectorGateway(
+        decision={"reasoning": "本轮无需导演介入。", "requests": []},
+    )
+
+    run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="观察港口。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+
+    skills = json.loads(gateway.input_data[0]["available_skills_json"])
+    skill_names = {skill["name"] for skill in skills}
+    assert "present_event" not in skill_names
+    assert "intrude_engaged_event" not in skill_names
+    assert "introduce_npc" not in skill_names
+    assert "foreshadow_setting" in skill_names

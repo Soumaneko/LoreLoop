@@ -39,6 +39,7 @@ class ActionResolutionFrame(BaseModel):
     resolution_source: ResolutionSource = "automatic"
     effect_reasoning: str = Field(min_length=1, max_length=180)
     resolved_fact: str = Field(min_length=1, max_length=180)
+    narrative_hook: str = Field(default="", max_length=180)
 
 
 class TurnResolutionResult(BaseModel):
