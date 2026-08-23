@@ -27,7 +27,10 @@ from pydantic import (
 
 from app.domain.director.schemas import DirectorPhase
 from app.domain.director_event.schemas import DirectorEventRole
-from app.domain.npc_profile.schemas import NPCDisclosureLevel
+from app.domain.npc_profile.schemas import (
+    NPC_PERSONALITY_TRAIT_MAX_LENGTH,
+    NPCDisclosureLevel,
+)
 from app.domain.world_setting.schemas import SettingKind
 
 
@@ -63,16 +66,78 @@ class IntrudeEngagedEventArguments(BaseModel):
     event_id: str = Field(min_length=1)
 
 
-class IntroduceNPCArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class KnownAbilitySpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    npc_id: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=20, description="能力或特长名称（<=20字，建议<=10字）")
+    description: str = Field(min_length=1, max_length=120, description="能力简要说明（<=120字，建议<=60字）")
+
+
+class SpontaneousNPCSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(
+        min_length=1,
+        max_length=40,
+        description="角色姓名（<=40字，不得与既有登场 NPC、别名、主角姓名或现有 drafts 重名）",
+    )
+    role: str = Field(
+        min_length=1,
+        max_length=100,
+        description="身份或职业定位（<=100字，建议<=20字）",
+    )
+    appearance: str = Field(
+        min_length=1,
+        max_length=300,
+        description="外貌、体型、服饰与特征描写（<=300字，建议<=100字）",
+    )
+    personality_trait: str = Field(
+        min_length=1,
+        max_length=NPC_PERSONALITY_TRAIT_MAX_LENGTH,
+        description=f"核心性格特质标签（<={NPC_PERSONALITY_TRAIT_MAX_LENGTH}字，建议10-20字）",
+    )
+    known_abilities: list[KnownAbilitySpec] = Field(
+        default_factory=list,
+        max_length=5,
+        description="简要已知能力或专业技能（最多5项）",
+    )
+
+
+class IntroduceNPCArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    npc_id: str | None = Field(
+        default=None,
+        description="从 resources.drafts 中选取的准备好的 NPC 草稿 ID",
+    )
+    spontaneous: SpontaneousNPCSpec | None = Field(
+        default=None,
+        description="仅当 resources.drafts 中无匹配当前突发情境的存货时，填写的即兴人物卡",
+    )
     view_mode: NPCViewMode = Field(
         description=(
-            "选择该导演 NPC 首次披露的等级。远程/间接接触选 remote；"
-            "初次见面/当面选 face_to_face；深度交心或搜魂选 intimate。"
-        )
+            "选择该 NPC 首次披露的等级。起用已准备草稿时可选 remote/face_to_face/intimate；"
+            "即兴新建 NPC（spontaneous）必须且只能使用 face_to_face（初次当面接触）。"
+        ),
     )
+
+    @model_validator(mode="after")
+    def _validate_mutually_exclusive(self) -> IntroduceNPCArguments:
+        if self.npc_id is not None and not self.npc_id.strip():
+            self.npc_id = None
+        has_id = self.npc_id is not None
+        has_spontaneous = self.spontaneous is not None
+        if has_id == has_spontaneous:
+            raise ValueError(
+                "introduce_npc requires exactly one of 'npc_id' (from resources.drafts) "
+                "or 'spontaneous' (for JIT creation)"
+            )
+        if has_spontaneous and self.view_mode != "face_to_face":
+            raise ValueError(
+                "spontaneous NPC introduction requires view_mode 'face_to_face' "
+                "(remote and intimate are not permitted for spontaneous creation)"
+            )
+        return self
 
 
 class UpgradeDisclosureArguments(BaseModel):
@@ -230,12 +295,12 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="introduce_npc",
         description=(
-            "将一名仍未登场的导演 NPC 草稿首次引入本轮场景。适用场景："
-            "你规划该草稿在本场景中初次出现（登场或提及）。"
-            "注意：只对 resources.drafts 中的 导演 NPC 草稿有效；"
+            "将一名新 NPC 首次引入本轮场景。适用场景：你规划该角色在场景中初次出现（登场或提及）。"
+            "优先使用 resources.drafts 中的 npc_id 起用准备好的草稿；"
+            "仅当 drafts 中无任何匹配当前场景的人物时，才允许使用 spontaneous 即兴提供轻量人物卡。"
             "resources.npcs 中的已登场 NPC 禁止再引入。"
-            "view_mode 是该 NPC 首次披露授权：远程/间接接触选 remote，初次见面/当面选 "
-            "face_to_face，深度交心或搜魂等选 intimate。"
+            "view_mode 是该 NPC 首次披露授权：起用草稿时可选 remote/face_to_face/intimate；"
+            "即兴新建（spontaneous）必须且只能使用 face_to_face（初次当面接触）。"
         ),
         phases=_GENERATION,
         mutates=False,

@@ -244,6 +244,117 @@ def test_introduce_npc_requires_valid_view_mode():
     assert validated.view_mode == "face_to_face"
 
 
+def test_introduce_npc_mutually_exclusive_arguments():
+    from app.domain.director.skill_specs import IntroduceNPCArguments, SpontaneousNPCSpec
+
+    # Neither provided
+    with pytest.raises(ValidationError, match="requires exactly one"):
+        IntroduceNPCArguments(view_mode="face_to_face")
+
+    # Both provided
+    with pytest.raises(ValidationError, match="requires exactly one"):
+        IntroduceNPCArguments(
+            npc_id="npc_1",
+            spontaneous=SpontaneousNPCSpec(
+                name="严铁匠",
+                role="铁匠",
+                appearance="壮汉",
+                personality_trait="暴躁",
+            ),
+            view_mode="face_to_face",
+        )
+
+    # Blank string npc_id with spontaneous normalizes to spontaneous only
+    validated = IntroduceNPCArguments(
+        npc_id="   ",
+        spontaneous=SpontaneousNPCSpec(
+            name="  严铁匠  ",
+            role="  铸灵匠人 ",
+            appearance=" 赤膊壮汉 ",
+            personality_trait=" 暴躁 ",
+        ),
+        view_mode="face_to_face",
+    )
+    assert validated.npc_id is None
+    assert validated.spontaneous.name == "严铁匠"
+    assert validated.spontaneous.role == "铸灵匠人"
+    assert validated.spontaneous.appearance == "赤膊壮汉"
+    assert validated.spontaneous.personality_trait == "暴躁"
+
+
+def test_introduce_npc_spontaneous_requires_face_to_face():
+    from app.domain.director.skill_specs import IntroduceNPCArguments, SpontaneousNPCSpec
+
+    # spontaneous with remote is rejected
+    with pytest.raises(ValidationError, match="requires view_mode 'face_to_face'"):
+        IntroduceNPCArguments(
+            spontaneous=SpontaneousNPCSpec(
+                name="严铁匠",
+                role="铁匠",
+                appearance="壮汉",
+                personality_trait="暴躁",
+            ),
+            view_mode="remote",
+        )
+
+    # spontaneous with intimate is rejected
+    with pytest.raises(ValidationError, match="requires view_mode 'face_to_face'"):
+        IntroduceNPCArguments(
+            spontaneous=SpontaneousNPCSpec(
+                name="严铁匠",
+                role="铁匠",
+                appearance="壮汉",
+                personality_trait="暴躁",
+            ),
+            view_mode="intimate",
+        )
+
+    # spontaneous with face_to_face is accepted
+    val_f2f = IntroduceNPCArguments(
+        spontaneous=SpontaneousNPCSpec(
+            name="严铁匠",
+            role="铁匠",
+            appearance="壮汉",
+            personality_trait="暴躁",
+        ),
+        view_mode="face_to_face",
+    )
+    assert val_f2f.view_mode == "face_to_face"
+
+
+def test_spontaneous_npc_spec_field_length_limits():
+    from app.domain.director.skill_specs import KnownAbilitySpec, SpontaneousNPCSpec
+
+    # personality_trait max 40
+    with pytest.raises(ValidationError):
+        SpontaneousNPCSpec(
+            name="严铁匠",
+            role="铁匠",
+            appearance="壮汉",
+            personality_trait="暴" * 41,
+        )
+
+    # KnownAbilitySpec name max 20, description max 120
+    with pytest.raises(ValidationError):
+        KnownAbilitySpec(name="技" * 21, description="说明")
+
+    with pytest.raises(ValidationError):
+        KnownAbilitySpec(name="技能", description="明" * 121)
+
+    spec = SpontaneousNPCSpec(
+        name="严铁匠",
+        role="铸灵匠人",
+        appearance="壮汉",
+        personality_trait="暴" * 40,
+        known_abilities=[
+            KnownAbilitySpec(name="技" * 20, description="明" * 120),
+        ],
+    )
+    assert len(spec.personality_trait) == 40
+    assert len(spec.known_abilities[0].name) == 20
+    assert len(spec.known_abilities[0].description) == 120
+
+
 def test_skill_service_validates_arguments_and_executes_in_request_order():
     service = DirectorSkillService()
     called: list[str] = []

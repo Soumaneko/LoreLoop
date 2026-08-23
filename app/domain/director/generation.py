@@ -9,7 +9,9 @@ LangGraph 节点只调用 :class:`DirectorGenerationExecutor`（或薄包装
 from __future__ import annotations
 
 import json
+import uuid
 
+from app.core.text import normalize_compact_key
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.director import (
@@ -126,20 +128,27 @@ class DirectorGenerationExecutor:
                     touched_event_ids=touched_event_ids,
                 ),
             )
-        if director_npcs:
-            register_skill(
-                service,
-                "introduce_npc",
-                handler=lambda args, guidance=None: _introduce_npc(
-                    director_npc_store,
-                    args,
-                    guidance=guidance,
-                ),
-                arguments_validator=lambda args: _get_director_draft(
-                    director_npc_store,
-                    args.npc_id,
-                ),
-            )
+        player_name = (
+            self._current_state.player.name
+            if self._current_state and self._current_state.player
+            else None
+        )
+        register_skill(
+            service,
+            "introduce_npc",
+            handler=lambda args, guidance=None: _introduce_npc(
+                director_npc_store,
+                args,
+                guidance=guidance,
+            ),
+            arguments_validator=lambda args: _validate_introduce_npc(
+                args,
+                director_npc_store,
+                npc_profile_store,
+                player_name=player_name,
+            ),
+            batch_validator=_validate_unique_introduce_npc_targets,
+        )
         if selected_npc_profiles:
             register_skill(
                 service,
@@ -354,14 +363,37 @@ def _introduce_npc(
     *,
     guidance: str | None,
 ) -> DirectorStageMaterial:
-    draft = _get_director_draft(director_npc_store, args.npc_id)
-    payload = {
-        "source": "director_npc",
-        **draft.private_view().model_dump(
-            mode="json",
-            exclude_none=True,
-        ),
-    }
+    clean_id = args.npc_id.strip() if args.npc_id and args.npc_id.strip() else None
+    if clean_id:
+        draft = _get_director_draft(director_npc_store, clean_id)
+        payload = {
+            "source": "director_npc",
+            **draft.private_view().model_dump(
+                mode="json",
+                exclude_none=True,
+            ),
+        }
+        resource_id = clean_id
+    elif args.spontaneous:
+        spontaneous = args.spontaneous
+        resource_id = f"spontaneous_npc_{uuid.uuid4().hex[:12]}"
+        payload = {
+            "npc_id": resource_id,
+            "source": "spontaneous",
+            "name": spontaneous.name.strip(),
+            "role": spontaneous.role.strip(),
+            "appearance": spontaneous.appearance.strip(),
+            "personality_trait": spontaneous.personality_trait.strip(),
+            "known_abilities": [
+                ability.model_dump(mode="json")
+                for ability in spontaneous.known_abilities
+            ],
+            "faction": "",
+            "disclosure_level": args.view_mode,
+        }
+    else:
+        raise ValueError("introduce_npc requires either npc_id or spontaneous")
+
     allowed = DISCLOSED_FIELD_SETS[args.view_mode]
     if allowed is not None:
         payload = {
@@ -372,7 +404,7 @@ def _introduce_npc(
     payload["view_mode"] = args.view_mode
     return DirectorStageMaterial(
         kind="npc",
-        resource_id=args.npc_id,
+        resource_id=resource_id,
         guidance=_require_generation_guidance(guidance),
         payload=payload,
     )
@@ -488,6 +520,73 @@ def _get_engaged_event(
             "resolved events are not intrudable)"
         )
     return event
+
+
+def _validate_unique_introduce_npc_targets(arguments: list[IntroduceNPCArguments]) -> None:
+    seen_ids: set[str] = set()
+    seen_spontaneous_names: set[str] = set()
+    for args in arguments:
+        if args.npc_id and args.npc_id.strip():
+            clean_id = args.npc_id.strip()
+            if clean_id in seen_ids:
+                raise ValueError(
+                    f"introduce_npc draft target '{clean_id}' is duplicated in the same batch"
+                )
+            seen_ids.add(clean_id)
+        if args.spontaneous:
+            name = args.spontaneous.name.strip()
+            compact = normalize_compact_key(name)
+            if compact in seen_spontaneous_names:
+                raise ValueError(
+                    f"spontaneous NPC name '{name}' is duplicated within the same decision batch"
+                )
+            seen_spontaneous_names.add(compact)
+
+
+def _validate_introduce_npc(
+    args: IntroduceNPCArguments,
+    director_npc_store,
+    npc_profile_store,
+    *,
+    player_name: str | None = None,
+):
+    clean_id = args.npc_id.strip() if args.npc_id and args.npc_id.strip() else None
+    if clean_id:
+        return _get_director_draft(director_npc_store, clean_id)
+    if args.spontaneous:
+        name = args.spontaneous.name.strip()
+        if not name:
+            raise ValueError("spontaneous NPC requires a non-empty name")
+        compact_name = normalize_compact_key(name)
+        if player_name:
+            compact_player = normalize_compact_key(player_name)
+            if compact_name == compact_player:
+                raise ValueError(
+                    f"spontaneous NPC name '{name}' conflicts with the protagonist name"
+                )
+        for p in npc_profile_store.list_all():
+            if normalize_compact_key(p.name) == compact_name:
+                raise ValueError(
+                    f"spontaneous NPC name '{name}' conflicts with an existing NPC profile"
+                )
+            alias_keys = {
+                normalize_compact_key(a)
+                for a in [*p.aliases, *p.transient_aliases.keys()]
+            }
+            if compact_name in alias_keys:
+                raise ValueError(
+                    f"spontaneous NPC name '{name}' conflicts with an existing NPC alias of '{p.name}'"
+                )
+        if any(
+            normalize_compact_key(d.name) == compact_name
+            for d in director_npc_store.list_all()
+            if d.status == "prepared"
+        ):
+            raise ValueError(
+                f"spontaneous NPC name '{name}' conflicts with an existing prepared draft"
+            )
+        return args.spontaneous
+    raise ValueError("introduce_npc requires either npc_id or spontaneous")
 
 
 def _get_director_draft(director_npc_store, npc_id: str):

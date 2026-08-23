@@ -646,5 +646,312 @@ def test_generation_director_omits_event_skills_when_no_events(tmp_path):
     skill_names = {skill["name"] for skill in skills}
     assert "present_event" not in skill_names
     assert "intrude_engaged_event" not in skill_names
-    assert "introduce_npc" not in skill_names
+    assert "upgrade_disclosure" not in skill_names
+    # introduce_npc is always available because it supports spontaneous NPC creation
+    assert "introduce_npc" in skill_names
     assert "foreshadow_setting" in skill_names
+
+
+def test_generation_director_introduce_spontaneous_npc_success(tmp_path):
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    gateway = ScriptedDirectorGateway(
+        decision={
+            "reasoning": "玩家前往铁匠铺，需要现场引入一名铁匠NPC。",
+            "requests": [{
+                "request_id": "req-1",
+                "skill": "introduce_npc",
+                "arguments": {
+                    "spontaneous": {
+                        "name": "严铁匠",
+                        "role": "陷空山脚下的铸灵匠人",
+                        "appearance": "赤膊壮汉，臂有火纹烫伤，手持重锤",
+                        "personality_trait": "脾气暴躁，视锤如命",
+                        "known_abilities": [{
+                            "name": "淬火锻灵",
+                            "description": "精通低阶法宝与粗胚精炼",
+                        }],
+                    },
+                    "view_mode": "face_to_face",
+                },
+                "guidance": "主角询问矿石或兵器时，他态度冷淡，自顾自打铁。",
+            }],
+        },
+    )
+
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="前往铁匠铺买把趁手短刀。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+
+    assert len(stage.materials) == 1
+    material = stage.materials[0]
+    assert material.kind == "npc"
+    assert material.resource_id.startswith("spontaneous_npc_")
+    assert material.guidance == "主角询问矿石或兵器时，他态度冷淡，自顾自打铁。"
+    assert material.payload["source"] == "spontaneous"
+    assert material.payload["name"] == "严铁匠"
+    assert material.payload["role"] == "陷空山脚下的铸灵匠人"
+    assert material.payload["view_mode"] == "face_to_face"
+    assert len(material.payload["known_abilities"]) == 1
+    assert material.payload["known_abilities"][0]["name"] == "淬火锻灵"
+
+
+def test_generation_director_introduce_spontaneous_npc_name_collision_rejected(tmp_path):
+    from app.domain.npc_profile import NPCProfile
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
+        store.upsert(NPCProfile(
+            name="周行之",
+            role="商会执事",
+            appearance="中年男子",
+            personality_trait="精明",
+            disclosure_level="face_to_face",
+        ))
+
+    gateway = ScriptedDirectorGateway(
+        decision={
+            "reasoning": "即兴引入同名角色。",
+            "requests": [{
+                "request_id": "req-1",
+                "skill": "introduce_npc",
+                "arguments": {
+                    "spontaneous": {
+                        "name": "周行之",
+                        "role": "同名假商人",
+                        "appearance": "特征描述",
+                        "personality_trait": "性格描述",
+                    },
+                    "view_mode": "face_to_face",
+                },
+                "guidance": "出现并打招呼。",
+            }],
+        },
+    )
+
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="进店。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+
+    # Name collision causes validation failure; rejected from stage.materials
+    assert len(stage.materials) == 0
+
+
+def test_generation_director_introduce_spontaneous_npc_batch_duplicate_rejected(tmp_path):
+    from app.domain.director.generation import _validate_unique_introduce_npc_targets
+    from app.domain.director.skill_specs import IntroduceNPCArguments, SpontaneousNPCSpec
+
+    # 1. Direct batch validator test
+    args1 = IntroduceNPCArguments(
+        spontaneous=SpontaneousNPCSpec(
+            name="严铁匠",
+            role="铸灵匠人",
+            appearance="壮汉",
+            personality_trait="暴躁",
+        ),
+        view_mode="face_to_face",
+    )
+    args2 = IntroduceNPCArguments(
+        spontaneous=SpontaneousNPCSpec(
+            name=" 严铁匠 ",
+            role="同批次重复角色",
+            appearance="另一个壮汉",
+            personality_trait="冷漠",
+        ),
+        view_mode="face_to_face",
+    )
+    with pytest.raises(ValueError, match="is duplicated within the same decision batch"):
+        _validate_unique_introduce_npc_targets([args1, args2])
+
+    # 2. Integration test via scripted director gateway
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    gateway = ScriptedDirectorGateway(
+        decision={
+            "reasoning": "同一次决策中下发两个同名即兴角色。",
+            "requests": [
+                {
+                    "request_id": "req-1",
+                    "skill": "introduce_npc",
+                    "arguments": {
+                        "spontaneous": {
+                            "name": "严铁匠",
+                            "role": "铸灵匠人",
+                            "appearance": "壮汉",
+                            "personality_trait": "暴躁",
+                        },
+                        "view_mode": "face_to_face",
+                    },
+                    "guidance": "出场打铁。",
+                },
+                {
+                    "request_id": "req-2",
+                    "skill": "introduce_npc",
+                    "arguments": {
+                        "spontaneous": {
+                            "name": "严铁匠",
+                            "role": "同批次重复角色",
+                            "appearance": "另一个壮汉",
+                            "personality_trait": "冷漠",
+                        },
+                        "view_mode": "face_to_face",
+                    },
+                    "guidance": "重复出场。",
+                },
+            ],
+        },
+    )
+
+    stage, decision = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="进店。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+
+    # Batch conflict causes scripted validation failure; fallback with 0 materials
+    assert len(stage.materials) == 0
+
+
+def test_generation_director_introduce_spontaneous_npc_alias_collision_rejected(tmp_path):
+    from app.domain.npc_profile import NPCProfile
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.npc_profile as store:
+        store.upsert(NPCProfile(
+            name="老周",
+            aliases=["周行之", "周掌柜"],
+            transient_aliases={"行之兄": 5},
+            role="商会执事",
+            appearance="中年男子",
+            personality_trait="精明",
+            disclosure_level="face_to_face",
+        ))
+
+    # Test permanent alias collision
+    gateway_perm = ScriptedDirectorGateway(
+        decision={
+            "reasoning": "即兴引入与别名同名角色。",
+            "requests": [{
+                "request_id": "req-1",
+                "skill": "introduce_npc",
+                "arguments": {
+                    "spontaneous": {
+                        "name": "周行之",
+                        "role": "同名假商人",
+                        "appearance": "特征描述",
+                        "personality_trait": "性格描述",
+                    },
+                    "view_mode": "face_to_face",
+                },
+                "guidance": "出现并打招呼。",
+            }],
+        },
+    )
+    stage, _ = run_generation_director_agent(
+        gateway=gateway_perm,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="进店。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+    assert len(stage.materials) == 0
+
+    # Test transient alias collision
+    gateway_trans = ScriptedDirectorGateway(
+        decision={
+            "reasoning": "即兴引入与临时别名同名角色。",
+            "requests": [{
+                "request_id": "req-2",
+                "skill": "introduce_npc",
+                "arguments": {
+                    "spontaneous": {
+                        "name": "行之兄",
+                        "role": "同名假商人",
+                        "appearance": "特征描述",
+                        "personality_trait": "性格描述",
+                    },
+                    "view_mode": "face_to_face",
+                },
+                "guidance": "出现并打招呼。",
+            }],
+        },
+    )
+    stage_trans, _ = run_generation_director_agent(
+        gateway=gateway_trans,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="进店。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+    assert len(stage_trans.materials) == 0
+
+
+def test_generation_director_introduce_spontaneous_npc_protagonist_collision_rejected(tmp_path):
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    gateway = ScriptedDirectorGateway(
+        decision={
+            "reasoning": "即兴引入与主角同名的角色。",
+            "requests": [{
+                "request_id": "req-1",
+                "skill": "introduce_npc",
+                "arguments": {
+                    "spontaneous": {
+                        "name": "萧欢",
+                        "role": "同名假身",
+                        "appearance": "特征描述",
+                        "personality_trait": "性格描述",
+                    },
+                    "view_mode": "face_to_face",
+                },
+                "guidance": "出现并打招呼。",
+            }],
+        },
+    )
+
+    state = make_current_state()
+    state.player.name = "萧欢"
+
+    stage, _ = run_generation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=state,
+        user_input="进店。",
+        context_facts=[],
+        recent_summaries=[],
+        turn_index=3,
+        trace_id="generation-director",
+        npc_profiles=[],
+    )
+    assert len(stage.materials) == 0

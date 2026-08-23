@@ -85,7 +85,10 @@ def _summarize_request(request, stores) -> str:
     skill = request.skill
     arguments = request.arguments or {}
     if skill == "introduce_npc":
-        name = _npc_name(stores, arguments.get("npc_id"))
+        if "spontaneous" in arguments and isinstance(arguments["spontaneous"], dict):
+            name = arguments["spontaneous"].get("name") or "即兴角色"
+        else:
+            name = _npc_name(stores, arguments.get("npc_id"))
         view_mode = arguments.get("view_mode")
         return f"引入NPC「{name}」({view_mode})" if view_mode else f"引入NPC「{name}」"
     if skill == "upgrade_disclosure":
