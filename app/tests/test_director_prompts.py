@@ -40,7 +40,7 @@ def test_director_decide_prompt_defines_create_event_boundary():
     assert "create_event" in prompt
     assert "`setting_requirements`" in prompt
     assert "`create_npc`" in prompt
-    assert "`enrich_npc`" in prompt
+    assert "`enrich_npc`" not in prompt
     assert "source=existing" in prompt
     assert "source=new" in prompt
 

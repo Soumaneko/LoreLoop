@@ -76,3 +76,35 @@ def merge_director_draft_into_npc_profile(
             merged.disclosure_level = disclosure_level
     merged.name_hit_count = max(merged.name_hit_count, 0)
     return merged
+
+
+def npc_profile_from_spontaneous_material(
+    material,
+    *,
+    turn_index: int,
+    scene_id: str | None = None,
+) -> NPCProfile:
+    payload = material.payload or {}
+    known_abilities = [
+        KnownAbility(
+            name=a.get("name") if isinstance(a, dict) else a.name,
+            description=(
+                a.get("description", "") if isinstance(a, dict) else a.description
+            ),
+        )
+        for a in payload.get("known_abilities", [])
+    ]
+    return NPCProfile(
+        name=payload["name"],
+        role=payload.get("role"),
+        appearance=payload.get("appearance"),
+        personality_trait=payload.get("personality_trait"),
+        known_abilities=known_abilities,
+        faction=payload.get("faction"),
+        source_director_npc_id=None,
+        created_turn=turn_index,
+        introduced_turn=turn_index,
+        disclosure_level=payload.get("view_mode") or "face_to_face",
+        source_scene_ids=[scene_id] if scene_id else [],
+        name_hit_count=0,
+    )

@@ -76,3 +76,12 @@ def draw_creative_brief(
         baseline_temperament=random_source.choice(_BASELINE_TEMPERAMENTS),
         optional_dimension=None,
     )
+
+
+def draw_desire_pattern(
+    *,
+    rng: random.Random | None = None,
+) -> str:
+    """仅抽取欲望模式字符串，用于即兴 NPC 补全，避免与既有性情/外貌冲突。"""
+    random_source = rng or random.SystemRandom()
+    return random_source.choice(_DESIRE_PATTERNS)

@@ -729,7 +729,6 @@ def test_director_skill_specs_cover_every_registered_skill():
         "create_npc",
         "create_event",
         "bind_event_actor",
-        "enrich_npc",
         "upgrade_disclosure",
     }
 
@@ -757,65 +756,12 @@ def test_director_skill_specs_cover_every_registered_skill():
         "create_npc",
         "create_event",
         "bind_event_actor",
-        "enrich_npc",
     }
     for spec in specs:
         if "generation" in spec.phases:
             assert spec.mutates is False
         if "confirmation" in spec.phases:
             assert spec.mutates is True
-
-
-def test_enrich_npc_is_capped_at_three_requests_per_batch():
-    from app.domain.director import DirectorSkillRequest
-    from app.domain.director.schemas import DirectorGuidance
-    from app.domain.director.skill_specs import (
-        EnrichNPCArguments,
-        get_director_skill_specs,
-    )
-
-    enrich_spec = next(
-        spec for spec in get_director_skill_specs() if spec.name == "enrich_npc"
-    )
-    assert enrich_spec.max_requests_per_batch == 3
-
-    service = DirectorSkillService()
-    for spec in get_director_skill_specs():
-        service.register(
-            name=spec.name,
-            description=spec.description,
-            phases=set(spec.phases),
-            mutates=spec.mutates,
-            arguments_model=spec.arguments_model,
-            handler=lambda args, guidance=None: {"ok": True},
-            max_requests_per_batch=spec.max_requests_per_batch,
-        )
-
-    requests = [
-        DirectorSkillRequest(
-            request_id=f"enrich_{index}",
-            skill="enrich_npc",
-            arguments={"npc_id": f"npc_{index}", "setting_requirements": [
-                {"kind": "location", "setting_description": "人物常驻之地。"}
-            ]},
-            guidance=DirectorGuidance(
-                name=f"角色{index}", purpose="补全人设。", description="背景。"
-            ),
-        )
-        for index in range(4)
-    ]
-    batch = make_decision_batch(reasoning="补全四个人物。", requests=requests)
-
-    with pytest.raises(
-        ValueError,
-        match="enrich_npc allows at most 3 request",
-    ):
-        service.validate_batch(batch, phase="confirmation")
-
-    service.validate_batch(
-        make_decision_batch(reasoning="补全三个人物。", requests=requests[:3]),
-        phase="confirmation",
-    )
 
 
 def test_director_batch_hard_caps_request_count():
@@ -845,53 +791,11 @@ def test_director_batch_hard_caps_request_count():
         make_decision_batch(reasoning="一次性创建七个角色。", requests=requests)
 
 
-def test_enrich_npc_rejects_duplicate_target_in_one_batch():
-    from app.domain.director import DirectorSkillRequest
-    from app.domain.director.confirmation import (
-        _validate_unique_enrich_npc_targets,
-    )
-    from app.domain.director.schemas import DirectorGuidance
-    from app.domain.director.skill_specs import register_skill
-
-    service = DirectorSkillService()
-    register_skill(
-        service,
-        "enrich_npc",
-        handler=lambda args, guidance=None: {"ok": True},
-        batch_validator=_validate_unique_enrich_npc_targets,
-    )
-
-    def request(npc_id, index):
-        return DirectorSkillRequest(
-            request_id=f"enrich_{index}",
-            skill="enrich_npc",
-            arguments={"npc_id": npc_id, "setting_requirements": [
-                {"kind": "location", "setting_description": "人物常驻之地。"}
-            ]},
-            guidance=DirectorGuidance(
-                name=f"角色{index}", purpose="补全人设。", description="背景。"
-            ),
-        )
-
-    duplicate = make_decision_batch(
-        reasoning="重复补全同一个新 NPC。",
-        requests=[request("npc_0", 0), request("npc_0", 1)],
-    )
-    with pytest.raises(ValueError, match="only target each new NPC once"):
-        service.validate_batch(duplicate, phase="confirmation")
-
-    distinct = make_decision_batch(
-        reasoning="补全两个不同的新 NPC。",
-        requests=[request("npc_0", 0), request("npc_1", 1)],
-    )
-    service.validate_batch(distinct, phase="confirmation")
-
-
 def test_batch_validator_receives_parsed_arguments_for_its_skill():
     seen = []
 
     def check(arguments):
-        seen.extend(args.npc_id for args in arguments)
+        seen.extend(args.name for args in arguments if hasattr(args, "name"))
 
     from app.domain.director import DirectorSkillRequest
     from app.domain.director.schemas import DirectorGuidance
@@ -900,15 +804,15 @@ def test_batch_validator_receives_parsed_arguments_for_its_skill():
     service = DirectorSkillService()
     register_skill(
         service,
-        "enrich_npc",
+        "create_npc",
         handler=lambda args, guidance=None: {"ok": True},
         batch_validator=check,
     )
     requests = [
         DirectorSkillRequest(
-            request_id=f"enrich_{index}",
-            skill="enrich_npc",
-            arguments={"npc_id": f"npc_{index}", "setting_requirements": [
+            request_id=f"create_{index}",
+            skill="create_npc",
+            arguments={"setting_requirements": [
                 {"kind": "location", "setting_description": "人物常驻之地。"}
             ]},
             guidance=DirectorGuidance(
@@ -918,8 +822,6 @@ def test_batch_validator_receives_parsed_arguments_for_its_skill():
         for index in range(2)
     ]
     service.validate_batch(
-        make_decision_batch(reasoning="补全两个人物。", requests=requests),
+        make_decision_batch(reasoning="创建两个人物。", requests=requests),
         phase="confirmation",
     )
-
-    assert seen == ["npc_0", "npc_1"]

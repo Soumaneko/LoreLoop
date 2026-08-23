@@ -435,176 +435,6 @@ def test_confirmation_agent_can_enrich_new_npc_via_skill(tmp_path):
     from app.domain.world_setting import WorldSetting
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    setting = WorldSetting(
-        kind="location",
-        name="醉花楼",
-        summary="城中最大的歌舞酒楼，也是大额生意往来的地点。",
-        public_facts=["二楼雅间常谈大宗买卖。"],
-        hidden_facts=["掌柜暗中把持着几条商路。"],
-        created_turn=1,
-    )
-    with stores.world_setting as store:
-        store.save(setting)
-    new_profile = NPCProfile(
-        name="二楼女子",
-        role="生意谈判方",
-        appearance="声音温婉中带媚。",
-    )
-    new_id = new_profile.npc_id
-    gateway = ScriptedDirectorGateway(
-        decision={
-            "reasoning": "新出现的谈判方缺少幕后设定，需要补全。",
-            "requests": [
-                {
-                    "request_id": "enrich_1",
-                    "skill": "enrich_npc",
-                    "arguments": {
-                        "npc_id": new_id,
-                        "setting_requirements": [{
-                            "kind": "location",
-                            "setting_description": "她长期在醉花楼二楼雅间谈生意。",
-                            "matched_setting_id": setting.setting_id,
-                        }],
-                    },
-                    "guidance": "补全谈判方的完整人设。",
-                }
-            ],
-        },
-        backfill_output={
-            "name": "苏锦屏",
-            "identity": {
-                "core_motivation": "建立一张足以保护自身生意的合作网络。",
-                "hidden_secret": "她正在隐瞒真正货主的身份。",
-                "role": "行商出身的生意谈判方",
-                "faction": None,
-            },
-            "behavior": {
-                "conflict_style": "先谈条件，谈不拢就用账目和人情施压。",
-                "social_style": "语气温婉，话锋却常常直指利益核心。",
-                "personality_trait": "开口先夸对方生意，再慢慢把话题引到账目上",
-            },
-            "shell": {
-                "known_abilities": [{"name": "商业谈判", "description": "凭账目与行情拿捏谈判筹码"}],
-                "appearance": "声音温婉中带媚，举止从容。",
-            },
-        },
-    )
-
-    decision, executions = run_confirmation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=make_current_state(),
-        user_input="询问昨夜发生的事。",
-        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
-        recent_summaries=[],
-        selection_summaries=[],
-        turn_index=3,
-        trace_id="confirmation-director",
-        new_npc_profiles=[new_profile],
-    )
-
-    assert decision.requests[0].skill == "enrich_npc"
-    assert executions.executions[0].output["name"] == "苏锦屏"
-    assert gateway.tasks == ["director_agent_decide_confirmation", "npc_profile_backfill"]
-    backfill_input = gateway.input_data[1]
-    assert setting.name in backfill_input["settings_json"]
-    assert "醉花楼" in backfill_input["settings_json"]
-    creative_brief = json.loads(
-        backfill_input["creative_brief_json"]
-    )
-    assert set(creative_brief) == {
-        "world_connection",
-        "life_phase",
-        "desire_pattern",
-        "baseline_temperament",
-    }
-    with stores.npc_profile as npc_store:
-        saved = npc_store.get_by_id(new_id)
-    assert saved.name == "苏锦屏"
-    assert "二楼女子" not in saved.aliases
-    assert saved.transient_aliases["二楼女子"] == 6
-    assert saved.core_motivation == "建立一张足以保护自身生意的合作网络。"
-    assert saved.hidden_secret == "她正在隐瞒真正货主的身份。"
-    assert saved.source_setting_ids == [setting.setting_id]
-
-
-def test_confirmation_agent_rejects_enrich_npc_for_existing_profile(tmp_path):
-    from app.domain.world_setting import WorldSetting
-
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    setting = WorldSetting(
-        kind="location",
-        name="醉花楼",
-        summary="城中最大的歌舞酒楼，也是大额生意往来的地点。",
-        public_facts=["二楼雅间常谈大宗买卖。"],
-        hidden_facts=["掌柜暗中把持着几条商路。"],
-        created_turn=1,
-    )
-    with stores.world_setting as store:
-        store.save(setting)
-    with stores.npc_profile as npc_store:
-        existing_id = npc_store.upsert(NPCProfile(name="陆远舟", role="镖师"))
-        other_new_id = npc_store.upsert(NPCProfile(name="二楼女子", role="生意谈判方"))
-        other_new = npc_store.get_by_id(other_new_id)
-    assert other_new is not None
-    gateway = ScriptedDirectorGateway(
-        decision={
-            "reasoning": "错误地补全既有 NPC。",
-            "requests": [
-                {
-                    "request_id": "enrich_1",
-                    "skill": "enrich_npc",
-                    "arguments": {
-                        "npc_id": existing_id,
-                        "setting_requirements": [{
-                            "kind": "location",
-                            "setting_description": "错误地补全既有 NPC 的土壤。",
-                            "matched_setting_id": setting.setting_id,
-                        }],
-                    },
-                    "guidance": "错误地补全既有 NPC。",
-                }
-            ],
-        },
-        backfill_output={
-            "name": "陆远舟",
-            "identity": {
-                "core_motivation": "护送商队平安。",
-                "hidden_secret": "替人捎带一封密信。",
-                "role": "镖师",
-                "faction": None,
-            },
-            "behavior": {
-                "conflict_style": "先护人后对敌。",
-                "social_style": "寡言但可靠。",
-                "personality_trait": "站在门口先扫一遍进出的人，再决定让不让路",
-            },
-            "shell": {
-                "known_abilities": [{"name": "刀法", "description": "贴身护卫时的近战刀法"}],
-                "appearance": "一身劲装。",
-            },
-        },
-    )
-
-    decision, executions = run_confirmation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=make_current_state(),
-        user_input="询问昨夜发生的事。",
-        scene_facts={"scene_focus": "主角走访社区。", "facts": []},
-        recent_summaries=[],
-        selection_summaries=[],
-        turn_index=3,
-        trace_id="confirmation-director",
-        new_npc_profiles=[other_new],
-    )
-
-    assert decision.requests == []
-    assert executions.executions == []
-
-
 def test_skill_guidance_flows_through_to_execution_handler():
     service = DirectorSkillService()
     seen_guidance: list[str | None] = []
@@ -652,7 +482,8 @@ def test_skill_guidance_flows_through_to_execution_handler():
     assert result.executions[0].guidance == "以压迫感为导向呈现该事件。"
 
 
-def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
+def test_skill_guidance_is_forwarded_into_create_npc_prompt(tmp_path):
+    from app.domain.director.schemas import DirectorGuidance
     from app.domain.world_setting import WorldSetting
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
@@ -666,51 +497,46 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
     )
     with stores.world_setting as store:
         store.save(setting)
-    with stores.npc_profile as npc_store:
-        new_id = npc_store.upsert(
-            NPCProfile(
-                name="二楼女子",
-                role="生意谈判方",
-                appearance="声音温婉中带媚。",
-            )
-        )
-        new_profile = npc_store.get_by_id(new_id)
-    assert new_profile is not None
+
     gateway = ScriptedDirectorGateway(
         decision={
-            "reasoning": "新出现的谈判方需要按指定方向补全。",
+            "reasoning": "创作备用 NPC 草稿。",
             "requests": [
                 {
-                    "request_id": "enrich_1",
-                    "skill": "enrich_npc",
+                    "request_id": "create_1",
+                    "skill": "create_npc",
                     "arguments": {
-                        "npc_id": new_id,
                         "setting_requirements": [{
                             "kind": "location",
                             "setting_description": "她长期在醉花楼二楼雅间谈生意。",
                             "matched_setting_id": setting.setting_id,
                         }],
                     },
-                    "guidance": "出身行商世家，隐瞒真实货主身份。",
+                    "guidance": DirectorGuidance(
+                        name="苏锦屏",
+                        purpose="作为未来商业线索的交涉人。",
+                        description="出身行商世家，隐瞒真实货主身份。",
+                    ),
                 }
             ],
         },
-        backfill_output={
-            "name": "苏锦屏",
+        npc_output={
+            "creation_reason": "创作备用商业交涉人。",
             "identity": {
-                "core_motivation": "建立一张足以保护自身生意的合作网络。",
-                "hidden_secret": "她正在隐瞒真正货主的身份。",
-                "role": "行商出身的生意谈判方",
-                "faction": None,
+                "core_motivation": "暗中积累资产摆脱家族控制",
+                "hidden_secret": "私藏有一批走私灵石",
+                "role": "行商谈判代表",
+                "faction": "行商会",
             },
             "behavior": {
-                "conflict_style": "先谈条件，谈不拢就用账目和人情施压。",
-                "social_style": "语气温婉，话锋却常常直指利益核心。",
-                "personality_trait": "开口先夸对方生意，再慢慢把话题引到账目上",
+                "conflict_style": "以利诱之，谋定后动",
+                "social_style": "八面玲珑",
+                "personality_trait": "外圆内方",
             },
             "shell": {
-                "known_abilities": [{"name": "商业谈判", "description": "凭账目与行情拿捏谈判筹码"}],
-                "appearance": "声音温婉中带媚，举止从容。",
+                "name": "苏锦屏",
+                "appearance": "锦缎罗裙，神情精明。",
+                "known_abilities": [{"name": "识货", "description": "能辨识珍品"}],
             },
         },
     )
@@ -726,10 +552,10 @@ def test_skill_guidance_is_forwarded_into_execution_prompt(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-        new_npc_profiles=[new_profile],
     )
 
-    assert decision.requests[0].guidance == "出身行商世家，隐瞒真实货主身份。"
-    assert executions.executions[0].guidance == "出身行商世家，隐瞒真实货主身份。"
-    backfill_input = gateway.input_data[-1]
-    assert backfill_input["director_guidance"] == "出身行商世家，隐瞒真实货主身份。"
+    assert decision.requests[0].skill == "create_npc"
+    assert executions.executions[0].guidance == "苏锦屏: 作为未来商业线索的交涉人。"
+    npc_input = gateway.input_data[-1]
+    assert "苏锦屏" in npc_input["director_guidance"]
+    assert "作为未来商业线索的交涉人" in npc_input["director_guidance"]

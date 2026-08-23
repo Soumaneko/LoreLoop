@@ -142,40 +142,13 @@ class NPCProfileUpdateInput(BaseModel):
 
 
 
-class NPCProfileBackfillIdentity(BaseModel):
+class NPCProfileBackfillOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     core_motivation: str = Field(min_length=1)
     hidden_secret: str = Field(min_length=1)
-    role: str = Field(min_length=1)
-    faction: str | None = None
-
-
-class NPCProfileBackfillBehavior(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
     conflict_style: str = Field(min_length=1)
     social_style: str = Field(min_length=1)
-    personality_trait: str = Field(
-        min_length=1,
-        max_length=NPC_PERSONALITY_TRAIT_MAX_LENGTH,
-    )
-
-
-class NPCProfileBackfillShell(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    known_abilities: list[LLMKnownAbility] = Field(default_factory=list, max_length=5)
-    appearance: str = Field(min_length=1)
-
-
-class NPCProfileBackfillOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(min_length=1)
-    identity: NPCProfileBackfillIdentity
-    behavior: NPCProfileBackfillBehavior
-    shell: NPCProfileBackfillShell
 
 
 class NPCProfile(BaseModel):

@@ -1186,12 +1186,9 @@ def test_candidate_npc_id_is_deterministic_and_conflict_free():
         existing_profile_ids={first},
         director_draft_ids=set(),
     )
-    assert shells[0].name == "采药女"
-    assert shells[0].npc_id == avoided
-    assert shells[0].source_scene_ids == ["scene_001"]
-    assert shells[0].created_turn == 3
-    assert shells[0].introduced_turn == 3
-    assert shells[0].updated_at == "2026-08-12T00:00:00Z"
+    assert shells == []
+    assert context[avoided].primary_surface == "采药女"
+    assert context[avoided].presence == "appeared"
     assert context[avoided].alias_surfaces == []
     assert context[avoided].evidence_fact_ids == ["f1"]
 

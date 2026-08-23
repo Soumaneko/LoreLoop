@@ -36,7 +36,6 @@ from app.domain.director.skill_specs import (
     BindEventActorArguments,
     CreateEventArguments,
     CreateNPCArguments,
-    EnrichNPCArguments,
     register_skill,
 )
 from app.domain.director_event.schemas import (
@@ -51,10 +50,6 @@ from app.domain.npc_profile.selection import (
     merge_profile_selections,
     select_profiles_by_active_events,
     select_profiles_by_fact_texts,
-)
-from app.domain.npc_profile.workflows import (
-    attach_transient_alias_for_rename,
-    backfill_new_npc_profile,
 )
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.world_setting.creator import WorldSettingCreator
@@ -89,8 +84,6 @@ class DirectorConfirmationExecutor:
         selection_summaries: list[SceneSummary],
         turn_index: int,
         trace_id: str,
-        new_npc_profiles: list[NPCProfile] | None = None,
-        npc_candidate_context: dict[str, dict] | None = None,
         scene_text: str = "",
         director_log_entry: dict | None = None,
     ):
@@ -104,8 +97,6 @@ class DirectorConfirmationExecutor:
         self._selection_summaries = selection_summaries
         self._turn_index = turn_index
         self._trace_id = trace_id
-        self._new_npc_profiles = new_npc_profiles or []
-        self._npc_candidate_context = npc_candidate_context or {}
         self._scene_text = scene_text
         self._director_log_entry = director_log_entry
 
@@ -229,18 +220,6 @@ class DirectorConfirmationExecutor:
                 npc_id=args.npc_id,
             ),
         )
-        if self._new_npc_profiles:
-            register_skill(
-                self._service,
-                "enrich_npc",
-                handler=self._enrich_npc,
-                arguments_validator=lambda args: _get_new_npc(
-                    self._npc_profile_store,
-                    self._new_npc_profiles,
-                    args.npc_id,
-                ),
-                batch_validator=_validate_unique_enrich_npc_targets,
-            )
 
     def _dispatch_setting_requirements(self, requirements) -> list:
         """Resolve the requirement from available + Wave-A in-memory Settings."""
@@ -514,42 +493,6 @@ class DirectorConfirmationExecutor:
             )
         return {"event_id": args.event_id, "npc_id": args.npc_id}
 
-    def _enrich_npc(self, args: EnrichNPCArguments, guidance: str | None = None):
-        original = _get_new_npc(
-            self._npc_profile_store,
-            self._new_npc_profiles,
-            args.npc_id,
-        )
-        settings = self._dispatch_setting_requirements(args.setting_requirements)
-        setting_ids = [setting.setting_id for setting in settings]
-        backfilled = backfill_new_npc_profile(
-            profile=original,
-            existing_profiles=[
-                npc
-                for npc in self._npc_profile_store.list_all()
-                if npc.npc_id != args.npc_id
-            ],
-            core_memory=self._core_memory,
-            gateway=self._gateway,
-            npc_store=self._npc_profile_store,
-            settings=settings,
-            trace_id=self._trace_id,
-            guidance=guidance,
-        )
-        backfilled.source_setting_ids = list(setting_ids)
-        if backfilled.name != original.name:
-            attach_transient_alias_for_rename(
-                backfilled,
-                old_name=original.name,
-                turn_index=self._turn_index,
-            )
-        with self._plan_lock:
-            self._plan.profile_upserts.append(backfilled)
-        return {
-            "npc_id": backfilled.npc_id,
-            "name": backfilled.name,
-        }
-
     def _build_observation(
         self,
         *,
@@ -638,14 +581,6 @@ class DirectorConfirmationExecutor:
                     setting.reference_view()
                     for setting in available_settings
                 ],
-                "new_npcs": [
-                    {
-                        "npc_id": profile.npc_id,
-                        **profile.director_view().model_dump(mode="json"),
-                        **self._npc_candidate_context.get(profile.npc_id, {}),
-                    }
-                    for profile in self._new_npc_profiles
-                ],
             },
         )
 
@@ -666,7 +601,6 @@ class DirectorConfirmationExecutor:
         argument_models = {
             "create_npc": CreateNPCArguments,
             "create_event": CreateEventArguments,
-            "enrich_npc": EnrichNPCArguments,
         }
         settings_by_id = {
             setting.setting_id: setting for setting in available_settings
@@ -752,8 +686,6 @@ def run_confirmation_director_agent(
     selection_summaries: list[SceneSummary],
     turn_index: int,
     trace_id: str,
-    new_npc_profiles: list[NPCProfile] | None = None,
-    npc_candidate_context: dict[str, dict] | None = None,
     scene_text: str = "",
     director_log_entry: dict | None = None,
 ) -> tuple[object, DirectorSkillExecutionBatch]:
@@ -769,8 +701,6 @@ def run_confirmation_director_agent(
         selection_summaries=selection_summaries,
         turn_index=turn_index,
         trace_id=trace_id,
-        new_npc_profiles=new_npc_profiles,
-        npc_candidate_context=npc_candidate_context,
         scene_text=scene_text,
         director_log_entry=director_log_entry,
     ).run()
@@ -807,33 +737,6 @@ def _require_npc(director_npc_store, npc_profile_store, npc_id: str) -> None:
         return
     if npc_profile_store.get_by_id(npc_id) is None:
         raise ValueError("director skill references an unknown npc_id")
-
-
-def _get_new_npc(npc_profile_store, new_npc_profiles, npc_id: str):
-    candidates = [profile for profile in (new_npc_profiles or [])]
-    if npc_id not in {profile.npc_id for profile in candidates}:
-        raise ValueError("enrich_npc requires a newly created npc_id")
-    profile = next(
-        (item for item in candidates if item.npc_id == npc_id),
-        npc_profile_store.get_by_id(npc_id),
-    )
-    if profile is None or profile.source_director_npc_id:
-        raise ValueError("enrich_npc references an invalid npc_id")
-    return profile
-
-
-def _validate_unique_enrich_npc_targets(arguments) -> None:
-    """Reject duplicate enrich_npc targets within one decision batch.
-
-    Wave B executes requests concurrently, so enriching the same new NPC twice
-    would produce several backfilled variants that overwrite each other in the
-    mutation plan and may leave orphaned Settings behind.
-    """
-    npc_ids = [args.npc_id for args in arguments]
-    if len(npc_ids) != len(set(npc_ids)):
-        raise ValueError(
-            "enrich_npc can only target each new NPC once per batch"
-        )
 
 
 def _require_event_actor_binding(

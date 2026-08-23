@@ -22,11 +22,24 @@ class NPCProfileBackfiller:
         profile: NPCProfile,
         existing_profiles: list[NPCProfile],
         core_memory: CoreMemory,
-        settings: list | None = None,
         trace_id: str | None = None,
         guidance: str | None = None,
-        creative_brief: CreativeBrief | None = None,
+        creative_brief: CreativeBrief | str | None = None,
     ) -> NPCProfile:
+        if isinstance(creative_brief, str):
+            creative_brief_json = json.dumps(
+                {"desire_pattern": creative_brief.strip()},
+                ensure_ascii=False,
+                indent=2,
+            )
+        elif isinstance(creative_brief, CreativeBrief):
+            creative_brief_json = creative_brief.model_dump_json(
+                exclude_none=True,
+                indent=2,
+            )
+        else:
+            creative_brief_json = "{}"
+
         result = cast(
             NPCProfileBackfillOutput,
             self._gateway.run(
@@ -41,19 +54,7 @@ class NPCProfileBackfiller:
                         ensure_ascii=False,
                         indent=2,
                     ),
-                    "settings_json": json.dumps(
-                        [setting.director_view() for setting in (settings or [])],
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    "creative_brief_json": (
-                        creative_brief.model_dump_json(
-                            exclude_none=True,
-                            indent=2,
-                        )
-                        if creative_brief is not None
-                        else "{}"
-                    ),
+                    "creative_brief_json": creative_brief_json,
                     "director_guidance": guidance or "",
                     "output_schema_json": schema_json(NPCProfileBackfillOutput),
                 },
@@ -76,22 +77,7 @@ def _existing_npc_view(npc: NPCProfile) -> dict:
 
 
 def _apply_backfill(profile: NPCProfile, backfill: NPCProfileBackfillOutput) -> None:
-    if backfill.name.strip() and backfill.name.strip() != profile.name:
-        profile.name = backfill.name.strip()
-    identity = backfill.identity
-    behavior = backfill.behavior
-    shell = backfill.shell
-    profile.role = profile.role or identity.role
-    profile.appearance = profile.appearance or shell.appearance
-    if not profile.personality_trait:
-        profile.personality_trait = behavior.personality_trait
-    if not profile.known_abilities:
-        profile.known_abilities = [
-            KnownAbility(name=ability.name, description=ability.description)
-            for ability in shell.known_abilities
-        ]
-    profile.faction = profile.faction or identity.faction
-    profile.core_motivation = profile.core_motivation or identity.core_motivation
-    profile.hidden_secret = profile.hidden_secret or identity.hidden_secret
-    profile.conflict_style = profile.conflict_style or behavior.conflict_style
-    profile.social_style = profile.social_style or behavior.social_style
+    profile.core_motivation = backfill.core_motivation.strip()
+    profile.hidden_secret = backfill.hidden_secret.strip()
+    profile.conflict_style = backfill.conflict_style.strip()
+    profile.social_style = backfill.social_style.strip()

@@ -96,13 +96,6 @@ def test_summarize_decision_covers_every_skill(tmp_path):
                 },
             ),
             _request(
-                "enrich_npc",
-                {
-                    "npc_id": npc_id,
-                    "setting_requirements": [{"kind": "faction"}],
-                },
-            ),
-            _request(
                 "bind_event_actor",
                 {"event_id": "event_x", "npc_id": draft.draft_id},
             ),
@@ -121,7 +114,6 @@ def test_summarize_decision_covers_every_skill(tmp_path):
     assert "引入事件「event_x」" in measures
     assert "创建NPC「柴行简」依托faction" in measures
     assert "创建事件(arc) 演员2 依托location" in measures
-    assert "补全NPC「顾晚棠」依托faction" in measures
     assert "绑定演员「event_x←林澈」" in measures
 
 

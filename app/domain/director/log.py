@@ -40,11 +40,6 @@ def summarize_executions(executions, stores) -> str:
             lines.append(
                 f"创建事件「{title}」({event_id}, {role}, 演员:{actor_text})"
             )
-        elif skill == "enrich_npc":
-            name = output.get("name") or _npc_name(
-                stores, output.get("npc_id")
-            )
-            lines.append(f"补全NPC「{name}」")
         elif skill == "upgrade_disclosure":
             name = _npc_name(stores, output.get("npc_id"))
             new_level = output.get("new_disclosure_level")
@@ -111,8 +106,6 @@ def _summarize_request(request, stores) -> str:
         role = arguments.get("role") or ""
         actors = arguments.get("actors") or []
         return f"创建事件({role}) 演员{len(actors)} 依托{_setting_kind(arguments)}"
-    if skill == "enrich_npc":
-        return f"补全NPC「{_npc_name(stores, arguments.get('npc_id'))}」依托{_setting_kind(arguments)}"
     if skill == "bind_event_actor":
         event = _event_title(stores, arguments.get("event_id"))
         npc = _npc_name(stores, arguments.get("npc_id"))

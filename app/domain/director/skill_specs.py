@@ -233,15 +233,6 @@ class BindEventActorArguments(BaseModel):
     npc_id: str = Field(min_length=1)
 
 
-class EnrichNPCArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    npc_id: str = Field(min_length=1)
-    setting_requirements: list[SettingRequirement] = Field(
-        min_length=1,
-        max_length=1,
-    )
-
 
 # ---------------------------------------------------------------------------
 # 技能语义规则
@@ -365,21 +356,6 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         phases=_CONFIRMATION,
         mutates=True,
         arguments_model=BindEventActorArguments,
-    ),
-    DirectorSkillSpec(
-        name="enrich_npc",
-        description=(
-            "为NPC补全完整人设并规范其姓名；若其当前 name 只是身份代称、职业泛称或外观代称，"
-            "必须为其创造符合世界观的专有姓名。只用于本轮新入库、仍需补全的 NPC。"
-            "在 arguments.setting_requirements 中声明该人物真实生活依托的 1 个 Setting："
-            "命中已有 Setting 时填其 matched_setting_id，否则该项留空。每轮至多处理三个。"
-            "在 guidance 中，name 填写你要为该角色设定的专有姓名；purpose 填写其剧情目的（50字以内）；"
-            "description 填写背景，性格和设想。"
-        ),
-        phases=_CONFIRMATION,
-        mutates=True,
-        arguments_model=EnrichNPCArguments,
-        max_requests_per_batch=3,
     ),
 )
 

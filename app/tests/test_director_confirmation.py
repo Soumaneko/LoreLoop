@@ -311,113 +311,14 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
     result = confirmation_nodes.npc_profile_update_node(state)
 
     assert result["updated_npc_profile_ids"] == []
-    assert len(result["new_npc_profiles"]) == 1
-    assert result["new_npc_profiles"][0].name == "练气巅峰采药女"
-    assert result["new_npc_profiles"][0].npc_id.startswith("cand_")
-    context = result["npc_candidate_context"][result["new_npc_profiles"][0].npc_id]
+    assert result["new_npc_profiles"] == []
+    assert len(result["npc_candidate_context"]) == 1
+    [cand_id] = result["npc_candidate_context"]
+    assert cand_id.startswith("cand_")
+    context = result["npc_candidate_context"][cand_id]
+    assert context.primary_surface == "练气巅峰采药女"
     assert context.alias_surfaces == []
     assert context.presence == "appeared"
-    assert state["cache"]["npc_turn_result"].new_npc_profiles[0].name == "练气巅峰采药女"
-
-
-def test_director_confirm_node_receives_stashed_temporary_profiles(
-    monkeypatch,
-    tmp_path,
-):
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    new_profile = NPCProfile(
-        name="练气巅峰采药女",
-        role="采药女",
-    )
-    captured = {}
-
-    class _FakeExecutor:
-        def __init__(self, **kwargs):
-            self._kwargs = kwargs
-
-        def run(self):
-            captured["new_npc_profiles"] = self._kwargs.get("new_npc_profiles")
-            return object(), object()
-
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "DirectorConfirmationExecutor",
-        _FakeExecutor,
-    )
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_gateway_for",
-        lambda _state: object(),
-    )
-    state = {
-        "write_db": True,
-        "pipeline_input": SimpleNamespace(
-            user_input="我在药山。",
-            turn_index=3,
-        ),
-        "cache": {},
-        "trace_id": "trace-director",
-        "runtime_services": SimpleNamespace(stores=stores),
-        "core_memory": CoreMemory(items=[]),
-        "updated_state": make_current_state(),
-        "scene_facts": SceneFactSet(scene_focus="药山。"),
-        "effective_scene_text": "药山上的采药女在采摘药草。",
-        "recent_summaries": [],
-        "selection_summaries": [],
-        "existing_npc_profiles": [],
-        "new_npc_profiles": [new_profile],
-        "node_errors": [],
-        "events": [],
-    }
-
-    confirmation_nodes.director_agent_confirm_node(state)
-
-    assert captured["new_npc_profiles"] == [new_profile]
-
-
-def test_confirmation_observation_surfaces_new_npc_candidate_context(tmp_path):
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    candidate = NPCProfile(npc_id="cand_abc123", name="采药女")
-    gateway = ScriptedDirectorGateway(
-        decision={"reasoning": "本轮无需导演介入。", "requests": []}
-    )
-
-    run_confirmation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=make_current_state(),
-        user_input="药山上那个女子是谁？",
-        scene_facts={"scene_focus": "药山采药女露面。", "facts": []},
-        recent_summaries=[],
-        selection_summaries=[],
-        turn_index=3,
-        trace_id="confirmation-director",
-        new_npc_profiles=[candidate],
-        npc_candidate_context={
-            "cand_abc123": {
-                "primary_surface": "采药女",
-                "presence": "appeared",
-                "alias_surfaces": ["药娘"],
-                "evidence_fact_ids": ["f1"],
-                "evidence_paragraph_ids": ["turn_3_p001"],
-            }
-        },
-    )
-
-    observation = json.loads(
-        gateway.input_data[0]["director_observation_json"]
-    )
-    new_npcs = observation["resources"]["new_npcs"]
-    assert new_npcs == [{
-        "npc_id": "cand_abc123",
-        **candidate.director_view().model_dump(mode="json"),
-        "primary_surface": "采药女",
-        "presence": "appeared",
-        "alias_surfaces": ["药娘"],
-        "evidence_fact_ids": ["f1"],
-        "evidence_paragraph_ids": ["turn_3_p001"],
-    }]
 
 
 def test_confirmation_observation_two_tier_npcs(tmp_path):

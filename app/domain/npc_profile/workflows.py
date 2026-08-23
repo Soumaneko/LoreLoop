@@ -1,42 +1,103 @@
-from __future__ import annotations
-
-from app.core.text import normalize_key
+from app.core.text import normalize_compact_key, normalize_key
 from app.domain.action.schemas import Anchor
 from app.domain.confirmed_history import HistoryDocument
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.creative_brief import CreativeBrief, draw_creative_brief
+from app.domain.creative_brief import (
+    CreativeBrief,
+    draw_desire_pattern,
+)
 from app.domain.npc_profile.backfiller import NPCProfileBackfiller
+from app.domain.npc_profile.director_promotion import (
+    npc_profile_from_spontaneous_material,
+)
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.current_state.schemas import CurrentState
+from app.domain.scene_facts import SceneFactSet
 
-TRANSIENT_ALIAS_TURNS = 3
+
+def _npc_mentioned_in_scene_facts(name: str, scene_facts: SceneFactSet | None) -> bool:
+    """检查 NPC 是否在 Scene Facts 中出现（无论是 appeared 还是 mentioned_only）。"""
+    if scene_facts is None:
+        return True
+    key = normalize_compact_key(name)
+    if not key:
+        return False
+    for mention in getattr(scene_facts, "npc_mentions", []):
+        if normalize_compact_key(mention.primary_surface) == key:
+            return True
+        for relation in getattr(mention, "alias_relations", []):
+            if normalize_compact_key(relation.surface) == key:
+                return True
+    return False
 
 
-def attach_transient_alias_for_rename(
-    profile: NPCProfile,
+def auto_backfill_spontaneous_npc_profiles(
     *,
-    old_name: str,
+    pending,
+    npc_store: NPCProfileStore,
+    gateway,
+    core_memory: CoreMemory,
     turn_index: int,
-    expiry_turns: int = TRANSIENT_ALIAS_TURNS,
-) -> None:
-    """把改名前的代称挂为临时别名，避免出现“查无此人”的认知断层。
+    scene_id: str | None = None,
+    scene_facts: SceneFactSet | None = None,
+    trace_id: str | None = None,
+) -> list[str]:
+    """对本轮生成导演引入的即兴轻量 NPC 执行自动 Backfill 并直接写入 NPCProfileStore。"""
+    stage = getattr(pending, "director_stage", None)
+    if stage is None or not getattr(stage, "materials", None):
+        return []
 
-    临时别名会在 ``turn_index + expiry_turns`` 之后由回合推进机制清理，
-    不参与永久别名的命中计数与晋升。
-    """
-    clean = str(old_name).strip()
-    if not clean:
-        return
-    key = normalize_key(clean)
-    known = {
-        normalize_key(profile.name),
-        *(normalize_key(alias) for alias in profile.aliases),
-        *(normalize_key(alias) for alias in profile.transient_aliases),
-    }
-    if key in known:
-        return
-    profile.transient_aliases[clean] = turn_index + expiry_turns
+    spontaneous_materials = [
+        mat
+        for mat in stage.materials
+        if mat.kind == "npc" and (mat.payload or {}).get("source") == "spontaneous"
+    ]
+    if not spontaneous_materials:
+        return []
+
+    backfilled_npc_ids: list[str] = []
+    backfiller = NPCProfileBackfiller(gateway)
+
+    for material in spontaneous_materials:
+        payload = material.payload or {}
+        name = payload.get("name")
+        if not name:
+            continue
+
+        # 若正文中完全未出现（既没有 appeared 也没有 mentioned_only），跳过 Backfill，避免幽灵档案
+        if scene_facts is not None and not _npc_mentioned_in_scene_facts(name, scene_facts):
+            continue
+
+        # 若已存在同名或同 ID 档案，保护不重复创建
+        existing_profile = npc_store.get_by_name(name)
+        if existing_profile is not None:
+            backfilled_npc_ids.append(existing_profile.npc_id)
+            continue
+
+        base_profile = npc_profile_from_spontaneous_material(
+            material,
+            turn_index=turn_index,
+            scene_id=scene_id,
+        )
+
+        desire_pattern = draw_desire_pattern()
+        existing_all = npc_store.list_all()
+        backfilled = backfiller.backfill(
+            profile=base_profile,
+            existing_profiles=existing_all,
+            core_memory=core_memory,
+            trace_id=trace_id,
+            guidance=material.guidance,
+            creative_brief=desire_pattern,
+        )
+        # 强制锁定原名不被篡改
+        backfilled.name = base_profile.name
+
+        saved_id = npc_store.upsert(backfilled)
+        backfilled_npc_ids.append(saved_id)
+
+    return backfilled_npc_ids
 
 
 def prune_expired_transient_aliases(
@@ -94,30 +155,6 @@ def gather_npc_profiles_from_state_and_anchors(
         if len(selected) >= limit:
             break
     return selected
-
-
-def backfill_new_npc_profile(
-    *,
-    profile: NPCProfile,
-    existing_profiles: list[NPCProfile],
-    core_memory: CoreMemory,
-    gateway,
-    npc_store: NPCProfileStore,
-    settings: list | None = None,
-    trace_id: str | None = None,
-    guidance: str | None = None,
-    creative_brief: CreativeBrief | None = None,
-) -> NPCProfile:
-    backfiller = NPCProfileBackfiller(gateway)
-    return backfiller.backfill(
-        profile=profile,
-        existing_profiles=existing_profiles,
-        core_memory=core_memory,
-        settings=settings,
-        trace_id=trace_id,
-        guidance=guidance,
-        creative_brief=creative_brief or draw_creative_brief(),
-    )
 
 
 def _matches_profile_name_or_alias(value: str | None, profile: NPCProfile) -> bool:

@@ -49,7 +49,7 @@ DirectorGuidanceInput = Annotated[
     Field(
         description=(
             "自由文本方向（事件/舞台调度），或 {name, purpose, description} "
-            "结构化人物指导（create_npc/enrich_npc）。"
+            "结构化人物指导（create_npc）。"
         )
     ),
 ]

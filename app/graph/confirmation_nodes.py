@@ -26,6 +26,7 @@ from app.domain.npc_profile.batch_updater import apply_npc_batch_update
 from app.domain.npc_profile.identity_resolver import NpcCandidate
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.workflows import (
+    auto_backfill_spontaneous_npc_profiles,
     prune_npc_transient_aliases_from_current_state,
 )
 from app.domain.scene_facts import (
@@ -74,7 +75,6 @@ def _candidate_shells(
     director_draft_ids: set[str],
 ) -> tuple[list[NPCProfile], dict[str, NpcCandidateContext]]:
     occupied = set(existing_profile_ids) | set(director_draft_ids)
-    shells: list[NPCProfile] = []
     context: dict[str, NpcCandidateContext] = {}
     for candidate in candidates:
         npc_id = _candidate_npc_id(
@@ -84,14 +84,6 @@ def _candidate_shells(
             occupied_ids=occupied,
         )
         occupied.add(npc_id)
-        shells.append(NPCProfile(
-            npc_id=npc_id,
-            name=candidate.primary_surface,
-            source_scene_ids=[scene_id],
-            created_turn=turn_index,
-            introduced_turn=turn_index,
-            updated_at=admitted_at,
-        ))
         context[npc_id] = NpcCandidateContext(
             primary_surface=candidate.primary_surface,
             presence=candidate.presence,
@@ -101,7 +93,7 @@ def _candidate_shells(
             evidence_fact_ids=list(candidate.evidence_fact_ids),
             evidence_paragraph_ids=list(candidate.evidence_paragraph_ids),
         )
-    return shells, context
+    return [], context
 
 
 def _gateway_for(state: ConfirmationState):
@@ -476,10 +468,6 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
             selection_summaries=state.get("selection_summaries", []),
             turn_index=pipeline_input.turn_index,
             trace_id=state["trace_id"],
-            new_npc_profiles=state.get("new_npc_profiles", []),
-            npc_candidate_context=_candidate_context_plain(
-                state.get("npc_candidate_context", {})
-            ),
             scene_text=state["effective_scene_text"],
             director_log_entry=getattr(
                 state.get("pending"), "director_log_entry", None
@@ -534,6 +522,21 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
         with _store_factory(state, "npc_profile") as npc_store:
             gateway = _gateway_for(state)
             admitted_at = utc_now()
+            pending = state.get("pending") or getattr(pipeline_input, "pending", None)
+
+            # 1. 自动为即兴轻量 NPC 进行 Backfill 并直接持久化
+            spontaneous_backfilled_ids = auto_backfill_spontaneous_npc_profiles(
+                pending=pending,
+                npc_store=npc_store,
+                gateway=gateway,
+                core_memory=state["core_memory"],
+                turn_index=pipeline_input.turn_index,
+                scene_id=state["updated_state"].scene.scene_id,
+                scene_facts=state.get("scene_facts"),
+                trace_id=trace_id,
+            )
+
+            # 2. 正常运行批次事实与别名更新（已有档案与刚刚 backfilled 的档案）
             evidence_documents = {
                 document.document_id: document
                 for document in build_turn_documents(
@@ -573,7 +576,11 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
             return NpcTurnNodeResult(
                 process_result=result,
                 updated_npc_profile_ids=merge_unique_ids(
-                    [*result.saved_ids, *alias_pruned_ids]
+                    [
+                        *spontaneous_backfilled_ids,
+                        *result.saved_ids,
+                        *alias_pruned_ids,
+                    ]
                 ),
                 new_npc_profiles=shells,
                 candidate_context=context,
