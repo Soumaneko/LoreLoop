@@ -42,7 +42,10 @@ from app.domain.director_event.schemas import (
     DirectorActorRef,
     utc_now,
 )
-from app.domain.director_event.selector import DirectorEventSelector
+from app.domain.director_event.selector import (
+    DirectorEventSelector,
+    event_eligible_setting_ids,
+)
 from app.domain.director_npc.creator import DirectorNPCCreator
 from app.domain.director_npc.schemas import NPCCreationContext
 from app.domain.npc_profile.schemas import NPCProfile
@@ -128,16 +131,24 @@ class DirectorConfirmationExecutor:
         self._settings_by_id = {
             setting.setting_id: setting for setting in available_settings
         }
+        all_events = self._event_store.list_all()
+        active_events = [
+            event for event in all_events if event.stage != "resolved"
+        ]
+        eligible_event_setting_ids = event_eligible_setting_ids(
+            available_settings,
+            all_events,
+        )
 
-        self._register_skills()
+        self._register_skills(
+            active_events=active_events,
+            eligible_event_setting_ids=eligible_event_setting_ids,
+        )
 
         observation = self._build_observation(
-            active_events=[
-                event
-                for event in self._event_store.list_all()
-                if event.stage != "resolved"
-            ],
+            active_events=active_events,
             available_settings=available_settings,
+            eligible_event_setting_ids=eligible_event_setting_ids,
             recent_director_log=recent_director_log,
         )
         try:
@@ -154,6 +165,9 @@ class DirectorConfirmationExecutor:
             decision, created_settings = self._run_setting_creation_wave(
                 decision,
                 available_settings=available_settings,
+            )
+            eligible_event_setting_ids.update(
+                setting.setting_id for setting in created_settings
             )
             # A Setting created in this same confirmation may already appear in
             # the confirmed scene text; the appearance node runs before this
@@ -197,17 +211,28 @@ class DirectorConfirmationExecutor:
         apply_director_mutations(self._plan, self._stores)
         return decision, executions
 
-    def _register_skills(self) -> None:
+    def _register_skills(
+        self,
+        *,
+        active_events,
+        eligible_event_setting_ids: set[str],
+    ) -> None:
         register_skill(
             self._service,
             "create_npc",
             handler=self._create_npc,
         )
-        register_skill(
-            self._service,
-            "create_event",
-            handler=self._create_event,
-        )
+        if not active_events:
+            register_skill(
+                self._service,
+                "create_event",
+                handler=self._create_event,
+                arguments_validator=lambda args: _require_event_setting_available(
+                    args,
+                    known_setting_ids=set(self._settings_by_id),
+                    eligible_setting_ids=eligible_event_setting_ids,
+                ),
+            )
         register_skill(
             self._service,
             "bind_event_actor",
@@ -498,6 +523,7 @@ class DirectorConfirmationExecutor:
         *,
         active_events,
         available_settings,
+        eligible_event_setting_ids,
         recent_director_log,
     ) -> DirectorObservation:
         scene_fact_texts = (
@@ -578,7 +604,12 @@ class DirectorConfirmationExecutor:
                     for profile in npc_detail_profiles
                 ],
                 "settings": [
-                    setting.reference_view()
+                    {
+                        **setting.reference_view(),
+                        "event_creation_available": (
+                            setting.setting_id in eligible_event_setting_ids
+                        ),
+                    }
                     for setting in available_settings
                 ],
             },
@@ -723,6 +754,21 @@ def _create_missing_setting(
         turn_index=turn_index,
         trace_id=trace_id,
     )
+
+
+def _require_event_setting_available(
+    args: CreateEventArguments,
+    *,
+    known_setting_ids: set[str],
+    eligible_setting_ids: set[str],
+) -> None:
+    setting_id = args.setting_requirements[0].matched_setting_id
+    if setting_id is None:
+        return
+    if setting_id not in known_setting_ids:
+        raise ValueError("create_event references an unknown Setting")
+    if setting_id not in eligible_setting_ids:
+        raise ValueError("create_event Setting has no unused facts")
 
 
 def _require_active_event(store, event_id: str) -> None:

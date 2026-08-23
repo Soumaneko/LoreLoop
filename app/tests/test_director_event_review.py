@@ -2,12 +2,19 @@ import pytest
 
 from types import SimpleNamespace
 from app.core.llm.errors import LLMOutputValidationError
+from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
+from app.domain.director.confirmation import run_confirmation_director_agent
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
-from app.tests.factories.director import make_review_node_state
+from app.tests.factories.director import (
+    make_current_state,
+    make_event_selection_output,
+    make_intrude_event,
+    make_review_node_state,
+)
 
 
 def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_path):
@@ -232,6 +239,79 @@ def test_engaged_review_resolves_event(tmp_path):
         assert persisted is not None
         assert persisted.stage == "resolved"
         assert persisted.resolved_turn == 3
+
+
+def test_resolved_review_reopens_one_event_slot_in_same_confirmation(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event as store:
+        old_event_id = store.save(make_intrude_event())
+        store.set_stage(old_event_id, "engaged", turn_index=2)
+    setting = WorldSetting(
+        kind="location",
+        name="河岸船坞",
+        summary="承担沿河商船修造与维护的老船坞。",
+        public_facts=["船坞由几个老师傅共同经营"],
+        hidden_facts=["部分旧账从未对外公开"],
+        created_turn=1,
+    )
+    with stores.world_setting as store:
+        store.save(setting)
+
+    review_gateway = ScriptedDirectorGateway(
+        decision={"reasoning": "旧事件已经收束。", "requests": []},
+        event_review_output={
+            "reviews": [{
+                "event_id": old_event_id,
+                "reason": "行动主体已经被永久驱逐。",
+                "action": "resolve",
+                "resolved_reason": "行动主体已经被永久驱逐。",
+            }],
+        },
+    )
+    confirmation_nodes.director_event_review_node(
+        make_review_node_state(stores, review_gateway)
+    )
+
+    create_gateway = ScriptedDirectorGateway(
+        decision={
+            "reasoning": "配额已经释放，可以布置下一事件。",
+            "requests": [{
+                "request_id": "event_2",
+                "skill": "create_event",
+                "arguments": {
+                    "role": "ambient",
+                    "setting_requirements": [{
+                        "kind": "location",
+                        "setting_description": "事件依托河岸船坞。",
+                        "matched_setting_id": setting.setting_id,
+                    }],
+                    "actors": [],
+                },
+                "guidance": "围绕船坞的独立日常矛盾展开。",
+            }],
+        },
+        event_selection_output=make_event_selection_output(),
+    )
+    run_confirmation_director_agent(
+        gateway=create_gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="继续前进。",
+        scene_facts={"scene_focus": "旧事件已经结束。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    with stores.director_event as store:
+        assert store.get_by_id(old_event_id).stage == "resolved"
+        [active] = store.list_active()
+        assert active.event_id != old_event_id
+        assert active.stage == "hidden"
 
 
 def test_engaged_review_keeps_event_when_not_resolved(tmp_path):

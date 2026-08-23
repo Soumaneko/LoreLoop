@@ -153,12 +153,6 @@ class UpgradeDisclosureArguments(BaseModel):
     )
 
 
-class ForeshadowSettingArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    setting_id: str = Field(min_length=1)
-
-
 class SettingRequirement(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -311,29 +305,21 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         arguments_model=UpgradeDisclosureArguments,
     ),
     DirectorSkillSpec(
-        name="foreshadow_setting",
-        description=(
-            "将一个已存在的设定资产（如特殊地点、派系、传闻、功法等）注入本轮上下文供正文生成引擎提供细节支撑。"
-            "要求底层引擎在正文中通过隐晦的可见影响、气氛渲染或主角的心理活动来暗示其存在。"
-            "必须在请求级 guidance 中说明具体表现方式。"
-        ),
-        phases=_GENERATION,
-        mutates=False,
-        arguments_model=ForeshadowSettingArguments,
-    ),
-    DirectorSkillSpec(
         name="create_event",
         description=(
             "创建一个长线事件（arc）或环境事件（ambient）。这是创建事件的唯一技能。"
+            "单次确认最多创建一个。"
             "只用于主角视线之外的世界动态，不得用于推动、包装或代劳主角当前正在执行的主线行动。"
-            "actors 是强制演员清单（existing/new 可混合，也可留空）。"
+            "actors 是强制演员清单，可留空。"
             "在 arguments.setting_requirements 中声明该事件因果依托的 1 个 Setting："
-            "命中已有 Setting 时填其 matched_setting_id，否则该项留空。"
+            "命中已有 Setting 时，只能选择 resources.settings 中 "
+            "event_creation_available=true 的 matched_setting_id；否则该项留空。"
             "请求级 guidance 用自由文本指定事件方向。"
         ),
         phases=_CONFIRMATION,
         mutates=True,
         arguments_model=CreateEventArguments,
+        max_requests_per_batch=1,
     ),
     DirectorSkillSpec(
         name="create_npc",

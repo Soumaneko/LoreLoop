@@ -97,8 +97,6 @@ def _summarize_request(request, stores) -> str:
     if skill == "intrude_engaged_event":
         title = _event_title(stores, arguments.get("event_id"))
         return f"引入事件「{title}」"
-    if skill == "foreshadow_setting":
-        return f"暗示设定「{_setting_name(stores, arguments.get('setting_id'))}」"
     if skill == "create_npc":
         name = _structured_name(request.guidance) or "未知"
         return f"创建NPC「{name}」依托{_setting_kind(arguments)}"
@@ -163,17 +161,3 @@ def _event_title(stores, event_id) -> str:
     except Exception:
         pass
     return event_id
-
-
-def _setting_name(stores, setting_id) -> str:
-    setting_id = str(setting_id or "")
-    if not setting_id:
-        return "?"
-    try:
-        with stores.world_setting as store:
-            setting = store.get_by_id(setting_id)
-            if setting is not None:
-                return setting.name
-    except Exception:
-        pass
-    return setting_id

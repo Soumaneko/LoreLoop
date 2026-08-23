@@ -23,7 +23,6 @@ from app.domain.director import (
 )
 from app.domain.director.agent import DirectorWarning
 from app.domain.director.skill_specs import (
-    ForeshadowSettingArguments,
     IntroduceNPCArguments,
     IntrudeEngagedEventArguments,
     NPC_VIEW_ALWAYS_KEPT,
@@ -86,7 +85,6 @@ class DirectorGenerationExecutor:
         event_store = uow.director_event
         director_npc_store = uow.director_npc
         npc_profile_store = uow.npc_profile
-        setting_store = uow.world_setting
         active_events = event_store.list_active()
         hidden_events = [
             event
@@ -108,7 +106,6 @@ class DirectorGenerationExecutor:
             if npc.status == "prepared"
         ]
         selected_npc_profiles = self._npc_profiles
-        settings = setting_store.list_all()
         log_store = uow.director_log
         recent_director_log = log_store.recent()
 
@@ -164,20 +161,6 @@ class DirectorGenerationExecutor:
                     args.npc_id,
                     args.new_disclosure_level,
                     visible_profiles=selected_npc_profiles,
-                ),
-            )
-        if settings:
-            register_skill(
-                service,
-                "foreshadow_setting",
-                handler=lambda args, guidance=None: _foreshadow_setting(
-                    setting_store,
-                    args,
-                    guidance=guidance,
-                ),
-                arguments_validator=lambda args: _get_setting(
-                    setting_store,
-                    args.setting_id,
                 ),
             )
         if engaged_events:
@@ -259,10 +242,6 @@ class DirectorGenerationExecutor:
                         **profile.director_view().model_dump(mode="json"),
                     }
                     for profile in selected_npc_profiles
-                ],
-                "settings": [
-                    setting.reference_view()
-                    for setting in settings
                 ],
             },
         )
@@ -441,21 +420,6 @@ def _upgrade_disclosure(
     )
 
 
-def _foreshadow_setting(
-    store,
-    args: ForeshadowSettingArguments,
-    *,
-    guidance: str | None,
-) -> DirectorStageMaterial:
-    setting = _get_setting(store, args.setting_id)
-    return DirectorStageMaterial(
-        kind="setting",
-        resource_id=setting.setting_id,
-        guidance=_require_generation_guidance(guidance),
-        payload=setting.director_view(),
-    )
-
-
 def _intrude_engaged_event(
     store,
     args: IntrudeEngagedEventArguments,
@@ -620,10 +584,3 @@ def _get_disclosure_profile(
             "upgrade_disclosure only supports raising the disclosure level"
         )
     return profile
-
-
-def _get_setting(store, setting_id: str):
-    setting = store.get_by_id(setting_id)
-    if setting is None:
-        raise ValueError("director skill references an unknown setting_id")
-    return setting

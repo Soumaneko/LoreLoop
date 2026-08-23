@@ -402,6 +402,18 @@ def test_selection_rejects_duration_beyond_world_clock_limit():
         DirectorEventSelectionResult.model_validate(payload)
 
 
+def test_event_selector_output_requires_selected_setting_fact_ids():
+    from app.domain.director_event.schemas import DirectorEventSelectionOutput
+
+    payload = _event_selection().model_dump(
+        mode="json",
+        exclude={"selected_setting_fact_ids"},
+    )
+
+    with pytest.raises(ValidationError, match="selected_setting_fact_ids"):
+        DirectorEventSelectionOutput.model_validate(payload)
+
+
 def test_event_deadline_is_derived_from_required_current_clock():
     event = _event_selection().to_event(
         role="ambient",

@@ -628,12 +628,212 @@ def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
         if task == "director_event_select_ambient"
     ]
     assert selector_input[0]["director_guidance"] == "以船坞翻修风波为整体方向。"
-    assert setting.name in selector_input[0]["settings_json"]
+    observation = json.loads(gateway.input_data[0]["director_observation_json"])
+    observed_setting = next(
+        item
+        for item in observation["resources"]["settings"]
+        if item["setting_id"] == setting.setting_id
+    )
+    assert observed_setting["event_creation_available"] is True
+    [selected_setting] = json.loads(selector_input[0]["settings_json"])
+    assert selected_setting["name"] == setting.name
+    assert selected_setting["public_facts"] == [{
+        "fact_id": "fact_1",
+        "content": setting.public_facts[0],
+    }]
+    assert selected_setting["hidden_facts"] == [{
+        "fact_id": "fact_2",
+        "content": setting.hidden_facts[0],
+    }]
     assert unrelated.name not in selector_input[0]["settings_json"]
     assert "director_npc_create" not in gateway.tasks
     with stores.director_event as store:
         [saved] = store.list_all()
     assert saved.source_setting_ids == [setting.setting_id]
+    assert saved.source_setting_fact_ids == ["fact_1"]
+
+
+def test_event_selector_omits_and_rejects_previously_used_setting_fact_id():
+    from app.domain.director_event.selector import DirectorEventSelector
+    from app.domain.world_setting import WorldSetting
+
+    setting = WorldSetting(
+        kind="location",
+        name="河岸船坞",
+        summary="承担沿河商船修造与维护的老船坞。",
+        public_facts=["船坞由几个老师傅共同经营"],
+        hidden_facts=["部分旧账从未对外公开"],
+        created_turn=1,
+    )
+    previous = make_intrude_event()
+    previous = previous.model_copy(update={
+        "stage": "resolved",
+        "resolved_reason": "猎户已经撤离，码头恢复通行。",
+        "final_world_impact": previous.world_impact,
+        "source_setting_ids": [setting.setting_id],
+        "source_setting_fact_ids": ["fact_1"],
+    })
+    available_output = make_event_selection_output()
+    available_output["selected_setting_fact_ids"] = ["fact_2"]
+    gateway = ScriptedDirectorGateway(
+        decision={"reasoning": "unused", "requests": []},
+        event_selection_output=available_output,
+    )
+
+    selection = DirectorEventSelector(gateway).select_or_create(
+        role="ambient",
+        events=[previous],
+        current_state=make_current_state(),
+        core_memory=CoreMemory(items=[]),
+        settings=[setting],
+    )
+
+    [selected_setting] = json.loads(gateway.input_data[0]["settings_json"])
+    [previous_event] = json.loads(gateway.input_data[0]["events_json"])
+    assert previous_event["resolved_reason"] == "猎户已经撤离，码头恢复通行。"
+    assert previous_event["final_world_impact"] == (
+        previous.final_world_impact.model_dump(mode="json")
+    )
+    assert selected_setting["public_facts"] == [{
+        "content": setting.public_facts[0],
+    }]
+    assert "fact_id" not in selected_setting["public_facts"][0]
+    assert selected_setting["hidden_facts"][0]["fact_id"] == "fact_2"
+    assert selection.selected_setting_fact_ids == ["fact_2"]
+
+    rejected_gateway = ScriptedDirectorGateway(
+        decision={"reasoning": "unused", "requests": []},
+        event_selection_output=make_event_selection_output(),
+    )
+    with pytest.raises(ValueError, match="unavailable"):
+        DirectorEventSelector(rejected_gateway).select_or_create(
+            role="ambient",
+            events=[previous],
+            current_state=make_current_state(),
+            core_memory=CoreMemory(items=[]),
+            settings=[setting],
+        )
+
+
+def test_confirmation_hides_create_event_while_an_event_is_active(tmp_path):
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event as store:
+        store.save(make_intrude_event())
+    gateway = ScriptedDirectorGateway(
+        decision={"reasoning": "已有事件，本轮不再创建。", "requests": []},
+    )
+
+    run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="继续处理眼前局势。",
+        scene_facts={"scene_focus": "旧事件仍在发展。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    skills = json.loads(gateway.input_data[0]["available_skills_json"])
+    assert "create_event" not in {skill["name"] for skill in skills}
+
+
+def test_confirmation_restores_create_event_after_resolution(tmp_path):
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    with stores.director_event as store:
+        event_id = store.save(make_intrude_event())
+        store.resolve_event(
+            event_id,
+            turn_index=2,
+            resolved_reason="事件已经收束。",
+        )
+    gateway = ScriptedDirectorGateway(
+        decision={"reasoning": "旧事件已结案。", "requests": []},
+    )
+
+    run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="继续前进。",
+        scene_facts={"scene_focus": "旧事件已经结束。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    skills = json.loads(gateway.input_data[0]["available_skills_json"])
+    assert "create_event" in {skill["name"] for skill in skills}
+
+
+def test_confirmation_rejects_exhausted_event_setting(tmp_path):
+    from app.domain.world_setting import WorldSetting
+
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    setting = WorldSetting(
+        kind="location",
+        name="河岸船坞",
+        summary="承担沿河商船修造与维护的老船坞。",
+        public_facts=["船坞由几个老师傅共同经营"],
+        hidden_facts=["部分旧账从未对外公开"],
+        created_turn=1,
+    )
+    with stores.world_setting as store:
+        store.save(setting)
+    event = make_intrude_event().model_copy(update={
+        "source_setting_ids": [setting.setting_id],
+        "source_setting_fact_ids": ["fact_1", "fact_2"],
+    })
+    with stores.director_event as store:
+        event_id = store.save(event)
+        store.resolve_event(
+            event_id,
+            turn_index=2,
+            resolved_reason="事件已经收束。",
+        )
+    gateway = ScriptedDirectorGateway(decision={
+        "reasoning": "继续沿用船坞。",
+        "requests": [{
+            "request_id": "event_1",
+            "skill": "create_event",
+            "arguments": {
+                "role": "ambient",
+                "setting_requirements": [{
+                    "kind": "location",
+                    "setting_description": "继续使用河岸船坞。",
+                    "matched_setting_id": setting.setting_id,
+                }],
+                "actors": [],
+            },
+            "guidance": "继续使用河岸船坞。",
+        }],
+    })
+
+    decision, executions = run_confirmation_director_agent(
+        gateway=gateway,
+        stores=stores,
+        core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(),
+        user_input="继续前进。",
+        scene_facts={"scene_focus": "旧事件已经结束。", "facts": []},
+        recent_summaries=[],
+        selection_summaries=[],
+        turn_index=3,
+        trace_id="confirmation-director",
+    )
+
+    observation = json.loads(gateway.input_data[0]["director_observation_json"])
+    [observed_setting] = observation["resources"]["settings"]
+    assert observed_setting["event_creation_available"] is False
+    skills = json.loads(gateway.input_data[0]["available_skills_json"])
+    assert "create_event" in {skill["name"] for skill in skills}
+    assert decision.requests == []
+    assert executions.executions == []
+    assert "director_event_select_ambient" not in gateway.tasks
 
 
 def test_create_event_rejects_more_than_three_new_actors():

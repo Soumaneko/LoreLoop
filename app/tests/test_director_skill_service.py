@@ -724,7 +724,6 @@ def test_director_skill_specs_cover_every_registered_skill():
     assert spec_names == {
         "present_event",
         "introduce_npc",
-        "foreshadow_setting",
         "intrude_engaged_event",
         "create_npc",
         "create_event",
@@ -748,7 +747,6 @@ def test_director_skill_specs_cover_every_registered_skill():
     assert {spec.name for spec in service.specs_for_phase("generation")} == {
         "present_event",
         "introduce_npc",
-        "foreshadow_setting",
         "intrude_engaged_event",
         "upgrade_disclosure",
     }
@@ -762,6 +760,42 @@ def test_director_skill_specs_cover_every_registered_skill():
             assert spec.mutates is False
         if "confirmation" in spec.phases:
             assert spec.mutates is True
+    create_event = next(spec for spec in specs if spec.name == "create_event")
+    assert create_event.max_requests_per_batch == 1
+
+
+def test_create_event_allows_at_most_one_request_per_batch():
+    from app.domain.director.skill_specs import register_skill
+
+    service = DirectorSkillService()
+    register_skill(
+        service,
+        "create_event",
+        handler=lambda args, guidance=None: {},
+    )
+    requests = [
+        DirectorSkillRequest(
+            request_id=f"event_{index}",
+            skill="create_event",
+            arguments={
+                "role": "ambient",
+                "setting_requirements": [{
+                    "kind": "location",
+                    "setting_description": "事件依托一处既有地点。",
+                    "matched_setting_id": "setting_1",
+                }],
+                "actors": [],
+            },
+            guidance=f"创建第 {index} 个独立世界事件。",
+        )
+        for index in range(2)
+    ]
+
+    with pytest.raises(ValueError, match="allows at most 1 request"):
+        service.validate_batch(
+            make_decision_batch(reasoning="尝试创建两个事件。", requests=requests),
+            phase="confirmation",
+        )
 
 
 def test_director_batch_hard_caps_request_count():

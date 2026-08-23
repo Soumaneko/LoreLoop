@@ -15,7 +15,7 @@ from app.tests.factories.director import (
 )
 
 
-def test_generation_director_observes_setting_without_facts(tmp_path):
+def test_generation_director_no_longer_observes_settings(tmp_path):
     from app.domain.world_setting import WorldSetting
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
@@ -55,12 +55,7 @@ def test_generation_director_observes_setting_without_facts(tmp_path):
     observation = json.loads(
         gateway.input_data[0]["director_observation_json"]
     )
-    observed_settings = observation["resources"]["settings"]
-    assert {
-        item["setting_id"] for item in observed_settings
-    } == {setting.setting_id, unrelated.setting_id}
-    assert all("public_facts" not in item for item in observed_settings)
-    assert all("hidden_facts" not in item for item in observed_settings)
+    assert "settings" not in observation["resources"]
 
 
 def test_generation_agent_observes_only_prepared_director_npcs(tmp_path):
@@ -649,7 +644,23 @@ def test_generation_director_omits_event_skills_when_no_events(tmp_path):
     assert "upgrade_disclosure" not in skill_names
     # introduce_npc is always available because it supports spontaneous NPC creation
     assert "introduce_npc" in skill_names
-    assert "foreshadow_setting" in skill_names
+    assert "foreshadow_setting" not in skill_names
+
+
+def test_legacy_setting_material_remains_schema_compatible():
+    from app.domain.director.schemas import DirectorStageResult
+
+    restored = DirectorStageResult.model_validate({
+        "reasoning": "升级前的待确认回合。",
+        "materials": [{
+            "kind": "setting",
+            "resource_id": "setting_legacy",
+            "guidance": "保留旧待确认数据的读取兼容。",
+            "payload": {"name": "旧设定"},
+        }],
+    })
+
+    assert restored.materials[0].kind == "setting"
 
 
 def test_generation_director_introduce_spontaneous_npc_success(tmp_path):

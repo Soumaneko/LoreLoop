@@ -55,6 +55,7 @@ def make_event_selection_output(actor_roles: list[dict] | None = None) -> dict:
         "reason": "世界缺乏明确的长期目标。",
         "title": "沉船账本",
         "duration_phases": 7,
+        "selected_setting_fact_ids": ["fact_1"],
         "actor_roles": actor_roles or [],
         "subject": "码头旧账房",
         "intent": "追回被私吞的账目",

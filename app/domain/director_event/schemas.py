@@ -64,6 +64,10 @@ class DirectorEvent(BaseModel):
 
     actors: list[DirectorActorRef] = Field(default_factory=list)
     source_setting_ids: list[str] = Field(default_factory=list, max_length=4)
+    source_setting_fact_ids: list[str] = Field(
+        default_factory=list,
+        max_length=8,
+    )
 
     world_impact: WorldImpact | None = None
     deadline_clock: WorldClock
@@ -125,6 +129,14 @@ class DirectorEventSelectionResult(BaseModel):
         default_factory=list,
         max_length=6,
     )
+    selected_setting_fact_ids: list[str] = Field(
+        default_factory=list,
+        max_length=8,
+        description=(
+            "本事件实际采用的 Setting Fact ID；必须从 settings_json 中"
+            "仍带 fact_id 的事实里选择。"
+        ),
+    )
     subject: str = Field(min_length=1)
     intent: str = Field(min_length=1)
     method: str = Field(min_length=1)
@@ -138,6 +150,13 @@ class DirectorEventSelectionResult(BaseModel):
         keys = [item.actor_key for item in value]
         if len(keys) != len(set(keys)):
             raise ValueError("actor_roles has duplicate actor_key")
+        return value
+
+    @field_validator("selected_setting_fact_ids")
+    @classmethod
+    def _unique_setting_fact_ids(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError("selected_setting_fact_ids has duplicate fact_id")
         return value
 
     def to_event(
@@ -161,6 +180,7 @@ class DirectorEventSelectionResult(BaseModel):
             hook_pool=list(self.hook_pool),
             actors=list(actors or []),
             source_setting_ids=list(source_setting_ids or []),
+            source_setting_fact_ids=list(self.selected_setting_fact_ids),
             world_impact=self.world_impact,
             deadline_clock=current_clock.advance_phase(self.duration_phases),
             final_world_impact=None,
@@ -169,6 +189,12 @@ class DirectorEventSelectionResult(BaseModel):
             created_at=now,
             updated_at=now,
         )
+
+
+class DirectorEventSelectionOutput(DirectorEventSelectionResult):
+    """LLM boundary: an instantiated Event must name its Setting facts."""
+
+    selected_setting_fact_ids: list[str] = Field(min_length=1, max_length=8)
 
 
 class DirectorEventHiddenReviewResult(BaseModel):

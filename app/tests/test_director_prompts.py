@@ -1,3 +1,5 @@
+import pytest
+
 from app.core.llm import PromptLoader
 
 
@@ -64,3 +66,25 @@ def test_event_skill_descriptions_forbid_quest_wrapping():
     for spec in specs.values():
         assert "主角视线之外" in spec.description
         assert "不得用于推动、包装或代劳主角当前正在执行的主线行动" in spec.description
+
+
+@pytest.mark.parametrize(
+    "task",
+    ["director_event_select_ambient", "director_event_select_arc"],
+)
+def test_director_event_selector_prompt_renders_fact_examples(task):
+    prompt, _ = PromptLoader().load(task)
+
+    rendered = prompt.format(
+        output_schema_json="{}",
+        core_memory_json="{}",
+        current_state_json="{}",
+        recent_summaries_json="[]",
+        settings_json="[]",
+        required_actors_json="[]",
+        events_json="[]",
+        director_guidance="",
+    )
+
+    assert "{fact_id, content}" in rendered
+    assert "{content}" in rendered
