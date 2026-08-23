@@ -6,7 +6,7 @@ from typing import Annotated, Any, TypedDict
 
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.core_memory.schemas import CoreMemory
-from app.domain.continuity import ContinuityProjection
+from app.domain.continuity import ContinuityItem, ContinuityProjection
 from app.domain.current_state.schemas import CurrentState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
 from app.domain.director import DirectorDecisionBatch, DirectorSkillExecutionBatch
@@ -79,6 +79,7 @@ class ConfirmationState(TypedDict, total=False):
     state_change_set: StateChangeSet
     state_update_warnings: list[StateChangeWarning]
     action_preview: ActionPreviewResult
+    active_continuity_items: list[ContinuityItem]
     continuity_projection: ContinuityProjection
     updated_npc_profile_ids: list[str]
     new_npc_profiles: list[NPCProfile]

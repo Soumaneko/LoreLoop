@@ -276,7 +276,8 @@ def merge_confirmation_node_update(
 
 
 def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationState:
-    with state["runtime_services"].stores.scene_summary as summary_store:
+    stores = state["runtime_services"].stores
+    with stores.scene_summary as summary_store:
         turn_summary = state["turn_summary"]
         state["scene_summaries"] = summary_store.list_active()
         state["recent_summaries"] = summary_store.get_recent(5)
@@ -284,6 +285,12 @@ def prepare_confirmation_second_wave(state: ConfirmationState) -> ConfirmationSt
             *state["recent_summaries"],
             turn_summary,
         ]
+    with stores.continuity as continuity_store:
+        state["active_continuity_items"] = (
+            []
+            if state["pipeline_input"].clear_continuity_before_save
+            else continuity_store.list_active()
+        )
     return state
 
 

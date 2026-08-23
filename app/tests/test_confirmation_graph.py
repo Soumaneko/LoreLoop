@@ -174,6 +174,16 @@ def test_only_selection_summaries_append_current_turn_summary():
             assert limit == 5
             return historical
 
+    class _ContinuityStore:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def list_active(self):
+            return []
+
     state = {
         "cache": {},
         "updated_state": CurrentState(
@@ -181,8 +191,14 @@ def test_only_selection_summaries_append_current_turn_summary():
             player=PlayerState(name="主角"),
         ),
         "turn_summary": current,
+        "pipeline_input": SimpleNamespace(
+            clear_continuity_before_save=False,
+        ),
         "runtime_services": SimpleNamespace(
-            stores=SimpleNamespace(scene_summary=_Store())
+            stores=SimpleNamespace(
+                scene_summary=_Store(),
+                continuity=_ContinuityStore(),
+            )
         ),
         "events": [],
     }
@@ -192,6 +208,7 @@ def test_only_selection_summaries_append_current_turn_summary():
     assert prepared["recent_summaries"] == historical
     assert prepared["scene_summaries"] == historical
     assert prepared["selection_summaries"] == [*historical, current]
+    assert prepared["active_continuity_items"] == []
 
 
 def test_scene_summarize_uses_updated_state_and_confirmation_text(monkeypatch):
@@ -373,20 +390,19 @@ def test_initialization_phase_is_revalidated_before_confirmation_writes():
     assert commit_called is False
 
 
-def test_confirmation_second_wave_is_serialized_for_shared_connection():
+def test_confirmation_second_wave_parallelizes_compute_before_setting_write():
     graph = build_confirmation_second_wave_graph().get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
-    # Phase 2 uses one shared sqlite connection per confirmation. The second
-    # wave is deliberately sequential so store-level SAVEPOINTs never interleave
-    # across threads.
+    # Only NPC Profile touches the shared connection in the parallel wave.
+    # Setting writes after all three compute branches have joined.
     assert ("__start__", "action_preview") in edges
-    assert ("action_preview", "continuity_project") in edges
-    assert ("continuity_project", "npc_profile_update") in edges
+    assert ("__start__", "continuity_project") in edges
+    assert ("__start__", "npc_profile_update") in edges
+    assert ("action_preview", "setting_appearance_update") in edges
+    assert ("continuity_project", "setting_appearance_update") in edges
     assert ("npc_profile_update", "setting_appearance_update") in edges
     assert ("setting_appearance_update", "__end__") in edges
-    assert ("__start__", "continuity_project") not in edges
-    assert ("__start__", "npc_profile_update") not in edges
     assert ("__start__", "setting_appearance_update") not in edges
 
     director_graph = confirmation_graph.build_confirmation_director_graph().get_graph()
@@ -887,6 +903,7 @@ def _continuity_node_state(*, cache, scene_text="正文", clear=False):
         "effective_scene_text": scene_text,
         "trace_id": "trace-1",
         "cache": cache,
+        "active_continuity_items": [],
         "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
     }
 
@@ -905,12 +922,6 @@ def test_continuity_project_node_reuses_cached_projection(monkeypatch):
             return ContinuityProjection(operations=[])
 
     monkeypatch.setattr(confirmation_nodes, "ContinuityProjector", _Projector)
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_store_factory",
-        lambda _state, _name: _FakeStore(),
-    )
-
     result = confirmation_nodes.continuity_project_node(state)
 
     assert result["continuity_projection"] is cached
@@ -930,12 +941,6 @@ def test_continuity_project_node_computes_and_caches_projection(monkeypatch):
             return fresh
 
     monkeypatch.setattr(confirmation_nodes, "ContinuityProjector", _Projector)
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_store_factory",
-        lambda _state, _name: _FakeStore(),
-    )
-
     result = confirmation_nodes.continuity_project_node(state)
 
     assert result["continuity_projection"] is fresh
@@ -961,12 +966,6 @@ def test_continuity_project_node_emits_warning(monkeypatch, tmp_path):
             return ContinuityProjection(operations=[])
 
     monkeypatch.setattr(confirmation_nodes, "ContinuityProjector", _Projector)
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_store_factory",
-        lambda _state, _name: _FakeStore(),
-    )
-
     confirmation_nodes.continuity_project_node(state)
 
     diagnostic = diagnostics.read(trace_id="trace-1")[0]

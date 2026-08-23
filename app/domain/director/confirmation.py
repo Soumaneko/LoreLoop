@@ -167,9 +167,9 @@ class DirectorConfirmationExecutor:
             for setting in created_settings:
                 self._settings_by_id[setting.setting_id] = setting
 
-            # Wave B may execute every request concurrently. Each proxy opens a
-            # dedicated SQLite connection per operation; semantic conflicts are
-            # prevented by the upstream Director contract.
+            # Wave B may execute every request concurrently. Handlers share the
+            # operation connection but issue only SELECTs; all writes remain in
+            # the in-memory mutation plan until the batch succeeds.
             executions = self._service.execute_batch(
                 decision,
                 phase="confirmation",

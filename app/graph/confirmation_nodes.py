@@ -118,13 +118,8 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
         user_input=pipeline_input.user_input,
         scene_text=state["effective_scene_text"],
     )
-    with _store_factory(state, "continuity") as continuity_store:
-        active_items = (
-            []
-            if pipeline_input.clear_continuity_before_save
-            else continuity_store.list_active()
-        )
-        active_count = len(active_items)
+    active_items = state["active_continuity_items"]
+    active_count = len(active_items)
     computed = False
     projector: ContinuityProjector | None = None
 

@@ -133,14 +133,17 @@ def _compile_confirmation_second_wave_graph():
         ),
     )
 
-    # Phase 2 uses one shared connection per confirmation. These nodes may all
-    # write through the same sqlite connection, so they are deliberately
-    # serialized here. Parallel execution on one connection would interleave
-    # store-level SAVEPOINTs and randomly fail with "no such savepoint".
+    # Continuity inputs are preloaded before this graph, so Action Preview and
+    # Continuity are pure computation while NPC Profile is the only connection
+    # user in the parallel wave. Setting appearance writes after the join;
+    # store-level SAVEPOINTs therefore never interleave on the shared connection.
     graph.add_edge(START, "action_preview")
-    graph.add_edge("action_preview", "continuity_project")
-    graph.add_edge("continuity_project", "npc_profile_update")
-    graph.add_edge("npc_profile_update", "setting_appearance_update")
+    graph.add_edge(START, "continuity_project")
+    graph.add_edge(START, "npc_profile_update")
+    graph.add_edge(
+        ["action_preview", "continuity_project", "npc_profile_update"],
+        "setting_appearance_update",
+    )
     graph.add_edge("setting_appearance_update", END)
 
     return graph.compile()
