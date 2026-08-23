@@ -27,9 +27,10 @@ from app.runtime.paths import (
     CampaignPaths,
     default_campaign_paths,
 )
+from app.runtime.campaign_open import open_campaign_resources
 from app.runtime.services import RuntimeServices
 from app.runtime.uow import CampaignUnitOfWork
-from app.runtime.campaign_migration import LEGACY_JOURNAL_MESSAGE, ensure_campaign_database
+from app.runtime.campaign_migration import LEGACY_JOURNAL_MESSAGE
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 from app.runtime.model_config import effective_gateway_factory
@@ -247,25 +248,21 @@ class CampaignRuntime:
     ) -> None:
         self.campaign_id = campaign_id
         self.paths = paths or default_campaign_paths()
-        # Phase 5: ensure campaign.db/control.db, offline interrupted recovery,
-        # then formal UoW. Director journal recovery removed. ensure_campaign_database
-        # also rejects any legacy journal before touching the save.
         if stores is None:
-            ensure_campaign_database(self.paths)
-            self.history = CampaignHistory(self.paths.data_dir)
-            self.history.recover_interrupted()
-            try:
-                _epoch = int(self.history.connection_epoch)
-            except Exception:
-                _epoch = None
-            self.stores = CampaignUnitOfWork(self.paths, expected_epoch=_epoch)
-            self._history_already_recovered = True
+            opened = open_campaign_resources(self.paths)
+            self.history = opened.history
+            self.stores = opened.stores
+            self.initialization = opened.initialization
         else:
             _journal = self.paths.data_dir / ".runtime" / "director_mutation.json"
             if _journal.is_file():
                 raise RuntimeError(LEGACY_JOURNAL_MESSAGE)
             self.stores = stores
-            self._history_already_recovered = False
+            self.history = CampaignHistory(self.paths.data_dir)
+            self.history.recover_interrupted()
+            from app.runtime.initialization import InitializationStore
+
+            self.initialization = InitializationStore(self.paths.initialization_json)
         self.gateway_factory = gateway_factory or effective_gateway_factory()
         self.diagnostics = getattr(
             self.gateway_factory,
@@ -298,13 +295,6 @@ class CampaignRuntime:
         self._restore_gate_closed = False
         self._restore_error: str | None = None
         self._on_save_played = None
-        from app.runtime.initialization import InitializationStore
-
-        self.initialization = InitializationStore(self.paths.initialization_json)
-        if not getattr(self, "_history_already_recovered", False):
-            self.history = CampaignHistory(self.paths.data_dir)
-            self.history.recover_interrupted()
-        # else: history already created and recovered in stores is None branch
         self._configure_pending_persistence()
         self._restore_pending_transactions()
 
@@ -404,16 +394,15 @@ class CampaignRuntime:
         except BaseException as exc:
             self._restore_error = f"{type(exc).__name__}: {exc}"
             raise
-        # 4. Success: rebuild session UoW/Services under new epoch, reopen gate
+        # 4. Success: reopen the restored campaign through the same validated
+        # path used by cold start and save switching.
         try:
-            try:
-                cur_epoch = int(self.history.connection_epoch)
-            except Exception:
-                cur_epoch = None
-            self.stores = CampaignUnitOfWork(
-                self.paths, expected_epoch=cur_epoch, runtime_ref=None
-            )
+            opened = open_campaign_resources(self.paths)
+            self.history = opened.history
+            self.stores = opened.stores
+            self.initialization = opened.initialization
             self._rebuild_runtime_services()
+            self._configure_pending_persistence()
         finally:
             with self._active_uows_cv:
                 self._restore_gate_closed = False
@@ -940,28 +929,17 @@ class CampaignRuntime:
             old_campaign_id = self.campaign_id
             old_paths = self.paths
             old_history = self.history
+            old_stores = self.stores
             old_pending_turns = self.pending_turns
             old_pending_openings = self.pending_openings
             old_initialization = self.initialization
-            new_stores: CampaignUnitOfWork | None = None
+            opened = None
+            old_stores_closed = False
             new_operations: OperationManager | None = None
             new_jobs: MaintenanceJobCoordinator | None = None
 
             try:
-                # ensure_campaign_database rejects any legacy journal before
-                # touching the target save.
-                ensure_campaign_database(paths)
-                new_history = CampaignHistory(paths.data_dir)
-                new_history.recover_interrupted()
-                try:
-                    _epoch = int(new_history.connection_epoch)
-                except Exception:
-                    _epoch = None
-                new_stores = CampaignUnitOfWork(paths, expected_epoch=_epoch)
-                # Rebuild all target-scoped resources.
-                from app.runtime.initialization import InitializationStore
-
-                new_initialization = InitializationStore(paths.initialization_json)
+                opened = open_campaign_resources(paths)
                 new_operations = OperationManager(
                     campaign_id,
                     max_workers=self._max_workers,
@@ -973,12 +951,13 @@ class CampaignRuntime:
                 )
 
                 # Commit the switch.
-                self.stores.close()
+                old_stores.close()
+                old_stores_closed = True
                 self.campaign_id = campaign_id
                 self.paths = paths
-                self.history = new_history
-                self.stores = new_stores
-                self.initialization = new_initialization
+                self.history = opened.history
+                self.stores = opened.stores
+                self.initialization = opened.initialization
                 self.operations = new_operations
                 self.jobs = new_jobs
                 self.pending_turns.clear(discard=False)
@@ -999,20 +978,18 @@ class CampaignRuntime:
                         new_operations.shutdown(wait=True)
                     except Exception:
                         pass
-                if new_stores is not None:
+                if opened is not None:
                     try:
-                        new_stores.close()
+                        opened.stores.close()
                     except Exception:
                         pass
-                # Rebuild fresh resources for the previous campaign.  The old
-                # operations/jobs were shut down before the switch began and
-                # must not be reattached.
+                # Rebuild executors for the previous campaign. Reuse its still-open
+                # resources when target preparation failed early; otherwise reopen
+                # them through the canonical path.
                 self.campaign_id = old_campaign_id
                 self.paths = old_paths
-                self.history = old_history
                 self.pending_turns = old_pending_turns
                 self.pending_openings = old_pending_openings
-                self.initialization = old_initialization
                 self.operations = OperationManager(
                     old_campaign_id,
                     max_workers=self._max_workers,
@@ -1022,20 +999,15 @@ class CampaignRuntime:
                     max_workers=self._max_workers,
                     operation_manager=self.operations,
                 )
-                try:
-                    self.stores = CampaignUnitOfWork(
-                        old_paths,
-                        expected_epoch=(
-                            int(self.history.connection_epoch)
-                            if self.history is not None
-                            else None
-                        ),
-                    )
-                except Exception:
-                    # If even the old save cannot be reopened (e.g. its DB was
-                    # corrupted concurrently), fall back to a bare unit so the
-                    # runtime is not left without stores.
-                    self.stores = CampaignUnitOfWork(old_paths)
+                if old_stores_closed:
+                    old_opened = open_campaign_resources(old_paths)
+                    self.history = old_opened.history
+                    self.stores = old_opened.stores
+                    self.initialization = old_opened.initialization
+                else:
+                    self.history = old_history
+                    self.stores = old_stores
+                    self.initialization = old_initialization
                 self._rebuild_runtime_services()
                 self._configure_pending_persistence()
                 self._restore_pending_transactions()

@@ -4,6 +4,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.domain.current_state import PlayerState, make_default_state
+from app.runtime import campaign_open as campaign_open_module
+from app.runtime.campaign_open import open_campaign_resources
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import (
     CampaignRuntime,
@@ -11,6 +13,61 @@ from app.runtime.session import (
     PendingTurnRepository,
     get_campaign_runtime,
 )
+
+
+def test_open_campaign_resources_recovers_before_uow_and_closes_on_failure(
+    tmp_path,
+    monkeypatch,
+):
+    events = []
+
+    class History:
+        connection_epoch = 7
+
+        def __init__(self, data_dir):
+            events.append(("history", data_dir))
+
+        def recover_interrupted(self):
+            events.append(("recover", None))
+
+    class Stores:
+        def __init__(self, paths, *, expected_epoch):
+            events.append(("stores", expected_epoch))
+            self.is_closed = False
+
+        def close(self):
+            self.is_closed = True
+            events.append(("close", None))
+
+    def fail_initialization(_path):
+        events.append(("initialization", None))
+        raise RuntimeError("init failed")
+
+    paths = CampaignPaths.from_data_dir(tmp_path / "campaign")
+    monkeypatch.setattr(
+        campaign_open_module,
+        "ensure_campaign_database",
+        lambda actual: events.append(("ensure", actual)),
+    )
+    monkeypatch.setattr(campaign_open_module, "CampaignHistory", History)
+    monkeypatch.setattr(campaign_open_module, "CampaignUnitOfWork", Stores)
+    monkeypatch.setattr(
+        campaign_open_module,
+        "InitializationStore",
+        fail_initialization,
+    )
+
+    with pytest.raises(RuntimeError, match="init failed"):
+        open_campaign_resources(paths)
+
+    assert events == [
+        ("ensure", paths),
+        ("history", paths.data_dir),
+        ("recover", None),
+        ("stores", 7),
+        ("initialization", None),
+        ("close", None),
+    ]
 
 
 def test_pytest_default_runtime_is_always_scoped_to_tmp_path(tmp_path):
@@ -153,6 +210,42 @@ def test_runtime_rejects_save_switch_while_operation_is_active(tmp_path):
         assert runtime.operations.campaign_id == "second"
     finally:
         release.set()
+        runtime.close()
+
+
+def test_reconfigure_reopens_old_campaign_after_late_target_failure(
+    tmp_path,
+    monkeypatch,
+):
+    old_paths = CampaignPaths.from_data_dir(tmp_path / "old")
+    runtime = CampaignRuntime("old", paths=old_paths, max_workers=1)
+    target_paths = CampaignPaths.from_data_dir(tmp_path / "target")
+    restore_pending = runtime._restore_pending_transactions
+    attempts = 0
+
+    def fail_target_pending_once():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("target pending invalid")
+        return restore_pending()
+
+    monkeypatch.setattr(
+        runtime,
+        "_restore_pending_transactions",
+        fail_target_pending_once,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="target pending invalid"):
+            runtime.reconfigure("target", target_paths)
+
+        assert runtime.campaign_id == "old"
+        assert runtime.paths == old_paths
+        assert runtime.stores.is_closed is False
+        assert runtime.stores._expected_epoch == runtime.history.connection_epoch
+        with runtime.uow() as uow:
+            uow._get_conn().execute("SELECT 1").fetchone()
+    finally:
         runtime.close()
 
 
