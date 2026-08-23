@@ -17,6 +17,12 @@ from app.domain.current_state import CurrentState
 from app.runtime.initialization import InitializationRecord
 
 from .save_manifest import SaveManifest
+from .snapshots import (
+    LEGACY_SNAPSHOT_DB_FILES,
+    SNAPSHOT_ARCHIVE_FILES,
+    SnapshotError,
+    normalize_snapshot,
+)
 from .sqlite import SUPPORTED_SCHEMA_VERSIONS
 
 
@@ -34,32 +40,13 @@ _ROOT_FILES = {
 }
 # Phase 5: export only .runtime/control.db; import still accepts legacy turn_history.db;
 # director_mutation.json is rejected everywhere (fail closed).
-# Snapshots: new exports never contain settings.json or legacy ten-db files.
-_SNAPSHOT_EXPORT_FILES = {
-    "campaign.db",
-    "core_memory.json",
-    "initialization.json",
-    "manifest.json",
-}
 # Phase 2 still imports archives created by the legacy ten-database save format.
 # Keep the legacy root database names accepted so old ZIPs can be extracted and
 # then migrated by ensure_campaign_database() before they are installed.
-_LEGACY_ROOT_DB_FILES = {
-    "current_state.db",
-    "continuity.db",
-    "short_term.db",
-    "scene_summaries.db",
-    "confirmed_history.db",
-    "npc_profiles.db",
-    "director_events.db",
-    "director_npcs.db",
-    "director_log.db",
-    "world_settings.db",
-}
 
 
 def _is_legacy_root_db_name(name: str) -> bool:
-    return name in _LEGACY_ROOT_DB_FILES
+    return name in LEGACY_SNAPSHOT_DB_FILES
 
 
 class SaveArchiveError(ValueError):
@@ -189,16 +176,10 @@ def _normalize_snapshot_manifests(data_dir: Path) -> None:
     for snapshot_dir in sorted(snapshots_dir.glob("*")):
         if not snapshot_dir.is_dir():
             continue
-        has_legacy = any(
-            _is_legacy_root_db_name(item.name) for item in snapshot_dir.iterdir()
-        )
-        if has_legacy:
-            from .campaign_migration import ensure_campaign_database
-            from .paths import CampaignPaths
-
-            ensure_campaign_database(CampaignPaths.from_data_dir(snapshot_dir))
-        _rewrite_snapshot_manifest(snapshot_dir)
-        (snapshot_dir / "settings.json").unlink(missing_ok=True)
+        try:
+            normalize_snapshot(snapshot_dir)
+        except SnapshotError as exc:
+            raise SaveArchiveError(str(exc)) from exc
 
 
 def export_save(
@@ -609,7 +590,7 @@ def _is_allowed_relative_path(value: str) -> bool:
     if path.is_absolute() or not path.parts or ".." in path.parts or "." in path.parts:
         return False
     if len(path.parts) == 1:
-        return path.name in _ROOT_FILES or path.name in _LEGACY_ROOT_DB_FILES
+        return path.name in _ROOT_FILES or path.name in LEGACY_SNAPSHOT_DB_FILES
     if path.parts[0] == ".runtime":
         return path.parts in {
             (".runtime", "control.db"),
@@ -618,7 +599,7 @@ def _is_allowed_relative_path(value: str) -> bool:
     if path.parts[0] == ".snapshots" and len(path.parts) == 3:
         # Import allows legacy snapshot DBs and snapshot settings for migration;
         # exports are filtered separately in _iter_save_files.
-        return path.name in (_ROOT_FILES - {"save_manifest.json"}) | {"manifest.json", "settings.json"} | _LEGACY_ROOT_DB_FILES
+        return path.name in (_ROOT_FILES - {"save_manifest.json"}) | {"manifest.json", "settings.json"} | LEGACY_SNAPSHOT_DB_FILES
     return False
 
 
@@ -638,7 +619,7 @@ def _is_allowed_for_export(value: str) -> bool:
     # the staging tree.
     if value.startswith(".snapshots/"):
         name = PurePosixPath(value).name
-        if name not in _SNAPSHOT_EXPORT_FILES:
+        if name not in SNAPSHOT_ARCHIVE_FILES:
             return False
     return True
 
@@ -703,64 +684,3 @@ def _remove_staging_contents(destination: Path) -> None:
             shutil.rmtree(item)
         else:
             item.unlink(missing_ok=True)
-
-
-def _rewrite_snapshot_manifest(snapshot_dir: Path) -> None:
-    """Rewrite a legacy snapshot manifest to reference the new campaign.db.
-
-    Production snapshot manifests use a string list::
-
-        {"files": ["current_state.db", "core_memory.json"]}
-
-    Old archives stored the legacy ten databases in each snapshot. After
-    migration only ``campaign.db`` remains, so every legacy database name is
-    removed and ``campaign.db`` is appended. Missing or malformed manifests are
-    rejected because Undo/Redo depends on an exact file list.
-    """
-    manifest_path = snapshot_dir / "manifest.json"
-    if not manifest_path.is_file():
-        raise SaveArchiveError(
-            f"Legacy snapshot is missing manifest.json: {snapshot_dir}"
-        )
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SaveArchiveError(
-            f"Legacy snapshot manifest is not valid JSON: {snapshot_dir}"
-        ) from exc
-    if not isinstance(manifest, dict):
-        raise SaveArchiveError(
-            f"Legacy snapshot manifest must be an object: {snapshot_dir}"
-        )
-    files = manifest.get("files")
-    if not isinstance(files, list) or not all(
-        isinstance(item, str) for item in files
-    ):
-        raise SaveArchiveError(
-            f"Legacy snapshot manifest files must be a string list: {snapshot_dir}"
-        )
-    # Remove legacy DBs and snapshot settings.json (Phase 3: settings no longer travels with snapshots)
-    rewritten = [
-        name
-        for name in files
-        if name not in _LEGACY_ROOT_DB_FILES and name != "settings.json"
-    ]
-    if (snapshot_dir / "campaign.db").is_file() and "campaign.db" not in rewritten:
-        rewritten.append("campaign.db")
-    # Validate that remaining files are whitelisted for snapshots
-    for name in rewritten:
-        if name not in _SNAPSHOT_EXPORT_FILES:
-            raise SaveArchiveError(
-                f"Legacy snapshot manifest contains unexpected file: {name!r} in {snapshot_dir}"
-            )
-    manifest["files"] = rewritten
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
-        encoding="utf-8",
-    )
-    # Physically clean legacy snapshot contents once the manifest no longer
-    # references them.  This is the single migration path for both archive
-    # staging and runtime Undo/Redo restores.
-    for name in _LEGACY_ROOT_DB_FILES:
-        (snapshot_dir / name).unlink(missing_ok=True)
-    (snapshot_dir / "settings.json").unlink(missing_ok=True)

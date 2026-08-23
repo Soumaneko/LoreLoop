@@ -11,28 +11,12 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from app.core.time import utc_now
+from .snapshots import capture_snapshot, install_snapshot
 from .sqlite import connect_sqlite, ensure_column
 
 
 def _now() -> str:
     return utc_now()
-
-
-# Whitelisted files that travel with Undo/Redo.
-_SNAPSHOT_WHITELIST = {"campaign.db", "core_memory.json", "initialization.json"}
-# Legacy snapshot contents that must be migrated.
-_LEGACY_SNAPSHOT_DB_FILES = {
-    "current_state.db",
-    "continuity.db",
-    "short_term.db",
-    "scene_summaries.db",
-    "confirmed_history.db",
-    "npc_profiles.db",
-    "director_events.db",
-    "director_npcs.db",
-    "director_log.db",
-    "world_settings.db",
-}
 
 
 def ensure_control_database(paths) -> str:
@@ -1252,157 +1236,10 @@ class CampaignHistory:
         return [row["turn_id"]] if row is not None else []
 
     def _capture_snapshot(self, destination: Path) -> None:
-        if destination.exists():
-            shutil.rmtree(destination)
-        destination.mkdir(parents=True)
-        files = []
-        # Whitelisted snapshot files
-        campaign = self.data_dir / "campaign.db"
-        if campaign.is_file():
-            target = destination / "campaign.db"
-            src_conn = sqlite3.connect(str(campaign))
-            dst_conn = sqlite3.connect(str(target))
-            try:
-                src_conn.backup(dst_conn)
-            finally:
-                dst_conn.close()
-                src_conn.close()
-            files.append("campaign.db")
-        for name in ("core_memory.json", "initialization.json"):
-            source = self.data_dir / name
-            if source.is_file():
-                shutil.copy2(source, destination / name)
-                files.append(name)
-        (destination / "manifest.json").write_text(
-            json.dumps({"created_at": _now(), "files": files}, indent=2),
-            encoding="utf-8",
-        )
-
-    def _migrate_snapshot_manifest_if_needed(self, snapshot_dir: Path) -> None:
-        """Migrate old snapshot manifests in place using the shared archive logic."""
-        # If snapshot still contains legacy ten-db files, migrate them to campaign.db first
-        has_legacy = any((snapshot_dir / name).is_file() for name in _LEGACY_SNAPSHOT_DB_FILES)
-        has_campaign = (snapshot_dir / "campaign.db").is_file()
-        if has_legacy:
-            # If snapshot still uses legacy DBs, migrate them to campaign.db first
-            # (has_campaign may be false or true if partially migrated)
-            try:
-                from .campaign_migration import ensure_campaign_database
-                from .paths import CampaignPaths
-
-                ensure_campaign_database(CampaignPaths.from_data_dir(snapshot_dir))
-            except Exception as exc:
-                raise RuntimeError(
-                    f"snapshot campaign migration failed: {snapshot_dir}: {exc}"
-                ) from exc
-        # Delegate manifest rewriting to the single source of truth in save_archive
-        # to keep settings.json/legacy handling consistent. Lazy import avoids cycle.
-        from .save_archive import _rewrite_snapshot_manifest
-        # _rewrite_snapshot_manifest expects a legacy snapshot; it will raise SaveArchiveError
-        # on malformed manifests, which we surface as RuntimeError for fail-closed restore.
-        try:
-            _rewrite_snapshot_manifest(snapshot_dir)
-        except Exception as exc:
-            # If manifest is missing or already current, _rewrite_snapshot_manifest raises;
-            # for runtime restores we treat missing manifest as explicit failure, but
-            # ignore the case where manifest is already clean (no legacy/settings to rewrite).
-            # _rewrite_snapshot_manifest raises only on truly invalid manifests, so propagate.
-            # To keep idempotence, check if manifest exists and is already clean.
-            manifest_path = snapshot_dir / "manifest.json"
-            if not manifest_path.is_file():
-                raise RuntimeError(f"Snapshot manifest missing: {snapshot_dir}") from exc
-            # If manifest exists but _rewrite complained about unexpected file, propagate
-            # Otherwise, if it was a no-op (no legacy/settings), it would not have raised
-            raise
+        capture_snapshot(self.data_dir, destination)
 
     def _restore_snapshot(self, source: Path, *, _allow_minimal: bool = False) -> None:
-        # First migrate old manifest if needed
-        self._migrate_snapshot_manifest_if_needed(source)
-        manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
-        expected = set(manifest["files"])
-        # Validate whitelist; unknown file fails closed
-        for name in expected:
-            if name not in _SNAPSHOT_WHITELIST:
-                raise RuntimeError(f"Snapshot manifest contains unexpected file: {name}")
-        # Stage all expected files first and validate every one before touching
-        # any live file.  A bad snapshot must never delete current JSON/db state.
-        staged: list[tuple[Path, Path, Path]] = []  # (source, dest, tmp)
-        try:
-            for name in expected:
-                snapshot_file = source / name
-                destination = self.data_dir / name
-                if not snapshot_file.exists():
-                    raise RuntimeError(f"Snapshot file missing: {snapshot_file}")
-                tmp = self.data_dir / f".{name}.{uuid.uuid4().hex}.tmp"
-                if snapshot_file.suffix == ".db":
-                    # Copy snapshot db to tmp, validate, fsync
-                    shutil.copy2(snapshot_file, tmp)
-                    try:
-                        from .campaign_migration import validate_campaign_database
-
-                        validate_campaign_database(tmp, allow_minimal=_allow_minimal)
-                    except Exception:
-                        tmp.unlink(missing_ok=True)
-                        raise
-                    # fsync tmp file
-                    try:
-                        with open(tmp, "rb") as h:
-                            os.fsync(h.fileno())
-                    except Exception:
-                        pass
-                else:
-                    # JSON: copy and validate JSON parse
-                    shutil.copy2(snapshot_file, tmp)
-                    try:
-                        json.loads(tmp.read_text(encoding="utf-8"))
-                    except Exception:
-                        tmp.unlink(missing_ok=True)
-                        raise RuntimeError(f"Snapshot JSON invalid: {snapshot_file}")
-                    try:
-                        with open(tmp, "rb") as h:
-                            os.fsync(h.fileno())
-                    except Exception:
-                        pass
-                staged.append((snapshot_file, destination, tmp))
-
-            # All staged files are valid.  Now it is safe to delete current
-            # files that are not in the restored snapshot.
-            for current in self.data_dir.glob("*.db"):
-                if current.name not in expected:
-                    for suffix in ("-wal", "-shm", "-journal"):
-                        Path(f"{current}{suffix}").unlink(missing_ok=True)
-                    current.unlink(missing_ok=True)
-            # For json files, only restore whitelisted; do not touch settings.json or drafts
-            for name in ("core_memory.json", "initialization.json"):
-                current = self.data_dir / name
-                if current.exists() and name not in expected:
-                    current.unlink()
-            # settings.json is deliberately NOT removed/restored
-
-            # Install all staged files atomically (campaign connections must be closed by caller)
-            for _src, dest, tmp in staged:
-                if dest.suffix == ".db":
-                    for suffix in ("-wal", "-shm", "-journal"):
-                        Path(f"{dest}{suffix}").unlink(missing_ok=True)
-                os.replace(tmp, dest)
-            # Best-effort fsync data_dir (reuse campaign_migration helper)
-            try:
-                from .campaign_migration import _fsync_dir
-
-                _fsync_dir(self.data_dir)
-            except Exception:
-                try:
-                    fd = os.open(str(self.data_dir), os.O_DIRECTORY)
-                    try:
-                        os.fsync(fd)
-                    finally:
-                        os.close(fd)
-                except Exception:
-                    pass
-        finally:
-            for _src, _dest, tmp in staged:
-                if tmp.exists():
-                    tmp.unlink(missing_ok=True)
+        install_snapshot(self.data_dir, source, allow_minimal=_allow_minimal)
 
     def _discard_redo_locked(self, conn) -> None:
         rows = conn.execute(
