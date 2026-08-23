@@ -706,3 +706,204 @@ def test_scene_npc_mentions_reject_generic_pronouns(surface):
             basis="same_scene_coreference",
             evidence_fact_ids=["f1"],
         )
+
+
+def test_prompt_staged_director_npcs_rules_and_alignment():
+    prompt = Path("app/prompts/confirmation/scene_fact_extract_v1.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "## StagedDirectorNPCs" in prompt
+    assert "{staged_director_npcs_json}" in prompt
+    assert "导演本轮引入角色对齐" in prompt
+    assert "primary_surface" in prompt
+    assert "身份解析" in prompt
+
+
+def test_scene_fact_extractor_sends_staged_npcs_json():
+    response = {
+        "scene_focus": "主角进入药铺，向孙百草问诊抓药。",
+        "facts": [
+            {"fact": "孙百草在柜台后称量药材，并接待了主角。"},
+        ],
+        "npc_mentions": [
+            {
+                "primary_surface": "孙百草",
+                "presence": "appeared",
+                "alias_relations": [
+                    {
+                        "surface": "老掌柜",
+                        "basis": "temporary_address",
+                        "evidence_fact_ids": ["f1"],
+                        "evidence_paragraph_ids": ["turn_1_p001"],
+                    }
+                ],
+                "evidence_fact_ids": ["f1"],
+                "evidence_paragraph_ids": ["turn_1_p001"],
+            }
+        ],
+    }
+    gateway = _SpyGateway(response)
+
+    staged_npcs = [
+        {
+            "name": "孙百草",
+            "role": "百草堂掌柜",
+            "appearance": "清瘦老者，穿青布长衫",
+            "personality_trait": "严谨和善",
+            "guidance": "主角推门进店时正在柜台后称药。",
+            "source": "spontaneous",
+        }
+    ]
+
+    result = SceneFactExtractor(gateway).extract(
+        SceneFactExtractInput(
+            scene_text="主角推门走进百草堂，柜台后的老掌柜正用小秤称量药材。",
+            current_state=_state(),
+            core_memory=CoreMemory(items=[]),
+            scene_paragraphs=[
+                SceneParagraphInput(
+                    document_id="turn_1_p001",
+                    text="主角推门走进百草堂，柜台后的老掌柜正用小秤称量药材。",
+                )
+            ],
+            staged_npcs=staged_npcs,
+        ),
+        trace_id="trace_test",
+    )
+
+    input_data = gateway.calls[0]["input_data"]
+    assert "staged_director_npcs_json" in input_data
+    parsed_staged = json.loads(input_data["staged_director_npcs_json"])
+    assert parsed_staged[0]["name"] == "孙百草"
+    assert parsed_staged[0]["appearance"] == "清瘦老者，穿青布长衫"
+    assert len(result.npc_mentions) == 1
+    assert result.npc_mentions[0].primary_surface == "孙百草"
+    assert len(result.npc_mentions[0].alias_relations) == 1
+    assert result.npc_mentions[0].alias_relations[0].surface == "老掌柜"
+
+
+def test_extract_staged_npc_materials_extracts_from_materials_only():
+    from app.domain.director.schemas import DirectorStageMaterial, DirectorStageResult
+    from app.graph.confirmation_nodes import _extract_staged_npc_materials
+
+    class MockPending:
+        def __init__(self, materials):
+            self.director_stage = DirectorStageResult(reasoning="引入角色与披露升级", materials=materials)
+
+    materials = [
+        DirectorStageMaterial(
+            kind="npc",
+            resource_id="spontaneous_npc_1",
+            payload={
+                "name": "孙百草",
+                "role": "药铺掌柜",
+                "appearance": "清瘦老者",
+                "personality_trait": "严谨",
+                "source": "spontaneous",
+            },
+            guidance="在柜台后称药。",
+        ),
+        DirectorStageMaterial(
+            kind="npc",
+            resource_id="director_npc_zhou_01",
+            payload={
+                "name": "周行之",
+                "role": "灵材商人",
+                "appearance": "富态商人",
+                "personality_trait": "精明",
+                "source": "director_npc",
+            },
+            guidance="在路边摊位叫卖。",
+        ),
+        DirectorStageMaterial(
+            kind="npc",
+            resource_id="npc_gu_01",
+            payload={
+                "name": "顾晚棠",
+                "role": "同门师姐",
+                "source": "npc_profile",
+                "disclosure_upgrade": True,
+                "new_disclosure_level": "intimate",
+            },
+            guidance="披露深度秘密。",
+        ),
+        DirectorStageMaterial(
+            kind="event",
+            resource_id="event_1",
+            payload={"event_name": "闹市喧哗"},
+            guidance="街上传来喧哗。",
+        ),
+    ]
+
+    pending = MockPending(materials)
+    staged = _extract_staged_npc_materials(pending)
+
+    assert len(staged) == 2
+    assert staged[0]["name"] == "孙百草"
+    assert staged[0]["source"] == "spontaneous"
+    assert staged[1]["name"] == "周行之"
+    assert staged[1]["source"] == "director_npc"
+    # 验证严格排除了 upgrade_disclosure (source == "npc_profile")
+    assert all(item["name"] != "顾晚棠" for item in staged)
+
+
+def test_project_scene_text_with_mixed_staged_npcs_preserves_both():
+    from app.domain.director.schemas import DirectorStageMaterial, DirectorStageResult
+    from app.domain.director_npc.schemas import DirectorNPCDraft
+    from app.graph.confirmation_helpers import project_scene_text_with_staged_director_npc
+
+    class MockPending:
+        def __init__(self, materials):
+            self.director_stage = DirectorStageResult(reasoning="混合引入", materials=materials)
+
+    materials = [
+        DirectorStageMaterial(
+            kind="npc",
+            resource_id="spontaneous_npc_sun_01",
+            payload={
+                "name": "孙百草",
+                "role": "药铺掌柜",
+                "source": "spontaneous",
+            },
+            guidance="在柜台后称药。",
+        ),
+        DirectorStageMaterial(
+            kind="npc",
+            resource_id="director_npc_zhou_01",
+            payload={
+                "name": "周行之",
+                "role": "灵材商人",
+                "source": "director_npc",
+            },
+            guidance="在路边摊叫卖。",
+        ),
+    ]
+
+    confirmed_drafts = [
+        DirectorNPCDraft(
+            draft_id="director_npc_zhou_01",
+            name="周行之",
+            role="灵材商人",
+            appearance="富态商人",
+            personality_trait="精明",
+            core_motivation="逐利",
+            hidden_secret="倒卖禁药",
+            conflict_style="息事宁人",
+            social_style="圆滑",
+            status="introduced",
+            created_turn=1,
+        )
+    ]
+
+    pending = MockPending(materials)
+    annotated = project_scene_text_with_staged_director_npc(
+        "正文开始。",
+        pending=pending,
+        confirmed_director_npc_drafts=confirmed_drafts,
+    )
+
+    assert "孙百草" in annotated
+    assert "周行之" in annotated
+    assert "spontaneous_npc_sun_01" in annotated
+    assert "director_npc_zhou_01" in annotated

@@ -173,11 +173,39 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
     }
 
 
+def _extract_staged_npc_materials(pending) -> list[dict[str, Any]]:
+    stage = getattr(pending, "director_stage", None)
+    if stage is None or not getattr(stage, "materials", None):
+        return []
+    staged: list[dict[str, Any]] = []
+    for mat in stage.materials:
+        if mat.kind != "npc":
+            continue
+        payload = mat.payload or {}
+        source = payload.get("source")
+        if source not in {"director_npc", "spontaneous"}:
+            continue
+        name = payload.get("name")
+        if not name:
+            continue
+        staged.append({
+            "name": name,
+            "role": payload.get("role") or "",
+            "appearance": payload.get("appearance") or "",
+            "personality_trait": payload.get("personality_trait") or "",
+            "guidance": mat.guidance or "",
+            "source": source,
+        })
+    return staged
+
+
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
     cache = ConfirmationCache(state["cache"])
     core_memory = state["core_memory"]
+    pending = state.get("pending") or getattr(pipeline_input, "pending", None)
+    staged_npcs = _extract_staged_npc_materials(pending)
     scene_paragraphs = [
         SceneParagraphInput(
             document_id=document.document_id,
@@ -203,6 +231,7 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
                 current_state=state["state_before_update"],
                 core_memory=core_memory,
                 scene_paragraphs=scene_paragraphs,
+                staged_npcs=staged_npcs,
             ),
             trace_id=trace_id,
         )

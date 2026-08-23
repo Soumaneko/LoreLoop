@@ -162,15 +162,18 @@ def project_scene_text_with_staged_director_npc(
         item
         for item in (stage.materials if stage is not None else [])
         if item.kind == "npc"
-        and item.payload.get("source") == "director_npc"
+        and item.payload.get("source") in ("director_npc", "spontaneous")
     ]
     if not materials:
         return scene_text
 
-    drafts = confirmed_director_npc_drafts or []
+    draft_by_id = {
+        draft.draft_id: draft
+        for draft in (confirmed_director_npc_drafts or [])
+    }
     entries: list[str] = []
-    for index, material in enumerate(materials):
-        draft = drafts[index] if index < len(drafts) else None
+    for material in materials:
+        draft = draft_by_id.get(material.resource_id)
         name = (
             draft.name
             if draft is not None
@@ -178,7 +181,7 @@ def project_scene_text_with_staged_director_npc(
         )
         if not name:
             continue
-        role = draft.role if draft is not None else None
+        role = draft.role if draft is not None else material.payload.get("role")
         role_note = f"（{role}）" if role else ""
         selected_id = (
             draft.draft_id

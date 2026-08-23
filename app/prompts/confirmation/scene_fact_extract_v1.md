@@ -47,6 +47,11 @@
 13. alias_relations.basis：explicit_fixed_alias＝明确固定别名（“人称沈二爷”）；temporary_address＝临时头衔或称谓（“这位少侠”）；same_scene_coreference＝两个有区分度的称呼在同场明确指向同一人。普通代词本身不输出。只提取正文有依据的，不猜测；explicit_fixed_alias 必须带证据。
 14. 不要把玩家写成 npc_mention。
 15. presence 只看本轮正文证据：实际说话、行动、直接可观察的状态、与在场者直接互动才算 appeared；被其他人谈论、回忆、转述或远程引用的为 mentioned_only。不要仅凭名字出现在正文或转述内容推断 appeared。
+16. 导演本轮引入角色对齐：
+    - 该区块列出了本轮由导演系统刚刚引入的角色。当正文中出现使用外貌、职业、位置或临时称呼描写的人物，且其特征/行为与本轮引入角色高度一致时，应当准确识别出正文中的该人物就是该引入角色：
+      - 在 `npc_mentions` 中，`primary_surface` 直接使用该角色的标准姓名，并将正文出现的代称记录在 `alias_relations` 中；
+      - 在 `facts` 中，直接以该角色标准姓名记录其确凿事实；
+      - 从而确保下游身份解析与 NPC/State 更新能够精准对接该角色档案。
 
 
 # 禁止事项
@@ -110,10 +115,16 @@
 {core_memory_json}
 ```
 
-## CurrentState（确认前状态）
+## CurrentState
 
 ```json
 {current_state_json}
+```
+
+## StagedDirectorNPCs
+
+```json
+{staged_director_npcs_json}
 ```
 
 
@@ -125,7 +136,7 @@
 {scene_text}
 ```
 
-## SceneParagraphs（本轮正文段落，带 document_id）
+## SceneParagraphs
 
 ```json
 {scene_paragraphs_json}

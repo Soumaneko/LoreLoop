@@ -301,3 +301,4 @@ class SceneFactExtractInput(BaseModel):
     core_memory: CoreMemory
     current_state: CurrentState
     scene_paragraphs: list[SceneParagraphInput] = Field(default_factory=list)
+    staged_npcs: list[dict[str, Any]] = Field(default_factory=list)

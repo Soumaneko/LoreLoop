@@ -142,6 +142,11 @@ class SceneFactExtractor:
                 raise ValueError("; ".join(feedback))
 
         schema = schema_json(SceneFactDraftSet)
+        staged_director_npcs_json = (
+            json.dumps(input_data.staged_npcs, ensure_ascii=False, indent=2)
+            if input_data.staged_npcs
+            else "[]"
+        )
         try:
             result = cast(
                 SceneFactDraftSetLoose,
@@ -150,6 +155,7 @@ class SceneFactExtractor:
                     input_data={
                         "core_memory_json": input_data.core_memory.model_dump_json(indent=2),
                         "current_state_json": project_current_state(input_data.current_state),
+                        "staged_director_npcs_json": staged_director_npcs_json,
                         "scene_text": input_data.scene_text,
                         "scene_paragraphs_json": _scene_paragraphs_json(
                             input_data.scene_paragraphs
