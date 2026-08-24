@@ -209,9 +209,8 @@ def test_spontaneous_npc_full_multiround_lifecycle(monkeypatch):
     # 2. 验证角色被批次事实更新器正确命中为 resolved 角色并增加命中计数
     assert sun_profile.name_hit_count == 1
 
-    # 3. 验证没有产生多余的 new_npc_candidates 壳
-    assert len(result_r1["new_npc_profiles"]) == 0
-    assert result_r1["npc_candidate_context"] == {}
+    # 3. 验证本轮未产生未解析的新 NPC 候选
+    assert result_r1["events"][0]["data"]["new_npc_candidates"] == []
 
     # 4. 验证草稿库零污染
     assert len(director_store.list_all()) == 0

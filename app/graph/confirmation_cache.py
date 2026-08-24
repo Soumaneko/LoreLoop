@@ -10,10 +10,9 @@ from app.domain.current_state.schemas import CurrentState
 from app.domain.director import DirectorDecisionBatch, DirectorSkillExecutionBatch
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.npc_profile.workflows import NPCConfirmedTurnResult
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
-
-from .npc_result import NpcTurnNodeResult
 
 T = TypeVar("T")
 
@@ -106,7 +105,7 @@ class ConfirmationCacheData(TypedDict, total=False):
     director_decision: DirectorDecisionBatch
     director_executions: DirectorSkillExecutionBatch
     director_event_reviews: list[dict[str, Any]]
-    npc_turn_result: NpcTurnNodeResult
+    npc_turn_result: NPCConfirmedTurnResult
     existing_npc_profiles: list[NPCProfile]
     director_npc_profile_ids: list[str]
     confirmed_director_npc_drafts: list[DirectorNPCDraft]

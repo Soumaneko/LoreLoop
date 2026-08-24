@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
 from app.domain.npc_profile.schemas import NPCProfile
+from app.domain.npc_profile.workflows import NPCConfirmedTurnResult
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.director.confirmation import run_confirmation_director_agent
 from app.graph import confirmation_nodes
@@ -258,7 +259,7 @@ def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
     }
 
 
-def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
+def test_npc_update_node_projects_unmatched_candidate_to_debug_event(
     monkeypatch,
 ):
     from app.domain.npc_profile.identity_resolver import NpcCandidate
@@ -270,27 +271,20 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
     )
 
     def _apply(**kwargs):
-        return SimpleNamespace(
-            saved_ids=[],
-            new_npc_candidates=[candidate],
-            warnings=[],
+        return NPCConfirmedTurnResult(
+            process_result=SimpleNamespace(
+                saved_ids=[],
+                new_npc_candidates=[candidate],
+                warnings=[],
+            ),
+            updated_npc_profile_ids=[],
         )
 
-    monkeypatch.setattr(confirmation_nodes, "apply_npc_batch_update", _apply)
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "prune_npc_transient_aliases_from_current_state",
-        lambda **kwargs: [],
-    )
+    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
         lambda _state, name: open_npc_profile_store(":memory:"),
-    )
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_director_draft_ids",
-        lambda _state: set(),
     )
     state = {
         "write_db": True,
@@ -311,14 +305,10 @@ def test_npc_update_node_keeps_new_profiles_temporary_when_director_runs(
     result = confirmation_nodes.npc_profile_update_node(state)
 
     assert result["updated_npc_profile_ids"] == []
-    assert result["new_npc_profiles"] == []
-    assert len(result["npc_candidate_context"]) == 1
-    [cand_id] = result["npc_candidate_context"]
-    assert cand_id.startswith("cand_")
-    context = result["npc_candidate_context"][cand_id]
-    assert context.primary_surface == "练气巅峰采药女"
-    assert context.alias_surfaces == []
-    assert context.presence == "appeared"
+    assert result["events"][0]["data"]["new_npc_candidates"] == [{
+        "name": "练气巅峰采药女",
+        "alias_surfaces": [],
+    }]
 
 
 def test_confirmation_observation_two_tier_npcs(tmp_path):

@@ -1,12 +1,19 @@
+from dataclasses import dataclass
+
 from app.core.text import normalize_compact_key, normalize_key
+from app.core.time import utc_now
 from app.domain.action.schemas import Anchor
-from app.domain.confirmed_history import HistoryDocument
+from app.domain.confirmed_history import HistoryDocument, build_turn_documents
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.creative_brief import (
     CreativeBrief,
     draw_desire_pattern,
 )
 from app.domain.npc_profile.backfiller import NPCProfileBackfiller
+from app.domain.npc_profile.batch_updater import (
+    NPCBatchProcessResult,
+    apply_npc_batch_update,
+)
 from app.domain.npc_profile.director_promotion import (
     npc_profile_from_spontaneous_material,
 )
@@ -14,6 +21,12 @@ from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_facts import SceneFactSet
+
+
+@dataclass(frozen=True)
+class NPCConfirmedTurnResult:
+    process_result: NPCBatchProcessResult
+    updated_npc_profile_ids: list[str]
 
 
 def _npc_mentioned_in_scene_facts(name: str, scene_facts: SceneFactSet | None) -> bool:
@@ -134,6 +147,67 @@ def prune_npc_transient_aliases_from_current_state(
         if aliases_pruned:
             saved_ids.append(npc_store.upsert(profile))
     return saved_ids
+
+
+def apply_confirmed_npc_turn(
+    *,
+    pending,
+    npc_store: NPCProfileStore,
+    gateway,
+    core_memory: CoreMemory,
+    scene_facts: SceneFactSet,
+    current_state: CurrentState,
+    user_input: str,
+    scene_text: str,
+    turn_index: int,
+    scene_id: str,
+    trace_id: str | None = None,
+) -> NPCConfirmedTurnResult:
+    """Apply the complete NPC workflow for one confirmed turn."""
+    admitted_at = utc_now()
+    backfilled_ids = auto_backfill_spontaneous_npc_profiles(
+        pending=pending,
+        npc_store=npc_store,
+        gateway=gateway,
+        core_memory=core_memory,
+        turn_index=turn_index,
+        scene_id=scene_id,
+        scene_facts=scene_facts,
+        trace_id=trace_id,
+    )
+    evidence_documents = {
+        document.document_id: document
+        for document in build_turn_documents(
+            scene_id=scene_id,
+            turn_index=turn_index,
+            user_input=user_input,
+            scene_text=scene_text,
+        )
+        if document.source_type == "scene_paragraph"
+    }
+    process_result = apply_npc_batch_update(
+        npc_store=npc_store,
+        gateway=gateway,
+        scene_facts=scene_facts,
+        evidence_documents=evidence_documents,
+        current_state=current_state,
+        turn_index=turn_index,
+        scene_id=scene_id,
+        admitted_at=admitted_at,
+        trace_id=trace_id,
+    )
+    pruned_ids = prune_npc_transient_aliases_from_current_state(
+        npc_store=npc_store,
+        turn_index=turn_index,
+    )
+    return NPCConfirmedTurnResult(
+        process_result=process_result,
+        updated_npc_profile_ids=list(dict.fromkeys([
+            *backfilled_ids,
+            *process_result.saved_ids,
+            *pruned_ids,
+        ])),
+    )
 
 
 def gather_npc_profiles_from_state_and_anchors(

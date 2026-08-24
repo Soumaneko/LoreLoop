@@ -10,6 +10,7 @@ from app.domain.continuity import ContinuityProjection
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
+from app.domain.npc_profile.workflows import NPCConfirmedTurnResult
 from app.domain.scene_facts.schemas import SceneFact, SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.summarizer import SceneSummaryWarning
@@ -1121,99 +1122,41 @@ def _fake_process(saved_ids=("npc_fresh",), candidates=(), warnings=()):
     )
 
 
-def _patch_npc_pipeline(monkeypatch):
+def _confirmed_npc_result(
+    *,
+    updated_ids=("npc_fresh",),
+    candidates=(),
+    warnings=(),
+):
+    return NPCConfirmedTurnResult(
+        process_result=_fake_process(candidates=candidates, warnings=warnings),
+        updated_npc_profile_ids=list(updated_ids),
+    )
+
+
+def _patch_npc_store(monkeypatch):
     monkeypatch.setattr(
         confirmation_nodes,
         "_store_factory",
         lambda _state, _name: _FakeStore(),
     )
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_director_draft_ids",
-        lambda _state: set(),
-    )
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_candidate_shells",
-        lambda candidates, **kwargs: ([], {}),
-    )
-
-
-def test_candidate_npc_id_is_deterministic_and_conflict_free():
-    from app.domain.npc_profile.identity_resolver import NpcCandidate
-
-    first = confirmation_nodes._candidate_npc_id(
-        scene_id="scene_001",
-        turn_index=3,
-        primary_surface="采药女",
-        occupied_ids=set(),
-    )
-    second = confirmation_nodes._candidate_npc_id(
-        scene_id="scene_001",
-        turn_index=3,
-        primary_surface="采药女",
-        occupied_ids=set(),
-    )
-    assert first == second
-    assert first.startswith("cand_")
-
-    shifted = confirmation_nodes._candidate_npc_id(
-        scene_id="scene_001",
-        turn_index=4,
-        primary_surface="采药女",
-        occupied_ids=set(),
-    )
-    assert shifted != first
-
-    avoided = confirmation_nodes._candidate_npc_id(
-        scene_id="scene_001",
-        turn_index=3,
-        primary_surface="采药女",
-        occupied_ids={first},
-    )
-    assert avoided != first
-
-    shells, context = confirmation_nodes._candidate_shells(
-        [NpcCandidate(
-            primary_surface="采药女",
-            presence="appeared",
-            evidence_fact_ids=("f1",),
-        )],
-        scene_id="scene_001",
-        turn_index=3,
-        admitted_at="2026-08-12T00:00:00Z",
-        existing_profile_ids={first},
-        director_draft_ids=set(),
-    )
-    assert shells == []
-    assert context[avoided].primary_surface == "采药女"
-    assert context[avoided].presence == "appeared"
-    assert context[avoided].alias_surfaces == []
-    assert context[avoided].evidence_fact_ids == ["f1"]
 
 
 def test_npc_profile_update_node_recomputes_when_slot_missing(monkeypatch):
     state = _npc_node_state()
-    _patch_npc_pipeline(monkeypatch)
+    _patch_npc_store(monkeypatch)
     update_calls = []
 
     def _apply(**kwargs):
         update_calls.append("update")
-        return _fake_process()
+        return _confirmed_npc_result(updated_ids=("npc_fresh", "npc_pruned"))
 
-    monkeypatch.setattr(confirmation_nodes, "apply_npc_batch_update", _apply)
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "prune_npc_transient_aliases_from_current_state",
-        lambda **kwargs: ["npc_pruned"],
-    )
+    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
 
     result = confirmation_nodes.npc_profile_update_node(state)
 
     assert update_calls == ["update"]
     assert result["updated_npc_profile_ids"] == ["npc_fresh", "npc_pruned"]
-    assert result["new_npc_profiles"] == []
-    assert result["npc_candidate_context"] == {}
     assert state["cache"]["npc_turn_result"].updated_npc_profile_ids == [
         "npc_fresh",
         "npc_pruned",
@@ -1232,16 +1175,11 @@ def test_npc_profile_update_node_emits_warning_summary_event(monkeypatch):
         )
     ]
     state = _npc_node_state()
-    _patch_npc_pipeline(monkeypatch)
+    _patch_npc_store(monkeypatch)
     monkeypatch.setattr(
         confirmation_nodes,
-        "apply_npc_batch_update",
-        lambda **kwargs: _fake_process(warnings=warnings),
-    )
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "prune_npc_transient_aliases_from_current_state",
-        lambda **kwargs: [],
+        "apply_confirmed_npc_turn",
+        lambda **kwargs: _confirmed_npc_result(warnings=warnings),
     )
 
     result = confirmation_nodes.npc_profile_update_node(state)
@@ -1268,14 +1206,7 @@ def test_npc_profile_update_node_emits_warning_summary_event(monkeypatch):
 
 
 def test_npc_profile_update_node_reuses_cached_slot(monkeypatch):
-    from app.graph.npc_result import NpcTurnNodeResult
-
-    node_result = NpcTurnNodeResult(
-        process_result=_fake_process(),
-        updated_npc_profile_ids=["cached"],
-        new_npc_profiles=[],
-        candidate_context={},
-    )
+    node_result = _confirmed_npc_result(updated_ids=("cached",))
     state = _npc_node_state(cache={"key": "正文", "npc_turn_result": node_result})
     update_calls = []
 
@@ -1283,7 +1214,7 @@ def test_npc_profile_update_node_reuses_cached_slot(monkeypatch):
         update_calls.append("update")
         return _fake_process()
 
-    monkeypatch.setattr(confirmation_nodes, "apply_npc_batch_update", _apply)
+    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
 
     result = confirmation_nodes.npc_profile_update_node(state)
 
@@ -1295,7 +1226,6 @@ def test_npc_profile_update_node_reuses_cached_slot(monkeypatch):
 
 def test_npc_profile_update_node_cache_hit_skips_diagnostics(monkeypatch):
     from app.domain.npc_profile.changes import NPCChangeAdmissionWarning
-    from app.graph.npc_result import NpcTurnNodeResult
 
     logged = []
 
@@ -1303,18 +1233,16 @@ def test_npc_profile_update_node_cache_hit_skips_diagnostics(monkeypatch):
         def warning(self, **fields):
             logged.append(fields)
 
-    node_result = NpcTurnNodeResult(
-        process_result=_fake_process(warnings=[
+    node_result = _confirmed_npc_result(
+        updated_ids=("cached",),
+        warnings=[
             NPCChangeAdmissionWarning(
                 npc_name="裴玉奴",
                 field_name="faction",
                 code="long_term_field_evidence_missing",
                 message="dropped",
             )
-        ]),
-        updated_npc_profile_ids=["cached"],
-        new_npc_profiles=[],
-        candidate_context={},
+        ],
     )
     state = _npc_node_state(
         cache={"key": "正文", "npc_turn_result": node_result},
@@ -1324,7 +1252,7 @@ def test_npc_profile_update_node_cache_hit_skips_diagnostics(monkeypatch):
     def _apply(**kwargs):
         raise AssertionError("factory must not run on a cache hit")
 
-    monkeypatch.setattr(confirmation_nodes, "apply_npc_batch_update", _apply)
+    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
 
     result = confirmation_nodes.npc_profile_update_node(state)
 

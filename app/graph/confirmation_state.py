@@ -19,7 +19,6 @@ from app.runtime.session import PendingOpening, PendingTurn
 from app.runtime.services import RuntimeServices
 
 from .confirmation_cache import ConfirmationCacheData
-from .npc_result import NpcCandidateContext
 
 
 class ConfirmationEvent(TypedDict, total=False):
@@ -82,8 +81,6 @@ class ConfirmationState(TypedDict, total=False):
     active_continuity_items: list[ContinuityItem]
     continuity_projection: ContinuityProjection
     updated_npc_profile_ids: list[str]
-    new_npc_profiles: list[NPCProfile]
-    npc_candidate_context: dict[str, NpcCandidateContext]
     npc_warnings: list[dict[str, Any]]
     director_decision: DirectorDecisionBatch
     director_executions: DirectorSkillExecutionBatch

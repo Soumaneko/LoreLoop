@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 
 from app.core.diagnostics import diagnostics_from_state as _diagnostics
@@ -8,8 +7,6 @@ from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
 )
-from app.core.text import normalize_compact_key
-from app.core.time import utc_now
 from app.domain.action_preview.agent import ActionPreviewAgent
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.continuity import ContinuityProjector
@@ -22,12 +19,8 @@ from app.domain.director_event.workflows import (
     review_engaged_events_workflow,
     review_hidden_events_workflow,
 )
-from app.domain.npc_profile.batch_updater import apply_npc_batch_update
-from app.domain.npc_profile.identity_resolver import NpcCandidate
-from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.workflows import (
-    auto_backfill_spontaneous_npc_profiles,
-    prune_npc_transient_aliases_from_current_state,
+    apply_confirmed_npc_turn,
 )
 from app.domain.scene_facts import (
     SceneFactExtractInput,
@@ -40,60 +33,8 @@ from app.domain.world_setting.schemas import setting_appears_in_text
 from app.runtime.serialization import model_data
 
 from .confirmation_cache import ConfirmationCache
-from .confirmation_helpers import merge_unique_ids
 from .confirmation_state import ConfirmationState
-from .npc_result import NpcCandidateContext, NpcTurnNodeResult
 from app.domain.director.confirmation import DirectorConfirmationExecutor
-
-
-
-def _candidate_npc_id(
-    *,
-    scene_id: str,
-    turn_index: int,
-    primary_surface: str,
-    occupied_ids: set[str],
-) -> str:
-    """候选正式 id：scene_id + turn_index + 规范化主称呼的稳定 hash。
-
-    enrich 后该 id 会成为正式档案 id（非 ``draft:`` 占位）；冲突时扩展 hash 输入。
-    """
-    base = f"{scene_id}:{turn_index}:{normalize_compact_key(primary_surface)}"
-    npc_id = f"cand_{hashlib.sha256(base.encode('utf-8')).hexdigest()[:16]}"
-    while npc_id in occupied_ids:
-        npc_id = f"cand_{hashlib.sha256(f'{base}:{npc_id}'.encode('utf-8')).hexdigest()[:16]}"
-    return npc_id
-
-
-def _candidate_shells(
-    candidates: list[NpcCandidate],
-    *,
-    scene_id: str,
-    turn_index: int,
-    admitted_at: str,
-    existing_profile_ids: set[str],
-    director_draft_ids: set[str],
-) -> tuple[list[NPCProfile], dict[str, NpcCandidateContext]]:
-    occupied = set(existing_profile_ids) | set(director_draft_ids)
-    context: dict[str, NpcCandidateContext] = {}
-    for candidate in candidates:
-        npc_id = _candidate_npc_id(
-            scene_id=scene_id,
-            turn_index=turn_index,
-            primary_surface=candidate.primary_surface,
-            occupied_ids=occupied,
-        )
-        occupied.add(npc_id)
-        context[npc_id] = NpcCandidateContext(
-            primary_surface=candidate.primary_surface,
-            presence=candidate.presence,
-            alias_surfaces=[
-                relation.surface for relation in candidate.alias_relations
-            ],
-            evidence_fact_ids=list(candidate.evidence_fact_ids),
-            evidence_paragraph_ids=list(candidate.evidence_paragraph_ids),
-        )
-    return [], context
 
 
 def _gateway_for(state: ConfirmationState):
@@ -502,11 +443,7 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
 def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     cache = ConfirmationCache(state["cache"])
     if not state.get("write_db", True):
-        return {
-            "updated_npc_profile_ids": [],
-            "new_npc_profiles": [],
-            "npc_candidate_context": {},
-        }
+        return {"updated_npc_profile_ids": []}
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
     computed = False
@@ -515,70 +452,23 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
         nonlocal computed
         computed = True
         with _store_factory(state, "npc_profile") as npc_store:
-            gateway = _gateway_for(state)
-            admitted_at = utc_now()
-            pending = state.get("pending") or getattr(pipeline_input, "pending", None)
-
-            # 1. 自动为即兴轻量 NPC 进行 Backfill 并直接持久化
-            spontaneous_backfilled_ids = auto_backfill_spontaneous_npc_profiles(
+            pending = state.get("pending") or getattr(
+                pipeline_input,
+                "pending",
+                None,
+            )
+            return apply_confirmed_npc_turn(
                 pending=pending,
                 npc_store=npc_store,
-                gateway=gateway,
+                gateway=_gateway_for(state),
                 core_memory=state["core_memory"],
-                turn_index=pipeline_input.turn_index,
-                scene_id=state["updated_state"].scene.scene_id,
-                scene_facts=state.get("scene_facts"),
-                trace_id=trace_id,
-            )
-
-            # 2. 正常运行批次事实与别名更新（已有档案与刚刚 backfilled 的档案）
-            evidence_documents = {
-                document.document_id: document
-                for document in build_turn_documents(
-                    scene_id=state["updated_state"].scene.scene_id,
-                    turn_index=pipeline_input.turn_index,
-                    user_input=pipeline_input.user_input,
-                    scene_text=state["effective_scene_text"],
-                )
-                if document.source_type == "scene_paragraph"
-            }
-            result = apply_npc_batch_update(
-                npc_store=npc_store,
-                gateway=gateway,
                 scene_facts=state["scene_facts"],
-                evidence_documents=evidence_documents,
                 current_state=state["updated_state"],
+                user_input=pipeline_input.user_input,
+                scene_text=state["effective_scene_text"],
                 turn_index=pipeline_input.turn_index,
                 scene_id=state["updated_state"].scene.scene_id,
-                admitted_at=admitted_at,
                 trace_id=trace_id,
-            )
-            alias_pruned_ids = prune_npc_transient_aliases_from_current_state(
-                npc_store=npc_store,
-                turn_index=pipeline_input.turn_index,
-            )
-            shells, context = _candidate_shells(
-                result.new_npc_candidates,
-                scene_id=state["updated_state"].scene.scene_id,
-                turn_index=pipeline_input.turn_index,
-                admitted_at=admitted_at,
-                existing_profile_ids={
-                    profile.npc_id
-                    for profile in state.get("existing_npc_profiles", [])
-                },
-                director_draft_ids=_director_draft_ids(state),
-            )
-            return NpcTurnNodeResult(
-                process_result=result,
-                updated_npc_profile_ids=merge_unique_ids(
-                    [
-                        *spontaneous_backfilled_ids,
-                        *result.saved_ids,
-                        *alias_pruned_ids,
-                    ]
-                ),
-                new_npc_profiles=shells,
-                candidate_context=context,
             )
 
     node_result = cache.compute_if_missing("npc_turn_result", compute_npc_update)
@@ -615,12 +505,14 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 "updated_npc_profile_ids": node_result.updated_npc_profile_ids,
                 "new_npc_candidates": [
                     {
-                        "npc_id": npc_id,
-                        "name": context.primary_surface,
-                        "alias_surfaces": list(context.alias_surfaces),
+                        "name": candidate.primary_surface,
+                        "alias_surfaces": [
+                            relation.surface
+                            for relation in candidate.alias_relations
+                        ],
                     }
-                    for npc_id, context in sorted(
-                        node_result.candidate_context.items()
+                    for candidate in (
+                        node_result.process_result.new_npc_candidates
                     )
                 ],
                 "warnings": warning_summary,
@@ -628,31 +520,8 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
         }]
     return {
         "updated_npc_profile_ids": node_result.updated_npc_profile_ids,
-        "new_npc_profiles": node_result.new_npc_profiles,
-        "npc_candidate_context": node_result.candidate_context,
         "npc_warnings": warning_summary,
         "events": update_events,
-    }
-
-
-def _director_draft_ids(state: ConfirmationState) -> set[str]:
-    with _store_factory(state, "director_npc") as director_npc_store:
-        return {draft.draft_id for draft in director_npc_store.list_all()}
-
-
-def _candidate_context_plain(
-    context: dict[str, NpcCandidateContext],
-) -> dict[str, dict]:
-    """把图侧候选上下文转成纯 dict，避免 domain 依赖 graph 类型。"""
-    return {
-        npc_id: {
-            "primary_surface": candidate.primary_surface,
-            "presence": candidate.presence,
-            "alias_surfaces": list(candidate.alias_surfaces),
-            "evidence_fact_ids": list(candidate.evidence_fact_ids),
-            "evidence_paragraph_ids": list(candidate.evidence_paragraph_ids),
-        }
-        for npc_id, candidate in context.items()
     }
 
 

@@ -1,11 +1,13 @@
 import json
 import sqlite3
+from types import SimpleNamespace
 from typing import Any
 
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.creative_brief import draw_desire_pattern
 from app.domain.director.schemas import DirectorStageMaterial, DirectorStageResult
 from app.domain.director_npc.store import DirectorNPCStore
+from app.domain.npc_profile import workflows as npc_workflows
 from app.domain.npc_profile.director_promotion import npc_profile_from_spontaneous_material
 from app.domain.npc_profile.schemas import KnownAbility, NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
@@ -47,6 +49,62 @@ def test_draw_desire_pattern_returns_valid_string():
     pattern = draw_desire_pattern()
     assert isinstance(pattern, str)
     assert len(pattern) > 0
+
+
+def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
+    calls = []
+    process_result = SimpleNamespace(
+        saved_ids=["npc_batch", "npc_shared"],
+        new_npc_candidates=[],
+        warnings=[],
+    )
+
+    def _backfill(**kwargs):
+        calls.append("backfill")
+        return ["npc_backfill", "npc_shared"]
+
+    def _batch(**kwargs):
+        calls.append("batch")
+        return process_result
+
+    def _prune(**kwargs):
+        calls.append("prune")
+        return ["npc_pruned", "npc_batch"]
+
+    monkeypatch.setattr(
+        npc_workflows,
+        "auto_backfill_spontaneous_npc_profiles",
+        _backfill,
+    )
+    monkeypatch.setattr(npc_workflows, "apply_npc_batch_update", _batch)
+    monkeypatch.setattr(
+        npc_workflows,
+        "prune_npc_transient_aliases_from_current_state",
+        _prune,
+    )
+
+    result = npc_workflows.apply_confirmed_npc_turn(
+        pending=object(),
+        npc_store=object(),
+        gateway=object(),
+        core_memory=CoreMemory(items=[]),
+        scene_facts=SceneFactSet(scene_focus="本轮场景。"),
+        current_state=object(),
+        user_input="前进。",
+        scene_text="主角走进客栈。",
+        turn_index=2,
+        scene_id="scene_002",
+        trace_id="trace-2",
+    )
+
+    assert calls == ["backfill", "batch", "prune"]
+    assert result.process_result is process_result
+    assert result.updated_npc_profile_ids == [
+        "npc_backfill",
+        "npc_shared",
+        "npc_batch",
+        "npc_pruned",
+    ]
 
 
 def test_auto_backfill_skips_when_npc_never_appeared_in_scene_facts():
