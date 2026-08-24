@@ -70,10 +70,11 @@ def test_state_update_warning_is_emitted_cached_and_diagnosed(
     monkeypatch.setattr(confirmation_nodes, "_gateway_for", lambda _state: object())
     diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
     state = {
-        "pipeline_input": object(),
+        "pipeline_input": SimpleNamespace(turn_index=1, user_input="推门而入"),
         "trace_id": "trace-1",
         "cache": {},
         "state_before_update": current_state,
+        "effective_scene_text": "主角走入门内。",
         "scene_facts_json": "{}",
         "core_memory": CoreMemory(items=[]),
         "existing_npc_profiles": [],
@@ -1021,10 +1022,17 @@ def test_action_preview_node_emits_warning(monkeypatch, tmp_path):
 
 def _state_update_node_state(*, cache):
     return {
-        "pipeline_input": SimpleNamespace(turn_index=1),
+        "pipeline_input": SimpleNamespace(
+            turn_index=1,
+            user_input="主角离开酒馆前往北门。",
+        ),
         "trace_id": "trace-1",
         "cache": cache,
-        "state_before_update": SimpleNamespace(),
+        "state_before_update": CurrentState(
+            scene=SceneState(scene_id="scene-1", location="酒馆"),
+            player=PlayerState(name="主角"),
+        ),
+        "effective_scene_text": "第一段。\n\n第二段。",
         "scene_facts_json": "{}",
         "core_memory": CoreMemory(items=[]),
         "existing_npc_profiles": [],
@@ -1088,6 +1096,32 @@ def test_state_update_node_reuses_complete_triple(monkeypatch):
     assert update_calls == []
     assert result["updated_state"] == "cached-state"
     assert result["state_change_set"].decision == "cached set"
+
+
+def test_state_update_node_always_passes_paragraph_texts(monkeypatch):
+    state = _state_update_node_state(cache={})
+    state["scene_facts_json"] = '{"facts": [{"fact_id": "f1", "content": "x"}]}'
+    update_kwargs = []
+
+    class _Updater:
+        def __init__(self, *_args, **_kwargs):
+            self.last_change_set = StateChangeSet(decision="fresh set")
+            self.last_warnings = []
+
+        def update(self, *_args, **kwargs):
+            update_kwargs.append(kwargs)
+            return "fresh-state"
+
+    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _Updater)
+
+    confirmation_nodes.state_update_node(state)
+
+    assert len(update_kwargs) == 1
+    paragraph_texts = update_kwargs[0]["paragraph_texts"]
+    assert paragraph_texts == {
+        "turn_1_p001": "第一段。",
+        "turn_1_p002": "第二段。",
+    }
 
 
 def _npc_node_state(**overrides):

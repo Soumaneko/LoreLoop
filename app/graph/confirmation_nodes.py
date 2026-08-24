@@ -218,19 +218,16 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
             if profile.name
             and (profile.aliases or profile.transient_aliases)
         }
-        paragraph_texts: dict[str, str] = {}
-        scene_facts = state.get("scene_facts")
-        if scene_facts is not None and not scene_facts.facts:
-            paragraph_texts = {
-                document.document_id: document.text
-                for document in build_turn_documents(
-                    scene_id=state["state_before_update"].scene.scene_id,
-                    turn_index=pipeline_input.turn_index,
-                    user_input=pipeline_input.user_input,
-                    scene_text=state["effective_scene_text"],
-                )
-                if document.source_type == "scene_paragraph"
-            }
+        paragraph_texts = {
+            document.document_id: document.text
+            for document in build_turn_documents(
+                scene_id=state["state_before_update"].scene.scene_id,
+                turn_index=pipeline_input.turn_index,
+                user_input=pipeline_input.user_input,
+                scene_text=state["effective_scene_text"],
+            )
+            if document.source_type == "scene_paragraph"
+        }
         updated_state = updater.update(
             state["state_before_update"],
             state["scene_facts_json"],

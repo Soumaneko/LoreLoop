@@ -1,0 +1,514 @@
+{
+  "timestamp": "2026-08-24 15:06:53",
+  "total_cases": 18,
+  "passed_cases": 11,
+  "total_accuracy": 0.6111,
+  "location_accuracy": 0.9444,
+  "clock_accuracy": 0.8333,
+  "participants_accuracy": 0.8889,
+  "money_accuracy": 1.0,
+  "inventory_accuracy": 0.9444,
+  "cases": [
+    {
+      "case_id": "case_1_stay_silent_same_location",
+      "name": "同地点静默保持（含言语探讨）",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "风息酒馆",
+      "expected_location": "风息酒馆",
+      "actual_clock": "Day 1 下午",
+      "expected_clock": "Day 1 下午",
+      "actual_participants": [
+        "托马斯",
+        "艾琳"
+      ],
+      "expected_participants": [
+        "托马斯",
+        "艾琳"
+      ],
+      "actual_money": 30,
+      "expected_money": 30,
+      "actual_inventory": {
+        "铁剑": 1
+      },
+      "expected_inventory": {
+        "铁剑": 1
+      },
+      "operations_count": 0,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "本轮 Scene Facts 与正文段落仅确认三人仍在风息酒馆等待雨停，托马斯提出明日前往东郊遗迹的计划。莱尔仅微微点头未明确表态，地点、参与者、时间、资源均未发生实际变化，计划中的行动不构成状态变更，因此无需输出任何操作。"
+    },
+    {
+      "case_id": "case_2_relocation_unmentioned_eviction",
+      "name": "换地未随行剔除（长途穿行）",
+      "passed": false,
+      "location_matched": true,
+      "clock_matched": false,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "北门哨塔",
+      "expected_location": "北门哨塔",
+      "actual_clock": "Day 1 黄昏",
+      "expected_clock": "Day 1 下午",
+      "actual_participants": [],
+      "expected_participants": [],
+      "actual_money": 30,
+      "expected_money": 30,
+      "actual_inventory": {
+        "铁剑": 1
+      },
+      "expected_inventory": {
+        "铁剑": 1
+      },
+      "operations_count": 4,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "莱尔独自离开酒馆并抵达北门哨塔，地点发生变化；托马斯和艾琳未跟随，需移除；步行半个时辰跨越一个时段；无其他资源或状态变化。"
+    },
+    {
+      "case_id": "case_3_relocation_partial_follow",
+      "name": "中途转场与同伴分流",
+      "passed": false,
+      "location_matched": false,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "城外废弃农舍",
+      "expected_location": "废弃农舍",
+      "actual_clock": "Day 1 下午",
+      "expected_clock": "Day 1 下午",
+      "actual_participants": [
+        "托马斯"
+      ],
+      "expected_participants": [
+        "托马斯"
+      ],
+      "actual_money": 20,
+      "expected_money": 20,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 3,
+      "warnings_count": 1,
+      "warnings": [
+        "participant_already_present: participant already present and ignored: 托马斯 (location change does not clear participants)"
+      ],
+      "decision": "艾琳明确留在酒馆，未随行，需从参与者中移除；莱尔与托马斯实际抵达废弃农舍，地点改变，托马斯跟随抵达需保留并加入；时间未明确跨越时段，不推进。"
+    },
+    {
+      "case_id": "case_4_indirect_departure_alone",
+      "name": "间接模糊离场与孤身落幕",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "黑石码头",
+      "expected_location": "黑石码头",
+      "actual_clock": "Day 2 黄昏",
+      "expected_clock": "Day 2 黄昏",
+      "actual_participants": [],
+      "expected_participants": [],
+      "actual_money": 50,
+      "expected_money": 50,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 1,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "加雷斯在黄昏时分于黑石码头与莱尔道别后登上货轮离开，货轮离港后码头上只剩莱尔一人。加雷斯明确离开且未跟随玩家，因此需要将其从参与者中移除。地点未改变，时间未推进，无资源变化。"
+    },
+    {
+      "case_id": "case_5_multi_segment_transit",
+      "name": "多阶段地点流转与过渡干扰",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "王城地牢",
+      "expected_location": "王城地牢",
+      "actual_clock": "Day 1 清晨",
+      "expected_clock": "Day 1 清晨",
+      "actual_participants": [
+        "布鲁诺"
+      ],
+      "expected_participants": [
+        "布鲁诺"
+      ],
+      "actual_money": 10,
+      "expected_money": 10,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 2,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "莱尔从青石客栈实际抵达王城地牢，地点发生变化；布鲁诺明确在场，需加入参与者；清晨出发未跨越时段，时间不变；无资源变化。"
+    },
+    {
+      "case_id": "case_6_absolute_time_advance",
+      "name": "绝对时间跨步与长途骑行",
+      "passed": false,
+      "location_matched": true,
+      "clock_matched": false,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "黑石要塞",
+      "expected_location": "黑石要塞",
+      "actual_clock": "Day 2 凌晨",
+      "expected_clock": "Day 1 深夜",
+      "actual_participants": [],
+      "expected_participants": [],
+      "actual_money": 10,
+      "expected_money": 10,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 2,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "莱尔从北门哨所出发，穿越荒原，于深夜抵达黑石要塞。地点明确改变，时间从清晨推进到深夜（跨越6个时段）。北门哨所无其他在场人物，无需参与者操作。无资源变化。"
+    },
+    {
+      "case_id": "case_7_mentioned_only_not_present",
+      "name": "仅提及人物防误入",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "学者密室",
+      "expected_location": "学者密室",
+      "actual_clock": "Day 1 上午",
+      "expected_clock": "Day 1 上午",
+      "actual_participants": [
+        "亚伦"
+      ],
+      "expected_participants": [
+        "亚伦"
+      ],
+      "actual_money": 10,
+      "expected_money": 10,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 0,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "本轮 Scene Facts 仅涉及亚伦向莱尔透露追捕消息，属于信息传递与对话内容，未产生任何需要写入 CurrentState 的状态变化。沃尔夫、克莱门特、影月均仅被提及，未实际进入场景，不得加入参与者。亚伦已在场且态度未发生明确、持续到场景结束的变化，无需操作。"
+    },
+    {
+      "case_id": "case_8_resource_and_money_settlement",
+      "name": "资源买卖与精准找零",
+      "passed": false,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": false,
+      "actual_location": "炼金药铺",
+      "expected_location": "炼金药铺",
+      "actual_clock": "Day 1 上午",
+      "expected_clock": "Day 1 上午",
+      "actual_participants": [
+        "药剂师罗恩"
+      ],
+      "expected_participants": [
+        "药剂师罗恩"
+      ],
+      "actual_money": 35,
+      "expected_money": 35,
+      "actual_inventory": {
+        "短剑": 1,
+        "高级治疗药水": 2
+      },
+      "expected_inventory": {
+        "短剑": 1,
+        "治疗药水": 2
+      },
+      "operations_count": 2,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "莱尔以15金币购得2瓶高级治疗药水，货币单位一致且明确支付，需更新金钱与库存；罗恩在场且态度未变，无需操作；地点与时间未变。"
+    },
+    {
+      "case_id": "case_9_already_present_duplicate_add",
+      "name": "已在场NPC去重与态度保持",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "落霞峰茶亭",
+      "expected_location": "落霞峰茶亭",
+      "actual_clock": "Day 1 下午",
+      "expected_clock": "Day 1 下午",
+      "actual_participants": [
+        "苏念薇"
+      ],
+      "expected_participants": [
+        "苏念薇"
+      ],
+      "actual_money": 100,
+      "expected_money": 100,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 0,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "本轮 Scene Facts 仅描述苏念薇为萧欢添茶并叮嘱、萧欢接受叮嘱并饮茶，属于日常对话与动作，未产生任何需要写入 CurrentState 的状态变化。苏念薇已在场，无需 participant_add；无地点、时间、资源、态度或外观变化。"
+    },
+    {
+      "case_id": "case_10_flashback_memory_hallucination",
+      "name": "深度回忆与幻觉干扰防漂移",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "竹林静室",
+      "expected_location": "竹林静室",
+      "actual_clock": "Day 3 上午",
+      "expected_clock": "Day 3 上午",
+      "actual_participants": [],
+      "expected_participants": [],
+      "actual_money": 0,
+      "expected_money": 0,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 0,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "Scene Facts 仅包含莱尔在竹林静室中回忆三年前往事的心理活动，未发生任何地点、时间、参与者、资源或玩家可见状态的实际变化。云天河仅被提及，未实际在场，不得加入参与者。断剑仅被展示和回忆，未获得或失去，不改变库存。因此本轮无任何状态变化需要写入。"
+    },
+    {
+      "case_id": "case_11_verbal_plan_not_executed",
+      "name": "口头未执行计划防早产",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "风息酒馆",
+      "expected_location": "风息酒馆",
+      "actual_clock": "Day 1 清晨",
+      "expected_clock": "Day 1 清晨",
+      "actual_participants": [
+        "托马斯"
+      ],
+      "expected_participants": [
+        "托马斯"
+      ],
+      "actual_money": 10,
+      "expected_money": 10,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 0,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "本轮 Scene Facts 仅涉及托马斯与莱尔在酒馆商定黄昏潜入死灵地牢的计划，以及老皮特被提及但未在场。莱尔与托马斯均明确留在酒馆待命，没有发生地点变化、时间推进、资源变动或态度变化。老皮特仅被提及，不得加入参与者。因此无需任何状态操作。"
+    },
+    {
+      "case_id": "case_12_failed_transaction_and_borrow",
+      "name": "交易失败与借阅归还",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "珍宝阁",
+      "expected_location": "珍宝阁",
+      "actual_clock": "Day 1 下午",
+      "expected_clock": "Day 1 下午",
+      "actual_participants": [
+        "店主奥利弗"
+      ],
+      "expected_participants": [
+        "店主奥利弗"
+      ],
+      "actual_money": 100,
+      "expected_money": 100,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 0,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "本轮事实仅涉及购买被拒、借用并归还放大镜，以及收回钱袋。购买未成交，金钱未实际转移；放大镜为借用后归还，未形成玩家持有；莱尔始终在珍宝阁，地点与参与者未变化。因此无需写入任何状态操作。"
+    },
+    {
+      "case_id": "case_13_transient_passerby_eviction",
+      "name": "匆匆过客与窗外路人排除",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "风息酒馆",
+      "expected_location": "风息酒馆",
+      "actual_clock": "Day 1 下午",
+      "expected_clock": "Day 1 下午",
+      "actual_participants": [
+        "女仆莉莉"
+      ],
+      "expected_participants": [
+        "女仆莉莉"
+      ],
+      "actual_money": 20,
+      "expected_money": 20,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 2,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "雷恩带队进入酒馆搜查后离开，属于临时到场人物，未形成持续在场关系，需将其加入后移除；老李仅被提及路过，未进入场景，不产生参与者变化；莉莉始终在场，无需操作。无地点、时间、资源或玩家状态变化。"
+    },
+    {
+      "case_id": "case_14_complex_four_party_split",
+      "name": "四人复杂分流与突围转移",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "城主府后院",
+      "expected_location": "城主府后院",
+      "actual_clock": "Day 1 深夜",
+      "expected_clock": "Day 1 深夜",
+      "actual_participants": [
+        "托马斯"
+      ],
+      "expected_participants": [
+        "托马斯"
+      ],
+      "actual_money": 10,
+      "expected_money": 10,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 3,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "莱尔与托马斯翻墙进入城主府后院，地点发生变化；艾琳和加雷斯明确分头撤离，未跟随玩家，需从参与者中移除；托马斯跟随玩家抵达新地点，保留在场。时间未明确推进，不推进时段。"
+    },
+    {
+      "case_id": "case_15_pronoun_and_alias_departure",
+      "name": "代称离场与真名失配",
+      "passed": false,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": false,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "古老石厅",
+      "expected_location": "古老石厅",
+      "actual_clock": "Day 1 深夜",
+      "expected_clock": "Day 1 深夜",
+      "actual_participants": [
+        "伊恩"
+      ],
+      "expected_participants": [],
+      "actual_money": 0,
+      "expected_money": 0,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 1,
+      "warnings_count": 1,
+      "warnings": [
+        "participant_not_present: participant not present; removal ignored: 黑袍法师"
+      ],
+      "decision": "黑袍法师出现后立即离开，且明确未跟随玩家，因此需要将其从参与者中移除。玩家莱尔仍留在古老石厅，地点未变；时间未推进；无资源变化。"
+    },
+    {
+      "case_id": "case_16_collective_group_departure",
+      "name": "复数群体溃散漏删",
+      "passed": false,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": false,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "城门暗巷",
+      "expected_location": "城门暗巷",
+      "actual_clock": "Day 1 晚上",
+      "expected_clock": "Day 1 晚上",
+      "actual_participants": [
+        "城防卫兵",
+        "巡逻兵"
+      ],
+      "expected_participants": [],
+      "actual_money": 0,
+      "expected_money": 0,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 0,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "Scene Facts 显示卫兵们被吓退并逃离暗巷，但未明确莱尔离开当前地点，也未显示任何资源、时间或玩家外观变化。卫兵逃离属于参与者移除，但 CurrentState 中参与者为城防卫兵和巡逻兵，而 Scene Facts 仅提及卫兵们，未明确区分具体身份，且无证据表明所有参与者均离开，因此不输出 participant_remove。其余事实不构成状态变化。"
+    },
+    {
+      "case_id": "case_17_coma_and_location_shift",
+      "name": "昏迷换地与全员滞留",
+      "passed": false,
+      "location_matched": true,
+      "clock_matched": false,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "圣光医馆",
+      "expected_location": "圣光医馆",
+      "actual_clock": "Day 1 晚上",
+      "expected_clock": "Day 1 黄昏",
+      "actual_participants": [
+        "修女安娜"
+      ],
+      "expected_participants": [
+        "修女安娜"
+      ],
+      "actual_money": 0,
+      "expected_money": 0,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 6,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "莱尔在击退狼群后昏迷，醒来时已身处圣光医馆，地点从幽暗密林变为圣光医馆。原在场参与者（狂暴狼王、灰狼甲、灰狼乙）均未跟随，且莱尔昏迷期间无法同行，应全部移除。修女安娜明确出现并照料莱尔，应加入。时间从黄昏推进到白天（次日清晨），推进一个时段。莱尔伤势已处理，但无资源变化。"
+    },
+    {
+      "case_id": "case_18_death_and_arrest_removal",
+      "name": "死伤与押解离场",
+      "passed": true,
+      "location_matched": true,
+      "clock_matched": true,
+      "participants_matched": true,
+      "money_matched": true,
+      "inventory_matched": true,
+      "actual_location": "废弃码头仓库",
+      "expected_location": "废弃码头仓库",
+      "actual_clock": "Day 1 深夜",
+      "expected_clock": "Day 1 深夜",
+      "actual_participants": [],
+      "expected_participants": [],
+      "actual_money": 0,
+      "expected_money": 0,
+      "actual_inventory": {},
+      "expected_inventory": {},
+      "operations_count": 2,
+      "warnings_count": 0,
+      "warnings": [],
+      "decision": "刺客首领已死亡，不再是当前场景的在场参与者，需移除；蒙面随从被宪兵队押解离开仓库，也需移除；城防军宪兵队虽出现但未停留，不加入参与者。仓库内只剩莱尔一人，地点未变，时间未明确推进，无资源变化。"
+    }
+  ]
+}

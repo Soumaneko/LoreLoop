@@ -182,3 +182,45 @@ class CurrentState(BaseModel):
             scene["participants"] = participant_data
             data["scene"] = scene
         return data
+
+
+class FinalSceneFrame(BaseModel):
+    """Scene-ending snapshot produced by the LLM; compiled deterministically.
+
+    The LLM only audits the spatio-temporal flow of the confirmed prose and
+    freezes the final frame: where the protagonist ends up, the absolute
+    day/phase at the end, and who is physically present. All set arithmetic
+    (participant diff, relocation eviction, clock phase steps) is computed by
+    the deterministic engine.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    final_location: str | None = Field(default=None, min_length=1)
+    day_offset: int = Field(default=0, ge=0)
+    final_phase: WorldPhase | None = None
+    active_present_npcs: list[str] = Field(default_factory=list)
+    departed_npcs: list[str] = Field(default_factory=list)
+    evidence_fact_ids: list[str] = Field(default_factory=list)
+    evidence_paragraph_ids: list[str] = Field(default_factory=list)
+
+    @field_validator(
+        "final_location",
+        "active_present_npcs",
+        "departed_npcs",
+        mode="before",
+    )
+    @classmethod
+    def _strip_names(cls, value):
+        if isinstance(value, str):
+            return value.strip() or None
+        if isinstance(value, list):
+            # Only strip strings; non-string items pass through untouched so
+            # Pydantic's own type validation rejects them as a normal
+            # (recoverable) ValidationError instead of crashing here.
+            return [
+                item.strip() if isinstance(item, str) else item
+                for item in value
+                if not isinstance(item, str) or item.strip()
+            ]
+        return value

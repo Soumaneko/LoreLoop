@@ -7,7 +7,13 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.text import normalize_key
-from .schemas import CurrentState, InventoryItem, ParticipantState
+from .schemas import (
+    CurrentState,
+    FinalSceneFrame,
+    InventoryItem,
+    ParticipantState,
+    PHASE_ORDER,
+)
 
 
 @dataclass(frozen=True)
@@ -140,7 +146,10 @@ class StateChangeSet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     decision: str = Field(min_length=1)
-    operations: list[StateOperation] = Field(default_factory=list, max_length=30)
+    # No total cap here: only the model output is bounded (30 items in the
+    # updater validator); deterministic frame-compiled operations scale with
+    # the participant count and are never truncated.
+    operations: list[StateOperation] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _operation_ids_must_be_unique(self):
@@ -161,6 +170,221 @@ class StateChangeSetLoose(BaseModel):
 
     decision: str | None = None
     operations: list[Any] = Field(default_factory=list)
+
+
+#: 由 ``FinalSceneFrame`` 经确定性引擎编译的操作类型；LLM 不得直接输出。
+FRAME_OPERATION_TYPES: frozenset[str] = frozenset({
+    "location_change",
+    "participant_add",
+    "participant_remove",
+    "world_clock_advance",
+})
+
+#: StateUpdater LLM 输出中允许的剩余操作类型（态度、外观、资源与资产）。
+RESOLUTION_OPERATION_TYPES: frozenset[str] = frozenset({
+    "participant_attitude_change",
+    "player_visible_status_change",
+    "inventory_delta",
+    "money_delta",
+    "fixed_asset_add",
+    "fixed_asset_remove",
+    "temporary_asset_add",
+    "temporary_asset_remove",
+})
+
+
+class StateResolutionOutput(BaseModel):
+    """LLM 输出契约：简短时空审计 + 落幕终态定格 + 剩余资源操作。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: str = Field(min_length=1)
+    frame: FinalSceneFrame
+    operations: list[StateOperation] = Field(default_factory=list, max_length=30)
+
+
+class StateResolutionOutputLoose(BaseModel):
+    """顶层宽松容器：frame 与 operations 的逐项校验由 output_validator 负责。"""
+
+    model_config = ConfigDict(extra="allow")
+
+    decision: str | None = None
+    frame: Any = None
+    operations: list[Any] = Field(default_factory=list)
+
+
+def calculate_phase_advance(
+    current_phase: str,
+    day_offset: int,
+    target_phase: str | None,
+) -> int | None:
+    """Deterministically resolve the clock step count from the final frame.
+
+    Returns ``None`` when the inputs cannot form a non-negative advance; the
+    caller records a warning and keeps the clock unchanged.
+    """
+
+    if current_phase not in PHASE_ORDER:
+        return None
+    steps = day_offset * len(PHASE_ORDER)
+    if target_phase is not None:
+        if target_phase not in PHASE_ORDER:
+            return None
+        steps += PHASE_ORDER.index(target_phase) - PHASE_ORDER.index(current_phase)
+    elif day_offset > 0:
+        # Whole days elapsed without a declared end phase: keep the same
+        # time of day on the new day.
+        pass
+    return steps if steps >= 0 else None
+
+
+def compile_frame_operations(
+    current_state: CurrentState,
+    frame: FinalSceneFrame,
+    *,
+    npc_aliases: dict[str, list[str]] | None = None,
+) -> tuple[list[StateOperation], list[StateChangeWarning]]:
+    """Deterministic diff engine compiling a FinalSceneFrame.
+
+    Compiles the scene-ending snapshot into auditable atomic StateOperations:
+    relocation, the relocation eviction guard (participants absent from the
+    final frame do not follow the protagonist), explicit departures, new
+    arrivals, and the absolute clock advance. Names are normalized through the
+    alias map; the player is never added or removed; an NPC listed as both
+    present and departed counts as present. The emitted operation/warning
+    contract matches the ``StateChangeSet`` audit format.
+    """
+
+    warnings: list[StateChangeWarning] = []
+    evidence_fact_ids = list(frame.evidence_fact_ids)
+    evidence_paragraph_ids = list(frame.evidence_paragraph_ids)
+    reason = "由落幕终态定格（FinalSceneFrame）确定性编译"
+    operations: list[StateOperation] = []
+
+    def _warning(code: str, message: str, target: str) -> None:
+        warnings.append(StateChangeWarning(
+            operation_id="frame",
+            operation_type="final_scene_frame",
+            target=target,
+            code=code,
+            message=message,
+        ))
+
+    final_location = frame.final_location
+    location_changed = bool(
+        final_location
+        and normalize_key(final_location)
+        != normalize_key(current_state.scene.location)
+    )
+    if final_location and location_changed:
+        operations.append(LocationChange(
+            operation_id="frame_location",
+            reason=reason,
+            evidence_fact_ids=evidence_fact_ids,
+            evidence_paragraph_ids=evidence_paragraph_ids,
+            type="location_change",
+            location=final_location,
+        ))
+
+    phases = calculate_phase_advance(
+        current_state.world_clock.phase,
+        frame.day_offset,
+        frame.final_phase,
+    )
+    if phases is None and (frame.day_offset or frame.final_phase):
+        _warning(
+            "frame_time_ignored",
+            (
+                "frame time fields cannot form a non-negative advance "
+                f"(day_offset={frame.day_offset}, "
+                f"final_phase={frame.final_phase}); clock unchanged"
+            ),
+            "",
+        )
+    elif phases:
+        operations.append(WorldClockAdvance(
+            operation_id="frame_clock",
+            reason=reason,
+            evidence_fact_ids=evidence_fact_ids,
+            evidence_paragraph_ids=evidence_paragraph_ids,
+            type="world_clock_advance",
+            phases=phases,
+        ))
+
+    aliases = _alias_map(npc_aliases or {})
+    player_key = normalize_key(current_state.player.name)
+    old_participants = [
+        participant for participant in current_state.scene.participants
+        if normalize_key(participant.name) != player_key
+    ]
+    old_names = {
+        normalize_key(participant.name): participant.name
+        for participant in old_participants
+    }
+
+    def _canonical(name: str) -> str:
+        return aliases.get(normalize_key(name), name.strip())
+
+    present_keys: set[str] = set()
+    for index, name in enumerate(frame.active_present_npcs, start=1):
+        canonical = _canonical(name)
+        key = normalize_key(canonical)
+        if key == player_key or key in present_keys:
+            # The player is never a tracked participant; duplicate canonical
+            # names (e.g. alias variants) are admitted once.
+            continue
+        present_keys.add(key)
+        matched = next(
+            (existing for existing in old_names if existing == key),
+            None,
+        )
+        if matched is not None:
+            continue
+        operations.append(ParticipantAdd(
+            operation_id=f"frame_present_{index}",
+            reason=reason,
+            evidence_fact_ids=evidence_fact_ids,
+            evidence_paragraph_ids=evidence_paragraph_ids,
+            type="participant_add",
+            name=canonical,
+        ))
+
+    departed_seen: set[str] = set()
+    for name in frame.departed_npcs:
+        key = normalize_key(_canonical(name))
+        if key == player_key or key in departed_seen:
+            continue
+        if key in present_keys:
+            # Conflict resolution: the final presence snapshot wins; an NPC
+            # listed as both present and departed counts as present.
+            continue
+        departed_seen.add(key)
+        if key in old_names:
+            operations.append(ParticipantRemove(
+                operation_id=f"frame_departed_{len(departed_seen)}",
+                reason=reason,
+                evidence_fact_ids=evidence_fact_ids,
+                evidence_paragraph_ids=evidence_paragraph_ids,
+                type="participant_remove",
+                name=_canonical(name),
+            ))
+    # Relocation default-eviction: participants absent from the final frame
+    # do not follow the protagonist to a new location.
+    if location_changed:
+        for key, name in old_names.items():
+            if key in present_keys or key in departed_seen:
+                continue
+            operations.append(ParticipantRemove(
+                operation_id=f"frame_evicted_{len(operations)}",
+                reason=(
+                    "地点变更且未出现在落幕在场名单，默认不跟随"
+                ),
+                evidence_fact_ids=evidence_fact_ids,
+                evidence_paragraph_ids=evidence_paragraph_ids,
+                type="participant_remove",
+                name=name,
+            ))
+    return operations, warnings
 
 
 def apply_state_changes(
