@@ -7,7 +7,7 @@ from typing import Callable
 
 from pydantic import BaseModel
 
-from app.core.llm.schema import compact_schema
+from app.core.llm.schema import display_schema_json
 
 from .schemas import (
     DirectorDecisionBatch,
@@ -83,6 +83,7 @@ class DirectorSkillService:
         arguments_validator: DirectorArgumentsValidator | None = None,
         max_requests_per_batch: int | None = None,
         batch_validator: DirectorBatchValidator | None = None,
+        input_targets: dict[str | tuple[str, ...], int] | None = None,
     ) -> None:
         if name in self._skills:
             raise ValueError(f"director skill already registered: {name}")
@@ -97,7 +98,10 @@ class DirectorSkillService:
             description=description,
             phases=sorted(phases),
             mutates=mutates,
-            input_schema=compact_schema(arguments_model.model_json_schema()),
+            input_schema=json.loads(display_schema_json(
+                arguments_model,
+                max_lengths=input_targets or {},
+            )),
             max_requests_per_batch=max_requests_per_batch,
         )
         self._skills[name] = _RegisteredSkill(

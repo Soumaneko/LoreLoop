@@ -101,6 +101,7 @@ class _AttemptRecord:
 _RESOLUTION_ADAPTER = TypeAdapter(_ActionResolutionOutputSoft)
 
 _HARD_LIMIT = 120
+_ACCEPT_LIMIT = 150
 _SOFT_LIMIT = 180
 _FALLBACK_REASONING = "行动判定未生成详细说明，按确定性结果继续。"
 _FALLBACK_EFFECT = "行动按判定推进，未生成详细效果说明。"
@@ -306,10 +307,14 @@ def _collect_record(
         invalid = False
         for field_name in ("effect_reasoning", "resolved_fact", "narrative_hook"):
             value = getattr(resolution, field_name)
-            if attempt == 1 and len(value) > _HARD_LIMIT:
+            if attempt == 1 and len(value) > _ACCEPT_LIMIT:
+                # Accept-Limit buffer: values within (H, A] are accepted on
+                # the first attempt; only > A triggers the single feedback
+                # retry asking the model to return to the H target.
                 retry_errors.append(
-                    f"action_resolutions[{index}].{field_name} exceeds "
-                    f"hard limit {_HARD_LIMIT}"
+                    f"action_resolutions[{index}].{field_name} length "
+                    f"{len(value)} exceeds accept limit {_ACCEPT_LIMIT}; "
+                    f"return to the prompt target {_HARD_LIMIT}"
                 )
                 invalid = True
             elif attempt > 1 and len(value) > _SOFT_LIMIT:
@@ -325,7 +330,8 @@ def _collect_record(
             warnings.append(TurnResolutionWarning(
                 code="turn_resolution_dropped",
                 message=(
-                    f"action_resolutions[{index}] dropped: exceeds hard limit"
+                    f"action_resolutions[{index}] dropped: exceeds accept "
+                    f"limit {_ACCEPT_LIMIT}"
                 ),
             ))
             continue

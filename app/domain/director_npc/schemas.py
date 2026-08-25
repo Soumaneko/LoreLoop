@@ -8,6 +8,19 @@ from app.core.time import utc_now
 
 DirectorNPCStatus = Literal["prepared", "introduced", "retired"]
 
+# 三级长度契约（H <= A <= S）：
+# - Prompt Limit H：展示给模型的质量目标；
+# - Accept Limit A：第一次输出无需因该字段重试的接收上限；
+# - Salvage Limit S：仅 soft_text 在重试耗尽后的最终保留上限。
+PERSONALITY_TRAIT_HARD_LIMIT = 40
+PERSONALITY_TRAIT_ACCEPT_LIMIT = 50
+PERSONALITY_TRAIT_SOFT_LIMIT = 60
+ABILITY_NAME_HARD_LIMIT = 20
+ABILITY_NAME_ACCEPT_LIMIT = 25
+ABILITY_DESCRIPTION_HARD_LIMIT = 120
+ABILITY_DESCRIPTION_ACCEPT_LIMIT = 150
+ABILITY_DESCRIPTION_SOFT_LIMIT = 180
+
 
 class NPCCreationContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -18,8 +31,12 @@ class NPCCreationContext(BaseModel):
 class KnownAbility(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=20)
-    description: str = Field(min_length=1, max_length=120)
+    # strict_name 接收上限为 A（无截断）；description 为 soft_text 上限 S。
+    name: str = Field(min_length=1, max_length=ABILITY_NAME_ACCEPT_LIMIT)
+    description: str = Field(
+        min_length=1,
+        max_length=ABILITY_DESCRIPTION_SOFT_LIMIT,
+    )
 
 
 _new_id = partial(new_hex_id, prefix="director_npc", length=12)
@@ -35,7 +52,10 @@ class DirectorNPCDraft(BaseModel):
     social_style: str = Field(min_length=1)
     role: str = Field(min_length=1)
     faction: str | None = None
-    personality_trait: str = Field(min_length=1, max_length=40)
+    personality_trait: str = Field(
+        min_length=1,
+        max_length=PERSONALITY_TRAIT_SOFT_LIMIT,
+    )
     known_abilities: list[KnownAbility] = Field(default_factory=list, max_length=5)
     appearance: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -79,7 +99,10 @@ class DirectorNPCBehavior(BaseModel):
 
     conflict_style: str = Field(min_length=1)
     social_style: str = Field(min_length=1)
-    personality_trait: str = Field(min_length=1, max_length=40)
+    personality_trait: str = Field(
+        min_length=1,
+        max_length=PERSONALITY_TRAIT_SOFT_LIMIT,
+    )
 
 
 class DirectorNPCShell(BaseModel):
@@ -97,6 +120,48 @@ class DirectorNPCCreateOutput(BaseModel):
     identity: DirectorNPCIdentity
     behavior: DirectorNPCBehavior
     shell: DirectorNPCShell
+
+
+class _WireAbility(BaseModel):
+    """宽松 wire：长度字段不设上限，由 creator 的 output_validator 分流。"""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+
+
+class DirectorNPCBehaviorWire(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    conflict_style: str = Field(min_length=1)
+    social_style: str = Field(min_length=1)
+    personality_trait: str = Field(min_length=1)
+
+
+class DirectorNPCShellWire(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    known_abilities: list[_WireAbility] = Field(
+        default_factory=list,
+        max_length=5,
+    )
+    appearance: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+
+class DirectorNPCCreateOutputWire(BaseModel):
+    """Gateway wire schema：允许 output_validator 看到 S 以上的值。
+
+    Prompt 仍展示严格 ``DirectorNPCCreateOutput``（maxLength=H）。
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    creation_reason: str = Field(min_length=1)
+    identity: DirectorNPCIdentity
+    behavior: DirectorNPCBehaviorWire
+    shell: DirectorNPCShellWire
 
 
 class DirectorNPCPrivateProfile(BaseModel):

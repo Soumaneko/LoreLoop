@@ -58,6 +58,7 @@ class SceneSummarizer:
                 "current_state_json": project_current_state(current_state),
             },
             hard_limit=300,
+            accept_limit=375,
             soft_limit=450,
             trace_id=trace_id,
         )
@@ -99,6 +100,7 @@ class SceneSummarizer:
                 ),
             },
             hard_limit=400,
+            accept_limit=500,
             soft_limit=600,
             trace_id=trace_id,
         )
@@ -127,12 +129,13 @@ class SceneSummarizer:
         task: str,
         input_data: dict[str, Any],
         hard_limit: int,
+        accept_limit: int,
         soft_limit: int,
         trace_id: str | None,
     ) -> str | None:
         prompt_schema = _summary_draft_schema(max_length=hard_limit)
-        # Gateway 不设 max_length：第一轮由 output_validator 按硬上限拒绝，
-        # 第二轮允许保留到软上限（1.5x）；超过软上限才截断。
+        # Gateway 不设 max_length：第一轮由 output_validator 按 Accept 上限
+        # （H < len <= A）拒绝，第二轮允许保留到软上限 S；超过软上限才截断。
         gateway_schema = SceneSummaryDraft
         candidates: dict[int, str] = {}
         truncated_attempts: set[int] = set()
@@ -150,10 +153,10 @@ class SceneSummarizer:
                 truncated_attempts.add(current_attempt)
                 content = content[:soft_limit]
             candidates[current_attempt] = content
-            if current_attempt == 1 and len(content) > hard_limit:
+            if current_attempt == 1 and len(content) > accept_limit:
                 raise ValueError(
-                    f"content exceeds hard limit {hard_limit}: "
-                    f"{len(content)} chars"
+                    f"content length {len(content)} exceeds accept limit "
+                    f"{accept_limit}; return to the prompt target {hard_limit}"
                 )
 
         def selected(attempt: int | None) -> tuple[str | None, int | None]:

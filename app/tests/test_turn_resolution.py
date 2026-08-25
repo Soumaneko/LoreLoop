@@ -483,7 +483,7 @@ def test_turn_resolution_soft_truncates_second_attempt_text():
         "resolution_reasoning": "软截断测试。",
         "action_resolutions": [{
             "action_id": "a1",
-            "effect_reasoning": "长" * 121,
+            "effect_reasoning": "长" * 151,
             "resolved_fact": "事实",
             "narrative_hook": "抓手",
         }],
@@ -620,7 +620,7 @@ def test_turn_resolution_missing_hook_is_rejected_and_falls_back():
     )
 
 
-def test_turn_resolution_hook_over_hard_limit_is_dropped_then_retried():
+def test_turn_resolution_hook_over_accept_limit_is_dropped_then_retried():
     from app.core.llm import MockLLM
 
     first = json.dumps({
@@ -629,7 +629,7 @@ def test_turn_resolution_hook_over_hard_limit_is_dropped_then_retried():
             "action_id": "a1",
             "effect_reasoning": "观察成功。",
             "resolved_fact": "主角发现异常。",
-            "narrative_hook": "长" * 121,
+            "narrative_hook": "长" * 151,
         }],
     }, ensure_ascii=False)
 
@@ -646,10 +646,58 @@ def test_turn_resolution_hook_over_hard_limit_is_dropped_then_retried():
     )
 
     frame = result.action_resolutions[0]
-    # First attempt exceeded the hard limit and was dropped; the retried
+    # First attempt exceeded the accept limit and was dropped; the retried
     # second response's hook was adopted instead.
     assert frame.narrative_hook.startswith("异常的来源隐约可辨")
     assert all(
         warning.code != "turn_resolution_truncated"
         for warning in agent.last_warnings
     )
+
+
+def test_turn_resolution_text_within_accept_buffer_is_kept_without_retry():
+    from app.core.llm.providers import MockProvider
+    from app.core.llm.gateway import LLMGateway
+    from app.core.llm.tracing import NullTraceLogger
+
+    class _CountingProvider(MockProvider):
+        def __init__(self, responses):
+            super().__init__()
+            self.set_responses(responses)
+            self.calls = 0
+
+        def generate(self, *args, **kwargs):
+            self.calls += 1
+            return MockProvider.generate(self, *args, **kwargs)
+
+    # 121-150 chars sit inside the Accept buffer (H=120, A=150): accepted on
+    # the first attempt without any feedback retry.
+    response = json.dumps({
+        "resolution_reasoning": "缓冲区长度接受。",
+        "action_resolutions": [{
+            "action_id": "a1",
+            "effect_reasoning": "长" * 140,
+            "resolved_fact": "事实",
+            "narrative_hook": "抓手",
+        }],
+    }, ensure_ascii=False)
+
+    provider = _CountingProvider([response])
+    gateway = LLMGateway(
+        provider=provider,
+        prompt_loader=MockLLM().prompt_loader,
+        tracer=NullTraceLogger(),
+    )
+    agent = TurnResolutionAgent(gateway)
+
+    result = agent.resolve(
+        user_input="观察",
+        current_state=_state(),
+        action_parse_result=_parse(),
+        roll_results=_roll_batch(_roll(20)),
+        core_memory=CoreMemory(items=[]),
+    )
+
+    frame = result.action_resolutions[0]
+    assert len(frame.effect_reasoning) == 140
+    assert provider.calls == 1

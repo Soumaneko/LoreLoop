@@ -13,20 +13,23 @@ from app.core.llm.schema import schema_json
 from app.domain.confirmed_history import HistoryDocument
 
 from .schemas import (
+    CURRENT_STATE_ACCEPT_LIMIT,
     CURRENT_STATE_SOFT_LIMIT,
+    PREMISE_ACCEPT_LIMIT,
     PREMISE_SOFT_LIMIT,
+    REASON_ACCEPT_LIMIT,
     REASON_SOFT_LIMIT,
+    STATE_DELTA_ACCEPT_LIMIT,
     STATE_DELTA_SOFT_LIMIT,
+    SUBJECT_ACCEPT_LIMIT,
     SUBJECT_SOFT_LIMIT,
     ContinuityOperation,
-    ContinuityOperationHard,
     ContinuityProjection,
     ContinuityProjectionOutput,
     ContinuityProjectionOutputLoose,
 )
 
 _OPERATION_ADAPTER = TypeAdapter(ContinuityOperation)
-_OPERATION_HARD_ADAPTER = TypeAdapter(ContinuityOperationHard)
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,38 @@ class ContinuityWarning:
 class _AttemptRecord:
     operations: list[ContinuityOperation] = field(default_factory=list)
     warnings: list[ContinuityWarning] = field(default_factory=list)
+
+
+def _accept_length_errors(operation: ContinuityOperation) -> list[str]:
+    """First-attempt Accept-Limit check (H shown to the model, A accepted).
+
+    Values above ``A`` trigger one feedback retry asking the model to return
+    to the prompt target ``H``; values within ``(A, S]`` are only tolerated
+    on the second attempt.
+    """
+
+    errors: list[str] = []
+
+    def _check(field: str, value: str, limit: int) -> None:
+        if len(value) > limit:
+            errors.append(
+                f"{field} length {len(value)} exceeds accept limit {limit}; "
+                "return to the prompt target"
+            )
+
+    if operation.operation == "create":
+        _check("subject", operation.item.subject, SUBJECT_ACCEPT_LIMIT)
+        _check("premise", operation.item.premise, PREMISE_ACCEPT_LIMIT)
+    elif operation.operation == "update":
+        _check("subject", operation.subject, SUBJECT_ACCEPT_LIMIT)
+        _check("state_delta", operation.state_delta, STATE_DELTA_ACCEPT_LIMIT)
+        _check(
+            "new_current_state",
+            operation.new_current_state,
+            CURRENT_STATE_ACCEPT_LIMIT,
+        )
+    _check("reason", operation.reason, REASON_ACCEPT_LIMIT)
+    return errors
 
 
 class ContinuityProjector:
@@ -82,21 +117,12 @@ class ContinuityProjector:
                 raw_operations, truncation_warnings = _soft_truncate_operations(
                     raw_operations
                 )
-            adapter = (
-                _OPERATION_ADAPTER
-                if current_attempt > 1
-                else _OPERATION_HARD_ADAPTER
-            )
             operations: list[ContinuityOperation] = []
             dropped_warnings: list[ContinuityWarning] = []
             retry_errors: list[str] = []
             for index, raw in enumerate(raw_operations):
                 try:
-                    parsed = adapter.validate_python(raw)
-                    if current_attempt == 1:
-                        parsed = _OPERATION_ADAPTER.validate_python(
-                            parsed.model_dump()
-                        )
+                    parsed = _OPERATION_ADAPTER.validate_python(raw)
                 except ValidationError as exc:
                     retry_errors.append(f"operation[{index}]: {exc}")
                     dropped_warnings.append(ContinuityWarning(
@@ -104,6 +130,17 @@ class ContinuityProjector:
                         message=f"operation[{index}] dropped: {exc}",
                     ))
                     continue
+                if current_attempt == 1:
+                    # First attempt tolerates up to the Accept Limit without a
+                    # retry; only fields above A trigger the single feedback
+                    # correction (which asks the model to return to H).
+                    accept_errors = _accept_length_errors(parsed)
+                    if accept_errors:
+                        retry_errors.extend(
+                            f"operation[{index}]: {error}"
+                            for error in accept_errors
+                        )
+                        continue
                 operation_errors = _validate_operation(
                     parsed,
                     valid_evidence_ids=valid_evidence_ids,

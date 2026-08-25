@@ -15,8 +15,9 @@ from app.core.time import utc_now
 NPCDisclosureLevel = Literal["remote", "face_to_face", "intimate"]
 
 #: ``personality_trait`` 是用于快速消费的简短稳定标签，所有生成、
-#: mutation 与持久化契约共用同一边界。
-NPC_PERSONALITY_TRAIT_MAX_LENGTH = 40
+#: mutation 与持久化契约共用同一边界（与 Director NPC 三级长度契约的
+#: Salvage Limit 对齐）。
+NPC_PERSONALITY_TRAIT_MAX_LENGTH = 60
 
 NPC_DISCLOSURE_ORDER: dict[NPCDisclosureLevel, int] = {
     "remote": 0,
@@ -45,8 +46,8 @@ _DISCLOSURE_FACE_TO_FACE_FIELDS = _DISCLOSURE_REMOTE_FIELDS | frozenset(
 class KnownAbility(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=20)
-    description: str = Field(default="", max_length=120)
+    name: str = Field(min_length=1, max_length=25)
+    description: str = Field(default="", max_length=180)
 
 
 class LLMKnownAbility(BaseModel):
@@ -58,8 +59,8 @@ class LLMKnownAbility(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=20)
-    description: str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=25)
+    description: str = Field(min_length=1, max_length=180)
 
 #: disclosure_level -> 该级允许可见的字段集合；None 表示全量（intimate）。
 DISCLOSED_FIELD_SETS: dict[NPCDisclosureLevel, frozenset[str] | None] = {

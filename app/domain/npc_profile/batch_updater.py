@@ -51,6 +51,8 @@ from app.domain.npc_profile.identity_resolver import (
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.turn_contract import (
+    CHANGE_BASIS_ACCEPT_LIMIT,
+    CHANGE_BASIS_HARD_LIMIT,
     CHANGE_BASIS_SOFT_LIMIT,
     NPCBatchUpdate,
     NPCBatchUpdateDisplay,
@@ -59,6 +61,8 @@ from app.domain.npc_profile.turn_contract import (
     NPCSceneSummaryDraftHard,
     NPCStableChange,
     NPCStableChangeHard,
+    NPC_SCENE_SUMMARY_ACCEPT_LIMIT,
+    NPC_SCENE_SUMMARY_HARD_LIMIT,
     NPC_SCENE_SUMMARY_SOFT_LIMIT,
 )
 from app.domain.scene_facts.schemas import SceneFactSet
@@ -150,13 +154,18 @@ class NPCBatchUpdater:
             truncation_warnings: list[NPCChangeAdmissionWarning] = []
             if current_attempt > 1:
                 updates, truncation_warnings = _soft_truncate_updates(updates)
+            # Soft adapters on every attempt: first-attempt rejection above
+            # the Accept Limit is decided by explicit A checks below instead
+            # of Pydantic hard limits, so (H, A] values survive attempt one.
             entries, entry_warnings = parse_batch_updates(
                 updates,
-                soft_limits=(current_attempt > 1),
+                soft_limits=True,
             )
             retry_errors = [
                 warning.message for warning in [*top_warnings, *entry_warnings]
             ]
+            if current_attempt == 1:
+                retry_errors.extend(_accept_length_errors(updates))
             entry_npc_ids = {entry.npc_id for entry in entries}
             for npc_id in sorted(expected_npc_ids - entry_npc_ids):
                 retry_errors.append(
@@ -200,6 +209,48 @@ class NPCBatchUpdater:
             LLMOutputValidationError,
         ) as exc:
             return _salvage_parsed_batch(attempt_records, exc, expected_npc_ids)
+
+
+def _accept_length_errors(updates: list[Any]) -> list[str]:
+    """First-attempt Accept-Limit checks (H shown to the model, A accepted).
+
+    Values within ``(H, A]`` are accepted without a retry; only fields above
+    ``A`` produce retry errors asking the model to return to ``H``.
+    """
+
+    errors: list[str] = []
+    for index, raw in enumerate(updates):
+        if not isinstance(raw, dict):
+            continue
+        npc_id = str(raw.get("npc_id") or f"#{index}")
+        raw_summary = raw.get("scene_summary")
+        if isinstance(raw_summary, dict) and isinstance(
+            raw_summary.get("summary"), str
+        ):
+            clean = str(raw_summary["summary"]).strip()
+            if len(clean) > NPC_SCENE_SUMMARY_ACCEPT_LIMIT:
+                errors.append(
+                    f"{npc_id} scene_summary length {len(clean)} exceeds "
+                    f"accept limit {NPC_SCENE_SUMMARY_ACCEPT_LIMIT}; return "
+                    f"to the prompt target {NPC_SCENE_SUMMARY_HARD_LIMIT}"
+                )
+        raw_changes = raw.get("stable_changes")
+        if not isinstance(raw_changes, list):
+            continue
+        for change_index, change in enumerate(raw_changes):
+            if not isinstance(change, dict) or not isinstance(
+                change.get("change_basis"), str
+            ):
+                continue
+            clean = str(change["change_basis"]).strip()
+            if len(clean) > CHANGE_BASIS_ACCEPT_LIMIT:
+                errors.append(
+                    f"{npc_id} stable_changes[{change_index}] change_basis "
+                    f"length {len(clean)} exceeds accept limit "
+                    f"{CHANGE_BASIS_ACCEPT_LIMIT}; return to the prompt "
+                    f"target {CHANGE_BASIS_HARD_LIMIT}"
+                )
+    return errors
 
 
 def _soft_truncate_updates(

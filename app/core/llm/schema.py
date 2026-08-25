@@ -57,6 +57,70 @@ def schema_json(model: type[BaseModel]) -> str:
     )
 
 
+def display_schema_json(
+    model: type[BaseModel],
+    *,
+    max_lengths: dict[str | tuple[str, ...], int],
+) -> str:
+    """渲染把指定字段 ``maxLength`` 降为 Prompt 目标 H 的展示 schema。
+
+    三级长度契约（Issue 07）：持久化/领域模型保留 Accept/Salvage 上限 A/S，
+    而提示只展示质量目标 H。``max_lengths`` 按字段路径给出 H 值
+    （``"name"`` 等价 ``("name",)``）；未列出的字段保持模型原约束。仅用于
+    提示展示，不影响校验。数组元素的字符串约束位于 ``items`` 节点上，同样
+    按其所属数组字段的路径覆盖。
+    """
+
+    schema = model.model_json_schema()
+
+    # Normalize to tuple keys.
+    normalized: dict[tuple[str, ...], int] = {}
+    for key, value in max_lengths.items():
+        if isinstance(key, str):
+            normalized[(key,)] = value
+        else:
+            normalized[tuple(key)] = value
+
+    definitions = schema.get("$defs", {})
+    visited_refs: set[tuple[str, tuple[str, ...]]] = set()
+
+    def _apply(node: Any, path: tuple[str, ...] = ()) -> None:
+        if not isinstance(node, dict):
+            return
+        target = normalized.get(path)
+        if target is not None and "maxLength" in node:
+            node["maxLength"] = target
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            name = ref.rsplit("/", 1)[-1]
+            marker = (name, path)
+            if marker not in visited_refs and name in definitions:
+                visited_refs.add(marker)
+                _apply(definitions[name], path)
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            for name, spec in properties.items():
+                if not isinstance(spec, dict):
+                    continue
+                current = path + (name,)
+                _apply(spec, current)
+        for key in ("anyOf", "allOf", "oneOf", "prefixItems"):
+            children = node.get(key)
+            if isinstance(children, list):
+                for child in children:
+                    _apply(child, path)
+        items = node.get("items")
+        if isinstance(items, dict):
+            _apply(items, path)
+
+    _apply(schema)
+    return json.dumps(
+        compact_schema(schema),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
 def output_contract_guidance() -> str:
     """统一的"输出必须是数据实例"限制块。
 

@@ -104,10 +104,13 @@ def test_known_ability_rejects_blank_name_and_oversized_label():
 
     with pytest.raises(ValidationError):
         KnownAbility(name="   ", description="处理外伤")
+    # strict_name Accept Limit is 25: 21-char names are now within the
+    # buffer; only names above A are rejected (never truncated).
+    KnownAbility(name="x" * 21, description="处理外伤")
     with pytest.raises(ValidationError):
-        KnownAbility(name="x" * 21, description="处理外伤")
+        KnownAbility(name="x" * 26, description="处理外伤")
     with pytest.raises(ValidationError):
-        KnownAbility(name="急救", description="x" * 121)
+        KnownAbility(name="急救", description="x" * 181)
 
 
 def test_known_ability_allows_empty_description_for_player_edits():

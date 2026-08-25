@@ -9,24 +9,6 @@
 {output_schema_json}
 ```
 
-没有状态变化时输出：
-
-```json
-{{
-  "decision": "本轮正文未形成任何需要写入 CurrentState 的状态变化。",
-  "frame": {{
-    "final_location": null,
-    "day_offset": 0,
-    "final_phase": null,
-    "active_present_npcs": [],
-    "departed_npcs": [],
-    "evidence_fact_ids": [],
-    "evidence_paragraph_ids": []
-  }},
-  "operations": []
-}}
-```
-
 首先填写 operations 列表外部的 `decision`：用简短的时空与资源审计说明本轮的转场过程、人物去留、时间推进与资源变动结论。必须先核对 CurrentState 与正文，再根据审计结果定格 frame 和创建 operation，严禁前后矛盾。
 
 
@@ -56,7 +38,7 @@
 允许的操作类型：
 
 - `participant_attitude_change`：在场非玩家人物对玩家的公开态度发生明确、持续到场景结束的变化。填写 `name` 和 `attitude_to_player`；设为 null 表示明确清除旧态度。若该人物本回合才加入，直接引用同一证据即可，引擎会先应用加入再应用态度。
-- `player_visible_status_change`：玩家稳定、对外可见的整体外观或公开呈现明确变化。填写 `visible_status`；明确恢复到无特殊外观时填 null。
+- `player_visible_status_change`：玩家稳定、对外可见的整体外观或公开呈现明确变化。填写 `visible_status`；明确恢复到无特殊外观时填 null，null不代表“本轮无变化”。
 - `inventory_delta`：物品明确获得、失去或消耗。填写 `item` 和 `delta`。增加为正，减少为负。
 - `money_delta`：明确知道数额的收入或支出。填写 `delta`。收入为正，支出为负。货币单位与基础 money 单位不同时，绝对禁止使用此操作。
 - `fixed_asset_add` / `fixed_asset_remove`：只用于玩家明确取得或失去长期控制权的建筑、土地、产业、设施。

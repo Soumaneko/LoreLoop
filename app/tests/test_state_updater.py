@@ -735,8 +735,8 @@ def test_prompt_defines_final_scene_frame_contract():
     assert "inventory_delta" in prompt
     assert "禁止" in prompt
     assert (
-        "`location_change`、`participant_add`、`participant_remove`、"
-        "`world_clock_advance`" in prompt
+        "location_change、participant_add、participant_remove 或 "
+        "world_clock_advance" in prompt
     )
     assert "不保存 condition" in prompt or "不保存玩家、NPC 或场景 condition" in prompt
     assert prompt.index("`decision`") < prompt.index("# FinalSceneFrame")

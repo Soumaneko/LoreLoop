@@ -115,10 +115,10 @@ class TestSceneSummarizer:
         assert summary.turn_start == 1
         assert summary.turn_end == 2
 
-    def test_summarize_turn_retries_when_content_exceeds_hard_limit(self):
+    def test_summarize_turn_retries_when_content_exceeds_accept_limit(self):
         mock = MockLLM()
         mock.set_responses([
-            json.dumps({"content": "长" * 301}, ensure_ascii=False),
+            json.dumps({"content": "长" * 376}, ensure_ascii=False),
             json.dumps({"content": "合规摘要。"}, ensure_ascii=False),
         ])
 
@@ -132,10 +132,10 @@ class TestSceneSummarizer:
 
         assert summary.content == "合规摘要。"
 
-    def test_condense_retries_when_content_exceeds_hard_limit(self):
+    def test_condense_retries_when_content_exceeds_accept_limit(self):
         mock = MockLLM()
         mock.set_responses([
-            json.dumps({"content": "长" * 401}, ensure_ascii=False),
+            json.dumps({"content": "长" * 501}, ensure_ascii=False),
             json.dumps({"content": "合规汇总。"}, ensure_ascii=False),
         ])
 
@@ -226,7 +226,7 @@ def test_summarize_turn_second_provider_failure_propagates():
             raise LLMProviderError("provider down")
 
     provider = FirstThenProviderFailure([
-        json.dumps({"content": "长" * 301}, ensure_ascii=False),
+        json.dumps({"content": "长" * 376}, ensure_ascii=False),
     ])
     summarizer = SceneSummarizer(_gateway(provider))
 
@@ -243,7 +243,7 @@ def test_summarize_turn_second_provider_failure_propagates():
 def test_summarize_turn_uses_first_candidate_when_second_is_blank():
     mock = MockLLM()
     mock.set_responses([
-        json.dumps({"content": "长" * 301}, ensure_ascii=False),
+        json.dumps({"content": "长" * 376}, ensure_ascii=False),
         json.dumps({"content": "   "}, ensure_ascii=False),
     ])
     summarizer = SceneSummarizer(mock.build_gateway())
@@ -256,14 +256,14 @@ def test_summarize_turn_uses_first_candidate_when_second_is_blank():
         turn_index=10,
     )
 
-    assert len(summary.content) == 301
+    assert len(summary.content) == 376
     assert summarizer.last_warnings == []
 
 
 def test_summarize_turn_uses_second_candidate_and_truncates():
     mock = MockLLM()
     mock.set_responses([
-        json.dumps({"content": "长" * 301}, ensure_ascii=False),
+        json.dumps({"content": "长" * 376}, ensure_ascii=False),
         json.dumps({"content": "长" * 500}, ensure_ascii=False),
     ])
     summarizer = SceneSummarizer(mock.build_gateway())

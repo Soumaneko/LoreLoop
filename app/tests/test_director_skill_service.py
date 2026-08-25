@@ -20,7 +20,7 @@ from app.tests.factories.director_schemas import (
 )
 
 
-def test_director_agent_falls_back_when_reasoning_exceeds_500():
+def test_director_agent_truncates_reasoning_above_salvage_limit():
     service = DirectorSkillService()
     service.register(
         name="present_event",
@@ -31,7 +31,7 @@ def test_director_agent_falls_back_when_reasoning_exceeds_500():
         handler=lambda arguments, guidance=None: None,
     )
     response = {
-        "reasoning": "长" * 501,
+        "reasoning": "长" * 751,
         "requests": [{
             "request_id": "request_1",
             "skill": "present_event",
@@ -45,7 +45,11 @@ def test_director_agent_falls_back_when_reasoning_exceeds_500():
     agent = DirectorAgent(mock.build_gateway(), service)
     result = agent.decide_generation(make_director_observation())
 
-    assert len(result.reasoning) <= 500
+    assert len(result.reasoning) <= 750
+    assert any(
+        warning.code == "director_reasoning_truncated"
+        for warning in agent.last_warnings
+    )
     assert result.requests[0].request_id == "request_1"
 
 
@@ -325,21 +329,28 @@ def test_introduce_npc_spontaneous_requires_face_to_face():
 def test_spontaneous_npc_spec_field_length_limits():
     from app.domain.director.skill_specs import KnownAbilitySpec, SpontaneousNPCSpec
 
-    # personality_trait max 40
+    # personality_trait max 60（对齐三级长度契约的 Salvage Limit）
     with pytest.raises(ValidationError):
         SpontaneousNPCSpec(
             name="严铁匠",
             role="铁匠",
             appearance="壮汉",
-            personality_trait="暴" * 41,
+            personality_trait="暴" * 61,
         )
+    SpontaneousNPCSpec(
+        name="严铁匠",
+        role="铁匠",
+        appearance="壮汉",
+        personality_trait="暴" * 41,
+    )
 
-    # KnownAbilitySpec name max 20, description max 120
+    # KnownAbilitySpec name max 25, description max 180
+    KnownAbilitySpec(name="技" * 21, description="说明")
     with pytest.raises(ValidationError):
-        KnownAbilitySpec(name="技" * 21, description="说明")
+        KnownAbilitySpec(name="技" * 26, description="说明")
 
     with pytest.raises(ValidationError):
-        KnownAbilitySpec(name="技能", description="明" * 121)
+        KnownAbilitySpec(name="技能", description="明" * 181)
 
     spec = SpontaneousNPCSpec(
         name="严铁匠",

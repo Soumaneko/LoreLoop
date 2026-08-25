@@ -4,20 +4,38 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.core.llm import LLMGateway
 from app.core.llm.errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
 )
-from app.core.llm.schema import schema_json
+from app.core.llm.schema import display_schema_json
 
 from .schemas import (
+    DIRECTOR_REASONING_ACCEPT_LIMIT,
+    DIRECTOR_REASONING_HARD_LIMIT,
+    DIRECTOR_REASONING_SOFT_LIMIT,
+    GUIDANCE_NAME_ACCEPT_LIMIT,
+    GUIDANCE_NAME_HARD_LIMIT,
+    GUIDANCE_PURPOSE_ACCEPT_LIMIT,
+    GUIDANCE_PURPOSE_HARD_LIMIT,
+    GUIDANCE_PURPOSE_SOFT_LIMIT,
     DirectorDecisionBatch,
     DirectorDecisionBatchLoose,
+    DirectorGuidance,
+    DirectorGuidanceWire,
     DirectorObservation,
     DirectorSkillRequest,
+    DirectorSkillRequestWire,
+)
+from app.domain.director_npc.schemas import (
+    ABILITY_DESCRIPTION_ACCEPT_LIMIT,
+    ABILITY_DESCRIPTION_SOFT_LIMIT,
+    ABILITY_NAME_ACCEPT_LIMIT,
+    PERSONALITY_TRAIT_ACCEPT_LIMIT,
+    PERSONALITY_TRAIT_SOFT_LIMIT,
 )
 from .skills import DirectorSkillService
 
@@ -101,13 +119,34 @@ class DirectorAgent:
             current_attempt = attempt
 
         def validate_output(output: DirectorDecisionBatchLoose) -> None:
+            warnings: list[DirectorWarning] = []
+            retry_errors: list[str] = []
             reasoning = (
                 output.reasoning.strip()
                 if output.reasoning and output.reasoning.strip()
                 else _FALLBACK_REASONING
             )
-            if len(reasoning) > 500:
-                reasoning = _FALLBACK_REASONING
+            # reasoning 是 soft_text：首轮超过 Accept Limit 触发一次反馈重试；
+            # 第二轮保留到 Salvage Limit，超出才截断，不再静默替换 fallback。
+            # 为保证 salvage 记录永不超出领域上限 S，即使首轮为触发重试
+            # 超过 S 的值也在入 record 前截断（不影响重试判定）。
+            orig_len = len(reasoning)
+            if orig_len > DIRECTOR_REASONING_SOFT_LIMIT:
+                warnings.append(DirectorWarning(
+                    code="director_reasoning_truncated",
+                    message=(
+                        f"reasoning exceeded the salvage limit "
+                        f"{DIRECTOR_REASONING_SOFT_LIMIT} and was truncated."
+                    ),
+                ))
+                reasoning = reasoning[:DIRECTOR_REASONING_SOFT_LIMIT]
+            if current_attempt == 1 and orig_len > DIRECTOR_REASONING_ACCEPT_LIMIT:
+                retry_errors.append(
+                    f"reasoning length {orig_len} exceeds accept limit "
+                    f"{DIRECTOR_REASONING_ACCEPT_LIMIT}; return to the prompt "
+                    f"target {DIRECTOR_REASONING_HARD_LIMIT}"
+                )
+
             top_warnings: list[DirectorWarning] = []
             extra_keys = sorted((output.model_extra or {}).keys())
             if extra_keys:
@@ -118,15 +157,31 @@ class DirectorAgent:
 
             requests: list[DirectorSkillRequest] = []
             dropped_warnings: list[DirectorWarning] = []
-            retry_errors = [warning.message for warning in top_warnings]
+            retry_errors = [
+                *retry_errors,
+                *[warning.message for warning in top_warnings],
+            ]
             for index, raw in enumerate(output.requests):
                 try:
-                    request = _parse_request(raw)
+                    request, request_warnings, request_errors = (
+                        _parse_request_wire(raw, attempt=current_attempt)
+                    )
                 except ValidationError as exc:
                     retry_errors.append(f"request[{index}]: {exc}")
                     dropped_warnings.append(DirectorWarning(
                         code="director_request_dropped",
                         message=f"request[{index}] dropped: {exc}",
+                    ))
+                    continue
+                warnings.extend(request_warnings)
+                if request is None:
+                    retry_errors.extend(request_errors)
+                    dropped_warnings.append(DirectorWarning(
+                        code="director_request_dropped",
+                        message=(
+                            f"request[{index}] dropped: "
+                            + "; ".join(request_errors)
+                        ),
                     ))
                     continue
                 candidate = [*requests, request]
@@ -147,7 +202,7 @@ class DirectorAgent:
             attempt_records[current_attempt] = _AttemptRecord(
                 reasoning=reasoning,
                 requests=requests,
-                warnings=[*top_warnings, *dropped_warnings],
+                warnings=[*top_warnings, *warnings, *dropped_warnings],
             )
             if retry_errors:
                 raise ValueError("; ".join(retry_errors))
@@ -203,8 +258,15 @@ class DirectorAgent:
                             ensure_ascii=False,
                             indent=2,
                         ),
-                        "output_schema_json": schema_json(
-                            DirectorDecisionBatch
+                        "output_schema_json": display_schema_json(
+                            DirectorDecisionBatch,
+                            max_lengths={
+                                "reasoning": DIRECTOR_REASONING_HARD_LIMIT,
+                                ("requests", "guidance", "name"):
+                                    GUIDANCE_NAME_HARD_LIMIT,
+                                ("requests", "guidance", "purpose"):
+                                    GUIDANCE_PURPOSE_HARD_LIMIT,
+                            },
                         ),
                     },
                     output_schema=DirectorDecisionBatchLoose,
@@ -276,6 +338,210 @@ def _parse_request(raw: Any) -> DirectorSkillRequest:
         if isinstance(guidance, str):
             raw["guidance"] = guidance.strip()
     return DirectorSkillRequest.model_validate(raw)
+
+
+def _parse_request_wire(
+    raw: Any,
+    *,
+    attempt: int,
+) -> tuple[DirectorSkillRequest | None, list[DirectorWarning], list[str]]:
+    """Parse one request through the tolerant wire model with H/A/S rules.
+
+    Returns ``(request, warnings, retry_errors)``. ``request is None`` means
+    the item was dropped at module granularity (strict_name still above its
+    Accept Limit after retries, or a structural failure on the final attempt).
+    """
+
+    warnings: list[DirectorWarning] = []
+    errors: list[str] = []
+    if isinstance(raw, dict):
+        raw = dict(raw)
+        for key in ("request_id", "skill"):
+            if isinstance(raw.get(key), str):
+                raw[key] = raw[key].strip()
+        guidance = raw.get("guidance")
+        if isinstance(guidance, str):
+            raw["guidance"] = guidance.strip()
+        elif isinstance(guidance, BaseModel):
+            # StubGateway 可能透传领域模型实例，统一转为可校验的 dict。
+            raw["guidance"] = guidance.model_dump()
+    try:
+        wire = DirectorSkillRequestWire.model_validate(raw)
+    except ValidationError as exc:
+        return None, warnings, [str(exc)]
+
+    # identifier / reference fields stay strict: no buffer, no truncation.
+    guidance = wire.guidance
+    if isinstance(guidance, DirectorGuidanceWire):
+        name = guidance.name.strip()
+        purpose = guidance.purpose.strip()
+        description = guidance.description
+        if attempt == 1:
+            if len(name) > GUIDANCE_NAME_ACCEPT_LIMIT:
+                errors.append(
+                    f"guidance.name length {len(name)} exceeds accept limit "
+                    f"{GUIDANCE_NAME_ACCEPT_LIMIT}; return to the prompt "
+                    f"target {GUIDANCE_NAME_HARD_LIMIT}"
+                )
+            if len(purpose) > GUIDANCE_PURPOSE_ACCEPT_LIMIT:
+                errors.append(
+                    f"guidance.purpose length {len(purpose)} exceeds accept "
+                    f"limit {GUIDANCE_PURPOSE_ACCEPT_LIMIT}; return to the "
+                    f"prompt target {GUIDANCE_PURPOSE_HARD_LIMIT}"
+                )
+            if errors:
+                return None, warnings, errors
+        else:
+            if len(name) > GUIDANCE_NAME_ACCEPT_LIMIT:
+                # strict_name: never truncated; the whole request item is
+                # dropped after retries are exhausted.
+                return None, warnings, [
+                    f"guidance.name length {len(name)} still exceeds accept "
+                    f"limit {GUIDANCE_NAME_ACCEPT_LIMIT} after retries"
+                ]
+            if len(purpose) > GUIDANCE_PURPOSE_SOFT_LIMIT:
+                warnings.append(DirectorWarning(
+                    code="director_guidance_truncated",
+                    message=(
+                        "guidance.purpose exceeded the salvage limit "
+                        f"{GUIDANCE_PURPOSE_SOFT_LIMIT} and was truncated."
+                    ),
+                ))
+                purpose = purpose[:GUIDANCE_PURPOSE_SOFT_LIMIT]
+        # description 是后端最终丢弃的 honeypot：超长不拖垮合法请求，
+        # 转换时直接按领域上限截去（值不会被转发）。
+        domain_guidance = DirectorGuidance(
+            name=name,
+            purpose=purpose,
+            description=description[:GUIDANCE_PURPOSE_SOFT_LIMIT],
+        )
+    else:
+        domain_guidance = guidance.strip()
+
+    arguments = _normalize_spontaneous_arguments(
+        wire.skill,
+        wire.arguments,
+        attempt=attempt,
+        warnings=warnings,
+        errors=errors,
+    )
+    if errors:
+        return None, warnings, errors
+    return DirectorSkillRequest(
+        request_id=wire.request_id,
+        skill=wire.skill,
+        arguments=arguments,
+        guidance=domain_guidance,
+    ), warnings, []
+
+
+def _normalize_spontaneous_arguments(
+    skill: str,
+    arguments: dict[str, Any],
+    *,
+    attempt: int,
+    warnings: list[DirectorWarning],
+    errors: list[str],
+) -> dict[str, Any]:
+    """Apply the H/A/S length policy to ``introduce_npc.spontaneous`` fields.
+
+    personality_trait: soft_text 40/50/60; ability.name: strict_name 20/25;
+    ability.description: soft_text 120/150/180. First attempt above A records
+    a retry error; on retries exhausted soft_text is truncated to S and
+    strict_name items that still exceed A are dropped whole.
+    """
+
+    if skill != "introduce_npc":
+        return arguments
+    spontaneous = arguments.get("spontaneous")
+    if not isinstance(spontaneous, dict):
+        return arguments
+    spontaneous = dict(spontaneous)
+
+    personality = spontaneous.get("personality_trait")
+    if isinstance(personality, str):
+        clean = personality.strip()
+        if attempt == 1 and len(clean) > PERSONALITY_TRAIT_ACCEPT_LIMIT:
+            errors.append(
+                f"spontaneous.personality_trait length {len(clean)} exceeds "
+                f"accept limit {PERSONALITY_TRAIT_ACCEPT_LIMIT}; return to "
+                "the prompt target"
+            )
+        elif attempt > 1 and len(clean) > PERSONALITY_TRAIT_SOFT_LIMIT:
+            warnings.append(DirectorWarning(
+                code="director_spontaneous_truncated",
+                message=(
+                    "spontaneous.personality_trait exceeded the salvage "
+                    f"limit {PERSONALITY_TRAIT_SOFT_LIMIT} and was truncated."
+                ),
+            ))
+            clean = clean[:PERSONALITY_TRAIT_SOFT_LIMIT]
+        spontaneous["personality_trait"] = clean
+
+    abilities = spontaneous.get("known_abilities")
+    if isinstance(abilities, list):
+        kept: list[Any] = []
+        for index, ability in enumerate(abilities):
+            if not isinstance(ability, dict):
+                kept.append(ability)
+                continue
+            ability = dict(ability)
+            name = ability.get("name")
+            if isinstance(name, str):
+                name_clean = name.strip()
+                if len(name_clean) > ABILITY_NAME_ACCEPT_LIMIT:
+                    if attempt == 1:
+                        errors.append(
+                            f"spontaneous.known_abilities[{index}].name "
+                            f"length {len(name_clean)} exceeds accept limit "
+                            f"{ABILITY_NAME_ACCEPT_LIMIT}; return to the "
+                            "prompt target"
+                        )
+                    else:
+                        warnings.append(DirectorWarning(
+                            code="director_spontaneous_ability_dropped",
+                            message=(
+                                f"spontaneous.known_abilities[{index}] "
+                                "dropped: name still exceeds accept limit "
+                                f"{ABILITY_NAME_ACCEPT_LIMIT} after retries"
+                            ),
+                        ))
+                    continue
+                ability["name"] = name_clean
+            description = ability.get("description")
+            if isinstance(description, str):
+                desc_clean = description.strip()
+                if (
+                    attempt == 1
+                    and len(desc_clean) > ABILITY_DESCRIPTION_ACCEPT_LIMIT
+                ):
+                    errors.append(
+                        f"spontaneous.known_abilities[{index}].description "
+                        f"length {len(desc_clean)} exceeds accept limit "
+                        f"{ABILITY_DESCRIPTION_ACCEPT_LIMIT}; return to the "
+                        "prompt target"
+                    )
+                elif (
+                    attempt > 1
+                    and len(desc_clean) > ABILITY_DESCRIPTION_SOFT_LIMIT
+                ):
+                    warnings.append(DirectorWarning(
+                        code="director_spontaneous_truncated",
+                        message=(
+                            f"spontaneous.known_abilities[{index}].description "
+                            f"exceeded the salvage limit "
+                            f"{ABILITY_DESCRIPTION_SOFT_LIMIT} and was "
+                            "truncated."
+                        ),
+                    ))
+                    desc_clean = desc_clean[:ABILITY_DESCRIPTION_SOFT_LIMIT]
+                ability["description"] = desc_clean
+            kept.append(ability)
+        spontaneous["known_abilities"] = kept
+
+    arguments = dict(arguments)
+    arguments["spontaneous"] = spontaneous
+    return arguments
 
 
 def _batch_valid(

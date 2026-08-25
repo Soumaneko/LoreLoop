@@ -288,7 +288,7 @@ def test_update_npc_rejects_oversized_trait_and_excess_abilities():
     _seed_records()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
     with pytest.raises(ValueError):
-        update_player_record("npc", npc_id, {"personality_trait": "x" * 41})
+        update_player_record("npc", npc_id, {"personality_trait": "x" * 61})
     with pytest.raises(ValueError):
         update_player_record(
             "npc",

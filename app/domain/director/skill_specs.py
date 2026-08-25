@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -69,8 +69,8 @@ class IntrudeEngagedEventArguments(BaseModel):
 class KnownAbilitySpec(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=20, description="能力或特长名称（<=20字，建议<=10字）")
-    description: str = Field(min_length=1, max_length=120, description="能力简要说明（<=120字，建议<=60字）")
+    name: str = Field(min_length=1, max_length=25, description="能力或特长名称（<=25字，建议<=10字）")
+    description: str = Field(min_length=1, max_length=180, description="能力简要说明（<=180字，建议<=60字）")
 
 
 class SpontaneousNPCSpec(BaseModel):
@@ -242,6 +242,7 @@ class DirectorSkillSpec:
     phases: frozenset[DirectorPhase]
     mutates: bool
     arguments_model: type[BaseModel]
+    input_targets: dict[str | tuple[str, ...], int] = field(default_factory=dict)
     max_requests_per_batch: int | None = None
 
 
@@ -291,6 +292,12 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         mutates=False,
         arguments_model=IntroduceNPCArguments,
         max_requests_per_batch=5,
+        input_targets={
+            ("spontaneous", "name"): 40,
+            ("spontaneous", "personality_trait"): 40,
+            ("spontaneous", "known_abilities", "name"): 20,
+            ("spontaneous", "known_abilities", "description"): 120,
+        },
     ),
     DirectorSkillSpec(
         name="upgrade_disclosure",
@@ -376,4 +383,5 @@ def register_skill(
         arguments_validator=arguments_validator,
         max_requests_per_batch=spec.max_requests_per_batch,
         batch_validator=batch_validator,
+        input_targets=spec.input_targets,
     )

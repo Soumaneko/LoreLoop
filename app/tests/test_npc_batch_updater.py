@@ -383,7 +383,7 @@ def test_batch_display_schema_requires_scene_summary_and_shapes_stable_changes()
 
 def test_store_rejects_mutated_invalid_profile_before_write():
     profile = _profile(personality_trait="稳重")
-    profile.personality_trait = "过" * 41
+    profile.personality_trait = "过" * 61
 
     with open_npc_profile_store(":memory:") as store:
         with pytest.raises(ValidationError, match="personality_trait"):

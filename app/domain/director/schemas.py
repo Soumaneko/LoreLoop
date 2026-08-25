@@ -9,6 +9,17 @@ DirectorPhase = Literal["generation", "confirmation"]
 DirectorResourceKind = Literal["event", "npc", "setting", "engaged_event"]
 MAX_DIRECTOR_SKILL_REQUESTS = 6
 
+# 三级长度契约（H <= A <= S）：Prompt 目标 / 首轮免重试接收上限 /
+# 重试耗尽后 soft_text 的最终保留上限。
+DIRECTOR_REASONING_HARD_LIMIT = 500
+DIRECTOR_REASONING_ACCEPT_LIMIT = 625
+DIRECTOR_REASONING_SOFT_LIMIT = 750
+GUIDANCE_NAME_HARD_LIMIT = 20
+GUIDANCE_NAME_ACCEPT_LIMIT = 25
+GUIDANCE_PURPOSE_HARD_LIMIT = 100
+GUIDANCE_PURPOSE_ACCEPT_LIMIT = 125
+GUIDANCE_PURPOSE_SOFT_LIMIT = 150
+
 
 class DirectorObservation(BaseModel):
     """Phase-neutral input assembled for one Director decision."""
@@ -37,8 +48,9 @@ class DirectorGuidance(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(min_length=1, max_length=20)
-    purpose: str = Field(min_length=1, max_length=100)
+    # name: strict_name（无截断，接收上限 A）；purpose: soft_text（上限 S）。
+    name: str = Field(min_length=1, max_length=25)
+    purpose: str = Field(min_length=1, max_length=150)
     description: str = Field(min_length=1, max_length=150)
 
 
@@ -68,7 +80,7 @@ class DirectorDecisionBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reasoning: str = Field(
-        min_length=1, max_length=500,
+        min_length=1, max_length=DIRECTOR_REASONING_SOFT_LIMIT,
     )
     requests: list[DirectorSkillRequest] = Field(
         default_factory=list,
@@ -81,6 +93,27 @@ class DirectorDecisionBatch(BaseModel):
         if len(request_ids) != len(set(request_ids)):
             raise ValueError("director request_id must be unique within one batch")
         return self
+
+
+class DirectorGuidanceWire(BaseModel):
+    """宽松 wire：guidance 长度不设上限，由 agent 的 output_validator 分流。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    purpose: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+
+
+class DirectorSkillRequestWire(BaseModel):
+    """request_id / skill 是 identifier，保持严格；仅自由文本字段放宽。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1, max_length=80)
+    skill: str = Field(min_length=1, max_length=80)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    guidance: str | DirectorGuidanceWire
 
 
 class DirectorDecisionBatchLoose(BaseModel):

@@ -25,8 +25,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.domain.npc_profile.schemas import LLMKnownAbility
 
 NPC_SCENE_SUMMARY_HARD_LIMIT = 160
+NPC_SCENE_SUMMARY_ACCEPT_LIMIT = 200
 NPC_SCENE_SUMMARY_SOFT_LIMIT = 240
 CHANGE_BASIS_HARD_LIMIT = 80
+CHANGE_BASIS_ACCEPT_LIMIT = 100
 CHANGE_BASIS_SOFT_LIMIT = 120
 
 
