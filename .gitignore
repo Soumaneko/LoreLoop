@@ -21,8 +21,11 @@ tools/
 /saves/
 /app/saves/
 /debug_server.py
-SPEC.md
 .bench/
 .scratch
 .saves
-benchmarks/narrative_quality/
+benchmarks/narrative_quality/recordings/
+benchmarks/narrative_quality/eval_prompts/
+benchmarks/narrative_quality/judgments/
+benchmarks/narrative_quality/reports/
+benchmarks/narrative_quality/*.report.json
