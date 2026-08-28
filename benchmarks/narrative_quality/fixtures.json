@@ -1,0 +1,1214 @@
+[
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "category": "tavern_inquiry",
+    "title": "望江茶楼向掌柜打听妖兽精血",
+    "description": "检验普通打听消息时，正文是否给出具象线索与开放行动空间，而非泛泛空话或机械列选项。",
+    "turn_index": 2,
+    "user_input": "我将两块下品灵石放在桌上推过去，向孙掌柜打听：“孙掌柜，落雁渡这几日灵材暗市里，可有二阶雷纹豹精血或者极品火髓的消息？”",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「中州大陆」，风格为：古典仙侠奇幻\n能力体系为：仙道修真与阵法"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角萧欢，男性。沉睡百年苏醒的远古宗门遗脉，正在落雁渡暗中探查各方势力并筹措筑基灵材。"
+        },
+        {
+          "id": "c3",
+          "kind": "ability_rule",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角特殊能力：远古神识（感知力超群，能察觉微弱的灵力波动与他人隐匿的情绪）。"
+        },
+        {
+          "id": "c4",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "基础交易货币为灵石。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_001",
+        "location": "落雁渡·望江茶楼二楼雅座",
+        "participants": [
+          {
+            "name": "萧欢",
+            "attitude_to_player": null
+          },
+          {
+            "name": "孙掌柜",
+            "attitude_to_player": "生意人客套"
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 1,
+        "phase": "下午"
+      },
+      "player": {
+        "name": "萧欢",
+        "visible_status": "身着月白素袍的年轻修士"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "低阶灵石",
+            "quantity": 30
+          }
+        ],
+        "money": 30,
+        "money_unit": "灵石",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家使用灵石作为酬劳向茶楼掌柜打听高阶妖兽精血，判定为 success。孙掌柜收下灵石并告知了关于精血流向的可靠线索。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "萧欢"
+          ],
+          "action_type": "inquire",
+          "outcome_band": "success",
+          "resolution_source": "automatic",
+          "effect_reasoning": "支点：灵石报酬与合理的打听方式；边界：掌柜提供可靠情报，授权下游展开具体线索。",
+          "resolved_fact": "萧欢成功从孙掌柜口中打听到了关于妖兽精血的真实去向与各方动向。",
+          "narrative_hook": "孙掌柜压低声音透露，那批二阶雷纹豹精血刚到落雁渡就被多方势力盯上，太玄门的外门执事甚至亲自在暗中核查买家背景。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "望江茶楼打听灵材情报",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "孙掌柜是落雁渡有名的耳目，专司兜售中低阶江湖情报，认钱不认人。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [
+      {
+        "name": "孙掌柜",
+        "aliases": [],
+        "role": "望江茶楼掌柜，暗市情报贩子",
+        "appearance": "五十岁上下微胖长者，留着两撇山羊胡，眼睛笑成一条缝。",
+        "personality_trait": "精明市侩、见风使舵、守财谨慎",
+        "known_abilities": [],
+        "faction": null,
+        "last_known_location": null,
+        "attitude_to_player": "生意人客套",
+        "last_scene_summary": null,
+        "last_scene_turn": null,
+        "disclosure_level": "face_to_face",
+        "core_motivation": null,
+        "hidden_secret": null,
+        "conflict_style": null,
+        "social_style": "热情迎合但说话留半句",
+        "director_notes": null,
+        "source_director_npc_id": null,
+        "source_setting_ids": [],
+        "created_turn": null,
+        "introduced_turn": null
+      }
+    ],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_001",
+      "turn_index": 1,
+      "user_input": "进入茶楼雅座坐下",
+      "scene_text": "你步入望江茶楼，挑了个靠江的雅座坐下。孙掌柜亲自拎着青瓷茶壶上来添茶，笑意盈盈地候着你开口。",
+      "closing_prompt": "孙掌柜正在为你沏茶，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "category": "rogue_recruitment",
+    "title": "公会酒馆招募傲娇女魔法师",
+    "description": "检验招募伙伴时，NPC 是否有自身性格顾虑与诉求表达，并在达成意向后自然打开准备环节的策略空间。",
+    "turn_index": 4,
+    "user_input": "我将一袋沉甸甸的金币推到艾莉丝面前，认真看着她：“这只是定金。队伍里正缺一名顶尖的元素使，只要你答应加入我们讨伐魔物的委托，之后的战利品你优先挑选，如何？”",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「艾尔文王国」，风格为：日式王道西幻\n能力体系为：冒险者职业等级、剑与魔法"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角里欧，男性。初出茅庐的持剑冒险者，正要在王都招募可靠队员建立固定小队。"
+        },
+        {
+          "id": "c3",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "货币单位为金币（G）。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_002",
+        "location": "王都·星辰公会酒馆角落",
+        "participants": [
+          {
+            "name": "里欧",
+            "attitude_to_player": null
+          },
+          {
+            "name": "艾莉丝",
+            "attitude_to_player": "半信半疑但心动"
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 3,
+        "phase": "晚上"
+      },
+      "player": {
+        "name": "里欧",
+        "visible_status": "背着轻便钢剑的年轻剑士"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "金币袋",
+            "quantity": 1
+          }
+        ],
+        "money": 300,
+        "money_unit": "G",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家开出了优厚的金币定金与战利品挑选优先权，判定为 success。艾莉丝心动并傲娇答应入队，同时提出了具体的准备要求。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "里欧"
+          ],
+          "action_type": "recruit",
+          "outcome_band": "success",
+          "resolution_source": "automatic",
+          "effect_reasoning": "支点：金币报酬与战利品优先权承诺；边界：艾莉丝口头应允并提出出征筹备条件。",
+          "resolved_fact": "里欧的优厚条件打动了艾莉丝，艾莉丝同意加入队伍并开始商讨行前准备。",
+          "narrative_hook": "艾莉丝收下金币袋但扬起下巴，明确要求在正式踏入迷雾森林前，队伍必须做好应对严苛魔瘴环境与未知魔物伏击的充分准备。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "招募独行魔法师艾莉丝",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "艾莉丝是公会里有名的独行法师，因为嫌弃笨拙队友而一直单独行动，近期正好手头拮据。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [
+      {
+        "name": "艾莉丝",
+        "aliases": [],
+        "role": "精灵族天才元素使",
+        "appearance": "金发双马尾，身着星纹深蓝法袍，身形娇小，眼神透着一股傲气。",
+        "personality_trait": "极度傲娇、口嫌体正直、自尊心强",
+        "known_abilities": [
+          {
+            "name": "爆裂魔法",
+            "description": "高阶火焰范围轰炸法术"
+          },
+          {
+            "name": "冰霜新星",
+            "description": "迅速冻结周围敌人的控制法术"
+          }
+        ],
+        "faction": null,
+        "last_known_location": null,
+        "attitude_to_player": "傲娇与好奇",
+        "last_scene_summary": null,
+        "last_scene_turn": null,
+        "disclosure_level": "face_to_face",
+        "core_motivation": null,
+        "hidden_secret": null,
+        "conflict_style": null,
+        "social_style": "嘴硬心软、容易害羞",
+        "director_notes": null,
+        "source_director_npc_id": null,
+        "source_setting_ids": [],
+        "created_turn": null,
+        "introduced_turn": null
+      }
+    ],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_002",
+      "turn_index": 3,
+      "user_input": "走到角落艾莉丝桌前坐下",
+      "scene_text": "你走到昏暗的角落，拉开木椅坐在了艾莉丝对面。她正用小勺子搅着面前的浆果冰沙，红宝石般的眼睛警惕地瞥了你一眼：“干嘛？我可是很挑队友的，没实力的笨蛋别来烦我。”",
+      "closing_prompt": "艾莉丝等待着你的下文，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "category": "secret_investigation",
+    "title": "废弃化工厂现场勘查",
+    "description": "检验现代刑侦探索调查时，正文是否给出具象物证线索，并为下一步排查留出多分支策略。",
+    "turn_index": 5,
+    "user_input": "我戴上手套，蹲下身打开紫外线手电，顺着被撬坏的铁门门框一路扫视到水泥地面，仔细寻找对方留下的脚印或金属碎屑。",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「新海市」，风格为：现代都市悬疑刑侦\n能力体系为：法证科学、逻辑推理与现代侦查工具"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角陈默，男性。前刑警出身的私家侦探，行事沉稳细致。"
+        },
+        {
+          "id": "c3",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "货币单位为人民币（元）。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_004",
+        "location": "东区·废弃化工厂第3车间门前",
+        "participants": [
+          {
+            "name": "陈默",
+            "attitude_to_player": null
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 2,
+        "phase": "深夜"
+      },
+      "player": {
+        "name": "陈默",
+        "visible_status": "穿着黑色风衣的独行侦探"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "紫外线手电",
+            "quantity": 1
+          },
+          {
+            "name": "取证勘查手套",
+            "quantity": 1
+          }
+        ],
+        "money": 1500,
+        "money_unit": "元",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家运用正确的法证勘查工具与逻辑细致排查现场，判定为 critical_success。成功提取到了嫌疑人的特殊鞋印与定制工具金属残渣。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "陈默"
+          ],
+          "action_type": "investigate",
+          "outcome_band": "critical_success",
+          "resolution_source": "automatic",
+          "effect_reasoning": "支点：专业工具与规范排查方法；边界：发现高价值物理线索，授权下游展开物证细节。",
+          "resolved_fact": "陈默在铁门撬痕与地面成功提取到了特种战术靴底纹以及带有工业编码的金属碎屑。",
+          "narrative_hook": "陈默在铁门撬痕处提取到特殊的特种战术靴底纹，并在缝隙内发现了残留的未知高硬度合金工具碎屑。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "化工厂犯罪现场物证勘查",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "两天前化工厂发生过不明纠纷，现场大范围痕迹被清理过，但此处的铁门是事后被暴力撬开的。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_004",
+      "turn_index": 4,
+      "user_input": "走近车间大门",
+      "scene_text": "夜风掠过空旷的车间，带来一阵铁锈与机油的气味。第3车间的铁门虚掩着，门锁被外力粗暴破坏，地上散落着剥落的漆皮与细碎残渣。",
+      "closing_prompt": "面对破坏的门，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "category": "faction_confrontation",
+    "title": "沙漠废土哨站应对军阀盘查",
+    "description": "检验高压交锋后化解阻力、顺利通过关卡时的心理质感与后续路线抉择空间。",
+    "turn_index": 2,
+    "user_input": "我没有去碰腰间的猎枪，而是从大衣口袋里摸出一张带印章的通行证和半包过滤嘴香烟递过去，冷静地说：“长官，净水芯片出了点毛病，红蝎老大让我回镇上找配件，耽误了供水大家都得挨渴。”",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「辐射荒原」，风格为：废土末日生存\n能力体系为：枪械改装、载具生存与荒原求生技能"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角猎人，男性。常年在各方军阀势力夹缝中求生的废土拾荒者，带着一辆旧摩托与自制猎枪。"
+        },
+        {
+          "id": "c3",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "交易货币为瓶盖。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_005",
+        "location": "荒原·血狼军阀控制的公路哨卡",
+        "participants": [
+          {
+            "name": "猎人",
+            "attitude_to_player": null
+          },
+          {
+            "name": "哨兵队长",
+            "attitude_to_player": "傲慢且多疑"
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 1,
+        "phase": "上午"
+      },
+      "player": {
+        "name": "猎人",
+        "visible_status": "满身风沙的拾荒猎人"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "伪造商会通行证",
+            "quantity": 1
+          },
+          {
+            "name": "半包香烟",
+            "quantity": 1
+          }
+        ],
+        "money": 20,
+        "money_unit": "瓶盖",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家出示假通行证并辅以香烟行贿，话术切中对方要害，判定为 success。哨兵队长被说服，收起武器准予放行。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "猎人"
+          ],
+          "action_type": "bluff",
+          "outcome_band": "success",
+          "resolution_source": "automatic",
+          "effect_reasoning": "支点：稀缺香烟贿赂与合理的借口；边界：成功通过盘查，消除敌意阻碍。",
+          "resolved_fact": "猎人成功用通行证和香烟化解了哨兵队长的敌意，获得放行许可。",
+          "narrative_hook": "哨兵队长收起香烟挥手放行，但顺嘴警告前方黑风峡谷的强沙暴正在提前成型，通往绿洲的安全行车窗口很快就会关闭。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "公路哨卡应对盘查",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "血狼军阀纪律涣散，底层士兵极度贪图烟酒等战前稀缺物资。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [
+      {
+        "name": "哨兵队长",
+        "aliases": [],
+        "role": "血狼军阀底层哨卡军官",
+        "appearance": "头戴破损护目镜，脖子上挂着兽齿项链，手持一把锈迹斑斑的自动步枪。",
+        "personality_trait": "暴躁贪婪、见利忘义、欺软怕硬",
+        "known_abilities": [],
+        "faction": null,
+        "last_known_location": null,
+        "attitude_to_player": "怀疑与贪婪",
+        "last_scene_summary": null,
+        "last_scene_turn": null,
+        "disclosure_level": "face_to_face",
+        "core_motivation": null,
+        "hidden_secret": null,
+        "conflict_style": null,
+        "social_style": "满嘴粗口，习惯性索贿",
+        "director_notes": null,
+        "source_director_npc_id": null,
+        "source_setting_ids": [],
+        "created_turn": null,
+        "introduced_turn": null
+      }
+    ],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_005",
+      "turn_index": 1,
+      "user_input": "停下载具走向哨卡",
+      "scene_text": "你将摩托车停在路边，迎着哨卡上黑洞洞的枪口走上前。哨兵队长粗鲁地拉了下枪栓，恶狠狠地盯视着你：“站住！哪来的拾荒鬼，想过卡子先拿买路财！”",
+      "closing_prompt": "哨兵队长用枪指着你，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "category": "dungeon_puzzle",
+    "title": "黑檀堡遗迹破解符文石门",
+    "description": "检验无 NPC 环境机关互动时，机关部分破解后呈现出的多重环境反馈与探索选择。",
+    "turn_index": 3,
+    "user_input": "我凝神调动体内的水系奥术魔力，将柔和的蓝光缓缓注入石门左侧那枚代表‘潮汐’的古老符文，尝试以相克属性中和封印回路。",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「费伦大陆」，风格为：中世纪正统奇幻 / D&D\n能力体系为：奥术学派、神术信仰与远古遗迹机关"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角亚瑟，男性。游历四方的青年学者兼三级法师，专精防护与塑能系符文学。"
+        },
+        {
+          "id": "c3",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "通用货币为金币。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_006",
+        "location": "黑檀堡地下二层·石门大厅",
+        "participants": [
+          {
+            "name": "亚瑟",
+            "attitude_to_player": null
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 1,
+        "phase": "深夜"
+      },
+      "player": {
+        "name": "亚瑟",
+        "visible_status": "手持法杖与提灯的法师"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "附魔黄铜提灯",
+            "quantity": 1
+          },
+          {
+            "name": "学者法杖",
+            "quantity": 1
+          }
+        ],
+        "money": 15,
+        "money_unit": "金币",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家准确判断了符文属性相克机制并稳定注入水系魔力，判定为 success。封印阵松动，沉重石门滑开半道缝隙，显露出门后深邃的回廊。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "亚瑟"
+          ],
+          "action_type": "manipulate",
+          "outcome_band": "success",
+          "resolution_source": "automatic",
+          "effect_reasoning": "支点：正确的符文相克解析与魔力引导；边界：石门部分开启，展示新的环境与空间分支。",
+          "resolved_fact": "亚瑟成功以水系魔力中和了潮汐符文，封印被削弱，沉重石门滑开了一条容一人通过的通道。",
+          "narrative_hook": "石门伴随轰鸣缓缓滑开半道缝隙，门后显露出一条向下延伸的潮湿石阶回廊，隐约传来地下暗河的潺潺水声与古老封印的嗡鸣。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "黑檀堡遗迹石门解密",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "黑檀堡是古代火神祭司修筑的地下要塞，门上的防卫法阵以炽热火流为主体。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_006",
+      "turn_index": 2,
+      "user_input": "观察石门结构",
+      "scene_text": "提灯的光晕驱散了浓厚的阴霾。巨大的黑曜石大门上刻满繁复的元素符文，其中火符文泛着危险的暗红微光，严密锁闭着通路。",
+      "closing_prompt": "石门上的符文静静流转，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  },
+  {
+    "case_id": "case_07_inn_rest_overhear",
+    "category": "inn_rest_overhear",
+    "title": "帝国列车头等车厢旁听商界秘闻",
+    "description": "检验低主动性旁听场景中，主角在平静假寐中隐秘获取情报的质感与后续线索利用空间。",
+    "turn_index": 3,
+    "user_input": "我将礼帽往下压了压，靠在柔软的天鹅绒椅背上假装闭目养神，平稳呼吸，聚精会神地倾听斜前方两位绅士的低声讨论。",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「阿尔比恩帝国」，风格为：维多利亚蒸汽朋克\n能力体系为：发条机械、蒸汽动力与工业炼金"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角克莱恩，男性。行事隐秘的情报掮客，擅长在公共场合低调搜集商政信息。"
+        },
+        {
+          "id": "c3",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "通用货币为英镑（£）。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_007",
+        "location": "帝国特快列车·头等车厢",
+        "participants": [
+          {
+            "name": "克莱恩",
+            "attitude_to_player": null
+          },
+          {
+            "name": "亨利爵士",
+            "attitude_to_player": "未察觉"
+          },
+          {
+            "name": "沃恩顾问",
+            "attitude_to_player": "未察觉"
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 1,
+        "phase": "晚上"
+      },
+      "player": {
+        "name": "克莱恩",
+        "visible_status": "身着深灰毛呢大衣打盹的绅士"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "怀表",
+            "quantity": 1
+          }
+        ],
+        "money": 12,
+        "money_unit": "英镑",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家伪装打盹极其自然，未引起周围乘客怀疑，判定为 success。成功听清了邻座亨利爵士与沃恩顾问关于特展货运与巡警换防的情报。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "克莱恩"
+          ],
+          "action_type": "eavesdrop",
+          "outcome_band": "success",
+          "resolution_source": "automatic",
+          "effect_reasoning": "支点：完美的隐蔽假寐姿态；边界：成功获取博览会专列与安保时间表情报。",
+          "resolved_fact": "克莱恩成功偷听到了亨利爵士与沃恩顾问关于明晚工业博览会特展专列的进站时间与安保巡逻空档。",
+          "narrative_hook": "亨利爵士与沃恩顾问压低嗓音，提及明晚抵达的特展专列将运载新型差分机原型，而市政厅近期因罢工正大幅缩减车站夜间巡警人数。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "列车头等车厢窃听商界情报",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "亨利爵士与沃恩顾问是齿轮工业商会的高层，此行正前往新纽卡斯尔参加工业博览会。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [
+      {
+        "name": "亨利爵士",
+        "aliases": [],
+        "role": "齿轮工业商会理事",
+        "appearance": "五十岁左右，面容严肃，戴着单片眼镜，手拄黄铜手杖。",
+        "personality_trait": "城府极深、谨言慎行、重视利益",
+        "known_abilities": [],
+        "faction": null,
+        "last_known_location": null,
+        "attitude_to_player": "未察觉",
+        "last_scene_summary": null,
+        "last_scene_turn": null,
+        "disclosure_level": "face_to_face",
+        "core_motivation": null,
+        "hidden_secret": null,
+        "conflict_style": null,
+        "social_style": "谈吐庄重严谨",
+        "director_notes": null,
+        "source_director_npc_id": null,
+        "source_setting_ids": [],
+        "created_turn": null,
+        "introduced_turn": null
+      },
+      {
+        "name": "沃恩顾问",
+        "aliases": [],
+        "role": "商会技术顾问兼学者",
+        "appearance": "三十余岁，戴厚框眼镜，公文包里塞满了带齿轮印记的图纸。",
+        "personality_trait": "神经质、语速快、对技术细节敏感",
+        "known_abilities": [],
+        "faction": null,
+        "last_known_location": null,
+        "attitude_to_player": "未察觉",
+        "last_scene_summary": null,
+        "last_scene_turn": null,
+        "disclosure_level": "face_to_face",
+        "core_motivation": null,
+        "hidden_secret": null,
+        "conflict_style": null,
+        "social_style": "喜欢推眼镜，说话常带术语",
+        "director_notes": null,
+        "source_director_npc_id": null,
+        "source_setting_ids": [],
+        "created_turn": null,
+        "introduced_turn": null
+      }
+    ],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_007",
+      "turn_index": 2,
+      "user_input": "进入车厢选位落座",
+      "scene_text": "车厢随着蒸汽轰鸣微幅摇曳，壁灯投下暖黄光晕。你坐在靠窗位置，斜前方的两位绅士刚合上皮质公文包，正凑近低语。",
+      "closing_prompt": "车厢内一片宁静，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  },
+  {
+    "case_id": "case_08_moral_dilemma",
+    "category": "moral_dilemma",
+    "title": "废墟超市仓库的药物抉择",
+    "description": "检验末日道德抉择后，既定取舍落地同时为后续行动提供危险但可行的回报抓手。",
+    "turn_index": 3,
+    "user_input": "我紧紧攥住背包里留给女儿的最后一支广谱抗生素，看着眼前流血的陌生人，咬咬牙丢给他一卷无菌绷带：“我救不了你……这卷绷带给你包扎伤口，祝你好运。”",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「感染隔离区」，风格为：写实丧尸末日生存\n能力体系为：现实物理法则、极度稀缺的医疗与生存物资"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角大卫，男性。普通木匠出身的幸存者，带着发烧的女儿藏身在安全屋，急需药物。"
+        },
+        {
+          "id": "c3",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "无统一货币，以物易物。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_008",
+        "location": "城市边缘·废弃超市后方库房",
+        "participants": [
+          {
+            "name": "大卫",
+            "attitude_to_player": null
+          },
+          {
+            "name": "受伤的幸存者",
+            "attitude_to_player": "绝望乞求"
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 4,
+        "phase": "黄昏"
+      },
+      "player": {
+        "name": "大卫",
+        "visible_status": "神色紧绷、手持撬棍的幸存者"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "广谱抗生素注射剂",
+            "quantity": 1
+          },
+          {
+            "name": "自用无菌绷带",
+            "quantity": 1
+          }
+        ],
+        "money": 0,
+        "money_unit": "无",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家在两难中做出坚决取舍，保留核心救命药而提供普通绷带，判定为 success。受伤幸存者凄然接受现实，表达了感激并回馈了一条关键车辆线索。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "大卫"
+          ],
+          "action_type": "interact",
+          "outcome_band": "success",
+          "resolution_source": "automatic",
+          "effect_reasoning": "支点：明确的物资处置决策；边界：对方接受绷带，情绪从哀求转为平静，提供线索。",
+          "resolved_fact": "大卫拒绝交出抗生素但给予了绷带援助，伤者接受现实并透露了后门皮卡车的线索。",
+          "narrative_hook": "受伤的年轻人用颤抖的手包扎伤口并低声道谢，苦笑着透露后门停着一辆带油的皮卡，但车钥匙在二楼已被感染的店长口袋里。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "超市后库资源与道德抉择",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "外围街道游荡着数只变异丧尸，天黑后活动将显著加剧。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [
+      {
+        "name": "受伤的幸存者",
+        "aliases": [],
+        "role": "流浪幸存者",
+        "appearance": "二十岁上下青年，衣衫褴褛，左小腿有深可见骨的撕裂伤口。",
+        "personality_trait": "软弱求生、心怀感激、知恩图报",
+        "known_abilities": [],
+        "faction": null,
+        "last_known_location": null,
+        "attitude_to_player": "绝望乞求转为感激",
+        "last_scene_summary": null,
+        "last_scene_turn": null,
+        "disclosure_level": "face_to_face",
+        "core_motivation": null,
+        "hidden_secret": null,
+        "conflict_style": null,
+        "social_style": "声音虚弱发颤",
+        "director_notes": null,
+        "source_director_npc_id": null,
+        "source_setting_ids": [],
+        "created_turn": null,
+        "introduced_turn": null
+      }
+    ],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_008",
+      "turn_index": 2,
+      "user_input": "走进库房深处搜寻",
+      "scene_text": "你穿过凌乱的货架来到后库，发现角落的纸箱堆后缩着一个年轻人。他捂着流血的小腿，看到你背包上的红十字标记时眼中燃起希冀：“求求你……给我一支抗生素吧，我不想死……”",
+      "closing_prompt": "面对对方的哀求，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  },
+  {
+    "case_id": "case_09_failed_action_recovery",
+    "category": "failed_action_recovery",
+    "title": "网络潜入失败触发局部警报",
+    "description": "检验行动明确失败、警报拉响时，正文如何合理承接挫折并展开撤退或应变的多维策略空间。",
+    "turn_index": 4,
+    "user_input": "我立刻切断与主机的数据直连，启动‘静默烟幕’擦除协议，尝试在机房监控系统全面锁定前脱离神经接入！",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「新夜城」，风格为：赛博朋克\n能力体系为：神经直连黑客技术、赛博义体与企业安保网络"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角 V，网络边缘人兼佣兵，接取了潜入荒坂子机房窃取科研名单的地下委托。"
+        },
+        {
+          "id": "c3",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "货币单位为欧金（E$）。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_009",
+        "location": "荒坂科技大厦·地下B2服务器机房",
+        "participants": [
+          {
+            "name": "V",
+            "attitude_to_player": null
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 1,
+        "phase": "深夜"
+      },
+      "player": {
+        "name": "V",
+        "visible_status": "眼部闪烁着数据蓝光的黑客潜入者"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "便携式网络接入仓",
+            "quantity": 1
+          }
+        ],
+        "money": 200,
+        "money_unit": "E$",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家在面对企业黑冰反击时尝试断连并擦除痕迹，掷骰判定为 failure。虽勉强拔出接口，但引发了物理机房的局部警报与摄像头调转。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "V"
+          ],
+          "action_type": "escape",
+          "outcome_band": "failure",
+          "resolution_source": "roll",
+          "effect_reasoning": "支点：断连操作受阻；边界：虽然脱离了深度数据死锁，但触发了现场物理警报与巡检机制。",
+          "resolved_fact": "V强行切断了数据连接，但未能完全阻断警报，机房内部安保系统进入黄色警戒。",
+          "narrative_hook": "神经直连强行熔断让V脑部隐隐刺痛，机房顶部的红外探头已亮起黄光进入巡检状态，走廊外隐约传来了安保人员快速逼近的脚步声。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "服务器机房潜入受挫",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "荒坂地下机房的巡逻安保小队每隔五分钟在走廊完成一次巡回打卡。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_009",
+      "turn_index": 3,
+      "user_input": "入侵主机数据端口",
+      "scene_text": "你将接口接入核心端口，但解密进度刚过半，一阵刺耳的电子蜂鸣在视网膜界面炸开，黑冰防卫程序如暗影般顺着数据流反噬而来！",
+      "closing_prompt": "黑冰警报瞬间被触发，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  },
+  {
+    "case_id": "case_10_high_stakes_negotiation",
+    "category": "high_stakes_negotiation",
+    "title": "空间站停机坪人质与数据对峙",
+    "description": "检验太空歌剧高风险对峙谈判时，双方利益威慑下博弈转入实质交换阶段的紧张张力与战术选择。",
+    "turn_index": 4,
+    "user_input": "我抬起手中的等离子起爆引信，冷冷盯着维克多特使：“密码和反物质炸药都在我脚下的箱子里。让你的人立刻解开总工程师的手铐并后退，否则大家一起在这里化成星际尘埃。”",
+    "core_memory": {
+      "version": 2,
+      "items": [
+        {
+          "id": "c1",
+          "kind": "world_invariant",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "世界名为「猎户座自由同盟」，风格为：太空歌剧与硬科幻\n能力体系为：星舰跃迁、等离子武器与动力装甲"
+        },
+        {
+          "id": "c2",
+          "kind": "protagonist_invariant",
+          "strength": "hard_constraint",
+          "source": "player",
+          "content": "主角雷诺，男性。反抗军前线指挥官，冷静果决。"
+        },
+        {
+          "id": "c3",
+          "kind": "system_convention",
+          "strength": "hard_constraint",
+          "source": "campaign_setup",
+          "content": "货币单位为信用点（Credits）。"
+        }
+      ]
+    },
+    "current_state": {
+      "scene": {
+        "scene_id": "scene_010",
+        "location": "欧米茄中立空间站·第三停机坪",
+        "participants": [
+          {
+            "name": "雷诺",
+            "attitude_to_player": null
+          },
+          {
+            "name": "维克多特使",
+            "attitude_to_player": "阴沉戒备"
+          }
+        ]
+      },
+      "world_clock": {
+        "day": 1,
+        "phase": "上午"
+      },
+      "player": {
+        "name": "雷诺",
+        "visible_status": "手持引信、神情坚毅的反抗军指挥官"
+      },
+      "resources": {
+        "inventory": [
+          {
+            "name": "反物质手提箱炸弹",
+            "quantity": 1
+          },
+          {
+            "name": "等离子起爆引信",
+            "quantity": 1
+          }
+        ],
+        "money": 0,
+        "money_unit": "Credits",
+        "fixed_assets": [],
+        "temporary_assets": []
+      }
+    },
+    "turn_resolution": {
+      "resolution_reasoning": "玩家以反物质炸药引信实施同归于尽威慑，判定为 success。维克多特使忌惮核心星图数据损毁，被迫让步，解开工程师手铐并后撤，要求交出第一段数据密钥。",
+      "action_resolutions": [
+        {
+          "action_id": "act_01",
+          "sequence": 1,
+          "actor": [
+            "雷诺"
+          ],
+          "action_type": "threaten",
+          "outcome_band": "success",
+          "resolution_source": "automatic",
+          "effect_reasoning": "支点：具备真实威慑力的反物质起爆装置；边界：对方被迫释放人质并后撤，进入实质性交换对峙。",
+          "resolved_fact": "雷诺的自爆威慑迫使维克多特使让步，工程师重获自由，双方进入近距离对峙与交换阶段。",
+          "narrative_hook": "维克多特使示意重装卫兵后退五步并解开了总工程师的手铐，冷冷要求雷诺立即将第一段解密公钥发送到控制台，双方在开阔的停机坪中央十步对峙。"
+        }
+      ],
+      "total_resolutions": 1
+    },
+    "context_facts": {
+      "turn_focus": "空间站停机坪数据与人质交换",
+      "facts": [
+        {
+          "fact_id": "f1",
+          "fact": "手提箱内封存着帝国急需的远古星门跃迁坐标，任何强行物理破坏都会直接引爆箱内反物质晶体。",
+          "evidence_ids": []
+        }
+      ]
+    },
+    "npc_profiles": [
+      {
+        "name": "维克多特使",
+        "aliases": [],
+        "role": "帝国安全局高级特派专员",
+        "appearance": "身着笔挺深灰军官常服，鹰钩鼻，右眼植入了微型战术战力扫描仪。",
+        "personality_trait": "冷酷傲慢、精于算计、权衡利弊",
+        "known_abilities": [],
+        "faction": null,
+        "last_known_location": null,
+        "attitude_to_player": "忌惮且敌视",
+        "last_scene_summary": null,
+        "last_scene_turn": null,
+        "disclosure_level": "face_to_face",
+        "core_motivation": null,
+        "hidden_secret": null,
+        "conflict_style": null,
+        "social_style": "语调冰冷带着施压质感",
+        "director_notes": null,
+        "source_director_npc_id": null,
+        "source_setting_ids": [],
+        "created_turn": null,
+        "introduced_turn": null
+      }
+    ],
+    "director_stage": null,
+    "engaged_events": [],
+    "recent_scene": {
+      "scene_id": "scene_010",
+      "turn_index": 3,
+      "user_input": "提箱走到停机坪中央",
+      "scene_text": "你提着银色手提箱走到停机坪中央。对面四名重装动力装甲步兵枪口微垂，被反绑的总工程师被按在特使身旁。维克多特使冷笑一声：“雷诺，交出箱子，我保证你们能活着离开。”",
+      "closing_prompt": "面对严阵以待的帝国卫队，你会怎么做？",
+      "action_preview": null,
+      "player_resolution": null,
+      "token_usage": null,
+      "created_at": null
+    }
+  }
+]

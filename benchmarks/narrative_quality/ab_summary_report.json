@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "timestamp": "2026-08-28T02:04:19Z",
+  "total_cases": 9,
+  "a_case_wins": 4,
+  "b_case_wins": 3,
+  "tie_cases": 2,
+  "b_case_win_rate": 0.3333,
+  "total_pairs": 27,
+  "valid_pairs": 24,
+  "a_pair_wins": 12,
+  "b_pair_wins": 12,
+  "tie_pairs": 0,
+  "void_pairs": 3,
+  "dimension_wins": {
+    "overall_preference": {
+      "A": 12,
+      "B": 12,
+      "tie": 0
+    },
+    "continue_desire": {
+      "A": 11,
+      "B": 13,
+      "tie": 0
+    },
+    "open_affordance": {
+      "A": 10,
+      "B": 13,
+      "tie": 1
+    },
+    "surprising_but_coherent": {
+      "A": 11,
+      "B": 10,
+      "tie": 3
+    },
+    "npc_world_agency": {
+      "A": 10,
+      "B": 12,
+      "tie": 2
+    },
+    "specificity": {
+      "A": 12,
+      "B": 10,
+      "tie": 2
+    }
+  },
+  "resource_stats": {
+    "avg_tokens": {
+      "A": 792.4,
+      "B": 732.1
+    },
+    "avg_latency_ms": {
+      "A": 4820.5,
+      "B": 4215.0
+    },
+    "avg_char_count": {
+      "A": 412.3,
+      "B": 395.4
+    }
+  },
+  "cases": [
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "winner": "B",
+      "a_pair_wins": 1,
+      "b_pair_wins": 2,
+      "tie_pairs": 0,
+      "void_pairs": 0
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "winner": "A",
+      "a_pair_wins": 2,
+      "b_pair_wins": 1,
+      "tie_pairs": 0,
+      "void_pairs": 0
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "winner": "tie",
+      "a_pair_wins": 1,
+      "b_pair_wins": 1,
+      "tie_pairs": 0,
+      "void_pairs": 1
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "winner": "B",
+      "a_pair_wins": 0,
+      "b_pair_wins": 2,
+      "tie_pairs": 0,
+      "void_pairs": 1
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "winner": "A",
+      "a_pair_wins": 2,
+      "b_pair_wins": 1,
+      "tie_pairs": 0,
+      "void_pairs": 0
+    },
+    {
+      "case_id": "case_07_inn_rest_overhear",
+      "winner": "B",
+      "a_pair_wins": 1,
+      "b_pair_wins": 2,
+      "tie_pairs": 0,
+      "void_pairs": 0
+    },
+    {
+      "case_id": "case_08_moral_dilemma",
+      "winner": "A",
+      "a_pair_wins": 2,
+      "b_pair_wins": 1,
+      "tie_pairs": 0,
+      "void_pairs": 0
+    },
+    {
+      "case_id": "case_09_failed_action_recovery",
+      "winner": "tie",
+      "a_pair_wins": 1,
+      "b_pair_wins": 1,
+      "tie_pairs": 0,
+      "void_pairs": 1
+    },
+    {
+      "case_id": "case_10_high_stakes_negotiation",
+      "winner": "A",
+      "a_pair_wins": 2,
+      "b_pair_wins": 1,
+      "tie_pairs": 0,
+      "void_pairs": 0
+    }
+  ]
+}
