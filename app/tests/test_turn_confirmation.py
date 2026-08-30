@@ -90,7 +90,7 @@ def test_turn_confirmation_runs_director_pipeline_for_player_and_creator(monkeyp
                 max_chars=1500,
                 experience_mode=mode,
                 state_before=_state(),
-                context=SimpleNamespace(turn_resolution=SimpleNamespace()),
+                context=SimpleNamespace(action_judgments=[]),
                 outline=SimpleNamespace(),
                 scene_result=SceneWriterResult(scene_text="场景正文"),
             )

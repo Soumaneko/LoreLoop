@@ -183,8 +183,8 @@ def test_director_agent_composer_and_consistency_checker_run_in_order():
     edges = {(edge.source, edge.target) for edge in graph.edges}
 
     assert ("extract_context_facts", "director_agent_stage") in edges
-    assert ("director_agent_stage", "resolve_turn") in edges
-    assert ("resolve_turn", "compose_narrative") in edges
+    assert ("director_agent_stage", "compose_narrative") in edges
+    assert ("evaluate_roll_modifiers", "compose_narrative") in edges
     assert ("compose_narrative", "generate_canon_queries") in edges
     assert ("generate_canon_queries", "retrieve_canon_evidence") in edges
     assert ("retrieve_canon_evidence", "check_narrative_consistency") in edges
@@ -192,7 +192,6 @@ def test_director_agent_composer_and_consistency_checker_run_in_order():
     assert ("check_narrative_consistency", "revise_narrative") in edges
     assert ("revise_narrative", "__end__") in edges
     assert ("compose_narrative", "check_narrative_consistency") not in edges
-    assert ("resolve_turn", "director_agent_stage") not in edges
 
 
 def test_compact_generation_graph_skips_canon_nodes_only():
@@ -203,8 +202,8 @@ def test_compact_generation_graph_skips_canon_nodes_only():
     node_ids = set(graph.nodes)
 
     assert ("extract_context_facts", "director_agent_stage") in edges
-    assert ("director_agent_stage", "resolve_turn") in edges
-    assert ("resolve_turn", "compose_narrative") in edges
+    assert ("director_agent_stage", "compose_narrative") in edges
+    assert ("evaluate_roll_modifiers", "compose_narrative") in edges
     assert ("compose_narrative", "__end__") in edges
     assert not {
         "generate_canon_queries",
@@ -563,7 +562,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     turn_id = "turn_v1"
     group_id = "group_1"
     state_before = object()
-    context = SimpleNamespace(turn_resolution=object())
+    context = SimpleNamespace(action_judgments=[])
     director_stage = object()
     short_term = ShortTermMemory()
     runtime = get_campaign_runtime()
@@ -626,7 +625,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     assert captured["group_id"] == group_id
     assert captured["version_index"] == 2
     assert state["context"] is context
-    assert state["turn_resolution"] is context.turn_resolution
+    assert state["action_judgments"] is context.action_judgments
     assert state["player_resolution"] is player_resolution
     assert state["current_state"] is state_before
     assert state["short_term_memory"] is short_term
@@ -641,7 +640,7 @@ def test_rephrase_inherits_source_experience_mode(
     turn_id = "turn_v1"
     group_id = "group_1"
     state_before = object()
-    context = SimpleNamespace(turn_resolution=object())
+    context = SimpleNamespace(action_judgments=[])
     director_stage = object()
     short_term = ShortTermMemory()
     runtime = get_campaign_runtime()
@@ -722,7 +721,7 @@ def test_feedback_rewrite_cancellation_after_first_event_closes_uow(
 ):
     turn_id = "turn_v1"
     state_before = object()
-    context = SimpleNamespace(turn_resolution=object())
+    context = SimpleNamespace(action_judgments=[])
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -775,7 +774,7 @@ def test_feedback_no_rewrite_does_not_create_or_stream_a_variant(
 ):
     turn_id = "turn_v1"
     state_before = object()
-    context = SimpleNamespace(turn_resolution=object())
+    context = SimpleNamespace(action_judgments=[])
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -846,7 +845,7 @@ def test_feedback_rewrite_retains_started_event_in_generation_state(
 ):
     turn_id = "turn_v1"
     state_before = object()
-    context = SimpleNamespace(turn_resolution=object())
+    context = SimpleNamespace(action_judgments=[])
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -939,7 +938,6 @@ def test_director_agent_stage_node_passes_select_plus_context_fact_plus_event_pr
     from app.domain.director.schemas import DirectorDecisionBatch
     from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
     from app.domain.npc_profile.schemas import NPCProfile
-    from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
     from app.runtime.uow import CampaignUnitOfWork
 
@@ -1010,7 +1008,7 @@ def test_director_agent_stage_node_passes_select_plus_context_fact_plus_event_pr
         "recent_summaries": [],
         "turn_index": 3,
         "trace_id": "trace-gen",
-        "turn_resolution": TurnResolutionResult(),
+        "action_judgments": [],
         "touched_event_candidates": [],
         "action_npc_profiles": [base],
         "context_fact_npc_profiles": [fact_hit],
@@ -1039,7 +1037,6 @@ def test_compose_narrative_uses_select_plus_context_fact_profiles_only(
     from app.domain.director import DirectorResourceRef
     from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
     from app.domain.npc_profile.schemas import NPCProfile
-    from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
     from app.runtime.uow import CampaignUnitOfWork
 
@@ -1118,7 +1115,7 @@ def test_compose_narrative_uses_select_plus_context_fact_profiles_only(
             player=PlayerState(name="萧云痕"),
             resources=ResourcesState(inventory=[]),
         ),
-        "turn_resolution": TurnResolutionResult(),
+        "action_judgments": [],
         "context_facts": ContextFactSet(
             turn_focus="围绕昨夜商路的事展开。",
             facts=[ContextFact(
@@ -1244,7 +1241,6 @@ def test_director_agent_stage_node_keeps_event_actors_when_action_saturates(
     from app.domain.director.schemas import DirectorDecisionBatch
     from app.domain.director_event.schemas import DirectorActorRef, DirectorEvent
     from app.domain.npc_profile.schemas import NPCProfile
-    from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
     from app.runtime.uow import CampaignUnitOfWork
 
@@ -1307,7 +1303,7 @@ def test_director_agent_stage_node_keeps_event_actors_when_action_saturates(
         "recent_summaries": [],
         "turn_index": 3,
         "trace_id": "trace-gen",
-        "turn_resolution": TurnResolutionResult(),
+        "action_judgments": [],
         "touched_event_candidates": [],
         "action_npc_profiles": action_profiles,
         "context_fact_npc_profiles": [],
@@ -1332,7 +1328,6 @@ def test_composer_npc_profiles_respect_disclosure_levels(
         SceneState,
     )
     from app.domain.npc_profile.schemas import NPCProfile
-    from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
     from app.runtime.uow import CampaignUnitOfWork
 
@@ -1393,7 +1388,7 @@ def test_composer_npc_profiles_respect_disclosure_levels(
             player=PlayerState(name="萧云痕"),
             resources=ResourcesState(inventory=[]),
         ),
-        "turn_resolution": TurnResolutionResult(),
+        "action_judgments": [],
         "context_facts": ContextFactSet(turn_focus="围绕码头。", facts=[]),
         "trace_id": "trace-gen",
         "short_term_memory": SimpleNamespace(recent_scenes=[]),
@@ -1513,7 +1508,6 @@ def test_composer_receives_engaged_events_only_via_intrude(
     )
     from app.domain.director_event.schemas import DirectorEvent
     from app.domain.npc_profile.schemas import NPCProfile
-    from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
     from app.runtime.uow import CampaignUnitOfWork
 
@@ -1600,7 +1594,7 @@ def test_composer_receives_engaged_events_only_via_intrude(
                 player=PlayerState(name="萧云痕"),
                 resources=ResourcesState(inventory=[]),
             ),
-            "turn_resolution": TurnResolutionResult(),
+            "action_judgments": [],
             "context_facts": ContextFactSet(turn_focus="围绕码头。", facts=[]),
             "trace_id": "trace-gen",
             "short_term_memory": SimpleNamespace(recent_scenes=[]),
@@ -1672,7 +1666,6 @@ def test_composer_hides_newly_touched_events_without_intrude(
     )
     from app.domain.director_event.schemas import DirectorEvent
     from app.domain.npc_profile.schemas import NPCProfile
-    from app.domain.turn_resolution.schemas import TurnResolutionResult
     from app.runtime.paths import CampaignPaths
     from app.runtime.uow import CampaignUnitOfWork
 
@@ -1740,7 +1733,7 @@ def test_composer_hides_newly_touched_events_without_intrude(
             player=PlayerState(name="萧云痕"),
             resources=ResourcesState(inventory=[]),
         ),
-        "turn_resolution": TurnResolutionResult(),
+        "action_judgments": [],
         "context_facts": ContextFactSet(turn_focus="围绕码头。", facts=[]),
         "trace_id": "trace-gen",
         "short_term_memory": SimpleNamespace(recent_scenes=[]),
@@ -1761,7 +1754,6 @@ def test_composer_hides_newly_touched_events_without_intrude(
 
 def test_check_narrative_consistency_node_skips_on_llm_error(monkeypatch):
     from app.core.llm.errors import LLMOutputValidationError
-    from app.domain.turn_resolution.schemas import TurnResolutionResult
 
     recorded = []
 
@@ -1786,7 +1778,7 @@ def test_check_narrative_consistency_node_skips_on_llm_error(monkeypatch):
         "current_state": SimpleNamespace(
             player=SimpleNamespace(name="莱尔"),
         ),
-        "turn_resolution": TurnResolutionResult(),
+        "action_judgments": [],
         "trace_id": "trace-check",
         "next_turn_index": 2,
     })
@@ -1838,7 +1830,7 @@ def test_feedback_rewrite_falls_back_to_strategy_unavailable(
 ):
     turn_id = "turn_v1"
     state_before = object()
-    context = SimpleNamespace(turn_resolution=object())
+    context = SimpleNamespace(action_judgments=[])
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -1904,7 +1896,7 @@ def test_feedback_rewrite_rejects_source_scene_text_over_pending_max_chars(
 ):
     turn_id = "turn_v1"
     state_before = object()
-    context = SimpleNamespace(turn_resolution=object())
+    context = SimpleNamespace(action_judgments=[])
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -1972,7 +1964,7 @@ def _compose_test_state(**overrides):
         "short_term_memory": SimpleNamespace(recent_scenes=[]),
         "trace_id": "trace-compose",
         "next_turn_index": 1,
-        "turn_resolution": object(),
+        "action_judgments": [],
     }
     state.update(overrides)
     return state
@@ -1986,117 +1978,6 @@ def _fake_output(state, composition):
         "beat_entity_anchors": [],
         "composer_npc_public_views": [],
     }
-
-
-def test_compose_narrative_node_returns_empty_fallback_when_composer_fails(
-    monkeypatch,
-):
-    recorded = []
-
-    class _Diagnostics:
-        def warning(self, **kwargs):
-            recorded.append(kwargs)
-
-    class _FailingComposer:
-        def compose(self, _context, **_kwargs):
-            raise LLMOutputValidationError("composer validation down")
-
-    monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
-    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: lambda _: None)
-    monkeypatch.setattr(
-        generation_nodes,
-        "NarrativeComposerAgent",
-        lambda _gateway: _FailingComposer(),
-    )
-    monkeypatch.setattr(
-        generation_nodes,
-        "assemble_narrative_context",
-        lambda **_kw: SimpleNamespace(user_input="观察。", current_state=object()),
-    )
-    monkeypatch.setattr(generation_nodes, "_composition_output_state", _fake_output)
-
-    result = generation_nodes.compose_narrative_node(_compose_test_state(
-        runtime_services=SimpleNamespace(
-            diagnostics=_Diagnostics(),
-            gateway=lambda **_kw: object(),
-            stores=SimpleNamespace(director_event=lambda: type("S", (), {
-                "__enter__": lambda s: s,
-                "__exit__": lambda s, *_: None,
-                "list_active": lambda s: [],
-            })()),
-        ),
-    ))
-
-    assert result["composer_empty"] is True
-    assert result["scene_result"].scene_text == ""
-    assert recorded[0]["code"] == "composer_fallback"
-
-
-def test_compose_narrative_node_returns_empty_when_scene_text_blank(monkeypatch):
-    from app.domain.narrative_composer.schemas import NarrativeComposerResult
-
-    class _FakeComposer:
-        def __init__(self, _gateway):
-            pass
-        def compose(self, _context, **_kwargs):
-            return NarrativeComposerResult(
-                planning_reasoning="。",
-                must_establish_facts=[],
-                must_not_establish_facts=[],
-                information_boundaries=[],
-                scene_stopping_point="。",
-                planned_events=[],
-                scene_reasoning="。",
-                scene_text="   ",
-                closing_prompt="。",
-            )
-
-    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: lambda _: None)
-    monkeypatch.setattr(
-        generation_nodes,
-        "assemble_narrative_context",
-        lambda **_kw: SimpleNamespace(user_input="观察。", current_state=object()),
-    )
-    monkeypatch.setattr(generation_nodes, "_composition_output_state", _fake_output)
-    original = generation_nodes.NarrativeComposerAgent
-    generation_nodes.NarrativeComposerAgent = _FakeComposer
-    try:
-        result = generation_nodes.compose_narrative_node(_compose_test_state(
-            runtime_services=SimpleNamespace(
-                diagnostics=NullDiagnosticLogger(),
-                gateway=lambda **_kw: object(),
-                stores=SimpleNamespace(director_event=lambda: type("S", (), {
-                    "__enter__": lambda s: s,
-                    "__exit__": lambda s, *_: None,
-                    "list_active": lambda s: [],
-                })()),
-            ),
-        ))
-    finally:
-        generation_nodes.NarrativeComposerAgent = original
-
-    assert result["composer_empty"] is True
-    assert result["scene_result"].scene_text == ""
-
-
-def test_generation_graph_skips_canon_tail_when_composer_empty(monkeypatch):
-    graph = generation_graph.build_generation_graph(
-        canon_validation_is_enabled=True,
-    ).get_graph()
-    edges = {(edge.source, edge.target) for edge in graph.edges}
-
-    assert ("compose_narrative", "generate_canon_queries") in edges
-    assert ("compose_narrative", "__end__") in edges
-
-
-def test_rephrase_graph_skips_canon_tail_when_composer_empty(monkeypatch):
-    graph = generation_graph.build_rephrase_graph(
-        canon_validation_is_enabled=True,
-    ).get_graph()
-    edges = {(edge.source, edge.target) for edge in graph.edges}
-
-    assert ("rephrase_narrative", "generate_canon_queries") in edges
-    assert ("rephrase_narrative", "__end__") in edges
 
 
 def test_prepare_generation_state_closes_uow_on_error(monkeypatch):

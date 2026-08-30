@@ -87,8 +87,6 @@ from app.domain.director_event.schemas import (
     DirectorEventSelectionOutput,
 )
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.turn_resolution.resolver import _TurnResolutionOutput
-from app.domain.turn_resolution.schemas import ActionResolutionFrame
 from app.domain.world_setting.schemas import SettingCreateOutput
 from app.domain.world_setting.creator import SETTING_PROMPT_TARGETS
 from app.domain.core_memory.schemas import CoreMemory
@@ -225,16 +223,6 @@ POLICY_ENTRIES = [
     ("continuity.update.deadline", lambda: schema_json(
         ContinuityProjectionOutput), ("deadline",),
      "strict_label", 80, 80, 80),
-    # --- Turn Resolution（soft_text）---
-    ("turn_resolution.effect_reasoning", lambda: schema_json(
-        _TurnResolutionOutput), ("action_resolutions", "effect_reasoning"),
-     "soft_text", 120, 150, 180),
-    ("turn_resolution.resolved_fact", lambda: schema_json(
-        _TurnResolutionOutput), ("action_resolutions", "resolved_fact"),
-     "soft_text", 120, 150, 180),
-    ("turn_resolution.narrative_hook", lambda: schema_json(
-        _TurnResolutionOutput), ("action_resolutions", "narrative_hook"),
-     "soft_text", 120, 150, 180),
     # --- NPC Batch Update（soft_text）---
     ("npc_batch_update.summary", lambda: schema_json(NPCBatchUpdateDisplay),
      ("updates", "scene_summary", "summary"),
@@ -380,15 +368,6 @@ def _domain_max_length(label: str) -> int | None:
         "continuity.create.deadline": (ContinuityItemDraft, ("deadline",)),
         "continuity.update.location": (ContinuityUpdateDraft, ("location",)),
         "continuity.update.deadline": (ContinuityUpdateDraft, ("deadline",)),
-        "turn_resolution.effect_reasoning": (
-            ActionResolutionFrame, ("effect_reasoning",),
-        ),
-        "turn_resolution.resolved_fact": (
-            ActionResolutionFrame, ("resolved_fact",),
-        ),
-        "turn_resolution.narrative_hook": (
-            ActionResolutionFrame, ("narrative_hook",),
-        ),
         "npc_batch_update.summary": (NPCSceneSummaryDraft, ("summary",)),
         "npc_batch_update.change_basis": (
             ScalarStableChange, ("change_basis",),
@@ -489,11 +468,6 @@ def test_no_unregistered_llm_constrained_field():
             ("item", "location"), ("item", "deadline"), ("subject",),
             ("state_delta",), ("new_current_state",), ("location",),
             ("deadline",),
-        }),
-        (_TurnResolutionOutput, {
-            ("action_resolutions", "effect_reasoning"),
-            ("action_resolutions", "resolved_fact"),
-            ("action_resolutions", "narrative_hook"),
         }),
         (NPCBatchUpdateDisplay, {
             ("updates", "scene_summary", "summary"),

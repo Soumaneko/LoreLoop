@@ -1,20 +1,13 @@
 import json
-from types import SimpleNamespace
-
 import pytest
 
 from app.core.llm import MockLLM
 from app.core.llm.errors import LLMProviderError
 from app.domain.action.schemas import ActionParseResult, AtomicAction
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
-from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.current_state import CurrentState, InventoryItem, PlayerState, ResourcesState, SceneState
-from app.domain.roll.schemas import RollResultBatch
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
-from app.domain.turn_resolution import ActionResolutionFrame, TurnResolutionResult
 from app.graph import generation_nodes
-from app.runtime.paths import CampaignPaths
-from app.runtime.uow import CampaignUnitOfWork
 
 
 def _make_action(action_id: str, likely_needs_roll: bool) -> AtomicAction:
@@ -124,81 +117,10 @@ class TestRollModifierEvaluator:
 
         assert result["modifier_batch"].modifiers == []
         assert result["roll_results"].total_rolls == 0
-        assert [event["step"] for event in result["events"]] == ["rolls_skipped"]
-
-    def test_generation_runs_turn_resolution_llm_without_rolls(self, monkeypatch):
-        calls = []
-
-        class _ResolutionAgent:
-            def __init__(self, _gateway):
-                pass
-
-            def resolve(self, **kwargs):
-                calls.append(kwargs)
-                return TurnResolutionResult(action_resolutions=[
-                    ActionResolutionFrame(
-                        action_id="a1",
-                        sequence=1,
-                        actor=["卢西安"],
-                        action_type="observe",
-                        outcome_band="success",
-                        effect_reasoning="无需随机判定。",
-                        resolved_fact="卢西安完成观察。",
-                    )
-                ])
-
-        monkeypatch.setattr(generation_nodes, "TurnResolutionAgent", _ResolutionAgent)
-        monkeypatch.setattr(generation_nodes, "gateway_for", lambda _state: object())
-        parse_result = ActionParseResult(
-            atomic_actions=[_make_action("a1", False)],
-        )
-
-        result = generation_nodes.resolve_turn_node({
-            "user_input": "观察庭院",
-            "current_state": _make_state(),
-            "action_parse_result": parse_result,
-            "roll_results": RollResultBatch(
-                dice_formula="0d20",
-                dice_sides=20,
-                total_rolls=0,
-                results=[],
-            ),
-            "core_memory": _make_core_memory(),
-            "context_facts": ContextFactSet(turn_focus="观察庭院", facts=[]),
-            "trace_id": "trace_no_roll",
-        })
-
-        assert calls
-        assert result["turn_resolution"].total_resolutions == 1
         assert [event["step"] for event in result["events"]] == [
-            "turn_resolution_done"
+            "rolls_skipped",
+            "action_judgments_done",
         ]
-
-    def test_resolve_turn_node_fails_closed_on_closed_stores(self, tmp_path):
-        stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-        stores.close()
-
-        with pytest.raises(RuntimeError, match="UoW is closed"):
-            generation_nodes.resolve_turn_node({
-                "user_input": "观察庭院",
-                "current_state": _make_state(),
-                "action_parse_result": ActionParseResult(
-                    atomic_actions=[_make_action("a1", False)],
-                ),
-                "roll_results": RollResultBatch(
-                    dice_formula="0d20",
-                    dice_sides=20,
-                    total_rolls=0,
-                    results=[],
-                ),
-                "core_memory": _make_core_memory(),
-                "context_facts": ContextFactSet(turn_focus="观察庭院", facts=[]),
-                "trace_id": "trace_fail_closed",
-                "runtime_services": SimpleNamespace(
-                    stores=stores,
-                    gateway=lambda **_kw: object(),
-                ),
-            })
 
     def test_trims_excess_modifiers_to_top_two(self):
         mock = MockLLM()

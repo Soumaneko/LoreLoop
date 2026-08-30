@@ -383,64 +383,6 @@ def test_introduce_npc_rejects_regular_profiles(tmp_path):
     assert stage.materials == []
 
 
-def test_generation_agent_receives_projected_turn_resolution(tmp_path):
-    import json
-
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    gateway = ScriptedDirectorGateway(
-        decision={
-            "reasoning": "本轮无额外舞台调度。",
-            "requests": [],
-        }
-    )
-    turn_resolution_json = json.dumps(
-        {
-            "action_resolutions": [
-                {
-                    "action_id": "a_1",
-                    "player_action": "向码头工人打听沉船的事。",
-                    "outcome": "success",
-                    "targets": [],
-                    "intent_match": True,
-                }
-            ]
-        },
-        ensure_ascii=False,
-    )
-
-    from app.domain.world_setting import WorldSetting
-    with stores.world_setting as store:
-        store.save(WorldSetting(
-            kind="lore",
-            name="潮汐旧约",
-            summary="约束沿海商会共同救援遇险船只的古老约定。",
-            public_facts=["拒绝救援会被同行抵制"],
-            created_turn=1,
-        ))
-
-    _, decision = run_generation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=make_current_state(),
-        user_input="向码头工人打听沉船的事。",
-        context_facts=[],
-        recent_summaries=[],
-        turn_index=3,
-        trace_id="generation-director",
-        npc_profiles=[],
-        turn_resolution_json=turn_resolution_json,
-    )
-
-    assert decision.requests == []
-    decide_input = gateway.input_data[0]["director_observation_json"]
-    observation = json.loads(decide_input)
-    assert observation["turn_resolution"]["action_resolutions"][0]["player_action"] == (
-        "向码头工人打听沉船的事。"
-    )
-    assert "action_resolutions" in observation["turn_resolution"]
-
-
 def test_generation_agent_projects_pending_engagement_without_writing(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 

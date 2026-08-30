@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.short_term_memory import ShortTermMemory, ShortTermScene, ShortTermMemoryStore
-from app.domain.turn_resolution import PlayerTurnResolution
+from app.domain.action_judgment import PlayerTurnResolution
 
 
 def _action_preview() -> ActionPreviewResult:

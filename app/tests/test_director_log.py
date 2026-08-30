@@ -18,7 +18,6 @@ from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer import SceneWriterResult
-from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import PendingTurn, get_campaign_runtime
 from app.runtime.uow import CampaignUnitOfWork
@@ -188,11 +187,10 @@ def test_pending_turn_persists_director_log_entry():
         context=NarrativeComposerContext(
             user_input="观察四周",
             current_state=state,
-            turn_resolution=TurnResolutionResult(),
+            action_judgments=[],
             core_memory=CoreMemory(items=[]),
         ),
         outline=PlotOutlineResult(
-            planning_reasoning="计划",
             scene_stopping_point="停止点",
         ),
         scene_result=SceneWriterResult(scene_text="正文"),

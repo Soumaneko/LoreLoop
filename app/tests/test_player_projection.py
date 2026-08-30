@@ -418,39 +418,27 @@ def test_player_event_projection_exposes_milestone_data_safely():
     assert "GM reasoning" not in str(rolls_event)
     assert "all_raw_values" not in str(rolls_event)
 
-    turn_res_event = DebugHandler._player_event({
-        "step": "turn_resolution_done",
+    judgment_event = DebugHandler._player_event({
+        "step": "action_judgments_done",
         "data": {
-            "turn_resolution": {
-                "action_resolutions": [
-                    {
-                        "action_id": "act-1",
-                        "action_type": "breakthrough",
-                        "outcome_band": "success",
-                        "resolved_fact": "已成功突破屏障",
-                        "effect_reasoning": "根据判定规则大阵有薄弱点",
-                    }
-                ],
-                "resolution_reasoning": "internal reasoning",
-            },
+            "action_judgments": [{
+                "action_id": "act-1",
+                "action_type": "breakthrough",
+                "outcome_band": "success",
+                "risk_level": "high",
+            }],
         },
     })
-    assert turn_res_event == {
-        "step": "turn_resolution_done",
+    assert judgment_event == {
+        "step": "action_judgments_done",
         "data": {
-            "turn_resolution": {
-                "action_resolutions": [
-                    {
-                        "action_type": "breakthrough",
-                        "outcome_band": "success",
-                    }
-                ],
-            },
+            "action_judgments": [{
+                "action_type": "breakthrough",
+                "outcome_band": "success",
+            }],
         },
     }
-    assert "internal reasoning" not in str(turn_res_event)
-    assert "effect_reasoning" not in str(turn_res_event)
-    assert "resolved_fact" not in str(turn_res_event)
+    assert "risk_level" not in str(judgment_event)
 
 
 def test_player_event_projection_preserves_revision_stream_marker():

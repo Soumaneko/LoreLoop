@@ -132,8 +132,8 @@ class TestPromptLoader:
             "# 权威上下文",
             "# 输出规范",
             "# 共同创作契约",
-            "严禁替玩家作出输入之外的新决定",
-            "CoreMemory、CurrentState、TurnResolutionResult、Director Agent",
+            "严禁替玩家作出重大不可逆决定",
+            "CoreMemory、CurrentState、ActionJudgments、Director Agent",
         ]
         for prompt in (compose, source, recompose):
             assert "[[include:" not in prompt
@@ -354,4 +354,3 @@ class TestPromptLoader:
         assert content == "Dynamically added prompt"
         assert version == "v1"
         assert "dynamic" in loader.list_tasks()
-

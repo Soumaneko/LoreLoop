@@ -41,11 +41,10 @@ from app.domain.narrative_consistency import (
     render_revision_instruction,
 )
 from app.domain.plot_outline.schemas import PlannedEvent
-from app.domain.turn_resolution.schemas import (
-    ActionResolutionFrame,
-    TurnResolutionResult,
+from app.domain.action_judgment.schemas import (
+    ActionJudgment,
 )
-from app.domain.turn_resolution.views import project_turn_resolution
+from app.domain.action_judgment.views import project_action_judgments
 
 
 pytestmark = pytest.mark.skipif(
@@ -67,7 +66,7 @@ FLAWED_SCENE_TEXT = """莱尔摊开手掌。埃利奥反而取出两枚金币塞
 
 埃利奥说，他多年前曾在灰烬图书馆住过半年，还亲自探索过地下书库，因此才来到老橡树镇招募莱尔。
 
-导演素材要求此处暂时隐藏真相，TurnResolutionResult 已经完成，所以下游模块应当结束本场景。"""
+导演素材要求此处暂时隐藏真相，Action Judgments 已经完成，所以下游模块应当结束本场景。"""
 
 
 def _current_state() -> CurrentState:
@@ -83,21 +82,16 @@ def _current_state() -> CurrentState:
     )
 
 
-def _turn_resolution() -> TurnResolutionResult:
-    return TurnResolutionResult(
-        resolution_reasoning=(
-            "交易动作成功；严格保留玩家限定，不扩展为同行承诺或离开广场。"
-        ),
-        action_resolutions=[ActionResolutionFrame(
+def _action_judgments() -> list[ActionJudgment]:
+    return [ActionJudgment(
             action_id="A1",
             sequence=1,
             actor=["莱尔"],
             action_type="支付定金并声明边界",
+            action_text=PLAYER_INPUT,
+            resolution_source="automatic",
             outcome_band="success",
-            effect_reasoning="埃利奥接受三枚金币，也接受莱尔今日不离开且未承诺同行的边界。",
-            resolved_fact="莱尔向埃利奥支付三枚金币；莱尔仍在广场，且没有承诺加入埃利奥的旅程。",
-        )],
-    )
+        )]
 
 
 def _context_facts() -> ContextFactSet:
@@ -118,16 +112,11 @@ def _context_facts() -> ContextFactSet:
 
 def _composition() -> NarrativeComposerResult:
     return NarrativeComposerResult(
-        planning_reasoning="本轮应落实有限定条件的三金币定金交易。",
-        must_establish_facts=[
-            "莱尔向埃利奥支付三枚金币。",
-            "莱尔仍留在广场，且没有承诺加入埃利奥的旅程。",
-        ],
-        must_not_establish_facts=[
-            "不得颠倒付款方向或改变金币数量。",
-            "不得替莱尔承诺同行或让莱尔离开广场。",
-        ],
-        information_boundaries=[],
+        action_resolutions=[{
+            "action_id": "A1",
+            "outcome_band": "success",
+            "resolved_fact": "莱尔向埃利奥支付三枚金币；莱尔仍在广场，且没有承诺加入旅程。",
+        }],
         scene_stopping_point="定金被埃利奥收下，莱尔仍在广场。",
         planned_events=[PlannedEvent(
             event_id="e1",
@@ -191,7 +180,7 @@ def _composer_context() -> NarrativeComposerContext:
     return NarrativeComposerContext(
         user_input=PLAYER_INPUT,
         current_state=_current_state(),
-        turn_resolution=_turn_resolution(),
+        action_judgments=_action_judgments(),
         core_memory=CoreMemory(items=[CoreMemoryItem(
             id="core_1",
             kind="world_invariant",
@@ -219,7 +208,7 @@ def test_real_llm_check_assertions_then_composer_revision(tmp_path):
     review = NarrativeConsistencyAgent(gateway).check(
         user_input=PLAYER_INPUT,
         current_state=_current_state(),
-        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        action_judgments_json=project_action_judgments(_action_judgments()),
         composition=flawed_composition,
         canon_query_set=query_set,
         canon_evidence_set=evidence_set,
@@ -271,7 +260,7 @@ def test_real_llm_check_assertions_then_composer_revision(tmp_path):
     assert revised.scene_text != flawed_composition.scene_text
     assert "三枚金币" in revised.scene_text
     assert "导演事件" not in revised.scene_text
-    assert "TurnResolutionResult" not in revised.scene_text
+    assert "Action Judgments" not in revised.scene_text
     assert revised.planned_events
     assert "A1" in {
         outcome_id

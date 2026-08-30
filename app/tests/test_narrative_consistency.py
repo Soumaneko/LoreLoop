@@ -18,8 +18,8 @@ from app.domain.narrative_consistency import (
 )
 from app.domain.narrative_consistency.agent import _segment_paragraphs
 from app.domain.plot_outline.schemas import PlannedEvent
-from app.domain.turn_resolution.schemas import ActionResolutionFrame, TurnResolutionResult
-from app.domain.turn_resolution.views import project_turn_resolution
+from app.domain.action_judgment.schemas import ActionJudgment
+from app.domain.action_judgment.views import project_action_judgments
 from app.graph import generation_nodes
 
 
@@ -40,24 +40,25 @@ def _current_state() -> CurrentState:
     )
 
 
-def _turn_resolution() -> TurnResolutionResult:
-    return TurnResolutionResult(action_resolutions=[ActionResolutionFrame(
+def _action_judgments() -> list[ActionJudgment]:
+    return [ActionJudgment(
         action_id="A1",
         sequence=1,
         actor=["莱尔"],
         action_type="speak",
+        action_text="要求埃利奥支付三枚金币",
+        resolution_source="automatic",
         outcome_band="success",
-        effect_reasoning="埃利奥接受付款条件。",
-        resolved_fact="埃利奥向莱尔支付三枚金币。",
-    )])
+    )]
 
 
 def _composition(scene_text: str) -> NarrativeComposerResult:
     return NarrativeComposerResult(
-        planning_reasoning="莱尔提出条件，埃利奥接受并付款。",
-        must_establish_facts=["埃利奥向莱尔支付三枚金币。"],
-        must_not_establish_facts=["莱尔向埃利奥支付三枚金币。"],
-        information_boundaries=[],
+        action_resolutions=[{
+            "action_id": "A1",
+            "outcome_band": "success",
+            "resolved_fact": "埃利奥向莱尔支付三枚金币。",
+        }],
         scene_stopping_point="莱尔收到三枚金币后仍在广场。",
         planned_events=[PlannedEvent(
             event_id="e1",
@@ -77,13 +78,13 @@ def _check(
     *,
     query_set: NarrativeCanonQuerySet | None = None,
     evidence_set: CanonEvidenceSet | None = None,
-    turn_resolution_json: str | None = None,
+    action_judgments_json: str | None = None,
 ):
     return NarrativeConsistencyAgent(gateway).check(
         user_input="我要求埃利奥支付三枚金币。",
         current_state=_current_state(),
-        turn_resolution_json=(
-            turn_resolution_json or project_turn_resolution(_turn_resolution())
+        action_judgments_json=(
+            action_judgments_json or project_action_judgments(_action_judgments())
         ),
         composition=_composition(scene_text),
         canon_query_set=query_set,
@@ -99,7 +100,7 @@ def _assertion_payload(**overrides):
         "incorrect_statement": "正文写成莱尔向埃利奥支付了两枚金币。",
         "authoritative_fact": "Player Input 与 TR 均确定埃利奥向莱尔支付三枚金币，主体、方向和数量相反。",
         "required_revision": "改正付款主体、方向和数量；保留交易场景中的其他对白与反应。",
-        "authority_refs": ["Player Input", "TurnResolutionResult"],
+        "authority_refs": ["Player Input", "Action Judgments"],
         "canon_query_id": None,
         "evidence_ids": [],
     }
@@ -129,32 +130,33 @@ def test_pass_returns_no_assertions_and_preserves_compact_input_contract():
     assert "[P001]" in call["input_data"]["segmented_scene_text"]
 
 
-def test_check_accepts_projected_turn_resolution_without_effect_reasoning():
+def test_check_accepts_projected_action_judgments():
     gateway = _SpyGateway({
         "audit_summary": "正文与本轮权威输入不存在明确冲突。",
         "canon_findings": [],
         "decision": "pass",
         "assertions": [],
     })
-    projected = json.dumps({
-        "action_resolutions": [{
+    projected = json.dumps([
+        {
             "action_id": "A1",
             "sequence": 1,
             "actor": ["莱尔"],
             "action_type": "speak",
             "outcome_band": "success",
-            "resolved_fact": "埃利奥向莱尔支付三枚金币。",
-        }],
-        "total_resolutions": 1,
-    }, ensure_ascii=False)
+            "action_text": "要求埃利奥支付三枚金币",
+            "resolution_source": "automatic",
+            "risk_level": "medium",
+        }
+    ], ensure_ascii=False)
 
     _check(
         gateway,
         "埃利奥向莱尔支付了三枚金币。",
-        turn_resolution_json=projected,
+        action_judgments_json=projected,
     )
 
-    assert gateway.calls[0]["input_data"]["turn_resolution_json"] == projected
+    assert gateway.calls[0]["input_data"]["action_judgments_json"] == projected
 
 
 def test_revise_outputs_composer_ready_semantic_assertion():
@@ -350,7 +352,7 @@ def test_unknown_canon_assertion_is_ignored_with_warning():
     review = agent.check(
         user_input="行动",
         current_state=_current_state(),
-        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        action_judgments_json=project_action_judgments(_action_judgments()),
         composition=_composition("错误正文。"),
         trace_id="trace-1",
     )
@@ -443,7 +445,7 @@ def test_canon_assertion_may_cite_evidence_retrieved_by_another_query():
     review = agent.check(
         user_input="行动",
         current_state=_current_state(),
-        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        action_judgments_json=project_action_judgments(_action_judgments()),
         composition=_composition("埃利奥说自己早已探索过灰烬图书馆。"),
         canon_query_set=query_set,
         canon_evidence_set=evidence_set,
@@ -512,7 +514,7 @@ def test_unknown_evidence_assertion_is_ignored_while_valid_one_is_retained():
     review = agent.check(
         user_input="行动",
         current_state=_current_state(),
-        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        action_judgments_json=project_action_judgments(_action_judgments()),
         composition=_composition("埃利奥说自己早已探索过灰烬图书馆。"),
         canon_query_set=query_set,
         canon_evidence_set=evidence_set,
@@ -582,7 +584,7 @@ def test_invalid_canon_assertion_is_ignored_and_decision_becomes_pass(
     review = agent.check(
         user_input="行动",
         current_state=_current_state(),
-        turn_resolution_json=project_turn_resolution(_turn_resolution()),
+        action_judgments_json=project_action_judgments(_action_judgments()),
         composition=_composition("莱尔抵达广场。"),
         canon_query_set=query_set,
         canon_evidence_set=evidence_set,
@@ -720,7 +722,7 @@ def test_check_node_stores_review_without_mutating_composition(
     result = generation_nodes.check_narrative_consistency_node({
         "user_input": "行动",
         "current_state": _current_state(),
-        "turn_resolution": _turn_resolution(),
+        "action_judgments": _action_judgments(),
         "narrative_composition": composition,
         "trace_id": "trace-1",
         "runtime_services": SimpleNamespace(diagnostics=diagnostics),

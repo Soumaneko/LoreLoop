@@ -838,7 +838,7 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         max_chars=1500,
         experience_mode="creator",
         state_before=state,
-        context=SimpleNamespace(turn_resolution=SimpleNamespace()),
+        context=SimpleNamespace(action_judgments=[]),
         outline=SimpleNamespace(),
         scene_result=scene_result,
         director_stage=DirectorStageResult(

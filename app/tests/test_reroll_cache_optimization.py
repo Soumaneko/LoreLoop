@@ -8,7 +8,6 @@ from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState
 from app.domain.roll.schemas import RollResultBatch
 from app.domain.roll_modifier.schemas import RollModifierBatch
-from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.graph.confirmation_cache import ConfirmationCache
 from app.graph.generation_helpers import (
     extract_generation_prefix,
@@ -93,8 +92,7 @@ def test_extract_and_hydrate_prefix_helpers():
         "modifier_batch": snap.modifier_batch,
         "events": [],
         "roll_results": None,
-        "turn_resolution": TurnResolutionResult(),
-        "composer_empty": False,
+        "action_judgments": [],
     }
 
     extracted = extract_generation_prefix(state)
@@ -104,8 +102,7 @@ def test_extract_and_hydrate_prefix_helpers():
     # Reset suffix clears downstream artifacts
     reset_generation_suffix(state)
     assert "roll_results" not in state
-    assert "turn_resolution" not in state
-    assert "composer_empty" not in state
+    assert "action_judgments" not in state
 
     # Hydrate restores prefix fields
     target_state = {}
@@ -191,11 +188,11 @@ def test_reroll_turn_stream_uses_reroll_graph(monkeypatch, configure_runtime_ser
         context=NarrativeComposerContext(
             user_input="测试动作",
             current_state=state_before,
-            turn_resolution=TurnResolutionResult(),
+            action_judgments=[],
             core_memory=CoreMemory(items=[]),
             context_facts=snap.context_facts,
         ),
-        outline=PlotOutlineResult(planning_reasoning="规划", scene_stopping_point="停顿点"),
+        outline=PlotOutlineResult(scene_stopping_point="停顿点"),
         scene_result=SceneWriterResult(scene_text="旧正文"),
         turn_index=1,
         short_term_memory=ShortTermMemory(),
@@ -231,7 +228,7 @@ def test_reroll_turn_stream_uses_reroll_graph(monkeypatch, configure_runtime_ser
         # Assert prefix was hydrated and suffix was reset
         assert captured["state"]["action_parse_result"] == snap.action_parse_result
         assert captured["state"]["context_facts"] == snap.context_facts
-        assert "turn_resolution" not in captured["state"]
+        assert "action_judgments" not in captured["state"]
     finally:
         runtime.pending_turns.remove(turn_id)
 
@@ -318,10 +315,10 @@ def test_finalize_pending_turn_populates_snapshot_and_prefix_cache():
         "action_parse_result": snap.action_parse_result,
         "context_facts": snap.context_facts,
         "context": None,
-        "outline": PlotOutlineResult(planning_reasoning="规划", scene_stopping_point="停顿点"),
+        "outline": PlotOutlineResult(scene_stopping_point="停顿点"),
         "scene_result": SceneWriterResult(scene_text="正文"),
         "roll_results": RollResultBatch(dice_formula="1d100", dice_sides=100, total_rolls=0, results=[]),
-        "turn_resolution": TurnResolutionResult(),
+        "action_judgments": [],
         "player_resolution": None,
         "events": [],
     }
@@ -442,7 +439,7 @@ def test_pending_journal_roundtrip_preserves_prefix_snapshot():
     from app.domain.plot_outline.schemas import PlotOutlineResult
     from app.domain.scene_writer.schemas import SceneWriterResult
     from app.domain.short_term_memory import ShortTermMemory
-    from app.domain.turn_resolution.schemas import PlayerTurnResolution
+    from app.domain.action_judgment.schemas import PlayerTurnResolution
     from app.runtime.session import PendingTurn, get_campaign_runtime
 
     runtime = get_campaign_runtime()
@@ -505,11 +502,11 @@ def test_pending_journal_roundtrip_preserves_prefix_snapshot():
         context=NarrativeComposerContext(
             user_input="持久化测试动作",
             current_state=_make_state(),
-            turn_resolution=TurnResolutionResult(),
+            action_judgments=[],
             core_memory=CoreMemory(items=[]),
             context_facts=snap.context_facts,
         ),
-        outline=PlotOutlineResult(planning_reasoning="规划", scene_stopping_point="停顿点"),
+        outline=PlotOutlineResult(scene_stopping_point="停顿点"),
         scene_result=SceneWriterResult(scene_text="持久化正文"),
         turn_index=1,
         short_term_memory=ShortTermMemory(),
@@ -555,7 +552,7 @@ def test_modifier_fallback_reroll_retries_modifier_evaluator_while_reusing_prefi
     from app.domain.plot_outline.schemas import PlotOutlineResult
     from app.domain.scene_writer.schemas import SceneWriterResult
     from app.domain.short_term_memory import ShortTermMemory
-    from app.domain.turn_resolution.schemas import PlayerTurnResolution
+    from app.domain.action_judgment.schemas import PlayerTurnResolution
     from app.graph import generation_graph, generation_nodes
     from app.runtime.session import PendingTurn, get_campaign_runtime
 
@@ -580,11 +577,11 @@ def test_modifier_fallback_reroll_retries_modifier_evaluator_while_reusing_prefi
         context=NarrativeComposerContext(
             user_input="攻击敌人",
             current_state=state_before,
-            turn_resolution=TurnResolutionResult(),
+            action_judgments=[],
             core_memory=CoreMemory(items=[]),
             context_facts=snap.context_facts,
         ),
-        outline=PlotOutlineResult(planning_reasoning="规划", scene_stopping_point="停顿点"),
+        outline=PlotOutlineResult(scene_stopping_point="停顿点"),
         scene_result=SceneWriterResult(scene_text="正文"),
         turn_index=1,
         short_term_memory=ShortTermMemory(),
@@ -638,7 +635,4 @@ def test_modifier_fallback_reroll_retries_modifier_evaluator_while_reusing_prefi
         assert captured["state"]["context_facts"] == snap.context_facts
     finally:
         runtime.pending_turns.remove(turn_id)
-
-
-
 

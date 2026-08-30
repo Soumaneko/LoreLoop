@@ -9,7 +9,6 @@ from app.domain.current_state import PlayerState, make_default_state
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
-from app.domain.turn_resolution.schemas import TurnResolutionResult
 from app.runtime.app_paths import APP_PATHS
 from app.runtime.paths import (
     ACTIVE_SAVE_FILE,
@@ -33,7 +32,7 @@ def _pending_turn(
     context = NarrativeComposerContext(
         user_input="推开门",
         current_state=state_before,
-        turn_resolution=TurnResolutionResult(),
+        action_judgments=[],
         core_memory=CoreMemory(items=[]),
     )
     return PendingTurn(
@@ -47,7 +46,6 @@ def _pending_turn(
         state_before=state_before,
         context=context,
         outline=PlotOutlineResult(
-            planning_reasoning="推进当前行动。",
             scene_stopping_point="门被推开。",
         ),
         scene_result=SceneWriterResult(scene_text=f"待确认版本 {version_index}"),
