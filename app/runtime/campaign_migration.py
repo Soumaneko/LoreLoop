@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import os
-import shutil
 import sqlite3
 import uuid
-from collections.abc import Callable
 from pathlib import Path
 
 from app.domain.confirmed_history.store import ConfirmedHistoryStore
@@ -33,104 +31,56 @@ LEGACY_DB_FILES = (
     "director_log.db",
     "world_settings.db",
 )
-LEGACY_ARCHIVE_DIR = Path(".runtime") / "legacy-db-v1"
 
-_LEGACY_STORE_FACTORIES = {
-    "current_state.db": CurrentStateStore,
-    "continuity.db": ContinuityStore,
-    "short_term.db": lambda conn: ShortTermMemoryStore(conn, max_items=5),
-    "scene_summaries.db": SceneSummaryStore,
-    "confirmed_history.db": ConfirmedHistoryStore,
-    "npc_profiles.db": NPCProfileStore,
-    "director_events.db": DirectorEventStore,
-    "director_npcs.db": DirectorNPCStore,
-    "director_log.db": RecentDirectorLogStore,
-    "world_settings.db": WorldSettingStore,
-}
-
-def _cleanup_legacy_files(paths: CampaignPaths) -> None:
-    """Best-effort delete known legacy ten DBs and sidecars plus archive dir.
-
-    Scope is exactly the ten known files and ``.runtime/legacy-db-v1``;
-    failures are swallowed so a successful campaign.db is never reported as
-    failed. Used both after migration and when a validated campaign.db wins.
-    """
-    for name in LEGACY_DB_FILES:
-        base = paths.data_dir / name
-        for suffix in ("", "-wal", "-shm", "-journal"):
-            try:
-                Path(str(base) + suffix).unlink(missing_ok=True)
-            except OSError:
-                pass
-    # Clean archive dir if it exists (Phase 2 leftovers)
-    archive = paths.data_dir / LEGACY_ARCHIVE_DIR
-    if archive.exists():
-        try:
-            shutil.rmtree(archive, ignore_errors=True)
-        except OSError:
-            pass
-        try:
-            (paths.data_dir / ".runtime").rmdir()
-        except OSError:
-            pass
-
-
-LEGACY_JOURNAL_MESSAGE = (
-    "Save contains legacy director_mutation.json from an interrupted cross-database commit. "
-    "Open this save with a Phase 4 build and close it normally to clear the journal, "
-    "then retry on Phase 5. Refusing to open at Phase 5."
+UNSUPPORTED_LEGACY_LAYOUT_MESSAGE = (
+    "unsupported legacy layout: save contains legacy ten database files, "
+    "turn_history.db or director_mutation.json from a pre-1.0 layout. This build only supports "
+    "campaign.db + .runtime/control.db. Migrate the save with a pre-Phase4 build first."
 )
 
 
-def ensure_campaign_database(paths: CampaignPaths) -> str:
-    """Return the outcome: ``"validated"``, ``"migrated"`` or ``"created"``.
+def has_legacy_layout(data_dir: Path) -> list[str]:
+    """Return sorted list of legacy layout markers found at the save root.
 
-    New saves start as an empty ``campaign.db``. Legacy saves (the ten per-file
-    databases) are migrated atomically into a single ``campaign.db``; a present,
-    valid ``campaign.db`` always wins and legacy files are never re-imported.
+    Only checks the save root (ten DBs, turn_history.db, director_mutation.json).
+    Snapshot-internal legacy files are handled by snapshots/save_archive directly.
+    """
+    data_dir = Path(data_dir)
+    found: list[str] = []
+    for name in LEGACY_DB_FILES:
+        if (data_dir / name).is_file():
+            found.append(name)
+    if (data_dir / ".runtime" / "turn_history.db").is_file():
+        found.append(".runtime/turn_history.db")
+    if (data_dir / ".runtime" / "director_mutation.json").is_file():
+        found.append(".runtime/director_mutation.json")
+    return sorted(found)
+
+
+def ensure_campaign_database(paths: CampaignPaths) -> str:
+    """Return the outcome: ``"validated"`` or ``"created"``.
+
+    Only the current format (``campaign.db``) is supported. Any legacy ten
+    databases or ``.runtime/director_mutation.json`` without a valid current
+    database cause a fail-closed ``RuntimeError``; no empty database is created
+    over an old layout.
     """
     paths.data_dir.mkdir(parents=True, exist_ok=True)
-    # Phase 5 fail-closed: never migrate/open a save that still carries the
-    # legacy cross-database journal.
-    _journal = paths.data_dir / ".runtime" / "director_mutation.json"
-    if _journal.is_file():
-        raise RuntimeError(LEGACY_JOURNAL_MESSAGE)
-    legacy_files = _legacy_file_paths(paths)
+    journal = paths.data_dir / ".runtime" / "director_mutation.json"
+    if journal.is_file():
+        raise RuntimeError(
+            f"{UNSUPPORTED_LEGACY_LAYOUT_MESSAGE} Found: .runtime/director_mutation.json"
+        )
     if paths.campaign_db.exists():
         validate_campaign_database(paths.campaign_db)
-        # Phase 5: validated campaign wins, clean any leftover legacy files/archive
-        try:
-            _cleanup_legacy_files(paths)
-        except OSError:
-            pass
         return "validated"
-    if legacy_files:
-        _migrate_legacy(paths, legacy_files)
-        return "migrated"
+    legacy_markers = has_legacy_layout(paths.data_dir)
+    if legacy_markers:
+        raise RuntimeError(
+            f"{UNSUPPORTED_LEGACY_LAYOUT_MESSAGE} Found: {', '.join(legacy_markers)}"
+        )
     _create_empty(paths)
     return "created"
-
-
-def _legacy_file_paths(paths: CampaignPaths) -> dict[str, Path]:
-    return {
-        name: paths.data_dir / name
-        for name in LEGACY_DB_FILES
-        if (paths.data_dir / name).is_file()
-    }
-
-
-def _open_legacy_stores(paths: CampaignPaths) -> None:
-    """Run in-code schema migrations against legacy files before copying."""
-    for name in LEGACY_DB_FILES:
-        path = paths.data_dir / name
-        if not path.is_file():
-            continue
-        conn = connect_sqlite(path)
-        try:
-            _LEGACY_STORE_FACTORIES[name](conn)
-            conn.commit()
-        finally:
-            conn.close()
 
 
 def _build_campaign_schema(conn: sqlite3.Connection) -> None:
@@ -147,66 +97,18 @@ def _build_campaign_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def _copy_business_tables(dst: sqlite3.Connection, legacy_path: Path) -> None:
-    """Copy business tables from one legacy database, skipping bookkeeping."""
-    dst.execute("ATTACH DATABASE ? AS legacy", (str(legacy_path),))
-    try:
-        legacy_tables = {
-            row["name"]
-            for row in dst.execute(
-                """
-                SELECT name FROM legacy.sqlite_master
-                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-                """
-            ).fetchall()
-        }
-        main_tables = {
-            row["name"]
-            for row in dst.execute(
-                "SELECT name FROM main.sqlite_master WHERE type = 'table'"
-            ).fetchall()
-        }
-        for table in sorted(legacy_tables & main_tables):
-            if table == "schema_versions" or _is_fts_table(table):
-                continue
-            src_count = int(
-                dst.execute(f'SELECT COUNT(*) FROM legacy."{table}"').fetchone()[0]
-            )
-            dst.execute(f'INSERT INTO main."{table}" SELECT * FROM legacy."{table}"')
-            dst_count = int(
-                dst.execute(f'SELECT COUNT(*) FROM main."{table}"').fetchone()[0]
-            )
-            if src_count != dst_count:
-                raise RuntimeError(
-                    f"row count mismatch while migrating {legacy_path.name}:{table} "
-                    f"({src_count} != {dst_count})"
-                )
-        dst.commit()
-    finally:
-        dst.execute("DETACH DATABASE legacy")
-
-
-def _is_fts_table(name: str) -> bool:
-    return "_fts" in name or name in {"history_documents_fts"}
-
-
-def _install_campaign_db(
-    paths: CampaignPaths,
-    populate: Callable[[sqlite3.Connection], None] | None,
-) -> None:
+def _install_campaign_db(paths: CampaignPaths) -> None:
     """Build ``campaign.db`` in a temporary file, validate, atomically install.
 
-    Shared by migration from the legacy ten databases and by first-install
-    creation of an empty database. Any failure before ``os.replace`` removes
-    the temporary file; a failure during replace cleans up and re-raises.
+    Shared by first-install creation of an empty database. Any failure before
+    ``os.replace`` removes the temporary file; a failure during replace cleans
+    up and re-raises.
     """
     temporary = paths.data_dir / f"campaign.db.{uuid.uuid4().hex}.tmp"
     conn = None
     try:
         conn = connect_sqlite(temporary)
         _build_campaign_schema(conn)
-        if populate is not None:
-            populate(conn)
         validate_campaign_database(temporary)
         conn.execute("PRAGMA journal_mode = DELETE")
         conn.commit()
@@ -226,35 +128,8 @@ def _install_campaign_db(
         raise
 
 
-def _migrate_legacy(paths: CampaignPaths, legacy_files: dict[str, Path]) -> None:
-    _open_legacy_stores(paths)
-
-    def _populate(conn: sqlite3.Connection) -> None:
-        conn.execute("PRAGMA foreign_keys = OFF")
-        for name in LEGACY_DB_FILES:
-            path = legacy_files.get(name)
-            if path is not None:
-                _copy_business_tables(conn, path)
-        conn.execute("PRAGMA foreign_keys = ON")
-        _rebuild_fts(conn)
-
-    _install_campaign_db(paths, _populate)
-    # Phase 5: directly delete legacy files/sidecars and archive dir; failures
-    # after a successful install must not be reported as migration failure.
-    try:
-        _cleanup_legacy_files(paths)
-    except OSError:
-        pass
-
-
 def _create_empty(paths: CampaignPaths) -> None:
-    _install_campaign_db(paths, None)
-
-
-def _rebuild_fts(conn: sqlite3.Connection) -> None:
-    ContinuityStore(conn).rebuild_fts()
-    ConfirmedHistoryStore(conn).rebuild_fts()
-    conn.commit()
+    _install_campaign_db(paths)
 
 
 _REQUIRED_BUSINESS_TABLES = (

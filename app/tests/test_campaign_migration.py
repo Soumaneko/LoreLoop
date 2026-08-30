@@ -32,122 +32,6 @@ def _paths(tmp_path, name="save"):
     return CampaignPaths.from_data_dir(tmp_path / name)
 
 
-def _seed_legacy(paths: CampaignPaths) -> None:
-    store = open_current_state_store(paths.data_dir / "current_state.db")
-    store.save(
-        CurrentState(
-            scene=SceneState(scene_id="sc1", location="北境"),
-            player=PlayerState(name="旅人"),
-        )
-    )
-    store.close()
-
-    store = open_continuity_store(paths.data_dir / "continuity.db")
-    store.insert(
-        ContinuityItem(
-            kind="commitment",
-            subject="找回失落的古籍",
-            premise="古籍被埋在北境废墟之下",
-            created_turn=1,
-            updated_turn=1,
-        )
-    )
-    store.close()
-
-    store = open_short_term_store(paths.data_dir / "short_term.db")
-    store.add_turn(
-        scene_id="sc1",
-        turn_index=1,
-        user_input="北境风沙很大",
-        scene_text="沙尘蔽日。",
-    )
-    store.close()
-
-    store = open_scene_summary_store(paths.data_dir / "scene_summaries.db")
-    store.save_one(
-        SceneSummary(
-            level=1,
-            content="初遇",
-            turn_start=1,
-            turn_end=2,
-        )
-    )
-    store.close()
-
-    store = open_confirmed_history_store(paths.data_dir / "confirmed_history.db")
-    store.upsert_turn(
-        scene_id="sc1",
-        turn_index=1,
-        user_input="我向南走",
-        scene_text="一段场景。\n\n第二段。",
-    )
-    store.close()
-
-    store = open_npc_profile_store(paths.data_dir / "npc_profiles.db")
-    store.upsert(
-        NPCProfile(
-            npc_id="n1",
-            name="林霜",
-            aliases=["林姑娘"],
-            last_known_location="北境客栈",
-        )
-    )
-    store.close()
-
-    store = open_director_event_store(paths.data_dir / "director_events.db")
-    store.save(
-        DirectorEvent(
-            event_id="e1",
-            role="arc",
-            title="废墟异动",
-            subject="发现废墟入口",
-            intent="引出主线",
-            method="场景线索",
-            macro_intent="推进探索",
-            deadline_clock=WorldClock(day=1, phase="黄昏"),
-            created_turn=1,
-        )
-    )
-    store.close()
-
-    store = open_director_npc_store(paths.data_dir / "director_npcs.db")
-    store.save(
-        DirectorNPCDraft(
-            draft_id="d1",
-            core_motivation="守护古籍",
-            hidden_secret="古籍是空的",
-            conflict_style="回避",
-            social_style="冷淡",
-            role="守墓人",
-            personality_trait="沉默",
-            appearance="灰袍老者",
-            name="无名守墓人",
-            status="prepared",
-            created_turn=1,
-        )
-    )
-    store.close()
-
-    store = open_director_log_store(paths.data_dir / "director_log.db")
-    store.save_entries(
-        [{"turn_index": 1, "phase": "confirmation", "reasoning": "引向废墟"}]
-    )
-    store.close()
-
-    store = open_world_setting_store(paths.data_dir / "world_settings.db")
-    store.save(
-        WorldSetting(
-            setting_id="w1",
-            kind="location",
-            name="北境",
-            summary="终年风沙的边境之地",
-            public_facts=["风沙"],
-            created_turn=1,
-        )
-    )
-    store.close()
-
-
 def test_created_empty_save_has_all_schemas(tmp_path):
     paths = _paths(tmp_path)
     assert ensure_campaign_database(paths) == "created"
@@ -166,58 +50,28 @@ def test_created_empty_save_has_all_schemas(tmp_path):
 def test_legacy_journal_blocks_migration_and_preserves_legacy(tmp_path):
     paths = _paths(tmp_path)
     paths.data_dir.mkdir(parents=True)
-    _seed_legacy(paths)
+    # Create a minimal legacy marker and journal
+    (paths.data_dir / "current_state.db").write_text("legacy", encoding="utf-8")
     journal = paths.data_dir / ".runtime" / "director_mutation.json"
     journal.parent.mkdir(parents=True)
     journal.write_text("{}", encoding="utf-8")
 
-    with pytest.raises(RuntimeError, match="legacy director_mutation"):
+    with pytest.raises(RuntimeError, match="unsupported legacy layout"):
         ensure_campaign_database(paths)
 
-    # Fail-closed: no campaign.db created, legacy files preserved.
+    # Fail-closed: no campaign.db created
     assert not paths.campaign_db.exists()
-    for name in LEGACY_DB_FILES:
-        assert (paths.data_dir / name).is_file()
 
 
-def test_legacy_save_migrates_atomically(tmp_path):
+def test_legacy_layout_is_rejected_without_creating_empty_db(tmp_path):
     paths = _paths(tmp_path)
     paths.data_dir.mkdir(parents=True)
-    _seed_legacy(paths)
-    legacy_present = {
-        name
-        for name in LEGACY_DB_FILES
-        if (paths.data_dir / name).is_file()
-    }
-    assert legacy_present == set(LEGACY_DB_FILES)
-
-    assert ensure_campaign_database(paths) == "migrated"
-
-    with CampaignUnitOfWork(paths) as uow:
-        assert uow.current_state.load().scene.location == "北境"
-        assert uow.continuity.list_active()[0].subject == "找回失落的古籍"
-        assert uow.scene_summary.list_active()[0].content == "初遇"
-        assert uow.confirmed_history.turn_count() == 1
-        assert uow.confirmed_history.fts_search("我向南走") != {}
-        assert uow.npc_profile.get_by_name("林霜").name == "林霜"
-        assert uow.director_event.get_by_id("e1").title == "废墟异动"
-        assert uow.director_npc.get_by_id("d1").name == "无名守墓人"
-        assert uow.director_log.count() == 1
-        assert uow.world_setting.get_by_id("w1").name == "北境"
-        assert uow.continuity.fts_search(["失落的古籍"]) == {
-            uow.continuity.list_active()[0].id
-        }
-
-    for name in LEGACY_DB_FILES:
-        assert not (paths.data_dir / name).exists()
-        for suffix in ("-wal", "-shm", "-journal"):
-            assert not (paths.data_dir / f"{name}{suffix}").exists()
-    archive = paths.data_dir / ".runtime" / "legacy-db-v1"
-    assert not archive.exists()
-
-    # Validated open should also clean any leftover archive (idempotent)
-    assert ensure_campaign_database(paths) == "validated"
-    assert not archive.exists()
+    (paths.data_dir / "current_state.db").write_text("legacy", encoding="utf-8")
+    (paths.data_dir / "continuity.db").write_text("legacy", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="unsupported legacy layout"):
+        ensure_campaign_database(paths)
+    assert not paths.campaign_db.exists()
+    assert (paths.data_dir / "current_state.db").is_file()
 
 
 def test_existing_campaign_db_wins(tmp_path):
@@ -230,32 +84,12 @@ def test_existing_campaign_db_wins(tmp_path):
                 player=PlayerState(name="旅人"),
             )
         )
-    paths.data_dir.mkdir(parents=True, exist_ok=True)
-    _seed_legacy(paths)
+    # Even with a stray legacy file, validated campaign wins and no migration is attempted
+    (paths.data_dir / "current_state.db").write_text("legacy", encoding="utf-8")
     assert ensure_campaign_database(paths) == "validated"
     with CampaignUnitOfWork(paths) as uow:
         assert uow.current_state.load().scene.location == "新房"
 
-
-def test_partial_legacy_archive_still_migrates(tmp_path):
-    paths = _paths(tmp_path)
-    paths.data_dir.mkdir(parents=True)
-    store = open_world_setting_store(paths.data_dir / "world_settings.db")
-    store.save(
-        WorldSetting(
-            setting_id="w1",
-            kind="location",
-            name="北境",
-            summary="终年风沙",
-            public_facts=["风沙"],
-            created_turn=1,
-        )
-    )
-    store.close()
-    assert ensure_campaign_database(paths) == "migrated"
-    with CampaignUnitOfWork(paths) as uow:
-        assert uow.world_setting.get_by_id("w1").name == "北境"
-        assert uow.continuity.list_active() == []
 
 def test_validate_rejects_incomplete_schema_only_db(tmp_path):
     import sqlite3
@@ -289,22 +123,8 @@ def test_validate_rejects_incomplete_schema_only_db(tmp_path):
 def test_migration_failure_cleans_temp_database(tmp_path, monkeypatch):
     paths = _paths(tmp_path)
     paths.data_dir.mkdir(parents=True)
-    store = open_world_setting_store(paths.data_dir / "world_settings.db")
-    store.save(
-        WorldSetting(
-            setting_id="w1",
-            kind="location",
-            name="北境",
-            summary="终年风沙",
-            public_facts=["风沙"],
-            created_turn=1,
-        )
-    )
-    store.close()
 
     from app.runtime import campaign_migration
-
-    original = campaign_migration._build_campaign_schema
 
     def boom(conn):
         raise RuntimeError("injected bootstrap failure")

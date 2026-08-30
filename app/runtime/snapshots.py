@@ -9,12 +9,7 @@ from pathlib import Path
 
 from app.core.time import utc_now
 
-from .campaign_migration import (
-    LEGACY_DB_FILES,
-    ensure_campaign_database,
-    validate_campaign_database,
-)
-from .paths import CampaignPaths
+from .campaign_migration import validate_campaign_database
 
 
 SNAPSHOT_DATA_FILES = frozenset({
@@ -23,7 +18,6 @@ SNAPSHOT_DATA_FILES = frozenset({
     "initialization.json",
 })
 SNAPSHOT_ARCHIVE_FILES = SNAPSHOT_DATA_FILES | {"manifest.json"}
-LEGACY_SNAPSHOT_DB_FILES = frozenset(LEGACY_DB_FILES)
 
 
 class SnapshotError(RuntimeError):
@@ -62,19 +56,22 @@ def capture_snapshot(data_dir: Path, destination: Path) -> None:
 
 
 def normalize_snapshot(snapshot_dir: Path) -> list[str]:
-    """Migrate one snapshot and normalize its manifest to the current format."""
+    """Validate and normalize a snapshot manifest to the current format."""
     snapshot_dir = Path(snapshot_dir)
-    has_legacy = any(
-        (snapshot_dir / name).is_file() for name in LEGACY_SNAPSHOT_DB_FILES
-    )
-    if has_legacy:
-        try:
-            ensure_campaign_database(CampaignPaths.from_data_dir(snapshot_dir))
-        except Exception as exc:
+    # Fail closed for any stray legacy file on disk, even if not listed in manifest
+    for name in ("settings.json",):
+        if (snapshot_dir / name).is_file():
             raise SnapshotError(
-                f"snapshot campaign migration failed: {snapshot_dir}: {exc}"
-            ) from exc
+                f"Snapshot contains unsupported file: {name!r} in {snapshot_dir}"
+            )
+    # Also check for any legacy ten-DB file on disk
+    from .campaign_migration import LEGACY_DB_FILES
 
+    for name in LEGACY_DB_FILES:
+        if (snapshot_dir / name).is_file():
+            raise SnapshotError(
+                f"Snapshot contains unsupported file: {name!r} in {snapshot_dir}"
+            )
     manifest_path = snapshot_dir / "manifest.json"
     if not manifest_path.is_file():
         raise SnapshotError(f"Snapshot is missing manifest.json: {snapshot_dir}")
@@ -94,28 +91,13 @@ def normalize_snapshot(snapshot_dir: Path) -> list[str]:
             f"Snapshot manifest files must be a string list: {snapshot_dir}"
         )
 
-    rewritten = [
-        name
-        for name in files
-        if name not in LEGACY_SNAPSHOT_DB_FILES and name != "settings.json"
-    ]
-    if (snapshot_dir / "campaign.db").is_file() and "campaign.db" not in rewritten:
-        rewritten.append("campaign.db")
-    for name in rewritten:
+    for name in files:
         if name not in SNAPSHOT_DATA_FILES:
             raise SnapshotError(
-                f"Snapshot manifest contains unexpected file: {name!r} in {snapshot_dir}"
+                f"Snapshot manifest contains unsupported file: {name!r} in {snapshot_dir}"
             )
 
-    manifest["files"] = rewritten
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
-        encoding="utf-8",
-    )
-    for name in LEGACY_SNAPSHOT_DB_FILES:
-        (snapshot_dir / name).unlink(missing_ok=True)
-    (snapshot_dir / "settings.json").unlink(missing_ok=True)
-    return rewritten
+    return list(dict.fromkeys(files))
 
 
 def install_snapshot(

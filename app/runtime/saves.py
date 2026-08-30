@@ -21,7 +21,6 @@ from .turn_history import ensure_control_database
 from .initialization import InitializationStore
 from .save_archive import (
     ArchiveInspection,
-    SaveArchiveError,
     create_consistent_snapshot,
     export_save as write_save_archive,
     extract_archive,
@@ -145,17 +144,6 @@ class SaveManager:
         source_id = self._validate_save_id(save_id)
         with self.runtime.save_task(), self._lock:
             source = self._require_save(source_id)
-            # A save that has never been opened since Phase 2 may still be in
-            # the legacy ten-database layout. Copying it without migrating would
-            # silently drop all canonical data because snapshots only accept
-            # campaign.db.
-            try:
-                ensure_campaign_database(CampaignPaths.from_data_dir(source))
-            except RuntimeError as exc:
-                if "director_mutation" in str(exc):
-                    raise SaveArchiveError(str(exc)) from exc
-                raise
-            ensure_control_database(CampaignPaths.from_data_dir(source))
             self._require_no_pending_source(source_id, "copy")
             if str(name).strip():
                 clean_name = self._available_name(name)
@@ -232,15 +220,6 @@ class SaveManager:
         destination_path = Path(destination)
         with self.runtime.save_task(), self._lock:
             source = self._require_save(clean_id)
-            # See copy(): migrate an unopened legacy save before snapshotting so
-            # export does not silently omit all canonical data.
-            try:
-                ensure_campaign_database(CampaignPaths.from_data_dir(source))
-            except RuntimeError as exc:
-                if "director_mutation" in str(exc):
-                    raise SaveArchiveError(str(exc)) from exc
-                raise
-            ensure_control_database(CampaignPaths.from_data_dir(source))
             self._require_no_pending_source(clean_id, "export")
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination_path.with_name(

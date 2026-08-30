@@ -1,28 +1,21 @@
 from __future__ import annotations
 
-import json
 import os
-import shutil
-import sys
-import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
+
 from uuid import UUID
 
 from platformdirs import user_data_path
 
 from app.runtime.environment import load_source_dotenv
 
-
 APP_NAME = "LoreLoop"
 DATA_DIR_ENV = "LORELOOP_DATA_DIR"
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-LEGACY_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 load_source_dotenv()
-
 
 @dataclass(frozen=True)
 class ApplicationPaths:
@@ -36,7 +29,6 @@ class ApplicationPaths:
     player_static_dir: Path
     debug_static_dir: Path
     data_dir_overridden: bool = False
-
 
 def resolve_data_root(
     environ: Mapping[str, str] | None = None,
@@ -59,7 +51,6 @@ def resolve_data_root(
         False,
     )
 
-
 def resolve_application_paths(
     environ: Mapping[str, str] | None = None,
 ) -> ApplicationPaths:
@@ -77,106 +68,6 @@ def resolve_application_paths(
         data_dir_overridden=overridden,
     )
 
-
-def migrate_legacy_user_data(
-    paths: ApplicationPaths,
-    *,
-    legacy_project_root: str | Path = LEGACY_PROJECT_ROOT,
-    frozen: bool | None = None,
-) -> str:
-    """Copy the pre-desktop source layout once, without deleting the source."""
-    if paths.data_dir_overridden:
-        return "skipped_override"
-    if frozen is None:
-        frozen = bool(getattr(sys, "frozen", False))
-    if frozen:
-        return "skipped_frozen"
-
-    data_root = paths.data_root
-    if data_root.exists() or data_root.is_symlink():
-        return "skipped_destination_exists"
-
-    legacy_root = Path(legacy_project_root)
-    legacy_saves = legacy_root / "saves"
-    legacy_config = legacy_saves / ".app"
-    legacy_logs = legacy_root / "logs"
-    if not legacy_saves.is_dir() and not legacy_config.is_dir():
-        return "no_legacy_data"
-
-    data_root.parent.mkdir(parents=True, exist_ok=True)
-    stage = Path(
-        tempfile.mkdtemp(
-            prefix=f".{data_root.name}-migration-",
-            dir=data_root.parent,
-        )
-    )
-    copied = False
-    try:
-        stage_saves = stage / "saves"
-        if legacy_saves.is_dir():
-            for source in legacy_saves.iterdir():
-                if not source.is_dir() or not _is_save_id(source.name):
-                    continue
-                shutil.copytree(source, stage_saves / source.name)
-                copied = True
-
-        stage_config = stage / "config"
-        for filename in ("model_config.json", "reader_preferences.json"):
-            source = legacy_config / filename
-            if source.is_file():
-                stage_config.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, stage_config / filename)
-                copied = True
-
-        active_save = _valid_legacy_active_save(legacy_saves, stage_saves)
-        if active_save is not None:
-            stage_config.mkdir(parents=True, exist_ok=True)
-            (stage_config / "active_save").write_text(
-                active_save,
-                encoding="utf-8",
-            )
-            copied = True
-
-        if legacy_logs.is_dir():
-            for source in legacy_logs.glob("*.jsonl"):
-                try:
-                    (stage / "logs").mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(source, stage / "logs" / source.name)
-                except OSError:
-                    continue
-
-        if not copied:
-            return "no_legacy_data"
-
-        stage_config.mkdir(parents=True, exist_ok=True)
-        (stage_config / "migration-v1.json").write_text(
-            json.dumps(
-                {
-                    "source": str(legacy_root),
-                    "completed_at": time.time(),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        try:
-            os.replace(stage, data_root)
-        except OSError:
-            if data_root.exists() or data_root.is_symlink():
-                return "skipped_destination_race"
-            raise
-        return "migrated"
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to copy legacy LoreLoop data from {legacy_root}"
-        ) from exc
-    finally:
-        if stage.exists():
-            shutil.rmtree(stage, ignore_errors=True)
-
-
 def ensure_user_directories(paths: ApplicationPaths) -> None:
     for directory in (
         paths.saves_dir,
@@ -189,7 +80,6 @@ def ensure_user_directories(paths: ApplicationPaths) -> None:
             directory.chmod(0o700)
         except OSError:
             pass
-
 
 def validate_resource_paths(paths: ApplicationPaths) -> None:
     missing = [
@@ -205,27 +95,12 @@ def validate_resource_paths(paths: ApplicationPaths) -> None:
             "LoreLoop read-only resources are missing: " + ", ".join(missing)
         )
 
-
 def validate_debug_resource_paths(paths: ApplicationPaths) -> None:
     if not paths.debug_static_dir.is_dir():
         raise RuntimeError(
             "LoreLoop debug resources are missing: "
             + str(paths.debug_static_dir)
         )
-
-
-def _valid_legacy_active_save(
-    legacy_saves: Path,
-    staged_saves: Path,
-) -> str | None:
-    try:
-        raw = (legacy_saves / ".active_save").read_text(encoding="utf-8").strip()
-        save_id = str(UUID(raw))
-    except (FileNotFoundError, OSError, ValueError):
-        return None
-    if raw != save_id or not (staged_saves / save_id).is_dir():
-        return None
-    return save_id
 
 
 def _is_save_id(value: str) -> bool:

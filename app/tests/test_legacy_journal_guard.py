@@ -30,12 +30,12 @@ def test_runtime_open_rejects_legacy_journal(tmp_path):
     journal = bad_dir / ".runtime" / "director_mutation.json"
     journal.parent.mkdir(parents=True, exist_ok=True)
     journal.write_text("{}", encoding="utf-8")
-    with pytest.raises(RuntimeError, match="legacy director_mutation"):
+    with pytest.raises(RuntimeError, match="unsupported legacy layout"):
         CampaignRuntime("bad", paths=bad_paths, max_workers=1)
     # reconfigure from ok to bad should also fail and keep old runtime usable
     rt = CampaignRuntime("ok2", paths=_valid_paths(tmp_path, "ok2"), max_workers=1)
     try:
-        with pytest.raises(RuntimeError, match="legacy director_mutation"):
+        with pytest.raises(RuntimeError, match="unsupported legacy layout"):
             rt.reconfigure("bad", bad_paths)
         assert rt.campaign_id == "ok2"
         assert not rt.stores.is_closed
@@ -51,17 +51,17 @@ def test_save_manager_copy_and_export_reject_journal_and_cleanup(tmp_path):
         # Inject journal into source
         (src_dir / ".runtime" / "director_mutation.json").write_text("{}", encoding="utf-8")
         # copy should fail closed and not leave new save or .copy-* staging
-        with pytest.raises(SaveArchiveError, match="director_mutation"):
+        with pytest.raises(SaveArchiveError, match="unsupported legacy layout"):
             manager.copy(src.save_id)
         assert len([p for p in root.iterdir() if p.is_dir() and p.name not in {src.save_id}]) == 1  # only default + src
         assert not list(root.glob(".copy-*"))
         # export should also fail and not create archive
         dest_zip = tmp_path / "out.zip"
-        with pytest.raises(SaveArchiveError, match="director_mutation"):
+        with pytest.raises(SaveArchiveError, match="unsupported legacy layout"):
             manager.export_to(src.save_id, dest_zip)
         assert not dest_zip.exists()
         # Also low-level save_archive should fail
-        with pytest.raises(SaveArchiveError, match="director_mutation"):
+        with pytest.raises(SaveArchiveError, match="unsupported legacy layout"):
             create_consistent_snapshot(src_dir, tmp_path / "staging2")
     finally:
         rt.close()

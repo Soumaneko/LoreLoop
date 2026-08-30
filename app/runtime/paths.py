@@ -5,12 +5,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID, uuid4
 
-from .app_paths import (
-    APP_PATHS,
-    _is_save_id,
-    ensure_user_directories,
-    migrate_legacy_user_data,
-)
+from .app_paths import APP_PATHS, _is_save_id, ensure_user_directories
 
 SAVES_DIR = APP_PATHS.saves_dir
 APP_CONFIG_DIR = APP_PATHS.config_dir
@@ -19,11 +14,6 @@ WEBVIEW_DIR = APP_PATHS.webview_dir
 ACTIVE_SAVE_FILE = APP_CONFIG_DIR / "active_save"
 
 _STAGING_DIR_PREFIXES = (".copy-", ".import-", ".trash-")
-
-
-def _ensure_user_data() -> None:
-    migrate_legacy_user_data(APP_PATHS)
-    ensure_user_directories(APP_PATHS)
 
 
 def validate_save_name(name: str) -> str:
@@ -52,7 +42,7 @@ def resolve_active_save_id(
     is only rewritten when the persisted value differs from the resolution.
     """
     if root == SAVES_DIR and active_file == ACTIVE_SAVE_FILE:
-        _ensure_user_data()
+        ensure_user_directories(APP_PATHS)
     active = _read_active_save_id(root, active_file)
     if active is not None:
         return active
@@ -143,16 +133,6 @@ class CampaignPaths:
     @property
     def control_db(self) -> Path:
         return self.data_dir / ".runtime" / "control.db"
-
-    @property
-    def turn_history_db(self) -> Path:
-        """Legacy control database path (``turn_history.db``).
-
-        Phase 3 renames the control database to :attr:`control_db`.
-        The legacy path is only used for the one-time migration and for
-        import-compatibility; new code must not write to it.
-        """
-        return self.data_dir / ".runtime" / "turn_history.db"
 
     @property
     def core_memory_json(self) -> Path:

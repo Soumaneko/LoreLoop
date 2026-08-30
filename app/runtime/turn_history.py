@@ -19,66 +19,32 @@ def _now() -> str:
     return utc_now()
 
 
+_UNSUPPORTED_CONTROL_MESSAGE = (
+    "unsupported legacy layout: save contains legacy .runtime/turn_history.db "
+    "from a pre-1.0 layout. This build only supports .runtime/control.db. "
+    "Migrate the save with a pre-Phase4 build first."
+)
+
+
 def ensure_control_database(paths) -> str:
     """Ensure the control database exists at ``paths.control_db``.
 
-    Cases:
-    - only ``control.db``: validate and upgrade schema in place.
-    - only ``turn_history.db``: checkpoint WAL, then atomically rename to
-      ``control.db`` and upgrade schema.
-    - neither: create a fresh ``control.db`` via schema bootstrap.
-    - both: fail closed.
-
-    An existing control database must already contain the two base control
-    tables; an empty or unrelated file is rejected instead of being silently
-    replaced by a fresh schema.
+    Only the current format (``control.db``) is supported. Any legacy
+    ``turn_history.db`` causes a fail-closed ``RuntimeError``; no silent
+    promotion or overwrite is performed.
     """
     control = Path(paths.control_db)
-    legacy = Path(paths.turn_history_db)
+    legacy = Path(paths.data_dir / ".runtime" / "turn_history.db")
     has_control = control.is_file()
     has_legacy = legacy.is_file()
     if has_control and has_legacy:
-        raise RuntimeError(
-            f"Both control databases exist: {control} and {legacy}; "
-            "refusing to choose silently. Remove one."
-        )
+        raise RuntimeError(_UNSUPPORTED_CONTROL_MESSAGE)
+    if has_legacy:
+        raise RuntimeError(_UNSUPPORTED_CONTROL_MESSAGE)
     if has_control:
         _validate_control_database(control)
         _ensure_control_schema(control)
         return "validated"
-    if has_legacy:
-        # A legacy control DB is still a control DB: it must already contain the
-        # two base control tables.  An empty/illegal legacy file must fail closed
-        # instead of being renamed and silently upgraded into a fresh schema.
-        _validate_control_database(legacy)
-        _checkpoint_legacy_control(legacy)
-        # The issue's migration contract is an atomic rename.  The legacy file
-        # becomes control.db and any legacy WAL/SHM sidecars are removed only
-        # after the main file is in place.  If any cleanup fails we fail closed:
-        # a successful return must never leave both files behind.
-        control.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            os.replace(legacy, control)
-        except OSError:
-            raise
-        try:
-            _ensure_control_schema(control)
-        except BaseException:
-            # Do not claim success if schema upgrade fails; leave the renamed
-            # control.db in place and report the failure so the user can act.
-            raise
-        for suffix in ("-wal", "-shm", "-journal"):
-            legacy_side = Path(str(legacy) + suffix)
-            if legacy_side.exists():
-                try:
-                    legacy_side.unlink(missing_ok=True)
-                except OSError as exc:
-                    raise RuntimeError(
-                        f"control migration succeeded but failed to remove "
-                        f"{legacy_side}: {exc}"
-                    ) from exc
-        return "migrated"
-    # neither exists
     control.parent.mkdir(parents=True, exist_ok=True)
     _ensure_control_schema(control)
     return "created"
@@ -115,31 +81,6 @@ def _validate_control_database(db_path: Path) -> None:
     finally:
         conn.close()
 
-
-def _checkpoint_legacy_control(legacy: Path) -> None:
-    """Checkpoint and close a legacy WAL before atomic rename.
-
-    ``os.replace`` moves the main database file only; uncheckpointed WAL
-    content would be stranded under the legacy name.  Opening with
-    ``connect_sqlite`` also persists ``journal_mode=WAL`` in the database
-    header, which is fine after the rename.
-    """
-    conn = connect_sqlite(legacy)
-    try:
-        # A plain commit after opening performs the checkpoint for a WAL-mode
-        # database.  Run a full explicit checkpoint and verify the WAL is gone
-        # before renaming.
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
-        conn.commit()
-    finally:
-        conn.close()
-    # After close SQLite may remove the WAL sidecar automatically.  If it still
-    # exists after a committed TRUNCATE checkpoint, the checkpoint did not fully
-    # absorb the WAL (e.g. another connection still holds it), so fail closed.
-    if Path(str(legacy) + "-wal").exists():
-        raise RuntimeError(
-            f"failed to checkpoint legacy control database WAL: {legacy}"
-        )
 
 
 def ensure_control_database_by_dir(data_dir: Path) -> str:

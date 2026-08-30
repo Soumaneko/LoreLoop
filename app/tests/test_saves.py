@@ -17,6 +17,7 @@ from app.runtime.paths import (
     SAVES_DIR,
     validate_save_name,
 )
+from app.runtime.save_archive import SaveArchiveError
 from app.runtime.saves import SaveManager
 from app.runtime.session import CampaignRuntime, PendingOpening, PendingTurn
 from app.runtime.turn_history import CampaignHistory
@@ -322,8 +323,6 @@ def test_copy_does_not_install_root_legacy_database(tmp_path):
     try:
         original = manager.rename(manager.active_id, "带旧库")
         original_dir = root / original.save_id
-        # Simulate an un-migrated legacy root DB next to campaign.db; the
-        # copy pipeline must not carry it into the new save.
         legacy = original_dir / "current_state.db"
         with sqlite3.connect(legacy) as conn:
             conn.execute(
@@ -341,11 +340,10 @@ def test_copy_does_not_install_root_legacy_database(tmp_path):
                 ),
             )
 
-        copied = manager.copy(original.save_id)
-        copied_dir = root / copied.save_id
-        assert not (copied_dir / "current_state.db").exists()
-        # Legacy files that already existed in the source are not listed or installed.
-        assert (copied_dir / "campaign.db").is_file()
+        with pytest.raises(SaveArchiveError, match="unsupported legacy layout"):
+            manager.copy(original.save_id)
+        # No new save should be created on failure
+        assert len(manager.list()) == 1
     finally:
         runtime.close()
 

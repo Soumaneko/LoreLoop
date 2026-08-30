@@ -113,13 +113,8 @@ def main(argv: list[str] | None = None) -> int:
 
     logs_dir = None
     try:
-        from app.runtime.app_paths import (
-            APP_PATHS,
-            ensure_user_directories,
-            migrate_legacy_user_data,
-        )
+        from app.runtime.app_paths import APP_PATHS, ensure_user_directories
 
-        migrate_legacy_user_data(APP_PATHS)
         ensure_user_directories(APP_PATHS)
         logs_dir = APP_PATHS.logs_dir
         with SingleInstanceLock(APP_PATHS.config_dir / "desktop.lock"):

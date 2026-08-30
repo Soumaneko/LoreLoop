@@ -85,6 +85,14 @@ def _make_campaign_database(path: Path, value: str = "saved") -> None:
         connection.execute("INSERT INTO values_for_test VALUES (?)", (value,))
         connection.commit()
 
+def _make_control_database(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE turn_transactions (id INTEGER PRIMARY KEY, status TEXT)")
+        conn.execute("CREATE TABLE turn_snapshots (sequence INTEGER PRIMARY KEY, path TEXT, redo_path TEXT)")
+        conn.execute("CREATE TABLE control_state (id INTEGER PRIMARY KEY, current_revision_id TEXT)")
+        conn.commit()
+
 
 def _manifest_for(path: str, content: bytes) -> dict:
     return {
@@ -112,10 +120,11 @@ def test_snapshot_uses_sqlite_backup_and_excludes_wal_and_shm(tmp_path):
         connection.execute("INSERT INTO values_for_test VALUES ('from-wal')")
         connection.commit()
         assert Path(f"{database}-wal").exists()
+        _make_control_database(source / ".runtime" / "control.db")
 
         destination = tmp_path / "snapshot"
         files = create_consistent_snapshot(source, destination)
-        assert files == ["campaign.db"]
+        assert files == [".runtime/control.db", "campaign.db"]
         assert not list(destination.glob("*-wal"))
         assert not list(destination.glob("*-shm"))
         with sqlite3.connect(destination / "campaign.db") as copied:
@@ -129,6 +138,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     source.mkdir()
     SaveManifestRepository(source).create("Alpha")
     _make_campaign_database(source / "campaign.db")
+    _make_control_database(source / ".runtime" / "control.db")
     _make_database(source / ".snapshots" / "undo-one" / "campaign.db", "old")
     (source / ".snapshots" / "undo-one" / "manifest.json").write_text(
         '{"files": ["campaign.db"]}', encoding="utf-8"
@@ -196,6 +206,7 @@ def test_export_accepts_director_log_schema(tmp_path):
             "reasoning": "r",
             "measures": "m",
         }])
+    _make_control_database(source / ".runtime" / "control.db")
 
     exported = export_save(source, tmp_path / "save.zip")
 
@@ -206,6 +217,7 @@ def test_snapshot_preserves_portable_turn_history_paths(tmp_path):
     source = tmp_path / "old-save"
     snapshots = source / ".snapshots"
     snapshots.mkdir(parents=True)
+    _make_database(source / "campaign.db")
     undo = snapshots / "undo-one"
     redo = snapshots / "redo-one"
     undo.mkdir()
@@ -348,10 +360,23 @@ def test_inspection_enforces_compression_ratio_limit(tmp_path):
 def test_extract_rejects_invalid_sqlite_and_cleans_staging(tmp_path):
     archive = tmp_path / "bad-db.zip"
     content = b"not sqlite"
-    manifest = _manifest_for("campaign.db", content)
+    control_path = tmp_path / "control.db"
+    _make_control_database(control_path)
+    control_bytes = control_path.read_bytes()
+    manifest = {
+        "format_version": 1,
+        "files": [
+            {"path": "campaign.db", "size": len(content), "sha256": hashlib.sha256(content).hexdigest()},
+            {"path": ".runtime/control.db", "size": len(control_bytes), "sha256": hashlib.sha256(control_bytes).hexdigest()},
+            {"path": "save_manifest.json", "size": 2, "sha256": hashlib.sha256(b"{}").hexdigest()},
+        ],
+        "metadata": {},
+    }
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.writestr("manifest.json", json.dumps(manifest))
         bundle.writestr("save/campaign.db", content)
+        bundle.write(control_path, "save/.runtime/control.db")
+        bundle.writestr("save/save_manifest.json", "{}")
     destination = tmp_path / "staging"
     with pytest.raises(SaveArchiveError, match="Invalid SQLite"):
         extract_archive(archive, destination)
@@ -372,6 +397,7 @@ def test_snapshot_rejects_database_schema_newer_than_application(tmp_path):
         connection.execute(
             "INSERT INTO schema_versions VALUES ('current_state', 999)"
         )
+    _make_control_database(source / ".runtime" / "control.db")
     with pytest.raises(SaveArchiveError, match="newer than this application"):
         export_save(source, tmp_path / "future.zip")
 
@@ -380,177 +406,42 @@ def test_snapshot_rejects_symlink_in_portable_subtree(tmp_path):
     source = tmp_path / "source"
     runtime = source / ".runtime"
     runtime.mkdir(parents=True)
+    _make_database(source / "campaign.db")
+    _make_control_database(runtime / "control.db")
     target = tmp_path / "outside.db"
     _make_database(target)
     (runtime / "linked.db").symlink_to(target)
     with pytest.raises(SaveArchiveError, match="Symbolic links"):
         create_consistent_snapshot(source, tmp_path / "snapshot")
 
-def test_legacy_archive_files_are_allowed_for_import(tmp_path):
-    from app.runtime.save_archive import _is_allowed_relative_path
 
-    assert _is_allowed_relative_path("current_state.db") is True
-    assert _is_allowed_relative_path("continuity.db") is True
-    assert _is_allowed_relative_path("campaign.db") is True
-
-
-def test_legacy_zip_import_migrates_to_campaign_db(tmp_path):
-    import json
-    import zipfile
-
-    from app.runtime.save_archive import extract_archive
-    from app.runtime.save_manifest import SaveManifestRepository
-
+def test_export_rejects_incomplete_current_layout(tmp_path):
     source = tmp_path / "source"
     source.mkdir()
-    SaveManifestRepository(source).create("旧档")
-    # Seed a legacy current_state.db with a minimal current_state row.
-    db = source / "current_state.db"
-    with sqlite3.connect(db) as conn:
-        conn.execute(
-            "CREATE TABLE current_state "
-            "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL, "
-            "updated_at TEXT NOT NULL DEFAULT '')"
-        )
-        conn.execute(
-            "INSERT INTO current_state(id, state_json, updated_at) VALUES (1, ?, '')",
-            (
-                json.dumps({
-                    "scene": {"scene_id": "sc1", "location": "旧地"},
-                    "player": {"name": "旧人"},
-                }, ensure_ascii=False),
-            ),
-        )
-        conn.commit()
-    save_manifest = (source / "save_manifest.json").read_bytes()
-    manifest = {
-        "format_version": 1,
-        "files": [
-            {
-                "path": "current_state.db",
-                "size": db.stat().st_size,
-                "sha256": hashlib.sha256(db.read_bytes()).hexdigest(),
-            },
-            {
-                "path": "save_manifest.json",
-                "size": len(save_manifest),
-                "sha256": hashlib.sha256(save_manifest).hexdigest(),
-            },
-        ],
-        "metadata": {},
-    }
+    SaveManifestRepository(source).create("Incomplete")
+    archive = tmp_path / "incomplete.zip"
+
+    with pytest.raises(
+        SaveArchiveError, match="campaign.db and .runtime/control.db"
+    ):
+        export_save(source, archive)
+
+    assert not archive.exists()
+
+
+def test_inspection_rejects_legacy_database_layout(tmp_path):
     archive = tmp_path / "legacy.zip"
+    content = b"legacy"
+    manifest = _manifest_for("current_state.db", content)
     with zipfile.ZipFile(archive, "w") as bundle:
-        bundle.writestr(
-            "manifest.json",
-            json.dumps(manifest, ensure_ascii=False, sort_keys=True),
-        )
-        bundle.write(db, "save/current_state.db")
-        bundle.writestr("save/save_manifest.json", save_manifest)
-    destination = tmp_path / "staging"
-    extract_archive(archive, destination)
-    assert (destination / "campaign.db").is_file()
-    assert not (destination / "current_state.db").exists()
+        bundle.writestr("manifest.json", json.dumps(manifest))
+        bundle.writestr("save/current_state.db", content)
 
+    destination = tmp_path / "destination"
+    with pytest.raises(SaveArchiveError, match="unsupported legacy layout"):
+        extract_archive(archive, destination)
 
-def test_legacy_zip_with_snapshot_migrates_snapshot_to_campaign_db(tmp_path):
-    import json
-    import zipfile
-
-    from app.runtime.save_archive import extract_archive
-    from app.runtime.save_manifest import SaveManifestRepository
-
-    source = tmp_path / "source"
-    source.mkdir()
-    SaveManifestRepository(source).create("旧快照档")
-    db = source / "current_state.db"
-    with sqlite3.connect(db) as conn:
-        conn.execute(
-            "CREATE TABLE current_state "
-            "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL, "
-            "updated_at TEXT NOT NULL DEFAULT '')"
-        )
-        conn.execute(
-            "INSERT INTO current_state(id, state_json, updated_at) VALUES (1, ?, '')",
-            (
-                json.dumps({
-                    "scene": {"scene_id": "sc1", "location": "旧地"},
-                    "player": {"name": "旧人"},
-                }, ensure_ascii=False),
-            ),
-        )
-        conn.commit()
-    snapshot = source / ".snapshots" / "undo-one"
-    snapshot.mkdir(parents=True)
-    snap_db = snapshot / "current_state.db"
-    with sqlite3.connect(snap_db) as conn:
-        conn.execute(
-            "CREATE TABLE current_state "
-            "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL, "
-            "updated_at TEXT NOT NULL DEFAULT '')"
-        )
-        conn.execute(
-            "INSERT INTO current_state(id, state_json, updated_at) VALUES (1, ?, '')",
-            (
-                json.dumps({
-                    "scene": {"scene_id": "sc1", "location": "旧快照"},
-                    "player": {"name": "旧人"},
-                }, ensure_ascii=False),
-            ),
-        )
-        conn.commit()
-    (snapshot / "manifest.json").write_text(
-        json.dumps({"files": ["current_state.db"]}),
-        encoding="utf-8",
-    )
-    save_manifest = (source / "save_manifest.json").read_bytes()
-
-    files = [
-        ("current_state.db", db),
-        ("save_manifest.json", save_manifest),
-    ]
-    manifest_files = []
-    for path, item in files:
-        data = item if isinstance(item, bytes) else item.read_bytes()
-        manifest_files.append({
-            "path": path,
-            "size": len(data),
-            "sha256": hashlib.sha256(data).hexdigest(),
-        })
-    manifest_files.append({
-        "path": ".snapshots/undo-one/current_state.db",
-        "size": snap_db.stat().st_size,
-        "sha256": hashlib.sha256(snap_db.read_bytes()).hexdigest(),
-    })
-    manifest_files.append({
-        "path": ".snapshots/undo-one/manifest.json",
-        "size": (snapshot / "manifest.json").stat().st_size,
-        "sha256": hashlib.sha256((snapshot / "manifest.json").read_bytes()).hexdigest(),
-    })
-    archive = tmp_path / "legacy-snap.zip"
-    with zipfile.ZipFile(archive, "w") as bundle:
-        bundle.writestr(
-            "manifest.json",
-            json.dumps({
-                "format_version": 1,
-                "files": manifest_files,
-                "metadata": {},
-            }, ensure_ascii=False, sort_keys=True),
-        )
-        bundle.write(db, "save/current_state.db")
-        bundle.writestr("save/save_manifest.json", save_manifest)
-        bundle.write(snap_db, "save/.snapshots/undo-one/current_state.db")
-        bundle.write(snapshot / "manifest.json", "save/.snapshots/undo-one/manifest.json")
-
-    destination = tmp_path / "staging"
-    extract_archive(archive, destination)
-    assert (destination / "campaign.db").is_file()
-    assert (destination / ".snapshots" / "undo-one" / "campaign.db").is_file()
-    assert not (destination / ".snapshots" / "undo-one" / "current_state.db").exists()
-    snapshot_manifest = json.loads(
-        (destination / ".snapshots" / "undo-one" / "manifest.json").read_text()
-    )
-    assert snapshot_manifest["files"] == ["campaign.db"]
+    assert not destination.exists()
 
 
 def test_legacy_snapshot_rejects_non_string_manifest(tmp_path):
@@ -563,34 +454,31 @@ def test_legacy_snapshot_rejects_non_string_manifest(tmp_path):
     source = tmp_path / "source"
     source.mkdir()
     SaveManifestRepository(source).create("坏快照")
-    db = source / "current_state.db"
-    with sqlite3.connect(db) as conn:
-        conn.execute(
-            "CREATE TABLE current_state "
-            "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL, "
-            "updated_at TEXT NOT NULL DEFAULT '')"
-        )
-        conn.commit()
     snapshot = source / ".snapshots" / "undo-one"
     snapshot.mkdir(parents=True)
-    snap_db = snapshot / "current_state.db"
-    with sqlite3.connect(snap_db) as conn:
-        conn.execute(
-            "CREATE TABLE current_state "
-            "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL, "
-            "updated_at TEXT NOT NULL DEFAULT '')"
-        )
-        conn.commit()
+    (snapshot / "campaign.db").write_bytes(b"")
     (snapshot / "manifest.json").write_text(
-        json.dumps({"files": [{"path": "current_state.db"}]}),
+        json.dumps({"files": [{"path": "campaign.db"}]}),
         encoding="utf-8",
     )
     save_manifest = (source / "save_manifest.json").read_bytes()
+    db = source / "campaign.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE t(x TEXT)")
+        conn.commit()
+    control_path2 = tmp_path / "control2.db"
+    _make_control_database(control_path2)
+    control_bytes2 = control_path2.read_bytes()
     manifest_files = [
         {
-            "path": "current_state.db",
+            "path": "campaign.db",
             "size": db.stat().st_size,
             "sha256": hashlib.sha256(db.read_bytes()).hexdigest(),
+        },
+        {
+            "path": ".runtime/control.db",
+            "size": len(control_bytes2),
+            "sha256": hashlib.sha256(control_bytes2).hexdigest(),
         },
         {
             "path": "save_manifest.json",
@@ -598,9 +486,9 @@ def test_legacy_snapshot_rejects_non_string_manifest(tmp_path):
             "sha256": hashlib.sha256(save_manifest).hexdigest(),
         },
         {
-            "path": ".snapshots/undo-one/current_state.db",
-            "size": snap_db.stat().st_size,
-            "sha256": hashlib.sha256(snap_db.read_bytes()).hexdigest(),
+            "path": ".snapshots/undo-one/campaign.db",
+            "size": (snapshot / "campaign.db").stat().st_size,
+            "sha256": hashlib.sha256((snapshot / "campaign.db").read_bytes()).hexdigest(),
         },
         {
             "path": ".snapshots/undo-one/manifest.json",
@@ -620,9 +508,10 @@ def test_legacy_snapshot_rejects_non_string_manifest(tmp_path):
                 "metadata": {},
             }, ensure_ascii=False, sort_keys=True),
         )
-        bundle.write(db, "save/current_state.db")
+        bundle.write(db, "save/campaign.db")
+        bundle.write(control_path2, "save/.runtime/control.db")
         bundle.writestr("save/save_manifest.json", save_manifest)
-        bundle.write(snap_db, "save/.snapshots/undo-one/current_state.db")
+        bundle.write(snapshot / "campaign.db", "save/.snapshots/undo-one/campaign.db")
         bundle.write(
             snapshot / "manifest.json",
             "save/.snapshots/undo-one/manifest.json",

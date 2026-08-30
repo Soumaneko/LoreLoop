@@ -40,24 +40,19 @@ root data files are:
 `scene_summaries`, `confirmed_history`, `continuity`, `npc_profiles`,
 `director_events`, `director_log`, `director_npcs`, `world_settings`) plus a
 `schema_versions` row per component. `initialization_draft.json` is an editable
-setup draft, not canonical campaign state. `.runtime/control.db` (migrated from
-legacy `.runtime/turn_history.db` via an atomic `os.replace`) durably journals
+setup draft, not canonical campaign state. `.runtime/control.db` durably journals
 pending scenes, confirmation status, the bounded Undo/Redo snapshot chain
 (`.snapshots/`), and the control state (`current_revision_id`,
-`connection_epoch`, plus per-transaction `commit_id`/`revision_id`). A legacy
-`turn_history.db` is promoted on first open; both files existing fails closed.
+`connection_epoch`, plus per-transaction `commit_id`/`revision_id`).
 
 New saves start as an empty `campaign.db` and a fresh `control.db` with an
-initial `current_revision_id` (`uuid4().hex`) and `connection_epoch=0`. A legacy
-save (the ten per-file databases) is migrated atomically into one `campaign.db`
-on first open; the originals and their `-wal`/`-shm`/`-journal` sidecars plus
-any existing `.runtime/legacy-db-v1` are deleted directly (Phase 5, no archive).
-A present, valid `campaign.db` always wins and legacy files are never re-imported.
-A save or ZIP that still contains a legacy `.runtime/director_mutation.json`
-cross-database journal (Phase 4 and earlier) is rejected at open/copy/export/import
-with an explicit error directing the user to reopen it with a Phase 4 build and
-close normally before retrying. Director canonical mutations now share the single
-`campaign.db` Confirmation transaction and have no separate journal.
+initial `current_revision_id` (`uuid4().hex`) and `connection_epoch=0`. Any save
+directory that still contains legacy ten per-file databases
+(`current_state.db` etc.), `turn_history.db`, or `.runtime/director_mutation.json`
+and does not already have a valid `campaign.db`/`control.db` is rejected with
+`unsupported legacy layout` and no empty database is created. Director canonical
+mutations share the single `campaign.db` Confirmation transaction and have no
+separate journal.
 During control DB upgrade, a linear revision chain is backfilled from
 `turn_snapshots.sequence` so that each snapshot's pre-revision and its
 transaction's post-revision are contiguous; `current_revision_id` is set to the
@@ -77,13 +72,11 @@ post-confirm `revision_id` are generated idempotently and
 transaction; `connection_epoch` only increments on `restore` (Undo, Redo,
 failed-confirmation restore, or crash recovery), never on a normal commit.
 
-Snapshot boundaries (Phase 3): `.snapshots/<id>/` contains only
-`campaign.db`, `core_memory.json` (if present), `initialization.json` (if
-present), and `manifest.json`. `settings.json` never travels with a snapshot
-and is never removed or rewritten by Undo/Redo or failed-restore; Old
-snapshot manifests containing `settings.json` or legacy ten-DB names are
-migrated in place (files removed, legacy DBs consolidated to `campaign.db`)
-before restore. Manifests with any other unknown file fail closed.
+Snapshot boundaries: `.snapshots/<id>/` contains only `campaign.db`,
+`core_memory.json` (if present), `initialization.json` (if present), and
+`manifest.json`. `settings.json` never travels with a snapshot. Snapshot
+manifests containing any other file (including legacy ten-DB names or
+`settings.json`) fail closed.
 
 Phase 4 offline restore (complete): every canonical restore (Undo, Redo,
 failed-confirmation rollback, and interrupted-recovery) runs as a durable
@@ -106,19 +99,16 @@ recreated with the new epoch after each restore. Confirmation failures go
 through the runtime offline path (`runtime.fail_confirmation_offline`) instead
 of direct `history.fail_confirmation`. Runtime startup and `reconfigure()` use
 the same ordering: `ensure campaign.db/control.db → CampaignHistory.recover_interrupted() offline →
-formal session UoW/Services → pending restore` (Phase 5; no legacy Director
-journal temporary UoW).
+formal session UoW/Services → pending restore`.
 
-Save copy and export first migrate an unopened legacy source to
-`campaign.db`/`control.db`, require that source to have no pending content, and
+Save copy and export require the source to have no pending content and
 create a quiesced staging snapshot. SQLite files are copied through the backup
 API; ZIP export records file sizes and SHA-256 hashes. Import validates archive
 paths, resource limits, manifest contents, checksums, SQLite `quick_check`,
 registered schema versions, and portable history paths before installing a
-save. Legacy ZIPs may contain the ten root databases, legacy
-`.runtime/turn_history.db`, and legacy ten-database Undo/Redo snapshots; staging
-migrates them to `campaign.db`/`control.db`, rewrites each snapshot manifest and
-removes snapshot-local `settings.json` before installation.
+save. Any save or ZIP that still contains legacy ten per-file databases,
+`turn_history.db`, `settings.json` inside a snapshot, or
+`.runtime/director_mutation.json` is rejected with `unsupported legacy layout`.
 
 ## 3. Initialization
 

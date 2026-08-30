@@ -14,7 +14,6 @@ from app.runtime.app_paths import (
     APP_NAME,
     DATA_DIR_ENV,
     ensure_user_directories,
-    migrate_legacy_user_data,
     resolve_application_paths,
     resolve_data_root,
     validate_resource_paths,
@@ -111,201 +110,18 @@ def test_desktop_resource_validation_does_not_require_debug_assets(tmp_path):
         validate_debug_resource_paths(desktop_paths)
 
 
-def test_legacy_migration_copies_without_deleting_source(tmp_path):
-    legacy_root = tmp_path / "legacy"
-    destination = tmp_path / "destination"
-    save_id = str(uuid4())
-    save_dir = legacy_root / "saves" / save_id
-    save_dir.mkdir(parents=True)
-    (save_dir / "core_memory.json").write_text("{}", encoding="utf-8")
-    (legacy_root / "saves" / ".active_save").write_text(
-        save_id,
-        encoding="utf-8",
-    )
-    legacy_config = legacy_root / "saves" / ".app"
-    legacy_config.mkdir()
-    (legacy_config / "model_config.json").write_text(
-        '{"model":"test"}',
-        encoding="utf-8",
-    )
-    (legacy_config / "reader_preferences.json").write_text(
-        '{"theme":"dark"}',
-        encoding="utf-8",
-    )
-    legacy_logs = legacy_root / "logs"
-    legacy_logs.mkdir()
-    (legacy_logs / "llm_traces.jsonl").write_text(
-        '{"trace_id":"old"}\n',
-        encoding="utf-8",
-    )
-    paths = replace(
-        resolve_application_paths({DATA_DIR_ENV: str(destination)}),
-        data_dir_overridden=False,
-    )
-
-    result = migrate_legacy_user_data(
-        paths,
-        legacy_project_root=legacy_root,
-        frozen=False,
-    )
-
-    assert result == "migrated"
-    assert (destination / "saves" / save_id / "core_memory.json").is_file()
-    assert (destination / "config" / "active_save").read_text() == save_id
-    assert (destination / "config" / "model_config.json").is_file()
-    assert (destination / "config" / "reader_preferences.json").is_file()
-    assert (destination / "config" / "migration-v1.json").is_file()
-    assert (destination / "logs" / "llm_traces.jsonl").is_file()
-    assert (legacy_root / "saves" / save_id / "core_memory.json").is_file()
-    assert (legacy_root / "saves" / ".app" / "model_config.json").is_file()
 
 
-def test_legacy_migration_never_runs_for_explicit_override(tmp_path):
-    legacy_root = tmp_path / "legacy"
-    (legacy_root / "saves").mkdir(parents=True)
-    paths = resolve_application_paths({
-        DATA_DIR_ENV: str(tmp_path / "destination")
-    })
-
-    result = migrate_legacy_user_data(
-        paths,
-        legacy_project_root=legacy_root,
-        frozen=False,
-    )
-
-    assert result == "skipped_override"
-    assert not paths.data_root.exists()
 
 
-def test_legacy_migration_never_runs_from_frozen_bundle(tmp_path):
-    legacy_root = tmp_path / "legacy"
-    (legacy_root / "saves").mkdir(parents=True)
-    paths = replace(
-        resolve_application_paths({
-            DATA_DIR_ENV: str(tmp_path / "destination")
-        }),
-        data_dir_overridden=False,
-    )
-
-    result = migrate_legacy_user_data(
-        paths,
-        legacy_project_root=legacy_root,
-        frozen=True,
-    )
-
-    assert result == "skipped_frozen"
-    assert not paths.data_root.exists()
 
 
-def test_legacy_migration_does_not_merge_into_nonempty_destination(tmp_path):
-    legacy_root = tmp_path / "legacy"
-    (legacy_root / "saves").mkdir(parents=True)
-    destination = tmp_path / "destination"
-    destination.mkdir()
-    sentinel = destination / "keep.txt"
-    sentinel.write_text("keep", encoding="utf-8")
-    paths = replace(
-        resolve_application_paths({DATA_DIR_ENV: str(destination)}),
-        data_dir_overridden=False,
-    )
-
-    result = migrate_legacy_user_data(
-        paths,
-        legacy_project_root=legacy_root,
-        frozen=False,
-    )
-
-    assert result == "skipped_destination_exists"
-    assert sentinel.read_text(encoding="utf-8") == "keep"
 
 
-def test_legacy_migration_does_not_remove_existing_empty_destination(tmp_path):
-    legacy_root = tmp_path / "legacy"
-    save_id = str(uuid4())
-    (legacy_root / "saves" / save_id).mkdir(parents=True)
-    destination = tmp_path / "destination"
-    destination.mkdir()
-    paths = replace(
-        resolve_application_paths({DATA_DIR_ENV: str(destination)}),
-        data_dir_overridden=False,
-    )
-
-    result = migrate_legacy_user_data(
-        paths,
-        legacy_project_root=legacy_root,
-        frozen=False,
-    )
-
-    assert result == "skipped_destination_exists"
-    assert destination.is_dir()
-    assert not list(destination.iterdir())
 
 
-def test_legacy_migration_yields_to_concurrent_destination_writer(
-    tmp_path,
-    monkeypatch,
-):
-    legacy_root = tmp_path / "legacy"
-    save_id = str(uuid4())
-    (legacy_root / "saves" / save_id).mkdir(parents=True)
-    destination = tmp_path / "destination"
-    paths = replace(
-        resolve_application_paths({DATA_DIR_ENV: str(destination)}),
-        data_dir_overridden=False,
-    )
-
-    def concurrent_replace(_source, target):
-        Path(target).mkdir()
-        (Path(target) / "other-process.txt").write_text(
-            "keep",
-            encoding="utf-8",
-        )
-        raise OSError("destination appeared")
-
-    monkeypatch.setattr(app_paths.os, "replace", concurrent_replace)
-
-    result = migrate_legacy_user_data(
-        paths,
-        legacy_project_root=legacy_root,
-        frozen=False,
-    )
-
-    assert result == "skipped_destination_race"
-    assert (destination / "other-process.txt").read_text() == "keep"
-    assert not list(tmp_path.glob(".destination-migration-*"))
 
 
-def test_failed_legacy_migration_keeps_source_and_removes_stage(
-    tmp_path,
-    monkeypatch,
-):
-    legacy_root = tmp_path / "legacy"
-    save_id = str(uuid4())
-    source = legacy_root / "saves" / save_id
-    source.mkdir(parents=True)
-    sentinel = source / "keep.db"
-    sentinel.write_text("source", encoding="utf-8")
-    destination = tmp_path / "destination"
-    paths = replace(
-        resolve_application_paths({DATA_DIR_ENV: str(destination)}),
-        data_dir_overridden=False,
-    )
-
-    def fail_copy(*_args, **_kwargs):
-        raise OSError("copy failed")
-
-    monkeypatch.setattr(app_paths.shutil, "copytree", fail_copy)
-
-    with pytest.raises(RuntimeError, match="Failed to copy legacy LoreLoop data"):
-        migrate_legacy_user_data(
-            paths,
-            legacy_project_root=legacy_root,
-            frozen=False,
-        )
-
-    assert sentinel.read_text(encoding="utf-8") == "source"
-    assert not destination.exists()
-    assert not list(tmp_path.glob(".destination-migration-*"))
 
 
 def test_default_resource_and_log_consumers_use_registered_paths():
