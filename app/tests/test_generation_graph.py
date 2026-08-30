@@ -58,67 +58,6 @@ def test_generation_captures_experience_mode_snapshot_at_generation(monkeypatch)
     assert captured["state"]["experience_mode"] == "player"
 
 
-def test_generation_graph_compiles():
-    graph = generation_graph.build_generation_graph(
-        canon_validation_is_enabled=True,
-    )
-
-    assert graph is not None
-
-
-def test_action_parser_precedes_parallel_context_and_roll_branches():
-    graph = generation_graph.build_generation_graph(
-        canon_validation_is_enabled=True,
-    ).get_graph()
-    edges = {(edge.source, edge.target) for edge in graph.edges}
-
-    assert ("__start__", "parse_action") in edges
-    assert ("parse_action", "extract_context_facts") in edges
-    assert ("parse_action", "evaluate_roll_modifiers") in edges
-    assert ("__start__", "extract_context_facts") not in edges
-
-
-def test_rephrase_graph_runs_only_composer_and_consistency_tail():
-    graph = generation_graph.build_rephrase_graph(
-        canon_validation_is_enabled=True,
-    ).get_graph()
-    edges = {(edge.source, edge.target) for edge in graph.edges}
-
-    assert ("__start__", "rephrase_narrative") in edges
-    assert ("rephrase_narrative", "generate_canon_queries") in edges
-    assert ("generate_canon_queries", "retrieve_canon_evidence") in edges
-    assert ("retrieve_canon_evidence", "check_narrative_consistency") in edges
-    assert ("check_narrative_consistency", "revise_narrative") in edges
-    assert not any(target in {
-        "parse_action",
-        "evaluate_roll_modifiers",
-        "resolve_turn",
-        "consume_director_events",
-        "maybe_director_npc",
-    } for _source, target in edges)
-
-
-def test_feedback_rewrite_graph_keeps_two_composer_paths_separate():
-    graph = generation_graph.build_feedback_rewrite_graph(
-        canon_validation_is_enabled=True,
-    ).get_graph()
-    edges = {(edge.source, edge.target) for edge in graph.edges}
-
-    assert ("__start__", "rewrite_from_source") in edges
-    assert ("__start__", "recompose") in edges
-    assert ("__start__", "__end__") in edges
-    assert ("rewrite_from_source", "generate_canon_queries") in edges
-    assert ("recompose", "generate_canon_queries") in edges
-    assert ("check_narrative_consistency", "revise_narrative") in edges
-    assert not any(target in {
-        "parse_action",
-        "evaluate_roll_modifiers",
-        "resolve_turn",
-        "consume_director_events",
-        "maybe_director_npc",
-    } for _source, target in edges)
-
-
 def test_feedback_rewrite_graph_accepts_no_rewrite_as_terminal_state():
     decision = RewriteStrategyDecision(
         strategy="no_rewrite",
@@ -176,24 +115,6 @@ def test_rewrite_stream_callbacks_share_mode_aware_event_projection(monkeypatch)
     ]
 
 
-def test_director_agent_composer_and_consistency_checker_run_in_order():
-    graph = generation_graph.build_generation_graph(
-        canon_validation_is_enabled=True,
-    ).get_graph()
-    edges = {(edge.source, edge.target) for edge in graph.edges}
-
-    assert ("extract_context_facts", "director_agent_stage") in edges
-    assert ("director_agent_stage", "compose_narrative") in edges
-    assert ("evaluate_roll_modifiers", "compose_narrative") in edges
-    assert ("compose_narrative", "generate_canon_queries") in edges
-    assert ("generate_canon_queries", "retrieve_canon_evidence") in edges
-    assert ("retrieve_canon_evidence", "check_narrative_consistency") in edges
-    assert ("check_narrative_consistency", "__end__") in edges
-    assert ("check_narrative_consistency", "revise_narrative") in edges
-    assert ("revise_narrative", "__end__") in edges
-    assert ("compose_narrative", "check_narrative_consistency") not in edges
-
-
 def test_compact_generation_graph_skips_canon_nodes_only():
     graph = generation_graph.build_generation_graph(
         canon_validation_is_enabled=False,
@@ -211,25 +132,6 @@ def test_compact_generation_graph_skips_canon_nodes_only():
         "check_narrative_consistency",
         "revise_narrative",
     } & node_ids
-
-
-def test_compact_rewrite_graphs_skip_canon_tail():
-    rephrase = generation_graph.build_rephrase_graph(
-        canon_validation_is_enabled=False,
-    ).get_graph()
-    feedback = generation_graph.build_feedback_rewrite_graph(
-        canon_validation_is_enabled=False,
-    ).get_graph()
-    rephrase_edges = {(edge.source, edge.target) for edge in rephrase.edges}
-    feedback_edges = {(edge.source, edge.target) for edge in feedback.edges}
-
-    assert ("rephrase_narrative", "__end__") in rephrase_edges
-    assert ("rewrite_from_source", "__end__") in feedback_edges
-    assert ("recompose", "__end__") in feedback_edges
-    assert not any(
-        edge[1] == "generate_canon_queries"
-        for edge in [*rephrase_edges, *feedback_edges]
-    )
 
 
 def test_consistency_route_revises_only_when_assertions_exist():

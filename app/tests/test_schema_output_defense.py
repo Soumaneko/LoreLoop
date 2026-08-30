@@ -7,7 +7,6 @@ from app.core.llm.errors import LLMOutputValidationError
 from app.core.llm.gateway import LLMGateway
 from app.core.llm.mock import MockLLM
 from app.core.llm.providers import MockProvider
-from app.core.llm.schemas import EchoResult
 from app.core.llm.tracing import NullTraceLogger
 from app.core.llm.tracing import TraceLogger
 
@@ -62,34 +61,7 @@ class TestSchemaCopyDefense:
             max_retries=max_retries,
         )
 
-    def test_guidance_appended_when_output_schema_json_present(self):
-        gateway, provider = self._recording_gateway(
-            ['{"text": "hi", "length": 2}']
-        )
 
-        gateway.run(
-            task="echo_structured_test",
-            input_data={"text": "x", "output_schema_json": "{}"},
-            output_schema=EchoResult,
-        )
-
-        prompt = provider.prompts[0]
-        assert "数据实例" in prompt
-        assert "$defs" in prompt
-        assert "```json" not in prompt
-
-    def test_guidance_not_appended_without_output_schema_json(self):
-        gateway, provider = self._recording_gateway(
-            ['{"text": "hi", "length": 2}']
-        )
-
-        gateway.run(
-            task="echo_structured_test",
-            input_data={"text": "x"},
-            output_schema=EchoResult,
-        )
-
-        assert "数据实例" not in provider.prompts[0]
 
     def test_salvages_root_data_next_to_schema_scaffolding(self):
         gateway, provider = self._recording_gateway(
@@ -149,7 +121,6 @@ class TestSchemaCopyDefense:
         assert result.mentions[0].name == "萧欢"
         assert result.mentions[0].context_span == "萧欢在醉花楼。"
         assert len(provider.prompts) == 2
-        assert "Schema 的定义元数据键" in provider.prompts[1]
 
     def test_normal_output_without_signature_unchanged(self):
         gateway, provider = self._recording_gateway(

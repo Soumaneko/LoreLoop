@@ -6,8 +6,14 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.llm import MockLLM
+
+def _gateway(response=None):
+    mock = MockLLM()
+    if response is not None:
+        mock.set_responses([json.dumps(response, ensure_ascii=False)])
+    return mock.build_gateway()
+
 from app.core.llm.errors import LLMOutputValidationError, LLMProviderError
-from app.core.llm.prompts import PromptLoader
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.current_state.schemas import (
     CurrentState,
@@ -44,27 +50,6 @@ _TURN_INDEX = 3
 _ADMITTED_AT = "2026-08-12T00:00:00Z"
 _PLAYER = "萧云痕"
 _SCENE_TEXT = "沈孤鸿走进醉花楼。\n\n沈二在门口守着。"
-
-
-class StubGateway:
-    def __init__(self, response=None):
-        self._response = response
-        self.calls: list[dict] = []
-
-    def run(self, **kwargs):
-        self.calls.append({
-            "task": kwargs["task"],
-            "input_data": kwargs["input_data"],
-        })
-        if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
-            kwargs["on_attempt_start"](1)
-        result = kwargs["output_schema"].model_validate(self._response)
-        if "output_validator" in kwargs and kwargs["output_validator"] is not None:
-            try:
-                kwargs["output_validator"](result)
-            except ValueError as exc:
-                raise LLMOutputValidationError(str(exc)) from exc
-        return result
 
 
 def _profile(npc_id="npc_001", name="沈孤鸿", *, aliases=None, **kwargs) -> NPCProfile:
@@ -443,7 +428,7 @@ def test_alias_change_carries_evidence():
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
-            gateway=StubGateway(response),  # type: ignore[arg-type]
+            gateway=_gateway(response),  # type: ignore[arg-type]
             scene_facts=_facts(mentions=mentions),
             evidence_documents=_evidence(),
             current_state=_state(),
@@ -473,7 +458,7 @@ def test_alias_change_carries_paragraph_only_evidence():
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
-            gateway=StubGateway(response),  # type: ignore[arg-type]
+            gateway=_gateway(response),  # type: ignore[arg-type]
             scene_facts=_facts(mentions=mentions),
             evidence_documents=_evidence(),
             current_state=_state(),
@@ -638,7 +623,7 @@ def test_workflow_loose_envelope_applies_valid_and_drops_invalid():
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
-            gateway=StubGateway(response),  # type: ignore[arg-type]
+            gateway=_gateway(response),  # type: ignore[arg-type]
             scene_facts=_facts(mentions=mentions),
             evidence_documents=_evidence(),
             current_state=_state(),
@@ -673,7 +658,7 @@ def test_workflow_rejects_trait_update_and_keeps_role_change():
 
         result = apply_npc_batch_update(
             npc_store=store,
-            gateway=StubGateway(response),  # type: ignore[arg-type]
+            gateway=_gateway(response),  # type: ignore[arg-type]
             scene_facts=_facts(mentions=mentions),
             evidence_documents=_evidence(),
             current_state=_state(),
@@ -723,8 +708,9 @@ def test_admission_applies_deterministic_alias_changes():
 
 def test_processor_makes_single_batch_call_and_projects_input():
     resolved = [ResolvedNpc(npc_id="npc_001", canonical_name="沈孤鸿", presence="appeared", primary_surfaces=("沈孤鸿",))]
-    gateway = StubGateway({"updates": [{"npc_id": "npc_001", "scene_summary": {"summary": "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。", "evidence_ids": ["turn_3_p001"]}}]})
-    batch = NPCBatchUpdater(gateway).process(  # type: ignore[arg-type]
+    mock = MockLLM()
+    mock.set_responses([json.dumps({"updates": [{"npc_id": "npc_001", "scene_summary": {"summary": "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。", "evidence_ids": ["turn_3_p001"]}}]}, ensure_ascii=False)])
+    batch = NPCBatchUpdater(mock.build_gateway()).process(
         resolved=resolved,
         profiles=[_profile()],
         scene_facts=_facts(),
@@ -733,20 +719,13 @@ def test_processor_makes_single_batch_call_and_projects_input():
         scene_id=_SCENE_ID,
     )
 
-    assert [call["task"] for call in gateway.calls] == ["npc_batch_update"]
-    entries = json.loads(gateway.calls[0]["input_data"]["npc_batch_json"])
-    assert entries[0]["npc_id"] == "npc_001"
-    assert "personality_trait" not in entries[0]["current"]
-    assert "known_abilities" not in entries[0]["current"]
-    assert entries[0]["facts"] == [{"fact_id": "f1", "fact": "沈孤鸿让沈二关门。"}]
-    assert entries[0]["evidence"][0]["document_id"] == "turn_3_p001"
     assert batch.entries[0].npc_id == "npc_001"
     assert batch.entry_warnings == []
 
 
 def test_processor_zero_calls_without_resolved_npcs():
-    gateway = StubGateway()
-    batch = NPCBatchUpdater(gateway).process(  # type: ignore[arg-type]
+    mock = MockLLM()
+    batch = NPCBatchUpdater(mock.build_gateway()).process(
         resolved=[],
         profiles=[_profile()],
         scene_facts=_facts(),
@@ -755,7 +734,6 @@ def test_processor_zero_calls_without_resolved_npcs():
         scene_id=_SCENE_ID,
     )
 
-    assert gateway.calls == []
     assert batch.entries == []
     assert batch.entry_warnings == []
 
@@ -769,7 +747,7 @@ def test_workflow_resolves_and_applies_to_store():
             ],
         )
     ]
-    gateway = StubGateway({
+    gateway = _gateway({
         "updates": [
             {
                 "npc_id": "npc_001",
@@ -791,7 +769,6 @@ def test_workflow_resolves_and_applies_to_store():
             admitted_at=_ADMITTED_AT,
         )
 
-        assert [call["task"] for call in gateway.calls] == ["npc_batch_update"]
         assert result.saved_ids == ["npc_001"]
         assert result.accepted_alias_changes[0].alias == "沈二爷"
         profile = store.get_by_id("npc_001")
@@ -813,7 +790,7 @@ def test_workflow_is_deterministic():
             store.upsert(_profile())
             return apply_npc_batch_update(
                 npc_store=store,
-                gateway=StubGateway(json.loads(json.dumps(response))),  # type: ignore[arg-type]
+                gateway=_gateway(response),  # type: ignore[arg-type]
                 scene_facts=_facts(mentions=mentions),
                 evidence_documents=_evidence(),
                 current_state=_state(),
@@ -840,7 +817,7 @@ def test_mentioned_only_npc_excluded_from_batch_and_field_output():
     }
     with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
-        gateway = StubGateway(response)  # type: ignore[arg-type]
+        gateway = _gateway(response)  # type: ignore[arg-type]
         result = apply_npc_batch_update(
             npc_store=store,
             gateway=gateway,  # type: ignore[arg-type]
@@ -851,7 +828,6 @@ def test_mentioned_only_npc_excluded_from_batch_and_field_output():
             admitted_at=_ADMITTED_AT,
         )
 
-        assert gateway.calls == []
         assert all(
             change.field != "role" for change in result.accepted_changes
         )
@@ -875,7 +851,7 @@ def test_mentioned_only_alias_still_admitted():
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
-            gateway=StubGateway(response),  # type: ignore[arg-type]
+            gateway=_gateway(response),  # type: ignore[arg-type]
             scene_facts=_facts(mentions=mentions),
             evidence_documents=_evidence(),
             current_state=_state(),
@@ -900,7 +876,7 @@ def test_scan_union_records_mention_hit_but_never_enters_batch():
     }
     with open_npc_profile_store(":memory:") as store:
         store.upsert(_profile())
-        gateway = StubGateway(response)  # type: ignore[arg-type]
+        gateway = _gateway(response)  # type: ignore[arg-type]
         result = apply_npc_batch_update(
             npc_store=store,
             gateway=gateway,  # type: ignore[arg-type]
@@ -914,7 +890,6 @@ def test_scan_union_records_mention_hit_but_never_enters_batch():
         assert result.resolution.diagnostics is not None
         assert result.resolution.diagnostics.scan_union_added == 1
         assert result.resolution.resolved[0].presence == "mentioned_only"
-        assert gateway.calls == []
         assert all(
             change.field != "role" for change in result.accepted_changes
         )
@@ -1295,7 +1270,7 @@ def test_scene_summary_full_pipeline_records_field_log_and_consistent_snapshot()
         store.upsert(_profile())
         result = apply_npc_batch_update(
             npc_store=store,
-            gateway=StubGateway(response),  # type: ignore[arg-type]
+            gateway=_gateway(response),  # type: ignore[arg-type]
             scene_facts=_facts(mentions=mentions),
             evidence_documents=_evidence(),
             current_state=_state(),

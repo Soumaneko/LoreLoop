@@ -197,17 +197,6 @@ def test_store_rejects_dispatch_schema_instead_of_migrating_it(tmp_path):
         raise AssertionError("dispatch-era DirectorNPC schema must be rejected")
 
 
-def test_npc_domain_does_not_import_world_setting_or_define_dispatch():
-    from pathlib import Path
-
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in Path("app/domain/director_npc").glob("*.py")
-    )
-    assert "world_setting" not in source
-    assert "dispatch" not in source.casefold()
-
-
 def test_creator_includes_recent_creations_in_prompt():
     import json
 

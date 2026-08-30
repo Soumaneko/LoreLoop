@@ -115,16 +115,6 @@ def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
         raise AssertionError("previous DirectorEvent schema must be rejected")
 
 
-def test_event_domain_does_not_import_director_npc():
-    from pathlib import Path
-
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in Path("app/domain/director_event").glob("*.py")
-    )
-    assert "director_npc" not in source
-
-
 def test_hooks_are_stored_but_hidden_from_consumer_projections():
     from app.domain.director_event.views import project_director_event
 

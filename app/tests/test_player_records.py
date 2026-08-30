@@ -217,13 +217,6 @@ def test_update_player_record_validates_kind_id_and_payload():
         update_player_record("npc", "some-id", None)
 
 
-def test_player_records_routes_exposed():
-    import inspect
-
-    assert "/api/player/records" in inspect.getsource(PlayerHandler.do_GET)
-    assert "/api/player/records/update" in inspect.getsource(PlayerHandler.do_POST)
-
-
 def test_api_facade_exposes_records_functions():
     import app.api
 

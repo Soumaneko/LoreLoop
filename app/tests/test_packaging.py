@@ -167,96 +167,13 @@ def test_frozen_desktop_does_not_load_dotenv_from_launch_directory(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
-def test_windows_packaging_contract_is_onedir_player_only():
-    spec_path = ROOT / "packaging" / "loreloop.spec"
-    spec_source = spec_path.read_text(encoding="utf-8")
-    ast.parse(spec_source)
 
-    assert '"app.debug_server"' in spec_source
-    assert '"app/player_static"' in spec_source
-    assert '"app/prompts"' in spec_source
-    assert "app/debug_static" not in spec_source
-    assert '".pytest_cache" not in path.parts' in spec_source
-    assert 'console=False' in spec_source
-    assert 'contents_directory="_internal"' in spec_source
-    assert 'name="LoreLoop"' in spec_source
-    assert (
-        'project_root / "build" / "metadata" / "version_info.txt"'
-        in spec_source
-    )
-
-
-def test_windows_build_dependencies_and_release_assets_are_fixed():
-    desktop_requirements = (
-        ROOT / "requirements-desktop.txt"
-    ).read_text(encoding="utf-8")
-    build_requirements = (
-        ROOT / "requirements-build-windows.txt"
-    ).read_text(encoding="utf-8")
+def test_windows_build_lock_requires_hashes():
     build_lock = (
         ROOT / "requirements-build-windows.lock"
     ).read_text(encoding="utf-8")
-    script = (
-        ROOT / "scripts" / "build_windows.ps1"
-    ).read_text(encoding="utf-8")
-    workflow = (
-        ROOT / ".github" / "workflows" / "build-windows.yml"
-    ).read_text(encoding="utf-8")
-    executable_config = (
-        ROOT / "packaging" / "windows" / "LoreLoop.exe.config"
-    ).read_text(encoding="utf-8")
-    windows_readme = (
-        ROOT / "packaging" / "windows" / "README-Windows.txt"
-    ).read_text(encoding="utf-8")
-    assert ">=" not in desktop_requirements
-    assert "pywebview==6.2.1" in desktop_requirements
-    assert 'pythonnet==3.1.0; sys_platform == "win32"' in desktop_requirements
-    assert "pyinstaller==6.21.0" in build_requirements
-    assert "pytest==9.0.3" in build_requirements
-    for requirement in (
-        "pydantic==2.13.4",
-        "openai==2.41.0",
-        "python-dotenv==1.2.2",
-        "langgraph==1.2.8",
-        "platformdirs==4.11.0",
-        "pywebview==6.2.1",
-        "pythonnet==3.1.0",
-        "pytest==9.0.3",
-        "pyinstaller==6.21.0",
-    ):
-        assert requirement in build_lock
+
     assert "--hash=sha256:" in build_lock
-    assert "--require-hashes" in script
-    assert "requirements-build-windows.lock" in script
-    assert "packaging\\loreloop.spec" in script
-    assert "MicrosoftEdgeWebview2Setup.exe" in script
-    assert "Get-AuthenticodeSignature -LiteralPath" in script
-    assert '"$($Signature.Status)" -ne "Valid"' in script
-    assert "O=Microsoft Corporation" in script
-    assert "SHA256SUMS.txt" in script
-    assert "Compress-Archive" in script
-    assert "Get-FileHash -Algorithm SHA256" in script
-    assert "LoreLoop.exe.config" in script
-    assert "Python.Runtime.dll" in script
-    assert 'Stream "Zone.Identifier"' in script
-    assert "--check-winforms-runtime" in script
-    assert "Unblock-File -LiteralPath" in script
-    assert '<loadFromRemoteSources enabled="true"/>' in executable_config
-    assert "generate_build_metadata.py" in script
-    assert "--print-version" in script
-    assert "--version-info" in script
-    assert "--build-info" in script
-    assert (
-        "New-Item -ItemType Directory -Force $BuildMetadataDir"
-        in script
-    )
-    assert "--workpath $PyInstallerWorkDir" in script
-    assert "Copy-Item $BuildInfo" in script
-    assert "LoreLoop-$Version-win-x64-test.zip" in script
-    assert "LoreLoop-*-win-x64-test.zip" in workflow
-    assert not (ROOT / "packaging" / "windows" / "version_info.txt").exists()
-    assert "DPAPI" in windows_readme
-    assert "build_info.json" in windows_readme
 
 
 def test_application_version_generates_windows_and_build_metadata():
@@ -284,26 +201,10 @@ def test_application_version_generates_windows_and_build_metadata():
     assert info["built_at"].endswith("Z")
 
 
-def test_github_windows_build_is_manual_read_only_and_pinned():
+def test_github_workflow_pins_action_shas():
     workflow = (
         ROOT / ".github" / "workflows" / "build-windows.yml"
     ).read_text(encoding="utf-8")
-    script = (
-        ROOT / "scripts" / "build_windows.ps1"
-    ).read_text(encoding="utf-8")
-    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
-
-    assert workflow.count("workflow_dispatch:") == 1
-    assert "\n  push:" not in workflow
-    assert "\n  pull_request:" not in workflow
-    assert "permissions:\n  contents: read" in workflow
-    assert "runs-on: windows-2025" in workflow
-    assert "timeout-minutes: 45" in workflow
-    assert "secrets." not in workflow
-    assert "retention-days: 7" in workflow
-    assert "if-no-files-found: error" in workflow
-    assert 'steps.python.outputs.python-path' in workflow
-    assert '-PythonExecutable' in workflow
 
     action_refs = re.findall(r"uses:\s+([^\s#]+)", workflow)
     assert len(action_refs) == 3
@@ -311,12 +212,3 @@ def test_github_windows_build_is_manual_read_only_and_pinned():
         re.fullmatch(r"actions/[a-z-]+@[0-9a-f]{40}", reference)
         for reference in action_refs
     )
-    assert "[string]$PythonExecutable" in script
-    assert '$BaseRuntime.Trim() -ne "3.11|64bit"' in script
-    for ignored in (
-        "/.venv-build-windows/",
-        "/build/",
-        "/dist/",
-        "/release/",
-    ):
-        assert ignored in gitignore

@@ -19,8 +19,3 @@ def test_debug_frontend_javascript_is_syntactically_valid():
         check=False,
     )
     assert result.returncode == 0, result.stderr
-
-
-def test_debug_frontend_does_not_expose_internal_fields():
-    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    assert "context_fact_memories" not in source

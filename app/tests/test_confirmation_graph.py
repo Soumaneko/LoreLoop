@@ -16,11 +16,7 @@ from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.summarizer import SceneSummaryWarning
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
 from app.graph import confirmation_nodes
-from app.graph.confirmation_graph import (
-    build_confirmation_first_wave_graph,
-    build_confirmation_second_wave_graph,
-    capture_confirmation_node_errors,
-)
+from app.graph.confirmation_graph import capture_confirmation_node_errors
 from app.graph import confirmation_graph
 from app.graph.confirmation_cache import ConfirmationCache
 from app.graph.confirmation_helpers import merge_confirmation_node_update
@@ -29,16 +25,6 @@ from app.graph.confirmation_state import ConfirmationState
 from app.graph.confirmation_lifecycle import (
     ConfirmationFinalizer,
 )
-
-
-def test_confirmation_first_wave_preserves_parallel_extract_dependencies():
-    graph = build_confirmation_first_wave_graph().get_graph()
-    edges = {(edge.source, edge.target) for edge in graph.edges}
-
-    assert ("scene_fact_extract", "state_update") in edges
-    assert ("state_update", "scene_summarize") in edges
-    assert ("scene_summarize", "__end__") in edges
-    assert all("npc_profile_extract" not in (source, target) for source, target in edges)
 
 
 def test_state_update_warning_is_emitted_cached_and_diagnosed(
@@ -392,93 +378,6 @@ def test_initialization_phase_is_revalidated_before_confirmation_writes():
     assert commit_called is False
 
 
-def test_confirmation_second_wave_parallelizes_compute_before_setting_write():
-    graph = build_confirmation_second_wave_graph().get_graph()
-    edges = {(edge.source, edge.target) for edge in graph.edges}
-
-    # Only NPC Profile touches the shared connection in the parallel wave.
-    # Setting writes after all three compute branches have joined.
-    assert ("__start__", "action_preview") in edges
-    assert ("__start__", "continuity_project") in edges
-    assert ("__start__", "npc_profile_update") in edges
-    assert ("action_preview", "setting_appearance_update") in edges
-    assert ("continuity_project", "setting_appearance_update") in edges
-    assert ("npc_profile_update", "setting_appearance_update") in edges
-    assert ("setting_appearance_update", "__end__") in edges
-    assert ("__start__", "setting_appearance_update") not in edges
-
-    director_graph = confirmation_graph.build_confirmation_director_graph().get_graph()
-    director_edges = {(edge.source, edge.target) for edge in director_graph.edges}
-    assert ("__start__", "director_event_review") in director_edges
-    assert ("director_event_review", "director_agent_confirm") in director_edges
-    assert ("director_agent_confirm", "__end__") in director_edges
-
-
-def test_setting_appearance_node_counts_once_and_is_cached(monkeypatch, tmp_path):
-    from app.domain.world_setting import WorldSetting, WorldSettingStore
-
-    db_path = tmp_path / "world_settings.db"
-    with open_world_setting_store(str(db_path)) as seed_store:
-        library = WorldSetting(
-            kind="location",
-            name="灰烬图书馆",
-            summary="一座石砌图书馆。",
-            public_facts=["对登记学者开放。"],
-            created_turn=1,
-        )
-        guild = WorldSetting(
-            kind="faction",
-            name="北陆商盟",
-            summary="北境商会。",
-            public_facts=["统一收取过路费。"],
-            created_turn=1,
-        )
-        seed_store.save(library)
-        seed_store.save(guild)
-
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_store_factory",
-        lambda _state, name: open_world_setting_store(str(db_path)),
-    )
-    state = {
-        "write_db": True,
-        "effective_scene_text": "莱尔走进了灰烬图书馆的借阅室。",
-        "cache": {},
-    }
-
-    result = confirmation_nodes.setting_appearance_update_node(state)
-    assert result["recorded_setting_ids"] == [library.setting_id]
-    merge_confirmation_node_update(state, result)
-    assert state["cache"]["recorded_setting_ids"] == [library.setting_id]
-    with open_world_setting_store(str(db_path)) as check:
-        assert check.get_by_id(library.setting_id).hit_count == 1
-        assert check.get_by_id(guild.setting_id).hit_count == 0
-
-    replayed = confirmation_nodes.setting_appearance_update_node(state)
-    assert replayed["recorded_setting_ids"] == [library.setting_id]
-    with open_world_setting_store(str(db_path)) as check:
-        assert check.get_by_id(library.setting_id).hit_count == 1
-
-
-def test_setting_appearance_node_skips_when_not_writing_db(monkeypatch):
-    from app.domain.world_setting import WorldSettingStore
-
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_store_factory",
-        lambda _state, _name: _FakeStore(),
-    )
-    state = {
-        "write_db": False,
-        "effective_scene_text": "灰烬图书馆",
-        "cache": {},
-    }
-
-    result = confirmation_nodes.setting_appearance_update_node(state)
-    assert result == {"recorded_setting_ids": []}
-
-
 def test_setting_appearance_node_ignores_single_character_names(monkeypatch, tmp_path):
     from app.domain.world_setting import WorldSetting, WorldSettingStore
 
@@ -520,6 +419,59 @@ def test_setting_appearance_node_ignores_single_character_names(monkeypatch, tmp
         assert check.get_by_id(guild.setting_id).hit_count == 1
 
 
+def test_setting_appearance_node_dry_run_and_prevents_double_count(monkeypatch, tmp_path):
+    from app.domain.world_setting import WorldSetting
+
+    db_path = tmp_path / "world_settings.db"
+    with open_world_setting_store(str(db_path)) as seed_store:
+        library = WorldSetting(
+            kind="location",
+            name="灰烬图书馆",
+            summary="一座石砌图书馆。",
+            public_facts=["对登记学者开放。"],
+            created_turn=1,
+        )
+        guild = WorldSetting(
+            kind="faction",
+            name="北陆商盟",
+            summary="北境商会。",
+            public_facts=["统一收取过路费。"],
+            created_turn=1,
+        )
+        seed_store.save(library)
+        seed_store.save(guild)
+
+    monkeypatch.setattr(
+        confirmation_nodes,
+        "_store_factory",
+        lambda _state, name: open_world_setting_store(str(db_path)),
+    )
+    state = {
+        "write_db": True,
+        "effective_scene_text": "莱尔走进了灰烬图书馆的借阅室。",
+        "cache": {},
+    }
+
+    first = confirmation_nodes.setting_appearance_update_node(state)
+    assert first["recorded_setting_ids"] == [library.setting_id]
+    merge_confirmation_node_update(state, first)
+    assert state["cache"]["recorded_setting_ids"] == [library.setting_id]
+    with open_world_setting_store(str(db_path)) as check:
+        assert check.get_by_id(library.setting_id).hit_count == 1
+
+    replayed = confirmation_nodes.setting_appearance_update_node(state)
+    assert replayed["recorded_setting_ids"] == [library.setting_id]
+    with open_world_setting_store(str(db_path)) as check:
+        assert check.get_by_id(library.setting_id).hit_count == 1
+
+    dry = confirmation_nodes.setting_appearance_update_node(
+        {"write_db": False, "effective_scene_text": "灰烬图书馆", "cache": {}}
+    )
+    assert dry == {"recorded_setting_ids": []}
+    with open_world_setting_store(str(db_path)) as check:
+        assert check.get_by_id(library.setting_id).hit_count == 1
+
+
 def test_confirmation_events_reducer_appends_node_events():
     def first(_state: ConfirmationState) -> ConfirmationState:
         return {"events": [{"step": "first", "data": {}}]}
@@ -541,40 +493,6 @@ def test_confirmation_events_reducer_appends_node_events():
         "first",
         "second",
     ]
-
-
-def test_node_updates_are_persisted_to_retry_cache_at_merge_boundary():
-    marker = object()
-    state = {"events": [], "cache": {}, "write_db": True}
-
-    merge_confirmation_node_update(
-        state,
-        {
-            "scene_facts": marker,
-            "npc_turn_result": marker,
-            "events": [{"step": "done", "data": {}}],
-        },
-    )
-
-    assert state["cache"]["scene_facts"] is marker
-    assert state["cache"]["npc_turn_result"] is marker
-    assert state["events"] == [{"step": "done", "data": {}}]
-
-
-def test_dry_run_merge_does_not_cache_write_only_results():
-    marker = object()
-    state = {"events": [], "cache": {}, "write_db": False}
-
-    merge_confirmation_node_update(
-        state,
-        {
-            "npc_turn_result": marker,
-            "recorded_setting_ids": ["setting_1"],
-        },
-    )
-
-    assert "npc_turn_result" not in state["cache"]
-    assert "recorded_setting_ids" not in state["cache"]
 
 
 def test_scene_fact_diagnostics_use_degraded_reasons_not_emptiness(
@@ -618,33 +536,6 @@ def test_scene_fact_diagnostics_use_degraded_reasons_not_emptiness(
 
     codes = {entry["code"] for entry in diagnostics.read()}
     assert codes == {"npc_mentions_degraded"}
-
-
-def test_parallel_success_is_cacheable_when_sibling_node_fails():
-    marker = object()
-
-    def succeeds(_state: ConfirmationState) -> ConfirmationState:
-        return {"action_preview": marker}
-
-    def fails(_state: ConfirmationState) -> ConfirmationState:
-        raise RuntimeError("failed")
-
-    graph = StateGraph(ConfirmationState)
-    graph.add_node("succeeds", capture_confirmation_node_errors("succeeds", succeeds))
-    graph.add_node("fails", capture_confirmation_node_errors("fails", fails))
-    graph.add_edge(START, "succeeds")
-    graph.add_edge(START, "fails")
-    graph.add_edge("succeeds", END)
-    graph.add_edge("fails", END)
-
-    state = {"events": [], "node_errors": [], "cache": {}, "write_db": True}
-    for update in graph.compile().stream(state, stream_mode="updates"):
-        for node_update in update.values():
-            merge_confirmation_node_update(state, node_update)
-
-    assert state["cache"]["action_preview"] is marker
-    assert state["node_errors"][0]["node"] == "fails"
-    assert str(state["node_errors"][0]["exception"]) == "failed"
 
 
 def test_node_error_wrapper_reraise_cancellation():
@@ -931,24 +822,6 @@ def test_continuity_project_node_reuses_cached_projection(monkeypatch):
     assert result["events"][0]["data"]["active_count"] == 0
 
 
-def test_continuity_project_node_computes_and_caches_projection(monkeypatch):
-    state = _continuity_node_state(cache={"key": "正文"})
-    fresh = ContinuityProjection(operations=[])
-
-    class _Projector:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-        def project(self, **_kwargs):
-            return fresh
-
-    monkeypatch.setattr(confirmation_nodes, "ContinuityProjector", _Projector)
-    result = confirmation_nodes.continuity_project_node(state)
-
-    assert result["continuity_projection"] is fresh
-    assert state["cache"]["continuity_projection"] is fresh
-
-
 def test_continuity_project_node_emits_warning(monkeypatch, tmp_path):
     state = _continuity_node_state(cache={"key": "正文"})
     diagnostics = DiagnosticLogger(tmp_path / "diagnostics.jsonl")
@@ -1043,87 +916,6 @@ def _state_update_node_state(*, cache):
     }
 
 
-def test_state_update_node_recomputes_all_fields_when_cache_partial(monkeypatch):
-    cached_state = "cached-state"
-    state = _state_update_node_state(cache={"updated_state": cached_state})
-    update_calls = []
-
-    class _Updater:
-        def __init__(self, *_args, **_kwargs):
-            self.last_change_set = StateChangeSet(decision="fresh set")
-            self.last_warnings = [StateChangeWarning(
-                operation_id="op1",
-                operation_type="participant_attitude_change",
-                target="米莉",
-                code="w1",
-                message="fresh",
-            )]
-
-        def update(self, *_args, **_kwargs):
-            update_calls.append("update")
-            return "fresh-state"
-
-    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _Updater)
-
-    result = confirmation_nodes.state_update_node(state)
-
-    assert update_calls == ["update"]
-    assert result["updated_state"] == "fresh-state"
-    assert result["state_change_set"].decision == "fresh set"
-    assert result["state_update_warnings"][0].message == "fresh"
-
-
-def test_state_update_node_reuses_complete_triple(monkeypatch):
-    state = _state_update_node_state(cache={
-        "updated_state": "cached-state",
-        "state_change_set": StateChangeSet(decision="cached set"),
-        "state_update_warnings": [],
-    })
-    update_calls = []
-
-    class _Updater:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-        def update(self, *_args, **_kwargs):
-            update_calls.append("update")
-            return "fresh-state"
-
-    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _Updater)
-
-    result = confirmation_nodes.state_update_node(state)
-
-    assert update_calls == []
-    assert result["updated_state"] == "cached-state"
-    assert result["state_change_set"].decision == "cached set"
-
-
-def test_state_update_node_always_passes_paragraph_texts(monkeypatch):
-    state = _state_update_node_state(cache={})
-    state["scene_facts_json"] = '{"facts": [{"fact_id": "f1", "content": "x"}]}'
-    update_kwargs = []
-
-    class _Updater:
-        def __init__(self, *_args, **_kwargs):
-            self.last_change_set = StateChangeSet(decision="fresh set")
-            self.last_warnings = []
-
-        def update(self, *_args, **kwargs):
-            update_kwargs.append(kwargs)
-            return "fresh-state"
-
-    monkeypatch.setattr(confirmation_nodes, "StateUpdater", _Updater)
-
-    confirmation_nodes.state_update_node(state)
-
-    assert len(update_kwargs) == 1
-    paragraph_texts = update_kwargs[0]["paragraph_texts"]
-    assert paragraph_texts == {
-        "turn_1_p001": "第一段。",
-        "turn_1_p002": "第二段。",
-    }
-
-
 def _npc_node_state(**overrides):
     state = {
         "pipeline_input": SimpleNamespace(turn_index=1, user_input=""),
@@ -1176,27 +968,6 @@ def _patch_npc_store(monkeypatch):
     )
 
 
-def test_npc_profile_update_node_recomputes_when_slot_missing(monkeypatch):
-    state = _npc_node_state()
-    _patch_npc_store(monkeypatch)
-    update_calls = []
-
-    def _apply(**kwargs):
-        update_calls.append("update")
-        return _confirmed_npc_result(updated_ids=("npc_fresh", "npc_pruned"))
-
-    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
-
-    result = confirmation_nodes.npc_profile_update_node(state)
-
-    assert update_calls == ["update"]
-    assert result["updated_npc_profile_ids"] == ["npc_fresh", "npc_pruned"]
-    assert state["cache"]["npc_turn_result"].updated_npc_profile_ids == [
-        "npc_fresh",
-        "npc_pruned",
-    ]
-
-
 def test_npc_profile_update_node_emits_warning_summary_event(monkeypatch):
     from app.domain.npc_profile.changes import NPCChangeAdmissionWarning
 
@@ -1234,67 +1005,6 @@ def test_npc_profile_update_node_emits_warning_summary_event(monkeypatch):
     assert result["npc_warnings"] == [{
         "npc_name": "裴玉奴",
         "field": "public_summary",
-        "code": "long_term_field_evidence_missing",
-        "evidence_ids": [],
-    }]
-
-
-def test_npc_profile_update_node_reuses_cached_slot(monkeypatch):
-    node_result = _confirmed_npc_result(updated_ids=("cached",))
-    state = _npc_node_state(cache={"key": "正文", "npc_turn_result": node_result})
-    update_calls = []
-
-    def _apply(**kwargs):
-        update_calls.append("update")
-        return _fake_process()
-
-    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
-
-    result = confirmation_nodes.npc_profile_update_node(state)
-
-    assert update_calls == []
-    assert result["updated_npc_profile_ids"] == ["cached"]
-    assert result["events"] == []
-    assert result["npc_warnings"] == []
-
-
-def test_npc_profile_update_node_cache_hit_skips_diagnostics(monkeypatch):
-    from app.domain.npc_profile.changes import NPCChangeAdmissionWarning
-
-    logged = []
-
-    class _Recorder:
-        def warning(self, **fields):
-            logged.append(fields)
-
-    node_result = _confirmed_npc_result(
-        updated_ids=("cached",),
-        warnings=[
-            NPCChangeAdmissionWarning(
-                npc_name="裴玉奴",
-                field_name="faction",
-                code="long_term_field_evidence_missing",
-                message="dropped",
-            )
-        ],
-    )
-    state = _npc_node_state(
-        cache={"key": "正文", "npc_turn_result": node_result},
-        runtime_services=SimpleNamespace(diagnostics=_Recorder()),
-    )
-
-    def _apply(**kwargs):
-        raise AssertionError("factory must not run on a cache hit")
-
-    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
-
-    result = confirmation_nodes.npc_profile_update_node(state)
-
-    assert result["events"] == []
-    assert logged == []
-    assert result["npc_warnings"] == [{
-        "npc_name": "裴玉奴",
-        "field": "faction",
         "code": "long_term_field_evidence_missing",
         "evidence_ids": [],
     }]

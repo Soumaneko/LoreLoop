@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from app.core.llm import LLMGateway
 from app.core.llm.errors import (
@@ -324,8 +324,7 @@ def _parse_request_wire(
         guidance = raw.get("guidance")
         if isinstance(guidance, str):
             raw["guidance"] = guidance.strip()
-        elif isinstance(guidance, BaseModel):
-            # StubGateway 可能透传领域模型实例，统一转为可校验的 dict。
+        elif isinstance(guidance, DirectorGuidance):
             raw["guidance"] = guidance.model_dump()
     try:
         wire = DirectorSkillRequestWire.model_validate(raw)
