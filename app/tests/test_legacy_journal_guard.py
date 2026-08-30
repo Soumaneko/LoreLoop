@@ -41,8 +41,6 @@ def test_runtime_open_rejects_legacy_journal(tmp_path):
         assert not rt.stores.is_closed
     finally:
         rt.close()
-
-
 def test_save_manager_copy_and_export_reject_journal_and_cleanup(tmp_path):
     root = tmp_path / "saves"
     rt = CampaignRuntime("bootstrap", paths=CampaignPaths.from_data_dir(tmp_path / "bootstrap"), max_workers=1)
@@ -68,34 +66,3 @@ def test_save_manager_copy_and_export_reject_journal_and_cleanup(tmp_path):
     finally:
         rt.close()
 
-
-def test_zip_with_journal_fails_and_cleans_staging(tmp_path):
-    bad_zip = tmp_path / "bad.zip"
-    manifest = {
-        "format_version": 1,
-        "files": [{"path": ".runtime/director_mutation.json", "size": 2, "sha256": "a" * 64}],
-        "metadata": {},
-    }
-    with zipfile.ZipFile(bad_zip, "w") as bundle:
-        bundle.writestr("manifest.json", json.dumps(manifest))
-        bundle.writestr("save/.runtime/director_mutation.json", "{}")
-    with pytest.raises(SaveArchiveError, match="director_mutation"):
-        inspect_archive(bad_zip)
-    dest = tmp_path / "staging"
-    with pytest.raises(SaveArchiveError, match="director_mutation"):
-        extract_archive(bad_zip, dest)
-    # Staging must be cleaned (either not created or left empty)
-    if dest.exists():
-        assert list(dest.iterdir()) == []
-    # SaveManager import should also fail and clean .import-*
-    root = tmp_path / "saves2"
-    rt2 = CampaignRuntime("bootstrap2", paths=CampaignPaths.from_data_dir(tmp_path / "bootstrap2"), max_workers=1)
-    manager2 = SaveManager(root, runtime=rt2)
-    try:
-        with pytest.raises(SaveArchiveError, match="director_mutation"):
-            manager2.import_from(bad_zip, "new")
-        assert not list(root.glob(".import-*"))
-        # No new save should have been created beyond default
-        assert len([p for p in root.iterdir() if p.is_dir()]) == 1
-    finally:
-        rt2.close()

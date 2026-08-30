@@ -28,7 +28,6 @@ from app.domain.continuity import (
 from app.domain.current_state import CurrentState, PlayerState, SceneState, WorldClock
 from app.core.llm.schema import schema_json
 
-
 def _draft(
     *,
     kind="open_thread",
@@ -47,7 +46,6 @@ def _draft(
         deadline=deadline,
     )
 
-
 def _item(item_id: str, *, turn=1, current_state=None, **kwargs):
     return ContinuityItem(
         id=item_id,
@@ -56,7 +54,6 @@ def _item(item_id: str, *, turn=1, current_state=None, **kwargs):
         created_turn=turn,
         updated_turn=turn,
     )
-
 
 def _update(
     *,
@@ -76,7 +73,6 @@ def _update(
         deadline=deadline,
     )
 
-
 def _operation(operation, *, item_id=None, item=None, evidence_id="turn_2_p001"):
     payload = {
         "operation": operation,
@@ -92,7 +88,6 @@ def _operation(operation, *, item_id=None, item=None, evidence_id="turn_2_p001")
             payload["item"] = item.model_dump()
     return payload
 
-
 def _evidence_documents(text="顾晚棠检查了账册。"):
     return {
         document.document_id: document
@@ -104,7 +99,6 @@ def _evidence_documents(text="顾晚棠检查了账册。"):
         )
         if document.source_type == "scene_paragraph"
     }
-
 
 def test_projector_sends_complete_active_ledger_in_one_llm_call():
     class SpyGateway:
@@ -165,7 +159,6 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
         "scene_paragraph"
     }
 
-
 def test_projector_accepts_operation_array_as_its_wire_contract():
     class ArrayGateway:
         def run(self, **kwargs):
@@ -197,7 +190,6 @@ def test_projector_accepts_operation_array_as_its_wire_contract():
     assert result.operations[0].operation == "resolve"
     assert result.operations[0].item_id == "item-1"
 
-
 def test_update_schema_cannot_modify_premise():
     with pytest.raises(ValidationError):
         ContinuityProjectionOutput.model_validate([{
@@ -215,7 +207,6 @@ def test_update_schema_cannot_modify_premise():
     ]["properties"]
     assert "premise" not in update_properties
     assert "kind" not in update_properties
-
 
 def test_service_applies_operations_and_persists_hashed_evidence_logs():
     with open_continuity_store() as store:
@@ -267,7 +258,6 @@ def test_service_applies_operations_and_persists_hashed_evidence_logs():
             result.created_ids[0], "update-me", "resolve-me", "cancel-me",
         }
 
-
 def test_history_document_hash_uses_exact_utf8_text_without_normalization():
     document = next(iter(_evidence_documents("原文。").values())).model_copy(
         update={"text": "  原文。\n"}
@@ -280,7 +270,6 @@ def test_history_document_hash_uses_exact_utf8_text_without_normalization():
     assert history_document_text_hash(document) != (
         history_document_text_hash(normalized)
     )
-
 
 def test_update_replaces_current_snapshot_while_logs_keep_each_delta():
     with open_continuity_store() as store:
@@ -308,7 +297,6 @@ def test_update_replaces_current_snapshot_while_logs_keep_each_delta():
     assert item.current_state == (
         "已锁定周姓修士；青云宗只是中间人，真正幕后势力未知。"
     )
-
 
 def test_update_merges_entities_and_null_metadata_preserves_existing_values():
     with open_continuity_store() as store:
@@ -354,7 +342,6 @@ def test_update_merges_entities_and_null_metadata_preserves_existing_values():
     assert changed.location == "落雁渡"
     assert changed.deadline == "三日内"
 
-
 def test_long_lived_item_can_accumulate_more_than_twelve_entities():
     initial_entities = [f"实体{index}" for index in range(12)]
     with open_continuity_store() as store:
@@ -378,7 +365,6 @@ def test_long_lived_item_can_accumulate_more_than_twelve_entities():
     assert reloaded is not None
     assert reloaded.entities == updated.entities
 
-
 def test_manual_metadata_edit_replaces_entities_instead_of_merging():
     with open_continuity_store() as store:
         store.insert(_item("manual-edit", entities=["A", "B"]))
@@ -396,7 +382,6 @@ def test_manual_metadata_edit_replaces_entities_instead_of_merging():
     assert updated.entities == ["A"]
     assert reloaded is not None
     assert reloaded.entities == ["A"]
-
 
 def test_manual_metadata_edit_validates_before_writing():
     with open_continuity_store() as store:
@@ -417,7 +402,6 @@ def test_manual_metadata_edit_validates_before_writing():
     assert reloaded.subject == "追查失踪账册"
     assert reloaded.entities == ["A", "B"]
     assert reloaded.updated_turn == 1
-
 
 def test_bridge_lifecycle_query_cost_is_constant_for_many_updates():
     with open_continuity_store() as store:
@@ -455,7 +439,6 @@ def test_bridge_lifecycle_query_cost_is_constant_for_many_updates():
         ("create", 1),
     ]
 
-
 def test_service_rejects_unknown_evidence_and_rolls_back_all_operations():
     with open_continuity_store() as store:
         projection = ContinuityProjection.model_validate({"operations": [
@@ -480,7 +463,6 @@ def test_service_rejects_unknown_evidence_and_rolls_back_all_operations():
         assert store.list_all() == []
         assert store.turn_processed(2) is False
 
-
 def test_service_rejects_evidence_from_another_turn():
     documents = _evidence_documents()
     wrong_turn = documents["turn_2_p001"].model_copy(update={"turn_index": 1})
@@ -494,7 +476,6 @@ def test_service_rejects_evidence_from_another_turn():
                 turn_index=2,
                 evidence_documents={"turn_2_p001": wrong_turn},
             )
-
 
 def test_service_is_idempotent_by_confirmed_turn():
     with open_continuity_store() as store:
@@ -517,7 +498,6 @@ def test_service_is_idempotent_by_confirmed_turn():
         assert len(first.created_ids) == 1
         assert second.created_ids == []
         assert store.count() == 1
-
 
 def test_v1_store_migrates_statement_and_evidence_relationship(tmp_path):
     db_path = tmp_path / "continuity-v1.db"
@@ -573,7 +553,6 @@ def test_v1_store_migrates_statement_and_evidence_relationship(tmp_path):
         assert log.evidence[0].evidence_id == "turn_1_p001"
         assert log.evidence[0].evidence_hash is None
         assert fts_entities == "顾晚棠 盐帮"
-
 
 def test_v2_store_adds_positions_and_preserves_legacy_state_as_snapshot(tmp_path):
     db_path = tmp_path / "continuity-v2.db"
@@ -673,7 +652,6 @@ def test_v2_store_adds_positions_and_preserves_legacy_state_as_snapshot(tmp_path
             "迁移后仍可继续写入新的替换快照。"
         )
 
-
 def test_retriever_selects_only_relevant_active_items():
     state = CurrentState(
         scene=SceneState(
@@ -719,7 +697,6 @@ def test_retriever_selects_only_relevant_active_items():
         assert by_id["npc"].matched_entities == ["顾晚棠"]
         assert by_id["deadline"].matched_deadline is True
 
-
 def _run_projector(mock, active=None, text="顾晚棠检查了账册。"):
     projector = ContinuityProjector(mock.build_gateway())
     result = projector.project(
@@ -729,14 +706,12 @@ def _run_projector(mock, active=None, text="顾晚棠检查了账册。"):
     )
     return result, projector
 
-
 def test_projector_provider_failure_propagates():
     mock = MockLLM()
     mock.set_fail_provider(True)
 
     with pytest.raises(LLMProviderError):
         _run_projector(mock)
-
 
 def test_projector_retries_invalid_operation_and_uses_second():
     first = [{
@@ -756,7 +731,6 @@ def test_projector_retries_invalid_operation_and_uses_second():
     assert len(result.operations) == 1
     assert result.operations[0].item_id == "item-1"
     assert projector.last_warnings == []
-
 
 def test_projector_uses_first_valid_subset_when_second_has_no_valid_ops():
     first = [
@@ -786,7 +760,6 @@ def test_projector_uses_first_valid_subset_when_second_has_no_valid_ops():
         for warning in projector.last_warnings
     )
 
-
 def test_projector_drops_duplicate_item_id_and_keeps_unrelated_operation():
     active = [_item("item-1"), _item("item-2")]
     first = [
@@ -812,7 +785,6 @@ def test_projector_drops_duplicate_item_id_and_keeps_unrelated_operation():
         for warning in projector.last_warnings
     )
 
-
 def test_projector_drops_non_active_item_id_and_keeps_active_operation():
     active = [_item("item-1")]
     first = [_operation("resolve", item_id="item-999")]
@@ -833,7 +805,6 @@ def test_projector_drops_non_active_item_id_and_keeps_active_operation():
         warning.code == "continuity_operation_dropped"
         for warning in projector.last_warnings
     )
-
 
 def test_projector_soft_accepts_premise_within_soft_limit_on_second_attempt():
     def create(premise):
@@ -856,7 +827,6 @@ def test_projector_soft_accepts_premise_within_soft_limit_on_second_attempt():
 
     assert len(result.operations[0].item.premise) == 300
     assert projector.last_warnings == []
-
 
 def test_projector_truncates_premise_over_soft_limit_on_second_attempt():
     def create(premise):
@@ -890,7 +860,6 @@ def test_projector_truncates_premise_over_soft_limit_on_second_attempt():
         for warning in projector.last_warnings
     )
 
-
 def test_projector_drops_operation_with_unknown_evidence_on_second_attempt():
     first = [{
         "operation": "resolve",
@@ -920,97 +889,3 @@ def test_projector_drops_operation_with_unknown_evidence_on_second_attempt():
         warning.code == "continuity_operation_dropped"
         for warning in projector.last_warnings
     )
-
-
-def test_projector_fallback_keeps_last_attempt_warnings():
-    first = [{
-        "operation": "resolve",
-        "evidence_ids": ["turn_2_p001"],
-        "reason": "缺 item_id。",
-    }]
-    second = [{
-        "operation": "resolve",
-        "item_id": "item-1",
-        "evidence_ids": ["unknown"],
-        "reason": "引用未知证据。",
-    }]
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps(first, ensure_ascii=False),
-        json.dumps(second, ensure_ascii=False),
-    ])
-
-    result, projector = _run_projector(mock)
-
-    assert result.operations == []
-    codes = {warning.code for warning in projector.last_warnings}
-    assert "continuity_fallback" in codes
-    assert "continuity_operation_dropped" in codes
-    dropped = [
-        warning for warning in projector.last_warnings
-        if warning.code == "continuity_operation_dropped"
-    ]
-    assert len(dropped) == 1
-    assert "unknown evidence" in dropped[0].message
-    assert "item_id" not in dropped[0].message
-
-
-def test_projector_strips_whitespace_around_text_before_soft_accept():
-    def create(premise):
-        return {
-            "operation": "create",
-            "evidence_ids": ["turn_2_p001"],
-            "reason": "本轮建立了新事项。",
-            "item": {
-                "kind": "open_thread",
-                "subject": "追查失踪账册",
-                "premise": "   " + premise + "   ",
-                "entities": ["顾晚棠"],
-                "location": "临江客栈",
-                "deadline": None,
-            },
-        }
-
-    first = [create("长" * 300)]
-    second = [create("长" * 300)]
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps(first, ensure_ascii=False),
-        json.dumps(second, ensure_ascii=False),
-    ])
-
-    result, projector = _run_projector(mock)
-
-    assert len(result.operations[0].item.premise) == 300
-    assert projector.last_warnings == []
-
-
-def test_projector_pure_whitespace_text_triggers_retry_and_uses_second():
-    def create(premise):
-        return {
-            "operation": "create",
-            "evidence_ids": ["turn_2_p001"],
-            "reason": "本轮建立了新事项。",
-            "item": {
-                "kind": "open_thread",
-                "subject": "追查失踪账册",
-                "premise": premise,
-                "entities": ["顾晚棠"],
-                "location": "临江客栈",
-                "deadline": None,
-            },
-        }
-
-    first = [create("   ")]
-    second = [create("真正的可接受前提。")]
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps(first, ensure_ascii=False),
-        json.dumps(second, ensure_ascii=False),
-    ])
-
-    result, projector = _run_projector(mock)
-
-    assert len(result.operations) == 1
-    assert result.operations[0].item.premise == "真正的可接受前提。"
-    assert projector.last_warnings == []

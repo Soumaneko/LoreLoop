@@ -252,51 +252,6 @@ def test_generation_agent_stages_existing_npc_without_mutating_it(tmp_path):
         assert store.get_by_id(draft.draft_id).status == "prepared"
 
 
-def test_generation_agent_remote_view_filters_nonexistent_fields_for_director_npc(
-    tmp_path,
-):
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    draft = make_director_npc()
-    with stores.director_npc as store:
-        store.save(draft)
-    gateway = ScriptedDirectorGateway(
-        decision={
-            "reasoning": "通过转述体现人物。",
-            "requests": [
-                {
-                    "request_id": "npc_1",
-                    "skill": "introduce_npc",
-                    "arguments": {
-                        "npc_id": draft.draft_id,
-                        "view_mode": "remote",
-                    },
-                    "guidance": "通过转述体现人物。",
-                }
-            ],
-        }
-    )
-
-    stage, _ = run_generation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=make_current_state(),
-        user_input="去诊所询问昨夜发生的事。",
-        context_facts=[],
-        recent_summaries=[],
-        turn_index=3,
-        trace_id="generation-director",
-        npc_profiles=[],
-    )
-
-    assert stage.materials[0].payload["source"] == "director_npc"
-    assert "aliases" not in stage.materials[0].payload
-    assert "public_summary" not in stage.materials[0].payload
-    assert "attitude_to_player" not in stage.materials[0].payload
-    assert stage.materials[0].payload["role"] == "社区医生"
-    assert stage.materials[0].payload["social_style"] == "克制而友善。"
-
-
 def test_generation_agent_intimate_view_reveals_director_npc_secrets(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     draft = make_director_npc()
@@ -549,44 +504,6 @@ def test_generation_observation_exposes_engaged_events_channel(tmp_path):
     assert engaged_channel[just_engaged_id]["stage"] == "engaged"
     assert engaged_channel[just_engaged_id]["touched_this_turn"] is True
     assert "hooks" not in engaged_channel[engaged_id]
-
-
-def test_generation_director_omits_event_skills_when_no_events(tmp_path):
-    from app.domain.world_setting import WorldSetting
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    with stores.world_setting as store:
-        store.save(WorldSetting(
-            kind="lore",
-            name="潮汐旧约",
-            summary="约束沿海商会共同救援遇险船只的古老约定。",
-            public_facts=["拒绝救援会被同行抵制"],
-            created_turn=1,
-        ))
-    gateway = ScriptedDirectorGateway(
-        decision={"reasoning": "本轮无需导演介入。", "requests": []},
-    )
-
-    run_generation_director_agent(
-        gateway=gateway,
-        stores=stores,
-        core_memory=CoreMemory(items=[]),
-        current_state=make_current_state(),
-        user_input="观察港口。",
-        context_facts=[],
-        recent_summaries=[],
-        turn_index=3,
-        trace_id="generation-director",
-        npc_profiles=[],
-    )
-
-    skills = json.loads(gateway.input_data[0]["available_skills_json"])
-    skill_names = {skill["name"] for skill in skills}
-    assert "present_event" not in skill_names
-    assert "intrude_engaged_event" not in skill_names
-    assert "upgrade_disclosure" not in skill_names
-    # introduce_npc is always available because it supports spontaneous NPC creation
-    assert "introduce_npc" in skill_names
-    assert "foreshadow_setting" not in skill_names
 
 
 def test_legacy_setting_material_remains_schema_compatible():

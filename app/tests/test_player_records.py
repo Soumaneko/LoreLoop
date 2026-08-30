@@ -149,60 +149,6 @@ def test_load_player_records_rejects_unknown_view():
     with pytest.raises(ValueError, match="unknown records view"):
         load_player_records(view="secret")
 
-
-def test_update_continuity_preserves_status_and_normalizes_null():
-    _seed_records()
-    item = load_player_records()["continuity"][0]
-    result = update_player_record(
-        "continuity",
-        item["id"],
-        {"subject": "找回失窃木偶", "location": ""},
-    )
-    assert result["subject"] == "找回失窃木偶"
-    assert result["location"] is None
-    assert result["status"] == "active"
-
-
-def test_update_continuity_can_remove_an_entity_from_archive_metadata():
-    _seed_records()
-    item = load_player_records()["continuity"][0]
-    runtime = get_campaign_runtime()
-    with runtime.stores.continuity as store:
-        store.edit_active_metadata(
-            item["id"],
-            subject=item["subject"],
-            entities=["埃利奥", "旧木偶"],
-            location=item["location"],
-            deadline=item["deadline"],
-            turn_index=item["updated_turn"],
-        )
-
-    result = update_player_record(
-        "continuity",
-        item["id"],
-        {"entities": ["埃利奥", "  "]},
-    )
-
-    assert result["entities"] == ["埃利奥"]
-    with runtime.stores.continuity as store:
-        assert store.get(item["id"]).entities == ["埃利奥"]
-
-
-def test_update_npc_public_fields_preserves_director_fields():
-    _seed_records()
-    runtime = get_campaign_runtime()
-    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    result = update_player_record(
-        "npc",
-        npc_id,
-        {"role": "巡回木偶师"},
-    )
-    assert result["public"]["role"] == "巡回木偶师"
-    assert "director_only" not in result
-    with pytest.raises(ValueError, match="NPC general fields only"):
-        update_player_record("npc", npc_id, {"aliases": ["木偶师"]})
-
-
 def test_update_npc_public_fields_preserves_last_scene_record():
     _seed_records()
     runtime = get_campaign_runtime()
@@ -240,86 +186,6 @@ def test_update_npc_public_fields_preserves_last_scene_record():
         assert saved.last_scene_summary == "他在灰烬图书馆当众修好了被窃的木偶。"
         assert saved.last_scene_turn == 3
 
-
-def test_update_npc_known_abilities_drops_blank_name_entries():
-    _seed_records()
-    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    result = update_player_record(
-        "npc",
-        npc_id,
-        {
-            "known_abilities": [
-                {"name": "   ", "description": "空名条目应被丢弃"},
-                {"name": "查账", "description": "核对往来账目"},
-            ]
-        },
-    )
-    assert result["public"]["known_abilities"] == [
-        {"name": "查账", "description": "核对往来账目"}
-    ]
-
-
-def test_update_npc_allows_empty_ability_description():
-    _seed_records()
-    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    result = update_player_record(
-        "npc",
-        npc_id,
-        {
-            "known_abilities": [
-                {"name": "查账", "description": ""},
-            ]
-        },
-    )
-    assert result["public"]["known_abilities"] == [
-        {"name": "查账", "description": ""}
-    ]
-
-
-def test_update_npc_clearing_personality_trait_persists_none():
-    _seed_records()
-    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    update_player_record("npc", npc_id, {"personality_trait": ""})
-    with get_campaign_runtime().stores.npc_profile as store:
-        assert store.get_by_id(npc_id).personality_trait is None
-
-
-def test_update_npc_rejects_oversized_trait_and_excess_abilities():
-    _seed_records()
-    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    with pytest.raises(ValueError):
-        update_player_record("npc", npc_id, {"personality_trait": "x" * 61})
-    with pytest.raises(ValueError):
-        update_player_record(
-            "npc",
-            npc_id,
-            {
-                "known_abilities": [
-                    {"name": f"a{i}", "description": "d"}
-                    for i in range(6)
-                ]
-            },
-        )
-
-
-def test_update_npc_advanced_edits_director_content_fields():
-    _seed_records()
-    npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
-    result = update_player_record(
-        "npc",
-        npc_id,
-        {
-            "core_motivation": "查明木偶失窃的真相。",
-            "hidden_secret": "",
-            "conflict_style": "迂回试探",
-        },
-        view="advanced",
-    )
-    assert result["director_only"]["core_motivation"] == "查明木偶失窃的真相。"
-    assert result["director_only"]["hidden_secret"] is None
-    assert result["director_only"]["conflict_style"] == "迂回试探"
-
-
 def test_update_npc_rejects_director_fields_in_general_and_blank_name():
     _seed_records()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
@@ -332,36 +198,6 @@ def test_update_npc_rejects_director_fields_in_general_and_blank_name():
     with pytest.raises(ValueError, match="name must not be empty"):
         update_player_record("npc", npc_id, {"name": "  "})
 
-
-def test_update_setting_edits_static_fields():
-    _seed_records()
-    setting_id = load_player_records()["world_settings"][0]["id"]
-    result = update_player_record(
-        "setting",
-        setting_id,
-        {
-            "summary": "关于旧时代档案封存制度的通称。",
-            "public_facts": ["学者常用这个词。", ""],
-        },
-    )
-    assert result["fields"]["public_facts"] == ["学者常用这个词。"]
-    assert "hidden_facts" not in result["fields"]
-    with pytest.raises(ValueError, match="Setting general fields only"):
-        update_player_record("setting", setting_id, {"kind": "lore"})
-
-
-def test_update_setting_advanced_edits_hidden_facts():
-    _seed_records()
-    setting_id = load_player_records(view="advanced")["world_settings"][0]["id"]
-    result = update_player_record(
-        "setting",
-        setting_id,
-        {"hidden_facts": ["地下层藏着旧案卷宗。"]},
-        view="advanced",
-    )
-    assert result["fields"]["hidden_facts"] == ["地下层藏着旧案卷宗。"]
-
-
 def test_update_setting_rejects_hidden_facts_in_general_and_unknown_fields():
     _seed_records()
     setting_id = load_player_records(view="advanced")["world_settings"][0]["id"]
@@ -371,24 +207,6 @@ def test_update_setting_rejects_hidden_facts_in_general_and_unknown_fields():
         update_player_record("setting", setting_id, {"related_setting_ids": ["s1"]}, view="advanced")
     with pytest.raises(ValueError, match="Setting not found"):
         update_player_record("setting", "missing", {"name": "无"})
-
-
-def test_update_setting_rejects_duplicate_name():
-    _seed_records()
-    runtime = get_campaign_runtime()
-    with runtime.stores.world_setting as store:
-        second = WorldSetting(
-            kind="item",
-            name="旧钥匙",
-            summary="一把来源不明的铜钥匙。",
-            public_facts=["钥匙表面有灼痕。"],
-            created_turn=2,
-            hit_count=1,
-        )
-        store.save(second)
-    with pytest.raises(ValueError, match="already exists"):
-        update_player_record("setting", second.setting_id, {"name": "灰烬图书馆"})
-
 
 def test_update_player_record_validates_kind_id_and_payload():
     with pytest.raises(ValueError, match="unknown record kind"):

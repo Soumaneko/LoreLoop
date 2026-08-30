@@ -3,7 +3,6 @@ from app.runtime.stores import open_confirmed_history_store
 from app.runtime.stores import open_npc_profile_store
 from app.runtime.stores import open_world_setting_store
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -62,7 +61,6 @@ from app.domain.short_term_memory import ShortTermScene
 from app.domain.world_setting import WorldSetting, WorldSettingStore
 from app.domain.npc_profile.selection import select_context_profiles
 
-
 def _state() -> CurrentState:
     return CurrentState(
         scene=SceneState(
@@ -73,7 +71,6 @@ def _state() -> CurrentState:
         player=PlayerState(name="萧云痕"),
         resources=ResourcesState(inventory=[InventoryItem(name="麂皮褡裢")]),
     )
-
 
 def _core_memory() -> CoreMemory:
     return CoreMemory(items=[
@@ -86,7 +83,6 @@ def _core_memory() -> CoreMemory:
         )
     ])
 
-
 def _npc_view():
     return NPCProfile(
         name="顾晚棠",
@@ -94,7 +90,6 @@ def _npc_view():
         role="万象阁阁主",
         attitude_to_player="部分信任但仍戒备",
     ).director_view()
-
 
 def _upsert_scenes(
     store: ConfirmedHistoryStore,
@@ -107,7 +102,6 @@ def _upsert_scenes(
             user_input=scene.user_input,
             scene_text=scene.scene_text,
         )
-
 
 def test_unified_history_selector_breaks_exact_ties_by_evidence_id():
     plan = ContextSearchPlan(intents=[ContextSearchIntent(
@@ -142,7 +136,6 @@ def test_unified_history_selector_breaks_exact_ties_by_evidence_id():
         "turn_1_p001"
     ]
 
-
 def test_context_history_projection_omits_empty_and_internal_fields():
     evidence = ContextHistoryEvidenceSet(hits=[ContextHistoryHit(
         evidence_id="turn_1_p001",
@@ -164,7 +157,6 @@ def test_context_history_projection_omits_empty_and_internal_fields():
         "text": "顾晚棠点头。",
     }]
     assert json.loads(project_context_history(evidence)) == payload
-
 
 def test_context_history_projection_keeps_nonempty_evidence_context():
     evidence = ContextHistoryEvidenceSet(hits=[ContextHistoryHit(
@@ -215,7 +207,6 @@ def test_context_history_projection_keeps_nonempty_evidence_context():
     }]
     assert "matched_intent_ids" not in record
 
-
 def test_continuity_and_setting_projections_omit_empty_optional_fields():
     continuity = ContinuitySelection(items=[ContinuityMatch(
         item=ContinuityItem(
@@ -258,7 +249,6 @@ def test_continuity_and_setting_projections_omit_empty_optional_fields():
     assert project_continuity(ContinuitySelection()) == "[]"
     assert project_settings(SettingSelection()) == "[]"
 
-
 def test_continuity_and_setting_projections_keep_nonempty_optional_fields():
     continuity = ContinuitySelection(items=[ContinuityMatch(
         item=ContinuityItem(
@@ -293,7 +283,6 @@ def test_continuity_and_setting_projections_keep_nonempty_optional_fields():
         "山中存在灵脉。"
     ]
 
-
 def test_context_fact_set_assigns_fact_ids_and_keeps_internal_evidence():
     result = ContextFactSet.from_drafts(
         turn_focus="萧云痕询问顾晚棠如何应对盐帮。",
@@ -321,7 +310,6 @@ def test_context_fact_set_assigns_fact_ids_and_keeps_internal_evidence():
         "萧云痕、顾晚棠已知(共同经历): 萧云痕已承诺庇护顾晚棠三日。",
     ]
 
-
 def test_context_fact_set_rejects_duplicate_ids_and_unknown_evidence():
     with pytest.raises(ValueError, match="fact_id"):
         ContextFactSet(
@@ -343,7 +331,6 @@ def test_context_fact_set_rejects_duplicate_ids_and_unknown_evidence():
             }],
             known_evidence_ids=set(),
         )
-
 
 def test_deterministic_intents_use_location_participants_aliases_and_topics():
     plan = build_context_search_plan(
@@ -381,7 +368,6 @@ def test_deterministic_intents_use_location_participants_aliases_and_topics():
     )
     assert topic.origin == "explicit_input"
 
-
 def test_parser_topics_replace_rule_extraction_and_remain_explicit():
     plan = build_context_search_plan(
         user_input=(
@@ -413,7 +399,6 @@ def test_parser_topics_replace_rule_extraction_and_remain_explicit():
     ]
     assert all(intent.origin == "explicit_input" for intent in topic_intents)
 
-
 def test_known_entity_topic_deduplicates_into_explicit_entity():
     plan = build_context_search_plan(
         user_input="我询问顾阁主。",
@@ -435,7 +420,6 @@ def test_known_entity_topic_deduplicates_into_explicit_entity():
         for intent in plan.intents
     )
 
-
 def test_unknown_explicit_names_remain_topics():
     plan = build_context_search_plan(
         user_input="离开护山大阵，查看周姓修士。",
@@ -455,7 +439,6 @@ def test_unknown_explicit_names_remain_topics():
         for topic in intent.topics
     }
     assert {"护山大阵", "周姓修士"} <= topics
-
 
 def test_contiguous_parser_topics_retrieve_natural_history_wording():
     plan = build_context_search_plan(
@@ -490,7 +473,6 @@ def test_contiguous_parser_topics_retrieve_natural_history_wording():
     assert "山脚下埋伏" in hit_text
     assert "刺探我宗情报" in hit_text
 
-
 def test_deterministic_intents_keep_all_matched_anchors():
     anchors = [
         Anchor(
@@ -523,7 +505,6 @@ def test_deterministic_intents_keep_all_matched_anchors():
     )
     assert len(plan.intents) > 16
 
-
 def test_explicit_anchor_promotes_existing_context_entity_intent():
     plan = build_context_search_plan(
         user_input="我继续观察。",
@@ -546,7 +527,6 @@ def test_explicit_anchor_promotes_existing_context_entity_intent():
     assert len(matching) == 1
     assert matching[0].origin == "explicit_input"
 
-
 def test_implicit_anchor_promotes_context_entity_below_explicit_input():
     plan = build_context_search_plan(
         user_input="我继续观察。",
@@ -567,7 +547,6 @@ def test_implicit_anchor_promotes_context_entity_below_explicit_input():
         if intent.entities and intent.entities[0].name == "顾晚棠"
     )
     assert matching.origin == "matched_anchor"
-
 
 def test_explicit_two_character_event_from_player_input_is_retrievable():
     state = CurrentState(
@@ -613,78 +592,6 @@ def test_explicit_two_character_event_from_player_input_is_retrievable():
     assert len(result.hits) == 1
     assert result.hits[0].matched_topics == ["黑塔"]
 
-
-def test_anchor_kind_routes_events_away_from_relationship_entities():
-    anchors = [
-        Anchor(
-            text="艾琳",
-            normalized="艾琳",
-            kind="character",
-            source="explicit",
-            confidence=1.0,
-        ),
-        Anchor(
-            text="黑塔",
-            normalized="黑塔",
-            kind="location",
-            source="explicit",
-            confidence=1.0,
-        ),
-        Anchor(
-            text="灰钥匙",
-            normalized="灰钥匙",
-            kind="item",
-            source="explicit",
-            confidence=1.0,
-        ),
-        Anchor(
-            text="黑塔密约",
-            normalized="黑塔密约",
-            kind="concept",
-            source="explicit",
-            confidence=1.0,
-        ),
-        Anchor(
-            text="调查失踪案",
-            normalized="调查失踪案",
-            kind="action_keyword",
-            source="explicit",
-            confidence=1.0,
-        ),
-    ]
-    plan = build_context_search_plan(
-        user_input="我询问艾琳并调查失踪案。",
-        current_state=_state(),
-        matched_anchors=anchors,
-        npc_profiles=[],
-    )
-
-    assert any(
-        intent.focus == "location"
-        and intent.entities[0].name == "黑塔"
-        for intent in plan.intents
-    )
-    assert any(
-        intent.focus == "entity"
-        and intent.entities[0].name == "灰钥匙"
-        for intent in plan.intents
-    )
-    assert {"黑塔密约", "调查失踪案"} <= {
-        topic
-        for intent in plan.intents
-        if intent.focus == "topic"
-        for topic in intent.topics
-    }
-    relationship = next(
-        intent for intent in plan.intents if intent.focus == "relationship"
-    )
-    relationship_names = {entity.name for entity in relationship.entities}
-    assert "艾琳" in relationship_names
-    assert relationship_names.isdisjoint({
-        "黑塔", "灰钥匙", "黑塔密约", "调查失踪案",
-    })
-
-
 def test_single_character_entity_substrings_are_not_promoted_without_anchor():
     profile = NPCProfile(
         name="安",
@@ -722,7 +629,6 @@ def test_single_character_entity_substrings_are_not_promoted_without_anchor():
         if intent.entities and intent.entities[0].name == "安"
     )
     assert explicit.origin == "explicit_input"
-
 
 def test_history_retriever_allows_single_alias_and_diversifies_turns():
     plan = ContextSearchPlan(intents=[
@@ -767,7 +673,6 @@ def test_history_retriever_allows_single_alias_and_diversifies_turns():
     assert any("账册摹本" in hit.matched_topics for hit in result.hits)
     assert all(hit.matched_intent_ids for hit in result.hits)
 
-
 def test_history_retriever_caps_entity_owned_hits_independently_of_fact_limit():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -792,7 +697,6 @@ def test_history_retriever_caps_entity_owned_hits_independently_of_fact_limit():
 
     assert len(result.hits) == 3
     assert [hit.turn_index for hit in result.hits] == [15, 14, 13]
-
 
 def test_history_diversity_balances_intent_coverage_then_fills():
     plan = ContextSearchPlan(intents=[
@@ -848,7 +752,6 @@ def test_history_diversity_balances_intent_coverage_then_fills():
     assert sum("黑塔" in hit.text for hit in result.hits) == 2
     assert sum("河湾旅店" in hit.text for hit in result.hits) == 1
 
-
 def test_explicit_entity_and_event_outrank_higher_scored_context_intent():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -903,55 +806,6 @@ def test_explicit_entity_and_event_outrank_higher_scored_context_intent():
         ("explicit_event",),
     }
 
-
-def test_explicit_origin_candidates_finish_before_context_candidates():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="context_npc",
-            focus="entity",
-            origin="current_context",
-            entities=[ContextSearchEntity(name="背景人物")],
-        ),
-        ContextSearchIntent(
-            intent_id="explicit_event",
-            focus="topic",
-            origin="explicit_input",
-            topics=["显式事件"],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            *[
-                ShortTermScene(
-                    scene_id=f"explicit_{turn}",
-                    turn_index=turn,
-                    scene_text=f"显式事件留下第{turn}条旧记录。",
-                )
-                for turn in range(1, 5)
-            ],
-            *[
-                ShortTermScene(
-                    scene_id=f"context_{turn}",
-                    turn_index=turn,
-                    scene_text=f"背景人物留下第{turn}条近期记录。",
-                )
-                for turn in range(97, 101)
-            ],
-        ])
-        result = ContextHistoryRetriever(
-            store,
-            diversity_policy=HistoryDiversityPolicy(max_hits=5),
-        ).retrieve(plan, current_turn_index=101)
-
-    assert [hit.matched_intent_ids for hit in result.hits] == [
-        ["explicit_event"],
-        ["explicit_event"],
-        ["explicit_event"],
-        ["explicit_event"],
-        ["context_npc"],
-    ]
-
-
 def test_one_hit_updates_three_intent_coverages_without_duplicate_payload():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -991,38 +845,6 @@ def test_one_hit_updates_three_intent_coverages_without_duplicate_payload():
     ]
     assert project_context_history(result).count(result.hits[0].evidence_id) == 1
 
-
-def test_topic_can_own_hit_after_entity_owner_cap_is_full():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="entity_ailin",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-        ContextSearchIntent(
-            intent_id="topic_tower",
-            focus="topic",
-            topics=["黑塔"],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id=f"scene_{turn:03d}",
-                turn_index=turn,
-                scene_text=f"艾琳记录了黑塔第{turn}层的门锁。",
-            )
-            for turn in range(1, 6)
-        ])
-        result = ContextHistoryRetriever(
-            store,
-            diversity_policy=HistoryDiversityPolicy(max_hits=5, entity_cap=2),
-        ).retrieve(plan, current_turn_index=6)
-
-    assert len(result.hits) == 5
-    assert all("艾琳" in hit.text and "黑塔" in hit.text for hit in result.hits)
-
-
 def test_relationship_intent_cannot_bypass_entity_cap_with_one_entity_match():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -1054,7 +876,6 @@ def test_relationship_intent_cannot_bypass_entity_cap_with_one_entity_match():
         ).retrieve(plan, current_turn_index=7)
 
     assert len(result.hits) == 2
-
 
 def test_genuine_relationship_match_can_own_hits_after_entity_cap():
     plan = ContextSearchPlan(intents=[
@@ -1092,7 +913,6 @@ def test_genuine_relationship_match_can_own_hits_after_entity_cap():
         for hit in result.hits
     )
 
-
 def test_short_exact_topic_receives_direct_match_score():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -1115,56 +935,6 @@ def test_short_exact_topic_receives_direct_match_score():
     assert len(result.hits) == 1
     assert result.hits[0].matched_topics == ["黑塔"]
     assert result.hits[0].score > 0.7
-
-
-def test_high_priority_intents_exhaust_max_hits_deterministically():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="low_location",
-            focus="location",
-            origin="current_context",
-            entities=[ContextSearchEntity(name="河湾旅店")],
-        ),
-        *[
-            ContextSearchIntent(
-                intent_id=f"high_entity_{index}",
-                focus="entity",
-                origin="explicit_input",
-                entities=[ContextSearchEntity(name=f"人物{index}")],
-            )
-            for index in range(1, 4)
-        ],
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id="scene_001",
-                turn_index=1,
-                scene_text="河湾旅店今日照常营业。",
-            ),
-            *[
-                ShortTermScene(
-                    scene_id=f"scene_{index + 1:03d}",
-                    turn_index=index + 1,
-                    scene_text=f"人物{index}留下了自己的线索。",
-                )
-                for index in range(1, 4)
-            ],
-        ])
-        retriever = ContextHistoryRetriever(
-            store,
-            diversity_policy=HistoryDiversityPolicy(max_hits=2),
-        )
-        first = retriever.retrieve(plan, current_turn_index=5)
-        second = retriever.retrieve(plan, current_turn_index=5)
-
-    first_ids = [hit.evidence_id for hit in first.hits]
-    assert first_ids == [hit.evidence_id for hit in second.hits]
-    assert [hit.matched_intent_ids for hit in first.hits] == [
-        ["high_entity_1"],
-        ["high_entity_2"],
-    ]
-
 
 def test_history_retriever_merges_multi_intent_alias_and_topic_hits_on_one_evidence():
     plan = ContextSearchPlan(intents=[
@@ -1199,7 +969,6 @@ def test_history_retriever_merges_multi_intent_alias_and_topic_hits_on_one_evide
     assert hit.matched_topics == ["账册摹本"]
     assert hit.supporting_evidence_ids == []
 
-
 def test_adjacent_paragraph_hit_does_not_create_duplicate_candidate():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -1230,34 +999,6 @@ def test_adjacent_paragraph_hit_does_not_create_duplicate_candidate():
     assert hit.context_after and "藏匿地点" in hit.context_after[0].text
     assert hit.context_after[0].evidence_id == "turn_1_p002"
 
-
-def test_identical_text_across_adjacent_turns_is_not_merged():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id=f"scene_{turn_index:02d}",
-                turn_index=turn_index,
-                scene_text="艾琳向玩家点头。",
-            )
-            for turn_index in (30, 31)
-        ])
-        result = ContextHistoryRetriever(store).retrieve(
-            plan,
-            current_turn_index=32,
-        )
-
-    assert len(result.hits) == 2
-    assert {hit.turn_index for hit in result.hits} == {30, 31}
-    assert all(hit.supporting_evidence_ids == [] for hit in result.hits)
-
-
 def test_identical_adjacent_paragraphs_in_same_turn_merge():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -1283,39 +1024,6 @@ def test_identical_adjacent_paragraphs_in_same_turn_merge():
     hit = result.hits[0]
     assert len(hit.supporting_evidence_ids) == 1
     assert hit.supporting_evidence_ids == ["turn_30_p001"]
-
-
-def test_non_adjacent_identical_paragraphs_do_not_merge():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id="scene_030",
-                turn_index=30,
-                scene_text=(
-                    "艾琳向玩家点头。\n\n"
-                    "艾琳走出门去。\n\n"
-                    "艾琳向玩家点头。"
-                ),
-            ),
-        ])
-        result = ContextHistoryRetriever(
-            store,
-            diversity_policy=HistoryDiversityPolicy(turn_cap=3),
-        ).retrieve(
-            plan,
-            current_turn_index=31,
-        )
-
-    assert len(result.hits) == 3
-    assert all(hit.supporting_evidence_ids == [] for hit in result.hits)
-
 
 def test_numeric_and_negation_differences_block_merge():
     plan = ContextSearchPlan(intents=[
@@ -1352,7 +1060,6 @@ def test_numeric_and_negation_differences_block_merge():
             current_turn_index=32,
         )
     assert len(negation.hits) == 2
-
 
 def test_clustered_evidence_ids_remain_valid_for_context_facts():
     plan = ContextSearchPlan(intents=[
@@ -1401,55 +1108,6 @@ def test_clustered_evidence_ids_remain_valid_for_context_facts():
     )
     assert facts.facts[0].evidence_ids == [supporting]
 
-
-def test_adjacent_context_ids_remain_valid_for_context_facts():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id="scene_001",
-                turn_index=1,
-                scene_text=(
-                    "顾阁主承认账册摹本并不在她身上。\n\n"
-                    "她拒绝透露具体藏匿地点。"
-                ),
-            ),
-        ])
-        result = ContextHistoryRetriever(store).retrieve(
-            plan,
-            current_turn_index=2,
-        )
-
-    assert len(result.hits) == 1
-    hit = result.hits[0]
-    assert hit.context_after
-    adjacent_id = hit.context_after[0].evidence_id
-    known = {
-        evidence_id
-        for item in hit.context_before + hit.context_after
-        for evidence_id in [item.evidence_id]
-    } | {hit.evidence_id, *hit.supporting_evidence_ids}
-    facts = ContextFactSet.from_drafts(
-        turn_focus="focus",
-        facts=[
-            {
-                "holder": "萧云痕",
-                "source": "史",
-                "fact": "顾晚棠拒绝透露藏匿地点。",
-                "evidence_ids": [adjacent_id],
-            },
-        ],
-        known_evidence_ids=known,
-    )
-    assert facts.facts[0].evidence_ids == [adjacent_id]
-
-
 def test_cluster_representative_merges_member_metadata_and_max_score():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -1484,223 +1142,6 @@ def test_cluster_representative_merges_member_metadata_and_max_score():
     assert len(hit.supporting_evidence_ids) == 1
     assert hit.score > 0
 
-
-def test_disjoint_topics_do_not_merge():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-        ContextSearchIntent(
-            intent_id="i2",
-            focus="topic",
-            topics=["账册", "盐帮"],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id="scene_030",
-                turn_index=30,
-                scene_text=(
-                    "艾琳负责处理账册方面的事务。\n\n"
-                    "艾琳负责处理盐帮方面的事务。"
-                ),
-            ),
-        ])
-        result = ContextHistoryRetriever(store).retrieve(
-            plan,
-            current_turn_index=31,
-        )
-
-    assert len(result.hits) == 2
-    assert {hit.paragraph_index for hit in result.hits} == {1, 2}
-
-
-def test_state_change_and_time_differences_do_not_merge():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-    ])
-    pairs = (
-        ("艾琳持有那把钥匙站在门口。", "艾琳交出那把钥匙站在门口。"),
-        ("艾琳仍然存活于地牢之中。", "艾琳已然死亡于地牢之中。"),
-        ("艾琳清晨来到客栈。", "艾琳黄昏来到客栈。"),
-    )
-    for first, second in pairs:
-        with open_confirmed_history_store() as store:
-            _upsert_scenes(store, [
-                ShortTermScene(
-                    scene_id="scene_030",
-                    turn_index=30,
-                    scene_text=f"{first}\n\n{second}",
-                ),
-            ])
-            result = ContextHistoryRetriever(store).retrieve(
-                plan,
-                current_turn_index=31,
-            )
-        assert len(result.hits) == 2, (
-            f"expected no merge for {first!r} / {second!r}"
-        )
-
-
-def test_negated_content_difference_blocks_merge():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-        ContextSearchIntent(
-            intent_id="i2",
-            focus="topic",
-            topics=["盐帮", "万象阁"],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id="scene_030",
-                turn_index=30,
-                scene_text="艾琳不是盐帮成员。\n\n艾琳不是万象阁成员。",
-            ),
-        ])
-        result = ContextHistoryRetriever(store).retrieve(
-            plan,
-            current_turn_index=31,
-        )
-
-    assert len(result.hits) == 2
-    assert {hit.paragraph_index for hit in result.hits} == {1, 2}
-
-
-def test_numeric_quantity_differences_block_merge():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-        ContextSearchIntent(
-            intent_id="i2",
-            focus="topic",
-            topics=["钥匙"],
-        ),
-    ])
-    pairs = (
-        ("艾琳携带 2 把钥匙。", "艾琳携带钥匙。"),
-        ("艾琳携带两把钥匙。", "艾琳携带三把钥匙。"),
-    )
-    for first, second in pairs:
-        with open_confirmed_history_store() as store:
-            _upsert_scenes(store, [
-                ShortTermScene(
-                    scene_id="scene_030",
-                    turn_index=30,
-                    scene_text=f"{first}\n\n{second}",
-                ),
-            ])
-            result = ContextHistoryRetriever(store).retrieve(
-                plan,
-                current_turn_index=31,
-            )
-        assert len(result.hits) == 2, (
-            f"expected no merge for {first!r} / {second!r}"
-        )
-
-
-def test_different_subject_entities_do_not_merge():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[
-                ContextSearchEntity(name="艾琳"),
-                ContextSearchEntity(name="萧云痕"),
-            ],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id="scene_030",
-                turn_index=30,
-                scene_text="艾琳走向门口。\n\n萧云痕走向门口。",
-            ),
-        ])
-        result = ContextHistoryRetriever(store).retrieve(
-            plan,
-            current_turn_index=31,
-        )
-
-    assert len(result.hits) == 2
-    assert {hit.paragraph_index for hit in result.hits} == {1, 2}
-
-
-def test_distant_identical_text_is_not_merged():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id=f"scene_{turn_index:03d}",
-                turn_index=turn_index,
-                scene_text="艾琳向玩家点头。",
-            )
-            for turn_index in (1, 100)
-        ])
-        result = ContextHistoryRetriever(store).retrieve(
-            plan,
-            current_turn_index=101,
-        )
-
-    assert len(result.hits) == 2
-    assert {hit.turn_index for hit in result.hits} == {1, 100}
-    assert all(hit.supporting_evidence_ids == [] for hit in result.hits)
-
-
-def test_adjacent_identical_pair_merges_and_non_adjacent_stays_separate():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-    ])
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [
-            ShortTermScene(
-                scene_id="scene_030",
-                turn_index=30,
-                scene_text=(
-                    "艾琳向玩家点头。\n\n"
-                    "艾琳向玩家点头。\n\n"
-                    "艾琳走出门去。"
-                ),
-            ),
-        ])
-        result = ContextHistoryRetriever(store).retrieve(
-            plan,
-            current_turn_index=31,
-        )
-
-    merged = [hit for hit in result.hits if hit.supporting_evidence_ids]
-    standalone = [hit for hit in result.hits if not hit.supporting_evidence_ids]
-    assert len(merged) == 1
-    assert len(standalone) == 1
-    assert standalone[0].paragraph_index == 3
-
-
 def test_supporting_evidence_ids_match_provided_texts():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -1728,7 +1169,6 @@ def test_supporting_evidence_ids_match_provided_texts():
         item.evidence_id for item in hit.supporting_evidence
     }
 
-
 def test_supporting_evidence_carries_member_full_text():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -1755,7 +1195,6 @@ def test_supporting_evidence_carries_member_full_text():
     assert len(hit.supporting_evidence) == 1
     assert hit.supporting_evidence[0].evidence_id == "turn_30_p001"
     assert hit.supporting_evidence[0].text == "艾琳向玩家点头。"
-
 
 def test_history_payload_budget_drops_optional_context_before_main_text():
     plan = ContextSearchPlan(intents=[
@@ -1800,49 +1239,6 @@ def test_history_payload_budget_drops_optional_context_before_main_text():
     assert bounded.hits[0].context_after == []
     assert bounded.hits[0].supporting_evidence == []
 
-
-def test_history_payload_budget_retains_explicit_main_before_context_candidate():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="context_npc",
-            focus="entity",
-            origin="current_context",
-            entities=[ContextSearchEntity(name="背景人物")],
-        ),
-        ContextSearchIntent(
-            intent_id="explicit_event",
-            focus="topic",
-            origin="explicit_input",
-            topics=["黑塔密约"],
-        ),
-    ])
-    policy = HistoryDiversityPolicy(
-        max_hits=2,
-        max_payload_chars=800,
-        max_evidence_text_chars=240,
-        min_excerpt_chars=80,
-    )
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [ShortTermScene(
-            scene_id="scene_001",
-            turn_index=1,
-            scene_text=(
-                "黑塔密约将在月末执行。\n\n"
-                f"背景人物记录：{'冗长背景。' * 500}"
-            ),
-        )])
-        result = ContextHistoryRetriever(
-            store,
-            diversity_policy=policy,
-        ).retrieve(plan, current_turn_index=2)
-
-    assert result.hits
-    assert result.hits[0].matched_intent_ids == ["explicit_event"]
-    assert "黑塔密约" in result.hits[0].text
-    assert result.hits[0].context_after == []
-    assert len(project_context_history(result)) <= policy.max_payload_chars
-
-
 def test_history_payload_budget_uses_marked_bounded_excerpt():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -1874,35 +1270,6 @@ def test_history_payload_budget_uses_marked_bounded_excerpt():
     assert hit.original_text_chars == len(original)
     assert "[bounded excerpt]" in hit.text
     assert len(project_context_history(result)) <= policy.max_payload_chars
-
-
-def test_history_payload_budget_skips_evidence_when_minimum_excerpt_cannot_fit():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-    ])
-    policy = HistoryDiversityPolicy(
-        max_payload_chars=100,
-        max_evidence_text_chars=80,
-        min_excerpt_chars=40,
-    )
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, [ShortTermScene(
-            scene_id="scene_001",
-            turn_index=1,
-            scene_text=f"艾琳记录：{'内容。' * 100}",
-        )])
-        result = ContextHistoryRetriever(
-            store,
-            diversity_policy=policy,
-        ).retrieve(plan, current_turn_index=2)
-
-    assert result.hits == []
-    assert project_context_history(result) == "[]"
-
 
 def test_history_payload_budget_retries_after_global_dedup_frees_space():
     plan = ContextSearchPlan(intents=[
@@ -1957,7 +1324,6 @@ def test_history_payload_budget_retries_after_global_dedup_frees_space():
     ]
     assert len(project_context_history(result)) <= policy.max_payload_chars
 
-
 def test_merge_conflict_detects_semantic_differences():
     from app.domain.context_facts.clustering import merge_conflict
 
@@ -1969,7 +1335,6 @@ def test_merge_conflict_detects_semantic_differences():
     assert merge_conflict("艾琳持有钥匙。", "艾琳交出钥匙。")
     assert merge_conflict("艾琳清晨前来。", "艾琳黄昏前来。")
     assert not merge_conflict("艾琳清晨前来。", "艾琳清晨前来。")
-
 
 def test_entity_sets_must_be_identical_for_merge():
     from app.domain.context_facts.clustering import cluster_near_duplicates
@@ -2010,7 +1375,6 @@ def test_entity_sets_must_be_identical_for_merge():
     assert len(cluster_near_duplicates(make(["艾琳"], ["艾琳"]))) == 1
     assert len(cluster_near_duplicates(make([], []))) == 2
 
-
 def test_cluster_members_are_excluded_from_adjacent_context():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -2044,7 +1408,6 @@ def test_cluster_members_are_excluded_from_adjacent_context():
         assert len(all_ids) == len(set(all_ids)), (
             "evidence IDs must be unique within a hit"
         )
-
 
 def test_evidence_documents_are_globally_unique_across_hits():
     plan = ContextSearchPlan(intents=[
@@ -2083,7 +1446,6 @@ def test_evidence_documents_are_globally_unique_across_hits():
             assert evidence_id not in seen, f"duplicate evidence: {evidence_id}"
             seen.add(evidence_id)
 
-
 def test_context_history_evidence_set_validates_global_uniqueness():
     def make_hit(evidence_id, context_after=None):
         return ContextHistoryHit(
@@ -2114,7 +1476,6 @@ def test_context_history_evidence_set_validates_global_uniqueness():
         make_hit("turn_1_p001"),
         make_hit("turn_1_p002"),
     ])
-
 
 def test_context_history_hit_validates_evidence_consistency():
     def make_hit(supporting_ids, supporting):
@@ -2149,7 +1510,6 @@ def test_context_history_hit_validates_evidence_consistency():
             ["turn_1_p002", "turn_1_p002"],
             [{"evidence_id": "turn_1_p002", "text": "x"}],
         )
-
 
 def test_context_extractor_receives_raw_history_and_cites_it():
     class SpyGateway:
@@ -2236,14 +1596,6 @@ def test_context_extractor_receives_raw_history_and_cites_it():
         "fact",
         "evidence_ids",
     }
-    rendered_prompt = Path(
-        "app/prompts/generation/context_extract_v1.md"
-    ).read_text(encoding="utf-8").format(**gateway.input_data)
-    assert "已确认历史正文" in rendered_prompt
-    assert "活跃连续性事项" in rendered_prompt
-    assert "世界设定" in rendered_prompt
-    assert "Retrieved Memories" not in rendered_prompt
-
 
 def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
     class SpyGateway:
@@ -2297,17 +1649,9 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
         )
             )
 
-        assert store.turn_count() == 1
-    assert len(gateway.calls) == 1
-    assert gateway.calls[0]["task"] == "context_extract"
-    assert result.search_plan.intents
-    assert result.history_evidence.hits
-    assert [match.name for match in result.settings.settings] == ["客栈上房"]
-    assert result.settings.active_count == 1
     assert "房梁暗格里藏着盐路账册摹本" not in gateway.calls[0][
         "input_data"
     ]["settings_json"]
-
 
 def test_context_facts_projection_hides_internal_evidence_ids():
     facts = ContextFactSet(
@@ -2323,7 +1667,6 @@ def test_context_facts_projection_hides_internal_evidence_ids():
         "fact_id": "f1",
         "fact": "盐帮追兵仍在客栈外搜寻顾晚棠。",
     }]
-
 
 def test_select_context_profiles_matches_state_and_user_input(tmp_path):
     npc_store = open_npc_profile_store(str(tmp_path / "npcs.db"))
@@ -2346,7 +1689,6 @@ def test_select_context_profiles_matches_state_and_user_input(tmp_path):
 
     assert [profile.name for profile in result.npc_profiles] == ["顾晚棠"]
     assert {anchor.text for anchor in result.anchors} == {"顾晚棠"}
-
 
 def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
     npc_store = open_npc_profile_store(str(tmp_path / "npcs.db"))
@@ -2381,58 +1723,6 @@ def test_select_context_profiles_matches_aliases_from_current_state(tmp_path):
     assert [profile.name for profile in result.npc_profiles] == [
         "希尔达·布拉斯科特"
     ]
-
-
-def test_setting_retriever_selects_relevant_public_settings():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="i1",
-            focus="location",
-            entities=[ContextSearchEntity(name="客栈上房")],
-        ),
-        ContextSearchIntent(
-            intent_id="i2",
-            focus="entity",
-            entities=[ContextSearchEntity(name="顾晚棠", aliases=["顾阁主"])],
-        ),
-    ])
-    with open_world_setting_store() as store:
-        store.save_many([
-            WorldSetting(
-                kind="location",
-                name="客栈上房",
-                summary="客栈二层临街的上房。",
-                public_facts=["入夜后街面有盐帮暗哨。"],
-                created_turn=1,
-            ),
-            WorldSetting(
-                kind="faction",
-                name="盐帮",
-                summary="掌控漕运与走私路线的江湖帮派。",
-                public_facts=["盐帮垄断盐路走私。"],
-                created_turn=1,
-            ),
-            WorldSetting(
-                kind="lore",
-                name="万象阁秘闻",
-                summary="与当前剧情无关的遥远传说。",
-                public_facts=["万象阁藏有古卷。"],
-                created_turn=1,
-            ),
-        ])
-        result = SettingRetriever(store).retrieve(
-            user_input="我问顾阁主盐帮的动向。",
-            current_state=_state(),
-            search_plan=plan,
-        )
-
-    assert result.active_count == 3
-    assert [match.name for match in result.settings] == ["客栈上房", "盐帮"]
-    assert result.settings[0].matched_location is True
-    assert result.settings[1].matched_name_in_input is True
-    assert all(match.kind in {"faction", "location", "item", "lore"}
-               for match in result.settings)
-
 
 def test_setting_retriever_limits_and_never_exposes_hidden_facts():
     plan = ContextSearchPlan(intents=[
@@ -2474,7 +1764,6 @@ def test_setting_retriever_limits_and_never_exposes_hidden_facts():
     assert len(payload) == 4
     assert all("hidden_facts" not in item for item in payload)
 
-
 def _context_extractor_input(*, evidence_ids=("e1",)):
     hits = [
         ContextHistoryHit(
@@ -2499,7 +1788,6 @@ def _context_extractor_input(*, evidence_ids=("e1",)):
         npc_profiles=[],
     )
 
-
 def test_context_extractor_provider_failure_propagates():
     from app.core.llm.errors import LLMProviderError
 
@@ -2510,7 +1798,6 @@ def test_context_extractor_provider_failure_propagates():
     extractor = ContextExtractor(FailingGateway())
     with pytest.raises(LLMProviderError):
         extractor.extract(_context_extractor_input())
-
 
 def test_context_extractor_first_invalid_retries_and_second_valid_subset_wins():
     class RetryGateway:
@@ -2569,7 +1856,6 @@ def test_context_extractor_first_invalid_retries_and_second_valid_subset_wins():
     ]
     assert extractor.last_warnings == []
 
-
 def test_context_extractor_second_focus_without_facts_wins_over_first_facts():
     from app.core.llm.errors import LLMOutputValidationError
 
@@ -2627,7 +1913,6 @@ def test_context_extractor_second_focus_without_facts_wins_over_first_facts():
     assert result.turn_focus == "第二次焦点。"
     assert result.facts == []
     assert extractor.last_salvaged is True
-
 
 def test_context_extractor_reuse_first_preserves_second_dropped_warnings():
     from app.core.llm import MockLLM

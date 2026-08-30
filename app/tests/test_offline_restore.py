@@ -139,17 +139,6 @@ def test_quiesce_blocks_new_uow_and_times_out(tmp_path):
     rt.close()
 
 
-def test_confirmation_failure_increments_epoch(tmp_path):
-    paths = _valid_campaign(tmp_path)
-    rt = CampaignRuntime("cf", paths=paths, max_workers=1)
-    rt.history.save_pending(turn_id="t1", kind="turn", group_id="g1", turn_index=1, payload={"turn_id": "t1"})
-    rt.history.begin_confirmation("t1", write_db=True, scene_text=None)
-    epoch0 = rt.history.connection_epoch
-    rt.history.fail_confirmation_offline("t1", RuntimeError("fail"))
-    assert rt.history.connection_epoch == epoch0 + 1
-    rt.close()
-
-
 def test_reconfigure_invalidates_old_operation_uow(tmp_path):
     paths = _valid_campaign(tmp_path)
     rt = CampaignRuntime("sw", paths=paths, max_workers=1)

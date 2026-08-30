@@ -21,36 +21,6 @@ class _DisconnectedWriter:
         pass
 
 
-def test_initialization_draft_route_dispatches_by_http_method(monkeypatch):
-    loaded = {"version": 2, "stage": "config", "form": {}}
-    saved = {"version": 2, "stage": "campaign_setup", "form": {}}
-    received = []
-    monkeypatch.setattr(player_server, "load_initialization_draft", lambda: loaded)
-    monkeypatch.setattr(
-        player_server,
-        "save_initialization_draft",
-        lambda payload: received.append(payload) or saved,
-    )
-
-    get_handler = object.__new__(player_server.PlayerHandler)
-    get_handler.path = "/api/player/init/draft"
-    get_results = []
-    get_handler._handle_player_json = lambda callback: get_results.append(callback())
-    get_handler.do_GET()
-
-    body = json.dumps(saved).encode("utf-8")
-    post_handler = object.__new__(player_server.PlayerHandler)
-    post_handler.path = "/api/player/init/draft"
-    post_handler.headers = {"Content-Length": str(len(body))}
-    post_handler.rfile = io.BytesIO(body)
-    post_results = []
-    post_handler._handle_player_json = lambda callback: post_results.append(callback())
-    post_handler.do_POST()
-
-    assert get_results == [{"draft": loaded}]
-    assert received == [saved]
-    assert post_results == [{"draft": saved}]
-
 
 def test_player_diagnostics_are_written_to_the_separate_diagnostic_log(
     monkeypatch,

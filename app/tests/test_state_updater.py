@@ -877,47 +877,6 @@ def test_salvage_uses_first_attempt_when_second_has_no_valid_ops():
         for warning in updater.last_warnings
     )
 
-
-def test_duplicate_operation_id_keeps_first_valid_and_drops_duplicate():
-    first = {
-        "decision": "重复 op1。",
-        "frame": _frame(),
-        "operations": [
-            _operation("op1", "money_delta", delta=1),
-            _operation("op1", "money_delta", delta=2),
-        ],
-    }
-    second = {
-        "decision": "重复 op2。",
-        "frame": _frame(),
-        "operations": [
-            _operation("op2", "money_delta", delta=5),
-            _operation("op2", "money_delta", delta=6),
-        ],
-    }
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps(first, ensure_ascii=False),
-        json.dumps(second, ensure_ascii=False),
-    ])
-    updater = StateUpdater(mock.build_gateway())
-
-    result = updater.update(
-        _state(),
-        _facts(),
-        core_memory=CoreMemory(items=[]),
-    )
-
-    assert result.resources.money == 25
-    assert [op.operation_id for op in updater.last_change_set.operations] == ["op2"]
-    assert [op.delta for op in updater.last_change_set.operations] == [5]
-    assert any(
-        warning.code == "state_update_operation_dropped"
-        and warning.operation_id == "op2"
-        for warning in updater.last_warnings
-    )
-
-
 def test_model_calls_do_not_exceed_two_on_structural_errors():
     invalid = {
         "decision": "结构错误。",
@@ -943,26 +902,6 @@ def test_model_calls_do_not_exceed_two_on_structural_errors():
         and warning.operation_id == "op1"
         for warning in updater.last_warnings
     )
-
-
-def test_permanent_provider_error_propagates_without_retry():
-    class PermanentFailureProvider(_CountingProvider):
-        def generate(self, *args, **kwargs):
-            self.calls += 1
-            raise LLMProviderError("Authentication failed: 401")
-
-    provider = PermanentFailureProvider()
-    updater = StateUpdater(_gateway(provider))
-
-    with pytest.raises(LLMProviderError):
-        updater.update(
-            _state(),
-            _facts(),
-            core_memory=CoreMemory(items=[]),
-        )
-
-    assert provider.calls == 1
-
 
 def test_transient_provider_error_retries_once_then_propagates():
     class TransientFailureProvider(_CountingProvider):

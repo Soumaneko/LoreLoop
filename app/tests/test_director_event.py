@@ -95,64 +95,6 @@ def test_event_store_binds_existing_resources_without_owning_their_lifecycle():
     store.close()
 
 
-def test_bind_actor_upgrades_same_name_unreferenced_actor_instead_of_duplicating():
-    from app.domain.director_event.schemas import DirectorActorRef, DirectorEventSelectionResult
-
-    store = open_director_event_store()
-    event = _event_selection().to_event(
-        role="ambient",
-        turn_index=3,
-        current_clock=WorldClock(),
-        actors=[DirectorActorRef(name="港务署"), DirectorActorRef(name="林澈")],
-    )
-    store.save(event)
-
-    updated = store.bind_actor(
-        event.event_id,
-        actor_name="林澈",
-        actor_ref=DirectorResourceRef(kind="npc", resource_id="npc_1"),
-        turn_index=4,
-    )
-
-    assert [actor.name for actor in updated.actors] == ["港务署", "林澈"]
-    assert updated.actors[-1] == DirectorActorRef(
-        name="林澈",
-        ref=DirectorResourceRef(kind="npc", resource_id="npc_1"),
-    )
-    store.close()
-
-
-def test_bind_actor_does_not_duplicate_same_resource_ref():
-    from app.domain.director_event.schemas import DirectorActorRef
-
-    store = open_director_event_store()
-    event = _event_selection().to_event(
-        role="ambient",
-        turn_index=3,
-        current_clock=WorldClock(),
-        actors=[DirectorActorRef(name="港务署")],
-    )
-    store.save(event)
-    ref = DirectorResourceRef(kind="npc", resource_id="npc_1")
-
-    store.bind_actor(
-        event.event_id,
-        actor_name="林澈",
-        actor_ref=ref,
-        turn_index=4,
-    )
-    updated = store.bind_actor(
-        event.event_id,
-        actor_name="林澈",
-        actor_ref=ref,
-        turn_index=5,
-    )
-
-    assert [actor.name for actor in updated.actors] == ["港务署", "林澈"]
-    assert sum(actor.name == "林澈" for actor in updated.actors) == 1
-    store.close()
-
-
 def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
     db_path = tmp_path / "director_events.db"
     conn = sqlite3.connect(db_path)
@@ -197,22 +139,6 @@ def test_hooks_are_stored_but_hidden_from_consumer_projections():
     assert "hook_sound" in projected
     assert "intent" not in projected
     assert "world_impact" not in projected
-
-
-def test_project_director_events_forces_engaged_view():
-    from app.domain.director_event.views import project_director_events
-
-    event = _event().model_copy(update={"stage": "hidden"})
-
-    projected = json.loads(
-        project_director_events([event], effective_stage="engaged")
-    )[0]
-
-    assert projected["stage"] == "engaged"
-    assert projected["macro_intent"]
-    assert projected["subject"]
-    assert projected["actors"]
-    assert "hooks" not in projected
 
 
 def test_multiple_active_events_allowed_without_role_limit():

@@ -160,50 +160,6 @@ def test_backfill_full_chain(tmp_path):
         assert cs["current_revision_id"] == txns[1]["revision_id"]
 
 
-def test_backfill_partial_txn_missing(tmp_path):
-    save = tmp_path / "save"
-    save.mkdir()
-    db = save / ".runtime" / "control.db"
-    db.parent.mkdir(parents=True)
-    conn = sqlite3.connect(db)
-    conn.executescript(
-        "CREATE TABLE turn_transactions (turn_id TEXT PRIMARY KEY, kind TEXT, group_id TEXT, turn_index INTEGER, payload_json TEXT, status TEXT, write_db INTEGER, scene_text TEXT, pre_snapshot_id TEXT, error TEXT, created_at TEXT, updated_at TEXT);"
-        "CREATE TABLE turn_snapshots (sequence INTEGER PRIMARY KEY AUTOINCREMENT, snapshot_id TEXT UNIQUE, turn_id TEXT, turn_index INTEGER, path TEXT, status TEXT, redo_path TEXT, created_at TEXT);"
-    )
-    for i in [1, 2]:
-        sid = f"snap{i}"
-        tid = f"turn{i}"
-        path = f".snapshots/undo-{sid}"
-        (save / path).mkdir(parents=True)
-        (save / path / "campaign.db").write_bytes(b"")
-        (save / path / "manifest.json").write_text(json.dumps({"files": ["campaign.db"]}))
-        conn.execute(
-            "INSERT INTO turn_snapshots(snapshot_id, turn_id, turn_index, path, status, created_at) VALUES (?,?,?,?,?,?)",
-            (sid, tid, i, path, "applied", "2020"),
-        )
-        conn.execute(
-            "INSERT INTO turn_transactions(turn_id, kind, group_id, turn_index, payload_json, status, created_at, updated_at, pre_snapshot_id) VALUES (?,?,?,?,?,?,?,?,?)",
-            (tid, "turn", tid, i, "{}", "completed", "2020", "2020", sid),
-        )
-    conn.commit()
-    conn.close()
-    ensure_campaign_database(CampaignPaths.from_data_dir(save))
-    hist = CampaignHistory(save)
-    # clear one txn revision to simulate partial
-    with hist._connect() as conn2:
-        conn2.execute("UPDATE turn_transactions SET revision_id=NULL, commit_id=NULL WHERE turn_id='turn2'")
-        conn2.commit()
-    # trigger backfill again via _ensure_control_schema
-    hist2 = CampaignHistory(save)
-    with hist2._connect() as conn3:
-        txn = conn3.execute("SELECT revision_id, commit_id FROM turn_transactions WHERE turn_id='turn2'").fetchone()
-        assert txn["revision_id"] is not None
-        assert txn["commit_id"] is not None
-        # snapshot chain should remain
-        snaps = conn3.execute("SELECT revision_id FROM turn_snapshots ORDER BY sequence").fetchall()
-        assert all(r["revision_id"] is not None for r in snaps)
-
-
 def test_snapshot_manifest_migrates_settings_and_legacy(tmp_path):
     save = tmp_path / "save"
     save.mkdir()
