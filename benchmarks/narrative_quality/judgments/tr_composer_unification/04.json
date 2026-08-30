@@ -1,0 +1,50 @@
+{
+    "case_id": "case_04_secret_investigation",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "right",
+            "left_evidence": "一根深蓝色的纤维，约三厘米长",
+            "right_evidence": "从脚印的重叠关系里分辨出两种不同的步态",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left以蓝色纤维、三种金属碎屑和车间内突发摩擦声制造了较好的意外感与现场活性，尤其最后的声音暗示现场可能仍有正在发生的事件，因此世界自主性更强。但Right把关键成果组织成两组不同步态、重叠关系以及分别通往荒草丛和排水沟的足迹，线索之间具有直接的空间指向性。相比Left最后较明显的“查证据或进门”二选一，Right允许追任一足迹、回查门框、固定物证或进一步比较两人行动，策略空间更宽，也更容易驱动玩家立即行动。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "left",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "一小片物质在紫外光下泛着暗淡的蓝紫色",
+            "right_evidence": "是一枚撬棍残片，大约小指长，断口新鲜",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的优势在于同时留下鞋印、金属碎屑和未知微量物质三个可独立深挖的方向，鞋印还延伸至荒草丛，因此后续调查的横向选择更丰富。不过其“职业装束特有的”磨损推断略显牵强，线索之间暂时也缺乏强关联。Right的断裂撬棍残片、深色油渍、独特鞋底断裂纹都更具体可比对，随后车间深处的金属闷响又让静态法证瞬间转为实时风险，既自然承接废弃化工厂环境，也明显增强了紧迫感和世界正在自行运转的感觉，整体更有推动力。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "tie",
+            "specificity": "left",
+            "left_evidence": "这粒钢屑的边缘有规则的磨削纹路",
+            "right_evidence": "碎屑的分布没有中断，一路向第3车间内部延伸",
+            "left_violations": [
+                "脚印被描述为出现在“距地面大约三十厘米的位置”，随后又被解释成踩入门框内侧的落脚痕迹，存在明显的物理空间连续性冲突。",
+                "将铁门撬压形成的卷边与剥落漆皮称为“旧伤”，与已知该铁门是在两天前纠纷之后才被暴力撬开的事实存在冲突。"
+            ],
+            "right_violations": [],
+            "reason": "Left的冷轧钢屑、崭新断口、哑光涂层和规则磨削纹提供了全组三篇里较强的物证辨识度，并通过“并非门锁本体脱落”制造了额外谜团；但脚印位置和撬痕年代的叙述破坏了现场逻辑，使这份惊奇建立在不稳定的事实基础上。Right虽然更保守，却把鞋印与金属屑连续延伸进第3车间这一空间关系交代得十分清楚，既忠实兑现大成功，又让玩家可以选择固定物证、沿轨迹追踪、检查碎屑来源等行动。两篇都没有真正出现具名NPC或明确自主行动者，因此世界/NPC自主性差距有限。"
+        }
+    ]
+}

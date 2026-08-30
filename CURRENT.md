@@ -177,9 +177,9 @@ START
 -> ActionExtractor + deterministic ActionSelfCheck
    ├─ ContextFactsService
    └─ optional RollModifierEvaluator -> deterministic RollResolver
-join -> TurnResolutionAgent
-      -> Director Agent generation stage (always runs for real generation)
-     -> NarrativeComposerAgent
+join -> deterministic ActionJudgments
+      + Director Agent generation stage (always runs for real generation)
+     -> NarrativeComposerAgent (outcome realization + prose)
      -> optional Canon Query -> Confirmed History evidence retrieval
         -> Narrative Consistency Check -> at most one source rewrite
      -> durable pending turn
@@ -189,15 +189,15 @@ Action parsing completes first; Context extraction and roll evaluation then run
 in parallel. This ordering lets the Action Extractor provide its normalized
 retrieval topics to Context Facts without serializing Context extraction and roll
 evaluation. Roll modifiers are only evaluated for actions selected for a roll.
-Turn Resolution enacts every parsed
-atomic action and receives the resolved rolls, Context Facts, and the initially
-selected NPC disclosure views. Actions without a roll resolve as automatic
-successes; projected Turn Resolution keeps `resolution_source=automatic|roll`
-and adds `resolution_mode=routine|roll` for prompt consumers.
+Python derives one `ActionJudgment` per parsed atomic action as soon as rolls are
+available; actions without a roll are automatic successes. These judgments
+contain the immutable outcome bands shown immediately to the player. The single
+Composer call then decides how those outcomes become concrete facts and prose;
+there is no independent LLM Turn Resolution stage.
 
 Before the graph starts, deterministic NPC selection admits at most 20 profiles
 whose canonical name or alias appears in the player input or CurrentState
-participants. Those profiles provide the action/Turn Resolution context and the
+participants. Those profiles provide the action/Composer context and the
 matched entity anchors used by Context Facts. The Action Extractor produces
 atomic actions, at most eight compact retrieval topics, and any hidden Event IDs
 directly touched by the player input. Retrieval topics are compact semantic
@@ -1111,7 +1111,7 @@ Generation exposes four read-only skills:
 - `introduce_npc(npc_id=None, spontaneous=None, view_mode="face_to_face")`: accepts either a prepared Director NPC draft ID (`npc_id`) under Draft-First policy, or a lightweight JIT spontaneous character card (`spontaneous`) when no draft matches; spontaneous creation strictly requires `view_mode` of `face_to_face`;
 - `upgrade_disclosure(npc_id, new_disclosure_level)` for an existing profile.
 
-The observation includes player input, projected Turn Resolution, CoreMemory,
+The observation includes player input, projected Action Judgments, CoreMemory,
 CurrentState, Context Facts, recent summaries/logs, active hidden and engaged
 Events, prepared Director NPC drafts, and selected NPC Profiles. NPC Profiles are
 the bounded union described in section 4 rather than
@@ -1388,10 +1388,11 @@ Event Hooks or an admitted engaged Event.
 
 ## 17. Narrative Composition and Rewrite
 
-`NarrativeComposerAgent` performs planning and prose in one structured LLM call.
+`NarrativeComposerAgent` performs outcome realization, planning, and prose in
+one structured LLM call.
 Its context contains:
 
-- player input and Turn Resolution;
+- player input and deterministic Action Judgments;
 - CoreMemory and CurrentState;
 - Context Facts;
 - selected NPC disclosure views;
@@ -1399,13 +1400,14 @@ Its context contains:
 - only the engaged Events admitted by `intrude_engaged_event`;
 - the most recent confirmed short-term scene.
 
-The output contains planning reasoning, required and forbidden facts,
-information boundaries, a stopping point, planned events, scene reasoning,
-scene prose, closing prompt, and up to five next-action directions. Every Turn
-Resolution outcome must be linked to a planned event. `director_reason` records
-how admitted Director material affected the plan and may be empty when the
-Director decision admits no material. An empty `DirectorStageResult` does not
-mean that the Director stage was skipped.
+The output contains one concrete resolution fact per action, a stopping point,
+one to four planned events, scene reasoning, scene prose, closing prompt, and up
+to five next-action directions. Every Action Judgment must be covered exactly
+once without changing its outcome band, and every action must be represented by
+a planned event. `director_reason` records how admitted Director material
+affected the plan and may be empty when the Director decision admits no
+material. An empty `DirectorStageResult` does not mean that the Director stage
+was skipped.
 
 All structured LLM tasks receive a compact JSON Schema with Pydantic-generated
 `title` metadata removed but validation constraints preserved. `LLMGateway`
@@ -1417,9 +1419,11 @@ nested under `properties`, validates the candidate normally, and records the
 effective validated shape in the trace; unsalvageable output follows the normal
 retry path.
 
-Rephrase reruns composition with the saved context. Feedback rewrite first
+Rephrase reruns the entire Composer with the saved authoritative context; prior
+resolution facts, events, and prose are not frozen as an intermediate contract.
+Feedback rewrite first
 chooses `revise_from_source`, `recompose`, or `no_rewrite`; it cannot change the
-player action or already resolved outcome. When Canon validation is enabled, any
+player action or deterministic outcome band. When Canon validation is enabled, any
 new composition/rephrase/rewrite passes through the same Canon tail and may
 receive at most one additional source rewrite.
 
@@ -1954,23 +1958,14 @@ paths do not override it, so they run at most two model calls per task.
 - `RollModifierEvaluator.last_warnings` reports `roll_modifier_fallback` and
   `roll_modifier_dropped`; the node emits them.
 
-### Generation: Turn Resolution (H4)
+### Generation: Action Judgments (H4)
 
-- `TurnResolutionAgent` uses a loose output container while the prompt shows the
-  strict hard-limit schema.
-- `output_validator` validates known/unique action IDs, detects missing
-  resolutions, and applies soft truncation to `effect_reasoning` /
-  `resolved_fact`: first attempt enforces 120, second attempt allows up to 180
-  and truncates only above 180.
-- After retries, second-attempt valid resolutions are preferred, then
-  first-attempt; missing resolutions are filled with deterministic neutral
-  frames that do not fabricate facts.
-- If nothing usable remains, every judgment gets a deterministic fallback frame
-  with `turn_resolution_fallback`.
-- Missing roll results in `build_action_judgments` remain integrity failures and
-  propagate.
-- Diagnostics: `turn_resolution_fallback`, `turn_resolution_dropped`,
-  `turn_resolution_missing_filled`, `turn_resolution_truncated`.
+- `build_action_judgments` deterministically maps every parsed action and roll
+  to an immutable `outcome_band`; non-roll actions are automatic successes.
+- The judgments are emitted to the player immediately after roll resolution and
+  do not wait for narrative composition.
+- Missing roll results remain integrity failures and propagate. No LLM fallback
+  invents an action outcome.
 
 ### Generation: Canon Query / Consistency / Revision (H6)
 
@@ -1996,24 +1991,17 @@ paths do not override it, so they run at most two model calls per task.
 
 ### Generation: Composer (H5)
 
-- `NarrativeComposerResult.scene_text` allows empty (`str = ""`) as an explicit
-  "empty body failure state"; the prompt and Gateway schema keep `min_length=1`
-  so the first empty attempt triggers a feedback retry.
-- `RuntimeNarrativeComposerResult` has a `field_validator` that strips
-  `scene_text` before `min_length=1`, so whitespace-only output is also caught.
-- After the second attempt, `_compose_with_context` catches LLM errors and
-  returns a fallback composition with `scene_text=""` and deterministic neutral
-  metadata; `composer_empty=True` is set in state.
-- The generation graph uses conditional routing after compose/rephrase nodes:
-  `composer_empty=true` skips the Canon tail and ends; `composer_empty=false`
-  follows the normal path.
-- `finalize_pending_turn` emits a `composer_empty` event instead of
-  `scene_written` when the body is empty; for feedback rewrite the original
-  pending variant is preserved.
-- Confirmation rejects empty `effective_scene_text`; `maybeAutoConfirm` skips
-  pending turns with empty body.
-- The frontend shows the error card with a "重新措辞" button on `composer_empty`,
-  reusing the existing rephrase endpoint.
+- The prompt exposes an 80-character hard target for each `resolved_fact`; the
+  Gateway accepts up to 120 and the domain validator soft-truncates only above
+  180. Invalid, missing, duplicate, or outcome-changing action resolutions are
+  rejected as a whole rather than silently fabricating replacements.
+- The Composer must return nonblank scene prose, one resolution per Action
+  Judgment, and planned-event coverage for every action. Parse or validation
+  failures propagate after the Gateway retry, so no invalid pending turn is
+  created.
+- Normal generation, Reroll, and Rephrase all invoke this same full Composer.
+  Rephrase preserves authoritative inputs and deterministic outcome bands, not
+  a previous LLM-generated plan.
 - Opening uses `OpeningSceneAgent`, not `NarrativeComposerAgent`; H5 does not
   cover it.
 

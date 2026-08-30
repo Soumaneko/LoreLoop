@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "seed": 42,
+  "timestamp": "2026-08-29T17:54:23Z",
+  "total_cases": 10,
+  "total_pairs": 30,
+  "mappings": {
+    "case_01_tavern_inquiry": [
+      {
+        "repetition": 1,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 2,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 3,
+        "left": "A",
+        "right": "B"
+      }
+    ],
+    "case_02_rogue_recruitment": [
+      {
+        "repetition": 1,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 2,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 3,
+        "left": "A",
+        "right": "B"
+      }
+    ],
+    "case_03_composite_infiltrate_and_disarm": [
+      {
+        "repetition": 1,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 2,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 3,
+        "left": "A",
+        "right": "B"
+      }
+    ],
+    "case_04_secret_investigation": [
+      {
+        "repetition": 1,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 2,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 3,
+        "left": "B",
+        "right": "A"
+      }
+    ],
+    "case_05_faction_confrontation": [
+      {
+        "repetition": 1,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 2,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 3,
+        "left": "B",
+        "right": "A"
+      }
+    ],
+    "case_06_dungeon_puzzle": [
+      {
+        "repetition": 1,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 2,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 3,
+        "left": "A",
+        "right": "B"
+      }
+    ],
+    "case_07_partial_success_alchemy": [
+      {
+        "repetition": 1,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 2,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 3,
+        "left": "B",
+        "right": "A"
+      }
+    ],
+    "case_08_failed_action_recovery": [
+      {
+        "repetition": 1,
+        "left": "B",
+        "right": "A"
+      },
+      {
+        "repetition": 2,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 3,
+        "left": "B",
+        "right": "A"
+      }
+    ],
+    "case_09_critical_failure_ambush": [
+      {
+        "repetition": 1,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 2,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 3,
+        "left": "B",
+        "right": "A"
+      }
+    ],
+    "case_10_composite_mixed_outcomes": [
+      {
+        "repetition": 1,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 2,
+        "left": "A",
+        "right": "B"
+      },
+      {
+        "repetition": 3,
+        "left": "B",
+        "right": "A"
+      }
+    ]
+  }
+}

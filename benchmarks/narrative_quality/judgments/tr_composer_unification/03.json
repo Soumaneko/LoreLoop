@@ -1,0 +1,47 @@
+{
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "夜色里每一息都可能藏着变数",
+            "right_evidence": "回廊尽头却传来一声极轻的靴底摩擦声",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left完成三连动作扎实，尤其以警戒灵石熄灭、联动阵法未苏醒来确认高风险破解成功，但后段主要靠旁白宣告“寂静随时可能被打破”，威胁仍偏抽象，Closing Prompt又直接枚举撤离、深入、伪装三项，略有菜单感。Right让守卫抱怨寒冷、以谈话声遮掩潜行动静，又在成功传讯后引入正在靠近的未知脚步，把世界从静态布景变成会自行运动的空间；这一变化没有否定既定成功，却立即制造新的位置、身份伪装、藏匿、误导等多种应对可能。青阳坊拆阵经历、树影中的回应以及迫近脚步也提供了更多可利用的具体信息，因此整体张力和行动驱动力更强。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "夜色深处传来一声极轻的回应",
+            "right_evidence": "身后三步外，两名守卫还在有一搭没一搭地聊着换岗的事",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的断口灼烫余韵与以鸟鸣回应闪光暗号颇有味道，尤其鸟鸣作为隐蔽的异介质回信，是本组更自然的小意外，因此surprising_but_coherent略胜。但其结尾把局势硬收束为“原地待命”或“先行撤离”两个选项，不仅没有充分利用已解除的枢纽，还明显压缩策略空间。Right则持续保留守卫的换岗谈话，并明确给出“身后三步外”的危险距离、法阵连接后山密室的风险记忆和窗外确认信号；结尾只问如何利用窗口，允许潜入、误导、观察守卫、处理枢纽痕迹或撤离等多方向行动，游戏性更开放，场景关系也更清楚。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "你面前是暗淡的枢纽灵石，身后是浑然不觉的守卫",
+            "right_evidence": "后山长老密室的方向，隐约传来一声极远的钟鸣",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left对空间状态总结得很清楚，枢纽、守卫、队友形成三向关系，也额外提出暗淡灵石可能成为可取材料，具有一定物证启发性；但Closing Prompt再次变成撤离、取物、深入的显式三选一，而且三连成功后局势基本停止演化。Right在不推翻潜行、拆阵和传讯成功的前提下，从后山长老密室方向加入一声来源未明的远钟，它既可能是正常时序、另一套机关反馈，也可能预示有人察觉异常，保持了悬念而没有擅自宣布警报触发。守卫仍谈笑、窗外队友已回信、后山却自行出现新动静，使不同势力和空间同时保持自主运动，并自然诱发侦察、隐藏、撤离、追查钟声来源或制造假象等多种后续策略。"
+        }
+    ]
+}

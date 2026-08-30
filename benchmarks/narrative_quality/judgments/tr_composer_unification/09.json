@@ -1,0 +1,47 @@
+{
+    "case_id": "case_09_critical_failure_ambush",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "巷子两壁悬挂的肉钩和绳索在雨中轻轻摇晃",
+            "right_evidence": "你的右脚踩中了一片浸透油脂的碎肉",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left把失败直接扣在既定的矮人符文防刺钢板上，又追加匕首脱手、加西亚拔剑、巡逻队逼近三层压力，且肉钩、绳索、积水都能转化为下一步战术资源，局势险恶却仍保持多路可操作性。Right以油脂碎肉导致滑倒，意外本身合理且有场景特色，但后续迅速收束成“倒地、死巷、剑抵喉”的单一近身危机；加西亚的挑衅有性格，却不如Left的敌人、增援与环境同时运转来得鲜活。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "right",
+            "specificity": "left",
+            "left_evidence": "右边堆着散乱的木料",
+            "right_evidence": "说！谁派你来的？",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的失败由符文钢板明确触发，反震造成手麻与虎口出血，再利用狭巷、石墙和木料堆形成闪避、格挡、钻缝等不同策略，行动启发最充分。Right的摔墙、锁腕、剑抵喉更猛烈，加西亚进一步逼问幕后主使，也因此在NPC自主诉求上更强；但它把局面压成几乎纯粹的审讯应答，后续策略空间明显更窄。匕首折断虽是激烈的重大代价，但作为高风险大失败的即时后果仍可成立，不单独视为硬违规。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "right",
+            "specificity": "left",
+            "left_evidence": "那是匕首上的毒剂渗入了伤口",
+            "right_evidence": "那沉重的重拳裹挟着风声",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left让刺杀失败演变成极具黑色讽刺意味的自伤中毒：掉落的匕首、流血左掌、毒性蔓延和逼近的加西亚共同制造多个紧迫变量，既出乎意料又与淬毒武器及屠夫巷湿滑环境相容，玩家可围绕抢刀、拖延、地形或毒势作不同决策。Right严格利用符文钢板反弹刺杀，逻辑稳固，加西亚立刻重拳反扑也更直接体现其战斗本能；但除迎面一拳与狭巷外，缺少额外可利用筹码，整体更像标准化的失败后反击，惊喜度和具体行动抓手逊于Left。"
+        }
+    ]
+}

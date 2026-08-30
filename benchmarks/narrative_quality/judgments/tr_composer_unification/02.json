@@ -1,0 +1,51 @@
+{
+    "case_id": "case_02_rogue_recruitment",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "下次出任务，你得让我看看你的剑配不配得上我的魔法",
+            "right_evidence": "要么你现在就在这儿比划给我看，要么……约个时间",
+            "left_violations": [],
+            "right_violations": [
+                "将既定为success的招募结果改成仍需先通过剑术考验才能正式加入，实质上把成功降格为条件性未完成状态。"
+            ],
+            "reason": "Left让艾莉丝明确收下定金并“暂时跟你走一趟”，既兑现招募成功，又以检验剑术作为后续关系张力，还主动催促去处理委托，使场景自然向任务、剑术证明、队伍磨合等多个方向展开。Right的剑术试炼本身符合傲娇性格，但“想让我签契约，得先……”把已经判定成功的招募重新设成前置考验，而且结尾直接收束为“当场演示/另约时间”的二选一，行动空间更窄。Left还有娇小身形勉强“居高临下”等细节，人物姿态和喜剧感更鲜活。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "指尖腾起一缕细小的火苗，又迅速熄灭",
+            "right_evidence": "目标、地点、报酬，现在就说清楚",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "两篇都明确兑现了成功招募。Left用小火苗威胁制造了较强的角色化瞬间，既呼应元素使身份，也让傲娇威吓更有戏，因此意外性略胜。Right整体则更适合作为交互叙事节点：艾莉丝不仅接受条件，还主动要求核验“目标、地点、报酬”，体现她作为资深独行法师自己的职业标准与判断力；这些问题同时给玩家提供了多个可操作的信息维度，比Left较泛化的“回应条件并讨论第一件委托”更能激发下一步输入。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "你说的‘讨伐魔物的委托’，具体是什么？队伍又有哪些人？",
+            "right_evidence": "带不到的话，入队的事就当我没说",
+            "left_violations": [],
+            "right_violations": [
+                "在先说“我答应了”后又以莓果挞作为撤销入队的必要条件，使既定success结果变成可因未来条件失败而作废。"
+            ],
+            "reason": "Left稳妥地完成成功结果，并让艾莉丝主动追问委托内容和队伍构成，后续可以从任务情报、成员介绍、职责分配乃至彼此试探等多条路线继续，开放性明显更好。Right加入隔壁面包房、莓果挞、明日午前见等具体细节，傲娇角色的私人要求也更意外、更有自主性，因此在惊喜度、NPC能动性和可利用细节上更强；但“带不到就当没说”直接把已经成功的招募重新变成条件任务，破坏机制结果，而且结尾几乎把下一步压成了完成莓果挞跑腿，整体游戏空间反而更狭窄。"
+        }
+    ]
+}

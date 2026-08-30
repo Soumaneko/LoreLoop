@@ -1,0 +1,47 @@
+{
+    "case_id": "case_01_tavern_inquiry",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "引荐的跑腿钱，另算",
+            "right_evidence": "有一批来路特殊的灵材，就要出手了",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left以“三日后云梦泽暗市”和付费引荐构成两条有效路径，但整体仍是较标准的情报贩卖流程，结尾还将行动压缩成“如何取舍”。Right不仅给出万灵阁、丑时前、黑市拍卖等可直接利用的信息，还让孙掌柜主动截断“来路特殊”的第三条线索，以留半句话诱导玩家继续加价或试探，更符合其精明市侩的社会风格。三条线可以追货、筹资、套话或调查异常货源，行动空间、NPC主动性和即时钩子均更强。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "跟方才那两块，可就不是一回事了",
+            "right_evidence": "开口就是六十灵石，还嫌少",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left把老周、黑水潭、熔火阁、阁主和额外付费引荐串成一张有层次的关系网，而且孙掌柜主动暗示“两样东西背后牵的线”另有文章，使情报本身成为可深挖的局势，而非单纯坐标。玩家可自行拜访、借孙掌柜名号、与阁主周旋、追查幕后关系或继续买情报。Right的六十灵石报价能形成现实压力，但火髓线索依赖买家临走时恰好自言自语说出“北郊荒塔”，略显方便剧情；同时结尾基本收束为两条地点线，世界与NPC的纵深逊于Left。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "left",
+            "left_evidence": "已经有另一路修士在打探同一个货源了",
+            "right_evidence": "二楼楼梯口传来不紧不慢的脚步声",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的优势在信息颗粒度：万兽坊暗拍、竞争修士、火云窟、老柴及“只认熟人引荐”都能转化成明确策略，因此specificity更强。但Right在静态问价场景中突然加入正在逼近的脚步声，孙掌柜立刻变脸改口谈茶，令秘密交谈受到现实环境干扰；这一变化与其谨慎情报贩子的身份高度一致，也让青衫来客、今晚旧码头、七日后大拍、蒙面截货者同时成为可处理变量。玩家可以装作无事、观察来人、试探身份、暂避锋芒或追旧码头，形成更强的即时戏剧张力和开放行动欲。"
+        }
+    ]
+}

@@ -1,0 +1,50 @@
+{
+    "case_id": "case_05_faction_confrontation",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "left",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "前天有支运货的车队整队消失",
+            "right_evidence": "前面那片废车场，还有一伙人摆摊设卡",
+            "left_violations": [
+                "擅自替玩家支付全部20枚瓶盖，属于额外且重大的不可逆资源支出决定。",
+                "擅自让玩家跨上摩托驶离哨卡并将其甩在身后，完成了未经玩家选择的实质性转场。"
+            ],
+            "right_violations": [],
+            "reason": "Left的队长在收烟后继续索取二十瓶盖，并抛出“整队消失”的车队与远处异常烟尘，贪婪性格、局势异动和可调查线索都更鲜活，戏剧钩子也更强；但它随后替玩家花光现有瓶盖并直接驶离哨卡，明显侵占玩家决策权。Right虽然线索稍弱，却把成功放行落实后仍把玩家留在可决策节点，可追问队长、观察废车场、准备绕行或直接前进，交互结构更稳健，因此总体胜出。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "前面三公里，红蝎自己设了卡",
+            "right_evidence": "最近红蝎的车队可不太安分",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left把队长的贪烟、检查钢印、随后低声泄露“三公里外另一道卡”串成一条完整的人物行为链，还补出“证件最好别细看”这一直接可利用的风险信息，使玩家可以考虑绕行、伪装、侦察、修补证件或改变说辞。Right对队长的贪婪刻画合格，但最后只留下“红蝎车队不太安分”的模糊半句话，Closing又收束成“追问或离开”的二选一，具体筹码、环境压力和策略空间明显逊色。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "镇上最近可不太平，过两日兴许要封路",
+            "right_evidence": "那条小路能绕过去，就是难走了点",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left完成放行后只给出“镇上不太平、可能封路”的泛化警告，氛围成立，但玩家缺少立刻能操作的具体信息。Right则让队长因收烟而私下指出主路第二道卡，并以右侧枯草土径提供一个带明确代价的绕行方案；主路意味着继续面对盘查，小路意味着承担地形与载具风险，同时仍可观察、追问或另寻办法。这个新情报既符合其贪婪见利的性格，又把环境直接转化为可玩的战术空间，因此各项叙事体验均更强。"
+        }
+    ]
+}

@@ -15,7 +15,6 @@ logs/
 llm_traces.jsonl
 skills-lock.json
 data/
-docs/
 debug_py/
 tools/
 /saves/
@@ -24,8 +23,15 @@ tools/
 .bench/
 .scratch
 .saves
-benchmarks/narrative_quality/recordings/
-benchmarks/narrative_quality/eval_prompts/
-benchmarks/narrative_quality/judgments/
-benchmarks/narrative_quality/reports/
+benchmarks/narrative_quality/recordings/*
+!benchmarks/narrative_quality/recordings/tr_composer_unification.manifest.json
+benchmarks/narrative_quality/eval_prompts/*
+!benchmarks/narrative_quality/eval_prompts/tr_composer_unification/
+!benchmarks/narrative_quality/eval_prompts/tr_composer_unification/**
+benchmarks/narrative_quality/judgments/*
+!benchmarks/narrative_quality/judgments/tr_composer_unification/
+!benchmarks/narrative_quality/judgments/tr_composer_unification/**
+benchmarks/narrative_quality/reports/*
+!benchmarks/narrative_quality/reports/tr_composer_unification.json
+!benchmarks/narrative_quality/reports/tr_composer_unification.metrics.json
 benchmarks/narrative_quality/*.report.json

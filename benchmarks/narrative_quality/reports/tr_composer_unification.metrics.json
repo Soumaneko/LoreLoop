@@ -1,0 +1,120 @@
+{
+  "A": {
+    "ttft": 16736.593333333334,
+    "lat": 23687.71433333334,
+    "tok": 9360.9,
+    "chars": 523.2333333333333,
+    "inv": 30,
+    "cases": {
+      "case_01_tavern_inquiry": {
+        "ttft": 17.301883333333336,
+        "tok": 9576.333333333334,
+        "chars": 483.6666666666667
+      },
+      "case_02_rogue_recruitment": {
+        "ttft": 15.938673333333334,
+        "tok": 9527.333333333334,
+        "chars": 454.6666666666667
+      },
+      "case_03_composite_infiltrate_and_disarm": {
+        "ttft": 19.401143333333337,
+        "tok": 10027.666666666666,
+        "chars": 582.6666666666666
+      },
+      "case_04_secret_investigation": {
+        "ttft": 18.01756333333333,
+        "tok": 9356.333333333334,
+        "chars": 580.0
+      },
+      "case_05_faction_confrontation": {
+        "ttft": 15.673576666666667,
+        "tok": 9384.0,
+        "chars": 461.3333333333333
+      },
+      "case_06_dungeon_puzzle": {
+        "ttft": 15.039573333333333,
+        "tok": 8945.0,
+        "chars": 477.0
+      },
+      "case_07_partial_success_alchemy": {
+        "ttft": 16.055293333333335,
+        "tok": 8866.0,
+        "chars": 509.0
+      },
+      "case_08_failed_action_recovery": {
+        "ttft": 15.846093333333332,
+        "tok": 9010.666666666666,
+        "chars": 580.3333333333334
+      },
+      "case_09_critical_failure_ambush": {
+        "ttft": 16.719873333333332,
+        "tok": 9397.333333333334,
+        "chars": 561.6666666666666
+      },
+      "case_10_composite_mixed_outcomes": {
+        "ttft": 17.372259999999997,
+        "tok": 9518.333333333334,
+        "chars": 542.0
+      }
+    }
+  },
+  "B": {
+    "ttft": 8979.765000000001,
+    "lat": 15978.03666666667,
+    "tok": 5254.433333333333,
+    "chars": 510.1333333333333,
+    "inv": 30,
+    "cases": {
+      "case_01_tavern_inquiry": {
+        "ttft": 9.358996666666666,
+        "tok": 5404.0,
+        "chars": 528.3333333333334
+      },
+      "case_02_rogue_recruitment": {
+        "ttft": 7.835613333333334,
+        "tok": 5208.666666666667,
+        "chars": 402.6666666666667
+      },
+      "case_03_composite_infiltrate_and_disarm": {
+        "ttft": 9.123053333333333,
+        "tok": 5562.0,
+        "chars": 573.6666666666666
+      },
+      "case_04_secret_investigation": {
+        "ttft": 9.910680000000001,
+        "tok": 5344.0,
+        "chars": 647.6666666666666
+      },
+      "case_05_faction_confrontation": {
+        "ttft": 9.21587,
+        "tok": 5318.333333333333,
+        "chars": 520.0
+      },
+      "case_06_dungeon_puzzle": {
+        "ttft": 8.603226666666668,
+        "tok": 4993.666666666667,
+        "chars": 430.3333333333333
+      },
+      "case_07_partial_success_alchemy": {
+        "ttft": 9.320886666666667,
+        "tok": 5220.0,
+        "chars": 583.3333333333334
+      },
+      "case_08_failed_action_recovery": {
+        "ttft": 8.725683333333333,
+        "tok": 4964.333333333333,
+        "chars": 385.3333333333333
+      },
+      "case_09_critical_failure_ambush": {
+        "ttft": 9.133083333333333,
+        "tok": 5320.333333333333,
+        "chars": 550.3333333333334
+      },
+      "case_10_composite_mixed_outcomes": {
+        "ttft": 8.570556666666665,
+        "tok": 5209.0,
+        "chars": 479.6666666666667
+      }
+    }
+  }
+}

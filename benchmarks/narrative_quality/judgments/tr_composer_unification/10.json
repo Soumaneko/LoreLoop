@@ -1,0 +1,49 @@
+{
+    "case_id": "case_10_composite_mixed_outcomes",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "衣角“嘶啦”一声被扯断",
+            "right_evidence": "血珠沿着指尖滴落，在石板上留下断续的暗色痕迹",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left用扯裂衣角很好地兑现了高风险移动的部分成功，追兵压迫感也明确，但后续信息主要仍是“河或灌木周旋”这一层。Right不仅用擦伤制造代价，还留下可被追踪的血迹，并让卫队长主动下令“点火把”，使追兵表现出适应局势的自主性。伤口、血迹、火把、石径和护城河共同形成多个可利用或需处理的战术变量，且结尾不强行收束成二选一，因此行动启发力和世界鲜活度更高。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "一名卫兵放弃格挡，整个人撞向你",
+            "right_evidence": "那匕首钉在门框上，兀自震颤",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的卫兵扑撞让阻门过程有实体对抗，假山和花丛也提供了明确地形，但整体仍较直线：破门、追赶、河边。Right的投掷匕首造成肩伤，同时把匕首留在门框上成为可见物证或潜在筹码；追兵举火把照亮小径，又让隐蔽与暴露形成动态关系。这些细节既强化部分成功的代价，也自然开放了处理伤口、利用黑暗、改变路线、借环境拖延等多种策略。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "公爵的怒吼从黑暗中传来：“别让他跑了！点火！快点火！”",
+            "right_evidence": "灌木的阴影在你左右两侧延展",
+            "left_violations": [],
+            "right_violations": [
+                "开篇写“目光在黑暗中锁定吊灯悬索”，与前一确认场景中大厅仍由水晶吊灯照亮、且本行动正是通过灭灯制造黑暗的空间与时间连续性冲突。"
+            ],
+            "reason": "Left对成功与部分成功的层次处理更扎实：吊灯坠落先破坏包围，破门后再以短矛擦伤收取代价；公爵立即命令点火，也让敌方拥有明确的应变行为。右篇的衣角被抓和灌木阴影同样能制造追逐张力，而且其灌木、声响与设伏可能性让后续策略空间略宽，因此open_affordance更好；但它在行动尚未灭灯前就写成“黑暗中”，直接破坏了场景光照连续性，削弱整体沉浸与因果可信度。"
+        }
+    ]
+}

@@ -1,5 +1,5 @@
 from app.domain.action_preview.schemas import ActionPreviewResult
-from app.domain.turn_resolution import PlayerTurnResolution
+from app.domain.action_judgment import PlayerTurnResolution
 
 
 def make_action_preview() -> ActionPreviewResult:

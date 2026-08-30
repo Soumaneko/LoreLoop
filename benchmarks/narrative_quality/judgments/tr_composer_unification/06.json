@@ -1,0 +1,47 @@
+{
+    "case_id": "case_06_dungeon_puzzle",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "right",
+            "specificity": "left",
+            "left_evidence": "通道的尽头，隐约闪烁着一丝微弱的蓝光",
+            "right_evidence": "带着干燥的暖意，仿佛来自被地火烘烤过的古老石廊",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left在成功开门后追加了潮湿青苔、反光地面和远处蓝光这一组可调查线索，使玩家既可追踪蓝光，也可检查门后痕迹，悬念与行动抓手都更具体。Right的“地火烘烤”暖风更贴合古代火神祭司要塞，因此世界环境的自洽反应略胜，但门后基本只剩黑暗与暖风，后续提示又直接列出“推开、侦测、战斗准备”三项，较像菜单，探索想象空间不及Left。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "黑暗浓稠得仿佛有实质",
+            "right_evidence": "台阶边缘留有被高温反复灼烧过的焦黑痕迹",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的门后主要是泛化的幽深黑暗，氛围成立但缺少可推理、可利用的具体对象。Right让石门只开启到“一人侧身通过”，又给出焦黑台阶、硫磺尘土和“不似自然造物的低鸣”，这些细节既延续火神要塞主题，又同时支持观察灼痕、研究符文、判断机关或声源、谨慎深入等不同策略。开放式“你会怎么做”也避免把玩家锁进预设菜单，因此各项叙事驱动力均更强。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "right",
+            "continue_desire": "left",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "right",
+            "left_evidence": "齿轮咬合、铁链拖曳，节奏缓慢而规律",
+            "right_evidence": "暗红的颜料勾勒出火焰与河流的图腾",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left用突然响起且持续运作的齿轮、铁链制造了最强的即时威胁感，遗迹像真正被玩家行为唤醒，因此世界自主性、意外性和催促下一步行动的力量更突出；但结尾把行动压缩成“循声探查或直接前进”的二选一。Right没有同等强烈的动态威胁，却提供火焰与河流壁画这一与当前水火解谜高度呼应的实体线索，且以开放问句收束，玩家可研究壁画、检查阶梯、施法侦察、回查石门或继续深入，策略空间更宽。综合而言Right的信息可利用度和交互开放性略占优势。"
+        }
+    ]
+}

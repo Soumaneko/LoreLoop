@@ -1,0 +1,47 @@
+{
+    "case_id": "case_07_partial_success_alchemy",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "岩壁上，一道细如蛛丝的裂纹正缓缓蔓延开来",
+            "right_evidence": "或许还能将品阶推上一线",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left把高风险的部分成功同时落在成丹瑕疵、神识代价与地火脉恶化上，并以岩壁裂纹把既有的喷涌风险转化成可观察、可应对的现场威胁；玩家接下来既可处理丹药，也可查地脉、稳炉室或先恢复。Right的瑕疵丹与神识疲惫成立，但主要把后续压缩为“二次温养或检查裂纹”，地火脉这一既有世界威胁几乎失去自主作用，且结尾重复菜单式二选一，行动空间明显较窄。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "药香中混杂着一丝焦糊的杂味",
+            "right_evidence": "一道裂纹从鼎耳蜿蜒而下，直延伸至炉腹",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left完成了标准的“成丹但品质不足”，感官细节清楚，却把多数代价集中在丹药本身，随后又以“服下或补救”收束成较窄选择。Right让部分成功产生三层彼此关联的后果：残丹、炉体受损、地火波动加剧；尤其鼎耳至炉腹的裂纹是可检查、修补或利用的具体物证，使玩家能在保丹、护炉、处理地脉、恢复自身之间权衡。世界环境因此比Left更有主动压力，戏剧张力和后续策略性更强。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "炉裂、神衰、地火未平",
+            "right_evidence": "丹药已成但丹纹带裂",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的结果结构更符合高风险部分成功：丹虽成形但品质低，同时丹炉出现裂痕、自身严重衰弱、地火仍未平息，三种压力都留在现场，形成真正需要取舍的局面；结尾虽短，却没有替玩家预设路线。Right的成丹过程偏顺利，甚至写到“杂质被层层剥离”、丹药圆润且药香浓郁，失败侧主要只剩裂纹和神识损耗；地火还明确“缓缓回落”。最后又直接列出服用、温养、再炼三项，其中在已经严重透支的情况下“再炼一炉”显得较机械，反而削弱了危险感与开放探索空间。"
+        }
+    ]
+}

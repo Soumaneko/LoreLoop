@@ -1,0 +1,47 @@
+{
+    "case_id": "case_08_failed_action_recovery",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "监控探头正缓缓转向你的方向",
+            "right_evidence": "物理位置还没有暴露——至少现在还没有",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left把失败具体转化为义体受创、摄像头转向和多人脚步逼近，局部安保系统呈现出主动响应，且摄像头、机柜、走廊与受损右臂都可成为下一步行动筹码。Right的残留数据比喻清楚，但刻意保留“物理位置还没有暴露”，削弱了高风险失败的即时反噬；结尾又收束成“撤离或折返”二选一，行动启发空间更窄。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "日志抹除率：43%",
+            "right_evidence": "两扇合金门正从走廊两侧缓缓合拢",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left用43%抹除率和活跃追踪标记明确表现失败，也利用了五分钟巡逻事实，但整体威胁仍停留在后台定位层面，且最终压成重新接入或撤离的二选一。Right让错误码、红色警报、加速逼近的钢靴与正在闭合的合金门同时发生，企业安保网络像一个自主运转的系统开始收网；接入仓、门禁、追踪箭头和逼近人员均可被玩家利用或对抗，戏剧张力和具体行动抓手更强。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "right",
+            "left_evidence": "区域C-7进入封锁程序",
+            "right_evidence": "机房出口在你身后十二步远的位置",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left将失败升级为区域封锁、广播响应、下降闸门与逼近安保，局部警报形成鲜明的世界反应，紧迫感明显强于Right的静默追踪，因此更能驱使玩家立即行动。Right则在可操作信息上更精确：67%进度、十二步出口、五分钟巡逻周期和残留信号共同构成可权衡的空间与时间资源，也没有把局面锁死在十几秒封门倒计时中，所以开放行动空间与具体性更胜一筹。"
+        }
+    ]
+}

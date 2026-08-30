@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "timestamp": "2026-08-29T17:53:20Z",
+  "model": "deepseek-v4-flash",
+  "task_a": "narrative_compose",
+  "task_b": "narrative_compose_unified",
+  "fixtures_hash": "51c03dc2e04b6912",
+  "prompt_a_fingerprint": "bbd6474e8a9d6965",
+  "prompt_b_fingerprint": "a8cb59a927c5df44",
+  "case_ids": [
+    "case_01_tavern_inquiry",
+    "case_02_rogue_recruitment",
+    "case_03_composite_infiltrate_and_disarm",
+    "case_04_secret_investigation",
+    "case_05_faction_confrontation",
+    "case_06_dungeon_puzzle",
+    "case_07_partial_success_alchemy",
+    "case_08_failed_action_recovery",
+    "case_09_critical_failure_ambush",
+    "case_10_composite_mixed_outcomes"
+  ],
+  "repetitions": 3,
+  "temperature": 0.8,
+  "total_calls": 60,
+  "recordings_file": "ab_experiment_recording.json"
+}
