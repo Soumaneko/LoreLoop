@@ -8,7 +8,6 @@ LangGraph 节点只调用 :class:`DirectorGenerationExecutor`（或薄包装
 
 from __future__ import annotations
 
-import json
 import uuid
 
 from app.core.text import normalize_compact_key
@@ -57,7 +56,6 @@ class DirectorGenerationExecutor:
         recent_summaries: list[SceneSummary],
         turn_index: int,
         trace_id: str,
-        turn_resolution_json: str = "",
         touched_event_candidates: list[str] | None = None,
         npc_profiles: list[NPCProfile],
     ):
@@ -70,7 +68,6 @@ class DirectorGenerationExecutor:
         self._recent_summaries = recent_summaries
         self._turn_index = turn_index
         self._trace_id = trace_id
-        self._turn_resolution_json = turn_resolution_json
         self._touched_event_candidates = touched_event_candidates or []
         self._npc_profiles = npc_profiles
         self.last_warnings: list[DirectorWarning] = []
@@ -191,11 +188,6 @@ class DirectorGenerationExecutor:
                 summary.model_dump(mode="json")
                 for summary in self._recent_summaries
             ],
-            turn_resolution=(
-                json.loads(self._turn_resolution_json)
-                if self._turn_resolution_json
-                else None
-            ),
             resources={
                 "events": [
                     {
@@ -279,11 +271,10 @@ def run_generation_director_agent(
     recent_summaries: list[SceneSummary],
     turn_index: int,
     trace_id: str,
-    turn_resolution_json: str = "",
     touched_event_candidates: list[str] | None = None,
     npc_profiles: list[NPCProfile],
 ) -> tuple[DirectorStageResult, object]:
-    """Thin wrapper kept for call-site compatibility."""
+    """Run the generation Director stage."""
     return DirectorGenerationExecutor(
         gateway=gateway,
         stores=stores,
@@ -294,7 +285,6 @@ def run_generation_director_agent(
         recent_summaries=recent_summaries,
         turn_index=turn_index,
         trace_id=trace_id,
-        turn_resolution_json=turn_resolution_json,
         touched_event_candidates=touched_event_candidates,
         npc_profiles=npc_profiles,
     ).run()

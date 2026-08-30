@@ -8,6 +8,7 @@ from .generation_state import GenerationEvent
 _ACTION_PROGRESS_STEPS = {
     "modifiers_done",
     "rolls_done",
+    "action_judgments_done",
 }
 
 

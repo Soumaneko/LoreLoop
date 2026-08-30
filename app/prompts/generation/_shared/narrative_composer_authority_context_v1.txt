@@ -34,7 +34,6 @@
 
 ## 活跃事件
 
-
 ```json
 {engaged_events_json}
 ```
@@ -53,10 +52,12 @@
 {user_input}
 ```
 
-## TurnResolutionResult
+## Action Judgments (程序动作检定结果)
+
+每个条目包含行动 ID、执行者、行动原文以及程序检定计算出的 `outcome_band`（成败档位）与骰子数据。**`outcome_band` 享有绝对最高权威，由程序确定，你的任务是将其落实与叙事化，严禁重新决定或反转成败！**
 
 ```json
-{turn_resolution_json}
+{action_judgments_json}
 ```
 
 ## Turn Index

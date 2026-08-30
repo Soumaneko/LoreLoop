@@ -38,8 +38,8 @@ from app.domain.roll.resolver import RollResolver
 from app.domain.roll.schemas import RollConfig
 from app.domain.roll_modifier.evaluator import RollModifierEvaluator
 from app.domain.roll_modifier.schemas import RollModifierBatch
-from app.domain.turn_resolution import TurnResolutionAgent, TurnResolutionResult
-from app.domain.turn_resolution.views import project_turn_resolution
+from app.domain.action_judgment import build_action_judgments
+from app.domain.action_judgment.views import project_action_judgments
 from app.runtime.serialization import model_data
 from app.domain.director.generation import DirectorGenerationExecutor
 from app.domain.director.log import assemble_director_log_entry
@@ -273,18 +273,28 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
             modifier_batch=modifier_batch,
             roll_actions=[],
         )
+        action_judgments = build_action_judgments(
+            state["action_parse_result"], roll_results
+        )
         return {
             "roll_config": roll_config,
             "roll_actions": [],
             "modifier_batch": modifier_batch,
             "roll_results": roll_results,
-            "events": [{
-                "step": "rolls_skipped",
-                "data": {
-                    "reason": "No actions require a roll.",
-                    "roll_results": model_data(roll_results),
+            "action_judgments": action_judgments,
+            "events": [
+                {
+                    "step": "rolls_skipped",
+                    "data": {
+                        "reason": "No actions require a roll.",
+                        "roll_results": model_data(roll_results),
+                    },
                 },
-            }],
+                {
+                    "step": "action_judgments_done",
+                    "data": {"action_judgments": model_data(action_judgments)},
+                },
+            ],
         }
 
     modifier_evaluator = RollModifierEvaluator(gateway_for(state))
@@ -309,6 +319,9 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
         modifier_batch=modifier_batch,
         roll_actions=roll_actions,
     )
+    action_judgments = build_action_judgments(
+        state["action_parse_result"], roll_results
+    )
     has_modifier_fallback = any(
         getattr(w, "code", None) == "roll_modifier_fallback"
         for w in modifier_evaluator.last_warnings
@@ -318,6 +331,7 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
         "roll_actions": roll_actions,
         "modifier_batch": modifier_batch,
         "roll_results": roll_results,
+        "action_judgments": action_judgments,
         "roll_modifier_fallback": has_modifier_fallback,
         "events": [
             {
@@ -332,6 +346,10 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
                 "data": {
                     "roll_results": model_data(roll_results),
                 },
+            },
+            {
+                "step": "action_judgments_done",
+                "data": {"action_judgments": model_data(action_judgments)},
             },
         ],
     }
@@ -348,18 +366,28 @@ def resolve_rolls_node(state: GenerationState) -> GenerationState:
             modifier_batch=modifier_batch,
             roll_actions=[],
         )
+        action_judgments = build_action_judgments(
+            state["action_parse_result"], roll_results
+        )
         return {
             "roll_config": roll_config,
             "roll_actions": [],
             "modifier_batch": modifier_batch,
             "roll_results": roll_results,
-            "events": [{
-                "step": "rolls_skipped",
-                "data": {
-                    "reason": "No actions require a roll.",
-                    "roll_results": model_data(roll_results),
+            "action_judgments": action_judgments,
+            "events": [
+                {
+                    "step": "rolls_skipped",
+                    "data": {
+                        "reason": "No actions require a roll.",
+                        "roll_results": model_data(roll_results),
+                    },
                 },
-            }],
+                {
+                    "step": "action_judgments_done",
+                    "data": {"action_judgments": model_data(action_judgments)},
+                },
+            ],
         }
 
     modifier_batch = state.get("modifier_batch")
@@ -371,11 +399,15 @@ def resolve_rolls_node(state: GenerationState) -> GenerationState:
         modifier_batch=modifier_batch,
         roll_actions=roll_actions,
     )
+    action_judgments = build_action_judgments(
+        state["action_parse_result"], roll_results
+    )
     return {
         "roll_config": roll_config,
         "roll_actions": roll_actions,
         "modifier_batch": modifier_batch,
         "roll_results": roll_results,
+        "action_judgments": action_judgments,
         "events": [
             {
                 "step": "modifiers_done",
@@ -390,96 +422,11 @@ def resolve_rolls_node(state: GenerationState) -> GenerationState:
                     "roll_results": model_data(roll_results),
                 },
             },
-        ],
-    }
-
-
-def resolve_turn_node(state: GenerationState) -> GenerationState:
-    if not state["action_parse_result"].atomic_actions:
-        turn_resolution = TurnResolutionResult()
-        return {
-            "turn_resolution": turn_resolution,
-            "events": [{
-                "step": "turn_resolution_skipped",
-                "data": {
-                    "reason": "No atomic actions require resolution.",
-                    "turn_resolution": model_data(turn_resolution),
-                },
-            }],
-        }
-
-    resolution_agent = TurnResolutionAgent(gateway_for(state))
-    short_term_memory = state.get("short_term_memory")
-    recent_scene = (
-        short_term_memory.recent_scenes[-1]
-        if short_term_memory and short_term_memory.recent_scenes
-        else None
-    )
-    next_turn_index = state.get("next_turn_index") or (
-        recent_scene.turn_index + 1 if recent_scene else 1
-    )
-    touched_event_ids = set(state.get("touched_event_candidates", []))
-    engaged_events = []
-    if "runtime_services" in state:
-        # Fail closed: a stale/closed UoW must surface here instead of
-        # silently degrading the turn resolution input.
-        with _store_factory(state, "director_event") as event_store:
-            engaged_events = [
-                event
-                for event in event_store.list_active()
-                if event.stage == "engaged" or event.event_id in touched_event_ids
-            ]
-    director_stage = state.get("director_stage")
-    intrude_ids = {
-        material.resource_id
-        for material in (
-            director_stage.materials if director_stage is not None else []
-        )
-        if material.kind == "engaged_event"
-    }
-    engaged_events = [
-        event
-        for event in engaged_events
-        if event.event_id in intrude_ids
-    ]
-    turn_npc_profiles = merge_profile_selections(
-        state.get("action_npc_profiles", []),
-        state.get("context_fact_npc_profiles") or [],
-    )
-    turn_resolution = resolution_agent.resolve(
-        user_input=state["user_input"],
-        current_state=state["current_state"],
-        action_parse_result=state["action_parse_result"],
-        roll_results=state["roll_results"],
-        core_memory=state["core_memory"],
-        context_facts=state["context_facts"],
-        npc_profiles=[
-            profile.disclosure_view()
-            for profile in turn_npc_profiles
-        ],
-        director_stage=director_stage,
-        recent_scene=recent_scene,
-        engaged_events=engaged_events,
-        turn_index=next_turn_index,
-        trace_id=state["trace_id"],
-    )
-    for warning in getattr(resolution_agent, "last_warnings", []):
-        _diagnostics(state).warning(
-            source="turn_resolution",
-            code=warning.code,
-            message=warning.message,
-            trace_id=state["trace_id"],
-            task="turn_resolution",
-            turn_index=state.get("next_turn_index") or state.get("turn_index"),
-        )
-    return {
-        "turn_resolution": turn_resolution,
-        "events": [{
-            "step": "turn_resolution_done",
-            "data": {
-                "turn_resolution": model_data(turn_resolution),
+            {
+                "step": "action_judgments_done",
+                "data": {"action_judgments": model_data(action_judgments)},
             },
-        }],
+        ],
     }
 
 
@@ -509,7 +456,6 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         recent_summaries=state.get("recent_summaries", []),
         turn_index=state["turn_index"],
         trace_id=state["trace_id"],
-        turn_resolution_json="",
         touched_event_candidates=state.get("touched_event_candidates", []),
         npc_profiles=director_npc_profiles,
     )
@@ -559,56 +505,37 @@ def _compose_with_context(
     next_turn_index = state.get("next_turn_index") or (
         recent_scene.turn_index + 1 if recent_scene else 1
     )
-    composition = None
-    try:
-        composition = NarrativeComposerAgent(gateway_for(state)).compose(
-            context,
-            recent_scene=recent_scene,
-            turn_index=next_turn_index,
-            trace_id=state["trace_id"],
-            on_stream_start=lambda attempt: stream_writer({
-                "step": "scene_stream_started",
-                "data": {"attempt": attempt, "trace_id": state["trace_id"]},
-            }),
-            on_scene_text_delta=lambda delta: stream_writer({
-                "step": "scene_text_delta",
-                "data": {"delta": delta, "trace_id": state["trace_id"]},
-            }),
-        )
-    except (
-        LLMOutputParseError,
-        LLMOutputValidationError,
-    ) as exc:
-        composition = _empty_composition(context)
+    composer = NarrativeComposerAgent(gateway_for(state))
+    composition = composer.compose(
+        context,
+        recent_scene=recent_scene,
+        turn_index=next_turn_index,
+        trace_id=state["trace_id"],
+        on_stream_start=lambda attempt: stream_writer({
+            "step": "scene_stream_started",
+            "data": {"attempt": attempt, "trace_id": state["trace_id"]},
+        }),
+        on_scene_text_delta=lambda delta: stream_writer({
+            "step": "scene_text_delta",
+            "data": {"delta": delta, "trace_id": state["trace_id"]},
+        }),
+    )
+    for warning in getattr(composer, "last_warnings", []):
         _diagnostics(state).warning(
             source="composer",
-            code="composer_fallback",
-            message=f"Composer failed; using empty fallback: {exc}",
+            code=warning.code,
+            message=warning.message,
             trace_id=state["trace_id"],
             task="narrative_compose",
             turn_index=state.get("next_turn_index") or state.get("turn_index"),
         )
 
-    if composition is not None and not composition.scene_text.strip():
-        if composition.scene_reasoning and composition.scene_reasoning != "正文生成失败":
-            composition = _empty_composition(context)
-            _diagnostics(state).warning(
-                source="composer",
-                code="composer_empty",
-                message="Composer produced empty scene_text",
-                trace_id=state["trace_id"],
-                task="narrative_compose",
-                turn_index=state.get("next_turn_index") or state.get("turn_index"),
-            )
-
     output_state = _composition_output_state(state, composition)
-    composer_empty = not composition.scene_text.strip()
     return {
         "context": context,
         **output_state,
         "recent_scene": recent_scene,
         "next_turn_index": next_turn_index,
-        "composer_empty": composer_empty,
         "events": [
             {
                 "step": context_event,
@@ -623,25 +550,6 @@ def _compose_with_context(
             },
         ],
     }
-
-
-def _empty_composition(context) -> "NarrativeComposerResult":
-    from app.domain.narrative_composer.schemas import NarrativeComposerResult
-    from app.domain.plot_outline.schemas import PlotOutlineResult
-    return NarrativeComposerResult(
-        planning_reasoning="正文生成失败",
-        must_establish_facts=[],
-        must_not_establish_facts=[],
-        information_boundaries=[],
-        scene_stopping_point="等待重新措辞",
-        planned_events=[],
-        scene_reasoning="正文生成失败",
-        scene_text="",
-        closing_prompt="。",
-        next_action_directions=[],
-    )
-
-
 def compose_narrative_node(state: GenerationState) -> GenerationState:
     composer_profiles = merge_profile_selections(
         state.get("action_npc_profiles", []),
@@ -670,7 +578,7 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
     context = assemble_narrative_context(
         user_input=state["user_input"],
         current_state=state["current_state"],
-        turn_resolution=state["turn_resolution"],
+        action_judgments=state["action_judgments"],
         core_memory=state["core_memory"],
         context_facts=state["context_facts"],
         npc_profiles=[
@@ -822,7 +730,7 @@ def check_narrative_consistency_node(state: GenerationState) -> GenerationState:
         review = agent.check(
             user_input=state["user_input"],
             current_state=state["current_state"],
-            turn_resolution_json=project_turn_resolution(state["turn_resolution"]),
+            action_judgments_json=project_action_judgments(state["action_judgments"]),
             composition=composition,
             canon_query_set=state.get("canon_query_set"),
             canon_evidence_set=state.get("canon_evidence_set"),

@@ -13,8 +13,8 @@ from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.npc_profile.selection import select_context_profiles
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.roll.schemas import Difficulty
-from app.domain.turn_resolution import build_player_turn_resolution
-from app.domain.turn_resolution.schemas import TurnResolutionResult
+from app.domain.action_judgment import build_player_turn_resolution
+from app.domain.action_judgment.schemas import ActionJudgment
 from app.graph.generation_state import GenerationEvent, GenerationState
 from app.runtime.serialization import model_data
 from app.runtime.services import RuntimeServices
@@ -98,13 +98,12 @@ def hydrate_generation_prefix(
 def reset_generation_suffix(state: GenerationState) -> None:
     for key in [
         "roll_results",
-        "turn_resolution",
+        "action_judgments",
         "player_resolution",
         "director_stage",
         "director_log_entry",
         "outline",
         "scene_result",
-        "composer_empty",
         "canon_queries",
         "canon_evidence",
         "consistency_review",
@@ -116,7 +115,7 @@ def assemble_narrative_context(
     *,
     user_input: str,
     current_state: CurrentState,
-    turn_resolution: TurnResolutionResult,
+    action_judgments: list[ActionJudgment],
     core_memory: CoreMemory,
     context_facts: ContextFactSet | None = None,
     npc_profiles: list[NPCProfileDirectorView] | None = None,
@@ -126,7 +125,7 @@ def assemble_narrative_context(
     return NarrativeComposerContext(
         user_input=user_input,
         current_state=current_state,
-        turn_resolution=turn_resolution,
+        action_judgments=action_judgments,
         core_memory=core_memory,
         context_facts=context_facts
         or ContextFactSet(turn_focus="No Context Facts", facts=[]),
@@ -235,7 +234,6 @@ def finalize_pending_turn(
         player_resolution = build_player_turn_resolution(
             state["action_parse_result"],
             state["roll_results"],
-            state["turn_resolution"],
         )
     token_usage = {
         "generation": get_trace_token_usage(state["trace_id"]),
@@ -268,7 +266,6 @@ def finalize_pending_turn(
             state["user_input"],
             snapshot,
         )
-    composer_empty = state.get("composer_empty", False)
     commit_if_not_cancelled(lambda: runtime.pending_turns.add(pending))
     finalized = {
         **state,
@@ -276,21 +273,15 @@ def finalize_pending_turn(
         "group_id": group_id,
         "version_index": version_index,
         "turn_index": state["next_turn_index"],
-        "status": "awaiting_confirm" if not composer_empty else "composer_empty",
-        "pending_turn_status": "awaiting_confirm" if not composer_empty else "composer_empty",
+        "status": "awaiting_confirm",
+        "pending_turn_status": "awaiting_confirm",
         "player_resolution": player_resolution,
         "token_usage": token_usage,
     }
-    if composer_empty:
-        finalized["events"] = [
-            *state.get("events", []),
-            composer_empty_event(finalized),
-        ]
-    else:
-        finalized["events"] = [
-            *state.get("events", []),
-            scene_written_event(finalized),
-        ]
+    finalized["events"] = [
+        *state.get("events", []),
+        scene_written_event(finalized),
+    ]
     return finalized
 
 
@@ -337,21 +328,5 @@ def scene_written_event(state: dict[str, Any]) -> GenerationEvent:
             "scene_result": model_data(state["scene_result"]),
             "context": model_data(state["context"]),
             "status": "awaiting_confirm",
-        },
-    }
-
-
-def composer_empty_event(state: dict[str, Any]) -> GenerationEvent:
-    return {
-        "step": "composer_empty",
-        "data": {
-            "turn_id": state["turn_id"],
-            "group_id": state["group_id"],
-            "version_index": state["version_index"],
-            "trace_id": state["trace_id"],
-            "turn_index": state["turn_index"],
-            "token_usage": state.get("token_usage"),
-            "context": model_data(state["context"]),
-            "status": "composer_empty",
         },
     }

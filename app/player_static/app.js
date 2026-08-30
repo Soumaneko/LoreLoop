@@ -86,7 +86,7 @@ const progressLabels = {
   action_parsed: "正在解析行动意图",
   context_facts_done: "前情已检索 · 正在推演因果",
   rolls_done: "检定已结算 · 正在推演",
-  turn_resolution_done: "机制判定达成 · 正在构思正文",
+  action_judgments_done: "机制判定达成 · 正在构思正文",
   scene_stream_started: "正在书写剧情正文",
   canon_query_started: "正在核对历史事实",
   canon_queries_generated: "历史查询已规划",
@@ -250,38 +250,6 @@ function clearError() {
   const pending = activePending();
   setMode(!state.modelConfig?.configured ? "needs_model" : state.playerState?.needs_init ? "needs_init" : pending ? "pending" : "idle");
   renderControls();
-}
-
-function showComposerEmptyMessage() {
-  els.errorCard.querySelector(".error-retry-btn")?.remove();
-  const pending = activePending(); const variant = selectedVariant();
-  setMode(pending ? "pending" : "idle");
-  els.errorTitle.textContent = "正文生成失败";
-  if (pending && variant) {
-    els.errorMessage.textContent = "之前的故事没有受到影响，你可以重新措辞来重试。";
-    const retryBtn = document.createElement("button");
-    retryBtn.className = "error-retry-btn";
-    retryBtn.type = "button";
-    retryBtn.textContent = "重新措辞";
-    retryBtn.onclick = () => { clearError(); retryTurn("rephrase"); };
-    els.errorCard.appendChild(retryBtn);
-  } else {
-    els.errorMessage.textContent = "之前的故事没有受到影响，你可以重试生成。";
-    const savedInput = state.composerEmptyUserInput || "";
-    if (savedInput) {
-      els.playerInput.value = savedInput;
-      autoSizeInput();
-    }
-    const retryBtn = document.createElement("button");
-    retryBtn.className = "error-retry-btn";
-    retryBtn.type = "button";
-    retryBtn.textContent = "重试生成";
-    retryBtn.onclick = () => { clearError(); generateTurn(); };
-    els.errorCard.appendChild(retryBtn);
-  }
-  els.errorCard.hidden = false;
-  renderControls();
-  scrollToBottom();
 }
 
 function setInputHintText(actionText) {
@@ -2635,10 +2603,9 @@ function handleGenerationEvent(event, { retryMode = null } = {}) {
       els.streamingLabel.textContent = `检定已掷出：${dice}${valStr} · 正在结算`;
     }
   }
-  if (event.step === "turn_resolution_done") {
-    const tr = event.data?.turn_resolution;
-    const firstResolution = tr?.action_resolutions?.[0];
-    const band = firstResolution?.outcome_band;
+  if (event.step === "action_judgments_done") {
+    const firstJudgment = event.data?.action_judgments?.[0];
+    const band = firstJudgment?.outcome_band;
     const bandMap = {
       critical_success: "大成功",
       success: "成功",
@@ -2673,9 +2640,6 @@ function handleGenerationEvent(event, { retryMode = null } = {}) {
   );
   if (event.step === "scene_text_delta") {
     appendStreamingText(event.data?.delta || "");
-  }
-  if (event.step === "composer_empty") {
-    state.composerEmpty = true;
   }
 }
 
@@ -2714,13 +2678,6 @@ async function resumeGenerationOperation(operation) {
       return false;
     }
     stopStreaming();
-    if (state.composerEmpty) {
-      state.composerEmpty = false;
-      state.composerEmptyUserInput = userInput;
-      await loadAll({ scroll: "smooth" });
-      showComposerEmptyMessage();
-      return true;
-    }
     if (retryMode === "feedback_rewrite" && feedbackDecision?.strategy === "no_rewrite") {
       showToast(feedbackNoRewriteMessage(feedbackDecision.reason_code));
     } else if (retryMode) {
@@ -2852,7 +2809,6 @@ async function generateTurn() {
   if (!userInput || state.mode !== "idle") return;
   prepareGenerationRun("generation", userInput);
   clearError(); setMode("generating"); state.suggestions = []; renderSuggestions(); renderControls();
-  state.composerEmptyUserInput = userInput;
   showActivePlayerAction(userInput);
   els.playerInput.value = ""; autoSizeInput(); renderControls();
   startStreaming("正在解析行动意图");
@@ -2868,13 +2824,6 @@ async function generateTurn() {
       return;
     }
     stopStreaming();
-    if (state.composerEmpty) {
-      state.composerEmpty = false;
-      await loadAll({ scroll: "smooth" });
-      showComposerEmptyMessage();
-      return;
-    }
-    state.composerEmptyUserInput = null;
     await loadAll({ scroll: "smooth" });
     const pendingAfterGen = activePending();
     if (pendingAfterGen) {
@@ -2911,12 +2860,6 @@ async function retryTurn(retryMode) {
       return;
     }
     stopStreaming();
-    if (state.composerEmpty) {
-      state.composerEmpty = false;
-      await loadAll({ scroll: "smooth" });
-      showComposerEmptyMessage();
-      return;
-    }
     await loadAll({ scroll: "smooth" });
     const pendingAfterRetry = activePending();
     if (pendingAfterRetry) {

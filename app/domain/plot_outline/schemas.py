@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from app.domain.action_judgment.schemas import OutcomeBand
+
 
 class PlannedEvent(BaseModel):
     event_id: str
@@ -8,11 +10,14 @@ class PlannedEvent(BaseModel):
     involved_entities: list[str] = Field(default_factory=list)
 
 
+class ActionResolution(BaseModel):
+    action_id: str
+    outcome_band: OutcomeBand
+    resolved_fact: str = Field(min_length=1, max_length=180)
+
+
 class PlotOutlineResult(BaseModel):
     director_reason: str | None = None
-    planning_reasoning: str = Field(min_length=1)
-    must_establish_facts: list[str] = Field(default_factory=list)
-    must_not_establish_facts: list[str] = Field(default_factory=list)
-    information_boundaries: list[str] = Field(default_factory=list)
+    action_resolutions: list[ActionResolution] = Field(default_factory=list)
     scene_stopping_point: str = Field(min_length=1)
     planned_events: list[PlannedEvent] = Field(default_factory=list)

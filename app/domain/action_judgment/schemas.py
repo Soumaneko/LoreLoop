@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 OutcomeBand = Literal[
@@ -28,29 +28,6 @@ class ActionJudgment(BaseModel):
     dice_sides: int | None = None
     outcome_band: OutcomeBand
     risk_level: RiskLevel = "medium"
-
-
-class ActionResolutionFrame(BaseModel):
-    action_id: str
-    sequence: int
-    actor: list[str]
-    action_type: str
-    outcome_band: OutcomeBand
-    resolution_source: ResolutionSource = "automatic"
-    effect_reasoning: str = Field(min_length=1, max_length=180)
-    resolved_fact: str = Field(min_length=1, max_length=180)
-    narrative_hook: str = Field(default="", max_length=180)
-
-
-class TurnResolutionResult(BaseModel):
-    resolution_reasoning: str = ""
-    action_resolutions: list[ActionResolutionFrame] = Field(default_factory=list)
-    total_resolutions: int = 0
-
-    @model_validator(mode="after")
-    def _fill_total(self):
-        self.total_resolutions = len(self.action_resolutions)
-        return self
 
 
 class PlayerRollModifier(BaseModel):

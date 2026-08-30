@@ -35,7 +35,7 @@ from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory.schemas import ShortTermMemory, ShortTermScene
-from app.domain.turn_resolution.schemas import PlayerTurnResolution, TurnResolutionResult
+from app.domain.action_judgment.schemas import ActionJudgment, PlayerTurnResolution
 from app.runtime.services import RuntimeServices
 from app.runtime.session import CampaignRuntime
 
@@ -88,7 +88,7 @@ class GenerationState(TypedDict, total=False):
     roll_actions: Any
     modifier_batch: RollModifierBatch
     roll_results: RollResultBatch
-    turn_resolution: TurnResolutionResult
+    action_judgments: list[ActionJudgment]
     player_resolution: PlayerTurnResolution
 
     director_decision: DirectorDecisionBatch
@@ -111,5 +111,4 @@ class GenerationState(TypedDict, total=False):
     recent_scene: ShortTermScene | None
 
     scene_result: SceneWriterResult
-    composer_empty: bool
     pending_turn_status: str

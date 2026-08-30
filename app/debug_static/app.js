@@ -1109,7 +1109,7 @@ function stepTasks(scope, stepName) {
     context_extract_failed: ["context_extract"],
     action_parsed: ["action_extract"],
     modifiers_done: ["roll_modifier"],
-    turn_resolution_done: ["turn_resolution"],
+    action_judgments_done: [],
     director_agent_staged: ["director_agent_decide_generation"],
     outline_done: ["narrative_compose"],
     canon_query_started: ["narrative_canon_query"],
@@ -1208,7 +1208,7 @@ function renderGeneration() {
       ${details("Action Parse", renderAction(g.action_parse_result, g.raw_action_parse_result, g.action_self_check_result), true)}
       ${details("Roll", renderRoll(g.roll_results))}
     `)}
-    ${card("Turn Resolution", renderResolution(g.turn_resolution))}
+    ${card("Action Judgments", renderJudgments(g.action_judgments))}
     ${card("Narrative Composer · Plan", renderOutline(g.plot_outline))}
     ${card("Narrative Canon Queries", renderCanonQueries(g.canon_query_set))}
     ${card("Canon Evidence Retrieval", renderCanonEvidence(g.canon_evidence_set))}
@@ -1430,17 +1430,16 @@ function renderRoll(result) {
   `;
 }
 
-function renderResolution(result) {
+function renderJudgments(result) {
   if (!result) return `<div class="empty">暂无结果判定。</div>`;
   return `
-    ${card("判定审计", esc(text(result.resolution_reasoning)))}
-    ${metrics([metric("解释", result.total_resolutions || 0)])}
-    ${(result.action_resolutions || []).map((o) => `<div class="section-card">
+    ${metrics([metric("行动", result.length || 0)])}
+    ${(result || []).map((o) => `<div class="section-card">
       <div class="card-title"><span>${esc(o.action_id)} · ${esc(o.outcome_band)}</span>${metric("type", o.action_type)}</div>
       ${kv([
         ["行动者", chips(o.actor)],
         ["序号", esc(text(o.sequence))],
-        ["事实结论", esc(text(o.resolved_fact))],
+        ["判定来源", esc(text(o.resolution_source))],
       ])}
     </div>`).join("")}
   `;
@@ -1560,10 +1559,11 @@ function renderOutline(outline) {
   if (!outline) return `<div class="empty">暂无大纲。</div>`;
   return `
     ${details("导演原因", esc(text(outline.director_reason)), true)}
-    ${card("规划审计", esc(text(outline.planning_reasoning)))}
-    ${details("必须成立", list(outline.must_establish_facts))}
-    ${details("不得成立", list(outline.must_not_establish_facts))}
-    ${details("信息边界", list(outline.information_boundaries))}
+    ${details("行动结果", (outline.action_resolutions || []).map((item) => `<div class="section-card">${kv([
+      ["行动", esc(text(item.action_id))],
+      ["档位", esc(text(item.outcome_band))],
+      ["事实", esc(text(item.resolved_fact))],
+    ])}</div>`).join("") || `<div class="empty">无</div>`, true)}
     ${card("停点", esc(text(outline.scene_stopping_point)))}
     ${(outline.planned_events || []).map((e) => `<div class="section-card">
       <div class="card-title"><span>${esc(e.event_id)}</span></div>

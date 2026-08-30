@@ -4,7 +4,7 @@ import sqlite3
 from pydantic import BaseModel, Field
 from app.core.time import utc_now
 from app.domain.action_preview.schemas import ActionPreviewResult
-from app.domain.turn_resolution.schemas import PlayerTurnResolution
+from app.domain.action_judgment.schemas import PlayerTurnResolution
 from app.runtime.sqlite import (
     ensure_column,
     ensure_schema_version,

@@ -1,3 +1,3 @@
-from app.domain.turn_resolution.views import project_turn_resolution
+from app.domain.action_judgment.views import project_action_judgments
 
-__all__ = ["project_turn_resolution"]
+__all__ = ["project_action_judgments"]

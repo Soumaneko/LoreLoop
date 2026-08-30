@@ -12,7 +12,7 @@
 
 # 权威顺序
 
-Player Input 决定玩家行动语义；TurnResolutionResult 决定判定结果；CurrentState、CoreMemory、Context Facts、Profile、上一回合正文和导演约束决定既有世界事实。这些内容全部高于玩家的重写意见。玩家意见只能纠正未确认正文，不能直接改写上述权威输入。
+Player Input 决定玩家行动语义；Action Judgments 决定成败档位；CurrentState、CoreMemory、Context Facts、Profile、上一回合正文和导演约束决定既有世界事实。这些内容全部高于玩家的重写意见。玩家意见只能纠正未确认正文，不能直接改写上述权威输入。
 
 
 # 三种策略与 Reason Code 判定 
@@ -30,12 +30,11 @@ Player Input 决定玩家行动语义；TurnResolutionResult 决定判定结果�
         - `localized_preference`：调整局部风格/语气/篇幅/描写侧重。
 
 2. `recompose`：抛弃原文重新构思
-    - **适用判据**：原正文的核心演出逻辑/因果链已经失效，但在不改变 Player Input 和 TurnResolutionResult 的前提下，仍能设计另一种完整演出落实判定结果。
+    - **适用判据**：原正文的核心演出逻辑/因果链已经失效，但在不改变 Player Input 和 Action Judgments 的前提下，仍能设计另一种完整演出落实判定结果。
     - **典型案例**：
-        - 原正文描写主角利用物品 A 击杀敌人，但玩家指出物品 A 不在身边。若 TurnResolutionResult 仅确定了“主角成功击杀敌人”，则判定结果依然有效，但旧正文因果链失效。此时选择 `recompose` 重新规划“成功击杀”的新演出，完全不以旧正文为基准修补，避免残留围绕物品 A 的动作、伤势和站位。
+        - 原正文描写主角利用物品 A 完成成功行动，但玩家指出物品 A 不在身边。只要成功档位仍可用其他合理演出落实，就选择 `recompose` 从头重做。
     - **允许的 Reason Code**： 
         - `causal_backbone_invalid`：旧正文的实现逻辑/因果链失效。 
-    - **重要冲突边界**：若 TurnResolutionResult 本身明确写有“主角使用物品 A 击杀敌人”，则玩家意见已与权威判定冲突，**不得选择 recompose**，必须判定为 `no_rewrite`。
 
 3. `no_rewrite`：不重写
     - **适用判据**：意见未形成明确可执行要求，或要求超越了重写模块权限/与权威输入冲突。
@@ -63,7 +62,7 @@ Player Input 决定玩家行动语义；TurnResolutionResult 决定判定结果�
 
 1. 区分玩家是在修改“角色在世界内的选择”，还是在控制“正文叙事方向”。如：“不要帮我做决定”、“写到某某时刻就停”、“只保留到……的剧情，后续由我下回合行动”）：这属于标准的元层面篇幅要求，不能误解为情节中主角的行动。
 2. 不要因为错误听起来“严重”就盲目选择 recompose。不要因为可以强行补丁就保留已经彻底失效的原文骨架。不要把玩家关于世界事实的声明自动当作真实事实。
-3. TR 的权威仅限于 TR JSON 中显式记载的确定事实与边界。旧正文中由 Composer 自由发挥生成的后续选择或延伸动作，没有任何权威性！玩家要求删除或截断这些超前延伸，完全合法，绝不能判定为违背 TR
+3. Action Judgments 的权威仅限于玩家行动和成败档位。旧正文中由 Composer 自由发挥生成的后续选择或延伸动作没有任何权威性；玩家要求删除或截断这些超前延伸完全合法。
 
 
 # 输入
@@ -86,10 +85,10 @@ Player Input 决定玩家行动语义；TurnResolutionResult 决定判定结果�
 {user_input}
 ```
 
-## TurnResolutionResult
+## Action Judgments
 
 ```json
-{turn_resolution_json}
+{action_judgments_json}
 ```
 
 ## CurrentState

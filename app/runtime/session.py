@@ -22,7 +22,7 @@ from app.domain.roll.schemas import Difficulty
 from app.domain.roll_modifier.schemas import RollModifierBatch
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory import ShortTermMemory
-from app.domain.turn_resolution.schemas import PlayerTurnResolution
+from app.domain.action_judgment.schemas import PlayerTurnResolution
 from app.runtime.paths import (
     CampaignPaths,
     default_campaign_paths,

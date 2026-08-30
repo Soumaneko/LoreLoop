@@ -40,7 +40,6 @@ from .generation_nodes import (
     recompose_from_feedback_node,
     rewrite_from_source_node,
     resolve_rolls_node,
-    resolve_turn_node,
     generate_canon_queries_node,
     retrieve_canon_evidence_node,
     revise_narrative_node,
@@ -85,7 +84,6 @@ def build_generation_graph(
         director_agent_stage_node,
         parse_action_node,
         evaluate_roll_modifiers_node,
-        resolve_turn_node,
         compose_narrative_node,
         generate_canon_queries_node,
         retrieve_canon_evidence_node,
@@ -113,7 +111,6 @@ def _compile_generation_graph(
     graph.add_node("extract_context_facts", extract_context_facts_node)
     graph.add_node("parse_action", parse_action_node)
     graph.add_node("evaluate_roll_modifiers", evaluate_roll_modifiers_node)
-    graph.add_node("resolve_turn", resolve_turn_node)
     graph.add_node("compose_narrative", compose_narrative_node)
 
     graph.add_edge(START, "parse_action")
@@ -121,14 +118,12 @@ def _compile_generation_graph(
     graph.add_edge("parse_action", "evaluate_roll_modifiers")
     graph.add_node("director_agent_stage", director_agent_stage_node)
     graph.add_edge("extract_context_facts", "director_agent_stage")
-    graph.add_edge(["director_agent_stage", "evaluate_roll_modifiers"], "resolve_turn")
-    graph.add_edge("resolve_turn", "compose_narrative")
+    graph.add_edge(["director_agent_stage", "evaluate_roll_modifiers"], "compose_narrative")
 
     _add_canon_validation_tail(
         graph,
         source_nodes=("compose_narrative",),
         enabled=canon_validation_is_enabled,
-        compose_routing=True,
     )
 
     return graph.compile()
@@ -161,7 +156,6 @@ def _compile_rephrase_graph(*, canon_validation_is_enabled: bool):
         graph,
         source_nodes=("rephrase_narrative",),
         enabled=canon_validation_is_enabled,
-        compose_routing=True,
     )
     return graph.compile()
 
@@ -169,7 +163,6 @@ def _compile_rephrase_graph(*, canon_validation_is_enabled: bool):
 def build_reroll_graph(*, canon_validation_is_enabled: bool):
     dependencies = (
         resolve_rolls_node,
-        resolve_turn_node,
         director_agent_stage_node,
         compose_narrative_node,
         generate_canon_queries_node,
@@ -191,25 +184,18 @@ def _compile_reroll_graph(*, canon_validation_is_enabled: bool):
     graph = StateGraph(GenerationState)
     graph.add_node("resolve_rolls", resolve_rolls_node)
     graph.add_node("director_agent_stage", director_agent_stage_node)
-    graph.add_node("resolve_turn", resolve_turn_node)
     graph.add_node("compose_narrative", compose_narrative_node)
 
     graph.add_edge(START, "resolve_rolls")
     graph.add_edge(START, "director_agent_stage")
-    graph.add_edge(["resolve_rolls", "director_agent_stage"], "resolve_turn")
-    graph.add_edge("resolve_turn", "compose_narrative")
+    graph.add_edge(["resolve_rolls", "director_agent_stage"], "compose_narrative")
 
     _add_canon_validation_tail(
         graph,
         source_nodes=("compose_narrative",),
         enabled=canon_validation_is_enabled,
-        compose_routing=True,
     )
     return graph.compile()
-
-
-def _route_after_compose(state: GenerationState) -> str:
-    return "empty" if state.get("composer_empty") else "canon"
 
 
 def _route_after_consistency_check(state: GenerationState) -> str:
@@ -267,18 +253,10 @@ def _add_canon_validation_tail(
     *,
     source_nodes: tuple[str, ...],
     enabled: bool,
-    compose_routing: bool = False,
 ) -> None:
     if not enabled:
         for source_node in source_nodes:
-            if compose_routing:
-                graph.add_conditional_edges(
-                    source_node,
-                    _route_after_compose,
-                    {"empty": END, "canon": END},
-                )
-            else:
-                graph.add_edge(source_node, END)
+            graph.add_edge(source_node, END)
         return
 
     graph.add_node("generate_canon_queries", generate_canon_queries_node)
@@ -286,14 +264,7 @@ def _add_canon_validation_tail(
     graph.add_node("check_narrative_consistency", check_narrative_consistency_node)
     graph.add_node("revise_narrative", revise_narrative_node)
     for source_node in source_nodes:
-        if compose_routing:
-            graph.add_conditional_edges(
-                source_node,
-                _route_after_compose,
-                {"empty": END, "canon": "generate_canon_queries"},
-            )
-        else:
-            graph.add_edge(source_node, "generate_canon_queries")
+        graph.add_edge(source_node, "generate_canon_queries")
     graph.add_edge("generate_canon_queries", "retrieve_canon_evidence")
     graph.add_edge("retrieve_canon_evidence", "check_narrative_consistency")
     graph.add_conditional_edges(
@@ -539,7 +510,7 @@ def _pending_context_state(
         "turn_index": pending.turn_index,
         "next_turn_index": pending.turn_index,
         "context": pending.context,
-        "turn_resolution": pending.context.turn_resolution,
+        "action_judgments": pending.context.action_judgments,
         "player_resolution": pending.player_resolution,
         "director_stage": pending.director_stage,
         "director_log_entry": getattr(pending, "director_log_entry", None),

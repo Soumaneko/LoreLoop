@@ -520,20 +520,17 @@ class PlayerHandler(BaseHTTPRequestHandler):
                     if isinstance(r, dict)
                 ],
             }
-        elif step == "turn_resolution_done":
-            tr = data.get("turn_resolution") or {}
-            raw_resolutions = tr.get("action_resolutions") or []
+        elif step == "action_judgments_done":
+            raw_judgments = data.get("action_judgments") or []
             public_data = {
-                "turn_resolution": {
-                    "action_resolutions": [
-                        {
-                            "action_type": ar.get("action_type"),
-                            "outcome_band": ar.get("outcome_band"),
-                        }
-                        for ar in raw_resolutions
-                        if isinstance(ar, dict)
-                    ],
-                },
+                "action_judgments": [
+                    {
+                        "action_type": judgment.get("action_type"),
+                        "outcome_band": judgment.get("outcome_band"),
+                    }
+                    for judgment in raw_judgments
+                    if isinstance(judgment, dict)
+                ],
             }
         elif step == "scene_text_delta":
             public_data = {"delta": data.get("delta", "")}
@@ -593,14 +590,6 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 "turn_index": data.get("turn_index"),
                 "scene_text": scene_result.get("scene_text", ""),
                 "closing_prompt": scene_result.get("closing_prompt", ""),
-            }
-        elif step == "composer_empty":
-            public_data = {
-                "turn_id": data.get("turn_id"),
-                "group_id": data.get("group_id"),
-                "version_index": data.get("version_index"),
-                "turn_index": data.get("turn_index"),
-                "status": data.get("status"),
             }
         elif step == "finish":
             public_data = {

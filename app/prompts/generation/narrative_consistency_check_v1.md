@@ -16,7 +16,7 @@
   - `verdict`：只能是 `contradiction`、`explicitly_confirmed` 或 `insufficient`。
   - `reasoning`：直接比较该组 `audit_target` 与实际历史原文，说明证据明确证明了什么，以及为何达到或没有达到对应判定标准。
   - `evidence_ids`：列出本项判断实际阅读和依据的历史原文 ID；即使判定为 `insufficient` 也必须填写。
-- `audit_summary`：在完成全部 `canon_findings` 后，简短汇总 TR/Input、State/Canon 和正文的总体核对结论。
+- `audit_summary`：在完成全部 `canon_findings` 后，简短汇总行动判定/Input、State/Canon 和正文的总体核对结论。
 - `decision`：`pass` 或 `revise`。
 - `assertions`：只包含确定成立的问题；`pass` 时为空数组。
   - `issue_type`：选择最贴近的审查清单类别，如 canon_contradiction, input_ignored, tr_reversed 等
@@ -24,7 +24,7 @@
   - `incorrect_statement`：客观描述：正文这一段具体写了什么错误事实？（需包含主体、对象、因果等，禁止只写'与历史冲突'）
   - `authoritative_fact`：客观描述：权威输入中实际确定的正确事实是什么？它为何与正文不相容？（禁止补充证据中没有的信息）
   - `required_revision`：执行指令：用 Composer 能直接执行的语言，明确指出必须删除/修正什么语义，必须满足什么边界，并要求保留哪些无关剧情。
-  - `authority_refs`：填入实际依据来源，只能取 `Player Input`、`TurnResolutionResult`、`CurrentState`、`Historical Canon Evidence`、`Scene Text`。
+  - `authority_refs`：填入实际依据来源，只能取 `Player Input`、`Action Judgments`、`CurrentState`、`Historical Canon Evidence`、`Scene Text`。
   - `canon_query_id`: 相关查询组ID（仅当涉及时填写，否则为 null）。
   - `evidence_ids`: 证据ID列表（仅当涉及时填写，否则为 []）。
 
@@ -37,10 +37,10 @@
 
 请严格比对正文与权威输入，只有触发以下明确情况时，才认定为错误：
 
-## 1. 意图与判定冲突 (Input & TR)
+## 1. 意图与判定冲突
   - **指令丢失/篡改：** Player Input 中的核心要素（主体、对象、方向、数量、条件或明确授权）在正文中丢失、颠倒或被替换。
   - **越权操作：** 正文替玩家作出了未经 Input 授权的重大决定、承诺、移动、攻击或关系选择（连贯的微小动作不算越权）。
-  - **结果反转：** Turn_Resolution 已确定的结果（成功/失败/完成状态/方向）在正文中被反转、降级、遗漏或推迟。
+  - **结果反转：** Action Judgments 已确定的成败档位在正文中被反转、降级、遗漏或推迟。
 
 ## 2. 状态与设定冲突 (Canon)
   - **历史互斥：** 正文与 Historical_Canon_Evidence 在主体、时间、状态、所有权或因果上直接不相容。
@@ -48,7 +48,7 @@
 
 ## 3. 内部逻辑与格式错误 (Internal Logic)
   - **自相矛盾：** 正文内部存在直接自相矛盾、错误算术、无因果来源的物理变化。
-  - **元数据泄露：** 正文文本中出现了诸如“导演事件”、“TurnResolutionResult”、“Player Input”等系统层面的元语言词汇。
+  - **元数据泄露：** 正文文本中出现了诸如“导演事件”、“Action Judgments”、“Player Input”等系统层面的元语言词汇。
 
 
 # 历史证据判定
@@ -79,10 +79,10 @@
 {user_input}
 ```
 
-## TurnResolutionResult
+## Action Judgments
 
 ```json
-{turn_resolution_json}
+{action_judgments_json}
 ```
 
 ## CurrentState

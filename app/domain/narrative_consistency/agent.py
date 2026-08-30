@@ -31,7 +31,7 @@ SEGMENT_TAIL_MIN_CHARS = 300
 SEGMENT_ABSOLUTE_MAX_CHARS = 1200
 ALLOWED_AUTHORITY_REFS = {
     "Player Input",
-    "TurnResolutionResult",
+    "Action Judgments",
     "CurrentState",
     "Historical Canon Evidence",
     "Scene Text",
@@ -63,7 +63,7 @@ class NarrativeConsistencyAgent:
         *,
         user_input: str,
         current_state: CurrentState,
-        turn_resolution_json: str,
+        action_judgments_json: str,
         composition: NarrativeComposerResult,
         canon_query_set: NarrativeCanonQuerySet | None = None,
         canon_evidence_set: CanonEvidenceSet | None = None,
@@ -187,7 +187,7 @@ class NarrativeConsistencyAgent:
                 input_data={
                     "user_input": user_input,
                     "current_state_json": project_current_state(current_state),
-                    "turn_resolution_json": turn_resolution_json,
+                    "action_judgments_json": action_judgments_json,
                     "historical_canon_evidence_json": (
                         project_canon_evidence_for_check(
                             canon_query_set,
