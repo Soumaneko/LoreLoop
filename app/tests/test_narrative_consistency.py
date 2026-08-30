@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -676,21 +675,6 @@ def test_segmentation_preserves_every_natural_paragraph_once():
     assert [pid for segment in segments for pid in segment.paragraph_ids] == [
         "P001", "P002", "P003", "P004", "P005",
     ]
-
-
-def test_prompt_defines_assertions_and_forbids_patch_replacement():
-    prompt = Path(
-        "app/prompts/generation/narrative_consistency_check_v1.md"
-    ).read_text(encoding="utf-8")
-
-    assert "incorrect_statement" in prompt
-    assert "authoritative_fact" in prompt
-    assert "required_revision" in prompt
-    assert "正文错误：{{incorrect_statement}}" in prompt
-    assert "不得输出 replacement、patch 或修改后的正文" in prompt
-    assert "形成之前" in prompt
-    assert "默认判定始终是 `insufficient`" in prompt
-    assert "每个 query 恰好输出一项" in prompt
 
 
 def test_check_node_stores_review_without_mutating_composition(

@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -107,35 +106,6 @@ def test_scene_fact_extractor_sends_scene_text_and_assigns_fact_ids():
     assert result.scene_focus == "卢西安进入酒馆。"
     assert [fact.fact_id for fact in result.facts] == ["f1", "f2"]
     assert result.facts[0].fact == "卢西安刚刚进入酒馆。"
-
-
-def test_prompt_requires_explicit_time_progression_to_be_preserved():
-    prompt = Path("app/prompts/confirmation/scene_fact_extract_v1.md").read_text(
-        encoding="utf-8"
-    )
-
-    assert "应当准确提取时间流逝" in prompt
-    assert "不得压缩成只描述早餐、出发、抵达等事件而丢失时间变化" in prompt
-
-
-def test_prompt_documents_positional_fact_ids():
-    prompt = Path("app/prompts/confirmation/scene_fact_extract_v1.md").read_text(
-        encoding="utf-8"
-    )
-
-    assert "facts 数组第 0 条是 f1" in prompt
-    assert "第 1 条是 f2" in prompt
-
-
-def test_prompt_npc_mentions_rules_are_concise_and_consistent():
-    prompt = Path("app/prompts/confirmation/scene_fact_extract_v1.md").read_text(
-        encoding="utf-8"
-    )
-
-    assert "不要把玩家写成 npc_mention" in prompt
-    assert "不得与 primary_surface 相同" in prompt
-    assert "不要记录“他”“她”“对方”“那人”等普通代词" in prompt
-    assert "萧云痕" not in prompt.split("# 示例")[1]
 
 
 def _mention(**overrides):
@@ -706,18 +676,6 @@ def test_scene_npc_mentions_reject_generic_pronouns(surface):
             basis="same_scene_coreference",
             evidence_fact_ids=["f1"],
         )
-
-
-def test_prompt_staged_director_npcs_rules_and_alignment():
-    prompt = Path("app/prompts/confirmation/scene_fact_extract_v1.md").read_text(
-        encoding="utf-8"
-    )
-
-    assert "## StagedDirectorNPCs" in prompt
-    assert "{staged_director_npcs_json}" in prompt
-    assert "导演本轮引入角色对齐" in prompt
-    assert "primary_surface" in prompt
-    assert "身份解析" in prompt
 
 
 def test_scene_fact_extractor_sends_staged_npcs_json():

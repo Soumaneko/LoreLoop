@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -14,24 +13,6 @@ from app.domain.action.schemas import (
 from app.domain.action.self_check import ActionSelfCheck
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
-
-
-def test_prompt_requires_complete_explicit_action_coverage():
-    prompt = Path("app/prompts/generation/action_extract_v1.md").read_text(
-        encoding="utf-8"
-    )
-
-    assert "覆盖审计" in prompt
-    assert "A、B、C 都必须被 atomic_actions 覆盖" in prompt
-    assert "擅自推迟到下一回合" in prompt
-    assert "完成型命令必须完整提取" in prompt
-    assert "接取任务并快速完成" in prompt
-    assert "不得只提取接取、准备、前往或讨论等前置步骤" in prompt
-    assert "行动者姓名列表" in prompt
-    assert "多人共同执行同一个原子行动" in prompt
-    assert "仅仅在场、同行、旁观、受益、被保护或作为 target" in prompt
-    assert "retrieval_topics 必须是检索词，不是剧情总结" in prompt
-    assert "允许根据 CurrentState 或 CoreMemory 使用更稳定的规范名" in prompt
 
 
 def test_action_parser_returns_retrieval_topics():

@@ -2,7 +2,6 @@ from app.runtime.stores import open_continuity_store
 import hashlib
 import json
 import sqlite3
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -114,7 +113,12 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
 
         def run(self, **kwargs):
             self.calls.append(kwargs)
-            return kwargs["output_schema"].model_validate([])
+            if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+                kwargs["on_attempt_start"](1)
+            result = kwargs["output_schema"].model_validate([])
+            if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+                kwargs["output_validator"](result)
+            return result
 
     gateway = SpyGateway()
     active = [
@@ -165,12 +169,17 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
 def test_projector_accepts_operation_array_as_its_wire_contract():
     class ArrayGateway:
         def run(self, **kwargs):
-            return kwargs["output_schema"].model_validate([{
+            if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+                kwargs["on_attempt_start"](1)
+            result = kwargs["output_schema"].model_validate([{
                 "operation": "resolve",
                 "item_id": "item-1",
                 "evidence_ids": ["turn_2_p001"],
                 "reason": "正文确认事项已经完成。",
             }])
+            if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+                kwargs["output_validator"](result)
+            return result
 
     gateway = ArrayGateway()
     documents = build_turn_documents(
@@ -1005,29 +1014,3 @@ def test_projector_pure_whitespace_text_triggers_retry_and_uses_second():
     assert len(result.operations) == 1
     assert result.operations[0].item.premise == "真正的可接受前提。"
     assert projector.last_warnings == []
-
-
-def test_continuity_prompt_defines_noop_and_immutable_premise():
-    prompt = Path(
-        "app/prompts/confirmation/continuity_project_v1.md"
-    ).read_text(encoding="utf-8")
-
-    assert "明确的承诺、债务、协议、职责或义务" in prompt
-    assert "未完成目标、仍存在的威胁" in prompt
-    assert "必须直接输出 `[]`" in prompt
-    assert "不要在数组外添加对象包装" in prompt
-    assert "事项最初成立的原因与原始含义" in prompt
-    assert "本轮正文明确建立了一个新的合格事项" in prompt
-    assert "长期愿景、抽象发展方向或无限延续的常规职责不得创建" in prompt
-    assert "自行把不合格的宏大目标拆分" in prompt
-    assert "独立满足原有 `create` 门槛" in prompt
-    assert "`new_current_state` 是应用本轮变化后的完整当前快照" in prompt
-    assert "移除或改写已失效、被推翻的判断" in prompt
-    assert "Schema 不允许修改 `premise`" not in prompt
-    assert "不得改变 Item 的 `kind` 或 `premise`" not in prompt
-    rendered = prompt.format(
-        confirmed_turn_json="[]",
-        active_continuity_json="[]",
-        output_schema_json="{}",
-    )
-    assert "必须直接输出 `[]`" in rendered

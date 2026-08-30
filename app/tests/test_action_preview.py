@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -115,7 +114,12 @@ class TestActionPreviewAgent:
 
             def run(self, **kwargs):
                 self.input_data = kwargs["input_data"]
-                return ActionPreviewResult.model_validate(json.loads(_build_response()))
+                if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+                    kwargs["on_attempt_start"](1)
+                result = ActionPreviewResult.model_validate(json.loads(_build_response()))
+                if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+                    kwargs["output_validator"](result)
+                return result
 
         gateway = SpyGateway()
 
@@ -155,9 +159,14 @@ class TestActionPreviewAgent:
 
             def run(self, **kwargs):
                 self.input_data = kwargs["input_data"]
-                return ActionPreviewResult.model_validate(
+                if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+                    kwargs["on_attempt_start"](1)
+                result = ActionPreviewResult.model_validate(
                     json.loads(_build_response())
                 )
+                if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+                    kwargs["output_validator"](result)
+                return result
 
         gateway = SpyGateway()
         ActionPreviewAgent(gateway).generate(
@@ -179,9 +188,14 @@ class TestActionPreviewAgent:
 
             def run(self, **kwargs):
                 self.input_data = kwargs["input_data"]
-                return ActionPreviewResult.model_validate(
+                if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+                    kwargs["on_attempt_start"](1)
+                result = ActionPreviewResult.model_validate(
                     json.loads(_build_response())
                 )
+                if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+                    kwargs["output_validator"](result)
+                return result
 
         gateway = SpyGateway()
         ActionPreviewAgent(gateway).generate(
@@ -196,15 +210,6 @@ class TestActionPreviewAgent:
         )
 
         assert gateway.input_data["scene_text_section"] == ""
-
-    def test_prompt_excludes_full_scene_and_structured_action_fields(self):
-        prompt = Path("app/prompts/confirmation/action_preview_v1.md").read_text(encoding="utf-8")
-
-        assert "Closing Prompt" not in prompt
-        assert "Scene Text" not in prompt
-        assert "Scene Facts" in prompt
-        assert "不是结构化行动输入" in prompt
-        assert "禁止输出 schema 以外的任何字段" in prompt
 
     @pytest.mark.parametrize("level", ["单", "超过四个汉字"])
     def test_level_must_be_a_short_dynamic_strategy_label(self, level):

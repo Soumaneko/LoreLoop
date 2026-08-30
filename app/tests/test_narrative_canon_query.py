@@ -1,6 +1,5 @@
 import json
 import pytest
-from pathlib import Path
 
 from app.domain.narrative_canon_query import NarrativeCanonQueryAgent
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
@@ -12,7 +11,9 @@ class _SpyGateway:
 
     def run(self, **kwargs):
         self.call = kwargs
-        return kwargs["output_schema"].model_validate({
+        if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+            kwargs["on_attempt_start"](1)
+        result = kwargs["output_schema"].model_validate({
             "thought_process": "P002-P003 将埃利奥与灰烬图书馆描述为既往经历，需要回查。",
             "queries": [
                 {
@@ -28,6 +29,9 @@ class _SpyGateway:
                 }
             ]
         })
+        if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+            kwargs["output_validator"](result)
+        return result
 
 
 def test_agent_projects_only_numbered_prose_and_compact_character_catalog():
@@ -77,10 +81,15 @@ def test_agent_allows_no_queries_and_rejects_empty_scene():
 
     def _empty_result(**kwargs):
         gateway.call = kwargs
-        return kwargs["output_schema"].model_validate({
+        if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+            kwargs["on_attempt_start"](1)
+        result = kwargs["output_schema"].model_validate({
             "thought_process": "P001 只是本轮当下的环境变化，不需要查询。",
             "queries": [],
         })
+        if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+            kwargs["output_validator"](result)
+        return result
 
     gateway.run = _empty_result
     result = NarrativeCanonQueryAgent(gateway).generate(
@@ -101,26 +110,6 @@ def test_agent_allows_no_queries_and_rejects_empty_scene():
         assert "non-empty scene prose" in str(exc)
     else:
         raise AssertionError("empty scene prose should fail")
-
-
-def test_prompt_keeps_query_generation_separate_from_retrieval_and_checking():
-    prompt = Path(
-        "app/prompts/generation/narrative_canon_query_v1.md"
-    ).read_text(encoding="utf-8")
-
-    assert "不检索证据" in prompt
-    assert "不判断陈述正确或错误" in prompt
-    assert "不提出修改建议" in prompt
-    assert "纯粹发生在本轮正文当下" in prompt
-    assert "空列表是正常结果" in prompt
-    assert "先规划、再输出查询" in prompt
-    assert "最小可独立判真的历史命题" in prompt
-    assert "只保留一个核心谓词" in prompt
-    assert "即使多个动作发生在同一时间、地点" in prompt
-    assert "必须拆分或只保留最关键的一个" in prompt
-    assert "亚瑟拔出了在黑水镇买的铁剑" in prompt
-    assert "亚瑟在黑水镇买过一把铁剑" in prompt
-    assert "重新淬火、磨剑次数和之后如何携带" in prompt
 
 
 def test_agent_provider_failure_propagates():

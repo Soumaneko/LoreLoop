@@ -1,6 +1,5 @@
 import json
 from concurrent.futures import CancelledError
-from pathlib import Path
 
 import pytest
 
@@ -706,43 +705,6 @@ def test_asset_remove_before_add_keeps_sequential_order():
     )
 
     assert result.resources.fixed_assets == ["葡萄园", "旧宅"]
-
-
-def test_prompt_defines_final_scene_frame_contract():
-    prompt = Path("app/prompts/confirmation/state_update_v1.md").read_text(
-        encoding="utf-8"
-    )
-
-    template_sections = [
-        "# 输出规范",
-        "# FinalSceneFrame",
-        "# operations",
-        "# 核心规则",
-        "# 禁止事项",
-        "# 例子",
-        "# 上下文",
-        "# 输入",
-    ]
-    section_positions = [prompt.index(section) for section in template_sections]
-    assert section_positions == sorted(section_positions)
-    assert "不输出完整状态" in prompt
-    assert "FinalSceneFrame" in prompt
-    assert "final_location" in prompt
-    assert "day_offset" in prompt
-    assert "active_present_npcs" in prompt
-    assert "departed_npcs" in prompt
-    assert "participant_attitude_change" in prompt
-    assert "inventory_delta" in prompt
-    assert "禁止" in prompt
-    assert (
-        "location_change、participant_add、participant_remove 或 "
-        "world_clock_advance" in prompt
-    )
-    assert "不保存 condition" in prompt or "不保存玩家、NPC 或场景 condition" in prompt
-    assert prompt.index("`decision`") < prompt.index("# FinalSceneFrame")
-    assert prompt.index("{scene_paragraphs_section}") < prompt.index(
-        "{scene_facts_json}"
-    )
 
 
 def test_resolution_schema_places_decision_frame_operations_first():

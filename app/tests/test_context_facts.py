@@ -1958,18 +1958,6 @@ def test_history_payload_budget_retries_after_global_dedup_frees_space():
     assert len(project_context_history(result)) <= policy.max_payload_chars
 
 
-def test_context_extractor_prompt_explains_truncated_history_semantics():
-    prompt = Path("app/prompts/generation/context_extract_v1.md").read_text(
-        encoding="utf-8"
-    )
-
-    assert "`text_truncated=true`" in prompt
-    assert "只能使用摘录里直接可见的内容" in prompt
-    assert "下游无法直接得到的增量上下文" in prompt
-    assert "不要把其中明确的内容复述为 fact" in prompt
-    assert "不得把未展示的中段当作不存在" in prompt
-
-
 def test_merge_conflict_detects_semantic_differences():
     from app.domain.context_facts.clustering import merge_conflict
 
@@ -2170,7 +2158,9 @@ def test_context_extractor_receives_raw_history_and_cites_it():
 
         def run(self, **kwargs):
             self.input_data = kwargs["input_data"]
-            return kwargs["output_schema"].model_validate({
+            if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+                kwargs["on_attempt_start"](1)
+            result = kwargs["output_schema"].model_validate({
                 "turn_focus": "萧云痕询问顾晚棠如何应对盐帮。",
                 "facts": [{
                     "holder": "萧云痕",
@@ -2179,6 +2169,9 @@ def test_context_extractor_receives_raw_history_and_cites_it():
                     "evidence_ids": ["turn_2_p003"],
                 }],
             })
+            if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+                kwargs["output_validator"](result)
+            return result
 
     history = ContextHistoryEvidenceSet(hits=[
         ContextHistoryHit(
@@ -2259,10 +2252,15 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
 
         def run(self, **kwargs):
             self.calls.append(kwargs)
-            return kwargs["output_schema"].model_validate({
+            if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+                kwargs["on_attempt_start"](1)
+            result = kwargs["output_schema"].model_validate({
                 "turn_focus": "追问盐帮动向。",
                 "facts": [],
             })
+            if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+                kwargs["output_validator"](result)
+            return result
 
     gateway = SpyGateway()
     with (

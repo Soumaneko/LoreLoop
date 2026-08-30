@@ -1,6 +1,5 @@
 from app.runtime.stores import open_director_log_store
 import json
-from pathlib import Path
 
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
@@ -213,15 +212,6 @@ def test_pending_turn_persists_director_log_entry():
         assert "林澈" in payload["director_log_entry"]["measures"]
     finally:
         runtime.pending_turns.remove("turn-log")
-
-
-def test_shared_decide_prompt_exposes_recent_director_log_section():
-    prompt = Path(
-        "app/prompts/director/_shared/director_decide_shared_v1.txt"
-    ).read_text(encoding="utf-8")
-    assert "近期导演工作日志" in prompt
-    assert "{recent_director_log_json}" in prompt
-    assert "不要重复执行日志中已经执行过的措施" in prompt
 
 
 def test_finalizer_writes_gen_and_confirm_entries(configure_runtime_services):

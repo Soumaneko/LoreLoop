@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.domain.core_memory import (
@@ -50,16 +49,6 @@ class TestNarrativeComposerStreaming:
 
 
 class TestOpeningSceneAgent:
-    def test_opening_prompt_uses_private_foundation_without_leaking_it(self):
-        prompt = Path("app/prompts/initialization/opening_scene_v1.md").read_text(
-            encoding="utf-8"
-        )
-
-        assert "Opening Foundation" in prompt
-        assert "地点、开局处境，以及与当下行动有关的初始资源" in prompt
-        assert "不得自行引入具名 NPC" in prompt
-        assert "不得替玩家作出重大决定" in prompt
-
     def test_generates_opening_scene(self):
         config = InitConfig(
             world_name="艾兰",

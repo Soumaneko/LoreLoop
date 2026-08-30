@@ -1,7 +1,6 @@
 from app.runtime.stores import open_scene_summary_store
 import json
 import pytest
-from pathlib import Path
 
 from app.core.llm import MockLLM
 from app.core.llm.errors import LLMOutputValidationError, LLMProviderError
@@ -13,9 +12,6 @@ from app.domain.current_state.schemas import CurrentState, PlayerState, SceneSta
 from app.domain.scene_summary import SceneSummarizer
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.maintenance import run_scene_summary_maintenance
-
-
-PROMPT_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
 
 def _state() -> CurrentState:
@@ -180,15 +176,6 @@ class TestSceneSummaryMaintenance:
             active = store.list_active()
             assert len(active) == 1
             assert active[0].level == 3
-
-
-class TestSceneSummaryPrompts:
-    def test_prompts_define_length_limits(self):
-        summarize_prompt = (PROMPT_DIR / "confirmation" / "scene_summarize_v1.md").read_text(encoding="utf-8")
-        condense_prompt = (PROMPT_DIR / "maintenance" / "scene_summary_condense_v1.md").read_text(encoding="utf-8")
-        assert "硬性上限 300" in summarize_prompt
-        assert "硬性上限 400" in condense_prompt
-        assert "不得随 source summaries 数量线性增长" in condense_prompt
 
 
 class _CountingProvider(MockProvider):

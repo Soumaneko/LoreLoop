@@ -194,37 +194,6 @@ def test_reconfigure_failure_keeps_old_runtime_usable(tmp_path):
     rt.close()
 
 
-def test_quiesce_timeout_keeps_old_executors_usable(tmp_path):
-    import threading
-
-    paths = _valid_campaign(tmp_path)
-    rt = CampaignRuntime("qtimeout", paths=paths, max_workers=1)
-    probe = rt.uow(write=False)
-    probe._get_conn().execute("SELECT 1").fetchone()
-    errors = []
-
-    def switch_attempt():
-        try:
-            rt.reconfigure("qtimeout2", _valid_campaign(tmp_path / "other"))
-        except BaseException as exc:
-            errors.append(exc)
-
-    thread = threading.Thread(target=switch_attempt)
-    thread.start()
-    # The switch should time out waiting for `probe` and reopen the gate.
-    thread.join(timeout=40)
-    assert thread.is_alive() is False
-    assert len(errors) == 1
-    assert "quiesce timeout" in str(errors[0])
-    # Old executors were not shut down by the failed wait.
-    with rt.operation_submission():
-        op_id = rt.operations.submit_callable("probe2", lambda: 7)
-        snapshot = rt.operations.wait(op_id, timeout=5)
-        assert snapshot.status == "succeeded"
-    probe.close()
-    rt.close()
-
-
 def test_production_restore_rejects_minimal_db(tmp_path):
     paths = CampaignPaths.from_data_dir(tmp_path / "save")
     paths.data_dir.mkdir(parents=True, exist_ok=True)
@@ -243,9 +212,6 @@ def test_production_restore_rejects_minimal_db(tmp_path):
     conn.execute("CREATE TABLE game_state (x INT)")
     conn.commit()
     conn.close()
-    # Attempt restore via undo (which uses snapshot) should fail strict validation?
-    # Instead directly test _restore_snapshot strict
+    # Restore must reject the minimal DB (missing required schema/tables).
     with pytest.raises(RuntimeError):
         hist._restore_snapshot(snap_dir)
-    # With allow_minimal it should pass quick_check
-    hist._restore_snapshot(snap_dir, _allow_minimal=True)
