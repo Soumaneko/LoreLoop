@@ -121,8 +121,6 @@ def normalize_snapshot(snapshot_dir: Path) -> list[str]:
 def install_snapshot(
     data_dir: Path,
     source: Path,
-    *,
-    allow_minimal: bool = False,
 ) -> None:
     """Validate, stage, and install one snapshot into a quiesced campaign."""
     data_dir = Path(data_dir)
@@ -140,7 +138,7 @@ def install_snapshot(
             staged.append((destination, temporary))
             shutil.copy2(snapshot_file, temporary)
             if snapshot_file.suffix == ".db":
-                validate_campaign_database(temporary, allow_minimal=allow_minimal)
+                validate_campaign_database(temporary)
             else:
                 try:
                     json.loads(temporary.read_text(encoding="utf-8"))

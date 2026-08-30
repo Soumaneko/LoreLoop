@@ -154,17 +154,8 @@ class WorldSettingCreator:
                 trace_id=trace_id,
             ),
         )
-        if pending is None:
-            # StubGateway compatibility.
-            pending = {
-                "name": wire_result.name,
-                "summary": wire_result.summary,
-                "public_facts": wire_result.public_facts,
-                "hidden_facts": wire_result.hidden_facts,
-            }
-            self.last_warnings = []
-        else:
-            self.last_warnings = pending_warnings
+        assert pending is not None, "output_validator not called"
+        self.last_warnings = pending_warnings
         output = SettingCreateOutput.model_validate(pending)
         return WorldSetting(
             kind=kind,

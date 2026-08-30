@@ -204,12 +204,7 @@ class ContextExtractor:
                     trace_id=trace_id,
                 ),
             )
-            if current_attempt in attempt_records:
-                record = attempt_records[current_attempt]
-            else:
-                # StubGateway compatibility: real Gateway calls output_validator;
-                # test stubs may return directly without invoking it.
-                record, _ = _collect_record(result, known_evidence_ids)
+            record = attempt_records[current_attempt]
             self.last_warnings = list(record.warnings)
             return _build_result(record, known_evidence_ids)
         except (

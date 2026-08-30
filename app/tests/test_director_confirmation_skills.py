@@ -7,7 +7,7 @@ from app.domain.director import DirectorSkillRequest
 from app.domain.director import DirectorSkillService
 from app.domain.core_memory import CoreMemory
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.director.confirmation import run_confirmation_director_agent
+from app.domain.director.confirmation import DirectorConfirmationExecutor
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
@@ -67,7 +67,7 @@ def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
                 },
             },
         )
-        run_confirmation_director_agent(
+        DirectorConfirmationExecutor(
             gateway=gateway,
             stores=stores,
             core_memory=CoreMemory(items=[]),
@@ -79,7 +79,7 @@ def test_created_setting_mention_in_same_confirmation_is_counted(tmp_path):
             turn_index=2,
             trace_id="confirmation-director",
             scene_text=scene_text,
-        )
+        ).run()
         with stores.world_setting as store:
             return store.list_all()
 
@@ -163,7 +163,7 @@ def test_confirmation_agent_creates_missing_setting_then_event_in_same_turn(tmp_
         event_selection_output=make_event_selection_output(),
     )
 
-    _, executions = run_confirmation_director_agent(
+    _, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -174,7 +174,7 @@ def test_confirmation_agent_creates_missing_setting_then_event_in_same_turn(tmp_
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     assert executions.executions[0].output["event_id"].startswith("director_event_")
     assert gateway.tasks == [
@@ -234,7 +234,7 @@ def test_confirmation_agent_replaces_kind_mismatched_setting_before_execution(
         event_selection_output=make_event_selection_output(),
     )
 
-    _, executions = run_confirmation_director_agent(
+    _, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -245,7 +245,7 @@ def test_confirmation_agent_replaces_kind_mismatched_setting_before_execution(
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     assert executions.executions[0].output["event_id"].startswith("director_event_")
     with stores.world_setting as store:
@@ -334,7 +334,7 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
         event_selection_output=make_event_selection_output(),
     )
 
-    _, executions = run_confirmation_director_agent(
+    _, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -345,7 +345,7 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     assert [execution.skill for execution in executions.executions] == [
         "create_npc", "create_event"
@@ -407,7 +407,7 @@ def test_confirmation_agent_replaces_unknown_setting_reference(tmp_path):
         },
     )
 
-    _, executions = run_confirmation_director_agent(
+    _, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -418,7 +418,7 @@ def test_confirmation_agent_replaces_unknown_setting_reference(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     assert executions.executions[0].output["name"] == "沈栖舟"
     with stores.world_setting as store:
@@ -541,7 +541,7 @@ def test_skill_guidance_is_forwarded_into_create_npc_prompt(tmp_path):
         },
     )
 
-    decision, executions = run_confirmation_director_agent(
+    decision, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -552,7 +552,7 @@ def test_skill_guidance_is_forwarded_into_create_npc_prompt(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     assert decision.requests[0].skill == "create_npc"
     assert executions.executions[0].guidance == "苏锦屏: 作为未来商业线索的交涉人。"

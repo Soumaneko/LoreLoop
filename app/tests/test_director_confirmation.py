@@ -9,7 +9,7 @@ from app.domain.current_state import WorldClock
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.workflows import NPCConfirmedTurnResult
 from app.domain.scene_facts.schemas import SceneFactSet
-from app.domain.director.confirmation import run_confirmation_director_agent
+from app.domain.director.confirmation import DirectorConfirmationExecutor
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
@@ -39,7 +39,7 @@ def test_confirmation_agent_observation_prepends_current_turn_gen_entry(
         decision={"reasoning": "本轮无需导演介入。", "requests": []},
     )
 
-    run_confirmation_director_agent(
+    DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -51,7 +51,7 @@ def test_confirmation_agent_observation_prepends_current_turn_gen_entry(
         turn_index=3,
         trace_id="confirmation-director",
         director_log_entry=gen_entry,
-    )
+    ).run()
 
     observation = json.loads(
         gateway.input_data[0]["director_observation_json"]
@@ -98,7 +98,7 @@ def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
         },
     )
 
-    decision, executions = run_confirmation_director_agent(
+    decision, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -109,7 +109,7 @@ def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     assert decision.requests == []
     assert executions.executions == []
@@ -179,7 +179,7 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
         },
     )
 
-    run_confirmation_director_agent(
+    DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -190,7 +190,7 @@ def test_confirmation_agent_passes_existing_setting_to_npc_creator(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     npc_input = gateway.input_data[gateway.tasks.index("director_npc_create")]
     assert setting.name in npc_input["settings_json"]
@@ -230,7 +230,7 @@ def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
         decision={"reasoning": "本轮无需导演介入。", "requests": []},
     )
 
-    run_confirmation_director_agent(
+    DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -241,7 +241,7 @@ def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     observation = json.loads(
         gateway.input_data[0]["director_observation_json"]
@@ -366,7 +366,7 @@ def test_confirmation_observation_two_tier_npcs(tmp_path):
     gateway = ScriptedDirectorGateway(
         decision={"reasoning": "本轮无需导演介入。", "requests": []}
     )
-    run_confirmation_director_agent(
+    DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -380,7 +380,7 @@ def test_confirmation_observation_two_tier_npcs(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     observation = json.loads(
         gateway.input_data[0]["director_observation_json"]

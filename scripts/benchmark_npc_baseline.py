@@ -647,7 +647,12 @@ class StubGateway:
                 f"{kwargs['task']!r}"
             )
         response = self._responses.pop(0)
-        return kwargs["output_schema"].model_validate(response)
+        if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+            kwargs["on_attempt_start"](1)
+        result = kwargs["output_schema"].model_validate(response)
+        if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+            kwargs["output_validator"](result)
+        return result
 
 
 def _run_offline_batch(

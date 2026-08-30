@@ -1238,8 +1238,8 @@ class CampaignHistory:
     def _capture_snapshot(self, destination: Path) -> None:
         capture_snapshot(self.data_dir, destination)
 
-    def _restore_snapshot(self, source: Path, *, _allow_minimal: bool = False) -> None:
-        install_snapshot(self.data_dir, source, allow_minimal=_allow_minimal)
+    def _restore_snapshot(self, source: Path) -> None:
+        install_snapshot(self.data_dir, source)
 
     def _discard_redo_locked(self, conn) -> None:
         rows = conn.execute(

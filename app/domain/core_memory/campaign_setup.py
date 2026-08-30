@@ -341,9 +341,7 @@ class CampaignSetupAgent:
             temperature=0.4,
             trace_id=trace_id,
         )
-        if pending is None:
-            # StubGateway compatibility.
-            pending = _clamp_campaign_setup(wire_result)
+        assert pending is not None, "output_validator not called"
         result = CampaignSetupProposal.model_validate(pending)
         self.last_warnings = pending_warnings
         return result

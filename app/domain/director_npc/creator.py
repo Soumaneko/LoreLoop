@@ -256,17 +256,8 @@ class DirectorNPCCreator:
                     return self._to_draft(result, creation_context, turn_index)
             raise
 
-        if current_attempt in attempt_outputs:
-            result = attempt_outputs[current_attempt]
-            self.last_warnings = list(attempt_warnings.get(current_attempt, []))
-        else:
-            # StubGateway compatibility: real Gateway always calls the
-            # output_validator; stubs may return the wire/domain model
-            # directly without invoking it.
-            result = DirectorNPCCreateOutput.model_validate(
-                wire_result.model_dump()
-            )
-            self.last_warnings = []
+        result = attempt_outputs[current_attempt]
+        self.last_warnings = list(attempt_warnings.get(current_attempt, []))
         return self._to_draft(result, creation_context, turn_index)
 
     def _to_draft(

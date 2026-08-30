@@ -108,13 +108,5 @@ class OpeningSettingAgent:
             temperature=0.7,
             trace_id=trace_id,
         )
-        if pending is None:
-            # StubGateway compatibility.
-            pending = [
-                {
-                    "kind": spec.kind,
-                    "setting_description": spec.setting_description,
-                }
-                for spec in wire_result.specs
-            ]
+        assert pending is not None, "output_validator not called"
         return OpeningSettingSpecs.model_validate({"specs": pending})

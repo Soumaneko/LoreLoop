@@ -266,41 +266,7 @@ class ContinuityProjector:
                     trace_id=trace_id,
                 ),
             )
-            if current_attempt in attempt_records:
-                record = attempt_records[current_attempt]
-            else:
-                # StubGateway compatibility: real Gateway always calls
-                # output_validator, but test stubs return without it.
-                operations: list[ContinuityOperation] = []
-                warnings: list[ContinuityWarning] = []
-                for index, raw in enumerate(result.root):
-                    try:
-                        parsed = _OPERATION_ADAPTER.validate_python(raw)
-                    except ValidationError as exc:
-                        warnings.append(ContinuityWarning(
-                            code="continuity_operation_dropped",
-                            message=f"operation[{index}] dropped: {exc}",
-                        ))
-                        continue
-                    operation_errors = _validate_operation(
-                        parsed,
-                        valid_evidence_ids=valid_evidence_ids,
-                        active_item_ids=active_item_ids,
-                    )
-                    if operation_errors:
-                        warnings.append(ContinuityWarning(
-                            code="continuity_operation_dropped",
-                            message=(
-                                f"operation[{index}] ({parsed.operation}) "
-                                "dropped: " + "; ".join(operation_errors)
-                            ),
-                        ))
-                        continue
-                    operations.append(parsed)
-                record = _AttemptRecord(
-                    operations=operations,
-                    warnings=warnings,
-                )
+            record = attempt_records[current_attempt]
             self.last_warnings = list(record.warnings)
             return ContinuityProjection(operations=record.operations)
         except (

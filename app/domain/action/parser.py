@@ -246,11 +246,7 @@ class ActionParser:
                     trace_id=trace_id,
                 ),
             )
-            if current_attempt in attempt_records:
-                record = attempt_records[current_attempt]
-            else:
-                # StubGateway compatibility: real Gateway calls output_validator.
-                record, _ = _collect_record(result, allowed_event_ids)
+            record = attempt_records[current_attempt]
             self.last_warnings = list(record.warnings)
             return _build_result(record)
         except (

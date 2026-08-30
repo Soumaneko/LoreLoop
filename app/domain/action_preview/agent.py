@@ -210,35 +210,7 @@ class ActionPreviewAgent:
                     trace_id=trace_id,
                 ),
             )
-            if current_attempt in attempt_records:
-                record = attempt_records[current_attempt]
-            else:
-                # StubGateway compatibility: real Gateway always calls
-                # output_validator, but test stubs return without it.
-                previews: list[ActionPreview] = []
-                warnings: list[ActionPreviewWarning] = []
-                seen_labels: set[str] = set()
-                for index, raw in enumerate(result.previews):
-                    try:
-                        preview = _parse_preview(raw)
-                    except ValidationError as exc:
-                        warnings.append(ActionPreviewWarning(
-                            code="action_preview_dropped",
-                            message=f"preview[{index}] dropped: {exc}",
-                        ))
-                        continue
-                    if preview.label in seen_labels or len(previews) >= 4:
-                        warnings.append(ActionPreviewWarning(
-                            code="action_preview_dropped",
-                            message=f"preview[{index}] dropped",
-                        ))
-                        continue
-                    seen_labels.add(preview.label)
-                    previews.append(preview)
-                record = _AttemptRecord(
-                    previews=previews,
-                    warnings=warnings,
-                )
+            record = attempt_records[current_attempt]
             self.last_warnings = list(record.warnings)
             return ActionPreviewResult(previews=record.previews)
         except (

@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.director.confirmation import run_confirmation_director_agent
+from app.domain.director.confirmation import DirectorConfirmationExecutor
 from app.domain.director.generation import run_generation_director_agent
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
@@ -80,7 +80,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         },
     )
 
-    decision, executions = run_confirmation_director_agent(
+    decision, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -91,7 +91,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     assert executions.executions[0].skill == "create_event"
     output = executions.executions[0].output
@@ -226,7 +226,7 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
         },
     )
 
-    _, executions = run_confirmation_director_agent(
+    _, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -237,7 +237,7 @@ def test_confirmation_agent_can_mix_existing_and_new_event_actors(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     output = executions.executions[0].output
     assert len(output["new_npc_ids"]) == 1
@@ -304,7 +304,7 @@ def test_create_event_rejects_missing_required_actor_role(tmp_path):
         ValueError,
         match="actor_roles must cover exactly every required actor_key",
     ):
-        run_confirmation_director_agent(
+        DirectorConfirmationExecutor(
             gateway=gateway,
             stores=stores,
             core_memory=CoreMemory(items=[]),
@@ -315,7 +315,7 @@ def test_create_event_rejects_missing_required_actor_role(tmp_path):
             selection_summaries=[],
             turn_index=3,
             trace_id="confirmation-director",
-        )
+        ).run()
 
 
 def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
@@ -360,7 +360,7 @@ def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
     )
 
     with pytest.raises(ValueError, match="unknown active NPC"):
-        run_confirmation_director_agent(
+        DirectorConfirmationExecutor(
             gateway=gateway,
             stores=stores,
             core_memory=CoreMemory(items=[]),
@@ -371,7 +371,7 @@ def test_create_event_rejects_unknown_existing_actor_before_selection(tmp_path):
             selection_summaries=[],
             turn_index=3,
             trace_id="confirmation-director",
-        )
+        ).run()
     assert gateway.tasks == ["director_agent_decide_confirmation"]
 
 
@@ -455,7 +455,7 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
     monkeypatch.setattr(DirectorNPCCreator, "create", flaky_create)
 
     with pytest.raises(TimeoutError, match="LLM 超时"):
-        run_confirmation_director_agent(
+        DirectorConfirmationExecutor(
             gateway=gateway,
             stores=stores,
             core_memory=CoreMemory(items=[]),
@@ -466,7 +466,7 @@ def test_create_event_defers_persistence_when_new_actor_creation_fails(
             selection_summaries=[],
             turn_index=3,
             trace_id="confirmation-director",
-        )
+        ).run()
 
     with stores.director_event as store:
         assert store.list_all() == []
@@ -544,7 +544,7 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
     monkeypatch.setattr(DirectorNPCCreator, "create", flaky_create)
 
     with pytest.raises(TimeoutError, match="LLM 超时"):
-        run_confirmation_director_agent(
+        DirectorConfirmationExecutor(
             gateway=gateway,
             stores=stores,
             core_memory=CoreMemory(items=[]),
@@ -555,7 +555,7 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
             selection_summaries=[],
             turn_index=3,
             trace_id="confirmation-director",
-        )
+        ).run()
 
     with stores.world_setting as store:
         assert store.list_all() == []
@@ -608,7 +608,7 @@ def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
         event_selection_output=make_event_selection_output(),
     )
 
-    _, executions = run_confirmation_director_agent(
+    _, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -619,7 +619,7 @@ def test_create_event_uses_request_guidance_as_event_direction(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     assert executions.executions[0].skill == "create_event"
     selector_input = [
@@ -723,7 +723,7 @@ def test_confirmation_hides_create_event_while_an_event_is_active(tmp_path):
         decision={"reasoning": "已有事件，本轮不再创建。", "requests": []},
     )
 
-    run_confirmation_director_agent(
+    DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -734,7 +734,7 @@ def test_confirmation_hides_create_event_while_an_event_is_active(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     skills = json.loads(gateway.input_data[0]["available_skills_json"])
     assert "create_event" not in {skill["name"] for skill in skills}
@@ -753,7 +753,7 @@ def test_confirmation_restores_create_event_after_resolution(tmp_path):
         decision={"reasoning": "旧事件已结案。", "requests": []},
     )
 
-    run_confirmation_director_agent(
+    DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -764,7 +764,7 @@ def test_confirmation_restores_create_event_after_resolution(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     skills = json.loads(gateway.input_data[0]["available_skills_json"])
     assert "create_event" in {skill["name"] for skill in skills}
@@ -813,7 +813,7 @@ def test_confirmation_rejects_exhausted_event_setting(tmp_path):
         }],
     })
 
-    decision, executions = run_confirmation_director_agent(
+    decision, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -824,7 +824,7 @@ def test_confirmation_rejects_exhausted_event_setting(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     observation = json.loads(gateway.input_data[0]["director_observation_json"])
     [observed_setting] = observation["resources"]["settings"]

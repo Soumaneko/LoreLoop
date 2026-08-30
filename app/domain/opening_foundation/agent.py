@@ -151,10 +151,7 @@ class OpeningFoundationAgent:
             temperature=0.7,
             trace_id=trace_id,
         )
-        if pending is None:
-            # StubGateway compatibility: stubs return without invoking
-            # output_validator.
-            pending = wire_result.model_dump()
+        assert pending is not None, "output_validator not called"
         result = OpeningFoundation.model_validate(pending)
         self.last_warnings = pending_warnings
         return result

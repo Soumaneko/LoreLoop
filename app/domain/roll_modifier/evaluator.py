@@ -213,11 +213,7 @@ class RollModifierEvaluator:
                     trace_id=trace_id,
                 ),
             )
-            if current_attempt in attempt_records:
-                record = attempt_records[current_attempt]
-            else:
-                # StubGateway compatibility.
-                record, _ = _collect_record(result, action_ids)
+            record = attempt_records[current_attempt]
             self.last_warnings = list(record.warnings)
             return RollModifierBatch(modifiers=record.modifiers)
         except (

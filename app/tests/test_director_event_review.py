@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from app.core.llm.errors import LLMOutputValidationError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
-from app.domain.director.confirmation import run_confirmation_director_agent
+from app.domain.director.confirmation import DirectorConfirmationExecutor
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
@@ -294,7 +294,7 @@ def test_resolved_review_reopens_one_event_slot_in_same_confirmation(tmp_path):
         },
         event_selection_output=make_event_selection_output(),
     )
-    run_confirmation_director_agent(
+    DirectorConfirmationExecutor(
         gateway=create_gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -305,7 +305,7 @@ def test_resolved_review_reopens_one_event_slot_in_same_confirmation(tmp_path):
         selection_summaries=[],
         turn_index=3,
         trace_id="confirmation-director",
-    )
+    ).run()
 
     with stores.director_event as store:
         assert store.get_by_id(old_event_id).stage == "resolved"

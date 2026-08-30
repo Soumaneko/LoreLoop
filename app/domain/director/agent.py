@@ -276,45 +276,7 @@ class DirectorAgent:
                     trace_id=trace_id,
                 ),
             )
-            if current_attempt in attempt_records:
-                record = attempt_records[current_attempt]
-            else:
-                # StubGateway compatibility: real Gateway always calls
-                # output_validator, but test stubs return without it.
-                requests: list[DirectorSkillRequest] = []
-                warnings: list[DirectorWarning] = []
-                for index, raw in enumerate(result.requests):
-                    try:
-                        request = _parse_request(raw)
-                    except ValidationError as exc:
-                        warnings.append(DirectorWarning(
-                            code="director_request_dropped",
-                            message=f"request[{index}] dropped: {exc}",
-                        ))
-                        continue
-                    if not _batch_valid(
-                        self._skills,
-                        [*requests, request],
-                        observation.phase,
-                    ):
-                        warnings.append(DirectorWarning(
-                            code="director_request_dropped",
-                            message=f"request[{index}] dropped: conflict",
-                        ))
-                        continue
-                    requests.append(request)
-                reasoning = (
-                    result.reasoning.strip()
-                    if result.reasoning and result.reasoning.strip()
-                    else _FALLBACK_REASONING
-                )
-                if len(reasoning) > 500:
-                    reasoning = _FALLBACK_REASONING
-                record = _AttemptRecord(
-                    reasoning=reasoning,
-                    requests=requests,
-                    warnings=warnings,
-                )
+            record = attempt_records[current_attempt]
             self.last_warnings = list(record.warnings)
             return DirectorDecisionBatch(
                 reasoning=record.reasoning,

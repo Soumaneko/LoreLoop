@@ -1,7 +1,6 @@
 """Confirmation-stage Director skill execution（领域层）。
 
-LangGraph 节点只调用 :class:`DirectorConfirmationExecutor`（或薄包装
-``run_confirmation_director_agent``）。本模块拥有技能 handler 及其参数
+LangGraph 节点只调用 :class:`DirectorConfirmationExecutor`。本模块拥有技能 handler 及其参数
 validator、两波执行（Wave A 生成 Setting / Wave B 并发执行技能）以及延迟提交。
 持久化细节由 :mod:`app.runtime.director_mutation` 负责。
 
@@ -703,38 +702,6 @@ class DirectorConfirmationExecutor:
             decision.model_copy(update={"requests": patched_requests}),
             created_settings,
         )
-
-
-def run_confirmation_director_agent(
-    *,
-    gateway,
-    stores,
-    core_memory: CoreMemory,
-    current_state: CurrentState,
-    user_input: str,
-    scene_facts: dict,
-    recent_summaries: list[SceneSummary],
-    selection_summaries: list[SceneSummary],
-    turn_index: int,
-    trace_id: str,
-    scene_text: str = "",
-    director_log_entry: dict | None = None,
-) -> tuple[object, DirectorSkillExecutionBatch]:
-    """Thin wrapper kept for call-site compatibility."""
-    return DirectorConfirmationExecutor(
-        gateway=gateway,
-        stores=stores,
-        core_memory=core_memory,
-        current_state=current_state,
-        user_input=user_input,
-        scene_facts=scene_facts,
-        recent_summaries=recent_summaries,
-        selection_summaries=selection_summaries,
-        turn_index=turn_index,
-        trace_id=trace_id,
-        scene_text=scene_text,
-        director_log_entry=director_log_entry,
-    ).run()
 
 
 def _create_missing_setting(

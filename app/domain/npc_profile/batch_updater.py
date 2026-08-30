@@ -199,11 +199,7 @@ class NPCBatchUpdater:
                     trace_id=trace_id,
                 ),
             )
-            if current_attempt in attempt_records:
-                return attempt_records[current_attempt]
-            # StubGateway compatibility: real Gateway always calls output_validator.
-            entries, entry_warnings = parse_batch_updates(batch.updates)
-            return ParsedBatch(entries=entries, entry_warnings=entry_warnings)
+            return attempt_records[current_attempt]
         except (
             LLMOutputParseError,
             LLMOutputValidationError,
