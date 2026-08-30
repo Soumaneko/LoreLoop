@@ -32,9 +32,34 @@ class _MockGateway:
             "output_schema": output_schema,
             "trace_id": trace_id,
         })
+        on_start = kwargs.get("on_attempt_start")
+        validator = kwargs.get("output_validator")
+        if on_start is not None:
+            on_start(1)
         if task == "npc_batch_update":
-            return output_schema.model_validate({"updates": []})
-        return output_schema.model_validate(self._response)
+            import json as _json
+            chars = _json.loads(input_data.get("npc_batch_json") or "[]")
+            updates = []
+            for char in chars:
+                ev_ids = []
+                for ev in char.get("evidence") or []:
+                    if isinstance(ev, dict) and "document_id" in ev:
+                        ev_ids.append(ev["document_id"])
+                if not ev_ids:
+                    ev_ids = ["turn_1_p001"]
+                updates.append({
+                    "npc_id": char["npc_id"],
+                    "scene_summary": {
+                        "summary": "在百草堂为萧欢抓药并告知坊市近况，持续二十字以上有效摘要。",
+                        "evidence_ids": ev_ids,
+                    },
+                })
+            result = output_schema.model_validate({"updates": updates})
+        else:
+            result = output_schema.model_validate(self._response)
+        if validator is not None:
+            validator(result)
+        return result
 
 
 def _make_stores():

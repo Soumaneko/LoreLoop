@@ -66,12 +66,20 @@ class RecordingGateway:
     def set_trace_context(self, **_kwargs):
         pass
 
-    def run(self, task, input_data, output_schema, **_kwargs):
+    def run(self, task, input_data, output_schema, **kwargs):
         self.calls.append((task, input_data))
+        on_attempt_start = kwargs.get("on_attempt_start")
+        output_validator = kwargs.get("output_validator")
+        if on_attempt_start is not None:
+            on_attempt_start(1)
+        def _maybe_validate(result):
+            if output_validator is not None:
+                output_validator(result)
+            return result
         if task == "opening_foundation":
-            return output_schema.model_validate(_foundation_payload())
+            return _maybe_validate(output_schema.model_validate(_foundation_payload()))
         if task == "opening_setting_requirements":
-            return output_schema.model_validate({
+            return _maybe_validate(output_schema.model_validate({
                 "specs": [
                     {
                         "kind": "faction",
@@ -92,7 +100,7 @@ class RecordingGateway:
                         ),
                     },
                 ],
-            })
+            }))
         if task == "director_setting_create":
             canned_by_kind = {
                 "faction": {
@@ -114,14 +122,14 @@ class RecordingGateway:
             canned = canned_by_kind.get(input_data["kind"])
             if canned is None:
                 raise AssertionError(f"unexpected setting kind: {input_data['kind']}")
-            return output_schema.model_validate(canned)
+            return _maybe_validate(output_schema.model_validate(canned))
         if task == "opening_scene":
             self.opening_attempts += 1
             if self.fail_first_opening and self.opening_attempts == 1:
                 raise RuntimeError("opening failed")
-            return output_schema.model_validate({
+            return _maybe_validate(output_schema.model_validate({
                 "scene_text": "清晨，你抵达白塔港，登记大厅却突然封门。"
-            })
+            }))
         raise AssertionError(f"unexpected task: {task}")
 
 

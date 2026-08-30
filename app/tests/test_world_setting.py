@@ -33,7 +33,12 @@ class _Gateway:
 
     def run(self, **kwargs):
         self.calls.append(kwargs)
-        return kwargs["output_schema"].model_validate(self.response)
+        if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+            kwargs["on_attempt_start"](1)
+        result = kwargs["output_schema"].model_validate(self.response)
+        if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+            kwargs["output_validator"](result)
+        return result
 
 
 def test_setting_kind_is_restricted_to_four_general_categories():

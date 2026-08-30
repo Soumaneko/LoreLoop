@@ -643,10 +643,15 @@ def test_shared_relation_evidence_counts_against_every_linked_item_cap():
 def test_context_facts_service_wires_forward_bridge_into_history_retrieval():
     class Gateway:
         def run(self, **kwargs):
-            return kwargs["output_schema"].model_validate({
+            if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+                kwargs["on_attempt_start"](1)
+            result = kwargs["output_schema"].model_validate({
                 "turn_focus": "追问苏念薇相关旧事。",
                 "facts": [],
             })
+            if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+                kwargs["output_validator"](result)
+            return result
 
     text = "那女人提醒他，姓周的看人不像是在看行情。"
     with (

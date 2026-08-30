@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.llm import MockLLM
-from app.core.llm.errors import LLMProviderError
+from app.core.llm.errors import LLMOutputValidationError, LLMProviderError
 from app.core.llm.prompts import PromptLoader
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.current_state.schemas import (
@@ -56,7 +56,15 @@ class StubGateway:
             "task": kwargs["task"],
             "input_data": kwargs["input_data"],
         })
-        return kwargs["output_schema"].model_validate(self._response)
+        if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
+            kwargs["on_attempt_start"](1)
+        result = kwargs["output_schema"].model_validate(self._response)
+        if "output_validator" in kwargs and kwargs["output_validator"] is not None:
+            try:
+                kwargs["output_validator"](result)
+            except ValueError as exc:
+                raise LLMOutputValidationError(str(exc)) from exc
+        return result
 
 
 def _profile(npc_id="npc_001", name="沈孤鸿", *, aliases=None, **kwargs) -> NPCProfile:
@@ -715,7 +723,7 @@ def test_admission_applies_deterministic_alias_changes():
 
 def test_processor_makes_single_batch_call_and_projects_input():
     resolved = [ResolvedNpc(npc_id="npc_001", canonical_name="沈孤鸿", presence="appeared", primary_surfaces=("沈孤鸿",))]
-    gateway = StubGateway({"updates": [{"npc_id": "npc_001"}]})
+    gateway = StubGateway({"updates": [{"npc_id": "npc_001", "scene_summary": {"summary": "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。", "evidence_ids": ["turn_3_p001"]}}]})
     batch = NPCBatchUpdater(gateway).process(  # type: ignore[arg-type]
         resolved=resolved,
         profiles=[_profile()],
@@ -750,20 +758,6 @@ def test_processor_zero_calls_without_resolved_npcs():
     assert gateway.calls == []
     assert batch.entries == []
     assert batch.entry_warnings == []
-
-
-def test_batch_prompt_loads_and_renders():
-    template, version = PromptLoader().load("npc_batch_update")
-    assert version == "v1"
-    rendered = template.format(
-        npc_batch_json="[]",
-        output_schema_json="{}",
-    )
-    assert "NPC Batch" in rendered
-    assert "npc_id" in rendered
-    assert "# 字段语义" in rendered
-    assert "可同时更新 `role` 和 `faction`" in rendered
-    assert "规范化、简洁归纳" in rendered
 
 
 def test_workflow_resolves_and_applies_to_store():

@@ -47,25 +47,44 @@ class _LifecycleMockGateway:
             "output_schema": output_schema,
             "trace_id": trace_id,
         })
+        on_start = kwargs.get("on_attempt_start")
+        validator = kwargs.get("output_validator")
+        if on_start is not None:
+            on_start(1)
         if task == "npc_profile_backfill":
-            return output_schema.model_validate({
+            result = output_schema.model_validate({
                 "core_motivation": "经营百草堂并暗中追寻救治胞妹的古方",
                 "hidden_secret": "私藏有一张上古残缺丹方",
                 "conflict_style": "以理服人，极力避免暴力",
                 "social_style": "和善谦逊，言谈滴水不漏",
             })
-        if task == "npc_batch_update":
+        elif task == "npc_batch_update":
             import json
             chars = json.loads(input_data.get("npc_batch_json") or "[]")
             updates = [
                 {
                     "npc_id": char["npc_id"],
-                    "scene_summary": "在百草堂为萧欢抓药并告知坊市近况。",
+                    "scene_summary": {
+                        "summary": (
+                            "在百草堂为萧欢抓药并告知坊市近况，"
+                            "双方完成了一次正面交谈。"
+                        ),
+                        "evidence_ids": [
+                            evidence["document_id"]
+                            for evidence in char.get("evidence") or []
+                            if isinstance(evidence, dict)
+                            and evidence.get("document_id")
+                        ],
+                    },
                 }
                 for char in chars
             ]
-            return output_schema.model_validate({"updates": updates})
-        return output_schema.model_validate({})
+            result = output_schema.model_validate({"updates": updates})
+        else:
+            result = output_schema.model_validate({})
+        if validator is not None:
+            validator(result)
+        return result
 
 
 def test_spontaneous_npc_full_multiround_lifecycle(monkeypatch):
