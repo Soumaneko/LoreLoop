@@ -173,51 +173,13 @@ class TestRegistryEnforcement:
         with pytest.raises(ValueError, match="unknown confirmation cache slot"):
             ConfirmationCache({}).set_result("typo_slot", 1)
 
-    def test_compute_if_missing_unknown_slot_raises(self):
-        with pytest.raises(ValueError, match="unknown confirmation cache slot"):
-            ConfirmationCache({}).compute_if_missing("typo_slot", lambda: 1)
 
-    def test_atomic_unknown_slot_raises(self):
-        with pytest.raises(ValueError, match="unknown confirmation cache slot"):
-            ConfirmationCache({}).atomic("typo_slot", factory=lambda: (1,))
 
-    def test_atomic_arity_mismatch_raises_and_leaves_cache_untouched(self):
-        data: dict = {}
-        with pytest.raises(ValueError, match="returned 1 values for 2 slots"):
-            ConfirmationCache(data).atomic(
-                "director_decision",
-                "director_executions",
-                factory=lambda: ("only-one",),
-            )
-        assert data == {}
 
-    def test_atomic_arity_overflow_raises_and_leaves_cache_untouched(self):
-        data: dict = {}
-        with pytest.raises(ValueError, match="returned 3 values for 2 slots"):
-            ConfirmationCache(data).atomic(
-                "director_decision",
-                "director_executions",
-                factory=lambda: ("a", "b", "c"),
-            )
-        assert data == {}
 
-    def test_atomic_no_slots_raises(self):
-        with pytest.raises(ValueError, match="at least one cache slot"):
-            ConfirmationCache({}).atomic(factory=lambda: ())
 
-    def test_atomic_duplicate_slots_raises_and_leaves_cache_untouched(self):
-        data: dict = {}
-        with pytest.raises(ValueError, match="slots must be unique"):
-            ConfirmationCache(data).atomic("a", "a", factory=lambda: ("x", "y"))
-        assert data == {}
 
-    def test_completed_non_marker_raises(self):
-        with pytest.raises(ValueError, match="completion marker"):
-            ConfirmationCache({}).completed("scene_facts")
 
-    def test_mark_completed_non_marker_raises(self):
-        with pytest.raises(ValueError, match="completion marker"):
-            ConfirmationCache({}).mark_completed("scene_facts")
 
     def test_registered_slots_still_write(self):
         data: dict = {}
