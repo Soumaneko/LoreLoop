@@ -10,10 +10,11 @@ LLM or touch a real save.
 
 Accepted on 2026-08-13 (33 cases); re-recorded for the v8 NPC schema on
 2026-08-14; re-recorded for issue 16 (NPC bridge structural correction) on
-2026-08-14 (34 cases):
+2026-08-14 (34 cases); expanded with `last_scene_summary` contracts on
+2026-08-31 (37 cases):
 
-- must recall: `38/38`
-- weighted recall: `123/125`
+- must recall: `41/41`
+- weighted recall: `132/134`
 - forbidden evidence visible: `0`
 - forbidden main evidence visible: `0`
 - invariant violations: `0`
@@ -223,25 +224,9 @@ NPC field nodes use the change's `new_value` as the primary basis. Legacy v7
 `public_summary` nodes (which carry `summary_delta`) are read-only audit rows
 and never reach retrieval.
 
-### Ticket 11 last-scene nodes
-
-`cases_last_scene_pending.json` declares three contracts for the
-`last_scene_summary` field: latest-node identity recall, bounded topic
-recall of an older node, and a mentioned-only fact that remains direct History
-without NPC relation attribution. Since the v8 profile field and the bridge
-write-set exist, the runner materializes these logs through the production
-store and the bridge resolves them: identity recalls the latest node, topics
-add back an older node, and mentioned-only facts stay direct.
-
-```bash
-PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py \
-  --cases benchmarks/context_retrieval/cases_last_scene_pending.json \
-  --baseline .scratch/npc-turn-processor/nonexistent-last-scene-context-baseline.json \
-  --json-out .scratch/npc-turn-processor/phase0-last-scene-context-report.json
-```
-
-These pending files never participate in the accepted `baseline.json --check`
-gate until implementation and human review are complete.
+The three `last_scene_summary` contracts (`npc_latest_scene_identity`,
+`npc_last_scene_topic`, `npc_mentioned_only_not_bridged`) are now part of the
+accepted 37 cases and are covered by the same `--check` gate.
 
 Only the primary basis (premise / state delta / closing reason) can reach
 `strong`; the contextual background can lift an evidence at most to `weak`, so

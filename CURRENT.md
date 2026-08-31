@@ -1570,11 +1570,11 @@ PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --check
 ```
 
 The Context History benchmark must agree byte-for-byte with the accepted
-`benchmarks/context_retrieval/baseline.json` (34 cases, benchmark version 3,
-must recall `38/38`, weighted recall `123/125`, and zero forbidden evidence or
+`benchmarks/context_retrieval/baseline.json` (37 cases, benchmark version 3,
+must recall `41/41`, weighted recall `132/134`, and zero forbidden evidence or
 invariant violations). The NPC pipeline benchmark agrees with
-`benchmarks/npc_baseline/baseline_batch.json` (weighted `150/153`, 12 logical
-calls). `baseline.json` records the
+`benchmarks/npc_baseline/baseline_batch.json` (25 cases, weighted `285/291`,
+20 logical calls). `baseline.json` records the
 SHA-256 of `cases.json`, so changing cases requires deliberate baseline review;
 a passing run by itself is not sufficient justification to update the snapshot.
 The byte-for-byte check is also run under at least three `PYTHONHASHSEED`

@@ -153,7 +153,7 @@ class RosterProfileFixture(BaseModel):
             last_scene_summary=self.last_scene_summary,
             last_scene_turn=self.last_scene_turn,
         )
-        # The fixture model may carry pending v8 fields not yet part of the
+        # The fixture model carries last_scene_* fields which are part of the
         # production profile; only the active production fields are projected.
         values = {
             key: value
@@ -297,7 +297,7 @@ class SceneSummaryExpectation(BaseModel):
 
 
 class LastSceneContract(BaseModel):
-    """Ticket 11 future contract, absent from accepted v7 fixtures."""
+    """Ticket 11 contract, now part of accepted fixtures. Covers last_scene_* expectations."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -418,8 +418,8 @@ class BenchmarkCase(BaseModel):
     roster: list[RosterProfileFixture] = Field(default_factory=list)
     roster_template: RosterTemplate | None = None
     gold: CaseGold
-    #: Future v8 contract.  Keeping it outside ``gold`` makes its presence
-    #: explicit and keeps all accepted v7 report bytes unchanged.
+    #: last_scene contract. Keeping it outside ``gold`` makes its presence
+    #: explicit and keeps reporting stable.
     last_scene_contract: LastSceneContract | None = None
 
     @model_validator(mode="after")

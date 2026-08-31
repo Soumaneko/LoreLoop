@@ -1,25 +1,25 @@
 {
   "benchmark_version": 3,
-  "cases_sha256": "c239822fcd7a31c393ab732b69de8d9f8e2b9a5dcdae15f299c43781e4ed3090",
+  "cases_sha256": "8bbd085acb3fd6070ca44de6f4f70a1f056fc22fa172b114b8edcc3e15182110",
   "aggregate": {
-    "must_recalled": 38,
-    "must_total": 38,
-    "weighted_recalled": 123,
-    "weighted_total": 125,
+    "must_recalled": 41,
+    "must_total": 41,
+    "weighted_recalled": 132,
+    "weighted_total": 134,
     "forbidden_visible_count": 0,
     "forbidden_main_visible_count": 0,
     "duplicate_visible_count": 3,
     "invariant_violation_count": 0,
     "invalid_relation_links": 9,
     "degraded_relation_links": 14,
-    "npc_valid_links": 14,
+    "npc_valid_links": 16,
     "npc_stale_links": 2,
     "npc_invalid_links": 1,
     "npc_degraded_links": 0,
-    "matched_npc_profiles": 9,
-    "npc_relation_candidates": 13,
-    "npc_relation_hits_added": 9,
-    "payload_chars": 9531
+    "matched_npc_profiles": 11,
+    "npc_relation_candidates": 15,
+    "npc_relation_hits_added": 11,
+    "payload_chars": 10000
   },
   "cases": [
     {
@@ -1892,6 +1892,168 @@
       "npc_bridge_status": "wired",
       "npc_fixture_profiles": 1,
       "npc_fixture_logs": 3
+    },
+    {
+      "case_id": "npc_latest_scene_identity",
+      "selected_main_ids": [
+        "turn_3_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_3_p001"
+      ],
+      "recalled_groups": [
+        "latest_scene"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 142,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {},
+      "turn_contributions": {
+        "3": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invalid_relation_links": 0,
+      "degraded_relation_links": 0,
+      "matched_npc_profiles": 1,
+      "npc_valid_links": 1,
+      "npc_stale_links": 0,
+      "npc_invalid_links": 0,
+      "npc_degraded_links": 0,
+      "npc_relation_candidates": 1,
+      "npc_relation_hits_added": 1,
+      "direct_proposals_considered": 0,
+      "relation_proposals_considered": 1,
+      "relation_zero_stripped": 0,
+      "relation_eligible_strong": 1,
+      "relation_eligible_degraded": 0,
+      "documents_selected_by_direct": 0,
+      "documents_selected_by_relation": 1,
+      "relation_augmented_on_selected_document": 0,
+      "invariant_violations": [],
+      "npc_bridge_status": "wired",
+      "npc_fixture_profiles": 1,
+      "npc_fixture_logs": 2
+    },
+    {
+      "case_id": "npc_last_scene_topic",
+      "selected_main_ids": [
+        "turn_2_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_2_p001"
+      ],
+      "recalled_groups": [
+        "spy_plan"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 140,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {},
+      "turn_contributions": {
+        "2": 1
+      },
+      "relation_candidates_considered": 1,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invalid_relation_links": 0,
+      "degraded_relation_links": 0,
+      "matched_npc_profiles": 1,
+      "npc_valid_links": 1,
+      "npc_stale_links": 0,
+      "npc_invalid_links": 0,
+      "npc_degraded_links": 0,
+      "npc_relation_candidates": 1,
+      "npc_relation_hits_added": 1,
+      "direct_proposals_considered": 0,
+      "relation_proposals_considered": 1,
+      "relation_zero_stripped": 0,
+      "relation_eligible_strong": 1,
+      "relation_eligible_degraded": 0,
+      "documents_selected_by_direct": 0,
+      "documents_selected_by_relation": 1,
+      "relation_augmented_on_selected_document": 0,
+      "invariant_violations": [],
+      "npc_bridge_status": "wired",
+      "npc_fixture_profiles": 1,
+      "npc_fixture_logs": 2
+    },
+    {
+      "case_id": "npc_mentioned_only_not_bridged",
+      "selected_main_ids": [
+        "turn_2_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_2_p001"
+      ],
+      "recalled_groups": [
+        "reported_fact"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 187,
+      "route_counts": {
+        "direct_only": 1,
+        "relation_only": 0,
+        "dual": 0
+      },
+      "continuity_contributions": {},
+      "turn_contributions": {
+        "2": 1
+      },
+      "relation_candidates_considered": 0,
+      "relation_hits_added": 0,
+      "stale_relation_links": 0,
+      "invalid_relation_links": 0,
+      "degraded_relation_links": 0,
+      "matched_npc_profiles": 0,
+      "npc_valid_links": 0,
+      "npc_stale_links": 0,
+      "npc_invalid_links": 0,
+      "npc_degraded_links": 0,
+      "npc_relation_candidates": 0,
+      "npc_relation_hits_added": 0,
+      "direct_proposals_considered": 1,
+      "relation_proposals_considered": 0,
+      "relation_zero_stripped": 0,
+      "relation_eligible_strong": 0,
+      "relation_eligible_degraded": 0,
+      "documents_selected_by_direct": 1,
+      "documents_selected_by_relation": 0,
+      "relation_augmented_on_selected_document": 0,
+      "invariant_violations": [],
+      "npc_bridge_status": "wired",
+      "npc_fixture_profiles": 1,
+      "npc_fixture_logs": 0
     }
   ]
 }

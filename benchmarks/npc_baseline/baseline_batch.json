@@ -1,13 +1,13 @@
 {
   "benchmark_version": 3,
   "backend": "batch",
-  "fixtures_sha256": "165968d5dab863ae14a45da8c4720e51c8fafd86faa520f542ca8d714609f8bb",
-  "recordings_sha256": "5c1e8e400cc4d0bb3690d0cea3ae7ca427ec8c0deeabe242e58de64f2dfcf3b8",
+  "fixtures_sha256": "e45e46c000c8bac37009051d0b06d1581ca77b85dcdab32af926595c1cc308c9",
+  "recordings_sha256": "0e5d158ac31788ea4dab9a3a4c319f7b2d2299b8aa295e935f3ace75e57fafe5",
   "aggregate": {
-    "call_count": 12,
-    "provider_attempts": 12,
-    "weighted_passed": 150,
-    "weighted_total": 153,
+    "call_count": 20,
+    "provider_attempts": 20,
+    "weighted_passed": 285,
+    "weighted_total": 291,
     "forbidden_violation_count": 0,
     "invariant_violation_count": 0,
     "categories": {
@@ -24,12 +24,12 @@
         "total": 1
       },
       "resolution": {
-        "passed": 22,
-        "total": 22
+        "passed": 33,
+        "total": 33
       },
       "stable_field": {
-        "passed": 7,
-        "total": 8
+        "passed": 8,
+        "total": 10
       },
       "new_npc": {
         "passed": 5,
@@ -38,12 +38,28 @@
       "alias": {
         "passed": 1,
         "total": 1
+      },
+      "last_scene_batch_scope": {
+        "passed": 11,
+        "total": 11
+      },
+      "last_scene_summary": {
+        "passed": 10,
+        "total": 10
+      },
+      "npc_presence": {
+        "passed": 11,
+        "total": 11
+      },
+      "last_scene_absent": {
+        "passed": 1,
+        "total": 1
       }
     },
-    "prompt_content_chars": 5316,
+    "prompt_content_chars": 9669,
     "token_usage": {
-      "completion_tokens": 1376,
-      "prompt_tokens": 22914
+      "completion_tokens": 2291,
+      "prompt_tokens": 38551
     }
   },
   "cases": [
@@ -1021,6 +1037,772 @@
         },
         "forbidden_violations": [],
         "invariant_violations": []
+      }
+    },
+    {
+      "case_id": "appeared_action_summary",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "秦霜"
+      ],
+      "exact_mentions": [
+        [
+          "npc-qin",
+          "秦霜"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc-qin": {
+          "last_known_location": "宗门库房",
+          "last_scene_summary": "秦霜推开库房木门，逐一核对货架上的药箱，发现三箱灵药短缺，当即封住库门，决定天亮后查问守夜弟子。",
+          "last_scene_turn": 20
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 2,
+          "content_chars": 552
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 552,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 109,
+          "prompt_tokens": 1963
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 109,
+        "prompt_tokens": 1963
+      },
+      "gold": {
+        "weighted_passed": 12,
+        "weighted_total": 12,
+        "categories": {
+          "last_scene_batch_scope": {
+            "passed": 1,
+            "total": 1
+          },
+          "last_scene_summary": {
+            "passed": 1,
+            "total": 1
+          },
+          "npc_presence": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      },
+      "last_scene_contract_signals": {
+        "mention_presences": [
+          [
+            "秦霜",
+            "appeared"
+          ]
+        ],
+        "batch_npc_ids": [
+          "npc-qin"
+        ],
+        "scene_summaries": {
+          "npc-qin": {
+            "summary": "秦霜推开库房木门，逐一核对货架上的药箱，发现三箱灵药短缺，当即封住库门，决定天亮后查问守夜弟子。",
+            "turn_index": 20,
+            "evidence_ids": [
+              "turn_20_p001",
+              "turn_20_p002"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "appeared_dialogue_plan_summary",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "苏念薇"
+      ],
+      "exact_mentions": [
+        [
+          "npc-su",
+          "苏念薇"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc-su": {
+          "last_known_location": "陷空山合欢宗驻地",
+          "last_scene_summary": "苏念薇收刀入鞘，向萧欢提议明日拜师后一同前往山下坊市，探听周姓修士的风声。",
+          "last_scene_turn": 21
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 398
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 398,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 93,
+          "prompt_tokens": 1907
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 93,
+        "prompt_tokens": 1907
+      },
+      "gold": {
+        "weighted_passed": 12,
+        "weighted_total": 12,
+        "categories": {
+          "last_scene_batch_scope": {
+            "passed": 1,
+            "total": 1
+          },
+          "last_scene_summary": {
+            "passed": 1,
+            "total": 1
+          },
+          "npc_presence": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      },
+      "last_scene_contract_signals": {
+        "mention_presences": [
+          [
+            "苏念薇",
+            "appeared"
+          ]
+        ],
+        "batch_npc_ids": [
+          "npc-su"
+        ],
+        "scene_summaries": {
+          "npc-su": {
+            "summary": "苏念薇收刀入鞘，向萧欢提议明日拜师后一同前往山下坊市，探听周姓修士的风声。",
+            "turn_index": 21,
+            "evidence_ids": [
+              "turn_21_p001"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "mentioned_only_no_overwrite",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "姚沉璧",
+        "苏念薇"
+      ],
+      "exact_mentions": [
+        [
+          "npc-yao",
+          "姚沉璧"
+        ],
+        [
+          "npc-su",
+          "苏念薇"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc-yao": {
+          "last_known_location": "落雁渡",
+          "last_scene_summary": "姚沉璧压低声音向主角透露，苏念薇如今仍在陷空山上。",
+          "last_scene_turn": 22
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 365
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 365,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 83,
+          "prompt_tokens": 1881
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 83,
+        "prompt_tokens": 1881
+      },
+      "gold": {
+        "weighted_passed": 24,
+        "weighted_total": 24,
+        "categories": {
+          "last_scene_absent": {
+            "passed": 1,
+            "total": 1
+          },
+          "last_scene_batch_scope": {
+            "passed": 2,
+            "total": 2
+          },
+          "last_scene_summary": {
+            "passed": 1,
+            "total": 1
+          },
+          "npc_presence": {
+            "passed": 2,
+            "total": 2
+          },
+          "resolution": {
+            "passed": 2,
+            "total": 2
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      },
+      "last_scene_contract_signals": {
+        "mention_presences": [
+          [
+            "姚沉璧",
+            "appeared"
+          ],
+          [
+            "苏念薇",
+            "mentioned_only"
+          ]
+        ],
+        "batch_npc_ids": [
+          "npc-yao"
+        ],
+        "scene_summaries": {
+          "npc-yao": {
+            "summary": "姚沉璧压低声音向主角透露，苏念薇如今仍在陷空山上。",
+            "turn_index": 22,
+            "evidence_ids": [
+              "turn_22_p001"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "appeared_then_departed",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "林舟"
+      ],
+      "exact_mentions": [
+        [
+          "npc-lin",
+          "林舟"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc-lin": {
+          "last_scene_summary": "林舟将密信交给萧欢，告知北门守卫已被调走，随后告辞离开。",
+          "last_scene_turn": 23
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 445
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 445,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 85,
+          "prompt_tokens": 1913
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 85,
+        "prompt_tokens": 1913
+      },
+      "gold": {
+        "weighted_passed": 12,
+        "weighted_total": 12,
+        "categories": {
+          "last_scene_batch_scope": {
+            "passed": 1,
+            "total": 1
+          },
+          "last_scene_summary": {
+            "passed": 1,
+            "total": 1
+          },
+          "npc_presence": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      },
+      "last_scene_contract_signals": {
+        "mention_presences": [
+          [
+            "林舟",
+            "appeared"
+          ]
+        ],
+        "batch_npc_ids": [
+          "npc-lin"
+        ],
+        "scene_summaries": {
+          "npc-lin": {
+            "summary": "林舟将密信交给萧欢，告知北门守卫已被调走，随后告辞离开。",
+            "turn_index": 23,
+            "evidence_ids": [
+              "turn_23_p001"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "same_summary_next_turn",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "秦霜"
+      ],
+      "exact_mentions": [
+        [
+          "npc-qin",
+          "秦霜"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc-qin": {
+          "last_known_location": "宗门库房",
+          "last_scene_summary": "秦霜仍守在库房门前，逐一核验每名出入弟子的腰牌，履行库房管事的职责。",
+          "last_scene_turn": 24
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 371
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 371,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 90,
+          "prompt_tokens": 1885
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 90,
+        "prompt_tokens": 1885
+      },
+      "gold": {
+        "weighted_passed": 12,
+        "weighted_total": 12,
+        "categories": {
+          "last_scene_batch_scope": {
+            "passed": 1,
+            "total": 1
+          },
+          "last_scene_summary": {
+            "passed": 1,
+            "total": 1
+          },
+          "npc_presence": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      },
+      "last_scene_contract_signals": {
+        "mention_presences": [
+          [
+            "秦霜",
+            "appeared"
+          ]
+        ],
+        "batch_npc_ids": [
+          "npc-qin"
+        ],
+        "scene_summaries": {
+          "npc-qin": {
+            "summary": "秦霜仍守在库房门前，逐一核验每名出入弟子的腰牌，履行库房管事的职责。",
+            "turn_index": 24,
+            "evidence_ids": [
+              "turn_24_p001"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "summary_does_not_accumulate",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "苏念薇"
+      ],
+      "exact_mentions": [
+        [
+          "npc-su",
+          "苏念薇"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc-su": {
+          "last_known_location": "合欢宗演武场",
+          "last_scene_summary": "苏念薇在演武场演示御风术，绕过三根木桩后稳稳落地，展示了其御风术的熟练程度。",
+          "last_scene_turn": 25
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 1,
+          "evidence_paragraphs": 1,
+          "content_chars": 376
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 376,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 93,
+          "prompt_tokens": 1892
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 93,
+        "prompt_tokens": 1892
+      },
+      "gold": {
+        "weighted_passed": 12,
+        "weighted_total": 12,
+        "categories": {
+          "last_scene_batch_scope": {
+            "passed": 1,
+            "total": 1
+          },
+          "last_scene_summary": {
+            "passed": 1,
+            "total": 1
+          },
+          "npc_presence": {
+            "passed": 1,
+            "total": 1
+          },
+          "resolution": {
+            "passed": 1,
+            "total": 1
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      },
+      "last_scene_contract_signals": {
+        "mention_presences": [
+          [
+            "苏念薇",
+            "appeared"
+          ]
+        ],
+        "batch_npc_ids": [
+          "npc-su"
+        ],
+        "scene_summaries": {
+          "npc-su": {
+            "summary": "苏念薇在演武场演示御风术，绕过三根木桩后稳稳落地，展示了其御风术的熟练程度。",
+            "turn_index": 25,
+            "evidence_ids": [
+              "turn_25_p001"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "stable_role_with_scene_summary",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "姚沉璧",
+        "苏念薇"
+      ],
+      "exact_mentions": [
+        [
+          "npc-yao",
+          "姚沉璧"
+        ],
+        [
+          "npc-su",
+          "苏念薇"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc-su": {
+          "last_known_location": "落雁渡茶棚",
+          "faction": "合欢宗",
+          "last_scene_summary": "苏念薇随后走进茶棚，当众抱拳宣布今日起加入合欢宗门下，往后听从宗主安排。",
+          "last_scene_turn": 26
+        },
+        "npc-yao": {
+          "last_scene_summary": "姚沉璧立在茶棚门口，扬声告知苏念薇很快就会过来。",
+          "last_scene_turn": 26
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 2,
+          "evidence_paragraphs": 3,
+          "content_chars": 936
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 936,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 206,
+          "prompt_tokens": 2109
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 206,
+        "prompt_tokens": 2109
+      },
+      "gold": {
+        "weighted_passed": 27,
+        "weighted_total": 30,
+        "categories": {
+          "last_scene_batch_scope": {
+            "passed": 2,
+            "total": 2
+          },
+          "last_scene_summary": {
+            "passed": 2,
+            "total": 2
+          },
+          "npc_presence": {
+            "passed": 2,
+            "total": 2
+          },
+          "resolution": {
+            "passed": 2,
+            "total": 2
+          },
+          "stable_field": {
+            "passed": 1,
+            "total": 2
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      },
+      "last_scene_contract_signals": {
+        "mention_presences": [
+          [
+            "姚沉璧",
+            "appeared"
+          ],
+          [
+            "苏念薇",
+            "appeared"
+          ]
+        ],
+        "batch_npc_ids": [
+          "npc-yao",
+          "npc-su"
+        ],
+        "scene_summaries": {
+          "npc-yao": {
+            "summary": "姚沉璧立在茶棚门口，扬声告知苏念薇很快就会过来。",
+            "turn_index": 26,
+            "evidence_ids": [
+              "turn_26_p001"
+            ]
+          },
+          "npc-su": {
+            "summary": "苏念薇随后走进茶棚，当众抱拳宣布今日起加入合欢宗门下，往后听从宗主安排。",
+            "turn_index": 26,
+            "evidence_ids": [
+              "turn_26_p002"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "multi_npc_scene_summary_coverage",
+      "call_count": 1,
+      "provider_attempts": 1,
+      "candidates": [],
+      "extract_mentions": [
+        "秦霜",
+        "林舟"
+      ],
+      "exact_mentions": [
+        [
+          "npc-lin",
+          "林舟"
+        ],
+        [
+          "npc-qin",
+          "秦霜"
+        ]
+      ],
+      "aliases_added": {},
+      "new_profile_names": [],
+      "field_deltas": {
+        "npc-qin": {
+          "last_known_location": "宗门库房",
+          "last_scene_summary": "秦霜将库房钥匙交给林舟，嘱咐他天亮前不得离开。",
+          "last_scene_turn": 27
+        },
+        "npc-lin": {
+          "last_known_location": "宗门库房",
+          "last_scene_summary": "林舟从秦霜处接过库房钥匙，并当场答应守到天亮。",
+          "last_scene_turn": 27
+        }
+      },
+      "warnings": [],
+      "prompt_metrics": {
+        "npc_batch_update": {
+          "resolved_npcs": 2,
+          "evidence_paragraphs": 3,
+          "content_chars": 910
+        },
+        "call_count": 1
+      },
+      "prompt_content_chars": 910,
+      "token_usage": {
+        "npc_batch_update": {
+          "completion_tokens": 156,
+          "prompt_tokens": 2087
+        }
+      },
+      "token_usage_total": {
+        "completion_tokens": 156,
+        "prompt_tokens": 2087
+      },
+      "gold": {
+        "weighted_passed": 24,
+        "weighted_total": 24,
+        "categories": {
+          "last_scene_batch_scope": {
+            "passed": 2,
+            "total": 2
+          },
+          "last_scene_summary": {
+            "passed": 2,
+            "total": 2
+          },
+          "npc_presence": {
+            "passed": 2,
+            "total": 2
+          },
+          "resolution": {
+            "passed": 2,
+            "total": 2
+          }
+        },
+        "forbidden_violations": [],
+        "invariant_violations": []
+      },
+      "last_scene_contract_signals": {
+        "mention_presences": [
+          [
+            "秦霜",
+            "appeared"
+          ],
+          [
+            "林舟",
+            "appeared"
+          ]
+        ],
+        "batch_npc_ids": [
+          "npc-lin",
+          "npc-qin"
+        ],
+        "scene_summaries": {
+          "npc-lin": {
+            "summary": "林舟从秦霜处接过库房钥匙，并当场答应守到天亮。",
+            "turn_index": 27,
+            "evidence_ids": [
+              "turn_27_p001",
+              "turn_27_p002"
+            ]
+          },
+          "npc-qin": {
+            "summary": "秦霜将库房钥匙交给林舟，嘱咐他天亮前不得离开。",
+            "turn_index": 27,
+            "evidence_ids": [
+              "turn_27_p001"
+            ]
+          }
+        }
       }
     }
   ]

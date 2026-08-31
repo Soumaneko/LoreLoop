@@ -231,17 +231,6 @@ def gather_npc_profiles_from_state_and_anchors(
     return selected
 
 
-def _matches_profile_name_or_alias(value: str | None, profile: NPCProfile) -> bool:
-    key = normalize_key(value)
-    if not key:
-        return False
-    return (
-        key == normalize_key(profile.name)
-        or key in {normalize_key(alias) for alias in profile.aliases}
-        or key in {normalize_key(alias) for alias in profile.transient_aliases}
-    )
-
-
 def _gather_names(current_state: CurrentState, anchors: list[Anchor]) -> list[str]:
     names: list[str] = []
     names.extend(current_state.scene.participant_names)

@@ -978,6 +978,549 @@
         "warning_expectations": [],
         "no_op_expectations": []
       }
+    },
+    {
+      "case_id": "appeared_action_summary",
+      "description": "An NPC who acts in the scene is classified as appeared and receives one evidence-backed scene summary.",
+      "scene_id": "scene_action",
+      "turn_index": 20,
+      "scene_text": "秦霜推开库房木门，逐一核对货架上的药箱。\n\n她发现三箱灵药短缺，当即封住库门，决定天亮后查问守夜弟子。",
+      "scene_facts": "{\"scene_focus\": \"秦霜清点库房并发现灵药短缺。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜逐一核对库房药箱。\"}, {\"fact_id\": \"f2\", \"fact\": \"秦霜发现三箱灵药短缺，封住库门并决定天亮后查问守夜弟子。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_20_p001\", \"turn_20_p002\"]}]}",
+      "player_name": "萧欢",
+      "scene_location": "宗门库房",
+      "participants": [
+        "秦霜"
+      ],
+      "roster": [
+        {
+          "npc_id": "npc-qin",
+          "name": "秦霜",
+          "role": "库房管事",
+          "updated_at": "2026-08-13T00:00:20Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "秦霜",
+            "resolution": "existing"
+          }
+        ]
+      },
+      "last_scene_contract": {
+        "presence_expectations": [
+          {
+            "surface": "秦霜",
+            "presence": "appeared"
+          }
+        ],
+        "scene_summary_expectations": [
+          {
+            "npc_id": "npc-qin",
+            "turn_index": 20,
+            "required_terms": [
+              "灵药短缺",
+              "查问"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_20_p001",
+              "turn_20_p002"
+            ]
+          }
+        ],
+        "expected_batch_npc_ids": [
+          "npc-qin"
+        ]
+      }
+    },
+    {
+      "case_id": "appeared_dialogue_plan_summary",
+      "description": "A plan stated in dialogue belongs in the scene summary without a current_intent field.",
+      "scene_id": "scene_plan",
+      "turn_index": 21,
+      "scene_text": "苏念薇收刀入鞘，对萧欢说道：“明日拜师之后，我陪你去山下坊市探听周姓修士的风声。”",
+      "scene_facts": "{\"scene_focus\": \"苏念薇提出拜师后陪萧欢下山探听消息。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"苏念薇提出明日拜师后陪萧欢去山下坊市探听周姓修士的风声。\"}], \"npc_mentions\": [{\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_21_p001\"]}]}",
+      "player_name": "萧欢",
+      "scene_location": "陷空山合欢宗驻地",
+      "participants": [
+        "苏念薇"
+      ],
+      "roster": [
+        {
+          "npc_id": "npc-su",
+          "name": "苏念薇",
+          "role": "合欢宗弟子",
+          "updated_at": "2026-08-13T00:00:21Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "苏念薇",
+            "resolution": "existing"
+          }
+        ],
+        "forbidden_field_changes": [
+          {
+            "npc_id": "npc-su",
+            "field": "current_intent"
+          }
+        ]
+      },
+      "last_scene_contract": {
+        "presence_expectations": [
+          {
+            "surface": "苏念薇",
+            "presence": "appeared"
+          }
+        ],
+        "scene_summary_expectations": [
+          {
+            "npc_id": "npc-su",
+            "turn_index": 21,
+            "required_terms": [
+              "拜师后",
+              "坊市",
+              "探听"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_21_p001"
+            ]
+          }
+        ],
+        "expected_batch_npc_ids": [
+          "npc-su"
+        ]
+      }
+    },
+    {
+      "case_id": "mentioned_only_no_overwrite",
+      "description": "A third-party mention remains History evidence and must not overwrite the NPC's latest actual scene record.",
+      "scene_id": "scene_mention",
+      "turn_index": 22,
+      "scene_text": "姚沉璧压低声音说：“苏念薇如今还在陷空山上。”",
+      "scene_facts": "{\"scene_focus\": \"姚沉璧谈到苏念薇的位置。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"姚沉璧称苏念薇仍在陷空山。\"}], \"npc_mentions\": [{\"primary_surface\": \"姚沉璧\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_22_p001\"]}, {\"primary_surface\": \"苏念薇\", \"presence\": \"mentioned_only\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_22_p001\"]}]}",
+      "player_name": "萧欢",
+      "scene_location": "落雁渡",
+      "participants": [
+        "姚沉璧"
+      ],
+      "roster": [
+        {
+          "npc_id": "npc-yao",
+          "name": "姚沉璧",
+          "role": "情报贩子",
+          "updated_at": "2026-08-13T00:00:22Z"
+        },
+        {
+          "npc_id": "npc-su",
+          "name": "苏念薇",
+          "role": "合欢宗弟子",
+          "last_scene_summary": "苏念薇加入合欢宗并确认次日拜师。",
+          "last_scene_turn": 21,
+          "updated_at": "2026-08-13T00:00:21Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "姚沉璧",
+            "resolution": "existing"
+          },
+          {
+            "candidate_name": "苏念薇",
+            "resolution": "existing"
+          }
+        ],
+        "forbidden_field_changes": [
+          {
+            "npc_id": "npc-su",
+            "field": "last_scene_summary"
+          },
+          {
+            "npc_id": "npc-su",
+            "field": "last_scene_turn"
+          }
+        ]
+      },
+      "last_scene_contract": {
+        "presence_expectations": [
+          {
+            "surface": "姚沉璧",
+            "presence": "appeared"
+          },
+          {
+            "surface": "苏念薇",
+            "presence": "mentioned_only"
+          }
+        ],
+        "scene_summary_expectations": [
+          {
+            "npc_id": "npc-yao",
+            "turn_index": 22,
+            "required_terms": [
+              "苏念薇",
+              "陷空山"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_22_p001"
+            ]
+          }
+        ],
+        "no_scene_summary_npc_ids": [
+          "npc-su"
+        ],
+        "expected_batch_npc_ids": [
+          "npc-yao"
+        ],
+        "excluded_batch_npc_ids": [
+          "npc-su"
+        ]
+      }
+    },
+    {
+      "case_id": "appeared_then_departed",
+      "description": "Presence is about participation during the turn, not end-of-turn CurrentState participants.",
+      "scene_id": "scene_departed",
+      "turn_index": 23,
+      "scene_text": "林舟把密信交给萧欢，说明北门守卫已被调走，随即告辞离开。",
+      "scene_facts": "{\"scene_focus\": \"林舟送来密信后离场。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"林舟把密信交给萧欢并说明北门守卫已被调走。\"}, {\"fact_id\": \"f2\", \"fact\": \"林舟随后告辞离开。\"}], \"npc_mentions\": [{\"primary_surface\": \"林舟\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_23_p001\"]}]}",
+      "player_name": "萧欢",
+      "scene_location": "合欢宗正殿",
+      "participants": [],
+      "roster": [
+        {
+          "npc_id": "npc-lin",
+          "name": "林舟",
+          "role": "信使",
+          "updated_at": "2026-08-13T00:00:23Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "林舟",
+            "resolution": "existing"
+          }
+        ]
+      },
+      "last_scene_contract": {
+        "presence_expectations": [
+          {
+            "surface": "林舟",
+            "presence": "appeared"
+          }
+        ],
+        "scene_summary_expectations": [
+          {
+            "npc_id": "npc-lin",
+            "turn_index": 23,
+            "required_terms": [
+              "密信",
+              "北门",
+              "离开"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_23_p001"
+            ]
+          }
+        ],
+        "expected_batch_npc_ids": [
+          "npc-lin"
+        ]
+      }
+    },
+    {
+      "case_id": "same_summary_next_turn",
+      "description": "The turn marker makes a repeated but independently observed summary a new record.",
+      "scene_id": "scene_watch",
+      "turn_index": 24,
+      "scene_text": "秦霜仍守在库房门前，逐一核验每名出入弟子的腰牌。",
+      "scene_facts": "{\"scene_focus\": \"秦霜继续守卫库房。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜守在库房门前并核验出入弟子的腰牌。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_24_p001\"]}]}",
+      "player_name": "萧欢",
+      "scene_location": "宗门库房",
+      "participants": [
+        "秦霜"
+      ],
+      "roster": [
+        {
+          "npc_id": "npc-qin",
+          "name": "秦霜",
+          "role": "库房管事",
+          "last_scene_summary": "秦霜守在库房门前并核验出入弟子的腰牌。",
+          "last_scene_turn": 23,
+          "updated_at": "2026-08-13T00:00:24Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "秦霜",
+            "resolution": "existing"
+          }
+        ]
+      },
+      "last_scene_contract": {
+        "presence_expectations": [
+          {
+            "surface": "秦霜",
+            "presence": "appeared"
+          }
+        ],
+        "scene_summary_expectations": [
+          {
+            "npc_id": "npc-qin",
+            "turn_index": 24,
+            "required_terms": [
+              "库房",
+              "腰牌"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_24_p001"
+            ]
+          }
+        ],
+        "expected_batch_npc_ids": [
+          "npc-qin"
+        ]
+      }
+    },
+    {
+      "case_id": "summary_does_not_accumulate",
+      "description": "The updater sees no old summary and the new summary must contain only this turn's portrayal.",
+      "scene_id": "scene_new_action",
+      "turn_index": 25,
+      "scene_text": "苏念薇在演武场演示御风术，绕过三根木桩后稳稳落地。",
+      "scene_facts": "{\"scene_focus\": \"苏念薇演示御风术。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"苏念薇在演武场演示御风术并绕过三根木桩落地。\"}], \"npc_mentions\": [{\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_25_p001\"]}]}",
+      "player_name": "萧欢",
+      "scene_location": "合欢宗演武场",
+      "participants": [
+        "苏念薇"
+      ],
+      "roster": [
+        {
+          "npc_id": "npc-su",
+          "name": "苏念薇",
+          "role": "合欢宗弟子",
+          "last_scene_summary": "苏念薇分析周姓修士可能是探子，并提议下山探听风声。",
+          "last_scene_turn": 24,
+          "updated_at": "2026-08-13T00:00:25Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "苏念薇",
+            "resolution": "existing"
+          }
+        ]
+      },
+      "last_scene_contract": {
+        "presence_expectations": [
+          {
+            "surface": "苏念薇",
+            "presence": "appeared"
+          }
+        ],
+        "scene_summary_expectations": [
+          {
+            "npc_id": "npc-su",
+            "turn_index": 25,
+            "required_terms": [
+              "御风术",
+              "木桩"
+            ],
+            "forbidden_terms": [
+              "周姓修士",
+              "探子",
+              "探听风声"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_25_p001"
+            ]
+          }
+        ],
+        "expected_batch_npc_ids": [
+          "npc-su"
+        ]
+      }
+    },
+    {
+      "case_id": "stable_role_with_scene_summary",
+      "description": "A durable role/faction change and the current scene portrayal can share evidence without public_summary synchronization.",
+      "scene_id": "scene_join",
+      "turn_index": 26,
+      "scene_text": "姚沉璧立在茶棚门口，扬声说：「苏念薇很快就会过来。」\n\n片刻后，苏念薇走进茶棚，当众抱拳道：“今日起我加入合欢宗门下，往后听宗主安排。”",
+      "scene_facts": "{\"scene_focus\": \"苏念薇被提前提及，随后到场并正式加入合欢宗。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"姚沉璧先提到苏念薇很快会到。\"}, {\"fact_id\": \"f2\", \"fact\": \"苏念薇随后实际到场，当众宣布加入合欢宗并听从宗主安排。\"}], \"npc_mentions\": [{\"primary_surface\": \"姚沉璧\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_26_p001\"]}, {\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_26_p001\", \"turn_26_p002\"]}]}",
+      "player_name": "萧欢",
+      "scene_location": "落雁渡茶棚",
+      "participants": [
+        "苏念薇"
+      ],
+      "roster": [
+        {
+          "npc_id": "npc-su",
+          "name": "苏念薇",
+          "role": "散修",
+          "updated_at": "2026-08-13T00:00:26Z"
+        },
+        {
+          "npc_id": "npc-yao",
+          "name": "姚沉璧",
+          "role": "情报贩子",
+          "updated_at": "2026-08-13T00:00:25Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "苏念薇",
+            "resolution": "existing"
+          },
+          {
+            "candidate_name": "姚沉璧",
+            "resolution": "existing"
+          }
+        ],
+        "stable_field_expectations": [
+          {
+            "npc_id": "npc-su",
+            "field": "role",
+            "value": "合欢宗弟子"
+          },
+          {
+            "npc_id": "npc-su",
+            "field": "faction",
+            "value": "合欢宗"
+          }
+        ],
+        "forbidden_field_changes": [
+          {
+            "npc_id": "npc-su",
+            "field": "public_summary"
+          }
+        ]
+      },
+      "last_scene_contract": {
+        "presence_expectations": [
+          {
+            "surface": "姚沉璧",
+            "presence": "appeared"
+          },
+          {
+            "surface": "苏念薇",
+            "presence": "appeared"
+          }
+        ],
+        "scene_summary_expectations": [
+          {
+            "npc_id": "npc-yao",
+            "turn_index": 26,
+            "required_terms": [
+              "苏念薇"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_26_p001"
+            ]
+          },
+          {
+            "npc_id": "npc-su",
+            "turn_index": 26,
+            "required_terms": [
+              "加入合欢宗",
+              "听从"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_26_p002"
+            ]
+          }
+        ],
+        "expected_batch_npc_ids": [
+          "npc-su",
+          "npc-yao"
+        ]
+      }
+    },
+    {
+      "case_id": "multi_npc_scene_summary_coverage",
+      "description": "Two appeared NPCs both produce a valid per-turn scene summary; the real model is not expected to emit malformed input. Invalid-summary salvage is deterministic program behavior covered by focused pytest.",
+      "scene_id": "scene_salvage",
+      "turn_index": 27,
+      "scene_text": "秦霜把库房钥匙交给林舟，嘱咐他天亮前不得离开。\n\n林舟接过钥匙，当场答应守到天亮。",
+      "scene_facts": "{\"scene_focus\": \"秦霜向林舟交接库房值守。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜把库房钥匙交给林舟并要求他天亮前不得离开。\"}, {\"fact_id\": \"f2\", \"fact\": \"林舟接过钥匙并答应守到天亮。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_27_p001\"]}, {\"primary_surface\": \"林舟\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_27_p001\", \"turn_27_p002\"]}]}",
+      "player_name": "萧欢",
+      "scene_location": "宗门库房",
+      "participants": [
+        "秦霜",
+        "林舟"
+      ],
+      "roster": [
+        {
+          "npc_id": "npc-qin",
+          "name": "秦霜",
+          "role": "库房管事",
+          "updated_at": "2026-08-13T00:00:27Z"
+        },
+        {
+          "npc_id": "npc-lin",
+          "name": "林舟",
+          "role": "信使",
+          "updated_at": "2026-08-13T00:00:26Z"
+        }
+      ],
+      "gold": {
+        "resolution_expectations": [
+          {
+            "candidate_name": "秦霜",
+            "resolution": "existing"
+          },
+          {
+            "candidate_name": "林舟",
+            "resolution": "existing"
+          }
+        ]
+      },
+      "last_scene_contract": {
+        "presence_expectations": [
+          {
+            "surface": "秦霜",
+            "presence": "appeared"
+          },
+          {
+            "surface": "林舟",
+            "presence": "appeared"
+          }
+        ],
+        "scene_summary_expectations": [
+          {
+            "npc_id": "npc-qin",
+            "turn_index": 27,
+            "required_terms": [
+              "钥匙",
+              "林舟"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_27_p001"
+            ]
+          },
+          {
+            "npc_id": "npc-lin",
+            "turn_index": 27,
+            "required_terms": [
+              "钥匙",
+              "守到天亮"
+            ],
+            "acceptable_evidence_ids": [
+              "turn_27_p001",
+              "turn_27_p002"
+            ]
+          }
+        ],
+        "expected_batch_npc_ids": [
+          "npc-qin",
+          "npc-lin"
+        ]
+      }
     }
   ]
 }

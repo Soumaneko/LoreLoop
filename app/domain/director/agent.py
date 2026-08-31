@@ -290,17 +290,6 @@ class DirectorAgent:
             return salvage(exc)
 
 
-def _parse_request(raw: Any) -> DirectorSkillRequest:
-    if isinstance(raw, dict):
-        raw = dict(raw)
-        for key in ("request_id", "skill"):
-            if isinstance(raw.get(key), str):
-                raw[key] = raw[key].strip()
-        guidance = raw.get("guidance")
-        if isinstance(guidance, str):
-            raw["guidance"] = guidance.strip()
-    return DirectorSkillRequest.model_validate(raw)
-
 
 def _parse_request_wire(
     raw: Any,

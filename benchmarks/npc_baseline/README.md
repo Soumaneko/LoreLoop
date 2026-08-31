@@ -18,23 +18,21 @@ The input/gold contract and the recorded LLM outputs are deliberately split:
 
 ## Current checkpoint
 
-Accepted with 17 cases covering the ticket-01 categories re-scored for the
-batch architecture (mention/exact/resolution are deterministic resolver
-outputs; the LLM is measured on field changes, aliases, warnings, and no-ops).
-Recorded from a live API run on 2026-08-12 (second take, accepted); re-recorded
-for the v8 schema on 2026-08-14:
+Accepted with 25 cases covering the ticket-01 categories plus 8
+`last_scene_summary` contracts re-scored for the batch architecture
+(mention/exact/resolution are deterministic resolver outputs; the LLM is
+measured on field changes, aliases, warnings, and no-ops). Recorded from a
+live API run on 2026-08-12 (second take, accepted); re-recorded for the v8
+schema on 2026-08-14; expanded with `last_scene` on 2026-08-31:
 
-- weighted gold recall: `150/153` (the baseline allows the model to score below
-  full marks; the 9 missed points are documented exact-string gaps below;
-  personality and abilities are currently curated fields outside per-turn
-  update scoring)
+- weighted gold recall: `285/291`
 - forbidden violations: `0`
 - invariant violations: `0`
-- logical gateway calls: `12` (0 calls when identity resolution finds no
+- logical gateway calls: `20` (0 calls when identity resolution finds no
   resolvable appeared NPC, e.g. player-only, org/place, or mentioned-only cases)
-- provider attempts: `12` (all first-round successes)
+- provider attempts: `20` (all first-round successes)
 - real provider tokens, ALL attempts included:
-  `prompt_tokens=18678`, `completion_tokens=1309`
+  `prompt_tokens=38551`, `completion_tokens=2291`
 
 A below-full score is a feature, not a bug: the gold encodes the desired
 contract and the model may fail it, so a fix scores higher and the improvement
@@ -131,32 +129,13 @@ production does (fixed `admitted_at`): same resolution order, admission,
 warning order, and store mutation. The report is byte-for-byte comparable
 across runs and across `PYTHONHASHSEED` values.
 
-## Ticket 11 pending contract
+## Last-scene contracts
 
-`cases_last_scene_pending.json` and `recordings/last_scene_pending.json` are an
-unaccepted benchmark-first contract for the v8 NPC model's `last_scene_*`
-fields.  They do not change `fixtures_batch.json`, its fingerprint, or
-`baseline_batch.json`.
+The 8 `last_scene_*` contracts (`appeared_action_summary` etc.) are now part
+of the accepted `fixtures_batch.json` / `recordings/batch.json` /
+`baseline_batch.json` and are covered by the same `--check` gate. The
+`last_scene_contract` scores:
 
-The optional `last_scene_contract` scores three future signals without a judge
-LLM:
-
-- `npc_presence`: `appeared` vs `mentioned_only` emitted by Scene Facts;
-- `last_scene_summary`: one 20–160 character summary for the expected turn,
-  containing required terms, excluding stale terms, and citing 1–4 paragraph
-  IDs from an allowed set;
-- `last_scene_batch_scope`: appeared profiles enter the updater while
-  mentioned-only profiles do not.
-
-The pending recordings use the nested `scene_summary` wire key.  The parser
-consumes it and admission writes the pair atomically, so the pre-implementation
-gaps (presence / summary / salvage) are now expected to be green.  Run it
-without accepting a baseline:
-
-```bash
-PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py \
-  --fixtures benchmarks/npc_baseline/cases_last_scene_pending.json \
-  --recordings benchmarks/npc_baseline/recordings/last_scene_pending.json \
-  --baseline .scratch/npc-turn-processor/nonexistent-last-scene-baseline.json \
-  --json-out .scratch/npc-turn-processor/phase0-last-scene-report.json
-```
+- `npc_presence`: `appeared` vs `mentioned_only`;
+- `last_scene_summary`: 20–160 chars with required/forbidden terms and 1–4 evidence IDs;
+- `last_scene_batch_scope`: appeared vs mentioned-only batch membership.

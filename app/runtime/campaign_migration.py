@@ -211,17 +211,6 @@ def validate_campaign_database(path: Path) -> None:
             pass
 
 
-def _fsync_dir(path: Path) -> None:
-    """Best-effort fsync of a directory after atomic replace."""
-    try:
-        fd = os.open(str(path), os.O_DIRECTORY)
-    except (OSError, NotADirectoryError):
-        return
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-
 
 def _fsync_file(path: Path) -> None:
     with open(path, "rb") as handle:
