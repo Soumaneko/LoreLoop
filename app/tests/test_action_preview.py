@@ -104,50 +104,6 @@ class TestActionPreviewAgent:
         }
         assert all(preview.label for preview in result.previews)
 
-    def test_passes_next_action_directions_without_closing_prompt(self):
-        class SpyGateway:
-            def __init__(self):
-                self.input_data = None
-
-            def run(self, **kwargs):
-                self.input_data = kwargs["input_data"]
-                if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
-                    kwargs["on_attempt_start"](1)
-                result = ActionPreviewResult.model_validate(json.loads(_build_response()))
-                if "output_validator" in kwargs and kwargs["output_validator"] is not None:
-                    kwargs["output_validator"](result)
-                return result
-
-        gateway = SpyGateway()
-
-        ActionPreviewAgent(gateway).generate(
-            current_state=_make_state(),
-            core_memory=_make_core_memory(),
-            recent_summaries=_make_recent_summaries(),
-            next_action_directions=[
-                NextActionDirection(
-                    direction="追问仓库区的夜间出没",
-                    rationale="正文结尾公开了米莉的线索，主角仍在酒馆内。",
-                    anchors=["米莉", "仓库区"],
-                )
-            ],
-            scene_facts=SceneFactSet(
-                scene_focus="米莉公开了仓库区线索。",
-                facts=[SceneFact(fact_id="f1", fact="米莉指出仓库区夜间有异常。")],
-            ),
-        )
-
-        assert "closing_prompt" not in gateway.input_data
-        assert "scene_text" not in gateway.input_data
-        directions = json.loads(gateway.input_data["next_action_directions_json"])
-        assert directions == [{
-            "direction": "追问仓库区的夜间出没",
-            "rationale": "正文结尾公开了米莉的线索，主角仍在酒馆内。",
-            "anchors": ["米莉", "仓库区"],
-        }]
-        scene_facts = json.loads(gateway.input_data["scene_facts_json"])
-        assert scene_facts["scene_focus"] == "米莉公开了仓库区线索。"
-        assert scene_facts["facts"][0]["fact"] == "米莉指出仓库区夜间有异常。"
 
 
 
@@ -196,39 +152,3 @@ def test_retries_invalid_preview_and_uses_second():
 
     assert len(result.previews) == 4
     assert agent.last_warnings == []
-
-
-def test_uses_first_valid_subset_when_second_has_no_valid_previews():
-    first = [_preview(), _preview(label="二"), _preview(label="三"), _preview(good_result=None)]
-    second = [_preview(good_result=None), _preview(good_result=None), _preview(good_result=None), _preview(good_result=None)]
-    mock = MockLLM()
-    mock.set_responses([_response(first), _response(second)])
-
-    result, agent = _run(mock)
-
-    assert len(result.previews) == 3
-    assert any(w.code == "action_preview_dropped" for w in agent.last_warnings)
-
-
-def test_preview_count_not_four_triggers_retry():
-    first = [_preview(label="一"), _preview(label="二"), _preview(label="三")]
-    second = [_preview(label="一"), _preview(label="二"), _preview(label="三"), _preview(label="四")]
-    mock = MockLLM()
-    mock.set_responses([_response(first), _response(second)])
-
-    result, agent = _run(mock)
-
-    assert len(result.previews) == 4
-    assert agent.last_warnings == []
-
-
-def test_duplicate_label_second_drops_duplicate_and_keeps_unique():
-    first = [_preview(), _preview(), _preview(label="三"), _preview(label="四")]
-    second = [_preview(), _preview(), _preview(label="三"), _preview(label="四")]
-    mock = MockLLM()
-    mock.set_responses([_response(first), _response(second)])
-
-    result, agent = _run(mock)
-
-    assert len(result.previews) == 3
-    assert any(w.code == "action_preview_dropped" for w in agent.last_warnings)

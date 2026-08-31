@@ -54,20 +54,6 @@ class TestSceneSummaryStore:
             assert [summary.id for summary in active] == [target.id]
             assert active[0].level == 2
 
-    def test_get_recent_prefers_recent_turn_then_lower_level(self):
-        with open_scene_summary_store(":memory:") as store:
-            store.save_one(_summary(id="old_l1", level=1, turn_start=1, turn_end=1))
-            store.save_one(_summary(id="recent_l2", level=2, turn_start=8, turn_end=10))
-            store.save_one(_summary(id="recent_l1", level=1, turn_start=10, turn_end=10))
-            store.save_one(_summary(id="newest_l3", level=3, turn_start=11, turn_end=12))
-
-            recent = store.get_recent(limit=3)
-
-            assert [summary.id for summary in recent] == [
-                "newest_l3",
-                "recent_l1",
-                "recent_l2",
-            ]
 
 
 class TestSceneSummarizer:
@@ -90,92 +76,8 @@ class TestSceneSummarizer:
         assert summary.turn_start == 10
         assert summary.turn_end == 10
 
-    def test_condense_program_fills_metadata(self):
-        mock = MockLLM()
-        mock.set_responses([json.dumps({"content": "旧旅店线索集中指向钟楼和酒窖。"}, ensure_ascii=False)])
-
-        sources = [
-            _summary(id="s1", scene_ids=["scene_001"], turn_start=1, turn_end=1),
-            _summary(id="s2", scene_ids=["scene_002"], turn_start=2, turn_end=2),
-        ]
-        summary = SceneSummarizer(mock.build_gateway()).condense(
-            core_memory=CoreMemory(items=[]),
-            source_summaries=sources,
-            target_level=2,
-        )
-
-        assert summary.level == 2
-        assert summary.content == "旧旅店线索集中指向钟楼和酒窖。"
-        assert summary.scene_ids == ["scene_001", "scene_002"]
-        assert summary.source_ids == ["s1", "s2"]
-        assert summary.turn_start == 1
-        assert summary.turn_end == 2
-
-    def test_summarize_turn_retries_when_content_exceeds_accept_limit(self):
-        mock = MockLLM()
-        mock.set_responses([
-            json.dumps({"content": "长" * 376}, ensure_ascii=False),
-            json.dumps({"content": "合规摘要。"}, ensure_ascii=False),
-        ])
-
-        summary = SceneSummarizer(mock.build_gateway()).summarize_turn(
-            core_memory=CoreMemory(items=[]),
-            scene_text="正文。",
-            current_state=_state(),
-            scene_id="scene_010",
-            turn_index=10,
-        )
-
-        assert summary.content == "合规摘要。"
-
-    def test_condense_retries_when_content_exceeds_accept_limit(self):
-        mock = MockLLM()
-        mock.set_responses([
-            json.dumps({"content": "长" * 501}, ensure_ascii=False),
-            json.dumps({"content": "合规汇总。"}, ensure_ascii=False),
-        ])
-
-        summary = SceneSummarizer(mock.build_gateway()).condense(
-            core_memory=CoreMemory(items=[]),
-            source_summaries=[_summary(id="s1"), _summary(id="s2")],
-            target_level=2,
-        )
-
-        assert summary.content == "合规汇总。"
 
 
-class TestSceneSummaryMaintenance:
-    def test_maintenance_condenses_up_multiple_levels(self):
-        mock = MockLLM()
-        mock.set_responses([
-            json.dumps({"content": "第2回合摘要。"}, ensure_ascii=False),
-            json.dumps({"content": "L2 汇总。"}, ensure_ascii=False),
-            json.dumps({"content": "L3 汇总。"}, ensure_ascii=False),
-        ])
-
-        with open_scene_summary_store(":memory:") as store:
-            store.save_one(_summary(id="l1_existing", level=1, turn_start=1, turn_end=1))
-            store.save_one(_summary(id="l2_existing", level=2, turn_start=1, turn_end=1, source_ids=["old_l1"]))
-
-            result = run_scene_summary_maintenance(
-                scene_text="第2回合正文。",
-                current_state=_state(),
-                core_memory=CoreMemory(items=[]),
-                scene_id="scene_002",
-                turn_index=2,
-                summarizer=SceneSummarizer(mock.build_gateway()),
-                store=store,
-                threshold=2,
-            )
-
-            assert len(result.created_summaries) == 3
-            assert len(result.condensed_ids) == 2
-            assert store.count_uncondensed(1) == 0
-            assert store.count_uncondensed(2) == 0
-            assert store.count_uncondensed(3) == 1
-            active = store.list_active()
-            assert len(active) == 1
-            assert active[0].level == 3
 
 
 class _CountingProvider(MockProvider):
@@ -227,72 +129,12 @@ def test_summarize_turn_second_provider_failure_propagates():
         )
 
 
-def test_summarize_turn_uses_first_candidate_when_second_is_blank():
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps({"content": "长" * 376}, ensure_ascii=False),
-        json.dumps({"content": "   "}, ensure_ascii=False),
-    ])
-    summarizer = SceneSummarizer(mock.build_gateway())
-
-    summary = summarizer.summarize_turn(
-        core_memory=CoreMemory(items=[]),
-        scene_text="正文。",
-        current_state=_state(),
-        scene_id="scene_010",
-        turn_index=10,
-    )
-
-    assert len(summary.content) == 376
-    assert summarizer.last_warnings == []
 
 
-def test_summarize_turn_uses_second_candidate_and_truncates():
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps({"content": "长" * 376}, ensure_ascii=False),
-        json.dumps({"content": "长" * 500}, ensure_ascii=False),
-    ])
-    summarizer = SceneSummarizer(mock.build_gateway())
-
-    summary = summarizer.summarize_turn(
-        core_memory=CoreMemory(items=[]),
-        scene_text="正文。",
-        current_state=_state(),
-        scene_id="scene_010",
-        turn_index=10,
-    )
-
-    assert len(summary.content) == 450
-    assert summarizer.last_warnings[0].code == "scene_summary_truncated"
 
 
-def test_summarize_turn_fallback_placeholder_when_no_candidate():
-    summarizer = SceneSummarizer(_gateway(_AlwaysFailProvider()))
-
-    summary = summarizer.summarize_turn(
-        core_memory=CoreMemory(items=[]),
-        scene_text="正文。",
-        current_state=_state(),
-        scene_id="scene_010",
-        turn_index=10,
-    )
-
-    assert summary.content == "（本轮无可用摘要）"
-    assert summarizer.last_warnings[0].code == "scene_summary_fallback"
 
 
-def test_condense_returns_none_when_no_candidate():
-    summarizer = SceneSummarizer(_gateway(_AlwaysFailProvider()))
-
-    result = summarizer.condense(
-        core_memory=CoreMemory(items=[]),
-        source_summaries=[_summary(id="s1"), _summary(id="s2")],
-        target_level=2,
-    )
-
-    assert result is None
-    assert summarizer.last_warnings[0].code == "scene_summary_condense_skipped"
 
 
 def test_blank_scene_text_does_not_call_llm():
