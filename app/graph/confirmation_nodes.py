@@ -45,11 +45,6 @@ def _gateway_for(state: ConfirmationState):
     )
 
 
-def _store_factory(state: ConfirmationState, name: str):
-    value = getattr(state["runtime_services"].stores, name)
-    return value() if callable(value) else value
-
-
 def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     cache = ConfirmationCache(state["cache"])
@@ -448,7 +443,7 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
     def compute_npc_update():
         nonlocal computed
         computed = True
-        with _store_factory(state, "npc_profile") as npc_store:
+        with state["runtime_services"].stores.npc_profile as npc_store:
             pending = state.get("pending") or getattr(
                 pipeline_input,
                 "pending",
@@ -537,7 +532,7 @@ def setting_appearance_update_node(state: ConfirmationState) -> ConfirmationStat
     folded_text = state["effective_scene_text"].casefold()
     recorded_ids: list[str] = []
     if folded_text:
-        with _store_factory(state, "world_setting") as setting_store:
+        with state["runtime_services"].stores.world_setting as setting_store:
             for setting in setting_store.list_all():
                 if setting_appears_in_text(setting.name, folded_text):
                     if setting_store.record_mention(setting.setting_id):
@@ -574,7 +569,7 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
         ensure_ascii=False,
         indent=2,
     )
-    with _store_factory(state, "director_event") as event_store:
+    with state["runtime_services"].stores.director_event as event_store:
         active_events = [
             event
             for event in event_store.list_active()

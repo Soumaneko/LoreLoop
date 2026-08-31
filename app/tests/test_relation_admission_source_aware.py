@@ -1,4 +1,4 @@
-from app.runtime.stores import open_confirmed_history_store
+from app.tests.factories.stores import open_confirmed_history_store
 import pytest
 from dataclasses import dataclass, field
 from types import SimpleNamespace

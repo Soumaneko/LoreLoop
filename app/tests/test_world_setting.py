@@ -1,4 +1,4 @@
-from app.runtime.stores import open_world_setting_store
+from app.tests.factories.stores import open_world_setting_store
 import sqlite3
 
 import pytest

@@ -1,4 +1,4 @@
-from app.runtime.stores import open_npc_profile_store
+from app.tests.factories.stores import open_npc_profile_store
 import pytest
 
 from app.domain.context_facts.schemas import ContextFact, ContextFactSet

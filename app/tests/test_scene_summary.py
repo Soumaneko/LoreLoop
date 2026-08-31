@@ -1,4 +1,4 @@
-from app.runtime.stores import open_scene_summary_store
+from app.tests.factories.stores import open_scene_summary_store
 import json
 import pytest
 

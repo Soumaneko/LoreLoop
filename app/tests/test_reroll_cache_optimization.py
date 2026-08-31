@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from app.domain.action.schemas import (
     ActionParseResult,
     ActionRetrievalTopic,
@@ -229,9 +231,12 @@ def test_generate_turn_stream_uses_prefix_cache_and_invalidates(monkeypatch):
             "scene_summaries": [],
             "recent_summaries": [],
             "matched_anchors": [],
-            "action_npc_profiles": [],
-            "action_npc_director_views": [],
-        }
+                "action_npc_profiles": [],
+                "action_npc_director_views": [],
+                "runtime_services": SimpleNamespace(
+                    stores=SimpleNamespace(close=lambda: None)
+                ),
+            }
 
     monkeypatch.setattr(generation_graph, "prepare_generation_state", _fake_prepare)
 

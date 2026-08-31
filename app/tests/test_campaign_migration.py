@@ -13,18 +13,6 @@ from app.runtime.campaign_migration import (
     ensure_campaign_database,
 )
 from app.runtime.paths import CampaignPaths
-from app.runtime.stores import (
-    open_confirmed_history_store,
-    open_continuity_store,
-    open_current_state_store,
-    open_director_event_store,
-    open_director_log_store,
-    open_director_npc_store,
-    open_npc_profile_store,
-    open_scene_summary_store,
-    open_short_term_store,
-    open_world_setting_store,
-)
 from app.runtime.uow import CampaignUnitOfWork
 
 

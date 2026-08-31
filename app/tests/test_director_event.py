@@ -1,5 +1,5 @@
-from app.runtime.stores import open_director_event_store
-from app.runtime.stores import open_world_setting_store
+from app.tests.factories.stores import open_director_event_store
+from app.tests.factories.stores import open_world_setting_store
 import json
 import sqlite3
 

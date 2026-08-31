@@ -394,16 +394,6 @@ def test_npc_profile_update_node_auto_backfills_spontaneous_npc(monkeypatch):
     }
     gateway = _MockGateway(backfill_response)
 
-    stores_map = {
-        "npc_profile": npc_store,
-        "world_setting": setting_store,
-        "director_npc": director_store,
-    }
-
-    def _mock_store_factory(_state, name):
-        return stores_map[name]
-
-    monkeypatch.setattr(confirmation_nodes, "_store_factory", _mock_store_factory)
     monkeypatch.setattr(confirmation_nodes, "_gateway_for", lambda _state: gateway)
 
     state = {
@@ -434,7 +424,14 @@ def test_npc_profile_update_node_auto_backfills_spontaneous_npc(monkeypatch):
         "effective_scene_text": "萧欢在百草堂抓药。",
         "core_memory": CoreMemory(items=[]),
         "existing_npc_profiles": [],
-        "runtime_services": SimpleNamespace(gateway=lambda **kw: gateway),
+        "runtime_services": SimpleNamespace(
+            gateway=lambda **kw: gateway,
+            stores=SimpleNamespace(
+                npc_profile=npc_store,
+                world_setting=setting_store,
+                director_npc=director_store,
+            ),
+        ),
     }
 
     result = confirmation_nodes.npc_profile_update_node(state)

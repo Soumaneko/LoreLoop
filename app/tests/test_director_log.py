@@ -1,4 +1,4 @@
-from app.runtime.stores import open_director_log_store
+from app.tests.factories.stores import open_director_log_store
 import json
 
 from app.domain.core_memory import CoreMemory

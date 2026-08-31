@@ -1,4 +1,4 @@
-from app.runtime.stores import open_confirmed_history_store
+from app.tests.factories.stores import open_confirmed_history_store
 import json
 
 from app.domain.canon_evidence import (

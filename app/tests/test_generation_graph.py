@@ -32,6 +32,9 @@ def test_generation_captures_experience_mode_snapshot_at_generation(monkeypatch)
             "user_input": user_input,
             "difficulty": difficulty,
             "max_chars": max_chars,
+            "runtime_services": SimpleNamespace(
+                stores=SimpleNamespace(close=lambda: None)
+            ),
         }
 
     def _finalize(state, **_kwargs):
@@ -82,6 +85,9 @@ def test_generate_turn_stream_forwards_state_events(monkeypatch):
         "prepare_generation_state",
         lambda *_args, **_kwargs: {
             "events": [{"step": "prepared", "data": {}}],
+            "runtime_services": SimpleNamespace(
+                stores=SimpleNamespace(close=lambda: None)
+            ),
         },
     )
     monkeypatch.setattr(
@@ -556,8 +562,8 @@ def _compose_test_state(**overrides):
         def list_active(self): return []
         def list_all(self): return []
     stores = SimpleNamespace(
-        director_event=lambda: _Store(),
-        npc_profile=lambda: _Store(),
+        director_event=_Store(),
+        npc_profile=_Store(),
     )
     state = {
         "runtime_services": SimpleNamespace(

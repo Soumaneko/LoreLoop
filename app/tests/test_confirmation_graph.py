@@ -1,4 +1,4 @@
-from app.runtime.stores import open_world_setting_store
+from app.tests.factories.stores import open_world_setting_store
 from concurrent.futures import CancelledError
 from types import SimpleNamespace
 
@@ -10,8 +10,7 @@ from app.domain.continuity import ContinuityProjection
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
-from app.domain.npc_profile.workflows import NPCConfirmedTurnResult
-from app.domain.scene_facts.schemas import SceneFact, SceneFactSet
+from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.summarizer import SceneSummaryWarning
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
@@ -25,6 +24,7 @@ from app.graph.confirmation_state import ConfirmationState
 from app.graph.confirmation_lifecycle import (
     ConfirmationFinalizer,
 )
+from app.runtime.sqlite import connect_sqlite
 
 
 def test_state_update_warning_is_emitted_cached_and_diagnosed(
@@ -161,7 +161,7 @@ def test_only_selection_summaries_append_current_turn_summary():
 
 
 
-def test_setting_appearance_node_dry_run_and_prevents_double_count(monkeypatch, tmp_path):
+def test_setting_appearance_node_dry_run_and_prevents_double_count(tmp_path):
     from app.domain.world_setting import WorldSetting
 
     db_path = tmp_path / "world_settings.db"
@@ -183,15 +183,16 @@ def test_setting_appearance_node_dry_run_and_prevents_double_count(monkeypatch, 
         seed_store.save(library)
         seed_store.save(guild)
 
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_store_factory",
-        lambda _state, name: open_world_setting_store(str(db_path)),
-    )
+    connection = connect_sqlite(db_path)
     state = {
         "write_db": True,
         "effective_scene_text": "莱尔走进了灰烬图书馆的借阅室。",
         "cache": {},
+        "runtime_services": SimpleNamespace(
+            stores=SimpleNamespace(
+                world_setting=open_world_setting_store(connection)
+            )
+        ),
     }
 
     first = confirmation_nodes.setting_appearance_update_node(state)
@@ -200,6 +201,7 @@ def test_setting_appearance_node_dry_run_and_prevents_double_count(monkeypatch, 
     assert state["cache"]["recorded_setting_ids"] == [library.setting_id]
     with open_world_setting_store(str(db_path)) as check:
         assert check.get_by_id(library.setting_id).hit_count == 1
+    connection.close()
 
     replayed = confirmation_nodes.setting_appearance_update_node(state)
     assert replayed["recorded_setting_ids"] == [library.setting_id]
@@ -447,116 +449,3 @@ def test_staged_director_npc_promotes_without_preadding_participants(
     assert saved.status == "introduced"
     with services.stores.npc_profile as store:
         assert [profile.name for profile in store.list_all()] == ["林澈"]
-
-
-class _FakeStore:
-    def __init__(self, active=None):
-        self._active = active or []
-
-    def list_active(self):
-        return self._active
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_args):
-        return False
-
-
-def _continuity_node_state(*, cache, scene_text="正文", clear=False):
-    return {
-        "pipeline_input": SimpleNamespace(
-            turn_index=1,
-            user_input="",
-            clear_continuity_before_save=clear,
-        ),
-        "updated_state": SimpleNamespace(
-            scene=SimpleNamespace(scene_id="scene_001")
-        ),
-        "effective_scene_text": scene_text,
-        "trace_id": "trace-1",
-        "cache": cache,
-        "active_continuity_items": [],
-        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
-    }
-
-
-
-
-
-
-
-
-def _state_update_node_state(*, cache):
-    return {
-        "pipeline_input": SimpleNamespace(
-            turn_index=1,
-            user_input="主角离开酒馆前往北门。",
-        ),
-        "trace_id": "trace-1",
-        "cache": cache,
-        "state_before_update": CurrentState(
-            scene=SceneState(scene_id="scene-1", location="酒馆"),
-            player=PlayerState(name="主角"),
-        ),
-        "effective_scene_text": "第一段。\n\n第二段。",
-        "scene_facts_json": "{}",
-        "core_memory": CoreMemory(items=[]),
-        "existing_npc_profiles": [],
-        "events": [],
-        "node_errors": [],
-        "write_db": True,
-        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
-    }
-
-
-def _npc_node_state(**overrides):
-    state = {
-        "pipeline_input": SimpleNamespace(turn_index=1, user_input=""),
-        "trace_id": "trace-1",
-        "cache": {"key": "正文"},
-        "write_db": True,
-        "scene_facts": SceneFactSet(scene_focus="裴玉奴出现在醉花楼。", facts=[]),
-        "updated_state": CurrentState(
-            scene=SceneState(
-                scene_id="scene_001",
-                location="醉花楼",
-                participants=["萧云痕"],
-            ),
-            player=PlayerState(name="萧云痕"),
-        ),
-        "effective_scene_text": "裴玉奴出现在醉花楼。",
-        "core_memory": CoreMemory(items=[]),
-        "existing_npc_profiles": [],
-        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
-    }
-    state.update(overrides)
-    return state
-
-
-def _fake_process(saved_ids=("npc_fresh",), candidates=(), warnings=()):
-    return SimpleNamespace(
-        saved_ids=list(saved_ids),
-        new_npc_candidates=list(candidates),
-        warnings=list(warnings),
-    )
-
-
-def _confirmed_npc_result(
-    *,
-    updated_ids=("npc_fresh",),
-    candidates=(),
-    warnings=(),
-):
-    return NPCConfirmedTurnResult(
-        process_result=_fake_process(candidates=candidates, warnings=warnings),
-        updated_npc_profile_ids=list(updated_ids),
-    )
-
-
-def _patch_npc_store(monkeypatch):
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_store_factory",
-        lambda _state, _name: _FakeStore(),
-    )

@@ -1,4 +1,4 @@
-from app.runtime.stores import open_director_log_store
+from app.tests.factories.stores import open_director_log_store
 import hashlib
 import json
 import sqlite3

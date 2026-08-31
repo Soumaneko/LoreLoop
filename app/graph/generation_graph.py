@@ -330,10 +330,7 @@ def reroll_turn_stream(turn_id: str):
                 )
         finally:
             if state is not None:
-                services = state.get("runtime_services", {})
-                stores = services.stores if hasattr(services, "stores") else None
-                if stores is not None and getattr(stores, "close", None) is not None:
-                    stores.close()
+                state["runtime_services"].stores.close()
 
 
 def rephrase_turn_stream(turn_id: str):
@@ -365,10 +362,7 @@ def rephrase_turn_stream(turn_id: str):
                 version_index=version_index,
             )
         finally:
-            services = state.get("runtime_services", {})
-            stores = services.stores if hasattr(services, "stores") else None
-            if stores is not None and getattr(stores, "close", None) is not None:
-                stores.close()
+            state["runtime_services"].stores.close()
 
 
 def feedback_rewrite_stream(
@@ -467,10 +461,7 @@ def feedback_rewrite_stream(
                 emitted_event_count=1,
             )
         finally:
-            services = state.get("runtime_services", {})
-            stores = services.stores if hasattr(services, "stores") else None
-            if stores is not None and getattr(stores, "close", None) is not None:
-                stores.close()
+            state["runtime_services"].stores.close()
 
 
 def _pending_context_state(
@@ -593,10 +584,7 @@ def _generate_turn_stream(
             )
     finally:
         if state is not None:
-            services = state.get("runtime_services", {})
-            stores = services.stores if hasattr(services, "stores") else None
-            if stores is not None and getattr(stores, "close", None) is not None:
-                stores.close()
+            state["runtime_services"].stores.close()
 
 
 def _stream_generation_graph(
@@ -648,8 +636,4 @@ def _stream_generation_graph(
             event_count += 1
             yield event
     finally:
-        runtime_services = state.get("runtime_services")
-        if runtime_services is not None:
-            stores = getattr(runtime_services, "stores", None)
-            if stores is not None and getattr(stores, "close", None) is not None:
-                stores.close()
+        state["runtime_services"].stores.close()

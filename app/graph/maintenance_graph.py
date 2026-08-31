@@ -57,6 +57,4 @@ def run_scene_summary_maintenance(
         raise
     finally:
         if state is not None:
-            stores = getattr(state.get("runtime_services"), "stores", None)
-            if stores is not None and getattr(stores, "close", None) is not None:
-                stores.close()
+            state["runtime_services"].stores.close()

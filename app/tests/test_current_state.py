@@ -1,4 +1,4 @@
-from app.runtime.stores import open_current_state_store
+from app.tests.factories.stores import open_current_state_store
 import json
 import sqlite3
 

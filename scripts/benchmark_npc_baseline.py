@@ -34,7 +34,6 @@ recorded outputs and the deterministic downstream results.
 """
 
 from __future__ import annotations
-from app.runtime.stores import open_npc_profile_store
 
 import argparse
 import hashlib
@@ -66,6 +65,7 @@ from app.domain.npc_profile.schemas import KnownAbility, NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.views import project_current_state
+from app.runtime.sqlite import connect_sqlite
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,6 +73,11 @@ DEFAULT_FIXTURES = ROOT / "benchmarks" / "npc_baseline" / "fixtures_batch.json"
 DEFAULT_RECORDINGS = ROOT / "benchmarks" / "npc_baseline" / "recordings" / "batch.json"
 DEFAULT_BASELINE = ROOT / "benchmarks" / "npc_baseline" / "baseline_batch.json"
 BENCHMARK_VERSION = 3
+
+
+def _open_npc_store():
+    return NPCProfileStore(connect_sqlite(":memory:"), owns_connection=True)
+
 
 #: Deterministic ``updated_at`` for the batch backend so replay is byte-stable.
 _ADMITTED_AT = "2026-08-12T00:00:00Z"
@@ -681,7 +686,7 @@ def _run_offline_batch(
         if recorded.npc_batch_update is not None
         else []
     )
-    with open_npc_profile_store(":memory:") as store:
+    with _open_npc_store() as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
         gateway = StubGateway(responses)
@@ -1269,7 +1274,7 @@ def _record_case(
             scene_text=case.scene_text,
         )
     }
-    with open_npc_profile_store(":memory:") as store:
+    with _open_npc_store() as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
         _run_live_pipeline(
@@ -1315,7 +1320,7 @@ def _expected_batch_input(case: BenchmarkCase) -> dict[str, str] | None:
         if document.source_type == "scene_paragraph"
     }
     scene_facts = SceneFactSet.model_validate_json(case.scene_facts)
-    with open_npc_profile_store(":memory:") as store:
+    with _open_npc_store() as store:
         for profile in case.effective_roster():
             store.upsert(profile.to_profile())
         profiles = store.list_all()

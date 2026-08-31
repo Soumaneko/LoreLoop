@@ -1,4 +1,4 @@
-from app.runtime.stores import open_npc_profile_store
+from app.tests.factories.stores import open_npc_profile_store
 import pytest
 
 import json
@@ -281,11 +281,7 @@ def test_npc_update_node_projects_unmatched_candidate_to_debug_event(
         )
 
     monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
-    monkeypatch.setattr(
-        confirmation_nodes,
-        "_store_factory",
-        lambda _state, name: open_npc_profile_store(":memory:"),
-    )
+    npc_store = open_npc_profile_store(":memory:")
     state = {
         "write_db": True,
         "pipeline_input": SimpleNamespace(
@@ -299,7 +295,10 @@ def test_npc_update_node_projects_unmatched_candidate_to_debug_event(
         "updated_state": make_current_state(),
         "core_memory": CoreMemory(items=[]),
         "existing_npc_profiles": [],
-        "runtime_services": SimpleNamespace(gateway=lambda **kw: object()),
+        "runtime_services": SimpleNamespace(
+            gateway=lambda **kw: object(),
+            stores=SimpleNamespace(npc_profile=npc_store),
+        ),
     }
 
     result = confirmation_nodes.npc_profile_update_node(state)
@@ -309,6 +308,7 @@ def test_npc_update_node_projects_unmatched_candidate_to_debug_event(
         "name": "练气巅峰采药女",
         "alias_surfaces": [],
     }]
+    npc_store.close()
 
 
 def test_confirmation_observation_two_tier_npcs(tmp_path):

@@ -1,4 +1,4 @@
-from app.runtime.stores import open_scene_summary_store
+from app.tests.factories.stores import open_scene_summary_store
 import json
 from types import SimpleNamespace
 
@@ -214,7 +214,7 @@ def test_scene_summary_condense_skip_emits_diagnostic_and_keeps_sources(
         "events": [],
         "runtime_services": SimpleNamespace(
             gateway=lambda **_kwargs: object(),
-            stores=SimpleNamespace(scene_summary=_StoreContext),
+            stores=SimpleNamespace(scene_summary=_StoreContext()),
             diagnostics=diagnostics,
         ),
         "trace_id": "trace-maintenance",

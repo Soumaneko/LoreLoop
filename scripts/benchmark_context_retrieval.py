@@ -1,7 +1,4 @@
 from __future__ import annotations
-from app.runtime.stores import open_continuity_store
-from app.runtime.stores import open_confirmed_history_store
-from app.runtime.stores import open_npc_profile_store
 
 import argparse
 import hashlib
@@ -29,11 +26,16 @@ from app.domain.npc_profile.changes import AcceptedNPCScalarChange
 from app.domain.npc_profile.history_bridge import NPCProfileHistoryBridge
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
+from app.runtime.sqlite import connect_sqlite
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES = ROOT / "benchmarks" / "context_retrieval" / "cases.json"
 DEFAULT_BASELINE = ROOT / "benchmarks" / "context_retrieval" / "baseline.json"
+
+
+def _memory_store(store_type):
+    return store_type(connect_sqlite(":memory:"), owns_connection=True)
 
 
 class TurnFixture(BaseModel):
@@ -677,9 +679,9 @@ def _materialize_npc_field_fixtures(
 def run_case(case: BenchmarkCase) -> dict:
     policy = HistoryDiversityPolicy(**case.policy)
     with (
-        open_confirmed_history_store() as history_store,
-        open_continuity_store() as continuity_store,
-        open_npc_profile_store(":memory:") as npc_store,
+        _memory_store(ConfirmedHistoryStore) as history_store,
+        _memory_store(ContinuityStore) as continuity_store,
+        _memory_store(NPCProfileStore) as npc_store,
     ):
         for turn in case.turns:
             history_store.upsert_turn(**turn.model_dump())

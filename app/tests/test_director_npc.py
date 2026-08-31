@@ -1,4 +1,4 @@
-from app.runtime.stores import open_director_npc_store
+from app.tests.factories.stores import open_director_npc_store
 import sqlite3
 
 import pytest

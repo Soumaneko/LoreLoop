@@ -29,22 +29,26 @@ def configure_runtime_services(monkeypatch):
                 return store_factories[name]()
             return getattr(base_stores, name)
 
-        stores = SimpleNamespace(**{
-            name: _store(name)
-            for name in (
-                "current_state",
-                "continuity",
-                "short_term",
-                "confirmed_history",
-                "scene_summary",
-                "npc_profile",
-                "core_memory",
-                "director_event",
-                "director_npc",
-                "director_log",
-                "world_setting",
-            )
-        })
+        stores = SimpleNamespace(
+            paths=base_stores.paths,
+            close=lambda: None,
+            **{
+                name: _store(name)
+                for name in (
+                    "current_state",
+                    "continuity",
+                    "short_term",
+                    "confirmed_history",
+                    "scene_summary",
+                    "npc_profile",
+                    "core_memory",
+                    "director_event",
+                    "director_npc",
+                    "director_log",
+                    "world_setting",
+                )
+            },
+        )
         services = RuntimeServices(
             stores=stores,
             gateway_factory=gateway_factory or runtime.gateway_factory,

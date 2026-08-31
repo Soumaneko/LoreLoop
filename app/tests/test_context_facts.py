@@ -1,7 +1,7 @@
-from app.runtime.stores import open_continuity_store
-from app.runtime.stores import open_confirmed_history_store
-from app.runtime.stores import open_npc_profile_store
-from app.runtime.stores import open_world_setting_store
+from app.tests.factories.stores import open_continuity_store
+from app.tests.factories.stores import open_confirmed_history_store
+from app.tests.factories.stores import open_npc_profile_store
+from app.tests.factories.stores import open_world_setting_store
 import json
 from types import SimpleNamespace
 

@@ -1,4 +1,4 @@
-from app.runtime.stores import open_confirmed_history_store
+from app.tests.factories.stores import open_confirmed_history_store
 from app.domain.confirmed_history import (
     ConfirmedHistoryStore,
     adjacent_context,

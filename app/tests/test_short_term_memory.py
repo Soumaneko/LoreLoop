@@ -1,4 +1,4 @@
-from app.runtime.stores import open_short_term_store
+from app.tests.factories.stores import open_short_term_store
 import tempfile
 
 import pytest
