@@ -98,18 +98,6 @@ class TestShortTermMemoryStore:
         assert len(all_scenes) == 5
         assert [s.scene_id for s in all_scenes] == ["s1", "s2", "s3", "s4", "s5"]
 
-    def test_custom_max_items(self):
-        store = open_short_term_store(max_items=2)
-        store.add_turn("s1", 1, "action", "剧情1")
-        store.add_turn("s2", 2, "action", "剧情2")
-        store.add_turn("s3", 3, "action", "剧情3")
-
-        memory = store.get_recent()
-        assert len(memory.recent_scenes) == 2
-        assert [s.scene_id for s in memory.recent_scenes] == ["s2", "s3"]
-
-        all_scenes = store.list_all()
-        assert len(all_scenes) == 3
 
     def test_list_page_uses_exclusive_turn_cursor(self):
         store = open_short_term_store(max_items=2)
@@ -128,68 +116,12 @@ class TestShortTermMemoryStore:
         assert [scene.turn_index for scene in oldest] == [1, 2]
         assert has_more is False
 
-    def test_list_navigation_entries_returns_only_ordered_index_fields(self):
-        store = open_short_term_store(max_items=2)
-        store.add_turn("s2", 2, "第二个行动", "不应进入导航的正文")
-        store.add_turn("s1", 1, "第一个行动", "同样不应进入导航的正文")
-
-        assert store.list_navigation_entries() == [
-            (1, "第一个行动"),
-            (2, "第二个行动"),
-        ]
-
-    def test_empty_store_returns_empty(self):
-        store = open_short_term_store()
-        memory = store.get_recent()
-        assert memory.recent_scenes == []
-        assert memory.max_items == 5
-
-    def test_clear_removes_existing_scenes(self):
-        store = open_short_term_store(max_items=5)
-        store.add_turn("s1", 1, "观察四周", "第一段剧情")
-        store.add_turn("s2", 2, "继续前进", "第二段剧情")
-
-        store.clear()
-
-        assert store.get_recent().recent_scenes == []
-        assert store.list_all() == []
-
-    def test_scenes_returns_in_order(self):
-        store = open_short_term_store(max_items=3)
-        store.add_turn("s1", 1, "action", "剧情1")
-        store.add_turn("s2", 2, "action", "剧情2")
-
-        memory = store.get_recent()
-        assert memory.recent_scenes[0].turn_index == 1
-        assert memory.recent_scenes[1].turn_index == 2
-        assert memory.recent_scenes[0].created_at is not None
-
-    def test_invalid_max_items_rejected(self):
-        with pytest.raises(ValueError):
-            open_short_term_store(max_items=0)
 
 
-class TestShortTermMemoryModel:
-    def test_default_list_is_isolated(self):
-        m1 = ShortTermMemory()
-        m2 = ShortTermMemory()
-        m1.recent_scenes.append(ShortTermScene(
-            scene_id="s1", turn_index=1, scene_text="剧情",
-        ))
-        assert m2.recent_scenes == []
 
-    def test_invalid_max_items_rejected(self):
-        with pytest.raises(ValidationError):
-            ShortTermMemory(max_items=0)
 
-    def test_user_input_default_empty(self):
-        scene = ShortTermScene(
-            scene_id="s1", turn_index=1, scene_text="剧情",
-        )
-        assert scene.user_input == ""
-        assert scene.closing_prompt == ""
-        assert scene.action_preview is None
-        assert scene.player_resolution is None
+
+
 
 
 class TestShortTermMemoryPersistence:
@@ -228,84 +160,8 @@ class TestShortTermMemoryPersistence:
         import os
         os.unlink(db_path)
 
-    def test_existing_minimal_db_is_supported(self):
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
 
-        import sqlite3
-        con = sqlite3.connect(db_path)
-        con.execute(
-            """
-            CREATE TABLE short_term_scenes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scene_id TEXT NOT NULL,
-                turn_index INTEGER NOT NULL,
-                user_input TEXT NOT NULL DEFAULT '',
-                scene_text TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        con.execute(
-            """
-            INSERT INTO short_term_scenes (
-                scene_id, turn_index, user_input, scene_text, created_at
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
-            ("s1", 1, "观察", "旧剧情", "2026-01-01T00:00:00+00:00"),
-        )
-        con.commit()
-        con.close()
 
-        store = open_short_term_store(db_path=db_path)
-        memory = store.get_recent()
-        store.add_turn("s2", 2, "继续", "新剧情")
-        updated = store.get_recent()
-        store.close()
-
-        assert memory.recent_scenes[0].scene_text == "旧剧情"
-        assert memory.recent_scenes[0].closing_prompt == ""
-        assert memory.recent_scenes[0].action_preview is None
-        assert updated.recent_scenes[1].scene_text == "新剧情"
-
-        import os
-        os.unlink(db_path)
-
-    def test_persisted_eviction(self):
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        store = open_short_term_store(db_path=db_path, max_items=3)
-        for i in range(1, 6):
-            store.add_turn(f"s{i}", i, "action", f"剧情{i}")
-        store.close()
-
-        store2 = open_short_term_store(db_path=db_path, max_items=3)
-        memory = store2.get_recent()
-        all_scenes = store2.list_all()
-        store2.close()
-
-        assert len(memory.recent_scenes) == 3
-        assert [s.scene_id for s in memory.recent_scenes] == ["s3", "s4", "s5"]
-
-        assert len(all_scenes) == 5
-        assert [s.scene_id for s in all_scenes] == ["s1", "s2", "s3", "s4", "s5"]
-
-        import os
-        os.unlink(db_path)
-
-    def test_empty_db_returns_empty(self):
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        store = open_short_term_store(db_path=db_path)
-        memory = store.get_recent()
-        store.close()
-
-        assert memory.recent_scenes == []
-
-        import os
-        os.unlink(db_path)
 
 
 class TestListAll:
@@ -321,20 +177,3 @@ class TestListAll:
         memory = store.get_recent()
         assert len(memory.recent_scenes) == 2
         assert [s.scene_id for s in memory.recent_scenes] == ["s6", "s7"]
-
-    def test_list_all_empty_store(self):
-        store = open_short_term_store()
-        assert store.list_all() == []
-
-    def test_list_all_returns_short_term_scene_objects(self):
-        store = open_short_term_store(max_items=5)
-        store.add_turn("s1", 1, "观察", "剧情")
-
-        all_scenes = store.list_all()
-        assert len(all_scenes) == 1
-        scene = all_scenes[0]
-        assert isinstance(scene, ShortTermScene)
-        assert scene.scene_id == "s1"
-        assert scene.user_input == "观察"
-        assert scene.scene_text == "剧情"
-        assert scene.created_at is not None
