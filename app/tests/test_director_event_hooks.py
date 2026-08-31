@@ -3,13 +3,13 @@ import pytest
 from pydantic import ValidationError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
-from app.domain.director.generation import run_generation_director_agent
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
 from app.tests.factories.director import make_current_state
 from app.tests.factories.director import make_review_node_state
+from app.tests.factories.director import run_generation_director_agent
 
 
 def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):

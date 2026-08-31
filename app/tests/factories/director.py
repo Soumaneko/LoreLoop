@@ -7,6 +7,12 @@ from app.domain.director_npc import DirectorNPCDraft
 from app.domain.scene_facts.schemas import SceneFactSet
 
 
+def run_generation_director_agent(**kwargs):
+    from app.domain.director.generation import DirectorGenerationExecutor
+
+    return DirectorGenerationExecutor(**kwargs).run()
+
+
 def make_decision_batch(**kwargs) -> DirectorDecisionBatch:
     return DirectorDecisionBatch(**kwargs)
 

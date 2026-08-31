@@ -18,10 +18,7 @@ class RollResolver:
 
     def select_roll_actions(self, parse_result: ActionParseResult) -> list[AtomicAction]:
         actions = [a for a in parse_result.atomic_actions if not action_never_rolls(a)]
-        if self.config.roll_only_when_needed:
-            actions = [a for a in actions if a.likely_needs_roll]
-
-        return list(actions)
+        return [a for a in actions if a.likely_needs_roll]
 
     def resolve(
         self,

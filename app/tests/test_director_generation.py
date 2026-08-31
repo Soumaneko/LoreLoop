@@ -4,7 +4,6 @@ import json
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.director.generation import run_generation_director_agent
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
 
@@ -12,6 +11,7 @@ from app.tests.factories.director import (
     ScriptedDirectorGateway,
     make_current_state,
     make_director_npc,
+    run_generation_director_agent,
 )
 
 

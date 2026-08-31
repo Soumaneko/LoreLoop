@@ -723,19 +723,3 @@ def _suppress_attribution(
     attribution.
     """
     return support.basis_complete and support.support_class == "zero"
-
-
-def partition_served(
-    direct_intents: set[str],
-    relation_intents: set[str],
-    degraded_relation_intents: set[str],
-) -> tuple[set[str], set[str]]:
-    """Split a selected document's served intents into normal vs degraded.
-
-    Normal coverage is any direct intent plus any non-degraded relation
-    intent. A degraded relation intent that is also directly served counts as
-    normal coverage and is not a rescue.
-    """
-    normal = direct_intents | (relation_intents - degraded_relation_intents)
-    degraded = degraded_relation_intents - normal
-    return normal, degraded

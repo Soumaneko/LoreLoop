@@ -1,8 +1,7 @@
 """Generation-stage Director skill execution（领域层）。
 
-LangGraph 节点只调用 :class:`DirectorGenerationExecutor`（或薄包装
-``run_generation_director_agent``）。技能 handler 与其参数 validator 均
-在本模块，而不是编排层。生成阶段技能为只读：只产出
+LangGraph 节点只调用 :class:`DirectorGenerationExecutor`。技能 handler
+与其参数 validator 均在本模块，而不是编排层。生成阶段技能为只读：只产出
 :class:`DirectorStageMaterial`，不触碰任何持久状态。
 """
 
@@ -258,38 +257,6 @@ class DirectorGenerationExecutor:
             ),
             decision,
         )
-
-
-def run_generation_director_agent(
-    *,
-    gateway,
-    stores,
-    core_memory: CoreMemory,
-    current_state: CurrentState,
-    user_input: str,
-    context_facts: list[str],
-    recent_summaries: list[SceneSummary],
-    turn_index: int,
-    trace_id: str,
-    touched_event_candidates: list[str] | None = None,
-    npc_profiles: list[NPCProfile],
-) -> tuple[DirectorStageResult, object]:
-    """Run the generation Director stage."""
-    return DirectorGenerationExecutor(
-        gateway=gateway,
-        stores=stores,
-        core_memory=core_memory,
-        current_state=current_state,
-        user_input=user_input,
-        context_facts=context_facts,
-        recent_summaries=recent_summaries,
-        turn_index=turn_index,
-        trace_id=trace_id,
-        touched_event_candidates=touched_event_candidates,
-        npc_profiles=npc_profiles,
-    ).run()
-
-
 def _present_event(
     store,
     args: PresentEventArguments,

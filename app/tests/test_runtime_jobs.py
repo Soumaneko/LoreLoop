@@ -3,7 +3,7 @@ import threading
 import pytest
 
 from app.graph import generation_graph
-from app.runtime.graph_cache import clear_compiled_graph_cache
+from app.runtime.graph_cache import COMPILED_GRAPH_CACHE
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 
@@ -87,7 +87,7 @@ def test_job_coordinator_delegates_execution_to_operation_manager():
 
 
 def test_compiled_generation_graph_is_cached_and_dependency_aware(monkeypatch):
-    clear_compiled_graph_cache("generation")
+    COMPILED_GRAPH_CACHE.clear("generation")
     first = generation_graph.build_generation_graph(
         canon_validation_is_enabled=True,
     )

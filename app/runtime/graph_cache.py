@@ -43,7 +43,3 @@ def get_cached_graph(
     builder: Callable[[], Any],
 ) -> Any:
     return COMPILED_GRAPH_CACHE.get_or_build(name, dependencies, builder)
-
-
-def clear_compiled_graph_cache(name: str | None = None) -> None:
-    COMPILED_GRAPH_CACHE.clear(name)

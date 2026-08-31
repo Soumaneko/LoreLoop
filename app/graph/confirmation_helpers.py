@@ -140,17 +140,6 @@ def ensure_director_npc_profile(
         return DirectorNPCConfirmation(npc_id=npc_id, draft=draft)
 
 
-def merge_unique_ids(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    merged: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        merged.append(value)
-    return merged
-
-
 def project_scene_text_with_staged_director_npc(
     scene_text: str,
     *,

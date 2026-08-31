@@ -90,16 +90,6 @@ def _write_settings(settings: dict[str, Any]) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def save_settings(settings: dict[str, Any]) -> None:
-    from .session import get_campaign_runtime
-
-    runtime = get_campaign_runtime()
-    with runtime.operation_submission():
-        with _SETTINGS_LOCK:
-            _write_settings(settings)
-            runtime.invalidate_generation_cache()
-
-
 def _update_settings(updates: dict[str, Any]) -> dict[str, Any]:
     from .session import get_campaign_runtime
 

@@ -159,19 +159,6 @@ class StateChangeSet(BaseModel):
         return self
 
 
-class StateChangeSetLoose(BaseModel):
-    """顶层宽松容器：只约束 decision 与 operations 列表形态。
-
-    decision 可为空、顶层额外字段和超过 30 项都不会在 schema 层失败；这些
-    由 ``output_validator`` 反馈/裁剪，以便保留可用的合法 operation。
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    decision: str | None = None
-    operations: list[Any] = Field(default_factory=list)
-
-
 #: 由 ``FinalSceneFrame`` 经确定性引擎编译的操作类型；LLM 不得直接输出。
 FRAME_OPERATION_TYPES: frozenset[str] = frozenset({
     "location_change",

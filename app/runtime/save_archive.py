@@ -110,7 +110,7 @@ def create_consistent_snapshot(source_dir: Path, destination_dir: Path) -> list[
     _assert_current_layout(source)
     _prepare_empty_directory(destination)
 
-    for relative, item in _iter_save_files(source, export_filter=True):
+    for relative, item in _iter_save_files(source):
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         if item.suffix == ".db":
@@ -353,9 +353,7 @@ def _portable_snapshot_path(value: str, root: Path) -> str:
     return target.relative_to(root).as_posix()
 
 
-def _iter_save_files(
-    root: Path, *, export_filter: bool = True
-) -> Iterable[tuple[Path, Path]]:
+def _iter_save_files(root: Path) -> Iterable[tuple[Path, Path]]:
     candidates = sorted(root.iterdir())
     for item in candidates:
         if item.is_symlink():
@@ -364,12 +362,7 @@ def _iter_save_files(
             if item.name.endswith(("-wal", "-shm")):
                 continue
             relative = Path(item.name)
-            allowed = (
-                _is_allowed_for_export(relative.as_posix())
-                if export_filter
-                else _is_allowed_relative_path(relative.as_posix())
-            )
-            if allowed:
+            if _is_allowed_for_export(relative.as_posix()):
                 yield relative, item
             continue
         if not item.is_dir() or item.name not in _ALLOWED_SUBTREES:
@@ -382,12 +375,7 @@ def _iter_save_files(
             if not nested.is_file() or nested.name.endswith(("-wal", "-shm")):
                 continue
             relative = nested.relative_to(root)
-            allowed = (
-                _is_allowed_for_export(relative.as_posix())
-                if export_filter
-                else _is_allowed_relative_path(relative.as_posix())
-            )
-            if allowed:
+            if _is_allowed_for_export(relative.as_posix()):
                 yield relative, nested
 
 

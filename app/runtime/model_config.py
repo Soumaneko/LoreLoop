@@ -78,12 +78,11 @@ class ModelConfigStore:
         path: str | Path = MODEL_CONFIG_FILE,
         *,
         secret_protector: SecretProtector | None = None,
-        use_platform_protector: bool = True,
     ) -> None:
         self.path = Path(path)
         self._secret_protector = (
             default_secret_protector()
-            if secret_protector is None and use_platform_protector
+            if secret_protector is None
             else secret_protector
         )
 

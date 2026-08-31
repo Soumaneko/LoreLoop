@@ -22,8 +22,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.npc_profile.schemas import LLMKnownAbility
-
 NPC_SCENE_SUMMARY_HARD_LIMIT = 160
 NPC_SCENE_SUMMARY_ACCEPT_LIMIT = 200
 NPC_SCENE_SUMMARY_SOFT_LIMIT = 240
@@ -74,17 +72,6 @@ class ScalarStableChangeHard(_EvidenceCarrying):
     field: Literal["role", "appearance", "faction"]
     value: str = Field(min_length=1)
     change_basis: str = Field(min_length=1, max_length=CHANGE_BASIS_HARD_LIMIT)
-
-
-class AbilityAddChange(_EvidenceCarrying):
-    """Reserved append-only ability contract; per-turn admission is frozen.
-
-    保留该类供后续重新设计能力准入时复用，但故意不放入
-    ``NPCStableChange``，因此当前 LLM Schema 无权输出它。
-    """
-
-    field: Literal["known_abilities"]
-    ability: LLMKnownAbility
 
 
 class NPCSceneSummaryDraft(BaseModel):

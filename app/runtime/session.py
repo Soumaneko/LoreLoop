@@ -353,19 +353,19 @@ class CampaignRuntime:
                 self._active_uows_cv.wait(timeout=min(0.2, remaining) if remaining is not None else 0.2)
 
     # Phase 4 unified offline restore barrier
-    def _run_offline_restore(self, fn: Callable[[], Any], *, allow_retry: bool = True) -> Any:
+    def _run_offline_restore(self, fn: Callable[[], Any]) -> Any:
         """Quiesce, close session stores, run offline restore, rebuild.
 
         fn is called with all operation UoWs and session stores closed, so it
         may safely do ``os.replace`` on campaign.db and update control.db.
         On failure the gate stays closed and the error is surfaced; callers
-        may retry via ``allow_retry=True`` or restart where durable intent
-        will complete recovery.
+        may retry in the same process or restart where durable intent will
+        complete recovery.
         """
         # 1. Close gate for new UoWs/operations
         with self._active_uows_cv:
             if self._restore_gate_closed:
-                if allow_retry and self._restore_error is not None:
+                if self._restore_error is not None:
                     # Previous restore failed, allow same-process retry by resetting gate
                     self._restore_gate_closed = False
                     self._restore_error = None

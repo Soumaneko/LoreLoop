@@ -63,7 +63,7 @@ class TestDefaultRoll:
             assert roll.dice == "1d6"
             assert 1 <= roll.value <= 6
 
-    def test_roll_only_when_needed(self):
+    def test_only_actions_marked_for_roll_are_selected(self):
         parse_result = ActionParseResult(
             atomic_actions=[
                 _make_action("a1", 1, True),
@@ -72,28 +72,12 @@ class TestDefaultRoll:
             anchors=[],
         )
 
-        resolver = RollResolver(RollConfig(roll_only_when_needed=True))
+        resolver = RollResolver(RollConfig())
         result = resolver.resolve(parse_result)
 
         assert result.dice_formula == "1d20"
         assert result.total_rolls == 1
         assert result.results[0].action_id == "a1"
-
-    def test_roll_all_actions_when_disabled(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, False),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(roll_only_when_needed=False))
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "2d20"
-        assert result.total_rolls == 2
-        assert [r.action_id for r in result.results] == ["a1", "a2"]
 
     def test_seeded_rolls_are_reproducible(self):
         parse_result = ActionParseResult(
