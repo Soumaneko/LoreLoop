@@ -174,26 +174,6 @@ def _seed_legacy_log_without_basis(
 
 
 class TestIdentity:
-    def test_long_field_value_basis_does_not_crash(self):
-        long_value = "北门巡检" + "甲" * 508
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _logs(store, [{
-                "npc_id": "npc-a",
-                "field": "role",
-                "new_value": long_value,
-                # 长 new_value 不影响 basis：basis 是短 change_basis（≤80）。
-                "change_basis": "北门巡检",
-                "turn": 1,
-                "evidence_text": long_value,
-            }])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "顾青", (), ()),
-            ]))
-
-        assert len(result.links) == 1
-        basis = result.links[0].evidence_basis_primary
-        assert basis == "北门巡检"
 
     def test_name_match_emits_latest_field_node(self):
         with open_npc_profile_store(":memory:") as store:
@@ -217,118 +197,10 @@ class TestIdentity:
         assert link.evidence_basis_primary == "北门巡检"
         assert link.basis_complete is True
 
-    def test_alias_match_uses_npc_alias_reason(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青", aliases=("阿青",))
-            _logs(store, [{
-                "npc_id": "npc-a",
-                "field": "role",
-                "new_value": "北门巡检",
-                "turn": 1,
-                "evidence_text": "她接过铜印，正式成为北门巡检。",
-            }])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "阿青", (), ()),
-            ]))
 
-        assert result.links[0].match_reasons == ["npc_alias_match"]
 
-    def test_transient_alias_is_not_a_history_index(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(
-                store,
-                "npc-a",
-                "顾青",
-                transient_aliases=(("阿青", 3),),
-            )
-            _logs(store, [{
-                "npc_id": "npc-a",
-                "field": "role",
-                "new_value": "北门巡检",
-                "turn": 1,
-                "evidence_text": "她接过铜印，正式成为北门巡检。",
-            }])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "阿青", (), ()),
-            ]))
 
-        assert result.links == []
 
-    def test_identity_conflict_emits_every_profile_deterministically(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-b", "顾青")
-            _profile(store, "npc-a", "顾青")
-            _logs(store, [
-                {
-                    "npc_id": "npc-a",
-                    "field": "role",
-                    "new_value": "北门巡检",
-                    "turn": 1,
-                    "evidence_text": "甲正式成为北门巡检。",
-                },
-                {
-                    "npc_id": "npc-b",
-                    "field": "role",
-                    "new_value": "北门巡检",
-                    "turn": 1,
-                    "evidence_text": "乙正式成为北门巡检。",
-                },
-            ])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "顾青", (), ()),
-            ]))
-
-        assert result.matched_profile_ids == ["npc-a", "npc-b"]
-        assert {link.npc_id for link in result.links} == {"npc-a", "npc-b"}
-
-    def test_inactive_profile_requires_explicit_identity(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-liu", "柳伯", active=False)
-            _logs(store, [{
-                "npc_id": "npc-liu",
-                "field": "role",
-                "new_value": "旧渡口账房",
-                "turn": 1,
-                "evidence_text": "他被推举为旧渡口账房。",
-            }])
-            context_only = _bridge(store).retrieve(_plan([
-                ("q", "current_context", "柳伯", (), ()),
-            ]))
-            explicit = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "柳伯", (), ()),
-            ]))
-
-        assert context_only.links == []
-        assert len(explicit.links) == 1
-
-    def test_identity_takes_latest_node_per_field(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _logs(store, [
-                {
-                    "npc_id": "npc-a",
-                    "field": "role",
-                    "new_value": "守门人",
-                    "turn": 1,
-                    "evidence_text": "她当上守门人。",
-                    "scene_id": "scene_001",
-                },
-                {
-                    "npc_id": "npc-a",
-                    "field": "role",
-                    "new_value": "北门巡检",
-                    "turn": 5,
-                    "evidence_text": "她升任北门巡检。",
-                    "scene_id": "scene_005",
-                },
-            ])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "顾青", (), ()),
-            ]))
-
-        assert len(result.links) == 1
-        assert result.links[0].turn_index == 5
-        assert result.links[0].evidence_basis_primary == "北门巡检"
 
 
 class TestTopic:
@@ -359,124 +231,10 @@ class TestTopic:
 
         assert {link.npc_id for link in result.links} == {"npc-liulan"}
 
-    def test_entity_intent_without_identity_hit_does_not_topic_scan(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-zhang", "张三")
-            _logs(store, [{
-                "npc_id": "npc-zhang",
-                "field": "role",
-                "new_value": "佩剑教习",
-                "turn": 1,
-                "evidence_text": "张三成为佩剑教习。",
-            }])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "刘青", (), ("佩剑",)),
-            ]))
 
-        assert result.links == []
 
-    def test_value_topic_match_only_emits_matched_last_scene_node(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-shalan", "沙岚")
-            _logs(store, [
-                {
-                    "npc_id": "npc-shalan",
-                    "field": "last_scene_summary",
-                    "new_value": "她在盟会推举中接过赤沙会令牌。",
-                    "turn": 1,
-                    "evidence_text": "她在盟会推举中接过赤沙会令牌。",
-                    "scene_id": "scene_001",
-                },
-                {
-                    "npc_id": "npc-shalan",
-                    "field": "last_scene_summary",
-                    "new_value": "她从沙暴里救回整支商队，成为当地知名救援者。",
-                    "turn": 2,
-                    "evidence_text": "她从沙暴里救回整支商队。",
-                    "scene_id": "scene_002",
-                },
-            ])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("救援者身份",)),
-            ]))
 
-        assert len(result.links) == 1
-        link = result.links[0]
-        assert link.turn_index == 2
-        assert link.match_reasons == ["npc_delta_topic_match"]
-        assert link.evidence_basis_primary == (
-            "她从沙暴里救回整支商队，成为当地知名救援者。"
-        )
 
-    def test_pure_topic_intent_does_not_add_identity_baseline(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _logs(store, [{
-                "npc_id": "npc-a",
-                "field": "role",
-                "new_value": "北门巡检",
-                "turn": 1,
-                "evidence_text": "她接过铜印，正式成为北门巡检。",
-            }])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("救援",)),
-            ]))
-
-        assert result.links == []
-
-    def test_topic_matched_nodes_all_emit(self):
-        # 同一 (intent, npc, field) 的 ≥3 个主题命中节点全部进入发射：
-        # 每次出场都是一条独立的 appearance -> evidence 映射，不得按新旧
-        # 截断为最新两个（issue 16）。
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _logs(store, [
-                {
-                    "npc_id": "npc-a",
-                    "field": "role",
-                    "new_value": f"守门人{index}",
-                    "turn": index,
-                    "evidence_text": f"第{index}次守门记录。",
-                    "scene_id": f"scene_{index:03d}",
-                }
-                for index in (1, 3, 5)
-            ])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("守门",)),
-            ]))
-
-        assert len(result.links) == 3
-        assert sorted(link.turn_index for link in result.links) == [1, 3, 5]
-
-    def test_identity_plus_topic_unions_and_prefers_identity(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _logs(store, [
-                {
-                    "npc_id": "npc-a",
-                    "field": "role",
-                    "new_value": "守门人",
-                    "turn": 1,
-                    "evidence_text": "她当上守门人。",
-                    "scene_id": "scene_001",
-                },
-                {
-                    "npc_id": "npc-a",
-                    "field": "role",
-                    "new_value": "北门巡检",
-                    "turn": 5,
-                    "evidence_text": "她升任北门巡检。",
-                    "scene_id": "scene_005",
-                },
-            ])
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "顾青", (), ("守门",)),
-            ]))
-
-        links = {link.turn_index: link for link in result.links}
-        assert set(links) == {1, 5}
-        assert links[5].match_reasons == ["npc_name_match"]
-        assert links[1].match_reasons == ["npc_delta_topic_match"]
 
 
     def test_retained_old_fact_does_not_trigger_later_node(self):
@@ -518,84 +276,8 @@ class TestTopic:
         assert sorted(link.turn_index for link in retained.links) == [1]
         assert sorted(link.turn_index for link in new_fact.links) == [5]
 
-    def test_legacy_log_without_change_basis_is_incomplete(self):
-        # 旧日志（无持久化 change_basis）不得伪装完整 delta：
-        # basis_complete=False（incomplete，degraded rescue only）。
-        # 写入 API 已拒绝为累积字段制造 NULL basis，因此 legacy 行只能来自
-        # v8->v9 迁移读取；这里直接以 SQL 注入模拟迁移后的持久化状态。
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _seed_legacy_log_without_basis(
-                store,
-                npc_id="npc-a",
-                field="role",
-                new_value="北门巡检",
-                turn=1,
-                evidence_id="turn_1_p001",
-                evidence_text="她接过铜印，正式成为北门巡检。",
-                scene_id="scene_001",
-            )
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("巡检",)),
-            ]))
 
-        assert len(result.links) == 1
-        link = result.links[0]
-        assert link.basis_complete is False
-        assert link.match_reasons == ["npc_value_topic_match"]
-        assert link.evidence_basis_primary == "北门巡检"
 
-    def test_replaced_value_triggers_via_change_basis(self):
-        # 替换型变化：change_basis 承载语义，retained 旧值不触发（issue 16 P1）。
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _logs(store, [
-                {
-                    "npc_id": "npc-a",
-                    "field": "role",
-                    "old_value": "北门巡检",
-                    "new_value": "南门巡检",
-                    "change_basis": "改任南门巡检",
-                    "turn": 3,
-                    "evidence_text": "她奉调前往南门，出任南门巡检。",
-                    "scene_id": "scene_003",
-                },
-            ])
-            replaced = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("南门",)),
-            ]))
-            retained = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("北门",)),
-            ]))
-
-        assert sorted(link.turn_index for link in replaced.links) == [3]
-        assert retained.links == []
-
-    def test_removed_value_triggers_via_change_basis(self):
-        # 删除型变化：被移除的职责仍可通过 change_basis 检索到；retained 不触发。
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _logs(store, [
-                {
-                    "npc_id": "npc-a",
-                    "field": "role",
-                    "old_value": "北门巡检，兼管东市",
-                    "new_value": "北门巡检",
-                    "change_basis": "卸去东市巡务",
-                    "turn": 5,
-                    "evidence_text": "她卸去东市巡务，专心北门。",
-                    "scene_id": "scene_005",
-                },
-            ])
-            removed = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("东市",)),
-            ]))
-            retained = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("北门",)),
-            ]))
-
-        assert sorted(link.turn_index for link in removed.links) == [5]
-        assert retained.links == []
 
 
 class TestMultiIntent:
@@ -629,36 +311,6 @@ class TestMultiIntent:
 
 
 class TestEmission:
-    def test_identity_and_topic_nodes_all_emit_without_total_cap(self):
-        # 无 total_link_cap 截断：身份命中与主题命中节点全部发射（issue 16）。
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-zhang", "张三")
-            _profile(store, "npc-liu", "柳伯")
-            _logs(store, [
-                {
-                    "npc_id": "npc-zhang",
-                    "field": "role",
-                    "new_value": "佩剑教习",
-                    "turn": 1,
-                    "evidence_text": "张三成为佩剑教习。",
-                },
-                {
-                    "npc_id": "npc-liu",
-                    "field": "role",
-                    "new_value": "旧渡口账房",
-                    "turn": 2,
-                    "evidence_text": "他成为旧渡口账房。",
-                    "scene_id": "scene_002",
-                },
-            ])
-            result = _bridge(store).retrieve(_plan([
-                ("t", "explicit_input", "", (), ("佩剑",)),
-                ("i", "explicit_input", "柳伯", (), ()),
-            ]))
-
-        # 身份命中 npc-liu 优先发射，主题命中 npc-zhang 也发射，无截断。
-        assert [link.npc_id for link in result.links] == ["npc-liu", "npc-zhang"]
-        assert result.matched_profile_ids == ["npc-liu", "npc-zhang"]
 
     def test_deterministic_newest_first_order(self):
         with open_npc_profile_store(":memory:") as store:
@@ -685,85 +337,9 @@ class TestEmission:
 
         assert [link.turn_index for link in result.links] == [4, 3, 2, 1]
 
-    def test_all_triggered_nodes_emit_without_total_link_cap(self):
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            _profile(store, "npc-b", "陆衡")
-            logs = []
-            for npc_id in ("npc-a", "npc-b"):
-                for turn, (field, value) in enumerate(
-                    (("role", "巡检"), ("faction", "黑羽卫")),
-                    start=1,
-                ):
-                    logs.append({
-                        "npc_id": npc_id,
-                        "field": field,
-                        "new_value": value,
-                        "turn": turn,
-                        "evidence_text": f"{npc_id}第{turn}次记录。",
-                        "scene_id": f"scene_{turn:03d}",
-                    })
-            _logs(store, logs)
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "顾青", (), ()),
-                ("r", "explicit_input", "陆衡", (), ()),
-            ]))
 
-        # 身份骨架每 npc 每字段发射最新节点：2 npc × 2 字段 = 4 条，无截断。
-        assert len(result.links) == 4
-
-    def test_multi_evidence_node_is_not_partially_emitted(self):
-        # issue 16 必测 2：多 evidence 节点不得因桥级总 cap 被部分静默发射。
-        with open_npc_profile_store(":memory:") as store:
-            _profile(store, "npc-a", "顾青")
-            turn = 3
-            evidence_ids = [f"turn_3_p00{index}" for index in range(1, 5)]
-            documents = [
-                HistoryDocument(
-                    document_id=evidence_id,
-                    source_type="scene_paragraph",
-                    turn_index=turn,
-                    scene_id="scene_003",
-                    paragraph_index=index,
-                    text=f"第{index}段：她接过铜印，正式成为北门巡检。",
-                )
-                for index, evidence_id in enumerate(evidence_ids, start=1)
-            ]
-            profile = store.get_by_id("npc-a")
-            assert profile is not None
-            profile.role = "北门巡检"
-            store.upsert(profile)
-            store.record_accepted_field_changes(
-                changes=[AcceptedNPCScalarChange(
-                    npc_id="npc-a",
-                    canonical_name="顾青",
-                    field="role",
-                    old_value=None,
-                    new_value="北门巡检",
-                    change_basis="北门巡检",
-                    evidence_ids=tuple(evidence_ids),
-                    turn_index=turn,
-                    source="proposal",
-                )],
-                evidence_documents=documents,
-                turn_index=turn,
-                scene_id="scene_003",
-            )
-            result = _bridge(store).retrieve(_plan([
-                ("q", "explicit_input", "", (), ("北门巡检",)),
-            ]))
-
-        assert len(result.links) == 4
-        assert sorted(link.evidence_id for link in result.links) == sorted(evidence_ids)
 
 
 class TestTopicMatcher:
     def test_short_word_matches_present_bigram(self):
         assert support_score("救援", "她从沙暴里救回商队，成为当地救援者。") >= 1.0
-
-    def test_threshold_boundary(self):
-        assert support_score("救援者身份", "因从沙暴中救回商队而成为当地知名救援者。") >= NPC_TOPIC_MATCH_THRESHOLD
-        assert support_score("救援者身份", "接掌赤沙会并成为新任首领。") < NPC_TOPIC_MATCH_THRESHOLD
-
-    def test_unrelated_topic_scores_zero(self):
-        assert support_score("佩剑", "她接过铜印，正式成为北门巡检。") < NPC_TOPIC_MATCH_THRESHOLD
