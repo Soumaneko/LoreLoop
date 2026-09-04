@@ -8,9 +8,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from app.core.llm.config import GatewayConfig, SharedGatewayFactory
+from app.core.llm.config import (
+    DEFAULT_PROTOCOL,
+    PROTOCOLS,
+    GatewayConfig,
+    SharedGatewayFactory,
+)
 from app.core.llm.provider_classification import classify_provider_error
-from app.core.llm.providers import OpenAICompatibleProvider
+from app.core.llm.providers import LLMProvider
 
 from .paths import APP_CONFIG_DIR
 from .secret_protection import (
@@ -32,6 +37,7 @@ class StoredModelConfig:
     base_url: str
     model: str
     thinking: bool | None = None
+    protocol: str = DEFAULT_PROTOCOL
 
     @classmethod
     def from_dict(cls, value: object) -> "StoredModelConfig":
@@ -43,8 +49,16 @@ class StoredModelConfig:
         thinking = value.get("thinking")
         if thinking is not None and not isinstance(thinking, bool):
             raise ValueError("thinking must be true, false, or null")
-        if not base_url:
-            raise ValueError("Base URL is required")
+        protocol = value.get("protocol", DEFAULT_PROTOCOL)
+        if not isinstance(protocol, str) or protocol not in PROTOCOLS:
+            raise ValueError(
+                f"protocol must be one of {', '.join(PROTOCOLS)}"
+            )
+        if protocol != "openai_chat" and thinking is True:
+            raise ValueError(
+                f"thinking is not supported for protocol '{protocol}' in this phase"
+            )
+        # Empty base_url delegates the official default to the protocol SDK.
         if not model:
             raise ValueError("Model name is required")
         return cls(
@@ -52,6 +66,7 @@ class StoredModelConfig:
             base_url=base_url,
             model=model,
             thinking=thinking,
+            protocol=protocol,
         )
 
     @property
@@ -59,16 +74,13 @@ class StoredModelConfig:
         return bool(self.api_key)
 
     def gateway_config(self) -> GatewayConfig:
-        thinking = (
-            None
-            if self.thinking is None
-            else "enabled" if self.thinking else "disabled"
-        )
+        thinking = "enabled" if self.thinking is True else None
         return GatewayConfig(
             api_key=self.api_key,
             base_url=self.base_url,
             model=self.model,
             thinking=thinking,
+            protocol=self.protocol,  # type: ignore[arg-type]
         )
 
 
@@ -123,6 +135,7 @@ class ModelConfigStore:
             thinking=(
                 None if env.thinking is None else env.thinking == "enabled"
             ),
+            protocol=env.protocol,
         )
 
     def save(self, config: StoredModelConfig) -> None:
@@ -141,6 +154,7 @@ class ModelConfigStore:
             "base_url": config.base_url,
             "model": config.model,
             "thinking": config.thinking,
+            "protocol": config.protocol,
         }
 
     def merge_payload(self, payload: dict[str, Any]) -> StoredModelConfig:
@@ -150,12 +164,21 @@ class ModelConfigStore:
             raise ValueError("clear_api_key must be true or false")
         supplied_key = _payload_text(payload.get("api_key"), fallback="")
         api_key = "" if clear_key else supplied_key or current.api_key
+        # base_url: an explicitly supplied key (even "") wins so the
+        # user can clear back to the protocol's official default.
+        if "base_url" in payload:
+            base_url = payload.get("base_url")
+            if base_url is None:
+                base_url = current.base_url
+            elif not isinstance(base_url, str):
+                raise ValueError("Model configuration text fields must be strings")
+            else:
+                base_url = base_url.strip()
+        else:
+            base_url = current.base_url
         return StoredModelConfig.from_dict({
             "api_key": api_key,
-            "base_url": _payload_text(
-                payload.get("base_url"),
-                fallback=current.base_url,
-            ),
+            "base_url": base_url,
             "model": _payload_text(
                 payload.get("model"),
                 fallback=current.model,
@@ -164,6 +187,10 @@ class ModelConfigStore:
                 current.thinking
                 if "thinking" not in payload
                 else payload["thinking"]
+            ),
+            "protocol": _payload_text(
+                payload.get("protocol"),
+                fallback=current.protocol,
             ),
         })
 
@@ -202,6 +229,7 @@ class ModelConfigStore:
             "base_url": payload.get("base_url"),
             "model": payload.get("model"),
             "thinking": payload.get("thinking"),
+            "protocol": payload.get("protocol", DEFAULT_PROTOCOL),
         })
 
     def _protected_payload(self, config: StoredModelConfig) -> dict[str, Any]:
@@ -218,6 +246,7 @@ class ModelConfigStore:
             "base_url": config.base_url,
             "model": config.model,
             "thinking": config.thinking,
+            "protocol": config.protocol,
         }
 
     def _write_payload(self, payload: dict[str, Any]) -> None:
@@ -236,7 +265,7 @@ class ModelConfigStore:
             temporary.unlink(missing_ok=True)
 
 
-ProviderFactory = Callable[[StoredModelConfig], OpenAICompatibleProvider]
+ProviderFactory = Callable[[StoredModelConfig], LLMProvider]
 
 
 def model_config_status(*, store: ModelConfigStore | None = None) -> dict[str, Any]:
@@ -273,6 +302,7 @@ def test_model_connection(
             "latency_ms": round(latency_ms, 1),
             "model": config.model,
             "thinking": config.thinking,
+            "protocol": config.protocol,
             "message": "连接成功",
         }
     except Exception as exc:
@@ -309,13 +339,16 @@ def effective_gateway_factory(
     return SharedGatewayFactory(config=config.gateway_config())
 
 
-def _connection_test_provider(config: StoredModelConfig) -> OpenAICompatibleProvider:
-    return OpenAICompatibleProvider(
+def _connection_test_provider(config: StoredModelConfig) -> LLMProvider:
+    from app.core.llm.providers import PydanticAIProvider
+
+    return PydanticAIProvider(
         api_key=config.api_key,
         base_url=config.base_url,
         default_model=config.model,
         thinking=config.gateway_config().thinking,
         timeout=30.0,
+        protocol=config.protocol,
     )
 
 

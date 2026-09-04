@@ -1,13 +1,19 @@
-import pytest
-
+import asyncio
+import json
+import threading
+import time
 from types import SimpleNamespace
+
+import httpx
+import pytest
 from app.core.llm.errors import LLMOutputValidationError
 from app.core.llm.errors import LLMProviderError
 from app.core.llm.mock import MockLLM
 from app.core.llm.providers import MockProvider
-from app.core.llm.providers import OpenAICompatibleProvider
+from app.core.llm.providers import PydanticAIProvider
 from app.core.llm.providers import ProviderResult
 from app.core.llm.providers import _extract_usage
+from app.core.llm.providers import _normalize_request_usage
 from app.core.llm.schemas import EchoResult
 from app.core.llm.token_usage import normalize_token_usage
 from app.debug_prompt_runner import FilePromptProvider
@@ -73,86 +79,407 @@ class TestMockProviderFeatures:
             )
 
 
-class TestProviderCompatibility:
+class TestPydanticAIProvider:
+    @pytest.mark.parametrize(
+        ("protocol", "expected_model"),
+        [
+            ("openai_responses", "OpenAIResponsesModel"),
+            ("openai_chat", "OpenAIChatModel"),
+            ("anthropic_messages", "AnthropicModel"),
+            ("gemini", "GoogleModel"),
+        ],
+    )
+    def test_protocol_selects_correct_model(self, protocol, expected_model):
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test/v1",
+            protocol=protocol,
+        )
+
+        model = provider._build_model("test-model")
+
+        assert type(model).__name__ == expected_model
+
+    @pytest.mark.parametrize("protocol", [
+        "openai_responses",
+        "openai_chat",
+        "anthropic_messages",
+        "gemini",
+    ])
+    def test_custom_base_url_passes_through(self, protocol):
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://gateway.example.test/v1",
+            protocol=protocol,
+        )
+
+        model = provider._build_model("test-model")
+
+        assert str(model._provider.base_url).rstrip("/") == (
+            "https://gateway.example.test/v1"
+        )
+
+    def test_rejects_unknown_protocol(self):
+        with pytest.raises(ValueError, match="protocol must be one of"):
+            PydanticAIProvider(
+                api_key="test",
+                base_url="https://example.test",
+                protocol="deepseek_native",
+            )
+
     @pytest.mark.parametrize(
         ("thinking", "expected_extra_body"),
         [
             (None, None),
-            ("disabled", {"thinking": {"type": "disabled"}}),
+            ("disabled", None),
             ("enabled", {"thinking": {"type": "enabled"}}),
         ],
     )
-    def test_openai_compatible_provider_sends_configured_thinking_mode(
-        self,
-        monkeypatch,
-        thinking,
-        expected_extra_body,
-    ):
-        captured = {}
-
-        class _Completions:
-            def create(self, **kwargs):
-                captured.update(kwargs)
-                return SimpleNamespace(
-                    choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))],
-                    usage=None,
-                )
-
-        client = SimpleNamespace(
-            chat=SimpleNamespace(completions=_Completions()),
-        )
-        monkeypatch.setattr(
-            OpenAICompatibleProvider,
-            "_client",
-            property(lambda _self: client),
-        )
-        provider = OpenAICompatibleProvider(
+    def test_openai_chat_thinking_contract(self, thinking, expected_extra_body):
+        provider = PydanticAIProvider(
             api_key="test",
             base_url="https://example.test",
             thinking=thinking,
+            protocol="openai_chat",
         )
 
-        provider.generate("prompt", model="model", temperature=0.2)
+        settings = provider._model_settings(0.2)
 
-        if expected_extra_body is None:
-            assert "extra_body" not in captured
-        else:
-            assert captured["extra_body"] == expected_extra_body
+        assert settings.get("extra_body") == expected_extra_body
 
-    def test_openai_compatible_provider_streams_content_and_usage(self, monkeypatch):
+    @pytest.mark.parametrize("protocol", [
+        "openai_responses",
+        "anthropic_messages",
+        "gemini",
+    ])
+    def test_non_chat_protocols_drop_thinking_when_off(self, protocol):
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test",
+            thinking=None,
+            protocol=protocol,
+        )
+
+        settings = provider._model_settings(0.2)
+
+        extra_body = settings.get("extra_body") or {}
+        assert "thinking" not in extra_body
+
+    @pytest.mark.parametrize("protocol", [
+        "openai_responses",
+        "anthropic_messages",
+        "gemini",
+    ])
+    def test_non_chat_protocols_reject_enabled_thinking(self, protocol):
+        with pytest.raises(ValueError, match="thinking is not supported"):
+            PydanticAIProvider(
+                api_key="test",
+                base_url="https://example.test",
+                thinking="enabled",
+                protocol=protocol,
+            )
+
+    def test_responses_disables_server_storage(self):
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test",
+            protocol="openai_responses",
+        )
+
+        settings = provider._model_settings(0.2)
+
+        extra_body = settings.get("extra_body")
+        assert isinstance(extra_body, dict)
+        assert extra_body["store"] is False
+
+    def test_responses_serializes_store_false(self):
+        from openai import AsyncOpenAI
+        from pydantic_ai.exceptions import ModelHTTPError
+        from pydantic_ai.messages import ModelRequest
+        from pydantic_ai.models import ModelRequestParameters
+        from pydantic_ai.models.openai import OpenAIResponsesModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
         captured = {}
 
-        class _Completions:
-            def create(self, **kwargs):
-                captured.update(kwargs)
-                return iter([
-                    SimpleNamespace(
-                        choices=[SimpleNamespace(delta=SimpleNamespace(content="一段"))],
-                        usage=None,
-                    ),
-                    SimpleNamespace(
-                        choices=[],
-                        usage=SimpleNamespace(total_tokens=9),
-                    ),
-                ])
+        def _capture(request):
+            captured["url"] = str(request.url)
+            captured["body"] = json.loads(request.content.decode())
+            return httpx.Response(
+                400,
+                json={"error": {"message": "request captured"}},
+            )
 
-        client = SimpleNamespace(chat=SimpleNamespace(completions=_Completions()))
-        monkeypatch.setattr(
-            OpenAICompatibleProvider,
-            "_client",
-            property(lambda _self: client),
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://gateway.example.test/v1",
+            protocol="openai_responses",
         )
-        provider = OpenAICompatibleProvider("key", "https://example.test")
 
-        chunks = list(provider.stream_generate("prompt", model="model", temperature=0.8))
+        async def _request():
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(_capture)
+            ) as http_client:
+                client = AsyncOpenAI(
+                    api_key="test",
+                    base_url="https://gateway.example.test/v1",
+                    max_retries=0,
+                    http_client=http_client,
+                )
+                model = OpenAIResponsesModel(
+                    "test-model",
+                    provider=OpenAIProvider(openai_client=client),
+                )
+                await model.request(
+                    [ModelRequest.user_text_prompt("prompt")],
+                    provider._model_settings(0.2),
+                    ModelRequestParameters(),
+                )
 
-        assert captured["stream"] is True
-        assert captured["stream_options"] == {"include_usage": True}
-        assert chunks == [
-            ProviderResult(content="一段", usage=None),
-            ProviderResult(content="", usage={"total_tokens": 9}),
-        ]
+        with pytest.raises(ModelHTTPError):
+            asyncio.run(_request())
 
+        assert captured["url"] == "https://gateway.example.test/v1/responses"
+        assert captured["body"]["store"] is False
+
+    def test_generate_converts_text_and_usage(self):
+        from pydantic_ai.models.test import TestModel
+
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test",
+            protocol="openai_chat",
+            model_instance=TestModel(custom_output_text='{"text": "hi"}'),
+        )
+
+        result = provider.generate("prompt", model="model", temperature=0.2)
+
+        assert result.content == '{"text": "hi"}'
+        assert isinstance(result.usage, dict)
+        assert result.usage["output_tokens"] >= 1
+        assert result.usage["input_tokens"] >= 1
+
+    def test_generate_rejects_empty_text(self):
+        from pydantic_ai.models.test import TestModel
+
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test",
+            protocol="openai_chat",
+            model_instance=TestModel(custom_output_text="   "),
+        )
+
+        with pytest.raises(LLMProviderError, match="empty response"):
+            provider.generate("prompt", model="model", temperature=0.2)
+
+    def test_generate_wraps_upstream_error(self):
+        from pydantic_ai.models.function import FunctionModel
+
+        def _boom(_messages, _info):
+            raise RuntimeError("upstream 500")
+
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test",
+            protocol="openai_chat",
+            model_instance=FunctionModel(_boom),
+        )
+
+        with pytest.raises(LLMProviderError, match="Pydantic AI API call failed"):
+            provider.generate("prompt", model="model", temperature=0.2)
+
+    def test_stream_converts_increments_and_final_usage(self):
+        from pydantic_ai.models.test import TestModel
+
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test",
+            protocol="openai_chat",
+            model_instance=TestModel(custom_output_text="hello world"),
+        )
+
+        chunks = list(
+            provider.stream_generate("prompt", model="model", temperature=0.2)
+        )
+
+        joined = "".join(chunk.content for chunk in chunks)
+        assert joined == "hello world"
+        assert chunks[-1].usage is not None
+        assert chunks[-1].usage["output_tokens"] >= 1
+
+    def test_request_usage_normalizes_cache_fields(self):
+        from pydantic_ai.usage import RequestUsage
+
+        usage = _normalize_request_usage(RequestUsage(
+            input_tokens=100,
+            output_tokens=20,
+            cache_read_tokens=80,
+            cache_write_tokens=10,
+        ))
+
+        assert usage == {
+            "input_tokens": 100,
+            "prompt_tokens": 100,
+            "output_tokens": 20,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "cached_tokens": 80,
+            "cache_creation_tokens": 10,
+        }
+
+    def test_request_usage_returns_none_when_empty(self):
+        from pydantic_ai.usage import RequestUsage
+
+        assert _normalize_request_usage(None) is None
+        assert _normalize_request_usage(RequestUsage()) is None
+
+    def test_models_are_cached_per_model_name(self, monkeypatch):
+        from pydantic_ai.models.test import TestModel
+
+        built: list[str] = []
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test",
+            protocol="openai_chat",
+        )
+
+        def _spy(name):
+            built.append(name)
+            return TestModel(custom_output_text=f'["{name}"]')
+
+        monkeypatch.setattr(provider, "_build_model", _spy)
+
+        first = provider.generate("p", model="model-a", temperature=0.0)
+        second = provider.generate("p", model="model-b", temperature=0.0)
+        third = provider.generate("p", model="model-a", temperature=0.0)
+
+        assert first.content == '["model-a"]'
+        assert second.content == '["model-b"]'
+        assert third.content == '["model-a"]'
+        assert built == ["model-a", "model-b"]
+
+    def test_stream_early_close_returns_promptly(self):
+        from openai import AsyncOpenAI
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        request_seen = threading.Event()
+        stream_closed = threading.Event()
+        captured = {}
+
+        class _SlowSSE(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield (
+                    b'data: {"id":"chunk-1","object":"chat.completion.chunk",'
+                    b'"created":1,"model":"test-model","choices":[{"index":0,'
+                    b'"delta":{"role":"assistant","content":"chunk0 "},'
+                    b'"finish_reason":null}]}\n\n'
+                )
+                await asyncio.sleep(10)
+                yield b"data: [DONE]\n\n"
+
+            async def aclose(self):
+                stream_closed.set()
+
+        def _stream_response(request):
+            captured["url"] = str(request.url)
+            captured["body"] = json.loads(request.content.decode())
+            request_seen.set()
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                stream=_SlowSSE(),
+            )
+
+        client = AsyncOpenAI(
+            api_key="test",
+            base_url="https://gateway.example.test/v1",
+            max_retries=0,
+            http_client=httpx.AsyncClient(
+                transport=httpx.MockTransport(_stream_response)
+            ),
+        )
+        model = OpenAIChatModel(
+            "test-model",
+            provider=OpenAIProvider(openai_client=client),
+        )
+
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://gateway.example.test/v1",
+            protocol="openai_chat",
+            thinking="enabled",
+            model_instance=model,
+        )
+
+        gen = provider.stream_generate(
+            "p", model="test-model", temperature=0.0
+        )
+        assert next(gen).content == "chunk0 "
+        assert request_seen.is_set()
+        start = time.perf_counter()
+        gen.close()
+        assert time.perf_counter() - start < 0.6
+        assert stream_closed.wait(timeout=0.1)
+        assert captured["url"] == (
+            "https://gateway.example.test/v1/chat/completions"
+        )
+        assert captured["body"]["thinking"] == {"type": "enabled"}
+
+    @pytest.mark.parametrize(
+        ("protocol", "marker"),
+        [
+            ("openai_responses", "api.openai.com"),
+            ("openai_chat", "api.openai.com"),
+            ("anthropic_messages", "api.anthropic.com"),
+        ],
+    )
+    def test_omitted_base_url_uses_sdk_official_default(
+        self, protocol, marker, monkeypatch
+    ):
+        from app.core.llm.config import GatewayConfig
+
+        # The project reads these variables into GatewayConfig. Remove them
+        # here so this test exercises the SDK's own no-override default.
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+
+        config = GatewayConfig(
+            api_key="test", base_url="", model="m", protocol=protocol
+        )
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url=config.base_url,
+            protocol=protocol,
+        )
+
+        model = provider._build_model("m")
+
+        assert marker in str(model._provider.base_url)
+
+    def test_gemini_omitted_base_url_uses_sdk_default(self):
+        from app.core.llm.config import GatewayConfig
+
+        config = GatewayConfig(
+            api_key="test", base_url="", model="m", protocol="gemini"
+        )
+
+        assert config.base_url == ""
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url=config.base_url,
+            protocol="gemini",
+        )
+
+        model = provider._build_model("m")
+
+        assert "generativelanguage.googleapis.com" in str(
+            model._provider.base_url
+        )
+        assert "openai" not in str(model._provider.base_url)
+
+
+class TestProviderCompatibility:
     def test_file_prompt_provider_returns_provider_result(self):
         class _Exchange:
             def request(self, **_kwargs):
@@ -286,5 +613,3 @@ class TestProviderCompatibility:
             "cached_tokens": 75,
             "cache_creation_tokens": 15,
         }
-
-

@@ -1430,6 +1430,21 @@ discovery, ensuring zero content reads on warm calls.
 Anthropic, and Gemini usage payloads) and exposes computed `cache_hit_rate`
 across pipeline operations and traces.
 
+LLM calls go through a single `PydanticAIProvider` over the Pydantic AI Direct
+Model API (no per-operator provider classes). `protocol` is one of
+`openai_responses | openai_chat | anthropic_messages | gemini` and defaults to
+`openai_chat` for legacy configs without URL guessing. `Base URL` is an
+optional override per protocol: empty means the protocol's official default
+(delegated to its SDK); an explicit value (e.g. an OpenCode Go gateway domain)
+wins for all four protocols. Streaming uses a request-owned event loop so
+early close/cancel stops promptly instead of waiting out the response; models
+are cached per model name. Responses explicitly disables server-side storage
+(`store=false`). `thinking=true` only sends `extra_body.thinking` on
+`openai_chat` and is rejected at config validation for the other three
+protocols; `false/null` never sends. Prompt rendering, JSON parsing, schema
+validation, salvage/retry, trace/diagnostics and cancel/degrade stay in
+`LLMGateway`.
+
 ## 18. Player, Debug, and Operation Surfaces
 
 The player surface provides:

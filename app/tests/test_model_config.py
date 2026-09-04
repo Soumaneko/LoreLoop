@@ -7,7 +7,7 @@ import threading
 import pytest
 
 from app.core.llm.config import SharedGatewayFactory
-from app.core.llm.providers import ProviderResult
+from app.core.llm.providers import LLMProvider, ProviderResult
 from app.runtime.model_config import (
     MODEL_CONFIG_FORMAT_VERSION,
     ModelConfigStore,
@@ -39,6 +39,7 @@ def _payload(**overrides):
         "base_url": "https://example.test/v1",
         "model": "story-model",
         "thinking": True,
+        "protocol": "openai_chat",
         **overrides,
     }
 
@@ -60,6 +61,7 @@ def test_local_model_config_overrides_environment_and_never_exposes_key(
         "base_url": "https://example.test/v1",
         "model": "story-model",
         "thinking": True,
+        "protocol": "openai_chat",
     }
     assert "api_key" not in status
     assert "local-secret" not in json.dumps(status)
@@ -101,6 +103,7 @@ def test_protected_store_never_writes_plaintext_api_key(tmp_path):
         "base_url": "https://example.test/v1",
         "model": "story-model",
         "thinking": True,
+        "protocol": "openai_chat",
     }
     assert "local-secret" not in path.read_text(encoding="utf-8")
     assert store.load_local().api_key == "local-secret"
@@ -206,6 +209,7 @@ def test_environment_is_bootstrap_when_no_local_config(tmp_path, monkeypatch):
     assert factory.config.base_url == "https://env.example/v1"
     assert factory.config.model == "env-model"
     assert factory.config.thinking == "enabled"
+    assert factory.config.protocol == "openai_chat"
 
 
 def test_environment_bootstrap_preserves_omitted_thinking(tmp_path, monkeypatch):
@@ -241,6 +245,94 @@ def test_stored_config_preserves_unspecified_thinking():
     assert config.gateway_config().thinking is None
 
 
+def test_legacy_config_without_protocol_defaults_to_openai_chat():
+    config = StoredModelConfig.from_dict({
+        "api_key": "local-secret",
+        "base_url": "https://example.test/v1",
+        "model": "story-model",
+        "thinking": True,
+    })
+
+    assert config.protocol == "openai_chat"
+    assert config.gateway_config().protocol == "openai_chat"
+
+
+def test_stored_false_thinking_maps_to_no_thinking_signal():
+    config = StoredModelConfig.from_dict(_payload(thinking=False))
+
+    assert config.gateway_config().thinking is None
+
+
+def test_non_chat_protocol_rejects_enabled_thinking():
+    with pytest.raises(ValueError, match="thinking is not supported"):
+        StoredModelConfig.from_dict(_payload(protocol="gemini", thinking=True))
+
+    with pytest.raises(ValueError, match="thinking is not supported"):
+        StoredModelConfig.from_dict(
+            _payload(protocol="anthropic_messages", thinking=True)
+        )
+
+
+def test_unknown_protocol_is_rejected():
+    with pytest.raises(ValueError, match="protocol must be one of"):
+        StoredModelConfig.from_dict(_payload(protocol="deepseek_native"))
+
+
+def test_empty_base_url_is_preserved_for_sdk_default():
+    openai_config = StoredModelConfig.from_dict(_payload(base_url=""))
+    gemini_config = StoredModelConfig.from_dict(
+        _payload(base_url="", protocol="gemini", thinking=None)
+    )
+
+    assert openai_config.gateway_config().base_url == ""
+    assert gemini_config.gateway_config().base_url == ""
+
+
+def test_merge_payload_can_clear_base_url_to_official_default(tmp_path):
+    store = ModelConfigStore(tmp_path / "model_config.json")
+    store.save(StoredModelConfig.from_dict(_payload()))
+
+    merged = store.merge_payload({"base_url": ""})
+
+    assert merged.base_url == ""
+    assert merged.gateway_config().base_url == ""
+
+
+def test_merge_payload_omitted_base_url_retains_current(tmp_path):
+    store = ModelConfigStore(tmp_path / "model_config.json")
+    store.save(StoredModelConfig.from_dict(_payload()))
+
+    merged = store.merge_payload({"model": "other-model"})
+
+    assert merged.base_url == "https://example.test/v1"
+
+
+def test_environment_without_base_url_uses_protocol_default(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "environment-secret")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_PROTOCOL", raising=False)
+
+    factory = effective_gateway_factory(
+        store=ModelConfigStore(tmp_path / "missing.json")
+    )
+
+    assert factory.config.protocol == "openai_chat"
+    assert factory.config.base_url == ""
+
+
+def test_environment_protocol_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "environment-secret")
+    monkeypatch.setenv("OPENAI_PROTOCOL", "gemini")
+
+    factory = effective_gateway_factory(
+        store=ModelConfigStore(tmp_path / "missing.json")
+    )
+
+    assert factory.config.protocol == "gemini"
+
+
 def test_blank_key_retains_configured_secret_and_explicit_clear_removes_it(tmp_path):
     store = ModelConfigStore(tmp_path / "model_config.json")
     store.save(StoredModelConfig.from_dict(_payload()))
@@ -272,7 +364,7 @@ def test_null_or_blank_text_payload_values_retain_current_values(tmp_path):
     assert merged.thinking is None
 
 
-class _SuccessfulProvider:
+class _SuccessfulProvider(LLMProvider):
     def __init__(self, captured, config):
         self.captured = captured
         self.captured["config"] = config
@@ -297,13 +389,14 @@ def test_connection_check_uses_unsaved_candidate_and_reports_latency(tmp_path):
     assert result["success"] is True
     assert result["model"] == "story-model"
     assert result["thinking"] is True
+    assert result["protocol"] == "openai_chat"
     assert result["latency_ms"] >= 0
     assert captured["config"].api_key == "local-secret"
     assert captured["model"] == "story-model"
 
 
 def test_connection_error_is_classified_without_leaking_key(tmp_path):
-    class FailingProvider:
+    class FailingProvider(LLMProvider):
         def generate(self, *_args, **_kwargs):
             raise RuntimeError("provider rejected local-secret")
 
@@ -320,7 +413,7 @@ def test_connection_error_is_classified_without_leaking_key(tmp_path):
 
 
 def test_connection_error_classifies_forbidden_response(tmp_path):
-    class ForbiddenProvider:
+    class ForbiddenProvider(LLMProvider):
         def generate(self, *_args, **_kwargs):
             raise RuntimeError("403 Forbidden")
 

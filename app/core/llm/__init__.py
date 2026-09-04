@@ -8,12 +8,19 @@ from .errors import (
     PromptRenderError,
 )
 from .prompts import PromptLoader
-from .providers import LLMProvider, MockProvider, OpenAICompatibleProvider
+from .providers import LLMProvider, MockProvider, PydanticAIProvider
 from .schemas import EchoResult
 from .tracing import NullTraceLogger, TraceLogger
 from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger
 from .mock import MockLLM
-from .config import GatewayConfig, LLMConfig, SharedGatewayFactory, create_gateway
+from .config import (
+    DEFAULT_PROTOCOL,
+    PROTOCOLS,
+    GatewayConfig,
+    LLMConfig,
+    SharedGatewayFactory,
+    create_gateway,
+)
 
 __all__ = [
     "LLMGateway",
@@ -26,7 +33,7 @@ __all__ = [
     "PromptLoader",
     "LLMProvider",
     "MockProvider",
-    "OpenAICompatibleProvider",
+    "PydanticAIProvider",
     "EchoResult",
     "TraceLogger",
     "NullTraceLogger",
@@ -34,6 +41,8 @@ __all__ = [
     "NullDiagnosticLogger",
     "MockLLM",
     "LLMConfig",
+    "DEFAULT_PROTOCOL",
+    "PROTOCOLS",
     "GatewayConfig",
     "SharedGatewayFactory",
     "create_gateway",
