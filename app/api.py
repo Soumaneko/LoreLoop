@@ -45,6 +45,7 @@ from app.runtime.model_config import (
     save_model_config,
     test_model_connection,
 )
+from app.runtime.models_dev_catalog import catalog_response as model_presets
 from app.runtime.initialization_draft import (
     load_initialization_draft,
     save_initialization_draft,
@@ -436,6 +437,7 @@ __all__ = [
     "load_initialization_draft",
     "load_reader_preferences",
     "model_config_status",
+    "model_presets",
     "list_maintenance_jobs",
     "list_operations",
     "list_saves",

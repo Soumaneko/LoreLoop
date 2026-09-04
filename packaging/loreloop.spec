@@ -25,6 +25,8 @@ def collect_data_tree(source, destination):
 
 prompt_root = project_root / "app" / "prompts"
 player_static_root = project_root / "app" / "player_static"
+models_dev_snapshot = project_root / "app" / "runtime" / "models_dev_snapshot.json"
+models_dev_license = project_root / "app" / "runtime" / "models_dev_LICENSE.txt"
 
 analysis = Analysis(
     [str(project_root / "app" / "desktop.py")],
@@ -33,6 +35,10 @@ analysis = Analysis(
     datas=(
         collect_data_tree(prompt_root, "app/prompts")
         + collect_data_tree(player_static_root, "app/player_static")
+        + [
+            (str(models_dev_snapshot), "app/runtime"),
+            (str(models_dev_license), "app/runtime"),
+        ]
     ),
     hiddenimports=[],
     hookspath=[],

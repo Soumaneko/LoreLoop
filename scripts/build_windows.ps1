@@ -141,6 +141,12 @@ if (-not (Test-Path (Join-Path $PackageDir "_internal\app\prompts"))) {
 if (-not (Test-Path (Join-Path $PackageDir "_internal\app\player_static"))) {
     throw "Player frontend resources are missing from the frozen bundle."
 }
+if (-not (Test-Path (Join-Path $PackageDir "_internal\app\runtime\models_dev_snapshot.json"))) {
+    throw "models.dev snapshot is missing from the frozen bundle."
+}
+if (-not (Test-Path (Join-Path $PackageDir "_internal\app\runtime\models_dev_LICENSE.txt"))) {
+    throw "models.dev license is missing from the frozen bundle."
+}
 if (Test-Path (Join-Path $PackageDir "_internal\app\debug_static")) {
     throw "Debug frontend resources must not be present in the desktop bundle."
 }

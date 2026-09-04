@@ -35,6 +35,7 @@ from app.api import (
     load_core_memory_items,
     save_core_memory_items,
     model_config_status,
+    model_presets,
     rename_save,
     redo_last_turn,
     save_dice_display,
@@ -142,6 +143,9 @@ class PlayerHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/model-config":
             self._handle_player_json(model_config_status)
+            return
+        if path == "/api/player/model-presets":
+            self._handle_player_json(model_presets)
             return
         if path == "/api/player/reader-preferences":
             self._handle_player_json(load_reader_preferences)

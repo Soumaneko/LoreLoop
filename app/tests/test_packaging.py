@@ -168,6 +168,25 @@ def test_frozen_desktop_does_not_load_dotenv_from_launch_directory(tmp_path):
 
 
 
+def test_frozen_bundle_collects_models_dev_snapshot_and_license():
+    spec = (ROOT / "packaging" / "loreloop.spec").read_text(encoding="utf-8")
+
+    assert "models_dev_snapshot.json" in spec
+    assert "models_dev_LICENSE.txt" in spec
+
+    build_script = (ROOT / "scripts" / "build_windows.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert r"_internal\app\runtime\models_dev_snapshot.json" in build_script
+    assert r"_internal\app\runtime\models_dev_LICENSE.txt" in build_script
+
+    snapshot = (
+        ROOT / "app" / "runtime" / "models_dev_snapshot.json"
+    ).read_text(encoding="utf-8")
+    assert "models_dev_LICENSE.txt" in snapshot
+    assert (ROOT / "app" / "runtime" / "models_dev_LICENSE.txt").exists()
+
+
 def test_windows_build_lock_requires_hashes():
     build_lock = (
         ROOT / "requirements-build-windows.lock"

@@ -1399,6 +1399,16 @@ affected the plan and may be empty when the Director decision admits no
 material. An empty `DirectorStageResult` does not mean that the Director stage
 was skipped.
 
+Rephrase reruns the entire Composer with the saved authoritative context; prior
+resolution facts, events, and prose are not frozen as an intermediate contract.
+Feedback rewrite first chooses `revise_from_source`, `recompose`, or
+`no_rewrite`; it cannot change the player action or deterministic outcome band.
+When Canon validation is enabled, any new composition/rephrase/rewrite passes
+through the same Canon tail and may receive at most one additional source
+rewrite.
+
+## 18. Shared LLM Runtime, Protocols, and Model Catalog
+
 All structured LLM tasks receive a compact JSON Schema with Pydantic-generated
 `title` metadata removed but validation constraints preserved. `LLMGateway`
 appends a generic anti-copy contract whenever `output_schema_json` is supplied,
@@ -1408,14 +1418,6 @@ gateway extracts same-named root data fields when present, otherwise fields
 nested under `properties`, validates the candidate normally, and records the
 effective validated shape in the trace; unsalvageable output follows the normal
 retry path.
-
-Rephrase reruns the entire Composer with the saved authoritative context; prior
-resolution facts, events, and prose are not frozen as an intermediate contract.
-Feedback rewrite first
-chooses `revise_from_source`, `recompose`, or `no_rewrite`; it cannot change the
-player action or deterministic outcome band. When Canon validation is enabled, any
-new composition/rephrase/rewrite passes through the same Canon tail and may
-receive at most one additional source rewrite.
 
 System Prompt templates strictly adhere to a **Static-First 4-Tier layout**
 (Tier 1: static instructions, schemas, anti-copy and format rules; Tier 2:
@@ -1438,14 +1440,28 @@ optional override per protocol: empty means the protocol's official default
 (delegated to its SDK); an explicit value (e.g. an OpenCode Go gateway domain)
 wins for all four protocols. Streaming uses a request-owned event loop so
 early close/cancel stops promptly instead of waiting out the response; models
-are cached per model name. Responses explicitly disables server-side storage
-(`store=false`). `thinking=true` only sends `extra_body.thinking` on
+are cached per model name. The Responses path explicitly disables server-side
+storage (`store=false`). `thinking=true` only sends `extra_body.thinking` on
 `openai_chat` and is rejected at config validation for the other three
 protocols; `false/null` never sends. Prompt rendering, JSON parsing, schema
 validation, salvage/retry, trace/diagnostics and cancel/degrade stay in
 `LLMGateway`.
 
-## 18. Player, Debug, and Operation Surfaces
+The Provider/model directory is read from models.dev (`GET
+/api/player/model-presets`), normalized to provider rows of
+`provider_id/provider_name/model_id/model_name/protocol/base_url/status`
+on exactly the four protocols above; unknown npm packages, endpoints
+with unresolved `${...}` templates, missing endpoints, and entries
+needing unimplemented auth are skipped per model row, never guessed.
+Per-model `provider.npm/api/shape` overrides win over the provider default
+(e.g. OpenCode Go responses/messages models); `shape=responses/completions`
+selects the corresponding OpenAI wire protocol.
+Reads try a 10s live refresh, then fall back to the last-good cache,
+the shipped MIT-attributed trimmed snapshot (also bundled into the
+desktop build), and finally an empty directory; refresh never modifies
+user model configuration and the app never loads upstream npm packages.
+
+## 19. Player, Debug, and Operation Surfaces
 
 The player surface provides:
 
@@ -1571,7 +1587,7 @@ invalid/degraded links, and candidates/hits for both the Continuity and NPC
 field-history bridges; these counts are diagnostic only and never reach the
 player surface or the LLM payload.
 
-## 19. Verification
+## 20. Verification
 
 Minimum verification for this contract:
 
@@ -1643,7 +1659,7 @@ Focused contract tests must cover:
 - compact Schema rendering, schema-copy defense, Prompt discovery/includes, and
   JavaScript syntax.
 
-## 20. Failure Policy
+## 21. Failure Policy
 
 This section defines the shared failure judgment basis for LLM-dependent
 modules. Module-specific fallback values are owned by each module and are
