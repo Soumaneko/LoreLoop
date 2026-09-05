@@ -40,6 +40,8 @@ def _payload(**overrides):
         "model": "story-model",
         "thinking": True,
         "protocol": "openai_chat",
+        "preset_id": "custom",
+        "model_id": "",
         **overrides,
     }
 
@@ -62,6 +64,8 @@ def test_local_model_config_overrides_environment_and_never_exposes_key(
         "model": "story-model",
         "thinking": True,
         "protocol": "openai_chat",
+        "preset_id": "custom",
+        "model_id": "",
     }
     assert "api_key" not in status
     assert "local-secret" not in json.dumps(status)
@@ -104,6 +108,8 @@ def test_protected_store_never_writes_plaintext_api_key(tmp_path):
         "model": "story-model",
         "thinking": True,
         "protocol": "openai_chat",
+        "preset_id": "custom",
+        "model_id": "",
     }
     assert "local-secret" not in path.read_text(encoding="utf-8")
     assert store.load_local().api_key == "local-secret"
@@ -278,6 +284,62 @@ def test_unknown_protocol_is_rejected():
         StoredModelConfig.from_dict(_payload(protocol="deepseek_native"))
 
 
+def test_legacy_config_without_selection_migrates_to_custom():
+    payload = {
+        "api_key": "local-secret",
+        "base_url": "https://example.test/v1",
+        "model": "story-model",
+        "thinking": False,
+    }
+    config = StoredModelConfig.from_dict(payload)
+
+    assert config.preset_id == "custom"
+    assert config.model_id == ""
+    assert config.gateway_config().protocol == "openai_chat"
+
+
+def test_unknown_preset_id_is_accepted_and_keeps_working():
+    config = StoredModelConfig.from_dict(
+        _payload(preset_id="retired-provider", model_id="old-model")
+    )
+
+    assert config.preset_id == "retired-provider"
+    assert config.model_id == "old-model"
+    assert config.gateway_config().model == "story-model"
+    assert config.gateway_config().protocol == "openai_chat"
+
+
+def test_preset_id_must_be_a_string():
+    with pytest.raises(ValueError, match="preset_id must be a string"):
+        StoredModelConfig.from_dict(_payload(preset_id=42))
+
+
+def test_merge_payload_retains_selection_when_omitted(tmp_path):
+    store = ModelConfigStore(tmp_path / "model_config.json")
+    store.save(StoredModelConfig.from_dict(
+        _payload(preset_id="moonshot", model_id="kimi-k3")
+    ))
+
+    merged = store.merge_payload({"model": "other-model"})
+
+    assert merged.preset_id == "moonshot"
+    assert merged.model_id == "kimi-k3"
+
+
+def test_merge_payload_overrides_selection_when_supplied(tmp_path):
+    store = ModelConfigStore(tmp_path / "model_config.json")
+    store.save(StoredModelConfig.from_dict(
+        _payload(preset_id="moonshot", model_id="kimi-k3")
+    ))
+
+    merged = store.merge_payload(
+        {"preset_id": "custom", "model_id": None}
+    )
+
+    assert merged.preset_id == "custom"
+    assert merged.model_id == "kimi-k3"
+
+
 def test_empty_base_url_is_preserved_for_sdk_default():
     openai_config = StoredModelConfig.from_dict(_payload(base_url=""))
     gemini_config = StoredModelConfig.from_dict(
@@ -390,6 +452,8 @@ def test_connection_check_uses_unsaved_candidate_and_reports_latency(tmp_path):
     assert result["model"] == "story-model"
     assert result["thinking"] is True
     assert result["protocol"] == "openai_chat"
+    assert result["preset_id"] == "custom"
+    assert result["model_id"] == ""
     assert result["latency_ms"] >= 0
     assert captured["config"].api_key == "local-secret"
     assert captured["model"] == "story-model"

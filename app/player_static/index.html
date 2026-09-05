@@ -322,20 +322,42 @@
         </button>
       </header>
       <p id="modelConfigIntro">模型配置只保存在本机，不会写入或导出到任何故事存档。</p>
+      <p id="modelPresetNote" class="form-error" role="status" hidden></p>
       <div class="model-config-fields">
+        <label>
+          <span>Provider</span>
+          <select id="modelProvider" autocomplete="off">
+            <option value="custom">Custom（手工配置）</option>
+          </select>
+          <small>预设用于填写协议、端点和常用模型；存在不等于已验证。体积较大的目录首次打开时可能需要几秒加载。</small>
+        </label>
+        <label>
+          <span>模型名称</span>
+          <input id="modelName" list="modelNameList" autocomplete="off" spellcheck="false" required placeholder="gpt-4o" />
+          <datalist id="modelNameList"></datalist>
+          <small>可从候选选择，也可手工输入未列出的模型 ID。</small>
+        </label>
         <label>
           <span>API Key</span>
           <input id="modelApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="填写 API Key" />
           <small id="modelKeyHint">保存后不会再次显示或传回浏览器。</small>
         </label>
-        <label>
-          <span>Base URL</span>
-          <input id="modelBaseUrl" type="url" autocomplete="off" spellcheck="false" required placeholder="https://api.openai.com/v1" />
-        </label>
-        <label>
-          <span>模型名称</span>
-          <input id="modelName" autocomplete="off" spellcheck="false" required placeholder="gpt-4o" />
-        </label>
+        <details id="modelAdvanced">
+          <summary>高级设置（Protocol 与 Base URL）</summary>
+          <label>
+            <span>Protocol</span>
+            <select id="modelProtocol" autocomplete="off">
+              <option value="openai_responses">openai_responses</option>
+              <option value="openai_chat">openai_chat</option>
+              <option value="anthropic_messages">anthropic_messages</option>
+              <option value="gemini">gemini</option>
+            </select>
+          </label>
+          <label>
+            <span>Base URL</span>
+            <input id="modelBaseUrl" type="url" autocomplete="off" spellcheck="false" placeholder="留空使用官方默认地址" />
+          </label>
+        </details>
         <label class="model-thinking-toggle">
           <input id="modelThinking" type="checkbox" />
           <span><strong>Thinking</strong><small>向兼容服务发送 thinking.type 设置</small></span>

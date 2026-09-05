@@ -1933,6 +1933,9 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .model-config-fields .model-thinking-toggle span { display: grid; gap: 3px; }
 .model-thinking-toggle strong { color: var(--ink); font-size: 13px; font-weight: 600; }
 .model-thinking-toggle small { color: var(--faint); font-size: 11px; }
+.model-config-fields details { display: grid; gap: 16px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--surface-soft); }
+.model-config-fields summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+#modelPresetNote { margin-top: 14px; }
 .model-test-result { margin-top: 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .model-test-result[data-status="success"] { border-color: var(--positive-border); background: var(--positive-bg); color: var(--positive-text); }
 .model-test-result[data-status="error"] { border-color: var(--negative-border); background: var(--negative-bg); color: var(--negative-text); }

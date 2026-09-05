@@ -38,6 +38,10 @@ class StoredModelConfig:
     model: str
     thinking: bool | None = None
     protocol: str = DEFAULT_PROTOCOL
+    # Selection metadata: which catalog entry the user picked. Display-only;
+    # never validated against the directory, so delisted entries keep working.
+    preset_id: str = "custom"
+    model_id: str = ""
 
     @classmethod
     def from_dict(cls, value: object) -> "StoredModelConfig":
@@ -58,6 +62,16 @@ class StoredModelConfig:
             raise ValueError(
                 f"thinking is not supported for protocol '{protocol}' in this phase"
             )
+        preset_id = value.get("preset_id", "custom")
+        if not isinstance(preset_id, str):
+            raise ValueError("preset_id must be a string")
+        preset_id = preset_id.strip() or "custom"
+        model_id = value.get("model_id", "")
+        if model_id is None:
+            model_id = ""
+        if not isinstance(model_id, str):
+            raise ValueError("model_id must be a string")
+        model_id = model_id.strip()
         # Empty base_url delegates the official default to the protocol SDK.
         if not model:
             raise ValueError("Model name is required")
@@ -67,6 +81,8 @@ class StoredModelConfig:
             model=model,
             thinking=thinking,
             protocol=protocol,
+            preset_id=preset_id,
+            model_id=model_id,
         )
 
     @property
@@ -136,6 +152,8 @@ class ModelConfigStore:
                 None if env.thinking is None else env.thinking == "enabled"
             ),
             protocol=env.protocol,
+            preset_id="custom",
+            model_id="",
         )
 
     def save(self, config: StoredModelConfig) -> None:
@@ -155,6 +173,8 @@ class ModelConfigStore:
             "model": config.model,
             "thinking": config.thinking,
             "protocol": config.protocol,
+            "preset_id": config.preset_id,
+            "model_id": config.model_id,
         }
 
     def merge_payload(self, payload: dict[str, Any]) -> StoredModelConfig:
@@ -191,6 +211,18 @@ class ModelConfigStore:
             "protocol": _payload_text(
                 payload.get("protocol"),
                 fallback=current.protocol,
+            ),
+            # Selection metadata only; explicit values win, omission
+            # or null retains.
+            "preset_id": (
+                current.preset_id
+                if payload.get("preset_id") is None
+                else payload["preset_id"]
+            ),
+            "model_id": (
+                current.model_id
+                if payload.get("model_id") is None
+                else payload["model_id"]
             ),
         })
 
@@ -230,6 +262,8 @@ class ModelConfigStore:
             "model": payload.get("model"),
             "thinking": payload.get("thinking"),
             "protocol": payload.get("protocol", DEFAULT_PROTOCOL),
+            "preset_id": payload.get("preset_id", "custom"),
+            "model_id": payload.get("model_id", ""),
         })
 
     def _protected_payload(self, config: StoredModelConfig) -> dict[str, Any]:
@@ -247,6 +281,8 @@ class ModelConfigStore:
             "model": config.model,
             "thinking": config.thinking,
             "protocol": config.protocol,
+            "preset_id": config.preset_id,
+            "model_id": config.model_id,
         }
 
     def _write_payload(self, payload: dict[str, Any]) -> None:
@@ -303,6 +339,8 @@ def test_model_connection(
             "model": config.model,
             "thinking": config.thinking,
             "protocol": config.protocol,
+            "preset_id": config.preset_id,
+            "model_id": config.model_id,
             "message": "连接成功",
         }
     except Exception as exc:

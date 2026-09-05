@@ -18,6 +18,7 @@ def test_player_frontend_javascript_is_syntactically_valid():
         "client_diagnostics.js",
         "custom_select.js",
         "error_feedback.js",
+        "model_selection.js",
         "prepaint.js",
         "popover_fallback.js",
         "reader_preferences.js",
@@ -56,6 +57,64 @@ if (!shouldAutoConfirmTurn({{ enabled: true, pendingKind: "turn" }})) {{
 if (!shouldAutoConfirmTurn({{ enabled: true }})) {{
   throw new Error("missing pending kind should be treated as a regular turn");
 }}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_model_selection_row_switch_and_metadata_behaviors():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "model_selection.js").resolve().as_uri()
+    script = f"""
+const m = await import("{module_url}");
+const eq = (a, b, msg) => {{
+  if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(msg + ": " + JSON.stringify(a));
+}};
+const row = {{ model_id: "grok-4.6", protocol: "openai_responses", base_url: "https://go.example/v1" }};
+// 1. Untouched catalog defaults move as a whole (stale supplier must not survive).
+eq(
+  m.applyRowDecision(row, {{ protocol: "openai_chat", base_url: "https://deepseek.example", model: "" }}),
+  {{ protocol: "openai_responses", base_url: "https://go.example/v1", model: "grok-4.6" }},
+  "catalog row change",
+);
+// Explicit advanced edits still win while the selected model is updated.
+eq(
+  m.applyRowDecision(row, {{ protocol: "openai_chat", base_url: "https://mine.example", model: "mine" }}, {{ advancedTouched: true }}),
+  {{ protocol: "openai_chat", base_url: "https://mine.example", model: "grok-4.6" }},
+  "row change keeps user edits",
+);
+// 2. Manual input keeps its text as model_id; matched rows carry the row id.
+eq(
+  m.selectionOnModelInput("moonshot", "my-custom-model", null),
+  {{ preset_id: "moonshot", model_id: "my-custom-model" }},
+  "manual model_id",
+);
+eq(
+  m.selectionOnModelInput("moonshot", "kimi-k3", {{ model_id: "kimi-k3" }}),
+  {{ preset_id: "moonshot", model_id: "kimi-k3" }},
+  "matched model_id",
+);
+// Re-display: preset hit keeps stored metadata (no reset to custom/"").
+const catalog = {{ byId: {{ go: {{ provider_id: "go", models: [row] }} }} }};
+eq(
+  m.lookupSelection(catalog, "retired", "old-model", "old-model"),
+  {{ provider: null, row: null, matchedPreset: false }},
+  "delisted preset",
+);
+const hit = m.lookupSelection(catalog, "go", "grok-4.6", "grok-4.6");
+if (!hit.matchedPreset || hit.row.model_id !== "grok-4.6") throw new Error("preset hit");
+// 3. Thinking clears on non-chat, never re-checks on chat.
+if (!m.needsThinkingClear("anthropic_messages", true)) throw new Error("must clear");
+if (m.needsThinkingClear("openai_chat", true)) throw new Error("must not clear on chat");
+if (m.needsThinkingClear("gemini", false)) throw new Error("must not clear when off");
 """
     result = subprocess.run(
         [node, "--input-type=module", "--eval", script],

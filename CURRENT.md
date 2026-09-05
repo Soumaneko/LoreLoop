@@ -1459,7 +1459,16 @@ selects the corresponding OpenAI wire protocol.
 Reads try a 10s live refresh, then fall back to the last-good cache,
 the shipped MIT-attributed trimmed snapshot (also bundled into the
 desktop build), and finally an empty directory; refresh never modifies
-user model configuration and the app never loads upstream npm packages.
+user model configuration and the app never loads upstream npm packages. Selecting a directory entry resolves (in the settings UI)
+`preset_id + model_id` to that row's catalog `protocol/base_url/model_id`
+and stores the resolved values together with the selection metadata
+(`preset_id`, `model_id`) in `StoredModelConfig`; user-typed Protocol,
+Base URL, or Model ID always wins and directory refreshes never rewrite
+saved configs. `Custom` needs no directory entry and accepts any of the
+four protocols with arbitrary Base URL and Model ID; legacy configs
+without selection metadata behave as Custom. Unknown or delisted
+`preset_id` values are kept as-is and remain editable, testable, and
+savable.
 
 ## 19. Player, Debug, and Operation Surfaces
 

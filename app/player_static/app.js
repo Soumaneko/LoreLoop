@@ -25,6 +25,14 @@ import {
   state,
 } from "./state.js";
 import { migrateStorageKey } from "./storage_migration.js";
+import {
+  applyRowDecision,
+  findProvider as findCatalogProvider,
+  findRow as findCatalogRow,
+  lookupSelection,
+  needsThinkingClear,
+  selectionOnModelInput,
+} from "./model_selection.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -51,8 +59,10 @@ const els = {
   addCoreMemoryBtn: $("addCoreMemoryBtn"), saveCoreMemoryBtn: $("saveCoreMemoryBtn"), coreMemoryList: $("coreMemoryList"), coreMemoryError: $("coreMemoryError"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), sceneSummary: $("sceneSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
-  closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelApiKey: $("modelApiKey"),
-  modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"),
+  closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelPresetNote: $("modelPresetNote"),
+  modelProvider: $("modelProvider"), modelApiKey: $("modelApiKey"),
+  modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"), modelNameList: $("modelNameList"),
+  modelProtocol: $("modelProtocol"), modelAdvanced: $("modelAdvanced"),
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
@@ -123,6 +133,9 @@ let saveManagerBusy = false;
 let selectedImportFile = null;
 let modelConfigBusy = false;
 let modelConnectionVerified = false;
+let modelCatalogCache = null;
+let modelSelection = { preset_id: "custom", model_id: "" };
+let modelAdvancedTouched = false;
 let activeGenerationRun = null;
 let historyLoadPromise = null;
 let historyLoadSaveName = null;
@@ -2140,7 +2153,124 @@ function modelConfigPayload() {
     base_url: els.modelBaseUrl.value.trim(),
     model: els.modelName.value.trim(),
     thinking: els.modelThinking.checked,
+    protocol: els.modelProtocol.value,
+    preset_id: modelSelection.preset_id,
+    model_id: modelSelection.model_id,
   };
+}
+
+function catalogProviderById(catalog, preset_id) {
+  return findCatalogProvider(catalog, preset_id);
+}
+
+function catalogModelRow(provider, model_id) {
+  return findCatalogRow(provider, model_id);
+}
+
+async function loadModelCatalog() {
+  if (modelCatalogCache) return modelCatalogCache;
+  const data = await request("/api/player/model-presets");
+  const providers = Array.isArray(data.providers) ? data.providers : [];
+  const byId = {};
+  for (const provider of providers) {
+    if (provider && provider.provider_id) byId[provider.provider_id] = provider;
+  }
+  modelCatalogCache = { providers, byId };
+  return modelCatalogCache;
+}
+
+function showModelPresetNote(message) {
+  if (!message) {
+    els.modelPresetNote.hidden = true;
+    els.modelPresetNote.textContent = "";
+    return;
+  }
+  els.modelPresetNote.hidden = false;
+  els.modelPresetNote.textContent = message;
+}
+
+function renderProviderOptions(catalog) {
+  const current = els.modelProvider.value;
+  els.modelProvider.textContent = "";
+  for (const provider of catalog.providers) {
+    const option = document.createElement("option");
+    option.value = provider.provider_id;
+    option.textContent = provider.provider_name || provider.provider_id;
+    els.modelProvider.append(option);
+  }
+  const custom = document.createElement("option");
+  custom.value = "custom";
+  custom.textContent = "Custom（手工配置）";
+  els.modelProvider.append(custom);
+  if (current && [...els.modelProvider.options].some((o) => o.value === current)) {
+    els.modelProvider.value = current;
+  }
+}
+
+function renderModelDatalist(provider) {
+  els.modelNameList.textContent = "";
+  if (!provider) return;
+  for (const row of provider.models) {
+    const option = document.createElement("option");
+    option.value = row.model_id;
+    option.label = row.model_name || row.model_id;
+    els.modelNameList.append(option);
+  }
+}
+
+function applyCatalogRow(row) {
+  if (!row) return;
+  const next = applyRowDecision(
+    row,
+    {
+      protocol: els.modelProtocol.value,
+      base_url: els.modelBaseUrl.value,
+      model: els.modelName.value,
+    },
+    { advancedTouched: modelAdvancedTouched },
+  );
+  els.modelProtocol.value = next.protocol;
+  els.modelBaseUrl.value = next.base_url;
+  els.modelName.value = next.model;
+  if (needsThinkingClear(next.protocol, els.modelThinking.checked)) {
+    els.modelThinking.checked = false;
+  }
+  modelSelection = selectionOnModelInput(
+    els.modelProvider.value,
+    next.model,
+    row,
+  );
+}
+
+function onProviderChanged() {
+  const catalog = modelCatalogCache;
+  const provider = catalogProviderById(catalog, els.modelProvider.value);
+  modelSelection = { preset_id: els.modelProvider.value || "custom", model_id: "" };
+  renderModelDatalist(provider);
+  els.modelName.value = "";
+  modelAdvancedTouched = false;
+  if (provider && els.modelProvider.value !== "custom") {
+    els.modelAdvanced.open = false;
+  } else {
+    els.modelAdvanced.open = true;
+  }
+  invalidateModelConnectionTest();
+}
+
+function onModelNameChanged() {
+  const catalog = modelCatalogCache;
+  const provider = catalogProviderById(catalog, els.modelProvider.value);
+  const row = catalogModelRow(provider, els.modelName.value.trim());
+  if (row) {
+    applyCatalogRow(row);
+  } else {
+    modelSelection = selectionOnModelInput(
+      els.modelProvider.value,
+      els.modelName.value.trim(),
+      null,
+    );
+  }
+  invalidateModelConnectionTest();
 }
 
 function renderModelConfigForm(config, { required = false } = {}) {
@@ -2157,18 +2287,64 @@ function renderModelConfigForm(config, { required = false } = {}) {
   els.modelKeyHint.textContent = config.configured
     ? "已保存密钥。留空会继续使用现有密钥；密钥不会传回浏览器。"
     : "保存后不会再次显示或传回浏览器。";
-  els.modelBaseUrl.value = config.base_url || "https://api.openai.com/v1";
-  els.modelName.value = config.model || "gpt-4o";
+  els.modelBaseUrl.value = config.base_url || "";
+  els.modelName.value = config.model || "";
+  els.modelProtocol.value = config.protocol || "openai_chat";
   els.modelThinking.checked = Boolean(config.thinking);
+  modelSelection = {
+    preset_id: config.preset_id || "custom",
+    model_id: config.model_id || "",
+  };
+  modelAdvancedTouched = false;
+  showModelPresetNote("");
   invalidateModelConnectionTest();
+  void enhanceModelConfigWithCatalog(config);
+}
+
+async function enhanceModelConfigWithCatalog(config) {
+  let catalog = null;
+  try {
+    catalog = await loadModelCatalog();
+  } catch (error) {
+    if (!els.modelConfigDialog.open) return;
+    els.modelProvider.value = "custom";
+    renderModelDatalist(null);
+    showModelPresetNote("模型目录暂时不可用，已保留 Custom 手工配置与当前已保存值，设置页可正常使用。");
+    return;
+  }
+  if (!els.modelConfigDialog.open) return;
+  renderProviderOptions(catalog);
+  // render 已按已存值设好 modelSelection（含手输/下架原文），这里只做
+  // provider 选中与候选列表，不重写选择元数据、不覆盖任何已有填写。
+  const found = lookupSelection(
+    catalog,
+    config.preset_id,
+    config.model_id,
+    config.model,
+  );
+  if (found.matchedPreset) {
+    els.modelProvider.value = found.provider.provider_id;
+    renderModelDatalist(found.provider);
+    els.modelAdvanced.open = false;
+  } else {
+    els.modelProvider.value = "custom";
+    renderModelDatalist(null);
+    if (config.preset_id && config.preset_id !== "custom") {
+      showModelPresetNote("原 Provider 在当前目录中已下架，已保留保存的协议与地址，可继续编辑、测试和保存。");
+    }
+    els.modelAdvanced.open = true;
+  }
 }
 
 function openModelConfig(config = state.modelConfig, { required = false } = {}) {
   renderModelConfigForm(config || {
     configured: false,
-    base_url: "https://api.openai.com/v1",
-    model: "gpt-4o",
+    base_url: "",
+    model: "",
     thinking: false,
+    protocol: "openai_chat",
+    preset_id: "custom",
+    model_id: "",
   }, { required });
   if (!els.modelConfigDialog.open) els.modelConfigDialog.showModal();
   window.setTimeout(() => (
@@ -2186,7 +2362,7 @@ function enterModelSetup(config) {
 
 function setModelConfigBusy(busy) {
   modelConfigBusy = busy;
-  for (const input of els.modelConfigForm.querySelectorAll("input, button")) {
+  for (const input of els.modelConfigForm.querySelectorAll("input, select, button")) {
     input.disabled = busy;
   }
   if (els.modelConfigDialog.dataset.required === "true") {
@@ -4946,6 +5122,19 @@ for (const input of els.modelConfigForm.querySelectorAll("input")) {
   input.addEventListener("input", invalidateModelConnectionTest);
   input.addEventListener("change", invalidateModelConnectionTest);
 }
+els.modelProvider.addEventListener("change", onProviderChanged);
+els.modelName.addEventListener("change", onModelNameChanged);
+els.modelProtocol.addEventListener("change", () => {
+  modelAdvancedTouched = true;
+  if (needsThinkingClear(els.modelProtocol.value, els.modelThinking.checked)) {
+    els.modelThinking.checked = false;
+  }
+  invalidateModelConnectionTest();
+});
+els.modelBaseUrl.addEventListener("change", () => {
+  modelAdvancedTouched = true;
+  invalidateModelConnectionTest();
+});
 els.modelConfigDialog.addEventListener("cancel", (event) => {
   if (els.modelConfigDialog.dataset.required === "true") event.preventDefault();
 });
