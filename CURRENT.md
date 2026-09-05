@@ -1470,6 +1470,26 @@ without selection metadata behave as Custom. Unknown or delisted
 `preset_id` values are kept as-is and remain editable, testable, and
 savable.
 
+Saved model services are a set (format v3) with a stable `config_id`,
+a display name, independent per-service protected API Key, and a single
+`active_config_id`. Non-Custom services are unique by `preset_id`
+(rejected at the atomic write boundary, including concurrent requests);
+Custom allows multiple entries distinguished by `config_id`. Keys never
+leak into public responses (only `has_api_key`), and a new service or an
+edit that changes provider/endpoint must supply its own Key — editing
+only a model reuses the stored Key. The old single-config file migrates
+idempotently into an enabled service, preserving identity (non-Custom
+keeps `preset_id`, otherwise becomes a "自定义服务" Custom entry), never
+guessing provider from the old URL and never requiring the directory.
+The management surface (`/api/player/model-configs`, activate/delete)
+drives switching; the old single-config write/test routes are retired.
+Missing model configuration opens the service manager, where users can add a
+service or edit an existing service with a missing Key by its saved ID. The
+editor keeps Provider identity locked, including after connection tests; fresh
+draft Provider changes clear the typed Key and update the service name. Key
+hints distinguish retaining this service's Key from an endpoint/protocol change
+that requires a new Key, and closing a dirty draft asks before discarding it.
+
 ## 19. Player, Debug, and Operation Surfaces
 
 The player surface provides:

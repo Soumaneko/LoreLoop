@@ -11,6 +11,7 @@ import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -34,6 +35,9 @@ from app.api import (
     load_player_events,
     load_core_memory_items,
     save_core_memory_items,
+    activate_model_config,
+    delete_model_config,
+    list_model_configs,
     model_config_status,
     model_presets,
     rename_save,
@@ -90,6 +94,26 @@ def _read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     return json.loads(raw)
 
 
+def _path_id(path: str, prefix: str, suffix: str) -> str:
+    """Extract the id segment between a path prefix and suffix."""
+    if not path.startswith(prefix) or not path.endswith(suffix):
+        raise ClientValidationError("Invalid model-configs path")
+    start = len(prefix)
+    end = len(path) - len(suffix) if suffix else len(path)
+    config_id = path[start:end].strip()
+    if not config_id:
+        raise ClientValidationError("config_id is required")
+    return config_id
+
+
+def _model_config_guard(fn: Callable[[], Any]) -> Any:
+    """Surface store-level ValueError as a client validation error."""
+    try:
+        return fn()
+    except ValueError as exc:
+        raise ClientValidationError(str(exc)) from exc
+
+
 def _project_client_error(exc: Exception, *, label: str) -> tuple[int, str, str]:
     """Project an exception into a (status, code, message) safe for the client.
 
@@ -143,6 +167,9 @@ class PlayerHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/model-config":
             self._handle_player_json(model_config_status)
+            return
+        if path == "/api/player/model-configs":
+            self._handle_player_json(list_model_configs)
             return
         if path == "/api/player/model-presets":
             self._handle_player_json(model_presets)
@@ -300,13 +327,25 @@ class PlayerHandler(BaseHTTPRequestHandler):
         if path == "/api/player/reader-preferences":
             self._handle_player_json(lambda: save_reader_preferences(_read_json(self)))
             return
-        if path == "/api/player/model-config/test":
+        if path == "/api/player/model-configs":
+            self._handle_player_json(
+                lambda: _model_config_guard(
+                    lambda: save_model_config(_read_json(self))
+                )
+            )
+            return
+        if path == "/api/player/model-configs/test":
             self._handle_player_json(
                 lambda: test_model_connection(_read_json(self))
             )
             return
-        if path == "/api/player/model-config":
-            self._handle_player_json(lambda: save_model_config(_read_json(self)))
+        if path.startswith("/api/player/model-configs/") and path.endswith("/activate"):
+            config_id = _path_id(path, "/api/player/model-configs/", "/activate")
+            self._handle_player_json(
+                lambda: _model_config_guard(
+                    lambda: activate_model_config(config_id)
+                )
+            )
             return
         if path == "/api/player/saves/create":
             self._handle_player_json(
@@ -342,6 +381,19 @@ class PlayerHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/history/redo":
             self._handle_player_json(redo_last_turn)
+            return
+        self.send_error(404)
+
+    def do_DELETE(self) -> None:
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        if path.startswith("/api/player/model-configs/"):
+            config_id = _path_id(path, "/api/player/model-configs/", "")
+            self._handle_player_json(
+                lambda: _model_config_guard(
+                    lambda: delete_model_config(config_id)
+                )
+            )
             return
         self.send_error(404)
 
@@ -1064,6 +1116,19 @@ class DesktopPlayerHandler(TokenAuthedPlayerHandler):
             self.send_error(HTTPStatus.FORBIDDEN)
             return
         super().do_POST()
+
+    def do_DELETE(self) -> None:
+        if not self._valid_host():
+            self.send_error(HTTPStatus.FORBIDDEN)
+            return
+        path = urlparse(self.path).path
+        if not path.startswith("/api/player/"):
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        if not self._valid_token():
+            self.send_error(HTTPStatus.FORBIDDEN)
+            return
+        super().do_DELETE()
 
     def log_message(self, format: str, *args: Any) -> None:
         return

@@ -8,6 +8,110 @@ from pathlib import Path
 STATIC_DIR = Path(__file__).parents[1] / "player_static"
 
 
+def test_model_service_editor_event_paths():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    script = r'''
+import fs from "node:fs";
+import vm from "node:vm";
+import assert from "node:assert/strict";
+const src = fs.readFileSync(process.argv[1], "utf8");
+const field = () => ({value: "", disabled: false});
+const els = {
+  modelProvider: field(), modelServiceName: field(), modelApiKey: field(),
+  modelProtocol: field(), modelBaseUrl: field(), modelName: field(),
+  modelServiceNameField: {}, modelKeyHint: {}, modelAdvanced: {},
+  closeModelConfigBtn: {}, initDialog: {open: false},
+  modelConfigDialog: {dataset: {required: "false"}, close() {c.closed = true;}},
+  modelConfigsDialog: {close() {}},
+};
+els.modelConfigForm = {querySelectorAll() {return [els.modelProvider, els.modelApiKey];}};
+const c = {
+  els, state: {}, modelDraftDirty: true, modelDraftIsNew: false,
+  modelConfigBusy: false, modelDraftOriginal: null, modelSelection: {},
+  modelCatalogCache: {}, modelAdvancedTouched: false,
+  catalogProviderById: (_catalog, id) => ({provider_id: id, provider_name: id.toUpperCase()}),
+  renderModelDatalist() {}, invalidateModelConnectionTest() {}, renderControls() {},
+  shouldDraftRequireTest: (isNew, changed) => isNew || changed,
+  setMode(mode) {c.mode = mode;},
+  openModelConfigs() {c.manager = true;},
+  window: {confirm() {c.prompted = true; return c.confirmed || false;}},
+  findConfigService: (services, id) => services.find(s => s.config_id === id),
+  openModelConfig(config, options) {c.editor = {config, options};},
+};
+vm.createContext(c);
+function install(start, end) {
+  const offset = src.indexOf(start);
+  assert.ok(offset >= 0);
+  const finish = src.indexOf(end, offset + start.length);
+  assert.ok(finish > offset);
+  vm.runInContext(src.slice(offset, finish), c);
+}
+install("function syncServiceNameField(", "function onModelNameChanged(");
+install("function enterModelSetup(", "async function testModelConnection(");
+install("function editModelService(", "async function activateModelService(");
+install("els.closeModelConfigBtn.onclick =", "els.closeModelConfigsBtn.onclick =");
+
+vm.runInContext("enterModelSetup({configured:false})", c);
+assert.equal(c.mode, "needs_model");
+assert.equal(c.manager, true);
+vm.runInContext("addModelService()", c);
+assert.equal(c.editor.options.isNew, true);
+assert.equal(c.editor.options.activate, true);
+c.modelConfigsCache = {services: [{config_id: "missing-key", has_api_key: false}]};
+vm.runInContext('editModelService("missing-key")', c);
+assert.equal(c.editor.options.configId, "missing-key");
+assert.equal(c.editor.options.isNew, false);
+
+vm.runInContext("setModelConfigBusy(true); setModelConfigBusy(false)", c);
+assert.equal(els.modelProvider.disabled, true);
+assert.equal(els.modelApiKey.disabled, false);
+c.modelDraftIsNew = true;
+vm.runInContext("setModelConfigBusy(false)", c);
+assert.equal(els.modelProvider.disabled, false);
+
+els.modelServiceName.value = "Old Provider";
+els.modelApiKey.value = "fake-old-key";
+els.modelProvider.value = "provider-b";
+vm.runInContext("onProviderChanged()", c);
+assert.equal(els.modelServiceName.value, "PROVIDER-B");
+assert.equal(els.modelApiKey.value, "");
+els.modelProvider.value = "custom";
+vm.runInContext("onProviderChanged()", c);
+assert.equal(els.modelServiceName.value, "");
+assert.equal(els.modelServiceName.required, true);
+
+c.modelDraftIsNew = false;
+c.modelDraftOriginal = {has_api_key: true, preset_id: "custom", protocol: "openai_chat", base_url: "https://old.test"};
+c.modelSelection = {preset_id: "custom"};
+els.modelProtocol.value = "openai_chat";
+els.modelBaseUrl.value = "https://old.test";
+vm.runInContext("syncModelKeyHint()", c);
+assert.ok(els.modelKeyHint.textContent.includes("留空保留"));
+assert.ok(!els.modelApiKey.placeholder.includes("•"));
+els.modelBaseUrl.value = "https://new.test";
+vm.runInContext("markConnectionDirty()", c);
+assert.ok(els.modelKeyHint.textContent.includes("服务已改变"));
+els.modelBaseUrl.value = "https://old.test";
+els.modelProtocol.value = "gemini";
+vm.runInContext("markConnectionDirty()", c);
+assert.ok(els.modelKeyHint.textContent.includes("服务已改变"));
+
+els.closeModelConfigBtn.onclick();
+assert.equal(c.prompted, true);
+assert.equal(c.closed, undefined);
+c.confirmed = true;
+els.closeModelConfigBtn.onclick();
+assert.equal(c.closed, true);
+'''
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script, str(STATIC_DIR / "app.js")],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_player_frontend_javascript_is_syntactically_valid():
     node = shutil.which("node")
     if node is None:
@@ -18,6 +122,7 @@ def test_player_frontend_javascript_is_syntactically_valid():
         "client_diagnostics.js",
         "custom_select.js",
         "error_feedback.js",
+        "model_configs.js",
         "model_selection.js",
         "prepaint.js",
         "popover_fallback.js",
@@ -115,6 +220,62 @@ if (!hit.matchedPreset || hit.row.model_id !== "grok-4.6") throw new Error("pres
 if (!m.needsThinkingClear("anthropic_messages", true)) throw new Error("must clear");
 if (m.needsThinkingClear("openai_chat", true)) throw new Error("must not clear on chat");
 if (m.needsThinkingClear("gemini", false)) throw new Error("must not clear when off");
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_model_configs_list_and_add_candidates():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "model_configs.js").resolve().as_uri()
+    script = f"""
+const m = await import("{module_url}");
+const eq = (a, b, msg) => {{
+  if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(msg + ": " + JSON.stringify(a));
+}};
+const catalog = {{
+  providers: [
+    {{ provider_id: "moonshot", provider_name: "Moonshot" }},
+    {{ provider_id: "openai", provider_name: "OpenAI" }},
+    {{ provider_id: "custom", provider_name: "Custom" }},
+  ],
+}};
+const services = [
+  {{ config_id: "a", name: "Moonshot", model: "kimi-k3", preset_id: "moonshot", has_api_key: true }},
+];
+// Configured non-Custom provider excluded from add candidates; Custom always addable.
+const candidates = m.buildAddCandidates(catalog, services);
+eq(candidates.map((c) => c.preset_id), ["openai", "custom"], "add candidates");
+if (!m.isConfiguredProvider("moonshot", services)) throw new Error("moonshot not configured");
+if (m.isConfiguredProvider("openai", services)) throw new Error("openai configured");
+// Deleted provider becomes addable again.
+eq(
+  m.buildAddCandidates(catalog, []).map((c) => c.preset_id),
+  ["moonshot", "openai", "custom"],
+  "candidates after delete",
+);
+// Unknown config_id must not fall back to a service.
+if (m.findService(services, "missing") !== null) throw new Error("unknown id found");
+if (m.findService(services, "a")?.config_id !== "a") throw new Error("known id not found");
+// List rows mark active and carry names.
+eq(
+  m.listRows(services, "a"),
+  [{{ config_id: "a", name: "Moonshot", model: "kimi-k3", preset_id: "moonshot", has_api_key: true, active: true }}],
+  "list rows",
+);
+// A draft needs a test only when new or a connection field changed; renaming a
+// Custom alone does not.
+if (m.shouldRequireTest(true, false) !== true) throw new Error("new needs test");
+if (m.shouldRequireTest(false, true) !== true) throw new Error("changed needs test");
+if (m.shouldRequireTest(false, false) !== false) throw new Error("rename only no test");
 """
     result = subprocess.run(
         [node, "--input-type=module", "--eval", script],

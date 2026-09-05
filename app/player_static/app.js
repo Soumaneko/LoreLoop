@@ -33,6 +33,12 @@ import {
   needsThinkingClear,
   selectionOnModelInput,
 } from "./model_selection.js";
+import {
+  buildAddCandidates,
+  findService as findConfigService,
+  listRows as buildServiceRows,
+  shouldRequireTest as shouldDraftRequireTest,
+} from "./model_configs.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -63,7 +69,10 @@ const els = {
   modelProvider: $("modelProvider"), modelApiKey: $("modelApiKey"),
   modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"), modelNameList: $("modelNameList"),
   modelProtocol: $("modelProtocol"), modelAdvanced: $("modelAdvanced"),
-  modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"),
+  modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"), saveModelOnlyBtn: $("saveModelOnlyBtn"),
+  modelServiceNameField: $("modelServiceNameField"), modelServiceName: $("modelServiceName"),
+  modelConfigsDialog: $("modelConfigsDialog"), modelConfigsForm: $("modelConfigsForm"), closeModelConfigsBtn: $("closeModelConfigsBtn"),
+  modelConfigsIntro: $("modelConfigsIntro"), modelConfigsList: $("modelConfigsList"), addModelServiceBtn: $("addModelServiceBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
   feedbackRewriteInput: $("feedbackRewriteInput"), feedbackRewriteCancelBtn: $("feedbackRewriteCancelBtn"),
   difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), canonValidationBtn: $("canonValidationBtn"), canonInfoBtn: $("canonInfoBtn"), tokenUsageInfoBtn: $("tokenUsageInfoBtn"), oneClickInfoBtn: $("oneClickInfoBtn"), settingInfoDialog: $("settingInfoDialog"), settingInfoTitle: $("settingInfoTitle"), settingInfoContent: $("settingInfoContent"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), oneClickConfirm: $("oneClickConfirm"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
@@ -136,6 +145,13 @@ let modelConnectionVerified = false;
 let modelCatalogCache = null;
 let modelSelection = { preset_id: "custom", model_id: "" };
 let modelAdvancedTouched = false;
+let modelConfigsCache = null;
+let modelDraftConfigId = "";
+let modelDraftIsNew = false;
+let modelDraftActivate = true;
+let modelDraftDirty = false;
+let modelDraftNeedsTest = true;
+let modelDraftOriginal = null;
 let activeGenerationRun = null;
 let historyLoadPromise = null;
 let historyLoadSaveName = null;
@@ -2148,7 +2164,7 @@ function invalidateModelConnectionTest() {
 }
 
 function modelConfigPayload() {
-  return {
+  const payload = {
     api_key: els.modelApiKey.value.trim(),
     base_url: els.modelBaseUrl.value.trim(),
     model: els.modelName.value.trim(),
@@ -2156,7 +2172,10 @@ function modelConfigPayload() {
     protocol: els.modelProtocol.value,
     preset_id: modelSelection.preset_id,
     model_id: modelSelection.model_id,
+    name: els.modelServiceName.value.trim(),
   };
+  if (modelDraftConfigId) payload.config_id = modelDraftConfigId;
+  return payload;
 }
 
 function catalogProviderById(catalog, preset_id) {
@@ -2192,10 +2211,17 @@ function showModelPresetNote(message) {
 function renderProviderOptions(catalog) {
   const current = els.modelProvider.value;
   els.modelProvider.textContent = "";
+  const services = (modelConfigsCache && modelConfigsCache.services) || [];
   for (const provider of catalog.providers) {
+    const providerId = provider.provider_id;
+    if (!providerId || providerId === "custom") continue;
+    // In add mode, exclude providers already configured as non-Custom services.
+    if (modelDraftIsNew && services.some((s) => s.preset_id === providerId)) {
+      continue;
+    }
     const option = document.createElement("option");
-    option.value = provider.provider_id;
-    option.textContent = provider.provider_name || provider.provider_id;
+    option.value = providerId;
+    option.textContent = provider.provider_name || providerId;
     els.modelProvider.append(option);
   }
   const custom = document.createElement("option");
@@ -2242,6 +2268,39 @@ function applyCatalogRow(row) {
   );
 }
 
+function syncServiceNameField() {
+  const isCustom = (els.modelProvider.value || "custom") === "custom";
+  els.modelServiceNameField.hidden = !isCustom;
+  els.modelServiceName.required = isCustom;
+  if (!isCustom && modelDraftIsNew) {
+    const provider = catalogProviderById(modelCatalogCache, els.modelProvider.value);
+    els.modelServiceName.value = provider?.provider_name || provider?.provider_id || "";
+  }
+}
+
+function syncModelKeyHint() {
+  const original = modelDraftOriginal;
+  const hasKey = !modelDraftIsNew && Boolean(original?.has_api_key);
+  const changed = hasKey && (
+    modelSelection.preset_id !== original.preset_id
+    || els.modelProtocol.value !== original.protocol
+    || els.modelBaseUrl.value.trim() !== original.base_url
+  );
+  els.modelApiKey.placeholder = "填写 API Key";
+  els.modelKeyHint.textContent = changed
+    ? "服务已改变，请填写此服务的 Key。保存前原配置仍有效。"
+    : hasKey
+      ? "此配置已保存 Key，留空保留；密钥不会传回浏览器。"
+      : "请填写此服务的 Key。测试不会保存配置。";
+}
+
+function markConnectionDirty() {
+  modelDraftDirty = true;
+  modelDraftNeedsTest = shouldDraftRequireTest(modelDraftIsNew, true);
+  invalidateModelConnectionTest();
+  syncModelKeyHint();
+}
+
 function onProviderChanged() {
   const catalog = modelCatalogCache;
   const provider = catalogProviderById(catalog, els.modelProvider.value);
@@ -2249,12 +2308,16 @@ function onProviderChanged() {
   renderModelDatalist(provider);
   els.modelName.value = "";
   modelAdvancedTouched = false;
+  // Switching provider on a fresh draft must not carry the previous Key over.
+  els.modelApiKey.value = "";
+  els.modelServiceName.value = "";
   if (provider && els.modelProvider.value !== "custom") {
     els.modelAdvanced.open = false;
   } else {
     els.modelAdvanced.open = true;
   }
-  invalidateModelConnectionTest();
+  syncServiceNameField();
+  markConnectionDirty();
 }
 
 function onModelNameChanged() {
@@ -2270,7 +2333,7 @@ function onModelNameChanged() {
       null,
     );
   }
-  invalidateModelConnectionTest();
+  markConnectionDirty();
 }
 
 function renderModelConfigForm(config, { required = false } = {}) {
@@ -2281,22 +2344,28 @@ function renderModelConfigForm(config, { required = false } = {}) {
     ? "开始故事前，请先配置并测试本机使用的模型服务。配置不会写入或导出到故事存档。"
     : "模型配置只保存在本机，不会写入或导出到任何故事存档。";
   els.modelApiKey.value = "";
-  els.modelApiKey.placeholder = config.configured
-    ? "••••••••••••（已配置）"
-    : "填写 API Key";
-  els.modelKeyHint.textContent = config.configured
-    ? "已保存密钥。留空会继续使用现有密钥；密钥不会传回浏览器。"
-    : "保存后不会再次显示或传回浏览器。";
+  modelDraftOriginal = { ...config };
   els.modelBaseUrl.value = config.base_url || "";
   els.modelName.value = config.model || "";
   els.modelProtocol.value = config.protocol || "openai_chat";
   els.modelThinking.checked = Boolean(config.thinking);
+  els.modelServiceName.value = config.name || "";
   modelSelection = {
     preset_id: config.preset_id || "custom",
     model_id: config.model_id || "",
   };
+  els.modelProvider.textContent = "";
+  const selectedProvider = document.createElement("option");
+  selectedProvider.value = modelSelection.preset_id;
+  selectedProvider.textContent = modelSelection.preset_id === "custom"
+    ? "Custom（手工配置）" : config.name || modelSelection.preset_id;
+  els.modelProvider.append(selectedProvider);
   modelAdvancedTouched = false;
+  modelDraftDirty = false;
+  modelDraftNeedsTest = shouldDraftRequireTest(modelDraftIsNew, false);
   showModelPresetNote("");
+  syncServiceNameField();
+  syncModelKeyHint();
   invalidateModelConnectionTest();
   void enhanceModelConfigWithCatalog(config);
 }
@@ -2307,7 +2376,7 @@ async function enhanceModelConfigWithCatalog(config) {
     catalog = await loadModelCatalog();
   } catch (error) {
     if (!els.modelConfigDialog.open) return;
-    els.modelProvider.value = "custom";
+    if (modelDraftIsNew) els.modelProvider.value = "custom";
     renderModelDatalist(null);
     showModelPresetNote("模型目录暂时不可用，已保留 Custom 手工配置与当前已保存值，设置页可正常使用。");
     return;
@@ -2327,16 +2396,34 @@ async function enhanceModelConfigWithCatalog(config) {
     renderModelDatalist(found.provider);
     els.modelAdvanced.open = false;
   } else {
-    els.modelProvider.value = "custom";
+    if (!modelDraftIsNew && config.preset_id && config.preset_id !== "custom") {
+      const option = document.createElement("option");
+      option.value = config.preset_id;
+      option.textContent = config.name || config.preset_id;
+      els.modelProvider.append(option);
+      els.modelProvider.value = config.preset_id;
+    } else {
+      els.modelProvider.value = "custom";
+    }
     renderModelDatalist(null);
     if (config.preset_id && config.preset_id !== "custom") {
       showModelPresetNote("原 Provider 在当前目录中已下架，已保留保存的协议与地址，可继续编辑、测试和保存。");
     }
     els.modelAdvanced.open = true;
   }
+  syncServiceNameField();
 }
 
-function openModelConfig(config = state.modelConfig, { required = false } = {}) {
+function openModelConfig(config = state.modelConfig, {
+  required = false,
+  configId = "",
+  isNew = false,
+  activate = true,
+} = {}) {
+  modelDraftConfigId = configId;
+  modelDraftIsNew = isNew;
+  modelDraftActivate = activate;
+  els.modelProvider.disabled = !isNew;
   renderModelConfigForm(config || {
     configured: false,
     base_url: "",
@@ -2345,6 +2432,7 @@ function openModelConfig(config = state.modelConfig, { required = false } = {}) 
     protocol: "openai_chat",
     preset_id: "custom",
     model_id: "",
+    name: "",
   }, { required });
   if (!els.modelConfigDialog.open) els.modelConfigDialog.showModal();
   window.setTimeout(() => (
@@ -2357,7 +2445,7 @@ function enterModelSetup(config) {
   setMode("needs_model");
   if (els.initDialog.open) els.initDialog.close();
   renderControls();
-  openModelConfig(config, { required: true });
+  openModelConfigs();
 }
 
 function setModelConfigBusy(busy) {
@@ -2365,6 +2453,7 @@ function setModelConfigBusy(busy) {
   for (const input of els.modelConfigForm.querySelectorAll("input, select, button")) {
     input.disabled = busy;
   }
+  els.modelProvider.disabled = busy || !modelDraftIsNew;
   if (els.modelConfigDialog.dataset.required === "true") {
     els.closeModelConfigBtn.hidden = true;
   }
@@ -2376,7 +2465,7 @@ async function testModelConnection() {
   setModelConfigBusy(true);
   showModelTestResult("pending", "正在连接模型服务……");
   try {
-    const result = await request("/api/player/model-config/test", {
+    const result = await request("/api/player/model-configs/test", {
       method: "POST",
       body: JSON.stringify(modelConfigPayload()),
     });
@@ -2400,27 +2489,163 @@ async function testModelConnection() {
   }
 }
 
-async function saveModelSettings() {
+async function saveModelSettings(activate = modelDraftActivate) {
   if (!els.modelConfigForm.reportValidity()) return;
-  if (!modelConnectionVerified) {
+  if (modelDraftNeedsTest && !modelConnectionVerified) {
     showModelTestResult("error", "请先使用当前填写内容完成一次连接测试。修改任一字段后需要重新测试。");
     return;
   }
   setModelConfigBusy(true);
   try {
-    const config = await request("/api/player/model-config", {
+    const payload = modelConfigPayload();
+    payload.activate = activate;
+    const configs = await request("/api/player/model-configs", {
       method: "POST",
-      body: JSON.stringify(modelConfigPayload()),
+      body: JSON.stringify(payload),
     });
-    state.modelConfig = config;
+    modelConfigsCache = configs;
     els.modelApiKey.value = "";
     els.modelConfigDialog.close();
-    showToast("模型配置已保存并立即启用");
-    await loadAll({ scroll: "instant", knownModelConfig: config });
+    showToast(activate ? "模型配置已保存并立即启用" : "模型配置已保存");
+    await refreshModelConfigs();
+    if (activate) {
+      await loadAll({ scroll: "instant" });
+    }
+    openModelConfigs();
   } catch (error) {
     showModelTestResult("error", error.message || "模型配置未能保存");
   } finally {
     setModelConfigBusy(false);
+  }
+}
+
+async function refreshModelConfigs() {
+  modelConfigsCache = await request("/api/player/model-configs");
+  return modelConfigsCache;
+}
+
+function renderModelConfigsList() {
+  const data = modelConfigsCache || { services: [], active_config_id: "" };
+  const rows = buildServiceRows(data.services || [], data.active_config_id || "");
+  els.modelConfigsList.textContent = "";
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "尚未添加任何模型服务。";
+    els.modelConfigsList.append(empty);
+    return;
+  }
+  for (const row of rows) {
+    const div = document.createElement("div");
+    div.className = "service-row";
+    const head = document.createElement("div");
+    head.className = "service-row-head";
+    const name = document.createElement("span");
+    name.className = "service-row-name";
+    name.textContent = row.name;
+    head.append(name);
+    if (row.active) {
+      const badge = document.createElement("span");
+      badge.className = "service-row-active";
+      badge.textContent = "当前使用";
+      head.append(badge);
+    }
+    const meta = document.createElement("div");
+    meta.className = "service-row-meta";
+    meta.textContent = `${row.model || "（未选择模型）"}`;
+    const actions = document.createElement("div");
+    actions.className = "service-row-actions";
+    if (!row.active) {
+      const enable = document.createElement("button");
+      enable.type = "button";
+      enable.textContent = "启用";
+      enable.onclick = () => activateModelService(row.config_id);
+      actions.append(enable);
+    }
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.textContent = "编辑";
+    edit.onclick = () => editModelService(row.config_id);
+    actions.append(edit);
+    if (!row.active) {
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "删除";
+      del.onclick = () => deleteModelService(row);
+      actions.append(del);
+    }
+    div.append(head, meta, actions);
+    if (!row.has_api_key) {
+      const missing = document.createElement("div");
+      missing.className = "service-row-missing-key";
+      missing.textContent = "此服务缺少 Key，请编辑并填写。";
+      div.append(missing);
+    }
+    els.modelConfigsList.append(div);
+  }
+}
+
+function openModelConfigs() {
+  if (!els.modelConfigsDialog.open) els.modelConfigsDialog.showModal();
+  void refreshModelConfigs().then(() => renderModelConfigsList());
+}
+
+function editModelService(config_id) {
+  const service = findConfigService(modelConfigsCache?.services || [], config_id);
+  if (!service) {
+    void refreshModelConfigs().then((data) => {
+      const found = findConfigService(data.services || [], config_id);
+      if (found) {
+        els.modelConfigsDialog.close();
+        openModelConfig(found, { configId: config_id, isNew: false, activate: true });
+      }
+    });
+    return;
+  }
+  els.modelConfigsDialog.close();
+  openModelConfig(service, { configId: config_id, isNew: false, activate: true });
+}
+
+function addModelService() {
+  els.modelConfigsDialog.close();
+  openModelConfig({
+    configured: false,
+    has_api_key: false,
+    base_url: "",
+    model: "",
+    thinking: false,
+    protocol: "openai_chat",
+    preset_id: "custom",
+    model_id: "",
+    name: "",
+  }, { configId: "", isNew: true, activate: true });
+}
+
+async function activateModelService(config_id) {
+  try {
+    const data = await request(`/api/player/model-configs/${config_id}/activate`, {
+      method: "POST",
+    });
+    modelConfigsCache = data;
+    showToast("已启用该服务");
+    renderModelConfigsList();
+    await loadAll({ scroll: "instant" });
+  } catch (error) {
+    showToast(error.message || "启用失败");
+  }
+}
+
+async function deleteModelService(row) {
+  if (!window.confirm(`确定删除服务「${row.name}」？此操作不可撤销。`)) return;
+  try {
+    const data = await request(`/api/player/model-configs/${row.config_id}`, {
+      method: "DELETE",
+    });
+    modelConfigsCache = data;
+    showToast("服务已删除");
+    renderModelConfigsList();
+  } catch (error) {
+    showToast(error.message || "删除失败");
   }
 }
 
@@ -5027,9 +5252,18 @@ els.manageSavesBtn.onclick = () => {
 };
 els.modelSettingsBtn.onclick = () => {
   closeDrawer();
-  openModelConfig();
+  openModelConfigs();
 };
-els.closeModelConfigBtn.onclick = () => els.modelConfigDialog.close();
+els.closeModelConfigBtn.onclick = () => {
+  if (modelDraftDirty) {
+    if (!window.confirm("有未保存的修改，确定放弃？")) return;
+  }
+  els.modelConfigDialog.close();
+  openModelConfigs();
+};
+els.closeModelConfigsBtn.onclick = () => els.modelConfigsDialog.close();
+els.addModelServiceBtn.onclick = addModelService;
+els.saveModelOnlyBtn.onclick = () => saveModelSettings(false);
 
 async function refreshGameView() {
   if (["generating", "confirming"].includes(state.mode) || activeGenerationRun) {
@@ -5119,8 +5353,13 @@ els.modelConfigForm.addEventListener("submit", (event) => {
   saveModelSettings();
 });
 for (const input of els.modelConfigForm.querySelectorAll("input")) {
-  input.addEventListener("input", invalidateModelConnectionTest);
-  input.addEventListener("change", invalidateModelConnectionTest);
+  if (input === els.modelServiceName) {
+    // 仅改 Custom 名称：置脏但不需要重测。
+    input.addEventListener("input", () => { modelDraftDirty = true; });
+    continue;
+  }
+  input.addEventListener("input", markConnectionDirty);
+  input.addEventListener("change", markConnectionDirty);
 }
 els.modelProvider.addEventListener("change", onProviderChanged);
 els.modelName.addEventListener("change", onModelNameChanged);
@@ -5129,14 +5368,20 @@ els.modelProtocol.addEventListener("change", () => {
   if (needsThinkingClear(els.modelProtocol.value, els.modelThinking.checked)) {
     els.modelThinking.checked = false;
   }
-  invalidateModelConnectionTest();
+  markConnectionDirty();
 });
 els.modelBaseUrl.addEventListener("change", () => {
   modelAdvancedTouched = true;
-  invalidateModelConnectionTest();
+  markConnectionDirty();
 });
 els.modelConfigDialog.addEventListener("cancel", (event) => {
-  if (els.modelConfigDialog.dataset.required === "true") event.preventDefault();
+  if (els.modelConfigDialog.dataset.required === "true") {
+    event.preventDefault();
+    return;
+  }
+  if (modelDraftDirty && !window.confirm("有未保存的修改，确定放弃？")) {
+    event.preventDefault();
+  }
 });
 els.feedbackRewriteCancelBtn.onclick = () => els.feedbackRewriteDialog.close();
 els.feedbackRewriteForm.addEventListener("submit", (event) => {

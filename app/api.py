@@ -41,6 +41,9 @@ from app.runtime.reader_preferences import (
     save_reader_preferences,
 )
 from app.runtime.model_config import (
+    activate_model_config,
+    delete_model_config,
+    list_model_configs,
     model_config_status,
     save_model_config,
     test_model_connection,
@@ -436,6 +439,9 @@ __all__ = [
     "load_player_state",
     "load_initialization_draft",
     "load_reader_preferences",
+    "activate_model_config",
+    "delete_model_config",
+    "list_model_configs",
     "model_config_status",
     "model_presets",
     "list_maintenance_jobs",

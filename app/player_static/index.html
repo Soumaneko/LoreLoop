@@ -331,6 +331,11 @@
           </select>
           <small>预设用于填写协议、端点和常用模型；存在不等于已验证。体积较大的目录首次打开时可能需要几秒加载。</small>
         </label>
+        <label id="modelServiceNameField" hidden>
+          <span>服务名称</span>
+          <input id="modelServiceName" autocomplete="off" spellcheck="false" placeholder="例如：日常写作" />
+          <small>为 Custom 服务起一个便于识别的名称。</small>
+        </label>
         <label>
           <span>模型名称</span>
           <input id="modelName" list="modelNameList" autocomplete="off" spellcheck="false" required placeholder="gpt-4o" />
@@ -366,7 +371,24 @@
       <div id="modelTestResult" class="model-test-result" role="status" hidden></div>
       <div class="modal-actions">
         <button id="testModelBtn" type="button">测试连接</button>
+        <button id="saveModelOnlyBtn" type="button">保存</button>
         <button id="saveModelBtn" class="primary-action" type="submit">保存并启用</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="modelConfigsDialog" class="modal model-configs-modal">
+    <form id="modelConfigsForm">
+      <header class="model-config-header">
+        <h2>已配置的服务</h2>
+        <button id="closeModelConfigsBtn" class="close-button" type="button" aria-label="关闭">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </header>
+      <p id="modelConfigsIntro">每个 Provider 对应一份服务；修改模型或参数即编辑该服务。Custom 可添加多份。</p>
+      <div id="modelConfigsList" class="model-configs-list"></div>
+      <div class="modal-actions">
+        <button id="addModelServiceBtn" type="button">添加服务</button>
       </div>
     </form>
   </dialog>

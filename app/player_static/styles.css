@@ -1939,6 +1939,17 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .model-test-result { margin-top: 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .model-test-result[data-status="success"] { border-color: var(--positive-border); background: var(--positive-bg); color: var(--positive-text); }
 .model-test-result[data-status="error"] { border-color: var(--negative-border); background: var(--negative-bg); color: var(--negative-text); }
+.model-configs-list { display: grid; gap: 12px; margin-top: 18px; }
+.model-configs-list .service-row { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--surface-soft); }
+.service-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.service-row-name { color: var(--ink); font-size: 13px; font-weight: 600; }
+.service-row-active { color: var(--positive-text); font-size: 11px; }
+.service-row-meta { color: var(--muted); font-size: 12px; }
+.service-row-actions { display: flex; gap: 8px; }
+.service-row-actions button { padding: 6px 12px; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.service-row-actions button.primary-action { border-color: var(--gold); color: var(--gold); }
+.service-row-missing-key { color: var(--negative-text); font-size: 11px; }
+#modelConfigsList .empty { color: var(--faint); font-size: 12px; padding: 12px 0; }
 .save-manager-modal { width: min(820px, calc(100% - 28px)); max-height: calc(100dvh - 28px); overflow: hidden; }
 .save-manager-shell { padding: 26px 28px 28px; }
 .save-manager-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }

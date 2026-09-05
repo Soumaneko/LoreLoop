@@ -63,6 +63,40 @@ def test_player_handler_exposes_only_authenticated_player_surface():
         server.server_close()
 
 
+def test_player_model_configs_delete_requires_token():
+    token = "desktop-test-token"
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0),
+        make_player_handler(token),
+    )
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    port = server.server_address[1]
+
+    def delete(path, *, headers=None):
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+        connection.request("DELETE", path, headers=headers or {})
+        response = connection.getresponse()
+        body = response.read()
+        connection.close()
+        return response.status, body
+
+    try:
+        status, _ = delete("/api/player/model-configs/abc")
+        assert status == 403
+        status, body = delete(
+            "/api/player/model-configs/abc",
+            headers={"X-LoreLoop-Token": token},
+        )
+        # Authenticated but unknown config_id -> client validation error.
+        assert status == 400
+        assert b'"ok": false' in body
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+
 def test_winforms_runtime_check_does_not_start_the_desktop(monkeypatch):
     calls = []
     monkeypatch.setattr(
