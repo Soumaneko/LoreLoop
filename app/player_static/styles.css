@@ -1928,6 +1928,8 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .model-config-fields { display: grid; gap: 16px; margin-top: 18px; }
 .model-config-fields label > span { display: block; color: var(--muted); font-size: 12px; }
 .model-config-fields label > small, #modelKeyHint { display: block; margin-top: 7px; color: var(--faint); font-size: 11px; line-height: 1.5; }
+#modelApiKey { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; letter-spacing: normal; }
+#modelApiKey::placeholder { font-family: var(--serif); }
 .model-thinking-toggle { display: flex; align-items: center; gap: 11px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-soft); cursor: pointer; }
 .model-thinking-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--gold); }
 .model-config-fields .model-thinking-toggle span { display: grid; gap: 3px; }
@@ -1935,6 +1937,20 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .model-thinking-toggle small { color: var(--faint); font-size: 11px; }
 .model-config-fields details { display: grid; gap: 16px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--surface-soft); }
 .model-config-fields summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.model-combobox { position: relative; }
+.model-combobox input { width: 100%; }
+.model-combobox-menu { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; right: 0; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 8px 24px rgba(0,0,0,0.24); }
+.model-combobox-option { display: block; width: 100%; text-align: left; padding: 7px 9px; font-size: 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; overflow-wrap: anywhere; }
+.model-combobox-option:hover, .model-combobox-option:focus-visible { background: var(--surface-soft); }
+.model-combobox-option[aria-selected="true"] { background: var(--gold-soft); color: var(--gold); }
+.model-combobox-empty { padding: 8px 9px; color: var(--faint); font-size: 11px; }
+.model-catalog-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+.model-catalog-status { flex: 1; color: var(--muted); font-size: 11px; }
+.model-catalog-status[data-status="error"], .model-catalog-status[data-status="empty"] { color: var(--negative-text); }
+.model-refresh-btn { padding: 8px 12px; font-size: 12px; border: 1px solid var(--gold); border-radius: 6px; background: var(--gold-soft); color: var(--gold-bright); cursor: pointer; margin-left: auto; }
+.model-refresh-btn:hover { border-color: var(--gold); color: var(--gold); }
+.codex-custom-select-search { width: calc(100% - 8px); margin: 4px; padding: 5px 7px; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.codex-custom-select-search:focus { outline: none; border-color: var(--gold); }
 #modelPresetNote { margin-top: 14px; }
 .model-test-result { margin-top: 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .model-test-result[data-status="success"] { border-color: var(--positive-border); background: var(--positive-bg); color: var(--positive-text); }
@@ -3137,3 +3153,35 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 .core-memory-item-head .remove-core-memory-btn:hover { color: var(--danger); border-color: var(--danger); }
 .core-memory-item-source { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); opacity: .75; white-space: nowrap; }
 .core-memory-empty { color: var(--muted); padding: 14px 0; }
+.provider-picker { border: 0; border-bottom: 1px solid var(--line); padding: 0 0 18px; min-width: 0; }
+.provider-picker p { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.provider-picker strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.provider-selected { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--gold); border-radius: 10px; background: var(--gold-soft); }
+.provider-selected[hidden] { display: none; }
+.provider-selected > div { display: grid; gap: 4px; min-width: 0; }
+.provider-selected span { color: var(--muted); font-size: 11px; }
+.provider-selected strong { color: var(--gold-bright); font-size: 15px; overflow-wrap: anywhere; }
+#modelProviderChange { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 6px 12px; font-size: 12px; cursor: pointer; }
+#modelProviderChange:hover { border-color: var(--gold); }
+#modelProviderPanel { display: grid; gap: 8px; }
+#modelProviderPanel[hidden] { display: none; }
+#modelProviderPanel > label { font-size: 12px; color: var(--muted); }
+#modelProviderSearch { margin: 0; padding: 10px 12px; font-size: 13px; }
+.provider-results { max-height: 144px; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.provider-results > .empty { grid-column: 1 / -1; padding: 8px 0; margin: 0; }
+.provider-result { appearance: none; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--ink); font-size: 13px; line-height: 1.4; letter-spacing: 0; overflow-wrap: anywhere; cursor: pointer; }
+.provider-result:hover:not(:disabled) { background: var(--gold-soft); border-color: var(--gold); }
+.provider-result[aria-pressed="true"] { background: var(--gold-soft); border-color: var(--gold); color: var(--gold-bright); }
+.provider-result:focus-visible, #modelCustomBtn:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+#modelCustomBtn { appearance: none; justify-self: start; border: 0; border-radius: 6px; padding: 6px 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+#modelCustomBtn:hover:not(:disabled) { color: var(--gold-bright); }
+.provider-result:disabled, #modelCustomBtn:disabled { opacity: 0.5; cursor: default; }
+.model-config-modal { max-height: calc(100dvh - 32px); }
+.model-config-modal .modal-actions { flex-wrap: wrap; }
+.model-config-fields > *, .model-endpoint-fields > * { min-width: 0; }
+@media (max-width: 420px) {
+  .model-config-modal form { padding: 20px 16px; }
+  .provider-results { grid-template-columns: minmax(0, 1fr); max-height: 136px; }
+}
+.model-endpoint-fields { display: grid; gap: 14px; }
+.model-combobox-option { overflow-wrap: anywhere; white-space: normal; }

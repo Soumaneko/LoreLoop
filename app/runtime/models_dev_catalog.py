@@ -260,23 +260,25 @@ def _usable_providers(payload: object) -> list[CatalogProvider]:
 
 def read_catalog(
     *,
+    refresh: bool = False,
     timeout: float = MODELS_DEV_TIMEOUT_S,
     cache_path: str | Path = CACHE_PATH,
     fetch_fn=None,
 ) -> dict[str, Any]:
-    """Read the catalog: live -> last-good cache -> shipped snapshot.
+    """Read locally; explicit refresh tries live before cache and snapshot.
 
     Refresh failures never clobber a good cache and never touch user
     model configuration. Returns a JSON-serializable response payload
     with a ``source`` marker.
     """
-    try:
-        payload = fetch_fn() if fetch_fn is not None else fetch(timeout=timeout)
-        providers = _usable_providers(payload)
-        save_cache(payload, cache_path)
-        return {"source": "live", "providers": _public_providers(providers)}
-    except Exception:
-        pass
+    if refresh:
+        try:
+            payload = fetch_fn() if fetch_fn is not None else fetch(timeout=timeout)
+            providers = _usable_providers(payload)
+            save_cache(payload, cache_path)
+            return {"source": "live", "providers": _public_providers(providers)}
+        except Exception:
+            pass
     try:
         cached = load_cache(cache_path)
         if cached is not None:
@@ -313,13 +315,14 @@ def _public_providers(providers: list[CatalogProvider]) -> list[dict[str, Any]]:
 
 def catalog_response(
     *,
+    refresh: bool = False,
     timeout: float = MODELS_DEV_TIMEOUT_S,
     cache_path: str | Path = CACHE_PATH,
     fetch_fn=None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     payload = read_catalog(
-        timeout=timeout, cache_path=cache_path, fetch_fn=fetch_fn,
+        timeout=timeout, cache_path=cache_path, fetch_fn=fetch_fn, refresh=refresh,
     )
     payload["latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
     return payload

@@ -3,29 +3,76 @@
 
 export const CUSTOM_PRESET = "custom";
 
+// Add-mode quick list: only these are shown by default, and only if present in
+// the catalog. Presence is checked against the catalog, never guessed. The list
+// controls display only and implies no endorsement; OpenRouter is omitted from
+// the shipped snapshot so it is not listed.
+export const COMMON_PROVIDER_IDS = [
+  "openai",
+  "anthropic",
+  "google",
+  "deepseek",
+  "moonshotai",
+  "opencode-go",
+];
+
 // Add candidates: every catalog provider that is not already configured as a
 // non-Custom service, plus Custom which is always addable. Delisted providers
 // simply are not in the catalog and therefore not offered.
 export function buildAddCandidates(catalog, services) {
+  const candidates = addableProviders(catalog, services);
+  candidates.push({ preset_id: CUSTOM_PRESET, name: "Custom（手工配置）" });
+  return candidates;
+}
+
+// Every addable catalog provider: configured non-Custom services are excluded.
+// Custom is not a catalog entry and is appended separately.
+export function addableProviders(catalog, services) {
   const configured = new Set();
   for (const service of services || []) {
     if (service.preset_id && service.preset_id !== CUSTOM_PRESET) {
       configured.add(service.preset_id);
     }
   }
-  const candidates = [];
+  const result = [];
   for (const provider of (catalog && catalog.providers) || []) {
     const providerId = provider && provider.provider_id;
     if (!providerId || providerId === CUSTOM_PRESET) continue;
-    if (!configured.has(providerId)) {
-      candidates.push({
-        preset_id: providerId,
-        name: provider.provider_name || providerId,
-      });
-    }
+    if (configured.has(providerId)) continue;
+    result.push({
+      preset_id: providerId,
+      name: provider.provider_name || providerId,
+    });
   }
-  candidates.push({ preset_id: CUSTOM_PRESET, name: "Custom（手工配置）" });
-  return candidates;
+  return result;
+}
+
+// The default add-mode list: common providers (only those present and not yet
+// configured) plus Custom. Used when no search query has been entered.
+export function commonProviderCandidates(catalog, services) {
+  const all = addableProviders(catalog, services);
+  const byId = new Map(all.map((candidate) => [candidate.preset_id, candidate]));
+  const common = [];
+  for (const providerId of COMMON_PROVIDER_IDS) {
+    const found = byId.get(providerId);
+    if (found) common.push(found);
+  }
+  return common;
+}
+
+// Full searchable add-mode list: every addable provider matching the query by
+// provider_id or provider_name (case-insensitive substring). An empty query
+// returns the complete addable set.
+export function searchProviderCandidates(catalog, services, query) {
+  const needle = String(query || "").trim().toLowerCase();
+  const all = addableProviders(catalog, services);
+  if (!needle) return all;
+  return all.filter(
+    (candidate) => (
+      candidate.preset_id.toLowerCase().includes(needle)
+      || candidate.name.toLowerCase().includes(needle)
+    ),
+  );
 }
 
 // A configured provider (non-Custom) can be added only after it is deleted.

@@ -1456,10 +1456,14 @@ needing unimplemented auth are skipped per model row, never guessed.
 Per-model `provider.npm/api/shape` overrides win over the provider default
 (e.g. OpenCode Go responses/messages models); `shape=responses/completions`
 selects the corresponding OpenAI wire protocol.
-Reads try a 10s live refresh, then fall back to the last-good cache,
+Explicit refreshes try a 10s live refresh, then fall back to the last-good cache,
 the shipped MIT-attributed trimmed snapshot (also bundled into the
 desktop build), and finally an empty directory; refresh never modifies
-user model configuration and the app never loads upstream npm packages. Selecting a directory entry resolves (in the settings UI)
+user model configuration and the app never loads upstream npm packages.
+Opening model settings reads the last-good local cache or shipped snapshot
+without waiting for the network. Only `?refresh=1`, sent by the service-area
+refresh button, requests upstream updates; the backend defaults to local reads.
+Selecting a directory entry resolves (in the settings UI)
 `preset_id + model_id` to that row's catalog `protocol/base_url/model_id`
 and stores the resolved values together with the selection metadata
 (`preset_id`, `model_id`) in `StoredModelConfig`; user-typed Protocol,
@@ -1489,6 +1493,23 @@ editor keeps Provider identity locked, including after connection tests; fresh
 draft Provider changes clear the typed Key and update the service name. Key
 hints distinguish retaining this service's Key from an endpoint/protocol change
 that requires a new Key, and closing a dirty draft asks before discarding it.
+
+The add editor shows a fixed search field, an independently scrolling list of
+common Providers, and an always-visible Custom action. Typing searches all
+remaining Providers directly; there is no separate search-all mode. Editing
+locks Provider identity. Custom needs no user-supplied name: its list label is
+derived from the URL hostname (without credentials/query) and model, while
+config_id keeps multiple entries separate. Existing name fields remain readable.
+
+The model field is one editable ID input with optional suggestions. There is no
+manual/list mode switch or confirmation checkbox. Keyboard highlight stays in
+the input; Enter selects without submitting and Escape closes suggestions.
+Protocol and Base URL are visible, including for Custom. A fresh catalog draft
+without a model row requires an explicit protocol and address before testing;
+Custom can explicitly use an SDK default address. Catalog refresh updates only
+candidates, with editor-session checks on asynchronous UI updates. Key ownership
+and activation follow the existing backend rules. Thinking remains an optional
+advanced extension, available only on openai_chat.
 
 ## 19. Player, Debug, and Operation Surfaces
 

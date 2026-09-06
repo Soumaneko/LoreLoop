@@ -194,7 +194,7 @@ def test_list_projection_has_no_keys_and_marks_active(tmp_path):
     by_name = {s["name"]: s for s in payload["services"]}
     assert by_name["B"]["has_api_key"] is True
     assert by_name["B"]["active"] is True
-    assert by_name["A"]["active"] is False
+    assert by_name["example.test · story-model"]["active"] is False
     # Full edit projection is present so the edit form can repopulate.
     assert by_name["B"]["protocol"] == "openai_chat"
     assert by_name["B"]["base_url"] == "https://example.test/v1"
@@ -440,14 +440,16 @@ def test_unknown_config_id_is_rejected_on_test(tmp_path):
     assert "未知的服务配置" in result["error"]["message"]
 
 
-def test_custom_service_requires_a_name_on_create(tmp_path):
+def test_custom_services_need_no_name_and_display_safe_target(tmp_path):
     store = ModelConfigStore(tmp_path / "model_config.json")
-
-    with pytest.raises(ValueError, match="请填写服务名称"):
-        store.resolve_draft(
-            _service_payload(name="", preset_id="custom"),
-            _empty_set(),
-        )
+    payload = _service_payload(preset_id="custom", base_url="https://user:password@example.test/v1?key=secret")
+    payload.pop("name")
+    save_model_config(payload, store=store)
+    save_model_config(payload, store=store)
+    rows = list_model_configs(store=store)["services"]
+    assert len(rows) == 2
+    assert rows[0]["config_id"] != rows[1]["config_id"]
+    assert rows[0]["name"] == "example.test · story-model"
 
 
 def test_save_new_persists_and_swaps_when_activate(tmp_path):

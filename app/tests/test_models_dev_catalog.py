@@ -11,6 +11,20 @@ from app.runtime.models_dev_catalog import (
 )
 
 
+def test_local_read_never_fetches_and_uses_cache_or_snapshot(tmp_path):
+    def forbidden_fetch():
+        pytest.fail("Opening settings must not contact the upstream catalog")
+
+    cache = tmp_path / "catalog.json"
+    snapshot = catalog_response( cache_path=cache, fetch_fn=forbidden_fetch)
+    assert snapshot["source"] == "snapshot"
+    assert snapshot["providers"]
+    save_cache(_payload(), cache)
+    cached = catalog_response( cache_path=cache, fetch_fn=forbidden_fetch)
+    assert cached["source"] == "cache"
+    assert cached["providers"]
+
+
 def _payload(extra=None, **overrides):
     base = {
         "openai": {
@@ -254,6 +268,7 @@ def test_incompatible_schema_raises_for_fallback():
 def test_live_success_updates_cache(tmp_path):
     cache = tmp_path / "cache.json"
     result = read_catalog(
+        refresh=True,
         cache_path=cache,
         fetch_fn=lambda: _payload(),
     )
@@ -271,7 +286,7 @@ def test_refresh_failure_keeps_good_cache(tmp_path):
     def _boom():
         raise TimeoutError("upstream down")
 
-    result = read_catalog(cache_path=cache, fetch_fn=_boom)
+    result = read_catalog(refresh=True, cache_path=cache, fetch_fn=_boom)
 
     assert result["source"] == "cache"
     assert cache.read_bytes() == before
@@ -284,6 +299,7 @@ def test_invalid_json_falls_back_without_clobbering(tmp_path):
     cache.write_text(json.dumps(_payload()), encoding="utf-8")
 
     result = read_catalog(
+        refresh=True,
         cache_path=cache,
         fetch_fn=lambda: "this is not json-shaped",
     )
@@ -305,7 +321,7 @@ def test_schema_drift_to_empty_catalog_keeps_good_cache(tmp_path):
         },
     }
 
-    result = read_catalog(cache_path=cache, fetch_fn=lambda: drifted)
+    result = read_catalog(refresh=True, cache_path=cache, fetch_fn=lambda: drifted)
 
     assert result["source"] == "cache"
     assert cache.read_bytes() == before
@@ -314,6 +330,7 @@ def test_schema_drift_to_empty_catalog_keeps_good_cache(tmp_path):
 
 def test_no_cache_uses_shipped_snapshot(tmp_path):
     result = read_catalog(
+        refresh=True,
         cache_path=tmp_path / "missing.json",
         fetch_fn=lambda: (_ for _ in ()).throw(TimeoutError("down")),
     )
@@ -334,7 +351,7 @@ def test_corrupt_cache_falls_through_to_snapshot(tmp_path):
     def _boom():
         raise ConnectionError("down")
 
-    result = read_catalog(cache_path=cache, fetch_fn=_boom)
+    result = read_catalog(refresh=True, cache_path=cache, fetch_fn=_boom)
 
     assert result["source"] == "snapshot"
 
@@ -350,6 +367,7 @@ def test_missing_snapshot_returns_empty_catalog(tmp_path, monkeypatch):
         raise ConnectionError("down")
 
     result = read_catalog(
+        refresh=True,
         cache_path=tmp_path / "missing.json", fetch_fn=_boom
     )
 
@@ -358,6 +376,7 @@ def test_missing_snapshot_returns_empty_catalog(tmp_path, monkeypatch):
 
 def test_api_contract_has_no_secrets(tmp_path):
     result = catalog_response(
+        refresh=True,
         cache_path=tmp_path / "missing.json",
         fetch_fn=lambda: _payload(),
     )
@@ -381,6 +400,7 @@ def test_refresh_never_touches_user_model_config(tmp_path):
     before = config_path.read_bytes()
 
     read_catalog(
+        refresh=True,
         cache_path=tmp_path / "cache.json",
         fetch_fn=lambda: _payload(),
     )

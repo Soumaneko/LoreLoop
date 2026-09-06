@@ -5,6 +5,7 @@ import os
 import threading
 import time
 import uuid
+from urllib.parse import urlsplit
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -233,10 +234,6 @@ class ModelConfigStore:
                         raise ValueError(
                             f"已存在使用此 Provider 的服务：{service.name or service.preset_id}"
                         )
-            else:
-                supplied_name = _stored_text(payload.get("name"), "名称")
-                if not supplied_name:
-                    raise ValueError("请填写服务名称")
             config_id = uuid.uuid4().hex
             name = _service_name(payload, preset_id)
             return StoredModelConfig(
@@ -439,6 +436,17 @@ def model_config_status(*, store: ModelConfigStore | None = None) -> dict[str, A
     }
 
 
+def service_display_name(service: StoredModelConfig) -> str:
+    if service.preset_id != CUSTOM_PRESET:
+        return service.name or service.preset_id
+    try:
+        host = urlsplit(service.base_url).hostname
+    except ValueError:
+        host = None
+    target = host or f"官方默认 · {service.protocol}"
+    return f"{target} · {service.model}"
+
+
 def list_model_configs(*, store: ModelConfigStore | None = None) -> dict[str, Any]:
     store = store or ModelConfigStore()
     config_set = store.load_set()
@@ -446,7 +454,7 @@ def list_model_configs(*, store: ModelConfigStore | None = None) -> dict[str, An
     for service in config_set.services:
         services.append({
             "config_id": service.config_id,
-            "name": service.name,
+            "name": service_display_name(service),
             "model": service.model,
             "preset_id": service.preset_id,
             "model_id": service.model_id,
@@ -605,7 +613,7 @@ def _connection_test_provider(config: StoredModelConfig) -> LLMProvider:
 def _service_name(payload: dict[str, Any], preset_id: str) -> str:
     name = _stored_text(payload.get("name"), "名称")
     if preset_id == CUSTOM_PRESET:
-        # Custom name is required at create time (validated in resolve_draft);
+        # Legacy names remain readable; the UI derives Custom display labels.
         # never silently substitute a generic placeholder.
         return name or DEFAULT_CUSTOM_NAME
     return name or preset_id

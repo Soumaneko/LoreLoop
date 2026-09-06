@@ -8,105 +8,50 @@ from pathlib import Path
 STATIC_DIR = Path(__file__).parents[1] / "player_static"
 
 
-def test_model_service_editor_event_paths():
+def test_editable_model_input_keyboard_and_refresh():
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
     script = r'''
-import fs from "node:fs";
-import vm from "node:vm";
 import assert from "node:assert/strict";
-const src = fs.readFileSync(process.argv[1], "utf8");
-const field = () => ({value: "", disabled: false});
-const els = {
-  modelProvider: field(), modelServiceName: field(), modelApiKey: field(),
-  modelProtocol: field(), modelBaseUrl: field(), modelName: field(),
-  modelServiceNameField: {}, modelKeyHint: {}, modelAdvanced: {},
-  closeModelConfigBtn: {}, initDialog: {open: false},
-  modelConfigDialog: {dataset: {required: "false"}, close() {c.closed = true;}},
-  modelConfigsDialog: {close() {}},
-};
-els.modelConfigForm = {querySelectorAll() {return [els.modelProvider, els.modelApiKey];}};
-const c = {
-  els, state: {}, modelDraftDirty: true, modelDraftIsNew: false,
-  modelConfigBusy: false, modelDraftOriginal: null, modelSelection: {},
-  modelCatalogCache: {}, modelAdvancedTouched: false,
-  catalogProviderById: (_catalog, id) => ({provider_id: id, provider_name: id.toUpperCase()}),
-  renderModelDatalist() {}, invalidateModelConnectionTest() {}, renderControls() {},
-  shouldDraftRequireTest: (isNew, changed) => isNew || changed,
-  setMode(mode) {c.mode = mode;},
-  openModelConfigs() {c.manager = true;},
-  window: {confirm() {c.prompted = true; return c.confirmed || false;}},
-  findConfigService: (services, id) => services.find(s => s.config_id === id),
-  openModelConfig(config, options) {c.editor = {config, options};},
-};
-vm.createContext(c);
-function install(start, end) {
-  const offset = src.indexOf(start);
-  assert.ok(offset >= 0);
-  const finish = src.indexOf(end, offset + start.length);
-  assert.ok(finish > offset);
-  vm.runInContext(src.slice(offset, finish), c);
+const {createModelCombobox} = await import(process.argv[1]);
+function element() {
+  return { value: "", id: "models", children: [], listeners: {},
+    addEventListener(type, fn) {this.listeners[type] = fn;},
+    setAttribute() {}, removeAttribute() {}, scrollIntoView() {},
+    replaceChildren() {this.children = [];}, append(x) {this.children.push(x);} };
 }
-install("function syncServiceNameField(", "function onModelNameChanged(");
-install("function enterModelSetup(", "async function testModelConnection(");
-install("function editModelService(", "async function activateModelService(");
-install("els.closeModelConfigBtn.onclick =", "els.closeModelConfigsBtn.onclick =");
-
-vm.runInContext("enterModelSetup({configured:false})", c);
-assert.equal(c.mode, "needs_model");
-assert.equal(c.manager, true);
-vm.runInContext("addModelService()", c);
-assert.equal(c.editor.options.isNew, true);
-assert.equal(c.editor.options.activate, true);
-c.modelConfigsCache = {services: [{config_id: "missing-key", has_api_key: false}]};
-vm.runInContext('editModelService("missing-key")', c);
-assert.equal(c.editor.options.configId, "missing-key");
-assert.equal(c.editor.options.isNew, false);
-
-vm.runInContext("setModelConfigBusy(true); setModelConfigBusy(false)", c);
-assert.equal(els.modelProvider.disabled, true);
-assert.equal(els.modelApiKey.disabled, false);
-c.modelDraftIsNew = true;
-vm.runInContext("setModelConfigBusy(false)", c);
-assert.equal(els.modelProvider.disabled, false);
-
-els.modelServiceName.value = "Old Provider";
-els.modelApiKey.value = "fake-old-key";
-els.modelProvider.value = "provider-b";
-vm.runInContext("onProviderChanged()", c);
-assert.equal(els.modelServiceName.value, "PROVIDER-B");
-assert.equal(els.modelApiKey.value, "");
-els.modelProvider.value = "custom";
-vm.runInContext("onProviderChanged()", c);
-assert.equal(els.modelServiceName.value, "");
-assert.equal(els.modelServiceName.required, true);
-
-c.modelDraftIsNew = false;
-c.modelDraftOriginal = {has_api_key: true, preset_id: "custom", protocol: "openai_chat", base_url: "https://old.test"};
-c.modelSelection = {preset_id: "custom"};
-els.modelProtocol.value = "openai_chat";
-els.modelBaseUrl.value = "https://old.test";
-vm.runInContext("syncModelKeyHint()", c);
-assert.ok(els.modelKeyHint.textContent.includes("留空保留"));
-assert.ok(!els.modelApiKey.placeholder.includes("•"));
-els.modelBaseUrl.value = "https://new.test";
-vm.runInContext("markConnectionDirty()", c);
-assert.ok(els.modelKeyHint.textContent.includes("服务已改变"));
-els.modelBaseUrl.value = "https://old.test";
-els.modelProtocol.value = "gemini";
-vm.runInContext("markConnectionDirty()", c);
-assert.ok(els.modelKeyHint.textContent.includes("服务已改变"));
-
-els.closeModelConfigBtn.onclick();
-assert.equal(c.prompted, true);
-assert.equal(c.closed, undefined);
-c.confirmed = true;
-els.closeModelConfigBtn.onclick();
-assert.equal(c.closed, true);
+globalThis.document = {createElement: element};
+const input = element(), menu = element();
+let selected;
+const box = createModelCombobox({input, menu, onSelect: v => {selected = v;}});
+const key = value => {
+  let prevented = false;
+  input.listeners.keydown({key: value, preventDefault() {prevented = true;}, stopPropagation() {}});
+  return prevented;
+};
+box.setModels([{value: "one", label: "First"}, {value: "two", label: "Second"}]);
+input.listeners.focus();
+key("ArrowDown"); key("ArrowDown");
+assert.equal(key("Enter"), true);
+assert.equal(selected, "two");
+assert.equal(menu.hidden, true);
+input.value = "unlisted-id";
+input.listeners.input();
+box.setModels([{value: "new", label: "New model"}]);
+assert.equal(input.value, "unlisted-id");
+assert.equal(key("Enter"), true);
+assert.equal(selected, "two");
+input.listeners.focus();
+key("Escape");
+assert.equal(menu.hidden, true);
+input.listeners.focus();
+key("Tab");
+assert.equal(menu.hidden, true);
 '''
     result = subprocess.run(
-        [node, "--input-type=module", "--eval", script, str(STATIC_DIR / "app.js")],
+        [node, "--input-type=module", "--eval", script,
+         (STATIC_DIR / "model_combobox.js").resolve().as_uri()],
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -122,6 +67,7 @@ def test_player_frontend_javascript_is_syntactically_valid():
         "client_diagnostics.js",
         "custom_select.js",
         "error_feedback.js",
+        "model_combobox.js",
         "model_configs.js",
         "model_selection.js",
         "prepaint.js",
@@ -220,6 +166,33 @@ if (!hit.matchedPreset || hit.row.model_id !== "grok-4.6") throw new Error("pres
 if (!m.needsThinkingClear("anthropic_messages", true)) throw new Error("must clear");
 if (m.needsThinkingClear("openai_chat", true)) throw new Error("must not clear on chat");
 if (m.needsThinkingClear("gemini", false)) throw new Error("must not clear when off");
+// 4. Model options show name and id (only once when identical).
+const prov = {{ models: [
+  {{ model_id: "gpt-4o", model_name: "GPT-4o" }},
+  {{ model_id: "kimi-k3", model_name: "kimi-k3" }},
+] }};
+eq(
+  m.modelOptions(prov),
+  [{{ value: "gpt-4o", label: "GPT-4o (gpt-4o)" }}, {{ value: "kimi-k3", label: "kimi-k3" }}],
+  "model options dedup",
+);
+// 5. Filter by id or label substring; empty query returns all.
+eq(
+  m.filterModels(prov, "4o").map((o) => o.value),
+  ["gpt-4o"],
+  "filter by label",
+);
+eq(
+  m.filterModels(prov, "kimi").map((o) => o.value),
+  ["kimi-k3"],
+  "filter by id",
+);
+eq(m.filterModels(prov, "").length, 2, "filter empty");
+eq(m.filterModels(prov, "zzz").length, 0, "filter no match");
+// 6. Known-model check distinguishes listed from manual/delisted.
+if (!m.isKnownModel(prov, "gpt-4o")) throw new Error("known model");
+if (m.isKnownModel(prov, "my-custom-model")) throw new Error("unknown model");
+if (m.isKnownModel(null, "x")) throw new Error("no provider");
 """
     result = subprocess.run(
         [node, "--input-type=module", "--eval", script],
@@ -245,6 +218,11 @@ const catalog = {{
   providers: [
     {{ provider_id: "moonshot", provider_name: "Moonshot" }},
     {{ provider_id: "openai", provider_name: "OpenAI" }},
+    {{ provider_id: "anthropic", provider_name: "Anthropic" }},
+    {{ provider_id: "deepseek", provider_name: "DeepSeek" }},
+    {{ provider_id: "google", provider_name: "Google Gemini" }},
+    {{ provider_id: "opencode-go", provider_name: "OpenCode Go" }},
+    {{ provider_id: "some-obscure", provider_name: "Obscure" }},
     {{ provider_id: "custom", provider_name: "Custom" }},
   ],
 }};
@@ -253,13 +231,42 @@ const services = [
 ];
 // Configured non-Custom provider excluded from add candidates; Custom always addable.
 const candidates = m.buildAddCandidates(catalog, services);
-eq(candidates.map((c) => c.preset_id), ["openai", "custom"], "add candidates");
+eq(candidates.map((c) => c.preset_id), ["openai", "anthropic", "deepseek", "google", "opencode-go", "some-obscure", "custom"], "add candidates");
 if (!m.isConfiguredProvider("moonshot", services)) throw new Error("moonshot not configured");
 if (m.isConfiguredProvider("openai", services)) throw new Error("openai configured");
+// Default common list shows only the common providers (in catalog order), never
+// obscure ones or already-configured providers.
+eq(
+  m.commonProviderCandidates(catalog, services).map((c) => c.preset_id),
+  ["openai", "anthropic", "google", "deepseek", "opencode-go"],
+  "common candidates",
+);
+// Search reveals all addable providers by name/id substring; configured excluded.
+eq(
+  m.searchProviderCandidates(catalog, services, "mo").map((c) => c.preset_id),
+  [],
+  "search mo excludes configured moonshot",
+);
+eq(
+  m.searchProviderCandidates(catalog, services, "open").map((c) => c.preset_id),
+  ["openai", "opencode-go"],
+  "search open",
+);
+eq(
+  m.searchProviderCandidates(catalog, services, "OBSCURE").map((c) => c.preset_id),
+  ["some-obscure"],
+  "search case-insensitive name",
+);
+// Empty query returns every addable provider.
+eq(
+  m.searchProviderCandidates(catalog, services, "").map((c) => c.preset_id),
+  ["openai", "anthropic", "deepseek", "google", "opencode-go", "some-obscure"],
+  "search empty",
+);
 // Deleted provider becomes addable again.
 eq(
   m.buildAddCandidates(catalog, []).map((c) => c.preset_id),
-  ["moonshot", "openai", "custom"],
+  ["moonshot", "openai", "anthropic", "deepseek", "google", "opencode-go", "some-obscure", "custom"],
   "candidates after delete",
 );
 // Unknown config_id must not fall back to a service.
@@ -283,6 +290,131 @@ if (m.shouldRequireTest(false, false) !== false) throw new Error("rename only no
         text=True,
         encoding="utf-8",
         check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_custom_select_option_click_and_search():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    script = r'''
+import fs from "node:fs";
+import vm from "node:vm";
+import assert from "node:assert/strict";
+const src = fs.readFileSync(process.argv[1], "utf8");
+
+function makeEl(tag) {
+  const el = {
+    tag, className: "", textContent: "", type: "", value: "", hidden: false, disabled: false,
+    dataset: {}, attributes: {}, children: [], parent: null, nextElementSibling: null,
+    _listeners: {},
+    classList: {
+      _s: new Set(),
+      add(c) { this._s.add(c); },
+      remove(c) { this._s.delete(c); },
+      toggle(c, f) { if (f === undefined) { this._s.has(c) ? this._s.delete(c) : this._s.add(c); } else if (f) this._s.add(c); else this._s.delete(c); return this._s.has(c); },
+      contains(c) { return this._s.has(c); },
+    },
+    addEventListener(t, fn) { (this._listeners[t] ||= []).push(fn); },
+    dispatchEvent(ev) { (this._listeners[ev.type] || []).forEach((fn) => fn.call(this, ev)); },
+    setAttribute(k, v) { this.attributes[k] = v; },
+    getAttribute(k) { return this.attributes[k]; },
+    append(...kids) { for (const k of kids) { k.parent = this; this.children.push(k); } },
+    appendChild(k) { k.parent = this; this.children.push(k); },
+    replaceChildren(...kids) { this.children = []; for (const k of kids) { k.parent = this; this.children.push(k); } },
+    remove() { const p = this.parent; if (p) { const i = p.children.indexOf(this); if (i >= 0) p.children.splice(i, 1); } },
+    contains(node) { if (node === this) return true; return this.children.some((c) => c.contains(node)); },
+    focus() { this.focused = true; },
+    querySelector(sel) { return query(this, sel)[0] || null; },
+    querySelectorAll(sel) { return query(this, sel); },
+    after(...nodes) { const p = this.parent; if (p) { const i = p.children.indexOf(this); nodes.forEach((n, j) => { n.parent = p; p.children.splice(i + 1 + j, 0, n); }); this.nextElementSibling = nodes[0] || null; } },
+    get selectedOptions() { return [this.selectedOption]; },
+    get options() { return this.children.filter((c) => c.tag === "option"); },
+    get labels() { return [{ textContent: "选择" }]; },
+  };
+  el.classList.contains = (c) => el.classList._s.has(c) || el.className.split(/\s+/).includes(c);
+  return el;
+}
+function matches(el, sel) {
+  if (sel.startsWith(".")) return el.classList.contains(sel.slice(1));
+  if (sel.startsWith("#")) return el.dataset.id === sel.slice(1);
+  return el.tag === sel;
+}
+function query(root, sel) {
+  const out = [];
+  (function walk(node) {
+    if (matches(node, sel)) out.push(node);
+    for (const c of node.children) walk(c);
+  })(root);
+  return out;
+}
+const doc = makeEl("document");
+doc.createElement = (tag) => makeEl(tag);
+doc.querySelectorAll = (sel) => { const out = []; for (const c of doc.children) query(c, sel).forEach((x) => out.push(x)); return out; };
+doc.addEventListener = (t, fn) => { (doc._listeners[t] ||= []).push(fn); };
+doc.dispatchEvent = (ev) => { (doc._listeners[ev.type] || []).forEach((fn) => fn.call(doc, ev)); };
+globalThis.document = doc;
+globalThis.Event = class { constructor(type, opts) { this.type = type; this.bubbles = opts?.bubbles; } };
+
+const root = makeEl("div");
+const select = makeEl("select");
+root.appendChild(select);
+for (const o of [
+  { value: "openai", text: "OpenAI" },
+  { value: "anthropic", text: "Anthropic" },
+  { value: "__search__", text: "搜索全部服务…" },
+  { value: "custom", text: "Custom" },
+]) {
+  const opt = makeEl("option"); opt.value = o.value; opt.textContent = o.text; select.appendChild(opt);
+}
+select.value = "";
+select.dataset.searchable = "true";
+
+const ctx = { document: doc, Event: globalThis.Event };
+vm.createContext(ctx);
+vm.runInContext(src.replace(/export /g, ""), ctx);
+
+ctx.enhanceCustomSelect(select);
+const wrapper = select.nextElementSibling;
+assert.ok(wrapper.classList.contains("codex-custom-select-wrapper"));
+const menu = wrapper.querySelector(".codex-custom-select-menu");
+const search = wrapper.querySelector(".codex-custom-select-search");
+assert.ok(search, "searchable select renders a search box");
+
+// Opening the menu exposes options and focuses the search box.
+ctx.openCustomSelect(select);
+assert.equal(menu.hidden, false);
+assert.equal(search.focused, true);
+
+// Clicking an option must not throw (trigger was out of scope before) and must
+// select the value while closing the menu.
+let changed = null;
+select.addEventListener("change", () => { changed = select.value; });
+const firstOption = menu.querySelectorAll(".codex-custom-select-option")[0];
+firstOption.onclick({ stopPropagation() {} });
+assert.equal(select.value, "openai");
+assert.equal(changed, "openai");
+assert.equal(menu.hidden, true);
+
+// A change handler that reopens the menu (the "搜索全部服务" entry) keeps it open.
+let reopened = false;
+select.addEventListener("change", () => {
+  if (select.value === "__search__") { ctx.openCustomSelect(select); reopened = true; }
+});
+const searchOption = menu.querySelectorAll(".codex-custom-select-option").find((o) => o.dataset.value === "__search__");
+searchOption.onclick({ stopPropagation() {} });
+assert.equal(reopened, true);
+assert.equal(menu.hidden, false);
+
+// Typing in the search box filters the options.
+search.value = "anth";
+search.oninput();
+assert.deepEqual(menu.querySelectorAll(".codex-custom-select-option").map((o) => o.dataset.value), ["anthropic"]);
+'''
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script, str(STATIC_DIR / "custom_select.js")],
+        capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr
 

@@ -29,16 +29,18 @@ import {
   applyRowDecision,
   findProvider as findCatalogProvider,
   findRow as findCatalogRow,
-  lookupSelection,
+  modelOptions,
   needsThinkingClear,
   selectionOnModelInput,
 } from "./model_selection.js";
 import {
-  buildAddCandidates,
+  commonProviderCandidates,
   findService as findConfigService,
   listRows as buildServiceRows,
+  searchProviderCandidates,
   shouldRequireTest as shouldDraftRequireTest,
 } from "./model_configs.js";
+import { createModelCombobox } from "./model_combobox.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -67,10 +69,12 @@ const els = {
   modelSettingsBtn: $("modelSettingsBtn"), modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
   closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelPresetNote: $("modelPresetNote"),
   modelProvider: $("modelProvider"), modelApiKey: $("modelApiKey"),
-  modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"), modelNameList: $("modelNameList"),
+  modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"), modelNameMenu: $("modelNameMenu"),
   modelProtocol: $("modelProtocol"), modelAdvanced: $("modelAdvanced"),
+  modelRefreshBtn: $("modelRefreshBtn"), modelCatalogStatus: $("modelCatalogStatus"),
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"), saveModelOnlyBtn: $("saveModelOnlyBtn"),
-  modelServiceNameField: $("modelServiceNameField"), modelServiceName: $("modelServiceName"),
+  modelProviderSearch: $("modelProviderSearch"), modelProviderResults: $("modelProviderResults"), modelProviderPanel: $("modelProviderPanel"), modelProviderLabel: $("modelProviderLabel"), modelCustomBtn: $("modelCustomBtn"),
+  modelProviderSelected: $("modelProviderSelected"), modelProviderChange: $("modelProviderChange"),
   modelConfigsDialog: $("modelConfigsDialog"), modelConfigsForm: $("modelConfigsForm"), closeModelConfigsBtn: $("closeModelConfigsBtn"),
   modelConfigsIntro: $("modelConfigsIntro"), modelConfigsList: $("modelConfigsList"), addModelServiceBtn: $("addModelServiceBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
@@ -152,6 +156,12 @@ let modelDraftActivate = true;
 let modelDraftDirty = false;
 let modelDraftNeedsTest = true;
 let modelDraftOriginal = null;
+let modelCatalogToken = 0;
+let modelCatalogLoading = false;
+let modelCatalogError = false;
+let modelCombobox = null;
+let modelProviderPickerOpen = false;
+let modelEditorSession = 0;
 let activeGenerationRun = null;
 let historyLoadPromise = null;
 let historyLoadSaveName = null;
@@ -2171,8 +2181,8 @@ function modelConfigPayload() {
     thinking: els.modelThinking.checked,
     protocol: els.modelProtocol.value,
     preset_id: modelSelection.preset_id,
-    model_id: modelSelection.model_id,
-    name: els.modelServiceName.value.trim(),
+    model_id: els.modelName.value.trim(),
+    name: catalogProviderById(modelCatalogCache, modelSelection.preset_id)?.provider_name || modelDraftOriginal?.name || modelSelection.preset_id,
   };
   if (modelDraftConfigId) payload.config_id = modelDraftConfigId;
   return payload;
@@ -2186,16 +2196,118 @@ function catalogModelRow(provider, model_id) {
   return findCatalogRow(provider, model_id);
 }
 
-async function loadModelCatalog() {
-  if (modelCatalogCache) return modelCatalogCache;
-  const data = await request("/api/player/model-presets");
-  const providers = Array.isArray(data.providers) ? data.providers : [];
-  const byId = {};
-  for (const provider of providers) {
-    if (provider && provider.provider_id) byId[provider.provider_id] = provider;
+async function loadModelCatalog({ force = false } = {}) {
+  if (modelCatalogCache && !force) return modelCatalogCache;
+  const token = ++modelCatalogToken;
+  modelCatalogLoading = true;
+  modelCatalogError = false;
+  renderModelCatalogStatus("loading");
+  try {
+    const data = await request(force ? "/api/player/model-presets?refresh=1" : "/api/player/model-presets");
+    if (token !== modelCatalogToken) return null;
+    const providers = Array.isArray(data.providers) ? data.providers : [];
+    const byId = {};
+    for (const provider of providers) {
+      if (provider && provider.provider_id) byId[provider.provider_id] = provider;
+    }
+    modelCatalogCache = {
+      providers,
+      byId,
+      source: data.source || "snapshot",
+    };
+    modelCatalogLoading = false;
+    renderModelCatalogStatus(providers.length ? "ready" : "empty");
+    return modelCatalogCache;
+  } catch (error) {
+    if (token !== modelCatalogToken) return null;
+    modelCatalogLoading = false;
+    modelCatalogError = true;
+    renderModelCatalogStatus("error");
+    throw error;
   }
-  modelCatalogCache = { providers, byId };
-  return modelCatalogCache;
+}
+
+function renderModelCatalogStatus(status) {
+  if (!els.modelCatalogStatus) return;
+  const messages = {
+    loading: "正在加载模型目录……",
+    ready: "",
+    empty: "模型目录暂无可用条目，可继续使用 Custom 或已保存的配置。",
+    error: "模型目录暂时不可用，可继续使用 Custom 或已保存的配置。",
+  };
+  els.modelCatalogStatus.dataset.status = status;
+  els.modelCatalogStatus.textContent = messages[status] || "";
+  els.modelCatalogStatus.hidden = status === "ready";
+}
+
+async function refreshModelCatalog() {
+  const session = modelEditorSession;
+  setModelConfigBusy(true);
+  try {
+    const catalog = await loadModelCatalog({ force: true });
+    if (session !== modelEditorSession || !els.modelConfigDialog.open || !catalog) return;
+    renderProviderOptions(catalog);
+    updateModelCombobox(catalogProviderById(catalog, modelSelection.preset_id));
+    showToast("模型目录已刷新");
+  } catch (error) {
+    if (session === modelEditorSession) showToast(error.message || "模型目录刷新失败");
+  } finally {
+    if (session === modelEditorSession) setModelConfigBusy(false);
+  }
+}
+
+function initModelConfigEditor() {
+  modelCombobox = createModelCombobox({
+    input: els.modelName,
+    menu: els.modelNameMenu,
+    onSelect: () => onModelNameChanged(),
+  });
+  els.modelProviderSearch.addEventListener("input", () => renderProviderOptions(modelCatalogCache));
+  els.modelProviderSearch.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      els.modelProviderResults.querySelector("button")?.focus();
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      els.modelProviderResults.querySelector("button")?.click();
+    }
+  });
+  els.modelProviderResults.addEventListener("keydown", (event) => {
+    const buttons = [...els.modelProviderResults.querySelectorAll("button")];
+    const index = buttons.indexOf(document.activeElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      buttons[Math.max(0, Math.min(buttons.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))]?.focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      els.modelProviderSearch.focus();
+    }
+  });
+  els.modelCustomBtn.onclick = () => chooseProvider("custom");
+  els.modelProviderChange.onclick = () => {
+    if (!modelDraftIsNew || modelConfigBusy) return;
+    modelProviderPickerOpen = true;
+    els.modelProviderSearch.value = "";
+    modelCombobox.close();
+    renderProviderOptions(modelCatalogCache);
+    els.modelProviderSearch.focus();
+  };
+  els.modelConfigForm.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target.tagName === "INPUT") event.preventDefault();
+  });
+}
+
+function chooseProvider(id) {
+  if (!modelDraftIsNew || modelConfigBusy) return;
+  els.modelProvider.textContent = "";
+  els.modelProvider.append(providerOption(id, id));
+  els.modelProvider.value = id;
+  onProviderChanged();
+  modelProviderPickerOpen = false;
+  renderProviderOptions(modelCatalogCache);
+  els.modelProviderChange.focus();
 }
 
 function showModelPresetNote(message) {
@@ -2208,40 +2320,58 @@ function showModelPresetNote(message) {
   els.modelPresetNote.textContent = message;
 }
 
+function providerOption(preset_id, name) {
+  const option = document.createElement("option");
+  option.value = preset_id;
+  option.textContent = name;
+  return option;
+}
+
 function renderProviderOptions(catalog) {
-  const current = els.modelProvider.value;
-  els.modelProvider.textContent = "";
-  const services = (modelConfigsCache && modelConfigsCache.services) || [];
-  for (const provider of catalog.providers) {
-    const providerId = provider.provider_id;
-    if (!providerId || providerId === "custom") continue;
-    // In add mode, exclude providers already configured as non-Custom services.
-    if (modelDraftIsNew && services.some((s) => s.preset_id === providerId)) {
-      continue;
-    }
-    const option = document.createElement("option");
-    option.value = providerId;
-    option.textContent = provider.provider_name || providerId;
-    els.modelProvider.append(option);
+  const choosing = modelDraftIsNew && modelProviderPickerOpen;
+  els.modelProviderPanel.hidden = !choosing;
+  els.modelCustomBtn.hidden = !choosing;
+  els.modelProviderSelected.hidden = choosing;
+  els.modelProviderChange.hidden = !modelDraftIsNew;
+  const current = modelSelection.preset_id || "custom";
+  const provider = catalogProviderById(catalog, current);
+  els.modelProviderLabel.textContent = current === "custom"
+    ? "Custom" : provider?.provider_name || modelDraftOriginal?.name || current;
+  const services = modelConfigsCache?.services || [];
+  const query = els.modelProviderSearch.value.trim();
+  const candidates = query
+    ? searchProviderCandidates(catalog, services, query)
+    : commonProviderCandidates(catalog, services);
+  els.modelProviderResults.replaceChildren();
+  for (const candidate of candidates) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = candidate.name;
+    button.className = "provider-result";
+    button.setAttribute("aria-pressed", String(candidate.preset_id === current));
+    button.onclick = () => chooseProvider(candidate.preset_id);
+    els.modelProviderResults.append(button);
   }
-  const custom = document.createElement("option");
-  custom.value = "custom";
-  custom.textContent = "Custom（手工配置）";
-  els.modelProvider.append(custom);
-  if (current && [...els.modelProvider.options].some((o) => o.value === current)) {
-    els.modelProvider.value = current;
+  if (!candidates.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = modelCatalogLoading || (!catalog && !modelCatalogError) ? "正在加载服务…" : modelCatalogError && !catalog
+      ? "目录加载失败，可刷新重试或添加 Custom" : query
+      ? "没有匹配的服务" : "暂无常用服务，可搜索其他服务或添加 Custom";
+    els.modelProviderResults.append(empty);
   }
 }
 
-function renderModelDatalist(provider) {
-  els.modelNameList.textContent = "";
-  if (!provider) return;
-  for (const row of provider.models) {
-    const option = document.createElement("option");
-    option.value = row.model_id;
-    option.label = row.model_name || row.model_id;
-    els.modelNameList.append(option);
-  }
+function renderProviderFieldPlaceholder(config) {
+  const preset = modelSelection.preset_id || "custom";
+  els.modelProvider.textContent = "";
+  els.modelProvider.append(providerOption(preset, config.name || preset));
+  els.modelProvider.value = preset;
+  renderProviderOptions(modelCatalogCache);
+}
+
+function updateModelCombobox(provider) {
+  modelCombobox.setModels(modelOptions(provider));
 }
 
 function applyCatalogRow(row) {
@@ -2266,16 +2396,14 @@ function applyCatalogRow(row) {
     next.model,
     row,
   );
+  syncThinkingField();
 }
 
-function syncServiceNameField() {
-  const isCustom = (els.modelProvider.value || "custom") === "custom";
-  els.modelServiceNameField.hidden = !isCustom;
-  els.modelServiceName.required = isCustom;
-  if (!isCustom && modelDraftIsNew) {
-    const provider = catalogProviderById(modelCatalogCache, els.modelProvider.value);
-    els.modelServiceName.value = provider?.provider_name || provider?.provider_id || "";
-  }
+function syncEndpointFields() {
+  const custom = modelSelection.preset_id === "custom";
+  // A fresh catalog draft has no inferred target until a row or user supplies it.
+  els.modelBaseUrl.required = modelDraftIsNew && !custom;
+  els.modelProtocol.required = true;
 }
 
 function syncModelKeyHint() {
@@ -2302,21 +2430,16 @@ function markConnectionDirty() {
 }
 
 function onProviderChanged() {
-  const catalog = modelCatalogCache;
-  const provider = catalogProviderById(catalog, els.modelProvider.value);
-  modelSelection = { preset_id: els.modelProvider.value || "custom", model_id: "" };
-  renderModelDatalist(provider);
+  const value = els.modelProvider.value || "custom";
+  modelSelection = { preset_id: value, model_id: "" };
   els.modelName.value = "";
-  modelAdvancedTouched = false;
-  // Switching provider on a fresh draft must not carry the previous Key over.
   els.modelApiKey.value = "";
-  els.modelServiceName.value = "";
-  if (provider && els.modelProvider.value !== "custom") {
-    els.modelAdvanced.open = false;
-  } else {
-    els.modelAdvanced.open = true;
-  }
-  syncServiceNameField();
+  els.modelBaseUrl.value = "";
+  els.modelProtocol.value = value === "custom" ? "openai_chat" : "";
+  modelAdvancedTouched = false;
+  updateModelCombobox(catalogProviderById(modelCatalogCache, value));
+  syncEndpointFields();
+  syncThinkingField();
   markConnectionDirty();
 }
 
@@ -2333,6 +2456,8 @@ function onModelNameChanged() {
       null,
     );
   }
+  syncThinkingField();
+  syncEndpointFields();
   markConnectionDirty();
 }
 
@@ -2349,70 +2474,48 @@ function renderModelConfigForm(config, { required = false } = {}) {
   els.modelName.value = config.model || "";
   els.modelProtocol.value = config.protocol || "openai_chat";
   els.modelThinking.checked = Boolean(config.thinking);
-  els.modelServiceName.value = config.name || "";
   modelSelection = {
     preset_id: config.preset_id || "custom",
     model_id: config.model_id || "",
   };
-  els.modelProvider.textContent = "";
-  const selectedProvider = document.createElement("option");
-  selectedProvider.value = modelSelection.preset_id;
-  selectedProvider.textContent = modelSelection.preset_id === "custom"
-    ? "Custom（手工配置）" : config.name || modelSelection.preset_id;
-  els.modelProvider.append(selectedProvider);
   modelAdvancedTouched = false;
   modelDraftDirty = false;
   modelDraftNeedsTest = shouldDraftRequireTest(modelDraftIsNew, false);
+  els.modelProviderSearch.value = "";
   showModelPresetNote("");
-  syncServiceNameField();
+  renderProviderFieldPlaceholder(config);
+  syncThinkingField();
+  updateModelCombobox(null);
+  syncEndpointFields();
   syncModelKeyHint();
   invalidateModelConnectionTest();
   void enhanceModelConfigWithCatalog(config);
 }
 
 async function enhanceModelConfigWithCatalog(config) {
-  let catalog = null;
+  const session = modelEditorSession;
   try {
-    catalog = await loadModelCatalog();
+    const catalog = await loadModelCatalog();
+    if (session !== modelEditorSession || !els.modelConfigDialog.open || !catalog) return;
+    renderProviderOptions(catalog);
+    updateModelCombobox(catalogProviderById(catalog, modelSelection.preset_id));
   } catch (error) {
-    if (!els.modelConfigDialog.open) return;
-    if (modelDraftIsNew) els.modelProvider.value = "custom";
-    renderModelDatalist(null);
-    showModelPresetNote("模型目录暂时不可用，已保留 Custom 手工配置与当前已保存值，设置页可正常使用。");
-    return;
+    if (session !== modelEditorSession || !els.modelConfigDialog.open) return;
+    renderProviderOptions(modelCatalogCache);
+    showModelPresetNote("模型目录暂时不可用，仍可填写服务地址和模型，或使用已保存配置。");
   }
-  if (!els.modelConfigDialog.open) return;
-  renderProviderOptions(catalog);
-  // render 已按已存值设好 modelSelection（含手输/下架原文），这里只做
-  // provider 选中与候选列表，不重写选择元数据、不覆盖任何已有填写。
-  const found = lookupSelection(
-    catalog,
-    config.preset_id,
-    config.model_id,
-    config.model,
-  );
-  if (found.matchedPreset) {
-    els.modelProvider.value = found.provider.provider_id;
-    renderModelDatalist(found.provider);
-    els.modelAdvanced.open = false;
-  } else {
-    if (!modelDraftIsNew && config.preset_id && config.preset_id !== "custom") {
-      const option = document.createElement("option");
-      option.value = config.preset_id;
-      option.textContent = config.name || config.preset_id;
-      els.modelProvider.append(option);
-      els.modelProvider.value = config.preset_id;
-    } else {
-      els.modelProvider.value = "custom";
-    }
-    renderModelDatalist(null);
-    if (config.preset_id && config.preset_id !== "custom") {
-      showModelPresetNote("原 Provider 在当前目录中已下架，已保留保存的协议与地址，可继续编辑、测试和保存。");
-    }
-    els.modelAdvanced.open = true;
-  }
-  syncServiceNameField();
 }
+
+function syncThinkingField() {
+  const protocol = els.modelProtocol.value;
+  const isChat = protocol === "openai_chat";
+  els.modelThinking.disabled = !isChat;
+  if (!isChat && els.modelThinking.checked) {
+    els.modelThinking.checked = false;
+  }
+}
+
+
 
 function openModelConfig(config = state.modelConfig, {
   required = false,
@@ -2422,7 +2525,11 @@ function openModelConfig(config = state.modelConfig, {
 } = {}) {
   modelDraftConfigId = configId;
   modelDraftIsNew = isNew;
+  modelProviderPickerOpen = isNew;
   modelDraftActivate = activate;
+  modelEditorSession += 1;
+  modelConfigBusy = false;
+  modelCombobox.close();
   els.modelProvider.disabled = !isNew;
   renderModelConfigForm(config || {
     configured: false,
@@ -2434,6 +2541,7 @@ function openModelConfig(config = state.modelConfig, {
     model_id: "",
     name: "",
   }, { required });
+  setModelConfigBusy(false);
   if (!els.modelConfigDialog.open) els.modelConfigDialog.showModal();
   window.setTimeout(() => (
     config?.configured ? els.modelBaseUrl : els.modelApiKey
@@ -2454,6 +2562,9 @@ function setModelConfigBusy(busy) {
     input.disabled = busy;
   }
   els.modelProvider.disabled = busy || !modelDraftIsNew;
+  // Re-applying the thinking field after un-busy restores the non-chat disable
+  // that the bulk re-enable above would otherwise lose.
+  if (!busy) syncThinkingField();
   if (els.modelConfigDialog.dataset.required === "true") {
     els.closeModelConfigBtn.hidden = true;
   }
@@ -2768,6 +2879,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
 
 async function bootstrap() {
   initAutoExpandingTextareas();
+  initModelConfigEditor();
   applyUiMode();
   restoreRecordsTabPreference();
   await readerPreferences.load();
@@ -5348,16 +5460,13 @@ const settingInfo = bindSettingInfoButtons({
 });
 bindSettingInfoDismiss(els.settingInfoDialog, () => settingInfo.hide());
 els.testModelBtn.onclick = testModelConnection;
+els.modelRefreshBtn.onclick = refreshModelCatalog;
 els.modelConfigForm.addEventListener("submit", (event) => {
   event.preventDefault();
   saveModelSettings();
 });
 for (const input of els.modelConfigForm.querySelectorAll("input")) {
-  if (input === els.modelServiceName) {
-    // 仅改 Custom 名称：置脏但不需要重测。
-    input.addEventListener("input", () => { modelDraftDirty = true; });
-    continue;
-  }
+  if (input === els.modelProviderSearch) continue;
   input.addEventListener("input", markConnectionDirty);
   input.addEventListener("change", markConnectionDirty);
 }
@@ -5365,15 +5474,14 @@ els.modelProvider.addEventListener("change", onProviderChanged);
 els.modelName.addEventListener("change", onModelNameChanged);
 els.modelProtocol.addEventListener("change", () => {
   modelAdvancedTouched = true;
-  if (needsThinkingClear(els.modelProtocol.value, els.modelThinking.checked)) {
-    els.modelThinking.checked = false;
-  }
+  syncThinkingField();
   markConnectionDirty();
 });
 els.modelBaseUrl.addEventListener("change", () => {
   modelAdvancedTouched = true;
   markConnectionDirty();
 });
+els.modelConfigDialog.addEventListener("close", () => { modelEditorSession += 1; modelCombobox.close(); });
 els.modelConfigDialog.addEventListener("cancel", (event) => {
   if (els.modelConfigDialog.dataset.required === "true") {
     event.preventDefault();

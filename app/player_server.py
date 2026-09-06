@@ -172,7 +172,10 @@ class PlayerHandler(BaseHTTPRequestHandler):
             self._handle_player_json(list_model_configs)
             return
         if path == "/api/player/model-presets":
-            self._handle_player_json(model_presets)
+            if parse_qs(parsed_url.query).get("refresh") == ["1"]:
+                self._handle_player_json(lambda: model_presets(refresh=True))
+            else:
+                self._handle_player_json(model_presets)
             return
         if path == "/api/player/reader-preferences":
             self._handle_player_json(load_reader_preferences)

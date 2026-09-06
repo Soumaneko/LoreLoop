@@ -324,22 +324,29 @@
       <p id="modelConfigIntro">模型配置只保存在本机，不会写入或导出到任何故事存档。</p>
       <p id="modelPresetNote" class="form-error" role="status" hidden></p>
       <div class="model-config-fields">
-        <label>
-          <span>Provider</span>
-          <select id="modelProvider" autocomplete="off">
-            <option value="custom">Custom（手工配置）</option>
-          </select>
-          <small>预设用于填写协议、端点和常用模型；存在不等于已验证。体积较大的目录首次打开时可能需要几秒加载。</small>
-        </label>
-        <label id="modelServiceNameField" hidden>
-          <span>服务名称</span>
-          <input id="modelServiceName" autocomplete="off" spellcheck="false" placeholder="例如：日常写作" />
-          <small>为 Custom 服务起一个便于识别的名称。</small>
-        </label>
+        <section class="provider-picker">
+          <div id="modelProviderSelected" class="provider-selected">
+            <div><span>已选服务</span><strong id="modelProviderLabel">Custom</strong></div>
+            <button id="modelProviderChange" type="button">更换</button>
+          </div>
+          <select id="modelProvider" hidden><option value="custom">Custom</option></select>
+          <div id="modelProviderPanel">
+            <label for="modelProviderSearch">搜索服务</label>
+            <input id="modelProviderSearch" type="search" autocomplete="off" placeholder="搜索全部服务的名称或 ID" />
+            <div id="modelProviderResults" class="provider-results" aria-label="可添加的服务"></div>
+          </div>
+          <div class="model-catalog-toolbar">
+            <button id="modelCustomBtn" type="button">＋ 使用自定义服务地址</button>
+            <button id="modelRefreshBtn" class="model-refresh-btn" type="button">刷新服务与模型列表</button>
+          </div>
+          <span id="modelCatalogStatus" class="model-catalog-status" role="status" hidden></span>
+        </section>
         <label>
           <span>模型名称</span>
-          <input id="modelName" list="modelNameList" autocomplete="off" spellcheck="false" required placeholder="gpt-4o" />
-          <datalist id="modelNameList"></datalist>
+          <div class="model-combobox">
+            <input id="modelName" autocomplete="off" spellcheck="false" required placeholder="选择或输入模型 ID" />
+            <div id="modelNameMenu" class="model-combobox-menu" role="listbox" hidden></div>
+          </div>
           <small>可从候选选择，也可手工输入未列出的模型 ID。</small>
         </label>
         <label>
@@ -347,11 +354,11 @@
           <input id="modelApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="填写 API Key" />
           <small id="modelKeyHint">保存后不会再次显示或传回浏览器。</small>
         </label>
-        <details id="modelAdvanced">
-          <summary>高级设置（Protocol 与 Base URL）</summary>
+        <div class="model-endpoint-fields">
           <label>
             <span>Protocol</span>
-            <select id="modelProtocol" autocomplete="off">
+            <select id="modelProtocol" autocomplete="off" required>
+              <option value="" disabled>请选择协议</option>
               <option value="openai_responses">openai_responses</option>
               <option value="openai_chat">openai_chat</option>
               <option value="anthropic_messages">anthropic_messages</option>
@@ -362,11 +369,14 @@
             <span>Base URL</span>
             <input id="modelBaseUrl" type="url" autocomplete="off" spellcheck="false" placeholder="留空使用官方默认地址" />
           </label>
+        </div>
+        <details id="modelAdvanced">
+          <summary>可选扩展参数</summary>
+          <label class="model-thinking-toggle">
+            <input id="modelThinking" type="checkbox" />
+            <span><strong>发送 thinking 扩展参数</strong><small>仅适用于接受此参数的服务（openai_chat）；关闭表示不发送，不保证关闭模型思考。</small></span>
+          </label>
         </details>
-        <label class="model-thinking-toggle">
-          <input id="modelThinking" type="checkbox" />
-          <span><strong>Thinking</strong><small>向兼容服务发送 thinking.type 设置</small></span>
-        </label>
       </div>
       <div id="modelTestResult" class="model-test-result" role="status" hidden></div>
       <div class="modal-actions">
