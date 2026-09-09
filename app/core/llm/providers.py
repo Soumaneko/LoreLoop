@@ -2,10 +2,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from collections.abc import Callable, Iterator
 import asyncio
+import concurrent.futures
 import queue
 import threading
 from types import TracebackType
 from typing import Any
+
+from .errors import LLMProviderError, LLMTimeoutError
+from .provider_classification import is_timeout_error
 
 
 PROTOCOLS: tuple[str, ...] = (
@@ -15,8 +19,43 @@ PROTOCOLS: tuple[str, ...] = (
     "gemini",
 )
 
-#: Max time to wait for a cancelled stream's background thread to stop.
+#: Formal-run boundary for one logical LLM provider call (sync and stream).
+FORMAL_LLM_CALL_TIMEOUT_SECONDS = 120.0
+
+#: Connection tests use their own shorter boundary and never change formal runs.
+CONNECTION_TEST_TIMEOUT_SECONDS = 30.0
+
+#: Max time to wait for a cancelled stream task to release its HTTP stream.
 _STREAM_STOP_TIMEOUT = 5.0
+
+
+class _AsyncRequestRuntime:
+    """Run all cached async SDK clients on one long-lived event loop."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._ready = threading.Event()
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def submit(self, coroutine: Any) -> concurrent.futures.Future:
+        with self._lock:
+            if self._loop is None:
+                threading.Thread(target=self._run, daemon=True).start()
+                self._ready.wait()
+            loop = self._loop
+        if loop is None:  # pragma: no cover - _run always publishes it
+            raise RuntimeError("LLM async runtime failed to start")
+        return asyncio.run_coroutine_threadsafe(coroutine, loop)
+
+    def _run(self) -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self._loop = loop
+        self._ready.set()
+        loop.run_forever()
+
+
+_ASYNC_REQUEST_RUNTIME = _AsyncRequestRuntime()
 
 
 @dataclass
@@ -26,6 +65,14 @@ class ProviderResult:
 
 
 class LLMProvider(ABC):
+    @property
+    def protocol_name(self) -> str:
+        return "unknown"
+
+    @property
+    def timeout_seconds(self) -> float | None:
+        return None
+
     @abstractmethod
     def generate(
         self,
@@ -103,11 +150,12 @@ class PydanticAIProvider(LLMProvider):
         base_url: str,
         default_model: str = "gpt-4o",
         thinking: str | None = None,
-        timeout: float | None = None,
+        timeout: float | None = FORMAL_LLM_CALL_TIMEOUT_SECONDS,
         protocol: str = "openai_chat",
         *,
         model_instance: Any | None = None,
         request_headers: Callable[[], dict[str, str]] | None = None,
+        http_transport: Any | None = None,
     ):
         if protocol not in PROTOCOLS:
             raise ValueError(
@@ -117,18 +165,99 @@ class PydanticAIProvider(LLMProvider):
             raise ValueError(
                 f"thinking is not supported for protocol '{protocol}' in this phase"
             )
+        if timeout is not None and (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not timeout > 0
+        ):
+            raise ValueError("timeout must be a positive number of seconds")
         self._api_key = api_key
         self._base_url = base_url
         self._default_model = default_model
         self._thinking = thinking
-        self._timeout = timeout
+        self._timeout = float(timeout) if timeout is not None else None
         self._protocol = protocol
         self._request_headers = request_headers
+        # Test-only injection for stalled-transport tests. Formal runs leave
+        # this unset and use the real vendor SDK clients below.
+        self._http_transport = http_transport
         # Test-only injection: a ready-made Model used for every call,
         # bypassing the per-model-name cache below.
         self._model_instance = model_instance
         self._models: dict[str, Any] = {}
-        self._model_lock = threading.Lock()
+        # Vendor SDK clients are cached per (protocol, base URL): models only
+        # differ by name, so every model of one provider instance shares one
+        # configured client (timeout + no hidden retries).
+        self._clients: dict[tuple[str, str], Any] = {}
+        # Reentrant: model and client builders nest under this lock.
+        self._model_lock = threading.RLock()
+
+    @property
+    def protocol_name(self) -> str:
+        return self._protocol
+
+    @property
+    def timeout_seconds(self) -> float | None:
+        return self._timeout
+
+    def _timeout_error(self, *, model: str, phase: str) -> LLMTimeoutError:
+        timeout = self._timeout
+        seconds = (
+            f"{timeout:g}" if isinstance(timeout, (int, float)) else "unknown"
+        )
+        return LLMTimeoutError(
+            f"模型请求超过{seconds}秒，已停止等待。",
+            timeout_seconds=timeout,
+            model=model,
+            protocol=self._protocol,
+            phase=phase,
+            transport_attempts=1,
+        )
+
+    def _wrap_call_error(
+        self, exc: Exception, *, model: str, phase: str
+    ) -> Exception:
+        if isinstance(exc, LLMTimeoutError):
+            if exc.timeout_seconds is None:
+                exc.timeout_seconds = self._timeout
+            if exc.model is None:
+                exc.model = model
+            if exc.protocol is None:
+                exc.protocol = self._protocol
+            if exc.phase is None:
+                exc.phase = phase
+            if exc.transport_attempts is None:
+                exc.transport_attempts = 1
+            return exc
+        if is_timeout_error(exc):
+            return self._timeout_error(model=model, phase=phase)
+        return exc
+
+    def _request_sync_with_total_timeout(
+        self, pyd_model: Any, messages: Any, settings: Any
+    ) -> Any:
+        """Run one non-streamed request with a total logical-call deadline.
+
+        Vendor SDK timeouts only bound idle reads, so a steadily dripping
+        response could otherwise outlive the project boundary forever. The
+        deadline is enforced with ``asyncio.wait_for`` on the shared SDK
+        event loop: expiry cancels the in-flight model coroutine (closing the
+        underlying HTTP request) instead of abandoning a still-running call.
+        """
+        from pydantic_ai.direct import model_request
+
+        async def _run() -> Any:
+            return await model_request(
+                pyd_model, list(messages), model_settings=settings
+            )
+
+        try:
+            coroutine = _run()
+            if self._timeout is not None:
+                coroutine = asyncio.wait_for(coroutine, timeout=self._timeout)
+            return _ASYNC_REQUEST_RUNTIME.submit(coroutine).result()
+        except asyncio.TimeoutError as e:
+            raise TimeoutError("Provider call exceeded total timeout") from e
 
     def generate(
         self,
@@ -140,7 +269,6 @@ class PydanticAIProvider(LLMProvider):
         from .errors import LLMProviderError
 
         try:
-            from pydantic_ai.direct import model_request_sync
             from pydantic_ai.messages import ModelRequest
         except ImportError as e:
             raise LLMProviderError(
@@ -152,12 +280,19 @@ class PydanticAIProvider(LLMProvider):
             pyd_model = self._get_or_build_model(model or self._default_model)
             settings = self._model_settings(temperature)
             messages = [ModelRequest.user_text_prompt(prompt)]
-            response = model_request_sync(
-                pyd_model, messages, model_settings=settings
+            response = self._request_sync_with_total_timeout(
+                pyd_model, messages, settings
             )
-        except LLMProviderError:
-            raise
+        except LLMProviderError as e:
+            raise self._wrap_call_error(
+                e, model=model or self._default_model, phase="generate"
+            ) from e
         except Exception as e:
+            wrapped = self._wrap_call_error(
+                e, model=model or self._default_model, phase="generate"
+            )
+            if isinstance(wrapped, LLMTimeoutError):
+                raise wrapped from e
             raise LLMProviderError(f"Pydantic AI API call failed: {e}") from e
 
         content = response.text or ""
@@ -196,10 +331,10 @@ class PydanticAIProvider(LLMProvider):
             messages = [ModelRequest.user_text_prompt(prompt)]
             # NOTE: deliberately not model_request_stream_sync — its
             # __exit__ joins the background thread until natural stream end
-            # and cannot be cancelled. _CancellableSyncStream owns its loop
-            # so early close/cancel stops promptly (see §0 repro).
+            # and cannot be cancelled. _CancellableSyncStream keeps a handle
+            # to the async task so early close/cancel stops promptly.
             with _CancellableSyncStream(
-                pyd_model, messages, settings
+                pyd_model, messages, settings, self._timeout
             ) as runner:
                 for event in runner:
                     content = ""
@@ -216,11 +351,18 @@ class PydanticAIProvider(LLMProvider):
                 usage = _normalize_request_usage(runner.final_usage())
                 if usage is not None:
                     yield ProviderResult(content="", usage=usage)
-        except LLMProviderError:
-            raise
+        except LLMProviderError as e:
+            raise self._wrap_call_error(
+                e, model=model or self._default_model, phase="stream"
+            ) from e
         except Exception as e:
+            wrapped = self._wrap_call_error(
+                e, model=model or self._default_model, phase="stream"
+            )
+            if isinstance(wrapped, LLMTimeoutError):
+                raise wrapped from e
             raise LLMProviderError(
-                f"Pydantic AI streaming API call failed: {e}"
+                f"Provider streaming call failed: {e}"
             ) from e
 
     def _get_or_build_model(self, model_name: str) -> Any:
@@ -233,6 +375,86 @@ class PydanticAIProvider(LLMProvider):
                 self._models[model_name] = cached
             return cached
 
+    def _test_http_client(self) -> Any | None:
+        if self._http_transport is None:
+            return None
+        import httpx
+
+        return httpx.AsyncClient(transport=self._http_transport)
+
+    def _build_openai_client(self) -> Any:
+        from openai import AsyncOpenAI
+
+        kwargs: dict[str, Any] = {
+            "api_key": self._api_key,
+            "base_url": self._base_url or None,
+            "timeout": self._timeout,
+            "max_retries": 0,
+        }
+        http_client = self._test_http_client()
+        if http_client is not None:
+            kwargs["http_client"] = http_client
+        return AsyncOpenAI(**kwargs)
+
+    def _build_anthropic_client(self) -> Any:
+        from anthropic import AsyncAnthropic
+
+        kwargs: dict[str, Any] = {
+            "api_key": self._api_key,
+            "base_url": self._base_url or None,
+            "timeout": self._timeout,
+            "max_retries": 0,
+        }
+        http_client = self._test_http_client()
+        if http_client is not None:
+            kwargs["http_client"] = http_client
+        return AsyncAnthropic(**kwargs)
+
+    def _build_google_provider(self) -> Any:
+        from google.genai import Client as GenAIClient
+        from google.genai.types import HttpOptions, HttpRetryOptions
+        from pydantic_ai.models import get_user_agent
+        from pydantic_ai.providers.google import GoogleProvider
+
+        import httpx
+
+        if self._timeout is None:
+            raise ValueError("Gemini calls require a positive timeout")
+        if self._http_transport is not None:
+            http_client = httpx.AsyncClient(transport=self._http_transport)
+        else:
+            http_client = httpx.AsyncClient(timeout=self._timeout)
+        options = HttpOptions(
+            base_url=self._base_url or None,
+            headers={"User-Agent": get_user_agent()},
+            timeout=int(1000 * self._timeout),
+            retry_options=HttpRetryOptions(attempts=1),
+            httpx_async_client=http_client,
+        )
+        return GoogleProvider(
+            client=GenAIClient(
+                vertexai=False,
+                api_key=self._api_key,
+                http_options=options,
+            )
+        )
+
+    def _get_or_build_client(self) -> Any:
+        key = (self._protocol, self._base_url or "")
+        with self._model_lock:
+            cached = self._clients.get(key)
+            if cached is None:
+                if self._protocol in ("openai_responses", "openai_chat"):
+                    cached = self._build_openai_client()
+                elif self._protocol == "anthropic_messages":
+                    cached = self._build_anthropic_client()
+                elif self._protocol == "gemini":
+                    cached = self._build_google_provider()
+                else:
+                    raise ValueError(f"Unsupported protocol: {self._protocol}")
+                self._clients[key] = cached
+            return cached
+
     def _build_model(self, model_name: str) -> Any:
         protocol = self._protocol
         if protocol == "openai_responses":
@@ -240,8 +462,7 @@ class PydanticAIProvider(LLMProvider):
             from pydantic_ai.providers.openai import OpenAIProvider
 
             provider = OpenAIProvider(
-                base_url=self._base_url or None,
-                api_key=self._api_key,
+                openai_client=self._get_or_build_client(),
             )
             return OpenAIResponsesModel(model_name, provider=provider)
         if protocol == "openai_chat":
@@ -249,8 +470,7 @@ class PydanticAIProvider(LLMProvider):
             from pydantic_ai.providers.openai import OpenAIProvider
 
             provider = OpenAIProvider(
-                base_url=self._base_url or None,
-                api_key=self._api_key,
+                openai_client=self._get_or_build_client(),
             )
             return OpenAIChatModel(model_name, provider=provider)
         if protocol == "anthropic_messages":
@@ -258,19 +478,15 @@ class PydanticAIProvider(LLMProvider):
             from pydantic_ai.providers.anthropic import AnthropicProvider
 
             provider = AnthropicProvider(
-                api_key=self._api_key,
-                base_url=self._base_url or None,
+                anthropic_client=self._get_or_build_client(),
             )
             return AnthropicModel(model_name, provider=provider)
         if protocol == "gemini":
             from pydantic_ai.models.google import GoogleModel
-            from pydantic_ai.providers.google import GoogleProvider
 
-            provider = GoogleProvider(
-                api_key=self._api_key,
-                base_url=self._base_url or None,
+            return GoogleModel(
+                model_name, provider=self._get_or_build_client()
             )
-            return GoogleModel(model_name, provider=provider)
         raise ValueError(f"Unsupported protocol: {protocol}")
 
     def _model_settings(self, temperature: float) -> Any:
@@ -300,27 +516,27 @@ class _CancellableSyncStream:
 
     Replaces ``model_request_stream_sync`` (whose ``__exit__`` joins the
     background thread until natural stream end with no way to cancel).
-    This runner owns its event loop and consume task, so closing the
-    consumer early cancels the task, closes the HTTP stream via the
-    ``async with`` exit, and returns promptly instead of waiting out the
-    remaining response.
+    The runner submits its consume task to the same long-lived loop used by
+    non-streamed requests. Closing the consumer cancels that task, closes the
+    HTTP stream via the ``async with`` exit, and returns promptly.
     """
 
-    def __init__(self, model: Any, messages: Any, settings: Any) -> None:
+    def __init__(
+        self, model: Any, messages: Any, settings: Any, timeout: float | None
+    ) -> None:
         self._model = model
         self._messages = messages
         self._settings = settings
+        self._timeout = timeout
         self._queue: queue.Queue = queue.Queue()
         self._cancel_requested = threading.Event()
+        self._stopped = threading.Event()
         self._exhausted = False
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._task: asyncio.Task | None = None
-        self._thread: threading.Thread | None = None
+        self._future: concurrent.futures.Future | None = None
         self._final_usage: Any | None = None
 
     def __enter__(self) -> "_CancellableSyncStream":
-        self._thread = threading.Thread(target=self._thread_main, daemon=True)
-        self._thread.start()
+        self._future = _ASYNC_REQUEST_RUNTIME.submit(self._consume())
         return self
 
     def __exit__(
@@ -331,8 +547,7 @@ class _CancellableSyncStream:
     ) -> None:
         if not self._exhausted:
             self._request_cancel()
-        if self._thread is not None and self._thread.is_alive():
-            self._thread.join(timeout=_STREAM_STOP_TIMEOUT)
+            self._stopped.wait(timeout=_STREAM_STOP_TIMEOUT)
 
     def __iter__(self) -> Iterator[Any]:
         try:
@@ -354,50 +569,38 @@ class _CancellableSyncStream:
 
     def _request_cancel(self) -> None:
         self._cancel_requested.set()
-        loop, task = self._loop, self._task
-        if loop is not None and task is not None:
-            try:
-                loop.call_soon_threadsafe(task.cancel)
-            except RuntimeError:
-                pass  # loop already closed
-
-    def _thread_main(self) -> None:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        self._loop = loop
-        try:
-            self._task = loop.create_task(self._consume())
-            try:
-                loop.run_until_complete(self._task)
-            except asyncio.CancelledError:
-                pass
-        finally:
-            try:
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            finally:
-                loop.close()
+        if self._future is not None:
+            self._future.cancel()
 
     async def _consume(self) -> None:
-        from pydantic_ai.direct import model_request_stream
-
         try:
-            async with model_request_stream(
-                self._model,
-                self._messages,
-                model_settings=self._settings,
-            ) as stream:
-                async for event in stream:
-                    if self._cancel_requested.is_set():
-                        break
-                    self._queue.put(event)
-                else:
-                    self._final_usage = stream.usage()
+            request = self._consume_stream()
+            if self._timeout is None:
+                await request
+            else:
+                await asyncio.wait_for(request, timeout=self._timeout)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             self._queue.put(exc)
         finally:
             self._queue.put(None)
+            self._stopped.set()
+
+    async def _consume_stream(self) -> None:
+        from pydantic_ai.direct import model_request_stream
+
+        async with model_request_stream(
+            self._model,
+            self._messages,
+            model_settings=self._settings,
+        ) as stream:
+            async for event in stream:
+                if self._cancel_requested.is_set():
+                    break
+                self._queue.put(event)
+            else:
+                self._final_usage = stream.usage()
 
 
 def _normalize_request_usage(usage_obj: Any) -> dict | None:

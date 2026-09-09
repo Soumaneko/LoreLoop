@@ -41,6 +41,15 @@ import {
   shouldRequireTest as shouldDraftRequireTest,
 } from "./model_configs.js";
 import { createModelCombobox } from "./model_combobox.js";
+import { PROGRESS_LABELS as progressLabels } from "./progress_labels.js";
+import {
+  isConfirmationTailStep,
+  tailProgressLabel,
+} from "./progress_labels.js";
+import {
+  isRecordsPollingPaused,
+  shouldSuppressRecordsPollError,
+} from "./records_policy.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -103,41 +112,6 @@ const els = {
   toast: $("toast"),
 };
 
-const progressLabels = {
-  state_loaded: "正在读取世界状态",
-  npc_profiles_loaded: "正在载入人物档案",
-  action_parsed: "正在解析行动意图",
-  context_facts_done: "前情已检索 · 正在推演因果",
-  rolls_done: "检定已结算 · 正在推演",
-  action_judgments_done: "机制判定达成 · 正在构思正文",
-  scene_stream_started: "正在书写剧情正文",
-  canon_query_started: "正在核对历史事实",
-  canon_queries_generated: "历史查询已规划",
-  canon_evidence_retrieved: "历史证据已比对",
-  narrative_check_started: "正在检查前后逻辑",
-  narrative_checked: "前后逻辑检查完成",
-  narrative_revision_started: "发现逻辑偏差，正在自动修订",
-  narrative_revised: "正文修订完成",
-  feedback_rewrite_started: "正在理解修改意见",
-  feedback_rewrite_strategy_selected: "修改方式已经确定",
-  opening_rewrite_started: "正在重新生成开场正文",
-  feedback_source_rewrite_done: "局部修订完成",
-  feedback_recompose_done: "重新构思完成",
-  confirm_started: "正在读取最终正文",
-  scene_facts_done: "正在提取场景事实",
-  state_update_done: "正在更新世界状态",
-  continuity_projected: "正在整理未决事项",
-  npc_profile_updated: "正在更新人物信息",
-  action_preview_done: "下一步方向已经生成",
-  npc_profiles_updated: "正在写入旅程",
-  campaign_setup_started: "正在生成公开世界惯例",
-  initialization_started: "正在准备开场",
-  opening_foundation_ready: "私有开局基础已经准备完成",
-  opening_settings_started: "正在建立世界设定",
-  opening_settings_done: "世界设定已经建立",
-  opening_scene_done: "开场正文已经生成",
-  initialization_pending: "正在保存待确认开场",
-};
 let streamBuffer = "";
 let streamFrame = 0;
 let initConfigSnapshot = null;
@@ -163,6 +137,7 @@ let modelCombobox = null;
 let modelProviderPickerOpen = false;
 let modelEditorSession = 0;
 let activeGenerationRun = null;
+let confirmationTailSeen = new Set();
 let historyLoadPromise = null;
 let historyLoadSaveName = null;
 let navigationRenderSignature = "";
@@ -3219,7 +3194,16 @@ async function resumeGenerationOperation(operation) {
 
 function handleConfirmationEvent(event) {
   tokenUsage.handleEvent(event);
-  setProgress(event.step);
+  if (event.step === "confirm_started") confirmationTailSeen = new Set();
+  if (isConfirmationTailStep(event.step)) {
+    confirmationTailSeen.add(event.step);
+    const label = tailProgressLabel([...confirmationTailSeen]);
+    els.streamingLabel.textContent = label;
+    const confirmationLabel = document.querySelector("#confirmationProgress .confirmation-progress-label");
+    if (confirmationLabel) confirmationLabel.textContent = label;
+  } else {
+    setProgress(event.step);
+  }
   if (event.step === "action_preview_done" || event.step === "finish") {
     const previews = event.data?.action_preview?.previews;
     if (previews) state.suggestions = previews;
@@ -3256,6 +3240,7 @@ async function resumeConfirmationOperation(operation) {
     setMode("pending");
     renderAll();
     showError(error, undefined, { pendingPreserved: true });
+    refreshRecords();
     await acknowledgeFailedOperation(error, operation.operation_id);
     return false;
   }
@@ -3492,6 +3477,7 @@ async function confirmTurn() {
     refreshRecordsAfterTurn();
   } catch (error) {
     setMode("pending"); renderAll(); showError(error, undefined, { pendingPreserved: true });
+    refreshRecords();
     await acknowledgeFailedOperation(error);
   }
   finally {
@@ -4200,8 +4186,12 @@ function stopRecordsPoll() {
   recordsPollTimer = null;
 }
 function startRecordsPoll() {
+  if (isRecordsPollingPaused(state.mode)) return;
   stopRecordsPoll();
-  recordsPollTimer = window.setInterval(() => { refreshRecords(); }, RECORDS_POLL_INTERVAL);
+  recordsPollTimer = window.setInterval(() => {
+    if (isRecordsPollingPaused(state.mode)) return;
+    refreshRecords();
+  }, RECORDS_POLL_INTERVAL);
 }
 
 let recordsRefreshInFlight = false;
@@ -4249,6 +4239,7 @@ function recomputeRecordsDirty() {
 async function refreshRecords({ force = false } = {}) {
   if (!els.recordsSettingList) return;
   const generation = ++recordsRefreshGeneration;
+  const startedMode = state.mode;
   if (recordsRefreshInFlight) {
     recordsRefreshPending = true;
     recordsRefreshPendingForce = recordsRefreshPendingForce || force;
@@ -4291,11 +4282,21 @@ async function refreshRecords({ force = false } = {}) {
       recordsRefreshPendingForce = recordsRefreshPendingForce || force;
       return;
     }
+    if (
+      shouldSuppressRecordsPollError({ startedMode, currentMode: state.mode })
+    ) {
+      return;
+    }
     setRecordsRefreshState("读取失败");
     reportClientError(error, "records_load_failed");
   } finally {
     recordsRefreshInFlight = false;
     if (recordsRefreshPending) {
+      if (isRecordsPollingPaused(state.mode)) {
+        recordsRefreshPending = false;
+        recordsRefreshPendingForce = false;
+        return;
+      }
       const pendingForce = recordsRefreshPendingForce;
       recordsRefreshPending = false;
       recordsRefreshPendingForce = false;

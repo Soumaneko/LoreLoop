@@ -338,3 +338,59 @@ class TestTraceLogging:
             reset_token_usage_sink(token)
             reset_token_usage_traces({trace_id})
 
+
+class TestCallLifecycleEvents:
+    def test_lifecycle_events_use_independent_file(self, tmp_path):
+        tracer = TraceLogger(log_path=str(tmp_path / "llm_traces.jsonl"))
+        base = {
+            "trace_id": "lifecycle-file",
+            "call_id": "call-1",
+            "task": "echo_structured_test",
+            "attempt": 1,
+            "model": "test-model",
+            "protocol": "openai_chat",
+            "started_at": 123.0,
+        }
+        tracer.log_call_event(
+            "llm_call_started", elapsed_ms=0.0, timeout_seconds=120.0, **base
+        )
+        tracer.log_call_event(
+            "llm_call_timed_out",
+            elapsed_ms=120.5,
+            timeout_seconds=120.0,
+            error_code="timeout",
+            transport_attempts=1,
+            **base,
+        )
+
+        events = tracer.read_call_events(trace_id="lifecycle-file")
+
+        assert [event["event"] for event in events] == [
+            "llm_call_started",
+            "llm_call_timed_out",
+        ]
+        assert events[0]["call_id"] == "call-1"
+        assert events[1]["error_code"] == "timeout"
+        assert events[1]["transport_attempts"] == 1
+        assert "input_data" not in events[0]
+        assert "raw_output" not in events[0]
+        # The complete-trace file keeps one-record-per-call semantics.
+        assert tracer.read_traces(trace_id="lifecycle-file") == []
+        assert (tmp_path / "llm_call_events.jsonl").exists()
+
+    def test_lifecycle_events_reject_unknown_events(self, tmp_path):
+        tracer = TraceLogger(log_path=str(tmp_path / "llm_traces.jsonl"))
+
+        with pytest.raises(ValueError, match="unsupported call event"):
+            tracer.log_call_event(
+                "llm_call_unknown",
+                trace_id="t",
+                call_id="c",
+                task="task",
+                attempt=1,
+                model="m",
+                protocol="openai_chat",
+                started_at=1.0,
+                elapsed_ms=0.0,
+            )
+

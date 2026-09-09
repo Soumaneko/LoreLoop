@@ -41,3 +41,15 @@ def test_permanent_provider_error_codes_are_never_retried():
         "provider_error",
     ):
         assert not is_permanent_provider_error(code)
+
+
+def test_chinese_timeout_error_is_classified_by_type_not_text():
+    from app.core.llm.errors import LLMTimeoutError
+
+    code, message = classify_provider_error(LLMTimeoutError(
+        "模型请求超过120秒，已停止等待。",
+        timeout_seconds=120.0,
+    ))
+
+    assert code == "timeout"
+    assert message == "模型请求超过120秒，已停止等待。"

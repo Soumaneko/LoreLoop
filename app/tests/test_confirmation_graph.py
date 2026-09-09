@@ -312,6 +312,50 @@ def test_journaled_confirmation_failure_resets_rolled_back_cache(monkeypatch):
     }
 
 
+def test_journaled_confirmation_timeout_propagates_without_partial_commit(
+    monkeypatch,
+):
+    from app.core.llm.errors import LLMTimeoutError
+
+    pending = SimpleNamespace(confirmation_cache={
+        "key": "scene text",
+        "scene_facts": object(),
+        "state_saved": True,
+    })
+    calls = []
+    runtime = SimpleNamespace(
+        begin_confirmation=lambda *_args, **_kwargs: True,
+        jobs=SimpleNamespace(wait_for_idle=lambda: calls.append("wait")),
+        fail_confirmation_offline=lambda *_args: calls.append("rollback"),
+    )
+
+    def timeout_pipeline(*_args, **_kwargs):
+        raise LLMTimeoutError(
+            "模型请求超过120秒，已停止等待。",
+            timeout_seconds=120.0,
+            task="scene_facts",
+        )
+        yield
+
+    monkeypatch.setattr(confirmation_graph, "get_campaign_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        confirmation_graph,
+        "stream_confirmation_pipeline",
+        timeout_pipeline,
+    )
+
+    with pytest.raises(LLMTimeoutError, match="已停止等待"):
+        list(confirmation_graph._confirm_pipeline_locked(
+            SimpleNamespace(turn_id="turn-1", pending=pending),
+        ))
+
+    assert calls == ["wait", "rollback"]
+    assert pending.confirmation_cache == {
+        "key": "scene text",
+        "scene_facts": pending.confirmation_cache["scene_facts"],
+    }
+
+
 def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(
     monkeypatch,
     configure_runtime_services,

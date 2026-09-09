@@ -16,7 +16,23 @@ from .token_usage import normalize_token_usage, publish_token_usage
 
 
 TRACE_LOG_MAX_BYTES = 50 * 1024 * 1024
+_CALL_EVENT_LOG_MAX_BYTES = 10 * 1024 * 1024
+_CALL_EVENTS = frozenset({
+    "llm_call_started",
+    "llm_call_succeeded",
+    "llm_call_failed",
+    "llm_call_timed_out",
+    "llm_call_cancelled",
+})
 _TRACE_WRITE_LOCK = threading.Lock()
+
+
+def call_event_path_for_trace(log_path: str | os.PathLike[str]) -> Path:
+    """Derive the independent call-lifecycle log for a trace file."""
+    path = Path(log_path)
+    if path.name == "llm_traces.jsonl":
+        return path.with_name("llm_call_events.jsonl")
+    return path.with_name(f"{path.stem}.llm_call_events.jsonl")
 
 
 class TraceLogger:
@@ -33,6 +49,10 @@ class TraceLogger:
             raise ValueError("trace max_bytes must be at least 1024")
         self._log_path = str(log_path)
         self._max_bytes = int(max_bytes)
+        self._call_event_path = str(
+            call_event_path_for_trace(self._log_path)
+        )
+        self._call_event_max_bytes = int(_CALL_EVENT_LOG_MAX_BYTES)
         self._diagnostics = diagnostics or DiagnosticLogger(
             diagnostic_path_for_trace(log_path)
         )
@@ -125,6 +145,79 @@ class TraceLogger:
             token_usage=token_usage,
             session_type=session_type,
         )
+
+    def log_call_event(
+        self,
+        event: str,
+        *,
+        trace_id: str,
+        call_id: str,
+        task: str,
+        attempt: int,
+        model: str,
+        protocol: str,
+        started_at: float,
+        elapsed_ms: float,
+        timeout_seconds: float | None = None,
+        error_code: str | None = None,
+        transport_attempts: int | None = None,
+    ) -> None:
+        """Record one allowlisted provider-call lifecycle event.
+
+        Lifecycle events intentionally carry no prompt, output, API key,
+        authorization material, custom header values, or full diagnostics.
+        They complement the complete trace file instead of replacing it.
+        """
+        if event not in _CALL_EVENTS:
+            raise ValueError(f"unsupported call event: {event}")
+        entry: dict[str, Any] = {
+            "timestamp": time.time(),
+            "event": event,
+            "trace_id": str(trace_id),
+            "call_id": str(call_id),
+            "task": str(task),
+            "attempt": int(attempt),
+            "model": str(model),
+            "protocol": str(protocol),
+            "started_at": float(started_at),
+            "elapsed_ms": round(float(elapsed_ms), 3),
+        }
+        if timeout_seconds is not None:
+            entry["timeout_seconds"] = float(timeout_seconds)
+        if error_code is not None:
+            entry["error_code"] = str(error_code)
+        if transport_attempts is not None:
+            entry["transport_attempts"] = int(transport_attempts)
+
+        payload = _encode_entry(entry)
+        with self._lock:
+            _append_bounded(
+                Path(self._call_event_path),
+                payload,
+                max_bytes=self._call_event_max_bytes,
+            )
+
+    def read_call_events(
+        self,
+        trace_id: str | None = None,
+        call_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        path = Path(self._call_event_path)
+        if not path.exists():
+            return []
+        events = []
+        with path.open("r", encoding="utf-8") as file:
+            for line in file:
+                line = line.strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                if trace_id is not None and entry.get("trace_id") != trace_id:
+                    continue
+                if call_id is not None and entry.get("call_id") != call_id:
+                    continue
+                events.append(entry)
+        return events
 
     def read_traces(self, trace_id: str | None = None) -> list[dict[str, Any]]:
         if not os.path.exists(self._log_path):
@@ -240,6 +333,18 @@ class NullTraceLogger:
         call_id: str | None = None,
     ) -> None:
         return None
+
+    def log_call_event(self, event: str, **_fields: Any) -> None:
+        del event
+        return None
+
+    def read_call_events(
+        self,
+        trace_id: str | None = None,
+        call_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        del trace_id, call_id
+        return []
 
     def read_traces(self, trace_id: str | None = None) -> list[dict[str, Any]]:
         return []

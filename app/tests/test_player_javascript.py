@@ -72,7 +72,9 @@ def test_player_frontend_javascript_is_syntactically_valid():
         "model_selection.js",
         "prepaint.js",
         "popover_fallback.js",
+        "progress_labels.js",
         "reader_preferences.js",
+        "records_policy.js",
         "setting_info.js",
         "state.js",
         "storage_migration.js",
@@ -488,3 +490,143 @@ if (state.hasDraft(variant) || state.readDraft(variant) !== "original") {{
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_progress_labels_show_next_phase_after_completion():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "progress_labels.js").resolve().as_uri()
+    script = f"""
+const {{ progressLabel, isConfirmationTailStep, tailProgressLabel }} = await import("{module_url}");
+const sceneFacts = progressLabel("scene_facts_done");
+if (!sceneFacts.includes("正在更新世界状态")) {{
+  throw new Error("scene_facts_done must point at the next phase: " + sceneFacts);
+}}
+if (sceneFacts === "正在提取场景事实") {{
+  throw new Error("scene_facts_done must not keep the stale extracting copy");
+}}
+if (!progressLabel("state_update_done").includes("回合摘要")) {{
+  throw new Error("state_update_done must point at the summary phase");
+}}
+if (!progressLabel("scene_summarized").includes("并行确认收尾")) {{
+  throw new Error("scene_summarized must point at the parallel tail wave");
+}}
+if (progressLabel("continuity_projected") === "正在整理未决事项") {{
+  throw new Error("continuity_projected must not keep the in-progress copy");
+}}
+if (progressLabel("unknown_step") !== "") {{
+  throw new Error("unknown steps must have no label");
+}}
+if (!isConfirmationTailStep("continuity_projected")) {{
+  throw new Error("continuity_projected must be a tail step");
+}}
+if (isConfirmationTailStep("scene_summarized")) {{
+  throw new Error("scene_summarized must not be a tail step");
+}}
+// The stalled-wave case from the issue: continuity_project stuck while the
+// other two finished must name the waiter, not a stale sibling label.
+const stuck = tailProgressLabel(["action_preview_done", "npc_profile_updated"]);
+if (stuck !== "已完成下一步方向、人物信息 · 正在等待未决事项") {{
+  throw new Error("stalled tail must name the waiter: " + stuck);
+}}
+const first = tailProgressLabel(["continuity_projected"]);
+if (first !== "已完成未决事项 · 正在等待下一步方向、人物信息") {{
+  throw new Error("partial tail order must follow pipeline order: " + first);
+}}
+if (tailProgressLabel([]) !== "正在并行确认收尾 · 等待下一步方向、未决事项、人物信息") {{
+  throw new Error("empty tail must list all waiters");
+}}
+if (tailProgressLabel(["action_preview_done", "continuity_projected", "npc_profile_updated"]) !== "并行确认收尾完成 · 正在写入旅程") {{
+  throw new Error("finished tail must hand off to the commit phase");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_timeout_feedback_keeps_server_message_without_model_config_action():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "error_feedback.js").resolve().as_uri()
+    script = f"""
+const {{ playerErrorFeedback }} = await import("{module_url}");
+const backend = "确认回合的模型请求超过120秒，已停止等待。";
+const plain = playerErrorFeedback({{ code: "timeout", message: backend }});
+if (plain.title !== "模型请求超时") {{
+  throw new Error("timeout title mismatch: " + plain.title);
+}}
+if (plain.message !== backend) {{
+  throw new Error("timeout must keep the server message");
+}}
+if ("action" in plain) {{
+  throw new Error("timeout must not suggest opening model settings");
+}}
+const preserved = playerErrorFeedback(
+  {{ code: "timeout", message: backend }},
+  "fallback",
+  {{ pendingPreserved: true }},
+);
+if (!preserved.title.includes("待确认内容仍在")) {{
+  throw new Error("confirmation timeout must mention preserved pending");
+}}
+if (!preserved.message.includes(backend) || !preserved.message.includes("没有写入正式故事")) {{
+  throw new Error("confirmation timeout must combine both messages");
+}}
+if ("action" in preserved) {{
+  throw new Error("confirmation timeout must not suggest opening model settings");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_records_polling_pauses_while_work_is_active():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "records_policy.js").resolve().as_uri()
+    script = f"""
+const {{ isRecordsPollingPaused, shouldSuppressRecordsPollError }} = await import("{module_url}");
+for (const mode of ["generating", "confirming"]) {{
+  if (!isRecordsPollingPaused(mode)) throw new Error(mode + " must pause polling");
+}}
+for (const mode of ["idle", "pending", "error", "booting"]) {{
+  if (isRecordsPollingPaused(mode)) throw new Error(mode + " must not pause polling");
+}}
+if (!shouldSuppressRecordsPollError({{ startedMode: "confirming", currentMode: "pending" }})) {{
+  throw new Error("requests started during confirmation must stay silent");
+}}
+if (!shouldSuppressRecordsPollError({{ startedMode: "idle", currentMode: "generating" }})) {{
+  throw new Error("late failures during active work must stay silent");
+}}
+if (shouldSuppressRecordsPollError({{ startedMode: "idle", currentMode: "pending" }})) {{
+  throw new Error("stable-state failures must still surface");
+}}
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    start = source.index("function startRecordsPoll()")
+    body = source[start:source.index("\n}", start)]
+    assert body.index("isRecordsPollingPaused") < body.index("stopRecordsPoll")

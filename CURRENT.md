@@ -1438,14 +1438,39 @@ Model API (no per-operator provider classes). `protocol` is one of
 `openai_chat` for legacy configs without URL guessing. `Base URL` is an
 optional override per protocol: empty means the protocol's official default
 (delegated to its SDK); an explicit value (e.g. an OpenCode Go gateway domain)
-wins for all four protocols. Streaming uses a request-owned event loop so
-early close/cancel stops promptly instead of waiting out the response; models
-are cached per model name. The Responses path explicitly disables server-side
+wins for all four protocols. Sync and streaming requests use one long-lived
+async SDK event loop so cached clients never cross closed event loops; stream
+close/cancel still stops the in-flight task promptly. Models are cached per
+model name. The Responses path explicitly disables server-side
 storage (`store=false`). `thinking=true` only sends `extra_body.thinking` on
 `openai_chat` and is rejected at config validation for the other three
 protocols; `false/null` never sends. Prompt rendering, JSON parsing, schema
 validation, salvage/retry, trace/diagnostics and cancel/degrade stay in
 `LLMGateway`.
+
+Every formal LLM call owns one 120-second total logical-call deadline for both
+sync and streaming requests on all four protocols. Vendor SDK timeouts only
+bound idle reads, so the project enforces the total itself: sync calls run
+under `asyncio.wait_for` on the shared SDK loop, and the cancellable stream
+consumer runs under the same boundary from response-stream entry through its
+final chunk. Expiry cancels the in-flight request and closes the HTTP stream
+instead of abandoning it behind a new watchdog thread. Known SDK clients
+additionally disable invisible
+retries (`max_retries=0` for the OpenAI/Anthropic clients, a single attempt
+for Gemini), and models of one provider instance share one configured vendor
+client. Connection tests keep their own shorter 30-second boundary and never
+change the formal constant. There is no
+user-editable timeout setting and no per-provider timeout table in this phase.
+
+Provider-call lifecycle is recorded independently of the complete trace file in
+`llm_call_events.jsonl`: each attempt emits `llm_call_started` before the
+provider returns, then exactly one terminal event (`llm_call_succeeded`,
+`llm_call_failed`, `llm_call_timed_out`, or `llm_call_cancelled`) under the
+same `call_id`. Lifecycle fields are limited to `trace_id`, `call_id`, `task`,
+`attempt`, `model`, `protocol`, start time, elapsed time, timeout, error code,
+and transport attempts; they never carry prompts, outputs, API keys,
+authorization material, or custom header values. The complete
+`llm_traces.jsonl` keeps its one-record-per-call semantics and full I/O.
 
 Provider-service request requirements are separate from wire protocols. The
 OpenCode Go preset applies its `opencode_go` request profile on all of its
@@ -1588,7 +1613,13 @@ Creator mode adds two read-only-to-write surfaces backed by dedicated endpoints:
 
 Routine automatic record refresh does not redraw while form controls differ
 from their original values, preventing polling from discarding unsaved edits.
-Explicit lifecycle refreshes may intentionally redraw the projection. The mode
+Explicit lifecycle refreshes may intentionally redraw the projection. Periodic
+records polling is paused while player work is active (`generating` or
+`confirming`): the timer never fires a `/records` request in those modes, and
+a request already in flight that fails across a mode switch stays silent
+instead of reporting a model-connection error over the confirmation prompt.
+After the operation reaches a stable state the UI refreshes records once and
+then resumes the existing polling behavior. The mode
 switch prompts before discarding dirty record edits; callers must save or
 explicitly discard edits before actions that intentionally replace the records
 projection.
@@ -1632,7 +1663,16 @@ records projection and future operations only; it does not rewrite or
 re-generate an existing pending variant.
 
 Generation, confirmation, initialization, maintenance, and save work run through
-tracked Operations. SSE events may be replayed for recoverable operations. After
+tracked Operations. SSE events may be replayed for recoverable operations. A
+timed-out operation ends with code `timeout` and a player message naming the
+operation ("生成剧情…"/"确认回合…") plus the 120-second boundary; it never
+offers the model-settings action and never confuses archive reads, model
+calls, or local connection errors. Completion progress labels describe the
+next phase once a step finishes (e.g. after `scene_facts_done` the UI shows
+the world-state update phase, after `scene_summarized` the parallel tail
+phase). The confirmation second wave runs three nodes concurrently, so the UI
+tracks their completions and always names what is still pending instead of
+leaving a stale sibling label on screen. After
 confirmation, the already-saved per-turn summary is maintained asynchronously:
 each group of ten uncondensed summaries at one level is condensed into the next
 level until no level reaches the threshold. Maintenance failure is diagnostic
@@ -1778,7 +1818,10 @@ first attempt
 
 Permanent Provider errors are not a processing decision: the Provider
 classifier decides “do not retry”, and the module then chooses `degradable`.
-A correctable failure is granted at most one feedback retry; nested retry
+Provider timeouts are likewise never retried by the Gateway itself: one
+120-second logical call ends as a timeout, while output parse/validation
+feedback retries keep their existing contract. A correctable failure is
+granted at most one feedback retry; nested retry
 stacks are avoided before module migration is complete. This is the Gateway
 default (`max_retries=1`), not a global hard limit; the generation H1–H7 call
 paths do not override it, so they run at most two model calls per task.

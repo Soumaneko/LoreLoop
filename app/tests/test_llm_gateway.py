@@ -7,6 +7,7 @@ from app.core.cancellation import bind_cancellation_token
 from app.core.cancellation import reset_cancellation_token
 from app.core.llm.errors import LLMOutputParseError
 from app.core.llm.errors import LLMProviderError
+from app.core.llm.errors import LLMTimeoutError
 from app.core.llm.errors import PromptNotFoundError
 from app.core.llm.gateway import LLMGateway
 from app.core.llm.mock import MockLLM
@@ -381,3 +382,141 @@ class TestPromptNotFound:
                     output_schema=EchoResult,
                     # version is internally "v1", but no v1 file exists in tempdir
                 )
+
+
+class _RecordingDiagnostics:
+    def __init__(self):
+        self.entries = []
+
+    def warning(self, **fields):
+        self.entries.append({"severity": "warning", **fields})
+
+    def error(self, **fields):
+        self.entries.append({"severity": "error", **fields})
+
+
+class _RecordingTracer:
+    def __init__(self):
+        self.calls = []
+        self.logs = []
+        self.diagnostics = _RecordingDiagnostics()
+
+    def log_call_event(self, event, **fields):
+        self.calls.append({"event": event, **fields})
+
+    def log(self, **fields):
+        self.logs.append(fields)
+
+
+class TestLLMGatewayTimeoutBoundary:
+    def test_timeout_is_not_retried_and_keeps_task_context(self):
+        calls = []
+
+        class _TimeoutProvider(MockProvider):
+            def generate(self, *args, **kwargs):
+                calls.append("called")
+                raise TimeoutError("upstream stalled")
+
+        tracer = _RecordingTracer()
+        gateway = LLMGateway(
+            provider=_TimeoutProvider(),
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=tracer,
+        )
+
+        with pytest.raises(LLMTimeoutError, match="任务：echo_structured_test"):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                max_retries=2,
+                trace_id="timeout-trace",
+            )
+
+        assert calls == ["called"]
+        assert [call["event"] for call in tracer.calls] == [
+            "llm_call_started",
+            "llm_call_timed_out",
+        ]
+        started, timed_out = tracer.calls
+        assert started["call_id"] == timed_out["call_id"]
+        assert started["task"] == "echo_structured_test"
+        assert timed_out["error_code"] == "timeout"
+        assert timed_out["elapsed_ms"] >= 0
+        assert timed_out["trace_id"] == "timeout-trace"
+        assert tracer.logs[-1]["error"] is not None
+        assert "hello" not in str(tracer.calls)
+        timeout_diagnostics = [
+            entry for entry in tracer.diagnostics.entries
+            if entry["code"] == "llm_provider_timeout"
+        ]
+        assert len(timeout_diagnostics) == 1
+        assert timeout_diagnostics[0]["severity"] == "error"
+
+    def test_successful_call_records_start_and_end_with_one_call_id(self):
+        mock = MockLLM()
+        mock.set_responses(['{"text": "hello", "length": 5}'])
+        tracer = _RecordingTracer()
+        gateway = LLMGateway(
+            provider=mock.provider,
+            prompt_loader=mock.prompt_loader,
+            tracer=tracer,
+        )
+
+        result = gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+            trace_id="lifecycle-trace",
+        )
+
+        assert result.text == "hello"
+        assert [call["event"] for call in tracer.calls] == [
+            "llm_call_started",
+            "llm_call_succeeded",
+        ]
+        started, succeeded = tracer.calls
+        assert started["call_id"] == succeeded["call_id"]
+        assert succeeded["attempt"] == 1
+        assert succeeded["elapsed_ms"] >= 0
+        assert set(started) == {
+            "event",
+            "trace_id",
+            "call_id",
+            "task",
+            "attempt",
+            "model",
+            "protocol",
+            "started_at",
+            "elapsed_ms",
+            "timeout_seconds",
+        }
+        assert "hello" not in str(tracer.calls)
+
+    def test_parse_retry_still_works_after_lifecycle_events(self):
+        mock = MockLLM()
+        mock.set_responses([
+            "not valid json",
+            '{"text": "hello", "length": 5}',
+        ])
+        tracer = _RecordingTracer()
+        gateway = LLMGateway(
+            provider=mock.provider,
+            prompt_loader=mock.prompt_loader,
+            tracer=tracer,
+        )
+
+        result = gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+            max_retries=2,
+        )
+
+        assert result.text == "hello"
+        assert [call["event"] for call in tracer.calls] == [
+            "llm_call_started",
+            "llm_call_succeeded",
+            "llm_call_started",
+            "llm_call_succeeded",
+        ]

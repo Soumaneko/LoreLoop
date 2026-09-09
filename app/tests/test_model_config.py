@@ -7,12 +7,15 @@ import threading
 import pytest
 
 from app.core.llm.config import SharedGatewayFactory
+from app.core.llm.providers import CONNECTION_TEST_TIMEOUT_SECONDS
+from app.core.llm.providers import FORMAL_LLM_CALL_TIMEOUT_SECONDS
 from app.core.llm.providers import LLMProvider, ProviderResult
 from app.runtime.model_config import (
     MODEL_CONFIG_FORMAT_VERSION,
     ModelConfigSet,
     ModelConfigStore,
     StoredModelConfig,
+    _connection_test_provider,
     activate_model_config,
     delete_model_config,
     effective_gateway_factory,
@@ -621,6 +624,24 @@ def test_opencode_go_headers_follow_factory_session():
     assert provider._model_settings(0.0)["extra_headers"][
         "x-opencode-session"
     ] == "save-b"
+
+
+def test_formal_gateway_config_defaults_to_project_timeout():
+    config = StoredModelConfig(api_key="k", model="story-model").gateway_config()
+
+    assert config.timeout == FORMAL_LLM_CALL_TIMEOUT_SECONDS
+
+
+def test_connection_test_keeps_its_own_short_timeout():
+    provider = _connection_test_provider(
+        StoredModelConfig(api_key="k", model="story-model")
+    )
+
+    assert provider.timeout_seconds == CONNECTION_TEST_TIMEOUT_SECONDS
+    assert provider.timeout_seconds is not None
+    assert (
+        provider.timeout_seconds < FORMAL_LLM_CALL_TIMEOUT_SECONDS
+    )
 
 
 def test_environment_bootstrap_preserves_omitted_thinking(tmp_path, monkeypatch):

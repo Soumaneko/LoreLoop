@@ -265,6 +265,32 @@ def test_operation_failure_projection_surfaces_classified_provider_error():
     )
 
 
+def test_operation_failure_projection_maps_timeout_to_operation_label():
+    from app.core.llm import FORMAL_LLM_CALL_TIMEOUT_SECONDS
+    from app.player_server import PlayerHandler
+
+    seconds = int(FORMAL_LLM_CALL_TIMEOUT_SECONDS)
+    confirmation = SimpleNamespace(
+        error_type="timeout",
+        error_message="模型请求超过120秒，已停止等待（任务：scene_facts）。",
+        operation_type="confirmation",
+    )
+    assert PlayerHandler._project_operation_failure(confirmation) == (
+        "timeout",
+        f"确认回合的模型请求超过{seconds}秒，已停止等待。",
+    )
+
+    unknown = SimpleNamespace(
+        error_type="timeout",
+        error_message="timeout",
+        operation_type="background_job",
+    )
+    assert PlayerHandler._project_operation_failure(unknown) == (
+        "timeout",
+        f"模型请求超过{seconds}秒，已停止等待。",
+    )
+
+
 def test_operation_failure_projection_never_surfaces_raw_provider_text():
     from app.player_server import PlayerHandler
 

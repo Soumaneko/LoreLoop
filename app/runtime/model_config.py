@@ -18,6 +18,7 @@ from app.core.llm.config import (
 )
 from app.core.llm.provider_classification import classify_provider_error
 from app.core.llm.providers import LLMProvider
+from app.core.llm.providers import CONNECTION_TEST_TIMEOUT_SECONDS
 from app.core.llm.request_profiles import request_headers, request_profile_for_preset
 
 from .paths import APP_CONFIG_DIR
@@ -610,7 +611,7 @@ def _connection_test_provider(config: StoredModelConfig) -> LLMProvider:
         base_url=config.base_url,
         default_model=config.model,
         thinking=gateway_config.thinking,
-        timeout=30.0,
+        timeout=CONNECTION_TEST_TIMEOUT_SECONDS,
         protocol=config.protocol,
         request_headers=lambda: request_headers(
             gateway_config.request_profile, session_id

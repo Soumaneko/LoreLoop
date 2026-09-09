@@ -16,12 +16,15 @@ from .errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
     LLMProviderError,
+    LLMTimeoutError,
     PromptRenderError,
 )
 from .prompts import PromptLoader
 from .provider_classification import (
     classify_provider_error,
+    is_no_retry_provider_error,
     is_permanent_provider_error,
+    is_timeout_error,
 )
 from .providers import LLMProvider, ProviderResult
 from .schema import output_contract_guidance
@@ -96,6 +99,24 @@ class LLMGateway:
 
         for attempt in range(1, max_retries + 2):
             latency_ms = 0.0
+            attempt_started_at = time.time()
+            attempt_monotonic = time.monotonic()
+            protocol = (
+                getattr(self._provider, "protocol_name", "unknown") or "unknown"
+            )
+            timeout_seconds = getattr(self._provider, "timeout_seconds", None)
+            self._emit_call_event(
+                "llm_call_started",
+                trace_id=trace_id,
+                call_id=call_id,
+                task=task,
+                attempt=attempt,
+                model=model,
+                protocol=protocol,
+                started_at=attempt_started_at,
+                elapsed_ms=0.0,
+                timeout_seconds=timeout_seconds,
+            )
             try:
                 raise_if_cancelled()
                 if on_attempt_start is not None:
@@ -113,6 +134,19 @@ class LLMGateway:
                     )
                 last_raw_output = raw_output
                 raise_if_cancelled()
+                self._emit_call_event(
+                    "llm_call_succeeded",
+                    trace_id=trace_id,
+                    call_id=call_id,
+                    task=task,
+                    attempt=attempt,
+                    model=model,
+                    protocol=protocol,
+                    started_at=attempt_started_at,
+                    elapsed_ms=latency_ms,
+                    timeout_seconds=timeout_seconds,
+                    transport_attempts=1,
+                )
 
                 parsed = self._parse_json(raw_output)
 
@@ -142,6 +176,20 @@ class LLMGateway:
                 return validated
 
             except concurrent.futures.CancelledError:
+                elapsed_ms = (time.monotonic() - attempt_monotonic) * 1000
+                self._emit_call_event(
+                    "llm_call_cancelled",
+                    trace_id=trace_id,
+                    call_id=call_id,
+                    task=task,
+                    attempt=attempt,
+                    model=model,
+                    protocol=protocol,
+                    started_at=attempt_started_at,
+                    elapsed_ms=elapsed_ms,
+                    timeout_seconds=timeout_seconds,
+                    error_code="cancelled",
+                )
                 raise
 
             except (LLMOutputParseError, LLMOutputValidationError) as e:
@@ -185,10 +233,87 @@ class LLMGateway:
 
             except LLMProviderError as e:
                 last_error = str(e)
+                elapsed_ms = (time.monotonic() - attempt_monotonic) * 1000
+                if isinstance(e, LLMTimeoutError) or is_timeout_error(e):
+                    seconds = (
+                        f"{timeout_seconds:g}"
+                        if isinstance(timeout_seconds, (int, float))
+                        else "未知"
+                    )
+                    message = (
+                        f"模型请求超过{seconds}秒，已停止等待"
+                        f"（任务：{task}）。"
+                    )
+                    timeout_error = LLMTimeoutError(
+                        message,
+                        timeout_seconds=timeout_seconds,
+                        model=model,
+                        protocol=protocol,
+                        phase=getattr(e, "phase", None),
+                        transport_attempts=1,
+                        task=task,
+                        elapsed_ms=elapsed_ms,
+                    )
+                    self._emit_call_event(
+                        "llm_call_timed_out",
+                        trace_id=trace_id,
+                        call_id=call_id,
+                        task=task,
+                        attempt=attempt,
+                        model=model,
+                        protocol=protocol,
+                        started_at=attempt_started_at,
+                        elapsed_ms=elapsed_ms,
+                        timeout_seconds=timeout_seconds,
+                        error_code="timeout",
+                        transport_attempts=1,
+                    )
+                    self._tracer.log(
+                        trace_id=trace_id,
+                        task=task,
+                        model=model,
+                        prompt_version=prompt_version,
+                        input_data=input_data,
+                        raw_output="",
+                        parsed_output=None,
+                        schema_valid=False,
+                        latency_ms=elapsed_ms,
+                        error=message,
+                        attempt=attempt,
+                        token_usage=None,
+                        turn_index=self._trace_context.get("turn_index"),
+                        session_type=self._trace_context.get("session_type"),
+                        prompt_fingerprint=prompt_fingerprint,
+                        call_id=call_id,
+                    )
+                    self._log_diagnostic(
+                        severity="error",
+                        code="llm_provider_timeout",
+                        message=message,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=attempt,
+                    )
+                    raise timeout_error from e
                 provider_code, _ = classify_provider_error(e)
                 will_retry = (
                     attempt <= max_retries
                     and not is_permanent_provider_error(provider_code)
+                    and not is_no_retry_provider_error(provider_code)
+                )
+                self._emit_call_event(
+                    "llm_call_failed",
+                    trace_id=trace_id,
+                    call_id=call_id,
+                    task=task,
+                    attempt=attempt,
+                    model=model,
+                    protocol=protocol,
+                    started_at=attempt_started_at,
+                    elapsed_ms=elapsed_ms,
+                    timeout_seconds=timeout_seconds,
+                    error_code=provider_code,
+                    transport_attempts=1,
                 )
                 self._tracer.log(
                     trace_id=trace_id,
@@ -199,7 +324,7 @@ class LLMGateway:
                     raw_output="",
                     parsed_output=None,
                     schema_valid=False,
-                    latency_ms=0,
+                    latency_ms=elapsed_ms,
                     error=last_error,
                     attempt=attempt,
                     token_usage=None,
@@ -222,6 +347,20 @@ class LLMGateway:
 
             except Exception as e:
                 last_error = str(e)
+                elapsed_ms = (time.monotonic() - attempt_monotonic) * 1000
+                self._emit_call_event(
+                    "llm_call_failed",
+                    trace_id=trace_id,
+                    call_id=call_id,
+                    task=task,
+                    attempt=attempt,
+                    model=model,
+                    protocol=protocol,
+                    started_at=attempt_started_at,
+                    elapsed_ms=elapsed_ms,
+                    timeout_seconds=timeout_seconds,
+                    error_code="unexpected_error",
+                )
                 self._tracer.log(
                     trace_id=trace_id,
                     task=task,
@@ -231,7 +370,7 @@ class LLMGateway:
                     raw_output="",
                     parsed_output=None,
                     schema_valid=False,
-                    latency_ms=0,
+                    latency_ms=elapsed_ms,
                     error=last_error,
                     attempt=attempt,
                     token_usage=token_usage,
@@ -251,6 +390,11 @@ class LLMGateway:
                 raise
 
         raise RuntimeError("unreachable LLM retry state")
+
+    def _emit_call_event(self, event: str, **fields: Any) -> None:
+        emit = getattr(self._tracer, "log_call_event", None)
+        if callable(emit):
+            emit(event, **fields)
 
     def _log_diagnostic(
         self,

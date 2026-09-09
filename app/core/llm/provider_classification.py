@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+
 #: Provider error codes that cannot recover by retrying the same request.
 PROVIDER_ERROR_PERMANENT_CODES = frozenset({
     "auth_failed",
     "permission_denied",
     "model_not_found",
     "thinking_unsupported",
+})
+
+#: Timeout is terminal at the Gateway layer: one logical call, no retry.
+PROVIDER_ERROR_NO_RETRY_CODES = frozenset({
+    "timeout",
 })
 
 
@@ -18,7 +25,13 @@ def classify_provider_error(
 
     The classification is text-based to keep it usable across provider SDK
     versions and both the connection test and the formal Gateway retry path.
+    Type-based checks come first so structured errors (e.g. a Chinese-language
+    ``LLMTimeoutError``) are never misclassified by their message text.
     """
+    from .errors import LLMTimeoutError
+
+    if isinstance(exc, LLMTimeoutError):
+        return "timeout", str(exc) or "连接模型服务超时"
     text = _safe_error_text(exc, secret=secret)
     lowered = text.casefold()
     if any(token in lowered for token in ("401", "unauthorized", "authentication")):
@@ -42,6 +55,28 @@ def classify_provider_error(
 
 def is_permanent_provider_error(code: str) -> bool:
     return code in PROVIDER_ERROR_PERMANENT_CODES
+
+
+def is_no_retry_provider_error(code: str) -> bool:
+    return code in PROVIDER_ERROR_NO_RETRY_CODES
+
+
+def is_timeout_error(exc: BaseException) -> bool:
+    """Detect provider transport timeouts across wrapped SDK exceptions."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (TimeoutError, asyncio.TimeoutError)):
+            return True
+        name = f"{type(current).__module__}.{type(current).__name__}".casefold()
+        if "timeout" in name or "deadlineexceeded" in name:
+            return True
+        message = str(current).strip().casefold()
+        if "timed out" in message or "timeout" in message:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def _safe_error_text(exc: Exception, *, secret: str = "") -> str:

@@ -8,7 +8,10 @@ import httpx
 import pytest
 from app.core.llm.errors import LLMOutputValidationError
 from app.core.llm.errors import LLMProviderError
+from app.core.llm.errors import LLMTimeoutError
 from app.core.llm.mock import MockLLM
+from app.core.llm.providers import CONNECTION_TEST_TIMEOUT_SECONDS
+from app.core.llm.providers import FORMAL_LLM_CALL_TIMEOUT_SECONDS
 from app.core.llm.providers import MockProvider
 from app.core.llm.providers import PydanticAIProvider
 from app.core.llm.providers import ProviderResult
@@ -503,6 +506,352 @@ class TestPydanticAIProvider:
             model._provider.base_url
         )
         assert "openai" not in str(model._provider.base_url)
+
+
+class TestFormalTimeoutBoundary:
+    @staticmethod
+    def _keep_alive_server():
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        calls: list[tuple[str, int]] = []
+
+        class _Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                if length:
+                    self.rfile.read(length)
+                calls.append((self.path, self.client_address[1]))
+                body = json.dumps({
+                    "id": "response",
+                    "object": "chat.completion",
+                    "created": 1,
+                    "model": "m",
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = f"http://127.0.0.1:{server.server_address[1]}/v1"
+        return url, calls, server.shutdown, server.server_close
+
+    @staticmethod
+    def _stalling_server(delay: float = 5.0):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        calls: list = []
+
+        class _StallHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                calls.append(self.path)
+                time.sleep(delay)
+                try:
+                    body = b"{}"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionError):
+                    pass
+
+            def log_message(self, format, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _StallHandler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = f"http://127.0.0.1:{server.server_address[1]}/v1"
+        return url, calls, server.shutdown, server.server_close
+
+    def test_formal_timeout_is_default(self):
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test/v1",
+            protocol="openai_chat",
+        )
+
+        assert provider.timeout_seconds == FORMAL_LLM_CALL_TIMEOUT_SECONDS
+        assert (
+            provider._model_settings(0.0)["timeout"]
+            == FORMAL_LLM_CALL_TIMEOUT_SECONDS
+        )
+
+    def test_openai_clients_disable_hidden_retries(self):
+        for protocol in ("openai_chat", "openai_responses"):
+            provider = PydanticAIProvider(
+                api_key="test",
+                base_url="https://example.test/v1",
+                protocol=protocol,
+                timeout=0.2,
+            )
+            client = provider._build_model("m")._provider._client
+
+            assert client.max_retries == 0
+
+    def test_anthropic_client_disables_hidden_retries(self):
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test/v1",
+            protocol="anthropic_messages",
+            timeout=0.2,
+        )
+        client = provider._build_model("m")._provider._client
+
+        assert client.max_retries == 0
+
+    @pytest.mark.parametrize("protocol", [
+        "openai_responses",
+        "openai_chat",
+        "anthropic_messages",
+        "gemini",
+    ])
+    def test_stalled_upstream_times_out_with_one_request(self, protocol):
+        url, calls, shutdown, close = self._stalling_server()
+        try:
+            provider = PydanticAIProvider(
+                api_key="test",
+                base_url=url,
+                protocol=protocol,
+                # Budget covers cold first-request SDK setup (~0.5s) while
+                # staying far below the 5s stall.
+                timeout=1.0,
+            )
+            # Warm up SDK imports/model build outside the measured window so
+            # the deadline strictly covers the in-flight request.
+            provider._get_or_build_model("m")
+
+            start = time.perf_counter()
+            with pytest.raises(LLMTimeoutError) as excinfo:
+                provider.generate("prompt", model="m", temperature=0.0)
+            elapsed = time.perf_counter() - start
+        finally:
+            shutdown()
+            close()
+
+        assert len(calls) == 1
+        assert excinfo.value.timeout_seconds == 1.0
+        assert excinfo.value.protocol == protocol
+        assert "1" in str(excinfo.value)
+        assert elapsed < 5
+
+    def test_stalled_stream_times_out_with_one_request(self):
+        url, calls, shutdown, close = self._stalling_server()
+        try:
+            provider = PydanticAIProvider(
+                api_key="test",
+                base_url=url,
+                protocol="openai_chat",
+                timeout=1.0,
+            )
+            provider._get_or_build_model("m")
+
+            start = time.perf_counter()
+            with pytest.raises(LLMTimeoutError) as excinfo:
+                list(provider.stream_generate("prompt", model="m", temperature=0.0))
+            elapsed = time.perf_counter() - start
+        finally:
+            shutdown()
+            close()
+
+        assert len(calls) == 1
+        assert excinfo.value.phase == "stream"
+        assert elapsed < 5
+
+    def test_stream_timeout_includes_entering_response_stream(self, monkeypatch):
+        from contextlib import asynccontextmanager
+        from pydantic_ai.models.test import TestModel
+
+        @asynccontextmanager
+        async def _delayed_stream(*_args, **_kwargs):
+            await asyncio.sleep(0.15)
+            yield SimpleNamespace(
+                __aiter__=lambda self: self,
+                __anext__=lambda self: (_ for _ in ()).throw(StopAsyncIteration),
+                usage=lambda: None,
+            )
+
+        monkeypatch.setattr(
+            "pydantic_ai.direct.model_request_stream", _delayed_stream
+        )
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test/v1",
+            protocol="openai_chat",
+            timeout=0.03,
+            model_instance=TestModel(),
+        )
+
+        start = time.perf_counter()
+        with pytest.raises(LLMTimeoutError):
+            list(provider.stream_generate("prompt", model="m", temperature=0.0))
+
+        assert time.perf_counter() - start < 0.12
+
+    @staticmethod
+    def _dripping_server(payload_parts, delay=0.1):
+        """HTTP server that drips response bytes forever-ish.
+
+        Each part arrives faster than the client idle timeout, so only a
+        total logical-call deadline can stop the call.
+        """
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        calls: list = []
+
+        class _DripHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                calls.append(self.path)
+                length = int(self.headers.get("Content-Length") or 0)
+                if length:
+                    self.rfile.read(length)
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    for part in payload_parts:
+                        time.sleep(delay)
+                        self.wfile.write(part)
+                        self.wfile.flush()
+                except (BrokenPipeError, ConnectionError):
+                    pass
+
+            def log_message(self, format, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _DripHandler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = f"http://127.0.0.1:{server.server_address[1]}/v1"
+        return url, calls, server.shutdown, server.server_close
+
+    def test_steady_sync_drips_hit_total_timeout(self):
+        finale = (
+            b'{"id":"c","object":"chat.completion","created":1,"model":"m",'
+            b'"choices":[{"index":0,"message":{"role":"assistant","content":"hi"},'
+            b'"finish_reason":"stop"}],"usage":{"prompt_tokens":1,'
+            b'"completion_tokens":1,"total_tokens":2}}'
+        )
+        # Spaces keep the idle read alive; a valid body at the end means a
+        # regressed implementation would succeed instead of timing out.
+        url, calls, shutdown, close = self._dripping_server(
+            [b" "] * 15 + [finale]
+        )
+        try:
+            provider = PydanticAIProvider(
+                api_key="test",
+                base_url=url,
+                protocol="openai_chat",
+                timeout=0.5,
+            )
+            provider._get_or_build_model("m")
+
+            start = time.perf_counter()
+            with pytest.raises(LLMTimeoutError):
+                provider.generate("prompt", model="m", temperature=0.0)
+            elapsed = time.perf_counter() - start
+        finally:
+            shutdown()
+            close()
+
+        assert len(calls) == 1
+        assert elapsed < 1.0
+
+    def test_cached_client_survives_consecutive_keep_alive_requests(self):
+        url, calls, shutdown, close = self._keep_alive_server()
+        try:
+            provider = PydanticAIProvider(
+                api_key="test",
+                base_url=url,
+                protocol="openai_chat",
+                timeout=1.0,
+            )
+
+            first = provider.generate("one", model="m", temperature=0.0)
+            second = provider.generate("two", model="m", temperature=0.0)
+        finally:
+            shutdown()
+            close()
+
+        assert first.content == "ok"
+        assert second.content == "ok"
+        assert len(calls) == 2
+        assert calls[0][1] == calls[1][1]
+
+    def test_steady_stream_drips_hit_total_timeout(self):
+        chunk = (
+            b'data: {"id":"c","object":"chat.completion.chunk","created":1,'
+            b'"model":"m","choices":[{"index":0,"delta":{"content":"x"},'
+            b'"finish_reason":null}]}\n\n'
+        )
+        url, calls, shutdown, close = self._dripping_server([chunk] * 15)
+        try:
+            provider = PydanticAIProvider(
+                api_key="test",
+                base_url=url,
+                protocol="openai_chat",
+                timeout=0.5,
+            )
+            provider._get_or_build_model("m")
+
+            start = time.perf_counter()
+            with pytest.raises(LLMTimeoutError) as excinfo:
+                list(provider.stream_generate("prompt", model="m", temperature=0.0))
+            elapsed = time.perf_counter() - start
+        finally:
+            shutdown()
+            close()
+
+        assert len(calls) == 1
+        assert excinfo.value.phase == "stream"
+        assert elapsed < 1.0
+
+    def test_connection_test_timeout_is_shorter_than_formal(self):
+        assert CONNECTION_TEST_TIMEOUT_SECONDS < FORMAL_LLM_CALL_TIMEOUT_SECONDS
+
+    @pytest.mark.parametrize("protocol", [
+        "openai_responses",
+        "openai_chat",
+        "anthropic_messages",
+        "gemini",
+    ])
+    def test_models_share_one_configured_client(self, protocol):
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test/v1",
+            protocol=protocol,
+            timeout=0.5,
+        )
+
+        first = provider._get_or_build_model("model-a")
+        second = provider._get_or_build_model("model-b")
+
+        assert first is not second
+        assert first._provider._client is second._provider._client
 
 
 class TestProviderCompatibility:

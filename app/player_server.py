@@ -66,6 +66,7 @@ from app.api import (
     update_player_record,
 )
 from app.core.client_error import ClientValidationError
+from app.core.llm import FORMAL_LLM_CALL_TIMEOUT_SECONDS
 from app.runtime.session import get_campaign_runtime
 from app.runtime.player_state import player_saves_payload
 from app.runtime.operation_types import (
@@ -804,9 +805,34 @@ class PlayerHandler(BaseHTTPRequestHandler):
         "provider_error",
     })
 
+    _TIMEOUT_OPERATION_LABELS = {
+        "generation": "生成剧情",
+        "rephrase": "重新措辞",
+        "reroll": "重新判定",
+        "feedback_rewrite": "意见重写",
+        "opening_rewrite": "开场重写",
+        "confirmation": "确认回合",
+        "initialization_campaign_setup": "生成世界惯例",
+        "initialization_opening": "生成开场",
+    }
+
+    @staticmethod
+    def _timeout_message(operation_type: Any) -> str:
+        label = PlayerHandler._TIMEOUT_OPERATION_LABELS.get(
+            str(operation_type or ""), "模型请求"
+        )
+        seconds = int(FORMAL_LLM_CALL_TIMEOUT_SECONDS)
+        if label == "模型请求":
+            return f"模型请求超过{seconds}秒，已停止等待。"
+        return f"{label}的模型请求超过{seconds}秒，已停止等待。"
+
     @staticmethod
     def _project_operation_failure(failed) -> tuple[str, str]:
         """Project a failed Operation snapshot into a player-safe (code, message)."""
+        if failed is not None and failed.error_type == "timeout":
+            return "timeout", PlayerHandler._timeout_message(
+                getattr(failed, "operation_type", None)
+            )
         if failed is not None and failed.error_type in PlayerHandler._PROVIDER_CODES:
             return failed.error_type, failed.error_message or "模型服务暂时不可用，请检查后重试。"
         if (

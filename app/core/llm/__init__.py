@@ -4,11 +4,16 @@ from .errors import (
     LLMOutputParseError,
     LLMOutputValidationError,
     LLMProviderError,
+    LLMTimeoutError,
     PromptNotFoundError,
     PromptRenderError,
 )
 from .prompts import PromptLoader
 from .providers import LLMProvider, MockProvider, PydanticAIProvider
+from .providers import (
+    CONNECTION_TEST_TIMEOUT_SECONDS,
+    FORMAL_LLM_CALL_TIMEOUT_SECONDS,
+)
 from .schemas import EchoResult
 from .tracing import NullTraceLogger, TraceLogger
 from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger
@@ -28,12 +33,15 @@ __all__ = [
     "LLMOutputParseError",
     "LLMOutputValidationError",
     "LLMProviderError",
+    "LLMTimeoutError",
     "PromptNotFoundError",
     "PromptRenderError",
     "PromptLoader",
     "LLMProvider",
     "MockProvider",
     "PydanticAIProvider",
+    "CONNECTION_TEST_TIMEOUT_SECONDS",
+    "FORMAL_LLM_CALL_TIMEOUT_SECONDS",
     "EchoResult",
     "TraceLogger",
     "NullTraceLogger",

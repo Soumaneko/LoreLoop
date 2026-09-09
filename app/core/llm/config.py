@@ -6,6 +6,10 @@ from typing import Literal, Optional
 from app.core.diagnostics import DiagnosticLogger, diagnostic_path_for_trace
 from app.runtime.environment import load_source_dotenv
 
+from .providers import (
+    CONNECTION_TEST_TIMEOUT_SECONDS,
+    FORMAL_LLM_CALL_TIMEOUT_SECONDS,
+)
 from .request_profiles import REQUEST_PROFILES, RequestProfile, request_headers
 
 load_source_dotenv()
@@ -36,6 +40,7 @@ class GatewayConfig:
     thinking: str | None = None
     protocol: Protocol = DEFAULT_PROTOCOL
     request_profile: RequestProfile | None = None
+    timeout: float = FORMAL_LLM_CALL_TIMEOUT_SECONDS
 
     def __post_init__(self) -> None:
         api_key = str(self.api_key).strip()
@@ -44,6 +49,7 @@ class GatewayConfig:
         thinking = self.thinking
         protocol = str(self.protocol).strip()
         request_profile = self.request_profile
+        timeout = self.timeout
         if thinking not in {None, "enabled", "disabled"}:
             raise ValueError("thinking must be 'enabled', 'disabled', or None")
         if protocol not in PROTOCOLS:
@@ -52,6 +58,12 @@ class GatewayConfig:
             raise ValueError(
                 f"request_profile must be one of {', '.join(REQUEST_PROFILES)}"
             )
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not timeout > 0
+        ):
+            raise ValueError("timeout must be a positive number of seconds")
         if protocol != "openai_chat" and thinking == "enabled":
             raise ValueError(
                 f"thinking is not supported for protocol '{protocol}' in this phase"
@@ -62,6 +74,7 @@ class GatewayConfig:
         object.__setattr__(self, "base_url", base_url)
         object.__setattr__(self, "model", model)
         object.__setattr__(self, "protocol", protocol)  # type: ignore[assignment]
+        object.__setattr__(self, "timeout", float(timeout))
 
     @property
     def is_configured(self) -> bool:
@@ -131,6 +144,7 @@ def create_gateway(
             base_url=config.base_url,
             default_model=config.model,
             thinking=config.thinking,
+            timeout=config.timeout,
             protocol=config.protocol,
         ),
         prompt_loader=PromptLoader(prompts_dir=prompts_dir),
@@ -207,6 +221,7 @@ class SharedGatewayFactory:
                         base_url=self.config.base_url,
                         default_model=default_model,
                         thinking=self.config.thinking,
+                        timeout=self.config.timeout,
                         protocol=self.config.protocol,
                         request_headers=lambda: request_headers(
                             self.config.request_profile, self._session_id

@@ -19,10 +19,6 @@ const PROVIDER_MESSAGES = {
     title: "请求过于频繁",
     message: "服务当前触发了速率限制，请稍后重试或检查配额。",
   },
-  timeout: {
-    title: "连接超时",
-    message: "连接模型服务超时，请检查网络后重试。",
-  },
   endpoint_unreachable: {
     title: "无法连接服务",
     message: "无法连接 Base URL，请检查地址和网络。",
@@ -43,6 +39,19 @@ export function playerErrorFeedback(
     return {
       title: "这次操作没有完成",
       message: error?.message || "请求没有完成，请检查后重试。",
+    };
+  }
+  if (code === "timeout") {
+    const base = error?.message || "模型请求超时，已停止等待，请稍后重试。";
+    if (pendingPreserved) {
+      return {
+        title: "模型请求超时，待确认内容仍在",
+        message: `${base}本次操作没有写入正式故事，待确认正文仍然保留在界面中。`,
+      };
+    }
+    return {
+      title: "模型请求超时",
+      message: base,
     };
   }
   if (PROVIDER_MESSAGES[code]) {
