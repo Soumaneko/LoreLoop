@@ -72,6 +72,7 @@ class _SuccessfulProvider(LLMProvider):
 class _Runtime:
     def __init__(self, store):
         self.store = store
+        self.campaign_id = "test-campaign"
         self.factory = None
         self.persisted_when_swapped = False
 
@@ -589,6 +590,39 @@ def test_environment_is_bootstrap_when_no_local_config(tmp_path, monkeypatch):
     assert factory.config.protocol == "openai_chat"
 
 
+def test_only_opencode_go_selects_its_request_profile():
+    opencode = StoredModelConfig(
+        api_key="k", model="mimo-v2.5", preset_id="opencode-go"
+    ).gateway_config()
+    other = StoredModelConfig(
+        api_key="k", model="story-model", preset_id="moonshot"
+    ).gateway_config()
+
+    assert opencode.request_profile == "opencode_go"
+    assert other.request_profile is None
+    other_provider = SharedGatewayFactory(config=other)._get_components()[0]
+    assert "extra_headers" not in other_provider._model_settings(0.0)
+
+
+def test_opencode_go_headers_follow_factory_session():
+    factory = SharedGatewayFactory(
+        config=StoredModelConfig(
+            api_key="k", model="mimo-v2.5", preset_id="opencode-go"
+        ).gateway_config(),
+        session_id="save-a",
+    )
+    provider = factory._get_components()[0]
+
+    assert provider._model_settings(0.0)["extra_headers"] == {
+        "x-opencode-session": "save-a",
+        "User-Agent": "LoreLoop/1.0",
+    }
+    factory.set_session_id("save-b")
+    assert provider._model_settings(0.0)["extra_headers"][
+        "x-opencode-session"
+    ] == "save-b"
+
+
 def test_environment_bootstrap_preserves_omitted_thinking(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "environment-secret")
     monkeypatch.delenv("OPENAI_THINKING", raising=False)
@@ -618,7 +652,11 @@ def test_runtime_hot_swap_rebuilds_services_for_future_work(tmp_path):
         config=StoredModelConfig(api_key="k", model="story-model").gateway_config()
     )
     replacement = SharedGatewayFactory(
-        config=StoredModelConfig(api_key="k", model="new-model").gateway_config()
+        config=StoredModelConfig(
+            api_key="k",
+            model="new-model",
+            preset_id="opencode-go",
+        ).gateway_config()
     )
     runtime = CampaignRuntime(
         "model-config-test",
@@ -633,6 +671,10 @@ def test_runtime_hot_swap_rebuilds_services_for_future_work(tmp_path):
         assert runtime.gateway_factory is replacement
         assert runtime.services is not previous_services
         assert runtime.services.gateway_factory is replacement
+        provider = replacement._get_components()[0]
+        assert provider._model_settings(0.0)["extra_headers"][
+            "x-opencode-session"
+        ] == "model-config-test"
     finally:
         runtime.close(wait_for_jobs=True)
 

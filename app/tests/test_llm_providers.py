@@ -192,6 +192,32 @@ class TestPydanticAIProvider:
         assert isinstance(extra_body, dict)
         assert extra_body["store"] is False
 
+    @pytest.mark.parametrize("protocol", [
+        "openai_responses",
+        "openai_chat",
+        "anthropic_messages",
+    ])
+    def test_request_headers_are_protocol_independent(self, protocol):
+        session = {"id": "save-a"}
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://example.test",
+            protocol=protocol,
+            request_headers=lambda: {
+                "x-opencode-session": session["id"],
+                "User-Agent": "LoreLoop/1.0",
+            },
+        )
+
+        assert provider._model_settings(0.2)["extra_headers"] == {
+            "x-opencode-session": "save-a",
+            "User-Agent": "LoreLoop/1.0",
+        }
+        session["id"] = "save-b"
+        assert provider._model_settings(0.2)["extra_headers"][
+            "x-opencode-session"
+        ] == "save-b"
+
     def test_responses_serializes_store_false(self):
         from openai import AsyncOpenAI
         from pydantic_ai.exceptions import ModelHTTPError

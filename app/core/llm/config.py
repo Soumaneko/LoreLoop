@@ -6,6 +6,8 @@ from typing import Literal, Optional
 from app.core.diagnostics import DiagnosticLogger, diagnostic_path_for_trace
 from app.runtime.environment import load_source_dotenv
 
+from .request_profiles import REQUEST_PROFILES, RequestProfile, request_headers
+
 load_source_dotenv()
 
 Protocol = Literal[
@@ -33,6 +35,7 @@ class GatewayConfig:
     model: str = "gpt-4o"
     thinking: str | None = None
     protocol: Protocol = DEFAULT_PROTOCOL
+    request_profile: RequestProfile | None = None
 
     def __post_init__(self) -> None:
         api_key = str(self.api_key).strip()
@@ -40,10 +43,15 @@ class GatewayConfig:
         model = str(self.model).strip()
         thinking = self.thinking
         protocol = str(self.protocol).strip()
+        request_profile = self.request_profile
         if thinking not in {None, "enabled", "disabled"}:
             raise ValueError("thinking must be 'enabled', 'disabled', or None")
         if protocol not in PROTOCOLS:
             raise ValueError(f"protocol must be one of {', '.join(PROTOCOLS)}")
+        if request_profile is not None and request_profile not in REQUEST_PROFILES:
+            raise ValueError(
+                f"request_profile must be one of {', '.join(REQUEST_PROFILES)}"
+            )
         if protocol != "openai_chat" and thinking == "enabled":
             raise ValueError(
                 f"thinking is not supported for protocol '{protocol}' in this phase"
@@ -142,6 +150,7 @@ class SharedGatewayFactory:
         *,
         config: GatewayConfig | None = None,
         diagnostic_path: str | None = None,
+        session_id: str = "",
     ) -> None:
         self.config = config or GatewayConfig.from_env(model=model)
         self.model = self.config.model
@@ -150,6 +159,7 @@ class SharedGatewayFactory:
         if diagnostic_path is None and log_path is not None:
             diagnostic_path = str(diagnostic_path_for_trace(log_path))
         self.diagnostic_logger = DiagnosticLogger(diagnostic_path)
+        self._session_id = session_id
         self._components = None
         self._lock = threading.Lock()
 
@@ -167,6 +177,10 @@ class SharedGatewayFactory:
             tracer=tracer,
             default_model=default_model,
         )
+
+    def set_session_id(self, session_id: str) -> None:
+        """Switch provider routing identity after the runtime switches saves."""
+        self._session_id = session_id
 
     def _get_components(self):
         if self._components is not None:
@@ -194,6 +208,9 @@ class SharedGatewayFactory:
                         default_model=default_model,
                         thinking=self.config.thinking,
                         protocol=self.config.protocol,
+                        request_headers=lambda: request_headers(
+                            self.config.request_profile, self._session_id
+                        ),
                     ),
                     PromptLoader(prompts_dir=self.prompts_dir),
                     TraceLogger(

@@ -264,6 +264,9 @@ class CampaignRuntime:
 
             self.initialization = InitializationStore(self.paths.initialization_json)
         self.gateway_factory = gateway_factory or effective_gateway_factory()
+        set_session_id = getattr(self.gateway_factory, "set_session_id", None)
+        if set_session_id is not None:
+            set_session_id(campaign_id)
         self.diagnostics = getattr(
             self.gateway_factory,
             "diagnostic_logger",
@@ -455,6 +458,9 @@ class CampaignRuntime:
                 self.jobs.wait_for_idle()
                 if persist is not None:
                     persist()
+                set_session_id = getattr(factory, "set_session_id", None)
+                if set_session_id is not None:
+                    set_session_id(self.campaign_id)
                 self.gateway_factory = factory
                 self.diagnostics = getattr(
                     factory,
@@ -954,6 +960,9 @@ class CampaignRuntime:
                 old_stores.close()
                 old_stores_closed = True
                 self.campaign_id = campaign_id
+                set_session_id = getattr(self.gateway_factory, "set_session_id", None)
+                if set_session_id is not None:
+                    set_session_id(campaign_id)
                 self.paths = paths
                 self.history = opened.history
                 self.stores = opened.stores
@@ -987,6 +996,9 @@ class CampaignRuntime:
                 # resources when target preparation failed early; otherwise reopen
                 # them through the canonical path.
                 self.campaign_id = old_campaign_id
+                set_session_id = getattr(self.gateway_factory, "set_session_id", None)
+                if set_session_id is not None:
+                    set_session_id(old_campaign_id)
                 self.paths = old_paths
                 self.pending_turns = old_pending_turns
                 self.pending_openings = old_pending_openings

@@ -18,6 +18,7 @@ from app.core.llm.config import (
 )
 from app.core.llm.provider_classification import classify_provider_error
 from app.core.llm.providers import LLMProvider
+from app.core.llm.request_profiles import request_headers, request_profile_for_preset
 
 from .paths import APP_CONFIG_DIR
 from .secret_protection import (
@@ -62,6 +63,7 @@ class StoredModelConfig:
             model=self.model,
             thinking=thinking,
             protocol=self.protocol,  # type: ignore[arg-type]
+            request_profile=request_profile_for_preset(self.preset_id),
         )
 
 
@@ -600,13 +602,19 @@ def effective_gateway_factory(
 def _connection_test_provider(config: StoredModelConfig) -> LLMProvider:
     from app.core.llm.providers import PydanticAIProvider
 
+    gateway_config = config.gateway_config()
+    session_id = uuid.uuid4().hex
+
     return PydanticAIProvider(
         api_key=config.api_key,
         base_url=config.base_url,
         default_model=config.model,
-        thinking=config.gateway_config().thinking,
+        thinking=gateway_config.thinking,
         timeout=30.0,
         protocol=config.protocol,
+        request_headers=lambda: request_headers(
+            gateway_config.request_profile, session_id
+        ),
     )
 
 

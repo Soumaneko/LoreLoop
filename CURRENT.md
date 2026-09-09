@@ -1447,6 +1447,14 @@ protocols; `false/null` never sends. Prompt rendering, JSON parsing, schema
 validation, salvage/retry, trace/diagnostics and cancel/degrade stay in
 `LLMGateway`.
 
+Provider-service request requirements are separate from wire protocols. The
+OpenCode Go preset applies its `opencode_go` request profile on all of its
+OpenAI Chat, OpenAI Responses, and Anthropic Messages model routes. It sends a
+LoreLoop User-Agent and a stable `x-opencode-session` derived from the active
+save ID; connection tests use a fresh test-session ID. Switching saves updates
+the routing ID without changing other provider presets, which send no custom
+headers by default.
+
 The Provider/model directory is read from models.dev (`GET
 /api/player/model-presets`), normalized to provider rows of
 `provider_id/provider_name/model_id/model_name/protocol/base_url/status`

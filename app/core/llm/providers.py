@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 import asyncio
 import queue
 import threading
@@ -107,6 +107,7 @@ class PydanticAIProvider(LLMProvider):
         protocol: str = "openai_chat",
         *,
         model_instance: Any | None = None,
+        request_headers: Callable[[], dict[str, str]] | None = None,
     ):
         if protocol not in PROTOCOLS:
             raise ValueError(
@@ -122,6 +123,7 @@ class PydanticAIProvider(LLMProvider):
         self._thinking = thinking
         self._timeout = timeout
         self._protocol = protocol
+        self._request_headers = request_headers
         # Test-only injection: a ready-made Model used for every call,
         # bypassing the per-model-name cache below.
         self._model_instance = model_instance
@@ -277,6 +279,10 @@ class PydanticAIProvider(LLMProvider):
         kwargs: dict[str, Any] = {"temperature": temperature}
         if self._timeout is not None:
             kwargs["timeout"] = self._timeout
+        if self._request_headers is not None:
+            headers = self._request_headers()
+            if headers:
+                kwargs["extra_headers"] = headers
         extra_body: dict[str, Any] = {}
         if self._protocol == "openai_responses":
             # Explicitly disable server-side storage to keep the project
