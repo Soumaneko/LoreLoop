@@ -134,7 +134,7 @@ class TestPydanticAIProvider:
         ("thinking", "expected_extra_body"),
         [
             (None, None),
-            ("disabled", None),
+            ("disabled", {"thinking": {"type": "disabled"}}),
             ("enabled", {"thinking": {"type": "enabled"}}),
         ],
     )
@@ -149,6 +149,19 @@ class TestPydanticAIProvider:
         settings = provider._model_settings(0.2)
 
         assert settings.get("extra_body") == expected_extra_body
+
+    def test_openai_chat_reasoning_effort_contract(self):
+        provider = PydanticAIProvider(
+            api_key="test",
+            base_url="https://opencode.ai/zen/go/v1",
+            reasoning_effort="none",
+            protocol="openai_chat",
+        )
+
+        settings = provider._model_settings(0.2)
+
+        assert settings["openai_reasoning_effort"] == "none"
+        assert settings.get("extra_body") is None
 
     @pytest.mark.parametrize("protocol", [
         "openai_responses",

@@ -19,7 +19,11 @@ from app.core.llm.config import (
 from app.core.llm.provider_classification import classify_provider_error
 from app.core.llm.providers import LLMProvider
 from app.core.llm.providers import CONNECTION_TEST_TIMEOUT_SECONDS
-from app.core.llm.request_profiles import request_headers, request_profile_for_preset
+from app.core.llm.request_profiles import (
+    map_thinking_request,
+    request_headers,
+    request_profile_for_service,
+)
 
 from .paths import APP_CONFIG_DIR
 from .secret_protection import (
@@ -57,14 +61,26 @@ class StoredModelConfig:
         return bool(self.api_key)
 
     def gateway_config(self) -> GatewayConfig:
-        thinking = "enabled" if self.thinking is True else None
+        request_profile = request_profile_for_service(
+            self.preset_id, self.base_url
+        )
+        thinking, reasoning_effort = map_thinking_request(
+            request_profile,
+            self.model,
+            self.thinking,
+        )
         return GatewayConfig(
             api_key=self.api_key,
             base_url=self.base_url,
             model=self.model,
             thinking=thinking,
+            reasoning_effort=(
+                reasoning_effort
+                if self.protocol == "openai_chat"
+                else None
+            ),
             protocol=self.protocol,  # type: ignore[arg-type]
-            request_profile=request_profile_for_preset(self.preset_id),
+            request_profile=request_profile,
         )
 
 
@@ -611,6 +627,7 @@ def _connection_test_provider(config: StoredModelConfig) -> LLMProvider:
         base_url=config.base_url,
         default_model=config.model,
         thinking=gateway_config.thinking,
+        reasoning_effort=gateway_config.reasoning_effort,
         timeout=CONNECTION_TEST_TIMEOUT_SECONDS,
         protocol=config.protocol,
         request_headers=lambda: request_headers(

@@ -150,6 +150,7 @@ class PydanticAIProvider(LLMProvider):
         base_url: str,
         default_model: str = "gpt-4o",
         thinking: str | None = None,
+        reasoning_effort: str | None = None,
         timeout: float | None = FORMAL_LLM_CALL_TIMEOUT_SECONDS,
         protocol: str = "openai_chat",
         *,
@@ -175,6 +176,7 @@ class PydanticAIProvider(LLMProvider):
         self._base_url = base_url
         self._default_model = default_model
         self._thinking = thinking
+        self._reasoning_effort = reasoning_effort
         self._timeout = float(timeout) if timeout is not None else None
         self._protocol = protocol
         self._request_headers = request_headers
@@ -504,8 +506,13 @@ class PydanticAIProvider(LLMProvider):
             # Explicitly disable server-side storage to keep the project
             # local, save-scoped privacy boundary.
             extra_body["store"] = False
-        if self._protocol == "openai_chat" and self._thinking == "enabled":
-            extra_body["thinking"] = {"type": "enabled"}
+        if self._protocol == "openai_chat" and self._thinking is not None:
+            extra_body["thinking"] = {"type": self._thinking}
+        if (
+            self._protocol == "openai_chat"
+            and self._reasoning_effort is not None
+        ):
+            kwargs["openai_reasoning_effort"] = self._reasoning_effort
         if extra_body:
             kwargs["extra_body"] = extra_body
         return ModelSettings(**kwargs)

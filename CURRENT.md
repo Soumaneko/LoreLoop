@@ -1444,7 +1444,11 @@ close/cancel still stops the in-flight task promptly. Models are cached per
 model name. The Responses path explicitly disables server-side
 storage (`store=false`). `thinking=true` only sends `extra_body.thinking` on
 `openai_chat` and is rejected at config validation for the other three
-protocols; `false/null` never sends. Prompt rendering, JSON parsing, schema
+protocols. The DeepSeek service maps an explicit `false` to
+`thinking.type=disabled`; OpenCode Go maps it to `reasoning_effort=none` only
+for its `deepseek-*` OpenAI Chat models. Providers without a verified mapping
+still omit it.
+Prompt rendering, JSON parsing, schema
 validation, salvage/retry, trace/diagnostics and cancel/degrade stay in
 `LLMGateway`.
 
@@ -1475,9 +1479,8 @@ authorization material, or custom header values. The complete
 Provider-service request requirements are separate from wire protocols. The
 OpenCode Go preset applies its `opencode_go` request profile on all of its
 OpenAI Chat, OpenAI Responses, and Anthropic Messages model routes. It sends a
-LoreLoop User-Agent and a stable `x-opencode-session` derived from the active
-save ID; connection tests use a fresh test-session ID. Switching saves updates
-the routing ID without changing other provider presets, which send no custom
+LoreLoop User-Agent and currently forces `x-opencode-session=794wNhtK` for
+both formal calls and connection tests. Other provider presets send no custom
 headers by default.
 
 The Provider/model directory is read from models.dev (`GET

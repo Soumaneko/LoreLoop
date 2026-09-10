@@ -38,6 +38,7 @@ class GatewayConfig:
     base_url: str = ""
     model: str = "gpt-4o"
     thinking: str | None = None
+    reasoning_effort: str | None = None
     protocol: Protocol = DEFAULT_PROTOCOL
     request_profile: RequestProfile | None = None
     timeout: float = FORMAL_LLM_CALL_TIMEOUT_SECONDS
@@ -47,11 +48,14 @@ class GatewayConfig:
         base_url = str(self.base_url).strip()
         model = str(self.model).strip()
         thinking = self.thinking
+        reasoning_effort = self.reasoning_effort
         protocol = str(self.protocol).strip()
         request_profile = self.request_profile
         timeout = self.timeout
         if thinking not in {None, "enabled", "disabled"}:
             raise ValueError("thinking must be 'enabled', 'disabled', or None")
+        if reasoning_effort not in {None, "none"}:
+            raise ValueError("reasoning_effort must be 'none' or None")
         if protocol not in PROTOCOLS:
             raise ValueError(f"protocol must be one of {', '.join(PROTOCOLS)}")
         if request_profile is not None and request_profile not in REQUEST_PROFILES:
@@ -221,6 +225,7 @@ class SharedGatewayFactory:
                         base_url=self.config.base_url,
                         default_model=default_model,
                         thinking=self.config.thinking,
+                        reasoning_effort=self.config.reasoning_effort,
                         timeout=self.config.timeout,
                         protocol=self.config.protocol,
                         request_headers=lambda: request_headers(

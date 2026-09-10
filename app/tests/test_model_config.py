@@ -593,21 +593,62 @@ def test_environment_is_bootstrap_when_no_local_config(tmp_path, monkeypatch):
     assert factory.config.protocol == "openai_chat"
 
 
-def test_only_opencode_go_selects_its_request_profile():
+def test_provider_specific_request_profiles_stay_isolated():
     opencode = StoredModelConfig(
-        api_key="k", model="mimo-v2.5", preset_id="opencode-go"
+        api_key="k",
+        model="deepseek-v4-flash",
+        preset_id="opencode-go",
+        thinking=False,
+    ).gateway_config()
+    deepseek = StoredModelConfig(
+        api_key="k",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        preset_id="deepseek",
+        thinking=False,
     ).gateway_config()
     other = StoredModelConfig(
         api_key="k", model="story-model", preset_id="moonshot"
     ).gateway_config()
 
     assert opencode.request_profile == "opencode_go"
+    assert opencode.thinking is None
+    assert opencode.reasoning_effort == "none"
+    assert deepseek.request_profile == "deepseek"
+    assert deepseek.thinking == "disabled"
     assert other.request_profile is None
+    assert other.reasoning_effort is None
     other_provider = SharedGatewayFactory(config=other)._get_components()[0]
     assert "extra_headers" not in other_provider._model_settings(0.0)
 
 
-def test_opencode_go_headers_follow_factory_session():
+def test_custom_official_deepseek_url_disables_thinking():
+    config = StoredModelConfig(
+        api_key="k",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        preset_id="custom",
+        thinking=False,
+    ).gateway_config()
+    provider = SharedGatewayFactory(config=config)._get_components()[0]
+
+    assert provider._model_settings(0.0)["extra_body"] == {
+        "thinking": {"type": "disabled"}
+    }
+
+
+def test_opencode_go_non_deepseek_does_not_receive_reasoning_effort():
+    config = StoredModelConfig(
+        api_key="k",
+        model="mimo-v2.5",
+        preset_id="opencode-go",
+        thinking=False,
+    ).gateway_config()
+
+    assert config.reasoning_effort is None
+
+
+def test_opencode_go_headers_use_forced_session():
     factory = SharedGatewayFactory(
         config=StoredModelConfig(
             api_key="k", model="mimo-v2.5", preset_id="opencode-go"
@@ -617,13 +658,13 @@ def test_opencode_go_headers_follow_factory_session():
     provider = factory._get_components()[0]
 
     assert provider._model_settings(0.0)["extra_headers"] == {
-        "x-opencode-session": "save-a",
+        "x-opencode-session": "794wNhtK",
         "User-Agent": "LoreLoop/1.0",
     }
     factory.set_session_id("save-b")
     assert provider._model_settings(0.0)["extra_headers"][
         "x-opencode-session"
-    ] == "save-b"
+    ] == "794wNhtK"
 
 
 def test_formal_gateway_config_defaults_to_project_timeout():
@@ -695,7 +736,7 @@ def test_runtime_hot_swap_rebuilds_services_for_future_work(tmp_path):
         provider = replacement._get_components()[0]
         assert provider._model_settings(0.0)["extra_headers"][
             "x-opencode-session"
-        ] == "model-config-test"
+        ] == "794wNhtK"
     finally:
         runtime.close(wait_for_jobs=True)
 
