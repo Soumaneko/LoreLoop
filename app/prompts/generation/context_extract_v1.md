@@ -27,14 +27,14 @@
 # 核心规则
 
 1. 提取“本回合生成可能需要知道的既有事实”，包括：已发生事件、当前已知威胁、旧承诺、关系状态、物品/资源状态、角色已知信息边界、未解决线程、已透露动机或冲突根源。
-2. Confirmed History 是原始已确认剧情证据；Active Continuity 是当前仍有效的承诺与未解决事项；World Settings 是公开已知的世界设定（只含公开事实，不含隐藏内容）；SceneSummaries 是跨回合压缩上下文；CurrentState 是当前即时状态；CoreMemory 是长期设定边界；NPC Profiles 是角色背景边界。
+2. Confirmed History 是原始已确认剧情证据；Active Continuity 是当前仍有效的承诺与未解决事项；World Settings 是公开已知的世界设定（只含公开事实，不含隐藏内容）；SceneSummaries 是跨回合压缩上下文；CurrentState 是当前即时状态；CoreMemory 是长期设定边界；NPC Profiles 是角色背景边界。Active Continuity 的每个条目通过 `source_evidence_ids` 指向本输入 `source_evidence` 中的原始 Confirmed History 正文段落——这些正文来自形成该条目当前状态的那次更新，取代了累计状态转录。`source_evidence_ids` 为空表示该条目没有可用的更新所附正文，此时不要臆测或补写它的状态。
 3. 事实必须与 User Input 的行动、询问对象、涉及人物、地点、物品、组织或威胁有关。
 4. CoreMemory、CurrentState 和 User Input 会由下游直接获得，facts 应优先提供下游无法直接得到的增量上下文，不要把其中明确的内容复述为 fact，以免占用名额。只有当这些内容是说明某条历史事实、认知边界、上下文冲突或事实关联不可缺少的一部分时，才保留必要的增量信息。
 5. holder/source 表达角色知识边界：角色只因上下文明确支持的观察、经历、告知或既有认知而成为 holder；不得因为角色在场、出现在档案中或可能知道，就擅自扩大持有人范围。
 6. 可以提取“尚未透露具体方式/尚未确认结果”这类信息边界，但必须写成已支持的事实，不要推导成否定事实。
 7. facts 应短而密，每条优先 1 句；多个事实不要硬塞进一条。
 8. 同一事实若被不同角色通过不同来源获知，应拆成多条；仅存在于 CoreMemory 或 NPC 私密档案、尚未提供给任何角色的事实，holder 填写“创作者”。
-9. Confirmed History 中 `text_truncated=true` 表示 `text` 只是原证据的有界摘录，`original_text_chars` 是原文长度；只能使用摘录里直接可见的内容，不得把未展示的中段当作不存在、否定或已知事实。没有该标记表示正文完整。
+9. Confirmed History 中 `text_truncated=true` 表示 `text` 只是原证据的有界摘录，`original_text_chars` 是原文长度；只能使用摘录里直接可见的内容，不得把未展示的中段当作不存在、否定或已知事实。没有该标记表示正文完整。若某条记录带 `text_in_continuity: true`，表示该段正文已在 Active Continuity 的 `source_evidence` 中完整给出（按相同 evidence_id 对应），此处不再重复文本；请按该 evidence_id 到 Active Continuity 查阅原正文。
 
 
 # 禁止事项
@@ -44,7 +44,7 @@
 3. 不要判定玩家行动成功或失败。
 4. 不要把缺失信息写成“事实不存在”；只能写“上下文未显示/尚未透露”，且必须与本回合明显相关。
 5. 不要臆造 Confirmed History、Active Continuity、SceneSummaries、CurrentState、CoreMemory、World Settings 或 NPC Profiles 中没有的信息。
-6. evidence_ids 只能引用 Confirmed History 中实际提供的 evidence_id，不得引用 Search Intent ID、场景 ID 或自行编造编号。
+6. evidence_ids 只能引用 Confirmed History 中实际提供的 evidence_id（包括 Confirmed History 区与 Active Continuity `source_evidence` 中的段落 ID），不得引用 Search Intent ID、场景 ID 或自行编造编号。
 7. 不要输出任何 schema 外字段。
 
 

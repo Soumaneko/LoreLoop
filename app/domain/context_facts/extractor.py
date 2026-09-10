@@ -25,7 +25,7 @@ from app.domain.views import (
 
 from .views import (
     project_context_history,
-    project_continuity,
+    project_continuity_input,
     project_settings,
 )
 
@@ -61,7 +61,7 @@ def _parse_draft(raw: Any) -> ContextFactDraft:
 
 
 def _known_evidence_ids(input_data: ContextExtractorInput) -> set[str]:
-    return {
+    known = {
         evidence_id
         for hit in input_data.history_evidence.hits
         for evidence_id in [
@@ -71,6 +71,11 @@ def _known_evidence_ids(input_data: ContextExtractorInput) -> set[str]:
             *(item.evidence_id for item in hit.context_after),
         ]
     }
+    known.update(
+        paragraph.evidence_id
+        for paragraph in input_data.continuity.source_evidence
+    )
+    return known
 
 
 def _collect_record(
@@ -186,9 +191,13 @@ class ContextExtractor:
                         "current_state_json": project_current_state(input_data.current_state),
                         "scene_summaries_json": project_scene_summaries(input_data.scene_summaries),
                         "confirmed_history_json": project_context_history(
-                            input_data.history_evidence
+                            input_data.history_evidence,
+                            continuity_evidence_ids={
+                                paragraph.evidence_id
+                                for paragraph in input_data.continuity.source_evidence
+                            },
                         ),
-                        "continuity_json": project_continuity(
+                        "continuity_json": project_continuity_input(
                             input_data.continuity
                         ),
                         "settings_json": project_settings(

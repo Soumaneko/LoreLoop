@@ -8,7 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.domain.action.schemas import ActionRetrievalTopic, Anchor
-from app.domain.confirmed_history import ConfirmedHistoryStore
+from app.domain.confirmed_history import (
+    ConfirmedHistoryStore,
+    history_document_text_hash,
+)
 from app.domain.continuity import (
     ContinuityItem,
     ContinuityMatch,
@@ -27,6 +30,9 @@ from app.domain.context_facts import (
     ContextSearchEntity,
     ContextSearchIntent,
     ContextSearchPlan,
+    ContinuityInput,
+    ContinuityInputItem,
+    ContinuitySourceParagraph,
     SettingMatch,
     SettingRetriever,
     SettingSelection,
@@ -43,6 +49,8 @@ from app.domain.context_facts.views import (
     project_context_history,
     project_context_history_payload,
     project_continuity,
+    project_continuity_input,
+    project_continuity_input_payload,
     project_continuity_payload,
     project_settings,
     project_settings_payload,
@@ -175,6 +183,42 @@ def test_context_history_projection_keeps_nonempty_evidence_context():
     }]
     assert "matched_intent_ids" not in record
 
+
+
+def test_context_history_projection_defers_duplicate_text_to_continuity():
+    evidence = ContextHistoryEvidenceSet(hits=[ContextHistoryHit(
+        evidence_id="turn_10_p002",
+        source_type="scene_paragraph",
+        turn_index=10,
+        scene_id="scene_010",
+        paragraph_index=2,
+        text="旧手稿只有怪圈符号。",
+        context_before=[{
+            "evidence_id": "turn_10_p001",
+            "text": "文书上写着鹈鹕号。",
+        }],
+        context_after=[{
+            "evidence_id": "turn_10_p003",
+            "text": "文书末尾有签名。",
+        }],
+        matched_intent_ids=["i1"],
+        score=0.5,
+    )])
+
+    payload = project_context_history_payload(
+        evidence,
+        continuity_evidence_ids={"turn_10_p001", "turn_10_p002"},
+    )[0]
+
+    assert payload["evidence_id"] == "turn_10_p002"
+    assert payload["text_in_continuity"] is True
+    assert "text" not in payload
+    assert payload["context_before"] == [
+        {"evidence_id": "turn_10_p001", "text_in_continuity": True}
+    ]
+    assert payload["context_after"] == [
+        {"evidence_id": "turn_10_p003", "text": "文书末尾有签名。"}
+    ]
 
 
 def test_context_fact_set_assigns_fact_ids_and_keeps_internal_evidence():
@@ -417,6 +461,383 @@ def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
     ]["settings_json"]
 
 
+class _CapturingGateway:
+    def __init__(self):
+        self.calls = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        if kwargs.get("on_attempt_start") is not None:
+            kwargs["on_attempt_start"](1)
+        result = kwargs["output_schema"].model_validate({
+            "turn_focus": "追问旧手稿线索。",
+            "facts": [],
+        })
+        if kwargs.get("output_validator") is not None:
+            kwargs["output_validator"](result)
+        return result
+
+
+def _seed_continuity_update(
+    continuity_store,
+    *,
+    item_id="thread_manuscript",
+    current_state="旧手稿正文含鹈鹕号与盐渍鳞鱼。",
+    evidence_ids=("turn_10_p002",),
+    with_update=True,
+):
+    item = ContinuityItem(
+        id=item_id,
+        kind="open_thread",
+        subject="旧手稿的怪圈符号",
+        premise="导师手记与旧手稿符号一致。",
+        current_state=current_state,
+        entities=["旧手稿"],
+        created_turn=9,
+        updated_turn=10,
+    )
+    continuity_store.insert(item)
+    continuity_store.add_lifecycle_log(
+        item_id=item_id,
+        operation="create",
+        turn_index=9,
+        state_delta=None,
+        reason="发现旧手稿。",
+        evidence=[("turn_9_p001", None)],
+    )
+    if with_update:
+        continuity_store.add_lifecycle_log(
+            item_id=item_id,
+            operation="update",
+            turn_index=10,
+            state_delta="确认符号与导师手记一致。",
+            reason="延续符号线索。",
+            evidence=[(identifier, None) for identifier in evidence_ids],
+        )
+    return item
+
+
+def _build_manuscript_context(
+    gateway,
+    history_store,
+    continuity_store,
+    setting_store,
+    npc_store,
+):
+    return ContextFactsService(
+        gateway, history_store, continuity_store, setting_store, npc_store
+    ).build(ContextFactsInput(
+        user_input="我继续研究旧手稿的怪圈符号。",
+        core_memory=_core_memory(),
+        current_state=_state(),
+        scene_summaries=[],
+        matched_anchors=[],
+        npc_profiles=[],
+        current_turn_index=11,
+    ))
+
+
+def test_context_facts_continuity_input_uses_update_prose_not_current_state():
+    gateway = _CapturingGateway()
+    with (
+        open_confirmed_history_store() as store,
+        open_continuity_store() as continuity_store,
+        open_world_setting_store() as setting_store,
+        open_npc_profile_store(":memory:") as npc_store,
+    ):
+        store.upsert_turn(
+            scene_id="scene_010",
+            turn_index=10,
+            user_input="",
+            scene_text="文书上写着鹈鹕号与盐渍鳞鱼。\n\n旧手稿只有怪圈符号。",
+        )
+        item = _seed_continuity_update(continuity_store)
+        result = _build_manuscript_context(
+            gateway, store, continuity_store, setting_store, npc_store
+        )
+
+    projected = gateway.calls[0]["input_data"]["continuity_json"]
+    payload = json.loads(projected)
+    assert payload["source_evidence"] == [
+        {"evidence_id": "turn_10_p002", "text": "旧手稿只有怪圈符号。"}
+    ]
+    assert payload["items"] == [{
+        "id": item.id,
+        "kind": "open_thread",
+        "subject": "旧手稿的怪圈符号",
+        "premise": "导师手记与旧手稿符号一致。",
+        "source_evidence_ids": ["turn_10_p002"],
+        "entities": ["旧手稿"],
+    }]
+    assert "鹈鹕号" not in projected
+    assert "current_state" not in projected
+    assert result.continuity_warnings == []
+    assert result.continuity.items[0].item.id == item.id
+
+
+def test_context_facts_continuity_input_reports_missing_update_evidence():
+    gateway = _CapturingGateway()
+    with (
+        open_confirmed_history_store() as store,
+        open_continuity_store() as continuity_store,
+        open_world_setting_store() as setting_store,
+        open_npc_profile_store(":memory:") as npc_store,
+    ):
+        store.upsert_turn(
+            scene_id="scene_010",
+            turn_index=10,
+            user_input="",
+            scene_text="旧手稿只有怪圈符号。",
+        )
+        _seed_continuity_update(
+            continuity_store, evidence_ids=("turn_10_p099",)
+        )
+        result = _build_manuscript_context(
+            gateway, store, continuity_store, setting_store, npc_store
+        )
+
+    projected = gateway.calls[0]["input_data"]["continuity_json"]
+    payload = json.loads(projected)
+    assert payload["source_evidence"] == []
+    assert payload["items"][0]["source_evidence_ids"] == []
+    assert "鹈鹕号" not in projected
+    assert [warning.code for warning in result.continuity_warnings] == [
+        "continuity_source_missing"
+    ]
+    assert "turn_10_p099" in result.continuity_warnings[0].message
+
+
+def test_context_facts_continuity_input_rejects_rewritten_update_evidence():
+    gateway = _CapturingGateway()
+    with (
+        open_confirmed_history_store() as store,
+        open_continuity_store() as continuity_store,
+        open_world_setting_store() as setting_store,
+        open_npc_profile_store(":memory:") as npc_store,
+    ):
+        store.upsert_turn(
+            scene_id="scene_010",
+            turn_index=10,
+            user_input="",
+            scene_text="旧手稿只有怪圈符号。\n\n旧手稿还有日期批注。",
+        )
+        original = next(
+            document
+            for document in store.documents_for_turn(10)
+            if document.document_id == "turn_10_p002"
+        )
+        recorded_hash = history_document_text_hash(original)
+
+        item = ContinuityItem(
+            id="thread_manuscript",
+            kind="open_thread",
+            subject="旧手稿的怪圈符号",
+            premise="导师手记与旧手稿符号一致。",
+            current_state="旧手稿正文含鹈鹕号与盐渍鳞鱼。",
+            entities=["旧手稿"],
+            created_turn=9,
+            updated_turn=10,
+        )
+        continuity_store.insert(item)
+        continuity_store.add_lifecycle_log(
+            item_id=item.id,
+            operation="update",
+            turn_index=10,
+            state_delta="确认符号。",
+            reason="延续线索。",
+            evidence=[("turn_10_p002", recorded_hash)],
+        )
+        # Rewriting the turn keeps the document ID but replaces its prose.
+        store.upsert_turn(
+            scene_id="scene_010",
+            turn_index=10,
+            user_input="",
+            scene_text="码头传来无灯货船的传闻。\n\n柯岚正在誊录特许印签。",
+        )
+        result = _build_manuscript_context(
+            gateway, store, continuity_store, setting_store, npc_store
+        )
+
+    projected = gateway.calls[0]["input_data"]["continuity_json"]
+    payload = json.loads(projected)
+    assert payload["source_evidence"] == []
+    assert payload["items"][0]["source_evidence_ids"] == []
+    assert "码头传来无灯货船" not in projected
+    assert [warning.code for warning in result.continuity_warnings] == [
+        "continuity_source_stale"
+    ]
+    assert "turn_10_p002" in result.continuity_warnings[0].message
+
+
+def test_context_facts_continuity_input_rejects_non_scene_and_wrong_turn_evidence():
+    gateway = _CapturingGateway()
+    with (
+        open_confirmed_history_store() as store,
+        open_continuity_store() as continuity_store,
+        open_world_setting_store() as setting_store,
+        open_npc_profile_store(":memory:") as npc_store,
+    ):
+        store.upsert_turn(
+            scene_id="scene_009",
+            turn_index=9,
+            user_input="",
+            scene_text="前情提要。",
+        )
+        store.upsert_turn(
+            scene_id="scene_010",
+            turn_index=10,
+            user_input="记下文书。",
+            scene_text="旧手稿只有怪圈符号。",
+        )
+        item = ContinuityItem(
+            id="thread_manuscript",
+            kind="open_thread",
+            subject="旧手稿的怪圈符号",
+            premise="导师手记与旧手稿符号一致。",
+            current_state="旧手稿正文含鹈鹕号与盐渍鳞鱼。",
+            entities=["旧手稿"],
+            created_turn=9,
+            updated_turn=10,
+        )
+        continuity_store.insert(item)
+        continuity_store.add_lifecycle_log(
+            item_id=item.id,
+            operation="update",
+            turn_index=10,
+            state_delta="确认符号。",
+            reason="延续线索。",
+            evidence=[("turn_10_input", None), ("turn_9_p001", None)],
+        )
+        result = _build_manuscript_context(
+            gateway, store, continuity_store, setting_store, npc_store
+        )
+
+    projected = gateway.calls[0]["input_data"]["continuity_json"]
+    payload = json.loads(projected)
+    assert payload["source_evidence"] == []
+    assert payload["items"][0]["source_evidence_ids"] == []
+    assert [warning.code for warning in result.continuity_warnings] == [
+        "continuity_source_stale",
+        "continuity_source_stale",
+    ]
+    assert "turn_10_input" in result.continuity_warnings[0].message
+    assert "turn_9_p001" in result.continuity_warnings[1].message
+
+
+def test_context_facts_continuity_input_omits_state_without_update():
+    gateway = _CapturingGateway()
+    with (
+        open_confirmed_history_store() as store,
+        open_continuity_store() as continuity_store,
+        open_world_setting_store() as setting_store,
+        open_npc_profile_store(":memory:") as npc_store,
+    ):
+        store.upsert_turn(
+            scene_id="scene_010",
+            turn_index=10,
+            user_input="",
+            scene_text="旧手稿只有怪圈符号。",
+        )
+        _seed_continuity_update(continuity_store, with_update=False)
+        result = _build_manuscript_context(
+            gateway, store, continuity_store, setting_store, npc_store
+        )
+
+    projected = gateway.calls[0]["input_data"]["continuity_json"]
+    payload = json.loads(projected)
+    assert payload["source_evidence"] == []
+    assert payload["items"][0]["source_evidence_ids"] == []
+    assert "鹈鹕号" not in projected
+    assert result.continuity_warnings == []
+
+
+def test_project_continuity_input_deduplicates_source_evidence():
+    continuity = ContinuityInput(
+        source_evidence=[ContinuitySourceParagraph(
+            evidence_id="turn_2_p001",
+            text="正文。",
+        )],
+        items=[
+            ContinuityInputItem(
+                id="c1",
+                kind="commitment",
+                subject="承诺",
+                premise="前提。",
+                source_evidence_ids=["turn_2_p001"],
+            ),
+            ContinuityInputItem(
+                id="c2",
+                kind="open_thread",
+                subject="线索",
+                premise="前提二。",
+                source_evidence_ids=["turn_2_p001"],
+            ),
+        ],
+    )
+
+    payload = project_continuity_input_payload(continuity)
+
+    assert payload["source_evidence"] == [
+        {"evidence_id": "turn_2_p001", "text": "正文。"}
+    ]
+    assert [item["source_evidence_ids"] for item in payload["items"]] == [
+        ["turn_2_p001"],
+        ["turn_2_p001"],
+    ]
+    assert json.loads(project_continuity_input(continuity)) == payload
+
+
+def test_context_extractor_defers_duplicate_history_text_to_continuity():
+    gateway = _CapturingGateway()
+    input_data = ContextExtractorInput(
+        user_input="研究旧手稿。",
+        core_memory=_core_memory(),
+        current_state=_state(),
+        scene_summaries=[],
+        history_evidence=ContextHistoryEvidenceSet(hits=[ContextHistoryHit(
+            evidence_id="turn_10_p002",
+            source_type="scene_paragraph",
+            turn_index=10,
+            scene_id="scene_010",
+            paragraph_index=2,
+            text="旧手稿只有怪圈符号。",
+            context_after=[{
+                "evidence_id": "turn_10_p003",
+                "text": "文书末尾有签名。",
+            }],
+            matched_intent_ids=["i1"],
+            score=0.5,
+        )]),
+        continuity=ContinuityInput(
+            source_evidence=[ContinuitySourceParagraph(
+                evidence_id="turn_10_p002",
+                text="旧手稿只有怪圈符号。",
+            )],
+            items=[ContinuityInputItem(
+                id="c1",
+                kind="open_thread",
+                subject="旧手稿",
+                premise="导师手记与旧手稿符号一致。",
+                source_evidence_ids=["turn_10_p002"],
+            )],
+        ),
+        settings=SettingSelection(),
+        npc_profiles=[],
+    )
+
+    ContextExtractor(gateway).extract(input_data)
+
+    history = json.loads(gateway.calls[0]["input_data"]["confirmed_history_json"])
+    assert history[0]["evidence_id"] == "turn_10_p002"
+    assert history[0]["text_in_continuity"] is True
+    assert "text" not in history[0]
+    assert history[0]["context_after"] == [
+        {"evidence_id": "turn_10_p003", "text": "文书末尾有签名。"}
+    ]
+    continuity = json.loads(gateway.calls[0]["input_data"]["continuity_json"])
+    assert continuity["source_evidence"] == [
+        {"evidence_id": "turn_10_p002", "text": "旧手稿只有怪圈符号。"}
+    ]
 
 
 def test_setting_retriever_limits_and_never_exposes_hidden_facts():
@@ -478,7 +899,7 @@ def _context_extractor_input(*, evidence_ids=("e1",)):
         current_state=_state(),
         scene_summaries=[],
         history_evidence=ContextHistoryEvidenceSet(hits=hits),
-        continuity=ContinuitySelection(),
+        continuity=ContinuityInput(),
         settings=SettingSelection(),
         npc_profiles=[],
     )

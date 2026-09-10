@@ -365,6 +365,7 @@ deterministic ContextSearchPlan
 -> NPCProfileHistoryBridge (accepted field-change nodes only)
 -> high-recall ContextHistoryRetriever
 -> targeted ContinuityRetriever
+-> update-bound Continuity input projection
 -> deterministic SettingRetriever (at most 4 public World Setting views)
 -> one ContextExtractor LLM call
 -> at most 12 compact facts
@@ -376,6 +377,26 @@ avoid spending fact slots on content already explicit in Core Memory,
 CurrentState, or the current player input, while retaining the freedom to cite
 those sources when needed to express a historical relation, knowledge boundary,
 or contextual conflict.
+
+The `continuity_json` input is not the accumulated `current_state` snapshot.
+`ContextFactsService` keeps `ContinuityRetriever`'s item selection unchanged,
+then for each selected item fetches its most recent `update` lifecycle node
+(`ContinuityStore.latest_update_logs`, which never falls back to `create`,
+`resolve`, or `cancel`) and resolves those evidence IDs back to raw Confirmed
+History paragraphs (`ConfirmedHistoryStore.documents_by_ids`). The payload
+carries one de-duplicated `source_evidence` paragraph list plus per-item
+`source_evidence_ids`, so a prose-only description can bind to the item on the
+extractor side without re-reading a synthesized state. An item with no `update`
+contributes no state and no references. A reference is only admitted when the
+document is scene prose, belongs to the update's own turn, and its current text
+still matches the hash recorded with the lifecycle log; an existing-but-rewritten
+paragraph is therefore rejected rather than silently re-read. Missing references
+emit a `continuity_source_missing` diagnostic and stale ones (wrong source type,
+wrong turn, or hash mismatch) emit `continuity_source_stale`; the stale
+transcript is never used as a fallback. The resolved paragraph IDs join the
+extractor's known evidence set,
+so facts may legally cite them even when direct retrieval or the Continuity
+bridge did not select them; they are not added to the history budget.
 
 Search intents use player input, trimmed and de-duplicated Action Parser
 retrieval topics, current location and participants, deterministic
@@ -500,6 +521,12 @@ the explicit JSON array `[]`. These compact payloads are built by the dedicated
 History, Continuity, and Setting projection functions in
 `app/domain/context_facts/views.py`; the full internal retrieval models remain
 unchanged for ranking, diagnostics, de-duplication, and evidence-ID validation.
+At final assembly the Confirmed History projection drops the `text` of any
+paragraph whose full prose is already in the Active Continuity `source_evidence`
+(matched by evidence ID, which stays a valid citation target) and marks it
+`text_in_continuity`; non-duplicate adjacent and supporting paragraphs are
+preserved. This is render-only: it never re-runs selection, scoring, or the
+budget, and never refills the freed space.
 For each eligible candidate the selector previews the exact payload that would
 result from admitting it. When a candidate does not fit, optional adjacent and
 supporting evidence are removed first. If the main evidence still does not fit

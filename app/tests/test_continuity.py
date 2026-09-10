@@ -253,6 +253,53 @@ def test_bridge_lifecycle_query_cost_is_constant_for_many_updates():
         ("create", 1),
     ]
 
+def test_latest_update_logs_returns_only_newest_update_per_item():
+    with open_continuity_store() as store:
+        for item_id in ("alpha", "beta"):
+            store.insert(_item(item_id))
+            store.add_lifecycle_log(
+                item_id=item_id,
+                operation="create",
+                turn_index=1,
+                state_delta=None,
+                reason="创建。",
+                evidence=[(f"{item_id}_create", "0" * 64)],
+            )
+        store.add_lifecycle_log(
+            item_id="alpha",
+            operation="update",
+            turn_index=3,
+            state_delta="第一次更新",
+            reason="更新。",
+            evidence=[("alpha_update_1", "0" * 64)],
+        )
+        store.add_lifecycle_log(
+            item_id="alpha",
+            operation="update",
+            turn_index=5,
+            state_delta="第二次更新",
+            reason="更新。",
+            evidence=[("alpha_update_2", "0" * 64)],
+        )
+        store.add_lifecycle_log(
+            item_id="beta",
+            operation="resolve",
+            turn_index=6,
+            state_delta=None,
+            reason="了结。",
+            evidence=[("beta_resolve", "0" * 64)],
+        )
+
+        logs = store.latest_update_logs(["alpha", "beta"])
+        assert store.latest_update_logs([]) == []
+
+    assert [(log.item_id, log.operation, log.turn_index) for log in logs] == [
+        ("alpha", "update", 5),
+    ]
+    assert [evidence.evidence_id for evidence in logs[0].evidence] == [
+        "alpha_update_2",
+    ]
+
 def test_service_rejects_unknown_evidence_and_rolls_back_all_operations():
     with open_continuity_store() as store:
         projection = ContinuityProjection.model_validate({"operations": [

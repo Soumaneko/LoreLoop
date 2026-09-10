@@ -601,6 +601,42 @@ class ContinuityStore:
         ).fetchall()
         return self._logs_from_rows(rows)
 
+    def latest_update_logs(
+        self,
+        item_ids: Iterable[str],
+    ) -> list[ContinuityLifecycleLog]:
+        """Latest ``update`` lifecycle node per item, with its evidence.
+
+        Deliberately excludes ``create``: Context Facts replaces an item's
+        accumulated ``current_state`` with the raw prose bound to the most
+        recent ``update`` that formed the current state, rather than borrowing
+        the bridge's create + latest skeleton (which would widen the paragraph
+        selection).
+        """
+        unique_ids = sorted(set(item_ids))
+        if not unique_ids:
+            return []
+        placeholders = ",".join("?" for _ in unique_ids)
+        rows = self._conn.execute(
+            f"""
+            SELECT logs.log_id, logs.item_id, logs.operation, logs.turn_index,
+                   logs.state_delta, logs.reason, logs.migration_created
+            FROM continuity_logs AS logs
+            WHERE logs.operation = 'update'
+              AND logs.item_id IN ({placeholders})
+              AND logs.log_id = (
+                  SELECT latest.log_id FROM continuity_logs AS latest
+                  WHERE latest.item_id = logs.item_id
+                    AND latest.operation = 'update'
+                  ORDER BY latest.turn_index DESC, latest.log_id DESC
+                  LIMIT 1
+              )
+            ORDER BY logs.turn_index, logs.log_id
+            """,
+            unique_ids,
+        ).fetchall()
+        return self._logs_from_rows(rows)
+
     def bridge_lifecycle_logs(
         self,
         item_ids: Iterable[str],

@@ -161,6 +161,16 @@ def extract_context_facts_node(state: GenerationState) -> GenerationState:
         extract_error = getattr(extractor, "last_error", None)
         extract_salvaged = bool(getattr(extractor, "last_salvaged", False))
 
+    for warning in result.continuity_warnings:
+        _diagnostics(state).warning(
+            source="context_continuity",
+            code=warning.code,
+            message=warning.message,
+            trace_id=state["trace_id"],
+            task="context_extract",
+            turn_index=state.get("next_turn_index") or state.get("turn_index"),
+        )
+
     with state["runtime_services"].stores.npc_profile as npc_store:
         context_fact_npc_profiles = select_profiles_by_context_facts(
             context_facts=result.context_facts,

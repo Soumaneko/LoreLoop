@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import re
 import sqlite3
+from collections.abc import Iterable
+
 from app.runtime.sqlite import ensure_schema_version, transaction
 
 from .schemas import HistoryDocument
@@ -168,6 +170,35 @@ class ConfirmedHistoryStore:
             (turn_index,),
         ).fetchall()
         return [self._row_to_document(row) for row in rows]
+
+    def documents_by_ids(
+        self,
+        document_ids: Iterable[str],
+    ) -> dict[str, HistoryDocument]:
+        """Fetch documents by ``document_id`` in bounded batches.
+
+        Used by Context Facts to resolve a continuity update's evidence IDs back
+        to the raw confirmed prose, without materializing the whole history.
+        """
+        unique_ids = sorted(set(document_ids))
+        if not unique_ids:
+            return {}
+        documents: dict[str, HistoryDocument] = {}
+        chunk_size = 500
+        for start in range(0, len(unique_ids), chunk_size):
+            chunk = unique_ids[start:start + chunk_size]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = self._conn.execute(
+                f"""
+                SELECT * FROM history_documents
+                WHERE document_id IN ({placeholders})
+                """,
+                chunk,
+            ).fetchall()
+            for row in rows:
+                document = self._row_to_document(row)
+                documents[document.document_id] = document
+        return documents
 
     def fts_search(self, term: str, *, limit: int = 100) -> dict[str, float]:
         clean = term.strip()

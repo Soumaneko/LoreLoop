@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.action.schemas import ActionRetrievalTopic, Anchor
 from app.domain.confirmed_history.schemas import HistorySource
-from app.domain.continuity import ContinuitySelection
+from app.domain.continuity import ContinuityKind, ContinuitySelection
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.npc_profile.field_history import NPCFieldHistoryName
@@ -316,6 +316,62 @@ class SettingSelection(BaseModel):
     active_count: int = Field(default=0, ge=0)
 
 
+class ContinuitySourceParagraph(BaseModel):
+    """One raw confirmed-history paragraph bound to a continuity update."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+
+
+class ContinuityInputItem(BaseModel):
+    """A selected continuity item projected for the Context Facts extractor.
+
+    The accumulated ``current_state`` transcript is deliberately absent: the
+    raw source paragraphs bound to the item's most recent update replace it, so
+    the extractor reads primary prose instead of a synthesized (and potentially
+    contaminated) state. ``source_evidence_ids`` reference the deduplicated
+    paragraphs carried by the enclosing :class:`ContinuityInput`; items with no
+    update carry no state and no paragraph references.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    kind: ContinuityKind
+    subject: str = Field(min_length=1)
+    premise: str = Field(min_length=1)
+    source_evidence_ids: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)
+    location: str | None = Field(default=None)
+    deadline: str | None = Field(default=None)
+
+
+class ContinuityInput(BaseModel):
+    """Continuity selection projected onto update-bound raw prose.
+
+    ``source_evidence`` is deduplicated by ``evidence_id`` across every item,
+    while each item keeps its own ordered references.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_evidence: list[ContinuitySourceParagraph] = Field(
+        default_factory=list
+    )
+    items: list[ContinuityInputItem] = Field(default_factory=list)
+
+
+class ContinuityInputWarning(BaseModel):
+    """A continuity paragraph that could not be resolved for the extractor."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+
+
 class ContextExtractorInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -324,7 +380,7 @@ class ContextExtractorInput(BaseModel):
     current_state: CurrentState
     scene_summaries: list[SceneSummary] = Field(default_factory=list)
     history_evidence: ContextHistoryEvidenceSet
-    continuity: ContinuitySelection
+    continuity: ContinuityInput
     settings: SettingSelection = Field(default_factory=SettingSelection)
     npc_profiles: list[NPCProfileDirectorView] = Field(default_factory=list)
 
@@ -350,3 +406,6 @@ class ContextFactsResult(BaseModel):
     continuity: ContinuitySelection
     settings: SettingSelection = Field(default_factory=SettingSelection)
     context_facts: ContextFactSet
+    continuity_warnings: list[ContinuityInputWarning] = Field(
+        default_factory=list
+    )
