@@ -61,11 +61,12 @@ class SelectionProposal(Generic[CandidateT]):
     route: Literal["direct", "relation"]
     channel_rank: int
     signal_rank: int
-    #: Recency tie-break that sorts before payload cost. Pure NPC field links
-    #: set this to ``current_turn_index - turn_index`` (0 = current, newer
-    #: first, never negative) so a recent node wins over an older one without
-    #: outranking the direct route; Continuity, mixed and direct proposals keep
-    #: 0 so their relative ordering is unchanged.
+    #: Cross-intent recency tie-break that sorts before payload cost. Pure NPC
+    #: field links set this to ``current_turn_index - turn_index`` (0 = current,
+    #: newer first, never negative) so a recent node wins over an older one
+    #: across intents without outranking the direct route; Continuity, mixed and
+    #: direct proposals keep 0. Relation channel ordering additionally blends the
+    #: bounded turn-distance bonus into ``channel_rank`` (issue 05).
     recency_rank: int = 0
     #: For relation proposals: the exact evidence document whose attribution
     #: this proposal carries (source-scoped, pre-cluster). ``None`` for direct.
@@ -464,11 +465,11 @@ def select_diverse_candidates(
             marginal_cost_band = marginal_chars // 128
             # Shared key shape for every route.  Element 6 is the quality
             # discriminator: for relation proposals it is channel_rank (the
-            # per-intent node-evidence support order), so within a triggered
-            # unit quality precedes trigger tier, recency and payload cost
-            # (issue 16).  Direct proposals keep a constant 0 there so their
-            # categorical tier (signal_rank) stays the deciding feature and
-            # the SPEC direct-tier semantics are untouched.
+            # per-intent node-evidence support order already blended with the
+            # bounded turn-distance bonus), so within a triggered unit quality
+            # precedes trigger tier and payload cost.  Direct proposals keep a
+            # constant 0 there so their categorical tier (signal_rank) stays the
+            # deciding feature and the SPEC direct-tier semantics are untouched.
             quality_tie_rank = (
                 0
                 if proposal.route == "direct"

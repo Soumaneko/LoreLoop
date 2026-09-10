@@ -344,3 +344,82 @@ def test_context_facts_service_wires_forward_bridge_into_history_retrieval():
     assert result.history_evidence.matched_active_continuities == 1
     assert result.history_evidence.matched_archived_continuities == 0
     assert result.history_evidence.valid_relation_links == 1
+
+
+def test_relation_recency_bonus_flips_near_equal_support(monkeypatch):
+    old_text = (
+        "案角那卷旧残卷的墨迹已经褪成灰褐，边角脆裂如同深秋的枯叶，"
+        "许多字迹都难以辨认，只有少数几行仍隐约可读，纸面上还留着前人"
+        "不经意间压出的折痕，窗外的风一吹便簌簌作响，尘埃在斜光里缓缓浮动。"
+    )
+    new_text = (
+        "货运登记表的纸面还带着新墨未干的湿气，落款清晰可辨，边栏没有"
+        "折损，各项数目与印签也一一对齐，抄录者的笔迹工整而克制，页脚"
+        "还压着半枚尚未干透的印章，边角也平整如新。"
+    )
+    # One changed character breaks two bigrams, so the older node keeps a
+    # slightly higher support score than the newer one on raw relevance.
+    new_basis = new_text.replace("清晰", "清昕")
+
+    with open_confirmed_history_store() as history_store:
+        history_store.upsert_turn(
+            scene_id="scene_004",
+            turn_index=4,
+            user_input="",
+            scene_text=old_text,
+        )
+        history_store.upsert_turn(
+            scene_id="scene_013",
+            turn_index=13,
+            user_input="",
+            scene_text=new_text,
+        )
+        links = [
+            ContinuityHistoryLink(
+                continuity_id="old",
+                continuity_status="active",
+                operation="update",
+                evidence_id="turn_4_p001",
+                evidence_hash=_hash(old_text),
+                triggering_intent_ids=["explicit_npc"],
+                match_reasons=["exact_entity_match"],
+                evidence_position=0,
+                evidence_basis_primary=old_text,
+                basis_complete=True,
+            ),
+            ContinuityHistoryLink(
+                continuity_id="new",
+                continuity_status="active",
+                operation="update",
+                evidence_id="turn_13_p001",
+                evidence_hash=_hash(new_text),
+                triggering_intent_ids=["explicit_npc"],
+                match_reasons=["exact_entity_match"],
+                evidence_position=0,
+                evidence_basis_primary=new_basis,
+                basis_complete=True,
+            ),
+        ]
+
+        import app.domain.context_facts.retriever as retriever_module
+
+        def run() -> list[str]:
+            return [
+                hit.evidence_id
+                for hit in ContextHistoryRetriever(
+                    history_store,
+                    diversity_policy=HistoryDiversityPolicy(max_hits=1),
+                ).retrieve(
+                    _explicit_entity_plan(),
+                    current_turn_index=14,
+                    continuity_links=links,
+                ).hits
+            ]
+
+        monkeypatch.setattr(retriever_module, "TIME_BONUS_EPSILON", 0.0)
+        without_bonus = run()
+        monkeypatch.setattr(retriever_module, "TIME_BONUS_EPSILON", 0.10)
+        with_bonus = run()
+
+    assert without_bonus == ["turn_4_p001"]
+    assert with_bonus == ["turn_13_p001"]

@@ -914,3 +914,15 @@ def test_context_extractor_provider_failure_propagates():
     extractor = ContextExtractor(FailingGateway())
     with pytest.raises(LLMProviderError):
         extractor.extract(_context_extractor_input())
+
+
+def test_recency_factor_is_monotonic_bounded_and_non_penalizing():
+    from app.domain.context_facts.retriever import _recency_factor
+
+    values = [_recency_factor(age) for age in range(0, 60)]
+    assert values[0] == 1.0
+    assert all(0.0 < value <= 1.0 for value in values)
+    assert values == sorted(values, reverse=True)
+    # Older ages approach but never reach zero; negative ages clamp to current.
+    assert _recency_factor(-5) == _recency_factor(0)
+    assert _recency_factor(0) > _recency_factor(1000) > 0.0

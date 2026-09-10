@@ -499,11 +499,18 @@ relation cap. The cap applies only when a relation proposal admits a new main
 document; augmentations on already selected documents never consume it. A shared
 relation document occupies one global seat but counts against every linked
 owner; direct-owned documents are never blocked by this owner cap. Within a
-relation channel, proposals rank by node-evidence support quality first, then
-by categorical signal tier and owner-local rank; recency (an age-based
-`max(0, current_turn - turn)` value for pure-NPC nodes) is only a tie-break
-after equal support quality, so a newer weak node never outranks an older
-strong one.
+relation channel, proposals rank by a bounded blend of node-evidence support
+quality and turn distance:
+`quality + TIME_BONUS_EPSILON * recency(age)`, where
+`age = max(0, current_turn - document.turn_index)` and
+`recency(age) = 1 / (1 + age / 8)` is monotonic and bounded in `(0, 1]`.
+`TIME_BONUS_EPSILON` (currently 0.10) is the largest support-quality gap turn
+distance may overcome: a near-equal newer node can win, while a clearly stronger
+older node still does. Older prose is never penalized (the bonus is
+non-negative), and the bonus is an in-retrieval candidate term, never a
+post-selection reordering, budget change, or re-retrieval. Pure-NPC nodes keep
+the additional cross-intent `recency_rank` tie-break; direct candidates add the
+same bounded bonus to their relevance score.
 Relationship ownership and coverage require at least two entities from that
 relationship intent to match the document directly; a document mentioning only
 one NPC cannot use the automatically generated player/NPC relationship intent

@@ -1,11 +1,11 @@
 {
   "benchmark_version": 3,
-  "cases_sha256": "8bbd085acb3fd6070ca44de6f4f70a1f056fc22fa172b114b8edcc3e15182110",
+  "cases_sha256": "e1eb898c5edcfbb44ef52b4d293883c97ed3a914611d3065358aa9f4a1ecadf3",
   "aggregate": {
-    "must_recalled": 41,
-    "must_total": 41,
-    "weighted_recalled": 132,
-    "weighted_total": 134,
+    "must_recalled": 42,
+    "must_total": 42,
+    "weighted_recalled": 135,
+    "weighted_total": 137,
     "forbidden_visible_count": 0,
     "forbidden_main_visible_count": 0,
     "duplicate_visible_count": 3,
@@ -19,7 +19,7 @@
     "matched_npc_profiles": 11,
     "npc_relation_candidates": 15,
     "npc_relation_hits_added": 11,
-    "payload_chars": 10000
+    "payload_chars": 10202
   },
   "cases": [
     {
@@ -2054,6 +2054,59 @@
       "npc_bridge_status": "wired",
       "npc_fixture_profiles": 1,
       "npc_fixture_logs": 0
+    },
+    {
+      "case_id": "recency_newer_relation_node",
+      "selected_main_ids": [
+        "turn_13_p001"
+      ],
+      "visible_evidence_ids": [
+        "turn_13_p001"
+      ],
+      "recalled_groups": [
+        "recent_ship"
+      ],
+      "missed_groups": [],
+      "must_recalled": 1,
+      "must_total": 1,
+      "weighted_recalled": 3,
+      "weighted_total": 3,
+      "forbidden_visible_ids": [],
+      "forbidden_main_visible_ids": [],
+      "duplicate_visible_count": 0,
+      "payload_chars": 202,
+      "route_counts": {
+        "direct_only": 0,
+        "relation_only": 1,
+        "dual": 0
+      },
+      "continuity_contributions": {
+        "recent_ledger": 1
+      },
+      "turn_contributions": {
+        "13": 1
+      },
+      "relation_candidates_considered": 2,
+      "relation_hits_added": 1,
+      "stale_relation_links": 0,
+      "invalid_relation_links": 0,
+      "degraded_relation_links": 0,
+      "matched_npc_profiles": 0,
+      "npc_valid_links": 0,
+      "npc_stale_links": 0,
+      "npc_invalid_links": 0,
+      "npc_degraded_links": 0,
+      "npc_relation_candidates": 0,
+      "npc_relation_hits_added": 0,
+      "direct_proposals_considered": 0,
+      "relation_proposals_considered": 2,
+      "relation_zero_stripped": 0,
+      "relation_eligible_strong": 2,
+      "relation_eligible_degraded": 0,
+      "documents_selected_by_direct": 0,
+      "documents_selected_by_relation": 1,
+      "relation_augmented_on_selected_document": 0,
+      "invariant_violations": []
     }
   ]
 }

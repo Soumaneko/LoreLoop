@@ -41,6 +41,17 @@ from .schemas import (
 
 DIRECT_TOPIC_GATE = 0.2
 
+#: Bounded turn-distance bonus. ``recency(age) = 1 / (1 + age / DECAY)`` is
+#: monotonic, bounded in ``(0, 1]``, and never penalizes older prose. The bonus
+#: is scaled by ``TIME_BONUS_EPSILON``, which is the largest relevance-score gap
+#: turn distance may overcome: a wider gap can never be reversed by recency.
+RECENCY_DECAY_TURNS = 8.0
+TIME_BONUS_EPSILON = 0.10
+
+
+def _recency_factor(age: int) -> float:
+    return 1.0 / (1.0 + max(0, age) / RECENCY_DECAY_TURNS)
+
 
 @dataclass
 class _Candidate:
@@ -207,10 +218,18 @@ class ContextHistoryRetriever:
                 if intent.intent_id in pair[1].served_intent_ids
             ]
             channel.sort(key=lambda pair: (
-                -pair[1].intent_quality.get(intent.intent_id, 0.0),
-                # Recency is the quality tie-break: equal-quality nodes rank
-                # newest first (issue 16); link arrival order only resolves
-                # remaining determinism.
+                -(
+                    pair[1].intent_quality.get(intent.intent_id, 0.0)
+                    + TIME_BONUS_EPSILON * _recency_factor(
+                        max(
+                            0,
+                            current_turn_index
+                            - pair[0].document.turn_index,
+                        )
+                    )
+                ),
+                # Equal quality + recency (same turn) keeps newest-first
+                # determinism; link arrival order resolves the rest.
                 -pair[0].document.turn_index,
                 pair[1].intent_first_order.get(
                     intent.intent_id,
@@ -468,24 +487,22 @@ class ContextHistoryRetriever:
                 else 0.0
             )
             age = max(0, current_turn_index - document.turn_index)
-            recency_score = 1.0 / (1.0 + age / 8.0)
             if intent.entities:
-                score = (
+                relevance = (
                     0.56 * entity_score
                     + 0.22 * topic_score
                     + (0.10 if has_fts else 0.0)
-                    + 0.12 * recency_score
                 )
             else:
-                score = (
+                relevance = (
                     0.72 * topic_score
                     + (0.14 if has_fts else 0.0)
-                    + 0.14 * recency_score
                 )
             if intent.focus == "relationship" and len(direct_matched_entities) >= 2:
-                score += 0.12
+                relevance += 0.12
             if document.source_type == "player_input":
-                score *= 0.72
+                relevance *= 0.72
+            score = relevance + TIME_BONUS_EPSILON * _recency_factor(age)
 
             scored.append(_Candidate(
                 document=document,
