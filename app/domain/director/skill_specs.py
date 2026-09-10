@@ -58,12 +58,29 @@ class PresentEventArguments(BaseModel):
             "必须指定要呈现给 Composer 的 hook_id；不指定即视为非法请求。"
         ),
     )
+    actors: list[str] = Field(
+        default_factory=list,
+        max_length=6,
+        description=(
+            "可选：本轮随该演出安排出场的 NPC 姓名。用于把 hidden 事件相关的"
+            "已有 NPC 纳入本轮'安排参与人物'，供 Composer 补齐档案、确认端识别身份；"
+            "省略则本次演出不额外安排人物。"
+        ),
+    )
 
 
 class IntrudeEngagedEventArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(min_length=1)
+    actors: list[str] = Field(
+        max_length=6,
+        description=(
+            "必填：本轮让事件中哪些具名演员出场；空数组 [] 明确表示不安排 NPC。"
+            "只列出的演员进入本轮'安排参与人物'，供 Composer 补齐档案、确认端识别身份；"
+            "未列出的演员不会自动入场。空白姓名或不在事件演员表内的姓名会拒绝整个请求。"
+        ),
+    )
 
 
 class KnownAbilitySpec(BaseModel):
@@ -258,6 +275,7 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
             "主角通过传闻、异象、信件、远程通讯或现场遗留痕迹，间接接触到了与该事件相关的信息。"
             "必须用 arguments.hook_id 选择本轮要呈现的 Hook；"
             "不指定 hook_id 时不呈现任何内容。必须在请求级 guidance 中说明具体表现方式。"
+            "可用可选的 arguments.actors 声明本轮随该演出安排出场的已有 NPC 姓名。"
             "注意：engaged 事件无需也不允许用本技能"
             "重复引入；本技能仅限 hidden 且本轮未被玩家直接行动触及的事件。"
         ),
@@ -270,6 +288,7 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         description=(
             "强行引入某个 engaged 事件。"
             "本 skill 用于把事件方正在做的事，强行以直接影响的形式落成于主角，让主角从未接触状态转变为接触状态。"
+            "必须提供 arguments.actors：列出本轮出场的事件演员姓名，或用 [] 明确不安排 NPC；未列出的演员不会自动入场。"
             "严禁以‘事件方尚未直接影响主角’为理由拒绝调用，如果类似语句出现在reasoning中，视为非法输出"
             "此 skill 是 engaged 事件开始作用于主角的唯一途径，因此只要时机合适，你必须进行事件引入。"
         ),

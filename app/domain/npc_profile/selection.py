@@ -130,31 +130,62 @@ def select_profiles_by_active_events(
     Director draft id (already-introduced NPC); name-only actors fall back to
     name/alias matching.
     """
+    actors = (
+        actor
+        for event in events
+        if event.is_active()
+        for actor in event.actors
+    )
+    return resolve_actor_profiles(actors, npc_store, limit=limit)
+
+
+def resolve_actor_profiles(
+    actors,
+    npc_store: NPCProfileStore,
+    limit: int = 20,
+) -> list[NPCProfile]:
+    """Resolve a flat list of Director actor refs to active NPC profiles.
+
+    Accepts ``DirectorActorRef`` objects or their ``model_dump`` dicts (the
+    shape carried by ``DirectorEvent.semantic_view()``), so scheduling output
+    that only carries the semantic view can still be resolved to profiles.
+    """
     selected: list[NPCProfile] = []
     seen: set[str] = set()
-    for event in events:
-        if not event.is_active():
+    for actor in actors:
+        profile = _resolve_actor_profile(actor, npc_store)
+        if profile is None or profile.npc_id in seen:
             continue
-        for actor in event.actors:
-            profile = _resolve_actor_profile(actor, npc_store)
-            if profile is None or profile.npc_id in seen:
-                continue
-            selected.append(profile)
-            seen.add(profile.npc_id)
-            if len(selected) >= limit:
-                return selected
+        selected.append(profile)
+        seen.add(profile.npc_id)
+        if len(selected) >= limit:
+            return selected
     return selected
 
 
 def _resolve_actor_profile(actor, npc_store: NPCProfileStore) -> NPCProfile | None:
-    ref = actor.ref
-    if ref is not None and ref.kind == "npc":
-        profile = npc_store.get_by_id(ref.resource_id)
-        if profile is None:
-            profile = npc_store.get_by_source_director_npc_id(ref.resource_id)
-        if profile is not None:
-            return profile
-    return npc_store.get_by_name(actor.name)
+    if isinstance(actor, dict):
+        ref = actor.get("ref") or None
+        name = actor.get("name") or ""
+    else:
+        ref = actor.ref
+        name = actor.name
+    if ref is not None:
+        if isinstance(ref, dict):
+            ref_kind = ref.get("kind")
+            ref_id = ref.get("resource_id") or ""
+        else:
+            ref_kind = ref.kind
+            ref_id = ref.resource_id
+        if ref_kind == "npc":
+            profile = npc_store.get_by_id(ref_id)
+            if profile is None:
+                profile = npc_store.get_by_source_director_npc_id(ref_id)
+            if profile is not None:
+                return profile
+    if not name:
+        return None
+    return npc_store.get_by_name(name)
 
 
 def merge_profile_selections(

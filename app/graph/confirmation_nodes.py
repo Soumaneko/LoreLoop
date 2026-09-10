@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from app.core.diagnostics import diagnostics_from_state as _diagnostics
 from app.core.llm.errors import (
@@ -19,6 +20,7 @@ from app.domain.director_event.workflows import (
     review_engaged_events_workflow,
     review_hidden_events_workflow,
 )
+from app.domain.director.scheduled import collect_scheduled_npcs
 from app.domain.npc_profile.workflows import (
     apply_confirmed_npc_turn,
 )
@@ -96,30 +98,32 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
     }
 
 
-def _extract_staged_npc_materials(pending) -> list[dict[str, Any]]:
+def _extract_staged_npc_materials(
+    pending,
+    npc_store,
+) -> list[dict[str, Any]]:
+    """Identity clues for the NPCs the Director arranged into this turn.
+
+    Uses the same ``collect_scheduled_npcs`` fold as Composer, so engaged-event
+    actors, ``present_event`` actors, introduced drafts, and upgraded profiles
+    all become one uniform clue list. That lets scene-fact extraction bind a
+    prose-only description (e.g. "灰衣人") to the true NPC without leaking the
+    name into prose.
+    """
     stage = getattr(pending, "director_stage", None)
     if stage is None or not getattr(stage, "materials", None):
         return []
-    staged: list[dict[str, Any]] = []
-    for mat in stage.materials:
-        if mat.kind != "npc":
-            continue
-        payload = mat.payload or {}
-        source = payload.get("source")
-        if source not in {"director_npc", "spontaneous"}:
-            continue
-        name = payload.get("name")
-        if not name:
-            continue
-        staged.append({
-            "name": name,
-            "role": payload.get("role") or "",
-            "appearance": payload.get("appearance") or "",
-            "personality_trait": payload.get("personality_trait") or "",
-            "guidance": mat.guidance or "",
-            "source": source,
-        })
-    return staged
+    return [
+        {
+            "name": entry.name,
+            "role": entry.role or "",
+            "appearance": entry.appearance or "",
+            "personality_trait": entry.personality_trait or "",
+            "guidance": entry.guidance or "",
+            "source": entry.source,
+        }
+        for entry in collect_scheduled_npcs(stage.materials, npc_store)
+    ]
 
 
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
@@ -128,7 +132,8 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
     cache = ConfirmationCache(state["cache"])
     core_memory = state["core_memory"]
     pending = state.get("pending") or getattr(pipeline_input, "pending", None)
-    staged_npcs = _extract_staged_npc_materials(pending)
+    with state["runtime_services"].stores.npc_profile as npc_store:
+        staged_npcs = _extract_staged_npc_materials(pending, npc_store)
     scene_paragraphs = [
         SceneParagraphInput(
             document_id=document.document_id,

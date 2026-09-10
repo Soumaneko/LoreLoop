@@ -284,6 +284,9 @@ def _present_event(
             "kind": hook.kind,
             "content": hook.content,
         },
+        "actors": [
+            name.strip() for name in args.actors if name.strip()
+        ],
     }
     return DirectorStageMaterial(
         kind="event",
@@ -387,8 +390,35 @@ def _intrude_engaged_event(
     event = _get_engaged_event(
         store, args.event_id, touched_event_ids=touched_event_ids
     )
+    view = event.semantic_view()
+    # Event actors are never equal to this turn's participants. The Director
+    # must name which of the event's cast join the turn (arguments.actors is
+    # required, with [] meaning no NPCs), so only explicitly named actors enter the arranged
+    # participants that Composer (profile supplementation) and the confirmation
+    # identity clues read; unlisted cast never auto-enters.
+    wanted = {normalize_compact_key(name) for name in args.actors}
+    if "" in wanted:
+        raise ValueError("intrude_engaged_event actors must contain non-blank names")
+    available = {
+        normalize_compact_key(actor["name"])
+        for actor in view["actors"]
+    }
+    unknown = [
+        name for name in args.actors
+        if normalize_compact_key(name) not in available
+    ]
+    if unknown:
+        raise ValueError(
+            f"intrude_engaged_event actors not in event cast: {unknown!r}; "
+            f"use event actor names: {[actor['name'] for actor in view['actors']]!r}"
+        )
+    view["actors"] = [
+        actor
+        for actor in view["actors"]
+        if normalize_compact_key(actor.get("name") or "") in wanted
+    ]
     payload = {
-        **event.semantic_view(),
+        **view,
         "stage": "engaged",
     }
     return DirectorStageMaterial(

@@ -204,9 +204,20 @@ After Context Facts are available, profile selection is expanded without loading
 the full profile store:
 
 - Composer receives the round-robin, deduplicated union of initial action
-  profiles and profiles named in Context Facts, at most 20;
-- Director receives those two sources plus profiles linked to active Director
+  profiles, profiles named in Context Facts, and this turn's Director-arranged
+  participant profiles, at most 20;
+- Director receives those sources plus profiles linked to active Director
   Events, at most 20.
+
+The Director-arranged participant list is folded by one programmatic helper
+(`collect_scheduled_npcs`) over every admitted `DirectorStageResult.material`,
+treating all skills uniformly: `intrude_engaged_event` and `present_event`
+contribute their actors, `introduce_npc` contributes its draft/spontaneous
+card, and `upgrade_disclosure` contributes the promoted profile. Composer uses
+the entries that already resolve to profiles to obtain prior-appearance anchors
+(role, appearance, `last_scene_summary`), so a re-introduced NPC stays
+identifiable without a fresh retrieval and without forcing a true-name reveal
+in prose.
 
 Every non-Director consumer receives `NPCProfile.disclosure_view()`, so fields
 above the profile's persistent disclosure level are physically absent.
@@ -242,7 +253,11 @@ Confirmation always projects the final accepted scene text, including any player
 edit. If prepared Director NPCs or disclosure upgrades were staged by the
 confirmed variant, they are promoted/applied and projected into the confirmation
 context before Scene Facts are extracted. They are protected by the confirmation
-snapshot and retry cache.
+snapshot and retry cache. The same `collect_scheduled_npcs` fold over the
+confirmed variant's materials supplies Scene Facts with the turn's arranged
+participants as identity clues: a prose-only description (e.g. "灰衣人") can
+bind to the true NPC on the confirmation side while the name never has to
+appear in the player-facing prose.
 
 The confirmation retry cache (`ConfirmationCache`) isolates data into two
 distinct invalidation domains:
@@ -1096,8 +1111,17 @@ profile services retain ownership of their schemas and content generation.
 
 Generation exposes four read-only skills:
 
-- `present_event(event_id, hook_id)` for one unconsumed hidden-event Hook;
-- `intrude_engaged_event(event_id)`, at most once per decision batch;
+- `present_event(event_id, hook_id, actors=[...])` for one unconsumed
+  hidden-event Hook; `actors` is optional and declares existing NPCs that this
+  presentation arranges into the turn;
+- `intrude_engaged_event(event_id, actors=[...])`, at most once per decision
+  batch; `actors` is required and names which of the event's cast join the
+  turn's arranged participants; an explicit `[]` admits the event without
+  scheduling any NPCs. Event actors are never equal to
+  this turn's participants: unlisted actors do not auto-enter, and the
+  selection cannot be omitted. Blank names or names that do not match the
+  event cast after normalization reject the entire request before producing
+  a stage material; unknown-name errors include the available cast names;
 - `introduce_npc(npc_id=None, spontaneous=None, view_mode="face_to_face")`: accepts either a prepared Director NPC draft ID (`npc_id`) under Draft-First policy, or a lightweight JIT spontaneous character card (`spontaneous`) when no draft matches; spontaneous creation strictly requires `view_mode` of `face_to_face`;
 - `upgrade_disclosure(npc_id, new_disclosure_level)` for an existing profile.
 

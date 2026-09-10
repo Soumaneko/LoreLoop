@@ -43,11 +43,13 @@ from app.domain.action_judgment.views import project_action_judgments
 from app.runtime.serialization import model_data
 from app.domain.director.generation import DirectorGenerationExecutor
 from app.domain.director.log import assemble_director_log_entry
+from app.domain.director.scheduled import collect_scheduled_npcs
 from app.domain.npc_profile.selection import (
     merge_profile_selections,
     select_profiles_by_active_events,
     select_profiles_by_context_facts,
 )
+from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.workflows import gather_npc_profiles_from_state_and_anchors
 
 from .generation_helpers import assemble_narrative_context, gateway_for
@@ -546,10 +548,6 @@ def _compose_with_context(
         ],
     }
 def compose_narrative_node(state: GenerationState) -> GenerationState:
-    composer_profiles = merge_profile_selections(
-        state.get("action_npc_profiles", []),
-        state.get("context_fact_npc_profiles") or [],
-    )
     touched_event_ids = set(state.get("touched_event_candidates", []))
     with state["runtime_services"].stores.director_event as event_store:
         engaged_events = [
@@ -570,6 +568,28 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
         for event in engaged_events
         if event.event_id in intrude_ids
     ]
+    # The Director's arranged participants (engaged-event actors, present_event
+    # actors, introduced drafts, upgraded profiles) are folded into one list by
+    # the same helper the confirmation pipeline uses; profiles that already
+    # exist give Composer the prior-appearance anchors it needs without a new
+    # retrieval and without forcing a true-name reveal in prose.
+    scheduled_profiles: list[NPCProfile] = []
+    if director_stage is not None and director_stage.materials:
+        with state["runtime_services"].stores.npc_profile as npc_store:
+            scheduled_npcs = collect_scheduled_npcs(
+                director_stage.materials, npc_store
+            )
+            scheduled_profiles = [
+                profile
+                for entry in scheduled_npcs
+                if entry.npc_id
+                and (profile := npc_store.get_by_id(entry.npc_id)) is not None
+            ]
+    composer_profiles = merge_profile_selections(
+        state.get("action_npc_profiles", []),
+        state.get("context_fact_npc_profiles") or [],
+        scheduled_profiles,
+    )
     context = assemble_narrative_context(
         user_input=state["user_input"],
         current_state=state["current_state"],

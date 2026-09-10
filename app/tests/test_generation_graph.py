@@ -432,6 +432,149 @@ def test_composer_npc_profiles_respect_disclosure_levels(
     assert by_name["顾晚棠"].hidden_secret == "暗中资助商会。"
 
 
+def test_composer_receives_engaged_event_actor_profiles(
+    tmp_path,
+    monkeypatch,
+):
+    from app.domain.context_facts.schemas import ContextFactSet
+    from app.domain.core_memory.schemas import CoreMemory
+    from app.domain.current_state import (
+        CurrentState,
+        PlayerState,
+        ResourcesState,
+        SceneState,
+    )
+    from app.domain.director import DirectorStageMaterial, DirectorStageResult
+    from app.domain.director_event.schemas import (
+        DirectorActorRef,
+        DirectorEvent,
+        DirectorResourceRef,
+    )
+    from app.domain.director_event.schemas import WorldClock
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.uow import CampaignUnitOfWork
+
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    samuel = NPCProfile(
+        name="萨缪尔·灰潮",
+        role="走私联络人",
+        appearance="深灰色旧风衣，袖口褪色铜徽章。",
+        last_scene_summary="在马车旁取走油布包裹。",
+        last_scene_turn=2,
+    )
+    trevor = NPCProfile(
+        name="特雷弗·石巷",
+        role="跑腿小贼",
+        appearance="瘦高，袖口有墨渍。",
+        last_scene_summary="在客栈门口被催促离场。",
+        last_scene_turn=6,
+    )
+    with stores.npc_profile as store:
+        store.upsert(samuel)
+        store.upsert(trevor)
+    event = DirectorEvent(
+        role="ambient",
+        title="走私暗流",
+        subject="走私网络退潮",
+        intent="把货物送入市场。",
+        method="利用特许印签。",
+        macro_intent="扩大地下流通。",
+        deadline_clock=WorldClock(),
+        created_turn=1,
+        updated_turn=1,
+        stage="engaged",
+        actors=[
+            DirectorActorRef(
+                name=samuel.name,
+                ref=DirectorResourceRef(
+                    kind="npc", resource_id=samuel.npc_id
+                ),
+            )
+        ],
+    )
+    with stores.director_event as event_store:
+        event_store.save(event)
+
+    captured = {}
+    streamed = []
+
+    class _FakeComposition:
+        scene_reasoning = "r"
+        scene_text = "t"
+        next_action_directions = []
+
+        def to_outline(self):
+            return SimpleNamespace()
+
+        def to_scene_result(self):
+            return SimpleNamespace()
+
+    class _FakeComposer:
+        def __init__(self, gateway):
+            self.gateway = gateway
+
+        def compose(self, context, **kwargs):
+            captured["context"] = context
+            return _FakeComposition()
+
+    monkeypatch.setattr(generation_nodes, "NarrativeComposerAgent", _FakeComposer)
+    monkeypatch.setattr(generation_nodes, "build_entity_retrieval_anchors", lambda _o: [])
+    monkeypatch.setattr(generation_nodes, "get_stream_writer", lambda: streamed.append)
+
+    state = {
+        "runtime_services": SimpleNamespace(
+            stores=stores,
+            gateway=lambda **kwargs: object(),
+        ),
+        "user_input": "观察门口。",
+        "core_memory": CoreMemory(items=[]),
+        "current_state": CurrentState(
+            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
+            player=PlayerState(name="阿尔文"),
+            resources=ResourcesState(inventory=[]),
+        ),
+        "action_judgments": [],
+        "context_facts": ContextFactSet(turn_focus="围绕码头。", facts=[]),
+        "trace_id": "trace-gen",
+        "short_term_memory": SimpleNamespace(recent_scenes=[]),
+        "director_stage": DirectorStageResult(
+            reasoning="安排萨缪尔介入。",
+            materials=[
+                DirectorStageMaterial(
+                    kind="engaged_event",
+                    resource_id=event.event_id,
+                    guidance="以萨缪尔推动事件。",
+                    payload=event.semantic_view(),
+                ),
+                DirectorStageMaterial(
+                    kind="event",
+                    resource_id="event_present",
+                    guidance="通过传闻带出特雷弗。",
+                    payload={
+                        "event_id": "event_present",
+                        "title": "传闻",
+                        "stage": "hidden",
+                        "hook": {},
+                        "actors": [trevor.name],
+                    },
+                ),
+            ],
+        ),
+    }
+
+    generation_nodes.compose_narrative_node(state)
+
+    by_name = {
+        profile.name: profile
+        for profile in captured["context"].npc_profiles
+    }
+    assert by_name["萨缪尔·灰潮"].last_scene_summary == "在马车旁取走油布包裹。"
+    assert by_name["萨缪尔·灰潮"].last_scene_turn == 2
+    assert by_name["特雷弗·石巷"].last_scene_summary == "在客栈门口被催促离场。"
+    assert by_name["特雷弗·石巷"].last_scene_turn == 6
+
+
 
 
 

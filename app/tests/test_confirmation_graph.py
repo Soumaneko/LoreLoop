@@ -493,3 +493,136 @@ def test_staged_director_npc_promotes_without_preadding_participants(
     assert saved.status == "introduced"
     with services.stores.npc_profile as store:
         assert [profile.name for profile in store.list_all()] == ["林澈"]
+
+
+def test_staged_npc_materials_fold_every_director_skill(tmp_path):
+    from app.domain.director import DirectorStageMaterial, DirectorStageResult
+    from app.domain.director_event.schemas import (
+        DirectorActorRef,
+        DirectorEvent,
+        DirectorResourceRef,
+        WorldClock,
+    )
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.graph.confirmation_nodes import _extract_staged_npc_materials
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.session import PendingTurn
+    from app.runtime.uow import CampaignUnitOfWork
+
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    samuel = NPCProfile(
+        name="萨缪尔·灰潮",
+        role="走私联络人",
+        appearance="深灰色旧风衣，袖口褪色铜徽章。",
+    )
+    trevor = NPCProfile(name="特雷弗·石巷", role="跑腿小贼", appearance="瘦高。")
+    edgar = NPCProfile(name="埃德加·莫尔顿", role="药草师", appearance="深灰短袍。")
+    with stores.npc_profile as store:
+        store.upsert(samuel)
+        store.upsert(trevor)
+        store.upsert(edgar)
+    event = DirectorEvent(
+        role="ambient",
+        title="走私暗流",
+        subject="走私网络退潮",
+        intent="把货物送入市场。",
+        method="利用特许印签。",
+        macro_intent="扩大地下流通。",
+        deadline_clock=WorldClock(),
+        created_turn=1,
+        updated_turn=1,
+        stage="engaged",
+        actors=[
+            DirectorActorRef(
+                name=samuel.name,
+                ref=DirectorResourceRef(
+                    kind="npc", resource_id=samuel.npc_id
+                ),
+            )
+        ],
+    )
+    pending = PendingTurn(
+        turn_id="turn-mix",
+        group_id="turn-mix",
+        version_index=1,
+        user_input="观察门口。",
+        difficulty="困难",
+        max_chars=1500,
+        experience_mode="creator",
+        state_before=CurrentState(
+            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
+            player=PlayerState(name="阿尔文"),
+        ),
+        context=SimpleNamespace(action_judgments=[]),
+        outline=SimpleNamespace(),
+        scene_result=SceneWriterResult(scene_text="灰衣人朝门口走来。"),
+        director_stage=DirectorStageResult(
+            reasoning="调度。",
+            materials=[
+                DirectorStageMaterial(
+                    kind="engaged_event",
+                    resource_id=event.event_id,
+                    guidance="以萨缪尔推动事件。",
+                    payload=event.semantic_view(),
+                ),
+                DirectorStageMaterial(
+                    kind="event",
+                    resource_id="event_present",
+                    guidance="通过传闻带出特雷弗。",
+                    payload={
+                        "event_id": "event_present",
+                        "title": "传闻",
+                        "stage": "hidden",
+                        "hook": {},
+                        "actors": [trevor.name],
+                    },
+                ),
+                DirectorStageMaterial(
+                    kind="npc",
+                    resource_id="director_npc_draft1",
+                    guidance="引入新角色。",
+                    payload={
+                        "source": "director_npc",
+                        "name": "柯岚·铁印",
+                        "role": "文书吏",
+                        "appearance": "灰制服。",
+                        "personality_trait": "谨慎",
+                    },
+                ),
+                DirectorStageMaterial(
+                    kind="npc",
+                    resource_id=edgar.npc_id,
+                    guidance="提升透露。",
+                    payload={
+                        "source": "npc_profile",
+                        "npc_id": edgar.npc_id,
+                        "disclosure_upgrade": True,
+                        "new_disclosure_level": "face_to_face",
+                        "name": edgar.name,
+                        "role": edgar.role,
+                        "appearance": edgar.appearance,
+                    },
+                ),
+            ],
+        ),
+    )
+
+    with stores.npc_profile as npc_store:
+        clues = _extract_staged_npc_materials(pending, npc_store)
+
+    by_name = {clue["name"]: clue for clue in clues}
+    assert set(by_name) == {
+        "萨缪尔·灰潮", "特雷弗·石巷", "柯岚·铁印", "埃德加·莫尔顿",
+    }
+    assert by_name["萨缪尔·灰潮"]["source"] == "intrude_engaged_event"
+    assert by_name["萨缪尔·灰潮"]["appearance"] == "深灰色旧风衣，袖口褪色铜徽章。"
+    assert by_name["萨缪尔·灰潮"]["guidance"] == "以萨缪尔推动事件。"
+    assert by_name["特雷弗·石巷"]["source"] == "present_event"
+    assert by_name["柯岚·铁印"]["source"] == "director_npc"
+    assert by_name["柯岚·铁印"]["role"] == "文书吏"
+    assert by_name["埃德加·莫尔顿"]["source"] == "upgrade_disclosure"
+
+    with stores.npc_profile as npc_store:
+        assert _extract_staged_npc_materials(
+            SimpleNamespace(director_stage=None), npc_store
+        ) == []
