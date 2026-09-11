@@ -1216,9 +1216,12 @@ Confirmation exposes three mutating skills:
 `create_event` is the only skill that creates an Event. Its `actors` list is a
 discriminated union: `source=existing` references an active Director NPC or NPC
 Profile by `npc_id`, while `source=new` carries the guidance used to create a new
-Director NPC. Existing and new actors may be mixed; there are at most six actors
-and at most three new actors. An empty list creates an environmental,
-institutional, or natural event without a concrete NPC cast.
+Director NPC. At least one real actor is required; an organization name cannot
+stand in for an actor and actor-less events are rejected before the Selector.
+Existing and new actors may be mixed, with at most six actors and at most three
+new actors. A rejected request is dropped with its concrete validation error fed
+back for the single retry, so the model can choose an existing NPC or request a
+new one rather than seeing a generic conflict message.
 The skill is registered only when no hidden or engaged Event exists and permits
 at most one request per confirmation batch. Other confirmation skills remain
 available while the Event slot is occupied.

@@ -111,6 +111,7 @@ def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
                 "matched_setting_id": "setting_known",
             },
         ],
+        "actors": [{"source": "existing", "npc_id": "npc_known"}],
     })
     assert [item.kind for item in validated.setting_requirements] == ["location"]
     assert validated.setting_requirements[0].matched_setting_id == "setting_known"
@@ -122,6 +123,7 @@ def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
                 {"kind": "lore", "guidance": "规则一。"},
                 {"kind": "item", "guidance": "规则二。"},
             ],
+            "actors": [{"source": "existing", "npc_id": "npc_known"}],
         })
 
     with pytest.raises(ValidationError):
@@ -131,7 +133,38 @@ def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
                 {"kind": "lore", "guidance": f"抽象规则 {index}"}
                 for index in range(5)
             ],
+            "actors": [{"source": "existing", "npc_id": "npc_known"}],
         })
+
+
+def test_create_event_requires_at_least_one_real_actor():
+    from app.domain.director.skill_specs import CreateEventArguments
+
+    base = {
+        "role": "arc",
+        "setting_requirements": [
+            {"kind": "location", "setting_description": "依托山道驿站。"},
+        ],
+    }
+    with pytest.raises(ValidationError, match="at least one real actor"):
+        CreateEventArguments.model_validate(base)
+    with pytest.raises(ValidationError, match="at least one real actor"):
+        CreateEventArguments.model_validate({**base, "actors": []})
+
+    existing = CreateEventArguments.model_validate({
+        **base,
+        "actors": [{"source": "existing", "npc_id": "npc_1"}],
+    })
+    assert existing.actors[0].source == "existing"
+
+    mixed = CreateEventArguments.model_validate({
+        **base,
+        "actors": [
+            {"source": "existing", "npc_id": "npc_1"},
+            {"source": "new", "guidance": "新人物。"},
+        ],
+    })
+    assert [actor.source for actor in mixed.actors] == ["existing", "new"]
 
 
 def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
@@ -158,6 +191,10 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
             "hidden_facts": ["地下仓道通往废弃河港。"],
         }
 
+    existing_actor = NPCProfile(name="寒川驿丞", role="驿站主管")
+    with stores.npc_profile as store:
+        store.upsert(existing_actor)
+
     gateway = ScriptedDirectorGateway(
         decision={
             "reasoning": "两个技能各自缺少一个 Setting，补齐后都应执行。",
@@ -182,7 +219,13 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
                             "kind": "location",
                             "setting_description": "agent 需要的交通节点。",
                         }],
-                        "actors": [],
+                        "actors": [
+                            {
+                                "source": "existing",
+                                "npc_id": existing_actor.npc_id,
+                                "guidance": "由既有驿站主管充当演员。",
+                            },
+                        ],
                     },
                         "guidance": "建立独立环境事件。",
                 },
@@ -208,7 +251,9 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
                 "name": "沈栖舟",
             },
         },
-        event_selection_output=make_event_selection_output(),
+        event_selection_output=make_event_selection_output([
+            {"actor_key": "actor_1", "role_in_event": "处置驿站往来"},
+        ]),
     )
 
     _, executions = DirectorConfirmationExecutor(

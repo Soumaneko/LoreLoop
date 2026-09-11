@@ -5,6 +5,7 @@ from app.core.llm.errors import LLMOutputValidationError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
 from app.domain.director.confirmation import DirectorConfirmationExecutor
+from app.domain.npc_profile.schemas import NPCProfile
 from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
@@ -274,6 +275,10 @@ def test_resolved_review_reopens_one_event_slot_in_same_confirmation(tmp_path):
         make_review_node_state(stores, review_gateway)
     )
 
+    existing_actor = NPCProfile(name="船坞管事", role="船坞管事")
+    with stores.npc_profile as store:
+        store.upsert(existing_actor)
+
     create_gateway = ScriptedDirectorGateway(
         decision={
             "reasoning": "配额已经释放，可以布置下一事件。",
@@ -287,12 +292,20 @@ def test_resolved_review_reopens_one_event_slot_in_same_confirmation(tmp_path):
                         "setting_description": "事件依托河岸船坞。",
                         "matched_setting_id": setting.setting_id,
                     }],
-                    "actors": [],
+                    "actors": [
+                        {
+                            "source": "existing",
+                            "npc_id": existing_actor.npc_id,
+                            "guidance": "由既有船坞管事充当演员。",
+                        },
+                    ],
                 },
                 "guidance": "围绕船坞的独立日常矛盾展开。",
             }],
         },
-        event_selection_output=make_event_selection_output(),
+        event_selection_output=make_event_selection_output([
+            {"actor_key": "actor_1", "role_in_event": "维持船坞日常"},
+        ]),
     )
     DirectorConfirmationExecutor(
         gateway=create_gateway,

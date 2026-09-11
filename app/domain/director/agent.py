@@ -185,15 +185,16 @@ class DirectorAgent:
                     ))
                     continue
                 candidate = [*requests, request]
-                if not _batch_valid(self._skills, candidate, observation.phase):
-                    retry_errors.append(
-                        f"request[{index}] conflicts with earlier requests"
-                    )
+                valid, batch_error = _batch_valid(
+                    self._skills, candidate, observation.phase
+                )
+                if not valid:
+                    detail = batch_error or "conflicts with earlier requests"
+                    retry_errors.append(f"request[{index}]: {detail}")
                     dropped_warnings.append(DirectorWarning(
                         code="director_request_dropped",
                         message=(
-                            f"request[{index}] dropped: conflicts with "
-                            "earlier requests"
+                            f"request[{index}] dropped: {detail}"
                         ),
                     ))
                     continue
@@ -498,7 +499,7 @@ def _batch_valid(
     service: DirectorSkillService,
     requests: list[DirectorSkillRequest],
     phase: str,
-) -> bool:
+) -> tuple[bool, str | None]:
     try:
         service.validate_batch(
             DirectorDecisionBatch(
@@ -507,6 +508,6 @@ def _batch_valid(
             ),
             phase=phase,
         )
-        return True
-    except (ValueError, ValidationError):
-        return False
+        return True, None
+    except (ValueError, ValidationError) as exc:
+        return False, str(exc)

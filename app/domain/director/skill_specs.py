@@ -220,7 +220,19 @@ class CreateEventArguments(BaseModel):
         min_length=1,
         max_length=1,
     )
-    actors: list[EventActorInput] = Field(default_factory=list, max_length=6)
+    actors: list[EventActorInput] = Field(min_length=1, max_length=6)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _require_actors(cls, data):
+        if isinstance(data, dict) and not data.get("actors"):
+            raise ValueError(
+                "create_event requires at least one real actor: use "
+                "source='existing' with a real npc_id, or source='new' with a "
+                "creation request; an organization name cannot replace an actor "
+                "and actor-less events are not allowed"
+            )
+        return data
 
     @model_validator(mode="after")
     def _validate_actor_mix(self):
@@ -333,14 +345,13 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="create_event",
         description=(
-            "创建一个长线事件（arc）或环境事件（ambient）。这是创建事件的唯一技能。"
-            "单次确认最多创建一个。"
-            "只用于主角视线之外的世界动态，不得用于推动、包装或代劳主角当前正在执行的主线行动。"
-            "actors 是强制演员清单，可留空。"
-            "在 arguments.setting_requirements 中声明该事件因果依托的 1 个 Setting："
-            "命中已有 Setting 时，只能选择 resources.settings 中 "
-            "event_creation_available=true 的 matched_setting_id；否则该项留空。"
-            "请求级 guidance 用自由文本指定事件方向。"
+            "创建一个长线事件（arc）或环境事件（ambient），"
+            "只描述主角视线之外的世界动态，不得推动、包装或代劳主角当前主线行动。"
+            "actors 为强制演员清单，至少一名真实演员：已有 NPC 用 source='existing' "
+            "并填 npc_id，新人物用 source='new' 并填创建要求；组织名不能替代演员，"
+            "禁止无人物事件。在 setting_requirements 声明 1 个因果依托 Setting："
+            "命中时只能选 event_creation_available=true 的 matched_setting_id，"
+            "否则留空。请求级 guidance 用自由文本指定事件方向。"
         ),
         phases=_CONFIRMATION,
         mutates=True,

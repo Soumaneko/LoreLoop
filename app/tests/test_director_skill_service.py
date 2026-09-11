@@ -248,3 +248,36 @@ def test_director_skill_specs_cover_every_registered_skill():
             assert spec.mutates is True
     create_event = next(spec for spec in specs if spec.name == "create_event")
     assert create_event.max_requests_per_batch == 1
+
+
+def test_batch_validation_surfaces_real_arguments_error():
+    from app.domain.director.agent import _batch_valid
+    from app.domain.director.skill_specs import CreateEventArguments
+
+    service = DirectorSkillService()
+    service.register(
+        name="create_event",
+        description="创建新的导演事件。",
+        phases={"confirmation"},
+        mutates=True,
+        arguments_model=CreateEventArguments,
+        handler=lambda arguments, guidance=None: {},
+    )
+    request = DirectorSkillRequest(
+        request_id="event_1",
+        skill="create_event",
+        arguments={
+            "role": "arc",
+            "setting_requirements": [
+                {"kind": "location", "setting_description": "依托山道驿站。"},
+            ],
+            "actors": [],
+        },
+        guidance="建立独立环境事件。",
+    )
+
+    valid, message = _batch_valid(service, [request], "confirmation")
+
+    assert valid is False
+    assert message is not None
+    assert "at least one real actor" in message
