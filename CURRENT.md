@@ -962,6 +962,17 @@ the whole batch. Accepted stable fields carry their evidence
 (fact ids and paragraph ids) and are persisted as a field-change log during
 confirmation finalization (below).
 
+`scene_summary` evidence pointers are bounded at six **valid** ids. Duplicates
+are de-duplicated in order before counting, and invalid pointers (not a confirmed
+scene paragraph of this turn in this scene) are removed first and reported via
+`scene_summary_evidence_dropped`; only then does the six-id budget apply,
+keeping the first six valid pointers in order and reporting
+`scene_summary_evidence_truncated`. The summary is dropped only when every
+pointer is invalid, so a valid pointer beyond position six is never lost to an
+earlier invalid one. The soft parse model tolerates up to twelve unique wire
+pointers so this ordering is possible; the prompt/display model still advertises
+six.
+
 `personality_trait` remains a curated characterization field consumed by the
 player record and face-to-face narrative disclosure, but ordinary per-turn NPC
 updates cannot overwrite it. It is written only during NPC creation, Director
@@ -1512,6 +1523,20 @@ still omit it.
 Prompt rendering, JSON parsing, schema
 validation, salvage/retry, trace/diagnostics and cancel/degrade stay in
 `LLMGateway`.
+
+JSON parsing strips code fences, then makes one conservative local repair
+before falling into the feedback retry: for the P06 shape — an ASCII `"` string
+closed by a curly quote that swallowed a raw newline (`Invalid control
+character`) — the right double curly quote immediately before the control
+character is replaced with `"` and the text is re-parsed. The rewrite requires
+that curly quote to be an *unmatched closer*: if the string already contains an
+open `“` content quote, the trailing `”` is the prose's own closing quote and
+the text is left untouched, so content is never silently deleted. A `\u` escape
+inside the string also makes the content quotes unreadable without a full escape
+parser, so the scan bails out and leaves the text alone. Any other JSON
+error, or a repair that still fails, keeps the normal failure/retry path; curly
+quotes inside otherwise-valid strings are never touched. A
+`llm_output_json_recovered` diagnostic records when the repair is used.
 
 Every formal LLM call owns one 120-second total logical-call deadline for both
 sync and streaming requests on all four protocols. Vendor SDK timeouts only
