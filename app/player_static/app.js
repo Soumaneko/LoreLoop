@@ -51,6 +51,11 @@ import {
   shouldSuppressRecordsPollError,
 } from "./records_policy.js";
 import { validateCampaignSetupForSubmit } from "./campaign_setup.js";
+import {
+  abilityRowHasContent,
+  campaignSetupValuesToRestore,
+  collectCampaignSetupDraft,
+} from "./initialization_draft.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -3602,7 +3607,7 @@ function captureInitializationForm() {
     protagonist_abilities: rows.map((row) => ({
       name: row.querySelector(".ability-name").value,
       description: row.querySelector(".ability-description").value,
-    })).filter((a) => a.name.trim()),
+    })).filter((a) => abilityRowHasContent(a)),
   };
 }
 
@@ -3620,7 +3625,7 @@ function restoreInitializationForm(form = {}) {
     if (customTextarea) customTextarea.value = savedWorldStyle;
   }
   const abilities = (form.protagonist_abilities || []).filter(
-    (a) => a && a.name && a.name.trim(),
+    (a) => abilityRowHasContent(a),
   );
   els.abilityRows.replaceChildren();
   for (const ability of abilities) {
@@ -3693,7 +3698,19 @@ function initializationDraftPayload() {
     stage: initConfigSnapshot ? "campaign_setup" : "config",
     form: captureInitializationForm(),
     config: initConfigSnapshot,
-    campaign_setup: initConfigSnapshot ? readCampaignSetup() : null,
+    campaign_setup: initConfigSnapshot ? collectCampaignSetupDraft({
+      currencyUnit: els.setupCurrencyUnit.value,
+      publicPowerBaseline: {
+        source: els.setupPowerSource.value,
+        prevalence: els.setupPowerPrevalence.value,
+        learningDifficulty: els.setupPowerLearningDifficulty.value,
+        limitation: els.setupPowerLimitation.value,
+      },
+      peoplesAndBeings: els.setupPeoplesAndBeings.value,
+      majorWorldConflicts: els.setupMajorWorldConflicts.value,
+      dominantPowers: els.setupDominantPowers.value,
+      civilizationBaseline: els.setupCivilizationBaseline.value,
+    }) : null,
   };
 }
 
@@ -3729,21 +3746,11 @@ async function loadInitializationDraft() {
     return;
   }
   restoreInitializationForm(draft.form);
-  if (
-    draft.stage === "campaign_setup"
-    && draft.config
-    && draft.campaign_setup?.version === 2
-    && draft.campaign_setup?.currency_unit
-    && draft.campaign_setup?.public_power_baseline
-    && draft.campaign_setup?.peoples_and_beings?.length
-    && draft.campaign_setup?.major_world_conflicts?.length
-    && draft.campaign_setup?.dominant_powers?.length
-    && draft.campaign_setup?.civilization_baseline
-  ) {
+  if (draft.stage === "campaign_setup" && draft.config) {
     showCampaignSetupStage({
       config: draft.config,
       campaign_setup: draft.campaign_setup,
-    });
+    }, { rawFields: draft.form?.fields });
   } else {
     editInitConfig();
   }
@@ -3754,10 +3761,10 @@ async function closeInitializationDialog() {
     await persistInitializationDraft();
   } catch (error) {
     reportClientError(error, "initialization_draft_save_failed");
-    showToast("初始化草稿暂未保存");
-  } finally {
-    els.initDialog.close();
+    showToast("初始化草稿暂未保存，请重试关闭");
+    return;
   }
+  els.initDialog.close();
 }
 
 function toggleCustomAbilityField() {
@@ -3809,20 +3816,14 @@ function setCampaignSetupControlsDisabled(disabled) {
   ]);
 }
 
-function showCampaignSetupStage(result, { committed = false } = {}) {
+function showCampaignSetupStage(result, { committed = false, rawFields = null } = {}) {
   initConfigSnapshot = result.config;
   campaignSetupCommitted = committed;
-  const proposal = result.campaign_setup || {};
-  const baseline = proposal.public_power_baseline || {};
-  els.setupCurrencyUnit.value = proposal.currency_unit || "";
-  els.setupPowerSource.value = baseline.source || "";
-  els.setupPowerPrevalence.value = baseline.prevalence || "少数人掌握";
-  els.setupPowerLearningDifficulty.value = baseline.learning_difficulty || "适中";
-  els.setupPowerLimitation.value = baseline.limitation || "";
-  els.setupPeoplesAndBeings.value = (proposal.peoples_and_beings || []).join("\n");
-  els.setupMajorWorldConflicts.value = (proposal.major_world_conflicts || []).join("\n");
-  els.setupDominantPowers.value = (proposal.dominant_powers || []).join("\n");
-  els.setupCivilizationBaseline.value = proposal.civilization_baseline || "";
+  const restored = campaignSetupValuesToRestore(result.campaign_setup, rawFields);
+  for (const [name, value] of Object.entries(restored)) {
+    const control = els.initForm.elements[name];
+    if (control) control.value = value;
+  }
   els.initConfigFields.disabled = true;
   els.initConfigActions.hidden = true;
   els.campaignSetupStage.hidden = false;

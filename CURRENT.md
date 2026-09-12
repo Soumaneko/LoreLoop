@@ -40,7 +40,14 @@ root data files are:
 `scene_summaries`, `confirmed_history`, `continuity`, `npc_profiles`,
 `director_events`, `director_log`, `director_npcs`, `world_settings`) plus a
 `schema_versions` row per component. `initialization_draft.json` is an editable
-setup draft, not canonical campaign state. `.runtime/control.db` durably journals
+setup draft, not canonical campaign state. It stores the raw setup form values
+(including empty fields, blank list lines, temporarily over-limit text, and
+ability rows that only carry a description) so unfinished edits survive closing
+and reloading; restore picks the stage from the draft envelope and prefers those
+raw values, falling back to the structured snapshot for older drafts. Draft
+saving never runs the submit contract - completeness is checked only at
+`initialization_opening` - and a failed save keeps the dialog open to retry.
+`.runtime/control.db` durably journals
 pending scenes, confirmation status, the bounded Undo/Redo snapshot chain
 (`.snapshots/`), and the control state (`current_revision_id`,
 `connection_epoch`, plus per-transaction `commit_id`/`revision_id`).

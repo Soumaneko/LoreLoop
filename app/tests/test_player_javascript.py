@@ -68,6 +68,7 @@ def test_player_frontend_javascript_is_syntactically_valid():
         "client_diagnostics.js",
         "custom_select.js",
         "error_feedback.js",
+        "initialization_draft.js",
         "model_combobox.js",
         "model_configs.js",
         "model_selection.js",
@@ -669,6 +670,96 @@ mustReject({
   ...base,
   civilization_baseline: "字".repeat(CAMPAIGN_SETUP_LIMITS.civilizationBaseline + 1),
 }, "文明与技术基准");
+'''.replace("__MODULE_URL__", module_url)
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_initialization_draft_helpers_preserve_unfinished_edits():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "initialization_draft.js").resolve().as_uri()
+    script = r'''
+const {
+  abilityRowHasContent,
+  campaignSetupValuesToRestore,
+  collectCampaignSetupDraft,
+  rawCampaignSetupFields,
+} = await import("__MODULE_URL__");
+if (!abilityRowHasContent({ name: "", description: "只填了说明" })) {
+  throw new Error("description-only ability row must be kept");
+}
+if (abilityRowHasContent({ name: "  ", description: "  " })) {
+  throw new Error("empty ability row must be dropped");
+}
+const draft = collectCampaignSetupDraft({
+  currencyUnit: "",
+  publicPowerBaseline: { source: " 武学 ", limitation: "" },
+  peoplesAndBeings: "人类\n\n精灵",
+  majorWorldConflicts: "",
+  dominantPowers: "",
+  civilizationBaseline: "",
+});
+if (draft.currency_unit !== "") throw new Error("blank currency must survive");
+if (draft.public_power_baseline.source !== " 武学 ") {
+  throw new Error("draft must not trim raw text");
+}
+if (draft.peoples_and_beings.length !== 3 || draft.peoples_and_beings[1] !== "") {
+  throw new Error("blank list lines must survive: " + JSON.stringify(draft.peoples_and_beings));
+}
+if (rawCampaignSetupFields({ world_name: "艾兰" }).size !== 0) {
+  throw new Error("config-only fields must not count as raw setup");
+}
+if (!rawCampaignSetupFields({ setup_power_limitation: "" }).has("setup_power_limitation")) {
+  throw new Error("present setup field must count even when empty");
+}
+const structured = {
+  currency_unit: "银币",
+  public_power_baseline: {
+    source: "魔法",
+    prevalence: "少数人掌握",
+    learning_difficulty: "困难",
+    limitation: "不能复活死者。",
+  },
+  peoples_and_beings: ["人类"],
+  major_world_conflicts: ["冲突"],
+  dominant_powers: ["帝国"],
+  civilization_baseline: "冷兵器为主",
+};
+const partial = campaignSetupValuesToRestore(structured, { setup_power_limitation: "" });
+if (partial.setup_currency_unit !== "银币") {
+  throw new Error("absent raw field must fall back to structured value");
+}
+if (partial.setup_power_source !== "魔法") {
+  throw new Error("partial raw fields must not wipe other structured values");
+}
+if ("setup_power_limitation" in partial) {
+  throw new Error("present raw field must be preserved even when empty");
+}
+const allRaw = campaignSetupValuesToRestore(
+  structured,
+  Object.fromEntries([
+    "setup_currency_unit",
+    "setup_power_source",
+    "setup_power_prevalence",
+    "setup_power_learning_difficulty",
+    "setup_power_limitation",
+    "setup_peoples_and_beings",
+    "setup_major_world_conflicts",
+    "setup_dominant_powers",
+    "setup_civilization_baseline",
+  ].map((name) => [name, ""])),
+);
+if (Object.keys(allRaw).length !== 0) {
+  throw new Error("fully raw drafts must not be overwritten by the snapshot");
+}
 '''.replace("__MODULE_URL__", module_url)
     result = subprocess.run(
         [node, "--input-type=module", "--eval", script],

@@ -171,3 +171,47 @@ def test_committed_core_memory_must_match_config_and_proposal_projection():
         match="does not match its config and campaign setup",
     ):
         commit_campaign_setup(config, proposal)
+
+
+def test_incomplete_draft_round_trips_without_completeness_checks():
+    draft = {
+        "version": 4,
+        "stage": "campaign_setup",
+        "form": {
+            "fields": {
+                "world_name": "艾兰",
+                "setup_currency_unit": "",
+                "setup_power_limitation": "",
+                "setup_peoples_and_beings": "人类\n\n精灵",
+            },
+            "protagonist_abilities": [
+                {"name": "", "description": "只填了说明"},
+            ],
+        },
+        "config": {"version": 4, "world_name": "艾兰"},
+        "campaign_setup": {
+            "version": 2,
+            "currency_unit": "",
+            "public_power_baseline": {
+                "source": " 武学 ",
+                "prevalence": "少数人掌握",
+                "learning_difficulty": "适中",
+                "limitation": "",
+            },
+            "peoples_and_beings": ["人类", "", "精灵"],
+            "major_world_conflicts": [""],
+            "dominant_powers": [""],
+            "civilization_baseline": "",
+        },
+    }
+
+    saved = save_initialization_draft(draft)
+
+    assert load_initialization_draft() == saved
+    assert saved["form"]["fields"]["setup_power_limitation"] == ""
+    assert saved["form"]["fields"]["setup_peoples_and_beings"] == "人类\n\n精灵"
+    assert saved["form"]["protagonist_abilities"] == [
+        {"name": "", "description": "只填了说明"},
+    ]
+    assert saved["campaign_setup"]["peoples_and_beings"] == ["人类", "", "精灵"]
+    assert saved["campaign_setup"]["public_power_baseline"]["source"] == " 武学 "
