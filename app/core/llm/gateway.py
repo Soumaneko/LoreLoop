@@ -38,6 +38,92 @@ _SCHEMA_COPY_CORRECTION = (
 )
 
 
+#: Curly quote characters a model may emit in place of the ASCII delimiter.
+#: Only the right double quotation mark is treated as a possible closer; the
+#: left one is typographically an opener and stays ambiguous.
+_CURLY_QUOTE_CLOSERS = ("\u201d",)
+
+
+def _curly_closer_is_delimiter(cleaned: str, candidate: int) -> bool:
+    """Whether the curly quote at ``candidate`` is an unmatched closer.
+
+    Scans the ASCII string containing ``candidate`` and counts its content
+    curly quotes. The candidate may only be treated as a missing ASCII delimiter
+    when no earlier content quote is left open, so a curly quote that is a
+    matching piece of the prose is never rewritten. A ``\\u`` escape inside the
+    string makes the content quotes unreadable without a full escape parser, so
+    the scan conservatively reports "not a delimiter" and the normal failure /
+    retry path runs instead.
+    """
+    in_string = False
+    escape = False
+    open_content = 0
+    has_unicode_escape = False
+    i = 0
+    while i < candidate:
+        ch = cleaned[i]
+        if not in_string:
+            if ch == '"':
+                in_string = True
+                open_content = 0
+                has_unicode_escape = False
+            i += 1
+            continue
+        if escape:
+            escape = False
+        elif ch == "\\":
+            if i + 1 < len(cleaned) and cleaned[i + 1] == "u":
+                has_unicode_escape = True
+            escape = True
+        elif ch == '"':
+            in_string = False
+        elif ch == "\u201c":
+            open_content += 1
+        elif ch == "\u201d":
+            if open_content > 0:
+                open_content -= 1
+        i += 1
+    return in_string and open_content == 0 and not has_unicode_escape
+
+
+def _recover_curly_quote_delimiter(
+    cleaned: str,
+    error: json.JSONDecodeError,
+) -> Any | None:
+    """Conservatively repair an ASCII string closed by a curly quote.
+
+    Only the P06 shape is handled: an ASCII ``"`` opened a string and the model
+    ended it with a curly quote instead of ``"``, so the string swallowed the
+    following raw newline and ``json`` raised ``Invalid control character``.
+    The single curly delimiter immediately before that control character is
+    replaced with ``"`` and the text is re-parsed.
+
+    The rewrite only happens when that curly quote is an *unmatched closer*: if
+    the string already contains an open ``\u201c`` content quote, the trailing
+    ``\u201d`` is the prose's own closing quote and replacing it would silently
+    delete content, so the text is left untouched and the normal failure/retry
+    path runs instead. Any other JSON error, or a repair that still fails, is
+    likewise left alone.
+    """
+    if "Invalid control character" not in error.msg:
+        return None
+    pos = error.pos
+    if pos < 0 or pos >= len(cleaned) or cleaned[pos] not in "\n\r\t":
+        return None
+    index = pos - 1
+    while index >= 0 and cleaned[index] in " \t\r\n":
+        index -= 1
+    if index < 0 or cleaned[index] not in _CURLY_QUOTE_CLOSERS:
+        return None
+    if not _curly_closer_is_delimiter(cleaned, index):
+        return None
+    repaired = cleaned[:index] + '"' + cleaned[index + 1:]
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        return None
+
+
 class LLMGateway:
     def __init__(
         self,
@@ -148,7 +234,19 @@ class LLMGateway:
                     transport_attempts=1,
                 )
 
-                parsed = self._parse_json(raw_output)
+                parsed, json_recovered = self._parse_json(raw_output)
+                if json_recovered:
+                    self._log_diagnostic(
+                        severity="warning",
+                        code="llm_output_json_recovered",
+                        message=(
+                            "Recovered a mismatched curly-quote string "
+                            "delimiter in LLM JSON output."
+                        ),
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=attempt,
+                    )
 
                 validated, effective_parsed = self._validate_with_salvage(
                     parsed, output_schema
@@ -509,7 +607,7 @@ class LLMGateway:
         latency = (time.time() - start) * 1000
         return "".join(parts), latency, token_usage
 
-    def _parse_json(self, raw_output: str) -> Any:
+    def _parse_json(self, raw_output: str) -> tuple[Any, bool]:
         cleaned = raw_output.strip()
         if cleaned.startswith("```"):
             lines = cleaned.split("\n")
@@ -519,8 +617,11 @@ class LLMGateway:
                 lines = lines[:-1]
             cleaned = "\n".join(lines).strip()
         try:
-            return json.loads(cleaned)
+            return json.loads(cleaned), False
         except json.JSONDecodeError as e:
+            recovered = _recover_curly_quote_delimiter(cleaned, e)
+            if recovered is not None:
+                return recovered, True
             raise LLMOutputParseError(
                 f"Failed to parse LLM output as JSON: {e}\nOutput: {raw_output[:500]}"
             ) from e

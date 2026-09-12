@@ -520,3 +520,125 @@ class TestLLMGatewayTimeoutBoundary:
             "llm_call_started",
             "llm_call_succeeded",
         ]
+
+
+class TestCurlyQuoteDelimiterRecovery:
+    def test_recovered_without_second_call(self):
+        class CountingProvider(MockProvider):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def generate(self, *_args, **_kwargs):
+                self.calls += 1
+                return ProviderResult(
+                    content='{"text": "hello\u201d\n, "length": 5}'
+                )
+
+        class CapturingDiagnostics:
+            def __init__(self):
+                self.entries = []
+
+            def warning(self, **fields):
+                self.entries.append({"severity": "warning", **fields})
+
+            def error(self, **fields):
+                self.entries.append({"severity": "error", **fields})
+
+        class CapturingTrace:
+            def __init__(self):
+                self.diagnostics = CapturingDiagnostics()
+
+            def log(self, **_kwargs):
+                pass
+
+        provider = CountingProvider()
+        trace = CapturingTrace()
+        gateway = LLMGateway(
+            provider=provider,
+            prompt_loader=MockLLM().prompt_loader,
+            tracer=trace,
+        )
+
+        result = gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+            max_retries=2,
+        )
+
+        assert result.text == "hello"
+        assert result.length == 5
+        assert provider.calls == 1
+        codes = [entry.get("code") for entry in trace.diagnostics.entries]
+        assert "llm_output_json_recovered" in codes
+
+    def test_content_curly_quotes_are_not_touched(self):
+        mock = MockLLM()
+        mock.set_responses(['{"text": "他说“好”", "length": 2}'])
+        gateway = make_llm_gateway(mock)
+
+        result = gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+        )
+
+        assert result.text == "他说“好”"
+
+    def test_ambiguous_content_closer_is_not_rewritten(self):
+        # The trailing curly quote closes the content quote ``“好``; it is not a
+        # missing ASCII delimiter, so the string must not be silently truncated.
+        mock = MockLLM()
+        mock.set_responses(['{"text": "他说“好”\n, "length": 2}'])
+        gateway = make_llm_gateway(mock)
+
+        with pytest.raises(LLMOutputParseError):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                max_retries=1,
+            )
+
+    def test_balanced_content_with_trailing_delimiter_is_recovered(self):
+        mock = MockLLM()
+        mock.set_responses(['{"text": "他说“好””\n, "length": 2}'])
+        gateway = make_llm_gateway(mock)
+
+        result = gateway.run(
+            task="echo_structured_test",
+            input_data={"text": "hello"},
+            output_schema=EchoResult,
+        )
+
+        assert result.text == "他说“好”"
+
+    def test_unicode_escaped_content_quote_is_not_recovered(self):
+        # ``\u201c`` is the content opening quote written as an escape; without a
+        # full escape parser the scan must bail out instead of deleting the
+        # prose's closing curly quote.
+        mock = MockLLM()
+        mock.set_responses(['{"text": "他说\\u201c好”\n, "length": 2}'])
+        gateway = make_llm_gateway(mock)
+
+        with pytest.raises(LLMOutputParseError):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                max_retries=1,
+            )
+
+    def test_unrecoverable_output_still_fails_and_retries(self):
+        mock = MockLLM()
+        mock.set_responses(['{"text": "hello"'])  # truncated, not recoverable
+        gateway = make_llm_gateway(mock)
+
+        with pytest.raises(LLMOutputParseError):
+            gateway.run(
+                task="echo_structured_test",
+                input_data={"text": "hello"},
+                output_schema=EchoResult,
+                max_retries=1,
+            )
