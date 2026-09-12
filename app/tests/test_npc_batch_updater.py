@@ -461,3 +461,173 @@ def test_processor_retries_invalid_entry_and_uses_second():
 
     assert [entry.npc_id for entry in batch.entries] == ["npc_001"]
     assert batch.entry_warnings == []
+
+
+def test_parse_scene_summary_dedupes_evidence_without_truncating():
+    from app.domain.npc_profile.batch_updater import parse_batch_updates
+
+    entries, warnings = parse_batch_updates([{
+        "npc_id": "npc_001",
+        "scene_summary": {
+            "summary": "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。",
+            "evidence_ids": [
+                "turn_3_p001", "turn_3_p001",
+                "turn_3_p002", "turn_3_p003", "turn_3_p004",
+                "turn_3_p005", "turn_3_p006", "turn_3_p007",
+            ],
+        },
+    }], soft_limits=True)
+
+    assert entries[0].scene_summary is not None
+    assert entries[0].scene_summary.evidence_ids == [
+        "turn_3_p001",
+        "turn_3_p002",
+        "turn_3_p003",
+        "turn_3_p004",
+        "turn_3_p005",
+        "turn_3_p006",
+        "turn_3_p007",
+    ]
+    codes = [warning.code for warning in warnings]
+    assert "scene_summary_evidence_deduplicated" in codes
+    # Parsing does not apply the budget; admission does, on valid pointers only.
+    assert "scene_summary_evidence_truncated" not in codes
+
+
+def test_admission_truncates_scene_summary_to_six_valid_evidence():
+    evidence = _evidence(
+        "\n\n".join(f"第 {index} 段正文。" for index in range(1, 9))
+    )
+    summary = _summary(
+        evidence=[f"turn_3_p00{index}" for index in range(1, 9)],
+    )
+
+    result = _admit(
+        [_entry("npc_001", scene_summary=summary)],
+        evidence_documents=evidence,
+    )
+
+    changes = [
+        change
+        for change in result.accepted_profile_changes
+        if change.field == "last_scene_summary"
+    ]
+    assert len(changes) == 1
+    assert list(changes[0].evidence_ids) == [
+        f"turn_3_p00{index}" for index in range(1, 7)
+    ]
+    truncated = [
+        warning
+        for warning in result.warnings
+        if warning.code == "scene_summary_evidence_truncated"
+    ]
+    assert len(truncated) == 1
+    assert truncated[0].evidence_ids == ("turn_3_p007", "turn_3_p008")
+
+
+def test_admission_keeps_late_valid_evidence_after_invalid_prefix():
+    evidence = _evidence(
+        "\n\n".join(f"第 {index} 段正文。" for index in range(1, 9))
+    )
+    summary = _summary(evidence=[
+        "turn_3_p099",  # invalid: not a document of this turn
+        "turn_3_p098",  # invalid
+        "turn_3_p001",
+        "turn_3_p002",
+        "turn_3_p003",
+        "turn_3_p004",
+        "turn_3_p007",  # valid, and beyond the old pre-validation truncation
+    ])
+
+    result = _admit(
+        [_entry("npc_001", scene_summary=summary)],
+        evidence_documents=evidence,
+    )
+
+    changes = [
+        change
+        for change in result.accepted_profile_changes
+        if change.field == "last_scene_summary"
+    ]
+    assert len(changes) == 1
+    assert list(changes[0].evidence_ids) == [
+        "turn_3_p001",
+        "turn_3_p002",
+        "turn_3_p003",
+        "turn_3_p004",
+        "turn_3_p007",
+    ]
+    codes = [warning.code for warning in result.warnings]
+    assert "scene_summary_evidence_dropped" in codes
+    assert "scene_summary_evidence_truncated" not in codes
+
+
+def test_admission_keeps_summary_when_only_late_evidence_valid():
+    evidence = _evidence(
+        "\n\n".join(f"第 {index} 段正文。" for index in range(1, 9))
+    )
+    summary = _summary(evidence=[
+        "turn_3_p099",
+        "turn_3_p098",
+        "turn_3_p097",
+        "turn_3_p096",
+        "turn_3_p095",
+        "turn_3_p094",
+        "turn_3_p001",  # the only valid pointer, beyond the old budget window
+    ])
+
+    result = _admit(
+        [_entry("npc_001", scene_summary=summary)],
+        evidence_documents=evidence,
+    )
+
+    changes = [
+        change
+        for change in result.accepted_profile_changes
+        if change.field == "last_scene_summary"
+    ]
+    assert len(changes) == 1
+    assert list(changes[0].evidence_ids) == ["turn_3_p001"]
+    assert "scene_summary_evidence_dropped" in {
+        warning.code for warning in result.warnings
+    }
+
+
+def test_admission_keeps_scene_summary_with_one_invalid_evidence():
+    result = _admit([
+        _entry(
+            "npc_001",
+            scene_summary=_summary(
+                evidence=["turn_3_p001", "turn_9_p099"],
+            ),
+        ),
+    ])
+
+    changes = [
+        change
+        for change in result.accepted_profile_changes
+        if change.field == "last_scene_summary"
+    ]
+    assert len(changes) == 1
+    assert list(changes[0].evidence_ids) == ["turn_3_p001"]
+    assert "scene_summary_evidence_dropped" in {
+        warning.code for warning in result.warnings
+    }
+
+
+def test_admission_drops_scene_summary_when_all_evidence_invalid():
+    result = _admit([
+        _entry(
+            "npc_001",
+            scene_summary=_summary(evidence=["turn_9_p099"]),
+        ),
+    ])
+
+    assert [
+        change
+        for change in result.accepted_profile_changes
+        if change.field == "last_scene_summary"
+    ] == []
+    assert "scene_summary_evidence_dropped" in {
+        warning.code for warning in result.warnings
+    }

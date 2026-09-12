@@ -25,6 +25,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 NPC_SCENE_SUMMARY_HARD_LIMIT = 160
 NPC_SCENE_SUMMARY_ACCEPT_LIMIT = 200
 NPC_SCENE_SUMMARY_SOFT_LIMIT = 240
+#: Bounded budget for the per-turn scene-summary evidence pointers, applied at
+#: admission to the *valid* pointers only. Duplicates are de-duplicated before
+#: counting so they never consume a slot.
+NPC_SCENE_SUMMARY_EVIDENCE_MAX = 6
+#: Wire tolerance for over-enumeration. The soft parse model accepts up to this
+#: many unique pointers so admission can drop the invalid ones first and only
+#: then apply ``NPC_SCENE_SUMMARY_EVIDENCE_MAX``; the prompt/display model still
+#: advertises the target budget of six.
+NPC_SCENE_SUMMARY_EVIDENCE_WIRE_MAX = 12
 CHANGE_BASIS_HARD_LIMIT = 80
 CHANGE_BASIS_ACCEPT_LIMIT = 100
 CHANGE_BASIS_SOFT_LIMIT = 120
@@ -79,7 +88,9 @@ class NPCSceneSummaryDraft(BaseModel):
 
     只压缩本轮该 NPC 的公开言语、行动、决定与可观察状态；不接收旧摘要、不累积、
     不写跨回合传记。``summary`` 20–240 字（软上限；prompt 展示仍为 160 硬上限），
-    ``evidence_ids`` 1–4 条本轮本场景正文段落（结构约束；语义归因由 prompt 保证）。
+    ``evidence_ids`` 目标 1–6 条本轮本场景正文段落（结构约束；语义归因由 prompt
+    保证；重复项保序去重，不占名额）。软解析额外容忍到 wire 上限，好让 admission
+    先剔除非法引用、再对剩余合法引用套用 6 条预算。
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -88,14 +99,15 @@ class NPCSceneSummaryDraft(BaseModel):
         min_length=20,
         max_length=NPC_SCENE_SUMMARY_SOFT_LIMIT,
     )
-    evidence_ids: list[str] = Field(min_length=1, max_length=4)
+    evidence_ids: list[str] = Field(
+        min_length=1,
+        max_length=NPC_SCENE_SUMMARY_EVIDENCE_WIRE_MAX,
+    )
 
     @field_validator("evidence_ids")
     @classmethod
-    def _evidence_ids_no_duplicates(cls, values):
-        if len(values) != len(set(values)):
-            raise ValueError("scene_summary evidence_ids must not repeat")
-        return values
+    def _evidence_ids_deduplicated(cls, values):
+        return list(dict.fromkeys(values))
 
 
 class NPCSceneSummaryDraftHard(BaseModel):
@@ -107,14 +119,15 @@ class NPCSceneSummaryDraftHard(BaseModel):
         min_length=20,
         max_length=NPC_SCENE_SUMMARY_HARD_LIMIT,
     )
-    evidence_ids: list[str] = Field(min_length=1, max_length=4)
+    evidence_ids: list[str] = Field(
+        min_length=1,
+        max_length=NPC_SCENE_SUMMARY_EVIDENCE_MAX,
+    )
 
     @field_validator("evidence_ids")
     @classmethod
-    def _evidence_ids_no_duplicates(cls, values):
-        if len(values) != len(set(values)):
-            raise ValueError("scene_summary evidence_ids must not repeat")
-        return values
+    def _evidence_ids_deduplicated(cls, values):
+        return list(dict.fromkeys(values))
 
 
 #: 稳定字段变化，以 ``field`` 作 discriminator（软上限 120）。

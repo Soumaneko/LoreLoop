@@ -313,6 +313,42 @@ def _soft_truncate_updates(
     return result, warnings
 
 
+def _prepare_scene_summary_evidence(
+    raw_summary: Any,
+    *,
+    npc_id: str,
+    warnings: list[NPCChangeAdmissionWarning],
+) -> Any:
+    """De-duplicate a scene-summary draft's evidence pointers.
+
+    Duplicates are removed while preserving order, so they never consume the
+    bounded budget and never trigger a whole-summary drop. The budget itself is
+    applied later, at admission, to the *valid* pointers only (invalid ones are
+    dropped first). Non-string or non-list evidence is left to the schema
+    validator so a type error still fails loudly.
+    """
+    if not isinstance(raw_summary, dict):
+        return raw_summary
+    evidence_ids = raw_summary.get("evidence_ids")
+    if not isinstance(evidence_ids, list):
+        return raw_summary
+    if not all(isinstance(item, str) for item in evidence_ids):
+        return raw_summary
+    deduped = list(dict.fromkeys(evidence_ids))
+    if len(deduped) == len(evidence_ids):
+        return raw_summary
+    warnings.append(NPCChangeAdmissionWarning(
+        npc_name=npc_id,
+        field_name="last_scene_summary",
+        code="scene_summary_evidence_deduplicated",
+        message=(
+            "scene_summary evidence_ids contained duplicates; "
+            "de-duplicated in order before counting"
+        ),
+    ))
+    return {**raw_summary, "evidence_ids": deduped}
+
+
 def _batch_has_usable_payload(
     record: ParsedBatch,
     expected_npc_ids: set[str],
@@ -398,6 +434,11 @@ def parse_batch_updates(
         scene_summary: NPCSceneSummaryDraft | None = None
         raw_summary = raw.get("scene_summary")
         if raw_summary is not None:
+            raw_summary = _prepare_scene_summary_evidence(
+                raw_summary,
+                npc_id=npc_id,
+                warnings=warnings,
+            )
             try:
                 parsed_summary = summary_model.model_validate(raw_summary)
                 if soft_limits:

@@ -438,3 +438,31 @@ def test_newer_or_unknown_version_is_rejected_without_creating_v7_tables(tmp_pat
     ).fetchone()
     connection.close()
     assert table is None
+
+
+def test_record_accepts_scene_summary_with_six_evidence():
+    documents = [
+        _document(f"turn_3_p00{index}", f"第 {index} 段正文。")
+        for index in range(1, 7)
+    ]
+    change = AcceptedNPCScalarChange(
+        npc_id="npc-a",
+        canonical_name="顾青",
+        field="last_scene_summary",
+        old_value=None,
+        new_value="顾青连续确认了六项事务，并逐一登记在册。",
+        evidence_ids=tuple(document.document_id for document in documents),
+        turn_index=3,
+        source="proposal",
+    )
+
+    with open_npc_profile_store(":memory:") as store:
+        store.upsert(_profile())
+        result = _record(store, [change], documents)
+
+    assert len(result.logs) == 1
+    log = result.logs[0]
+    assert [item.position for item in log.evidence] == list(range(6))
+    assert [item.evidence_id for item in log.evidence] == [
+        document.document_id for document in documents
+    ]

@@ -68,7 +68,7 @@ class NPCFieldChangeLog(BaseModel):
     change_basis: str | None = None
     summary_delta: str | None = None
     source: Literal["proposal"] = "proposal"
-    evidence: list[NPCFieldChangeEvidence] = Field(min_length=1, max_length=4)
+    evidence: list[NPCFieldChangeEvidence] = Field(min_length=1, max_length=6)
 
     @model_validator(mode="after")
     def validate_node(self):
@@ -123,7 +123,7 @@ class PreparedNPCFieldChange(BaseModel):
     change_basis: str | None = Field(default=None, min_length=1, max_length=120)
     summary_delta: str | None = None
     source: Literal["proposal"] = "proposal"
-    evidence: list[PreparedNPCFieldEvidence] = Field(min_length=1, max_length=4)
+    evidence: list[PreparedNPCFieldEvidence] = Field(min_length=1, max_length=6)
 
     @model_validator(mode="after")
     def validate_node(self):

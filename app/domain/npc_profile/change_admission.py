@@ -40,6 +40,7 @@ from app.domain.npc_profile.schemas import (
 from app.domain.npc_profile.turn_contract import (
     NPCBatchUpdateEntry,
     NPCSceneSummaryDraft,
+    NPC_SCENE_SUMMARY_EVIDENCE_MAX,
     ScalarStableChange,
 )
 
@@ -320,7 +321,11 @@ def _admit_scene_summary(
     """审理单个 appeared NPC 的本轮摘要草稿（宁漏勿错）。
 
     - 无草稿 → 不处理（``missing_scene_summary`` 由循环后兜底发出）；
-    - evidence 引用非本轮本场景正文 → 丢摘要（``scene_summary_evidence_dropped``）；
+    - evidence 引用非本轮本场景正文 → 只剔除该条引用并告警，保留其余合法引用；
+      仅当全部引用都非法时才丢摘要（``scene_summary_evidence_dropped``）；
+    - 先校验后套预算：非法引用剔除之后，合法引用超过 6 条才保序取前 6 并告警
+      （``scene_summary_evidence_truncated``），第 7 条合法引用不会因前面有非法项
+      而被误删；
     - 同一 npc 第二条摘要 → 丢（``duplicate_scene_summary``）；
     - no-op 用 ``(summary, turn)`` 判断：相同摘要出现在新回合仍构成有效记录；
     - 接受时生成 ``last_scene_summary`` scalar change，snapshot 应用阶段由程序
@@ -340,6 +345,11 @@ def _admit_scene_summary(
             ),
         ))
         return
+    valid_ids = [
+        evidence_id
+        for evidence_id in draft.evidence_ids
+        if evidence_id in valid_evidence
+    ]
     invalid = [
         evidence_id
         for evidence_id in draft.evidence_ids
@@ -351,12 +361,28 @@ def _admit_scene_summary(
             field_name="last_scene_summary",
             code="scene_summary_evidence_dropped",
             message=(
-                "scene summary dropped: evidence ids are not confirmed "
-                "scene paragraphs of this turn in this scene"
+                "scene summary evidence ids are not confirmed scene "
+                "paragraphs of this turn in this scene; dropped the invalid "
+                "ids and kept the rest"
             ),
             evidence_ids=tuple(sorted(set(invalid))),
         ))
+    if not valid_ids:
         return
+    if len(valid_ids) > NPC_SCENE_SUMMARY_EVIDENCE_MAX:
+        dropped = valid_ids[NPC_SCENE_SUMMARY_EVIDENCE_MAX:]
+        valid_ids = valid_ids[:NPC_SCENE_SUMMARY_EVIDENCE_MAX]
+        warnings.append(NPCChangeAdmissionWarning(
+            npc_name=target.name,
+            field_name="last_scene_summary",
+            code="scene_summary_evidence_truncated",
+            message=(
+                "scene_summary valid evidence exceeded the "
+                f"{NPC_SCENE_SUMMARY_EVIDENCE_MAX}-id budget; kept the first "
+                f"{NPC_SCENE_SUMMARY_EVIDENCE_MAX} in order"
+            ),
+            evidence_ids=tuple(dropped),
+        ))
     if (
         target.last_scene_summary == draft.summary
         and target.last_scene_turn == turn_index
@@ -369,7 +395,7 @@ def _admit_scene_summary(
         field="last_scene_summary",
         old_value=target.last_scene_summary,
         new_value=draft.summary,
-        evidence_ids=tuple(draft.evidence_ids),
+        evidence_ids=tuple(valid_ids),
         turn_index=turn_index,
         source="proposal",
     ))
