@@ -228,6 +228,55 @@ def test_setup_and_initial_state_are_persisted_before_their_consumers(
     assert all(setting.hit_count == 0 for setting in settings)
 
 
+def test_prepare_initialization_state_accepts_player_edits_and_maps_errors(
+    configure_runtime_services,
+):
+    from app.core.client_error import ClientValidationError
+    from app.graph.initialization_helpers import prepare_initialization_state
+
+    configure_runtime_services(gateway_factory=lambda **_kwargs: RecordingGateway())
+    runtime = get_campaign_runtime()
+
+    payload = _payload()
+    payload["campaign_setup"]["public_power_baseline"]["limitation"] = (
+        "不能羽化飞升；违者走火入魔。"
+    )
+    payload["campaign_setup"]["civilization_baseline"] = "农耕为主\n手工业与舟船"
+    state = prepare_initialization_state(payload)
+    assert state["campaign_setup"].public_power_baseline.limitation == (
+        "不能羽化飞升；违者走火入魔。"
+    )
+    persisted = runtime.initialization.load()
+    assert persisted is not None
+    assert persisted.campaign_setup == state["campaign_setup"]
+
+    bad = _payload()
+    bad["campaign_setup"]["public_power_baseline"]["limitation"] = "   "
+    with pytest.raises(ClientValidationError, match="力量限制：不能为空"):
+        prepare_initialization_state(bad)
+
+    with pytest.raises(ClientValidationError, match="初始化配置缺失"):
+        prepare_initialization_state({
+            "config": None,
+            "campaign_setup": _payload()["campaign_setup"],
+        })
+    with pytest.raises(ClientValidationError, match="公开世界惯例缺失"):
+        prepare_initialization_state({
+            "config": _payload()["config"],
+            "campaign_setup": None,
+        })
+
+    empty_list = _payload()
+    empty_list["campaign_setup"]["peoples_and_beings"] = []
+    with pytest.raises(ClientValidationError, match="主要存在主体：至少 1 项"):
+        prepare_initialization_state(empty_list)
+
+    over_list = _payload()
+    over_list["campaign_setup"]["major_world_conflicts"] = ["一", "二", "三"]
+    with pytest.raises(ClientValidationError, match="世界主要冲突：最多 2 项"):
+        prepare_initialization_state(over_list)
+
+
 def test_opening_retry_reuses_same_persisted_foundation(
     configure_runtime_services,
 ):

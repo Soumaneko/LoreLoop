@@ -64,6 +64,7 @@ def test_player_frontend_javascript_is_syntactically_valid():
     for filename in (
         "api.js",
         "app.js",
+        "campaign_setup.js",
         "client_diagnostics.js",
         "custom_select.js",
         "error_feedback.js",
@@ -630,3 +631,50 @@ if (shouldSuppressRecordsPollError({{ startedMode: "idle", currentMode: "pending
     start = source.index("function startRecordsPoll()")
     body = source[start:source.index("\n}", start)]
     assert body.index("isRecordsPollingPaused") < body.index("stopRecordsPoll")
+
+
+def test_campaign_setup_submit_validation_accepts_player_edits():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module_url = (STATIC_DIR / "campaign_setup.js").resolve().as_uri()
+    script = r'''
+const { validateCampaignSetupForSubmit, CAMPAIGN_SETUP_LIMITS } =
+  await import("__MODULE_URL__");
+const base = {
+  currency_unit: "两",
+  public_power_baseline: {
+    source: "武学",
+    limitation: "不能飞升；违者走火入魔。\n（例外极罕见）",
+  },
+  civilization_baseline: "农耕为主\n手工业辅助",
+};
+validateCampaignSetupForSubmit(base);
+function mustReject(setup, label) {
+  try {
+    validateCampaignSetupForSubmit(setup);
+  } catch (error) {
+    if (!error.message.includes(label)) {
+      throw new Error("expected " + label + " in: " + error.message);
+    }
+    return;
+  }
+  throw new Error("expected rejection for " + label);
+}
+mustReject({
+  ...base,
+  public_power_baseline: { ...base.public_power_baseline, limitation: "   " },
+}, "力量限制");
+mustReject({
+  ...base,
+  civilization_baseline: "字".repeat(CAMPAIGN_SETUP_LIMITS.civilizationBaseline + 1),
+}, "文明与技术基准");
+'''.replace("__MODULE_URL__", module_url)
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

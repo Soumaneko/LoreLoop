@@ -50,6 +50,7 @@ import {
   isRecordsPollingPaused,
   shouldSuppressRecordsPollError,
 } from "./records_policy.js";
+import { validateCampaignSetupForSubmit } from "./campaign_setup.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -3901,6 +3902,7 @@ async function initialize() {
     campaignSetup = campaignSetupCommitted
       ? state.playerState.initialization.campaign_setup
       : readCampaignSetup();
+    validateCampaignSetupForSubmit(campaignSetup);
   } catch (error) {
     els.initError.textContent = error.message;
     els.initError.hidden = false;

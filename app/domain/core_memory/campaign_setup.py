@@ -50,6 +50,9 @@ DominantPower = Annotated[
 ]
 
 
+# Player/persistence contract for the public power baseline. Generation shaping
+# (single line, one sentence, no semicolons) lives in PublicPowerBaselineWire; a
+# player may edit the saved proposal and is only bounded by the product caps.
 class PublicPowerBaseline(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -64,19 +67,7 @@ class PublicPowerBaseline(BaseModel):
         clean = value.strip()
         if not clean:
             raise ValueError("must not be blank")
-        if "\n" in clean or "\r" in clean:
-            raise ValueError("must be one line")
         return clean
-
-    @field_validator("limitation")
-    @classmethod
-    def require_one_sentence(cls, value: str) -> str:
-        sentence_endings = sum(value.count(mark) for mark in "。！？!?")
-        if sentence_endings > 1:
-            raise ValueError("must contain exactly one sentence")
-        if "；" in value or ";" in value:
-            raise ValueError("must not enumerate clauses with semicolons")
-        return value
 
 
 class CampaignSetupProposal(BaseModel):
@@ -111,8 +102,8 @@ class CampaignSetupProposal(BaseModel):
     @classmethod
     def normalize_civilization_baseline(cls, value: str) -> str:
         clean = value.strip()
-        if "\n" in clean or "\r" in clean:
-            raise ValueError("must be one line")
+        if not clean:
+            raise ValueError("must not be blank")
         return clean
 
     def to_core_memory_items(self) -> list[CoreMemoryItem]:
@@ -197,6 +188,14 @@ class CampaignSetupProposalWire(BaseModel):
     )
     civilization_baseline: str = Field(min_length=1)
 
+    @field_validator("currency_unit")
+    @classmethod
+    def normalize_currency_unit(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("must not be blank")
+        return clean
+
     # soft_text 字段（冲突/文明基线）在 wire 上不设上限，把 A/S 判定交给
     # output_validator，确保二轮超过 S 时能进入截断分支（而非先被 Schema 拒绝）。
     @field_validator("major_world_conflicts")
@@ -216,6 +215,8 @@ class CampaignSetupProposalWire(BaseModel):
     @classmethod
     def normalize_civilization_baseline(cls, value: str) -> str:
         clean = value.strip()
+        if not clean:
+            raise ValueError("must not be blank")
         if "\n" in clean or "\r" in clean:
             raise ValueError("must be one line")
         return clean

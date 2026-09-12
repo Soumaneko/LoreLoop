@@ -4,12 +4,18 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.llm import MockLLM
+from app.core.llm.schema import display_schema_json
 from app.domain.core_memory import (
     CampaignSetupAgent,
     CampaignSetupProposal,
     InitConfig,
     build_core_memory,
     build_initial_current_state,
+)
+from app.domain.core_memory.campaign_setup import (
+    CAMPAIGN_SETUP_PROMPT_TARGETS,
+    CampaignSetupProposalWire,
+    PublicPowerBaselineWire,
 )
 from app.domain.current_state import InventoryItem
 from app.graph.initialization_helpers import preview_initialization_config
@@ -164,21 +170,105 @@ def test_campaign_setup_agent_generates_only_public_world_conventions():
     }
 
 
+def test_campaign_setup_agent_retries_blank_currency_and_uses_second():
+    valid = make_proposal().model_dump(mode="json")
+    blank = {**valid, "currency_unit": "   "}
+    mock = MockLLM()
+    mock.set_responses([
+        json.dumps(blank, ensure_ascii=False),
+        json.dumps(valid, ensure_ascii=False),
+    ])
+
+    result = CampaignSetupAgent(mock.build_gateway()).generate(
+        config=make_config(),
+    )
+
+    assert result.currency_unit == "银币"
+
+
 @pytest.mark.parametrize(
     "limitation",
     [
-        ["不能复活死者。"],
         "不能复活死者。\n也不能跨越时间。",
         "不能复活死者。也不能跨越时间。",
         "不能复活死者；也不能跨越时间。",
-        "这是一条超过长度限制的能力边界" * 10,
     ],
 )
-def test_public_power_baseline_accepts_only_one_short_sentence(limitation):
+def test_domain_accepts_player_edited_limitation(limitation):
     payload = make_proposal().model_dump(mode="json")
     payload["public_power_baseline"]["limitation"] = limitation
+    result = CampaignSetupProposal.model_validate(payload)
+    assert result.public_power_baseline.limitation == limitation
+
+
+def test_domain_accepts_multiline_source_and_civilization():
+    payload = make_proposal().model_dump(mode="json")
+    payload["public_power_baseline"]["source"] = "魔法\n源脉"
+    payload["civilization_baseline"] = "农业为主\n手工业辅助"
+    result = CampaignSetupProposal.model_validate(payload)
+    assert result.public_power_baseline.source == "魔法\n源脉"
+    assert result.civilization_baseline == "农业为主\n手工业辅助"
+
+
+def test_domain_rejects_overlong_and_non_string_limitation():
+    payload = make_proposal().model_dump(mode="json")
+    payload["public_power_baseline"]["limitation"] = "边界" * 50
     with pytest.raises(ValidationError):
         CampaignSetupProposal.model_validate(payload)
+    payload["public_power_baseline"]["limitation"] = ["不能复活死者。"]
+    with pytest.raises(ValidationError):
+        CampaignSetupProposal.model_validate(payload)
+
+
+def test_domain_rejects_blank_civilization_baseline():
+    payload = make_proposal().model_dump(mode="json")
+    payload["civilization_baseline"] = "   "
+    with pytest.raises(ValidationError):
+        CampaignSetupProposal.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "limitation",
+    [
+        "不能复活死者。\n也不能跨越时间。",
+        "不能复活死者。也不能跨越时间。",
+        "不能复活死者；也不能跨越时间。",
+    ],
+)
+def test_generation_wire_still_rejects_limitation_shaping(limitation):
+    with pytest.raises(ValidationError):
+        PublicPowerBaselineWire.model_validate({
+            "source": "魔法",
+            "prevalence": "少数人掌握",
+            "learning_difficulty": "困难",
+            "limitation": limitation,
+        })
+
+
+def test_generation_wire_rejects_blank_civilization_baseline():
+    payload = make_proposal().model_dump(mode="json")
+    payload["civilization_baseline"] = "   "
+    with pytest.raises(ValidationError):
+        CampaignSetupProposalWire.model_validate(payload)
+
+
+def test_generation_wire_rejects_blank_currency_unit():
+    payload = make_proposal().model_dump(mode="json")
+    payload["currency_unit"] = "   "
+    with pytest.raises(ValidationError):
+        CampaignSetupProposalWire.model_validate(payload)
+
+
+def test_generation_prompt_schema_keeps_shaping_targets():
+    schema = json.loads(display_schema_json(
+        CampaignSetupProposal,
+        max_lengths=CAMPAIGN_SETUP_PROMPT_TARGETS,
+    ))
+    baseline = schema["$defs"]["PublicPowerBaseline"]
+    assert baseline["properties"]["limitation"]["maxLength"] == 60
+    assert baseline["properties"]["source"]["maxLength"] == 100
+    assert schema["properties"]["civilization_baseline"]["maxLength"] == 160
+    assert "description" not in baseline
 
 
 @pytest.mark.parametrize(

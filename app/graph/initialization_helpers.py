@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import ValidationError
 
+from app.core.client_error import ClientValidationError
 from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.core_memory import (
     CampaignSetupAgent,
@@ -69,17 +71,100 @@ def generate_campaign_setup_stream(payload: dict[str, Any]):
         return result
 
 
+_PLAYER_FIELD_LABELS = {
+    "world_name": "世界名称",
+    "world_style": "世界风格",
+    "ability_system": "能力体系",
+    "custom_ability_system": "自定义能力体系",
+    "protagonist_name": "主角姓名",
+    "protagonist_gender": "主角性别",
+    "protagonist_age": "主角年龄",
+    "protagonist_introduction": "主角介绍",
+    "protagonist_abilities": "主角能力",
+    "protagonist_abilities.name": "主角能力名称",
+    "protagonist_abilities.description": "主角能力说明",
+    "story_expectation": "期待的故事体验",
+    "failure_severity": "失败后果尺度",
+    "currency_unit": "货币单位",
+    "public_power_baseline.source": "力量来源",
+    "public_power_baseline.prevalence": "力量普及率",
+    "public_power_baseline.learning_difficulty": "力量习得难度",
+    "public_power_baseline.limitation": "力量限制",
+    "peoples_and_beings": "主要存在主体",
+    "major_world_conflicts": "世界主要冲突",
+    "dominant_powers": "主导势力",
+    "civilization_baseline": "文明与技术基准",
+}
+
+
+def _player_error_reason(error: Mapping[str, Any]) -> str:
+    kind = error.get("type", "")
+    context = error.get("ctx") or {}
+    if kind in {"missing", "string_too_short"}:
+        return "不能为空"
+    if kind == "string_too_long":
+        limit = context.get("max_length")
+        return f"不能超过 {limit} 个字" if limit else "内容过长"
+    if kind == "too_long":
+        limit = context.get("max_length")
+        return f"最多 {limit} 项" if limit else "数量过多"
+    if kind == "too_short":
+        limit = context.get("min_length")
+        return f"至少 {limit} 项" if limit else "数量不足"
+    if kind == "string_pattern_mismatch":
+        return "每项必须在一行内填写"
+    if kind in {"literal_error", "enum"}:
+        return "取值不在允许范围内"
+    if kind in {
+        "int_parsing",
+        "int_type",
+        "string_type",
+        "list_type",
+        "dict_type",
+        "bool_type",
+    }:
+        return "格式不正确"
+    if kind == "value_error":
+        message = str(error.get("msg", ""))
+        if "blank" in message:
+            return "不能为空"
+        return "格式不正确"
+    return "格式不正确"
+
+
+def _player_input_error_message(exc: ValidationError) -> str:
+    """Turn the first field error into a player-readable Chinese message."""
+    errors = exc.errors(include_url=False)
+    if not errors:
+        return "初始化输入不合法，请检查后重试。"
+    error = errors[0]
+    parts = [
+        str(part)
+        for part in error.get("loc", ())
+        if not isinstance(part, bool) and not isinstance(part, int)
+    ]
+    path = ".".join(parts)
+    label = _PLAYER_FIELD_LABELS.get(path, path or "输入")
+    return f"{label}：{_player_error_reason(error)}。"
+
+
 def prepare_initialization_state(payload: dict[str, Any]) -> InitializationState:
     runtime = get_campaign_runtime()
     config_payload = payload.get("config")
     if not isinstance(config_payload, dict):
-        raise ValueError("config is required")
+        raise ClientValidationError("初始化配置缺失，请重新填写后再提交。")
     proposal_payload = payload.get("campaign_setup")
     if not isinstance(proposal_payload, dict):
-        raise ValueError("campaign_setup is required")
+        raise ClientValidationError("公开世界惯例缺失，请先生成后再提交。")
 
-    config = InitConfig.model_validate(config_payload)
-    proposal = CampaignSetupProposal.model_validate(proposal_payload)
+    try:
+        config = InitConfig.model_validate(config_payload)
+    except ValidationError as exc:
+        raise ClientValidationError(_player_input_error_message(exc)) from exc
+    try:
+        proposal = CampaignSetupProposal.model_validate(proposal_payload)
+    except ValidationError as exc:
+        raise ClientValidationError(_player_input_error_message(exc)) from exc
     record = commit_campaign_setup(config, proposal)
     if record.phase == "completed":
         raise RuntimeError("Initialization is already complete")

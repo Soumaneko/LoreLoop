@@ -495,14 +495,14 @@
         <p>以下内容将成为长期稳定的世界常识。确认前可以直接编辑。</p>
         <div class="form-grid">
           <label><span>货币单位</span><input id="setupCurrencyUnit" maxlength="40" required disabled placeholder="例如：金币" /></label>
-          <label><span>力量来源</span><input id="setupPowerSource" maxlength="120" required disabled placeholder="例如：魔法" /></label>
+          <label><span>力量来源</span><textarea id="setupPowerSource" rows="2" maxlength="120" required disabled placeholder="例如：魔法"></textarea></label>
           <label><span>力量普及率</span><select id="setupPowerPrevalence" required disabled><option>罕见</option><option>少数人掌握</option><option>较为常见</option><option>社会基础</option></select></label>
           <label><span>力量习得难度</span><select id="setupPowerLearningDifficulty" required disabled><option>困难</option><option>适中</option><option>轻松</option></select></label>
-          <label class="wide"><span>力量限制</span><input id="setupPowerLimitation" maxlength="80" required disabled placeholder="用一句话概括这套力量不能突破的边界" /></label>
+          <label class="wide"><span>力量限制</span><textarea id="setupPowerLimitation" rows="2" maxlength="80" required disabled placeholder="概括这套力量不能突破的边界"></textarea></label>
           <label class="wide"><span>主要存在主体</span><textarea id="setupPeoplesAndBeings" rows="3" required disabled placeholder="每行一项，每项不超过 10 个字"></textarea></label>
           <label class="wide"><span>世界主要冲突</span><textarea id="setupMajorWorldConflicts" rows="3" required disabled placeholder="每行一项，填写 1 至 2 项，每项不超过 50 个字"></textarea></label>
           <label class="wide"><span>主导势力</span><textarea id="setupDominantPowers" rows="3" required disabled placeholder="每行一项，填写 1 至 3 项，每项不超过 10 个字"></textarea></label>
-          <label class="wide"><span>文明与技术基准</span><input id="setupCivilizationBaseline" maxlength="200" required disabled placeholder="用一句话概括普通人日常可用的技术与生产水平" /></label>
+          <label class="wide"><span>文明与技术基准</span><textarea id="setupCivilizationBaseline" rows="2" maxlength="200" required disabled placeholder="概括普通人日常可用的技术与生产水平"></textarea></label>
         </div>
       </section>
       <div id="initError" class="form-error" hidden></div>

@@ -128,6 +128,16 @@ Campaign setup contributes these public world baselines:
 - `dominant_powers`: 1-3 entries, at most 10 characters each;
 - `civilization_baseline`.
 
+The stored `CampaignSetupProposal` is also the player-editable submission
+contract. A player may edit the generated proposal, so the domain model keeps
+only required/type/enum/count/length bounds and allows internal newlines or
+semicolon-joined text in `source`, `limitation`, and `civilization_baseline`;
+list items still stay one per line. The generation-shaping rules (single line,
+single sentence, no semicolons) live only in `CampaignSetupProposalWire` and the
+prompt schema, so relaxing player input never relaxes model output. A rejected
+player submission is reported as a labelled field message and is validated
+before `commit_campaign_setup`, so no record or `CoreMemory` is written.
+
 The initialization record advances through recoverable phases:
 
 ```text
