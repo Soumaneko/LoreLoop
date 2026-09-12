@@ -50,3 +50,25 @@ class CoreMemory(BaseModel):
                 if item.kind != "protagonist_invariant"
             ]
         )
+
+    def world_premise(self) -> "CoreMemory":
+        """Projection for world-setting creation.
+
+        Keeps only world-level premises: world invariants, system conventions,
+        and the campaign-setup public ability baseline. Protagonist-private
+        items are removed so a setting can never be built from the player's
+        protagonist identity, personal abilities, or protagonist-facing
+        narrative preferences. A player-authored ``ability_rule`` is private;
+        only the ``campaign_setup`` public power baseline is world-level.
+        """
+        return CoreMemory(
+            items=[
+                item
+                for item in self.items
+                if item.kind in {"world_invariant", "system_convention"}
+                or (
+                    item.kind == "ability_rule"
+                    and item.source == "campaign_setup"
+                )
+            ]
+        )

@@ -136,7 +136,9 @@ class WorldSettingCreator:
                 input_data={
                     "kind": kind,
                     "guidance": guidance,
-                    "core_memory_json": core_memory.model_dump_json(indent=2),
+                    "core_memory_json": core_memory.world_premise().model_dump_json(
+                        indent=2
+                    ),
                     "existing_settings_json": json.dumps(
                         [setting.dedup_view() for setting in existing_settings],
                         ensure_ascii=False,

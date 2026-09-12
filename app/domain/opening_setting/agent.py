@@ -93,7 +93,9 @@ class OpeningSettingAgent:
             task="opening_setting_requirements",
             input_data={
                 "opening_foundation_json": foundation.model_dump_json(indent=2),
-                "core_memory_json": core_memory.model_dump_json(indent=2),
+                "core_memory_json": core_memory.world_premise().model_dump_json(
+                    indent=2
+                ),
                 "output_schema_json": display_schema_json(
                     OpeningSettingSpecs,
                     max_lengths={

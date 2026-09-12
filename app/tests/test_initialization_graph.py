@@ -294,6 +294,22 @@ def test_opening_settings_node_generates_once_and_reuses(
     with runtime.stores.world_setting as store:
         assert len(store.list_all()) == 3
 
+    requirement_input = next(
+        data for task, data in gateway.calls
+        if task == "opening_setting_requirements"
+    )["core_memory_json"]
+    assert "卢西安" not in requirement_input
+    assert "探索、成长" not in requirement_input
+    assert "金币" in requirement_input
+    assert "人类、精灵" in requirement_input
+
+    setting_input = next(
+        data for task, data in gateway.calls
+        if task == "director_setting_create"
+    )["core_memory_json"]
+    assert "卢西安" not in setting_input
+    assert "金币" in setting_input
+
     second = opening_setting_node(state)
     assert second["events"][0]["data"]["reused"] is True
     assert [task for task, _ in gateway.calls if task == "director_setting_create"] == [

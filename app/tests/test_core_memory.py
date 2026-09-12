@@ -102,6 +102,33 @@ def test_player_layer_and_public_proposal_project_to_core_memory():
     assert "北方帝国、圣辉教会" in by_id["core_dominant_powers"].content
 
 
+def test_world_premise_projection_drops_protagonist_and_player_abilities():
+    memory = build_core_memory(
+        make_config(
+            protagonist_abilities=[
+                {"name": "执念拓印", "description": "应承心愿即立因果契约"}
+            ]
+        ),
+        make_proposal(),
+    )
+    premise = memory.world_premise()
+    by_id = {item.id: item for item in premise.items}
+    assert set(by_id) == {
+        "core_world_identity",
+        "core_currency_system",
+        "core_public_power_baseline",
+        "core_peoples_and_beings",
+        "core_major_world_conflicts",
+        "core_dominant_powers",
+        "core_civilization_baseline",
+    }
+    assert "core_player_identity" not in by_id
+    assert "core_player_abilities" not in by_id
+    assert "core_story_expectation" not in by_id
+    assert "core_failure_severity" not in by_id
+    assert by_id["core_public_power_baseline"].source == "campaign_setup"
+
+
 def test_campaign_setup_agent_generates_only_public_world_conventions():
     config = make_config()
     mock = MockLLM()

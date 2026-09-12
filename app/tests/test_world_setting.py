@@ -255,6 +255,110 @@ def test_creator_freely_builds_complete_setting_from_limited_guidance():
     assert "related_settings_json" not in gateway.calls[0]["input_data"]
 
 
+def _premise_core_memory() -> CoreMemory:
+    return CoreMemory(items=[
+        CoreMemoryItem(
+            id="core_world_identity",
+            kind="world_invariant",
+            strength="hard_constraint",
+            source="player",
+            content="当前世界名为「大乾江湖」，世界风格为：武侠\n能力体系为：武学",
+        ),
+        CoreMemoryItem(
+            id="core_player_identity",
+            kind="protagonist_invariant",
+            strength="hard_constraint",
+            source="player",
+            content="主角是顾平生，男性，21岁。",
+        ),
+        CoreMemoryItem(
+            id="core_player_abilities",
+            kind="ability_rule",
+            strength="hard_constraint",
+            source="player",
+            content="主角的特殊能力：\n- 执念拓印：应承未了心愿即立因果契约",
+        ),
+        CoreMemoryItem(
+            id="core_story_expectation",
+            kind="narrative_preference",
+            strength="strong_preference",
+            source="player",
+            content="玩家期望：以了愿客的身份浪迹天涯，白嫖天下绝学。",
+        ),
+        CoreMemoryItem(
+            id="core_public_power_baseline",
+            kind="ability_rule",
+            strength="hard_constraint",
+            source="campaign_setup",
+            content="公开力量来源：武学\n社会普及率：较为常见",
+        ),
+    ])
+
+
+def _open_foundation():
+    from app.domain.opening_foundation import OpeningFoundation
+
+    return OpeningFoundation.model_validate({
+        "version": 1,
+        "starting_location": {
+            "name": "临江渡口",
+            "description": "大乾东南水路要冲。",
+        },
+        "protagonist_opening_situation": "顾平生在酒楼落座。",
+        "initial_resources": {
+            "inventory": [],
+            "money": 10,
+            "fixed_assets": [],
+        },
+    })
+
+
+def test_world_setting_creator_receives_only_world_premise():
+    gateway = _Gateway({
+        "name": "临江渡口",
+        "summary": "大乾东南水路枢纽。",
+        "public_facts": ["码头由漕帮管理。"],
+    })
+
+    WorldSettingCreator(gateway).create(
+        kind="location",
+        guidance="临江渡口——水路枢纽",
+        core_memory=_premise_core_memory(),
+        existing_settings=[],
+        turn_index=0,
+    )
+
+    sent = gateway.calls[0]["input_data"]["core_memory_json"]
+    assert "顾平生" not in sent
+    assert "执念拓印" not in sent
+    assert "了愿客" not in sent
+    assert "大乾江湖" in sent
+    assert "公开力量来源" in sent
+
+
+def test_opening_setting_agent_receives_only_world_premise():
+    from app.domain.opening_setting import OpeningSettingAgent
+
+    gateway = _Gateway({
+        "specs": [
+            {"kind": "faction", "setting_description": "掌控商路的商会。"},
+            {"kind": "location", "setting_description": "一座贸易港。"},
+        ],
+    })
+
+    OpeningSettingAgent(gateway).generate(
+        foundation=_open_foundation(),
+        core_memory=_premise_core_memory(),
+    )
+
+    sent = gateway.calls[0]["input_data"]["core_memory_json"]
+    assert "顾平生" not in sent
+    assert "执念拓印" not in sent
+    assert "了愿客" not in sent
+    assert "大乾江湖" in sent
+    assert "公开力量来源" in sent
+
+
 def test_setting_requires_concrete_non_overlapping_facts():
     with pytest.raises(ValidationError):
         SettingCreateOutput(name="空壳", summary="没有事实。")

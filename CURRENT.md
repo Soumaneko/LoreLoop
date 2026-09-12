@@ -330,6 +330,14 @@ Initialization creates identity, world style, ability system, protagonist,
 story-expectation, failure-severity, currency, public power, peoples, conflict,
 power-group, and civilization items from the validated setup contracts.
 
+World-setting creation receives only the `world_premise` projection:
+`world_invariant` and `system_convention` items plus the `campaign_setup`
+public ability baseline. A player-authored `ability_rule` is protagonist-private
+and is excluded, so neither `OpeningSettingAgent` nor `WorldSettingCreator`
+(opening and director-side) can build a setting from the player's protagonist
+identity, personal abilities, or protagonist-facing narrative preferences. This
+is a deterministic input boundary, not a prompt instruction.
+
 ## 7. Current State and Scene Facts
 
 `CurrentState` represents only the present:
