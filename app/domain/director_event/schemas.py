@@ -8,7 +8,6 @@ from app.core.time import utc_now
 from app.domain.current_state.schemas import WorldClock
 from app.domain.director.schemas import DirectorResourceRef
 
-DirectorEventRole = Literal["arc", "ambient"]
 DirectorEventStage = Literal["hidden", "engaged", "resolved"]
 EventHookKind = Literal["auditory", "visual", "rumor", "item", "environment"]
 
@@ -51,7 +50,6 @@ class DirectorEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(default_factory=_new_id)
-    role: DirectorEventRole
     title: str = Field(min_length=1)
     stage: DirectorEventStage = "hidden"
 
@@ -59,6 +57,7 @@ class DirectorEvent(BaseModel):
     intent: str = Field(min_length=1)
     method: str = Field(min_length=1)
     macro_intent: str = Field(min_length=1)
+    conception: str = Field(default="", max_length=800)
 
     hook_pool: list[EventHook] = Field(default_factory=list)
 
@@ -102,10 +101,10 @@ class DirectorEvent(BaseModel):
     def semantic_view(self) -> dict:
         return {
             "event_id": self.event_id,
-            "role": self.role,
             "title": self.title,
             "stage": self.stage,
             "subject": self.subject,
+            "conception": self.conception,
             "intent": self.intent,
             "method": self.method,
             "macro_intent": self.macro_intent,
@@ -122,9 +121,8 @@ class DirectorEventSelectionResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     current_story_direction: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    duration_phases: int = Field(ge=1, le=140)
+    conception: str = Field(min_length=1, max_length=800)
+    subject: str = Field(min_length=1)
     actor_roles: list[DirectorEventActorRole] = Field(
         default_factory=list,
         max_length=6,
@@ -137,12 +135,13 @@ class DirectorEventSelectionResult(BaseModel):
             "仍带 fact_id 的事实里选择。"
         ),
     )
-    subject: str = Field(min_length=1)
     intent: str = Field(min_length=1)
     method: str = Field(min_length=1)
     macro_intent: str = Field(min_length=1)
     hook_pool: list[EventHook] = Field(min_length=1)
     world_impact: WorldImpact
+    title: str = Field(min_length=1)
+    duration_phases: int = Field(ge=1, le=140)
 
     @field_validator("actor_roles")
     @classmethod
@@ -162,7 +161,6 @@ class DirectorEventSelectionResult(BaseModel):
     def to_event(
         self,
         *,
-        role: DirectorEventRole,
         turn_index: int,
         current_clock: WorldClock,
         source_setting_ids: list[str] | None = None,
@@ -170,13 +168,13 @@ class DirectorEventSelectionResult(BaseModel):
     ) -> DirectorEvent:
         now = utc_now()
         return DirectorEvent(
-            role=role,
             title=self.title,
             stage="hidden",
             subject=self.subject,
             intent=self.intent,
             method=self.method,
             macro_intent=self.macro_intent,
+            conception=self.conception,
             hook_pool=list(self.hook_pool),
             actors=list(actors or []),
             source_setting_ids=list(source_setting_ids or []),
@@ -194,7 +192,11 @@ class DirectorEventSelectionResult(BaseModel):
 class DirectorEventSelectionOutput(DirectorEventSelectionResult):
     """LLM boundary: an instantiated Event must name its Setting facts."""
 
-    selected_setting_fact_ids: list[str] = Field(min_length=1, max_length=8)
+    model_config = ConfigDict(extra="forbid", validate_default=True)
+
+    selected_setting_fact_ids: list[str] = Field(
+        default_factory=list, min_length=1, max_length=8
+    )
 
 
 class DirectorEventHiddenReviewResult(BaseModel):

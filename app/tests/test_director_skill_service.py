@@ -267,7 +267,6 @@ def test_batch_validation_surfaces_real_arguments_error():
         request_id="event_1",
         skill="create_event",
         arguments={
-            "role": "arc",
             "setting_requirements": [
                 {"kind": "location", "setting_description": "依托山道驿站。"},
             ],

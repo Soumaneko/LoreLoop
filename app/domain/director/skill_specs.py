@@ -26,7 +26,6 @@ from pydantic import (
 )
 
 from app.domain.director.schemas import DirectorPhase
-from app.domain.director_event.schemas import DirectorEventRole
 from app.domain.npc_profile.schemas import (
     NPC_PERSONALITY_TRAIT_MAX_LENGTH,
     NPCDisclosureLevel,
@@ -215,7 +214,6 @@ EventActorInput = Annotated[
 class CreateEventArguments(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    role: DirectorEventRole
     setting_requirements: list[SettingRequirement] = Field(
         min_length=1,
         max_length=1,
@@ -345,13 +343,14 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="create_event",
         description=(
-            "创建一个长线事件（arc）或环境事件（ambient），"
-            "只描述主角视线之外的世界动态，不得推动、包装或代劳主角当前主线行动。"
-            "actors 为强制演员清单，至少一名真实演员：已有 NPC 用 source='existing' "
-            "并填 npc_id，新人物用 source='new' 并填创建要求；组织名不能替代演员，"
-            "禁止无人物事件。在 setting_requirements 声明 1 个因果依托 Setting："
-            "命中时只能选 event_creation_available=true 的 matched_setting_id，"
-            "否则留空。请求级 guidance 用自由文本指定事件方向。"
+            "让第三方按自身目的行动，触及主角附近的人与目标，带来可回应的请求与机会；"
+            "玩家保有选择。"
+            "guidance 写清谁想做什么、对哪个对象采取什么行动、带来什么变化；"
+            "背景与因果由 Selector 结合 Setting 补全。"
+            "actors 至少一名真实演员：已有 NPC 用 source='existing' 填 npc_id，"
+            "新人物用 source='new'；组织名不能替代演员，禁止无人物事件。"
+            "setting_requirements 声明 1 个依托 Setting：命中时只能选 "
+            "event_creation_available=true 的 matched_setting_id，否则留空。"
         ),
         phases=_CONFIRMATION,
         mutates=True,

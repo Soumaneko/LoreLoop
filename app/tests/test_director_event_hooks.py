@@ -18,7 +18,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -41,7 +41,7 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
             ),
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 
@@ -76,7 +76,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -93,7 +93,7 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
         store.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
@@ -141,7 +141,7 @@ def test_present_event_carries_optional_actors_into_material(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -158,7 +158,7 @@ def test_present_event_carries_optional_actors_into_material(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 
@@ -223,7 +223,6 @@ def test_intrude_engaged_event_selects_subset_of_cast(tmp_path):
         store.upsert(samuel)
         store.upsert(trevor)
     event = DirectorEvent(
-        role="ambient",
         title="走私暗流",
         subject="走私网络退潮",
         intent="把货物送入市场。",
@@ -327,7 +326,7 @@ def test_present_event_requires_hook_id(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -344,7 +343,7 @@ def test_present_event_requires_hook_id(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 
@@ -386,7 +385,7 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -403,7 +402,7 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 
@@ -436,7 +435,7 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -453,7 +452,7 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
         store.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
@@ -487,7 +486,7 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -504,7 +503,7 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 

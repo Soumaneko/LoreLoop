@@ -474,7 +474,6 @@ def test_composer_receives_engaged_event_actor_profiles(
         store.upsert(samuel)
         store.upsert(trevor)
     event = DirectorEvent(
-        role="ambient",
         title="走私暗流",
         subject="走私网络退潮",
         intent="把货物送入市场。",

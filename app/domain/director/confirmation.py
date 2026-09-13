@@ -294,7 +294,6 @@ class DirectorConfirmationExecutor:
             self._resolve_event_actors(args.actors)
         )
         selection = DirectorEventSelector(self._gateway).select_or_create(
-            role=args.role,
             events=self._event_store.list_all(),
             current_state=self._current_state,
             core_memory=self._core_memory,
@@ -305,7 +304,6 @@ class DirectorConfirmationExecutor:
             guidance=event_guidance,
         )
         event = selection.to_event(
-            role=args.role,
             turn_index=self._turn_index,
             actors=bound_actors,
             current_clock=self._current_state.world_clock,
@@ -374,7 +372,6 @@ class DirectorConfirmationExecutor:
             self._plan.npc_drafts.extend(drafts)
         return {
             "event_id": event.event_id,
-            "role": event.role,
             "new_npc_ids": new_npc_ids,
             "actor_names": actor_names,
         }

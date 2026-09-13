@@ -344,7 +344,6 @@ def test_confirmation_observation_two_tier_npcs(tmp_path):
     with stores.director_npc as store:
         store.save(prepared_draft)
     event = DirectorEvent(
-        role="ambient",
         title="旧桥封锁",
         subject="河务署",
         intent="控制渡河通道",

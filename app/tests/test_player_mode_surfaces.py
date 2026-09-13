@@ -37,7 +37,6 @@ def _seed_event():
     runtime = get_campaign_runtime()
     with runtime.stores.director_event as store:
         store.save(DirectorEvent(
-            role="ambient",
             title="旧桥封锁",
             subject="河务署",
             intent="控制渡河通道",
@@ -86,7 +85,6 @@ def test_load_player_events_browses_creator_mode():
     event = payload["events"][0]
     assert event["event_id"].startswith("director_event_")
     assert event["title"] == "旧桥封锁"
-    assert event["role"] == "ambient"
     assert event["stage"] == "hidden"
     assert event["deadline_clock"]["day"] >= 1
     assert event["created_turn"] == 1

@@ -87,7 +87,6 @@ def test_summarize_decision_covers_every_skill(tmp_path):
             _request(
                 "create_event",
                 {
-                    "role": "arc",
                     "actors": [{"source": "new"}, {"source": "existing"}],
                     "setting_requirements": [{"kind": "location"}],
                 },
@@ -109,7 +108,7 @@ def test_summarize_decision_covers_every_skill(tmp_path):
     assert "呈现事件「event_x」" in measures
     assert "引入事件「event_x」" in measures
     assert "创建NPC「柴行简」依托faction" in measures
-    assert "创建事件(arc) 演员2 依托location" in measures
+    assert "创建事件 演员2 依托location" in measures
     assert "绑定演员「event_x←林澈」" in measures
 
 
@@ -270,7 +269,6 @@ def test_confirmation_entry_records_actual_execution_results(tmp_path):
             skill="create_event",
             output={
                 "event_id": "director_event_abc",
-                "role": "arc",
                 "new_npc_ids": ["director_npc_1"],
                 "actor_names": ["周汐"],
             },
@@ -290,6 +288,6 @@ def test_confirmation_entry_records_actual_execution_results(tmp_path):
     )
 
     assert "director_event_abc" in entry["measures"]
-    assert "arc" in entry["measures"]
+    assert "创建事件" in entry["measures"]
     assert "演员:周汐" in entry["measures"]
     assert "创建NPC「柴行简」" in entry["measures"]

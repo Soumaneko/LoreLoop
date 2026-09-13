@@ -16,7 +16,6 @@ from app.runtime.uow import CampaignUnitOfWork
 
 def _event() -> DirectorEvent:
     return DirectorEvent(
-        role="ambient",
         title="旧桥封锁",
         subject="河务署",
         intent="控制渡河通道",

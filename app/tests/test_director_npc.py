@@ -222,7 +222,7 @@ def test_creator_includes_recent_creations_in_prompt():
         }
     )
     recent_creations = [
-        {"kind": "event", "title": "沉船账本", "role": "arc"},
+        {"kind": "event", "title": "沉船账本"},
         {"kind": "npc", "name": "阿贵", "role": "账房先生"},
     ]
 

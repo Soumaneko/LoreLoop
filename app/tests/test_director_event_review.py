@@ -24,7 +24,7 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -42,7 +42,6 @@ def test_confirmation_review_event_commits_engagement_and_hook_consumption(tmp_p
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(
-        role="ambient",
         turn_index=1,
         current_clock=WorldClock(),
     )
@@ -103,7 +102,7 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -120,7 +119,7 @@ def test_confirmation_does_not_commit_when_write_db_disabled(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 
@@ -148,7 +147,7 @@ def test_hidden_review_engages_event(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -165,7 +164,7 @@ def test_hidden_review_engages_event(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 
@@ -197,7 +196,7 @@ def test_engaged_review_resolves_event(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -214,7 +213,7 @@ def test_engaged_review_resolves_event(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
         store.set_stage(event_id, "engaged", turn_index=2)
@@ -286,7 +285,6 @@ def test_resolved_review_reopens_one_event_slot_in_same_confirmation(tmp_path):
                 "request_id": "event_2",
                 "skill": "create_event",
                 "arguments": {
-                    "role": "ambient",
                     "setting_requirements": [{
                         "kind": "location",
                         "setting_description": "事件依托河岸船坞。",
@@ -333,7 +331,7 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -350,7 +348,7 @@ def test_engaged_review_keeps_event_when_not_resolved(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
         store.set_stage(event_id, "engaged", turn_index=2)
@@ -382,7 +380,7 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -399,7 +397,7 @@ def test_review_node_skips_events_created_this_turn(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=3, current_clock=WorldClock())
+    ).to_event(turn_index=3, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 
@@ -432,7 +430,7 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -449,7 +447,7 @@ def test_keep_hidden_does_not_transition_stage(tmp_path):
             )
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
-    ).to_event(role="ambient", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
 
@@ -483,7 +481,7 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
     for index, title in enumerate(["无灯船", "夜探码头"], start=1):
         selection = DirectorEventSelectionResult(
             current_story_direction="河岸码头出现异常动静。",
-            reason="独立世界事件。",
+            conception="独立世界事件。",
             title=title,
             duration_phases=7,
             actor_roles=[],
@@ -500,8 +498,7 @@ def test_hidden_review_batch_covers_multiple_events_in_one_call(tmp_path):
                 )
             ],
             world_impact=WorldImpact(description="外围变为凡人活动区。"),
-        ).to_event(
-            role="ambient", turn_index=index, current_clock=WorldClock()
+        ).to_event( turn_index=index, current_clock=WorldClock()
         )
         with stores.director_event as store:
             ids.append(store.save(selection))
@@ -547,7 +544,7 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
     for index, title in enumerate(["无灯船", "夜探码头"], start=1):
         selection = DirectorEventSelectionResult(
             current_story_direction="河岸码头出现异常动静。",
-            reason="独立世界事件。",
+            conception="独立世界事件。",
             title=title,
             duration_phases=7,
             actor_roles=[],
@@ -564,8 +561,7 @@ def test_engaged_review_batch_covers_multiple_events_in_one_call(tmp_path):
                 )
             ],
             world_impact=WorldImpact(description="外围变为凡人活动区。"),
-        ).to_event(
-            role="ambient", turn_index=index, current_clock=WorldClock()
+        ).to_event( turn_index=index, current_clock=WorldClock()
         )
         with stores.director_event as store:
             ids.append(store.save(selection))
@@ -611,7 +607,7 @@ def test_review_input_uses_actor_names_only(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     selection = DirectorEventSelectionResult(
         current_story_direction="河岸码头出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -629,7 +625,6 @@ def test_review_input_uses_actor_names_only(tmp_path):
         ],
         world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(
-        role="ambient",
         turn_index=1,
         current_clock=WorldClock(),
         actors=[DirectorActorRef(name="港务署"), DirectorActorRef(name="林澈")],
@@ -667,7 +662,7 @@ def _review_selection(title):
 
     return DirectorEventSelectionResult(
         current_story_direction=f"{title} 出现异常动静。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title=title,
         duration_phases=7,
         actor_roles=[],
@@ -691,13 +686,11 @@ def test_hidden_success_engaged_failure_keeps_hidden_result(tmp_path):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     with stores.director_event as store:
         hidden_id = store.save(
-            _review_selection("无灯船").to_event(
-                role="ambient", turn_index=1, current_clock=WorldClock()
+            _review_selection("无灯船").to_event( turn_index=1, current_clock=WorldClock()
             )
         )
         engaged_id = store.save(
-            _review_selection("夜哨").to_event(
-                role="ambient", turn_index=1, current_clock=WorldClock()
+            _review_selection("夜哨").to_event( turn_index=1, current_clock=WorldClock()
             )
         )
         store.set_stage(engaged_id, "engaged", turn_index=2)

@@ -25,7 +25,6 @@ from app.domain.views import project_current_state
 def _event_hook_view(event: DirectorEvent) -> dict:
     return {
         "event_id": event.event_id,
-        "role": event.role,
         "title": event.title,
         "subject": event.subject,
         "intent": event.intent,

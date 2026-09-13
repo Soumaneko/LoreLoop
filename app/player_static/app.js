@@ -5108,7 +5108,6 @@ function renderSettingRecords(settings) {
   }
 }
 
-const EVENT_ROLE_LABELS = { arc: "主线", ambient: "环境" };
 const EVENT_STAGE_LABELS = { hidden: "隐藏", engaged: "进行中", resolved: "已解决" };
 const EVENT_HOOK_KIND_LABELS = {
   auditory: "听觉", visual: "视觉", rumor: "传闻", item: "物品", environment: "环境",
@@ -5131,13 +5130,11 @@ function renderEventRecords(events) {
   const resolvedEvents = events.filter((e) => e.stage === "resolved");
 
   const renderEvent = (event, container) => {
-    const roleLabel = EVENT_ROLE_LABELS[event.role] || event.role;
     const stageLabel = EVENT_STAGE_LABELS[event.stage] || event.stage;
     const statusActive = event.stage !== "resolved";
 
     // 1. 属性网格
     const metaRows = [
-      ["定位", roleLabel],
       ["阶段", stageLabel],
     ];
     if (event.deadline_clock) metaRows.push(["期限", _formatEventClock(event.deadline_clock)]);

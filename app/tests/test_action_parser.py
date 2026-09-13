@@ -219,7 +219,6 @@ def test_action_parser_filters_unknown_touched_event_id_after_retry():
 
     visible_event = SimpleNamespace(
         event_id="evt_visible",
-        role="arc",
         title="商路封锁",
         subject="河务署",
         intent="控制渡河通道",

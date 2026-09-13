@@ -21,7 +21,7 @@ from app.domain.director_event import (
 def _event_selection() -> DirectorEventSelectionResult:
     return DirectorEventSelectionResult(
         current_story_direction="港口失踪案仍在扩大。",
-        reason="这是独立的长期世界活动。",
+        conception="这是独立的长期世界活动。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -51,7 +51,6 @@ def _event_selection() -> DirectorEventSelectionResult:
 
 def _event():
     return _event_selection().to_event(
-        role="ambient",
         turn_index=3,
         current_clock=WorldClock(),
         actors=[DirectorActorRef(name="港务署")],
@@ -133,11 +132,9 @@ def test_hooks_are_stored_but_hidden_from_consumer_projections():
 
 def test_multiple_active_events_allowed_without_role_limit():
     store = open_director_event_store()
-    first = _event_selection().to_event(
-        role="arc", turn_index=1, current_clock=WorldClock()
+    first = _event_selection().to_event( turn_index=1, current_clock=WorldClock()
     )
-    second = _event_selection().to_event(
-        role="arc", turn_index=2, current_clock=WorldClock()
+    second = _event_selection().to_event( turn_index=2, current_clock=WorldClock()
     )
     store.save(first)
     store.save(second)
@@ -253,7 +250,7 @@ def test_selection_actor_roles_require_unique_keys_and_event_uses_bound_actors()
 
     selection = DirectorEventSelectionResult(
         current_story_direction="港口失踪案仍在扩大。",
-        reason="这是独立的长期世界活动。",
+        conception="这是独立的长期世界活动。",
         title="无灯船",
         duration_phases=7,
         actor_roles=[],
@@ -275,7 +272,6 @@ def test_selection_actor_roles_require_unique_keys_and_event_uses_bound_actors()
     )
 
     event = selection.to_event(
-        role="ambient",
         turn_index=3,
         current_clock=WorldClock(),
         actors=[DirectorActorRef(name="林澈"), DirectorActorRef(name="港务署")],
@@ -285,7 +281,7 @@ def test_selection_actor_roles_require_unique_keys_and_event_uses_bound_actors()
     with pytest.raises(ValidationError):
         DirectorEventSelectionResult(
             current_story_direction="港口失踪案仍在扩大。",
-            reason="这是独立的长期世界活动。",
+            conception="这是独立的长期世界活动。",
             title="无灯船",
             duration_phases=7,
             actor_roles=[
@@ -332,7 +328,6 @@ def test_event_selector_output_requires_selected_setting_fact_ids():
 
 def test_event_deadline_is_derived_from_required_current_clock():
     event = _event_selection().to_event(
-        role="ambient",
         turn_index=3,
         current_clock=WorldClock(day=4, phase="黄昏"),
     )
@@ -348,3 +343,53 @@ def test_actor_role_rejects_blank_role_in_event():
             actor_key="actor_1",
             role_in_event="   ",
         )
+
+
+def test_event_selection_persists_conception():
+    event = _event_selection().to_event(
+        turn_index=3,
+        current_clock=WorldClock(),
+    )
+
+    assert event.conception == "这是独立的长期世界活动。"
+    assert event.semantic_view()["conception"] == "这是独立的长期世界活动。"
+
+
+def test_legacy_event_without_conception_loads_with_empty_default():
+    from app.domain.director_event.schemas import DirectorEvent
+
+    payload = _event().model_dump(mode="json")
+    payload.pop("conception")
+
+    restored = DirectorEvent.model_validate(payload)
+
+    assert restored.conception == ""
+
+
+def test_player_event_projection_excludes_conception():
+    from app.domain.director_event.views import project_director_event
+
+    event = _event()
+
+    hidden = json.loads(project_director_event(event))
+    engaged = json.loads(
+        project_director_event(event, effective_stage="engaged")
+    )
+
+    assert "conception" not in hidden
+    assert "conception" not in engaged
+
+
+def test_selection_schema_and_prompts_agree_on_conception_field():
+    from app.core.llm.prompts import PromptLoader
+    from app.core.llm.schema import schema_json
+    from app.domain.director_event.schemas import DirectorEventSelectionOutput
+
+    schema = schema_json(DirectorEventSelectionOutput)
+    assert "conception" in schema
+    assert '"reason"' not in schema
+
+    loader = PromptLoader()
+    content, _ = loader.load("director_event_select")
+    assert "- conception" in content
+    assert "- reason" not in content

@@ -853,8 +853,6 @@ function renderStatePanel() {
   const resources = current.resources || {};
   const participants = scene.participants || [];
   const activeDirectorEvents = data.active_director_events || [];
-  const activeArcEvent = activeDirectorEvents.find((event) => event.role === "arc");
-  const activeAmbientEvent = activeDirectorEvents.find((event) => event.role === "ambient");
   const preparedDirectorNpcs = data.prepared_director_npcs || [];
   const introducedDirectorNpcs = data.introduced_director_npcs || [];
   const continuityItems = data.continuity_items || [];
@@ -887,8 +885,6 @@ function renderStatePanel() {
     ${details("导演", `
       ${metrics([
         metric("事件", activeDirectorEvents.length, activeDirectorEvents.length ? "ok" : ""),
-        metric("Arc", activeArcEvent ? "active" : "none", activeArcEvent ? "ok" : ""),
-        metric("Ambient", activeAmbientEvent ? "active" : "none", activeAmbientEvent ? "ok" : ""),
         metric("已准备NPC", preparedDirectorNpcs.length, preparedDirectorNpcs.length ? "info" : ""),
         metric("已引入NPC", introducedDirectorNpcs.length, introducedDirectorNpcs.length ? "ok" : ""),
       ])}
@@ -1132,8 +1128,7 @@ function stepTasks(scope, stepName) {
       "director_agent_decide_confirmation",
       "director_event_review_hidden",
       "director_event_review_engaged",
-      "director_event_select_arc",
-      "director_event_select_ambient",
+      "director_event_select",
       "director_npc_create",
       "director_setting_create",
     ],
@@ -1339,15 +1334,11 @@ function renderDirectorDebug() {
   const server = state.serverState || {};
   const active = sortDirectorEvents(server.active_director_events || []);
   const resolved = server.resolved_director_events || [];
-  const activeArc = active.find((event) => event.role === "arc");
-  const activeAmbient = active.find((event) => event.role === "ambient");
   const preparedNpcs = server.prepared_director_npcs || [];
   const introducedNpcs = server.introduced_director_npcs || [];
   return `
     ${card("导演库存", metrics([
       metric("Active", active.length, active.length ? "ok" : ""),
-      metric("Arc", activeArc ? "active" : "none", activeArc ? "ok" : ""),
-      metric("Ambient", activeAmbient ? "active" : "none", activeAmbient ? "ok" : ""),
       metric("Resolved", resolved.length, resolved.length ? "info" : ""),
       metric("Prepared NPC", preparedNpcs.length, preparedNpcs.length ? "info" : ""),
       metric("Introduced NPC", introducedNpcs.length, introducedNpcs.length ? "ok" : ""),
@@ -1806,7 +1797,7 @@ function directorCard(event) {
   const finalWorldImpact = event.final_world_impact || null;
   const deadlineClock = event.deadline_clock || null;
   return `<div class="section-card">
-    <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric(event.role || "role?", event.stage || "active", event.stage === "resolved" ? "info" : "ok")}</div>
+    <div class="card-title"><span>${esc(event.title || event.event_id)}</span>${metric("阶段", event.stage || "active", event.stage === "resolved" ? "info" : "ok")}</div>
     ${event.macro_intent ? `<div style="margin-bottom:8px">${esc(event.macro_intent)}</div>` : ""}
     ${kv([
       ["ID", esc(text(event.event_id))],

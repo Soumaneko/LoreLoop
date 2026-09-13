@@ -1321,6 +1321,13 @@ still-unused fact from it as
 unavailable IDs. The selected facts must ground `intent` or `method` and derive
 observable Hooks. Public facts may be presented directly; hidden facts may drive
 backstage causality but Hooks expose only their observable consequences or traces.
+Because the coordinating Director supplies only a directional brief, the Selector
+owns instantiation: unresolved phrases such as "some object/person/matter" are
+directions to be resolved into a concrete core object, stakes, and an investigable
+causal chain, not left to later prose. A passing Selection answers what happens,
+why the actor cares, how it acts, and what the player can find and act on; at least
+one Hook carries a confirmable investigative lead grounded in `method`, with
+atmospheric signs only supplementary.
 The confirmation Director's compact Setting catalog marks
 `event_creation_available`; a dynamic `create_event` argument validator rejects
 an existing Setting whose Facts are all used, while leaving that Setting available
@@ -1333,11 +1340,15 @@ core; resolved Events additionally expose `resolved_reason` and
 ## 14. Director Event
 
 `DirectorEvent` is a long-lived world event with a single stage
-`hidden | engaged | resolved` and:
+`hidden | engaged | resolved`. There is one Event type, not a role split; an
+Event may be closely tied to the protagonist's current or near-accessible
+situation (competition, obstacles, losses, new opportunities), but it never
+decides the player's action or reverses adjudicated results. It carries:
 
-- role `arc | ambient`;
-- a persistent Core Intent: `subject`, `intent`, `method`, and one-line
-  `macro_intent`;
+- a persistent Core Intent: `conception` (the Selector's concrete event core —
+  the object or change with identifying features, the organizational purpose,
+  and what at least one Hook will reveal), `subject`, `intent`, `method`, and
+  one-line `macro_intent`;
 - a consumable Hook Pool: each hook has a kind (auditory/visual/rumor/
   item/environment), content, trigger anchors, and a `consumed` flag;
 - an actor list: each entry carries a `name` and an optional `DirectorResourceRef`
@@ -1352,6 +1363,13 @@ core; resolved Events additionally expose `resolved_reason` and
 - `final_world_impact`: the actual settled impact, or null when no automatic
   impact is applied;
 - resolution reason and turn.
+
+The persisted `conception` keeps the Selector's concrete event core alive after
+creation: it appears in `semantic_view()` (so later Selector duplicate checks,
+reviewers, the Generation observation, NPC creation, and engaged-event
+composition all see it) and defaults to empty for legacy Events. It is never
+part of the player-facing `project_director_event` projection, and a hidden
+event's `present_event` material still exposes only its Hook.
 
 The store can read legacy saves containing multiple active Events, but the
 confirmation creation gate allows no new Event while any hidden or engaged Event

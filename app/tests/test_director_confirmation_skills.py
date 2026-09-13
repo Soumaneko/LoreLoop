@@ -103,7 +103,6 @@ def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
     from app.domain.director.skill_specs import CreateEventArguments
 
     validated = CreateEventArguments.model_validate({
-        "role": "arc",
         "setting_requirements": [
             {
                 "kind": "location",
@@ -118,7 +117,6 @@ def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
 
     with pytest.raises(ValidationError, match="at most 1 item"):
         CreateEventArguments.model_validate({
-            "role": "arc",
             "setting_requirements": [
                 {"kind": "lore", "guidance": "规则一。"},
                 {"kind": "item", "guidance": "规则二。"},
@@ -128,7 +126,6 @@ def test_setting_requirements_accepts_exactly_one_entry_with_optional_id():
 
     with pytest.raises(ValidationError):
         CreateEventArguments.model_validate({
-            "role": "arc",
             "setting_requirements": [
                 {"kind": "lore", "guidance": f"抽象规则 {index}"}
                 for index in range(5)
@@ -141,7 +138,6 @@ def test_create_event_requires_at_least_one_real_actor():
     from app.domain.director.skill_specs import CreateEventArguments
 
     base = {
-        "role": "arc",
         "setting_requirements": [
             {"kind": "location", "setting_description": "依托山道驿站。"},
         ],
@@ -214,7 +210,6 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
                     "request_id": "event_1",
                     "skill": "create_event",
                     "arguments": {
-                        "role": "ambient",
                         "setting_requirements": [{
                             "kind": "location",
                             "setting_description": "agent 需要的交通节点。",

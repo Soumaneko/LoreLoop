@@ -12,7 +12,6 @@ def project_director_event(
     if stage == "hidden":
         data = {
             "event_id": event.event_id,
-            "role": event.role,
             "title": event.title,
             "stage": "hidden",
             "hooks": [
@@ -29,7 +28,6 @@ def project_director_event(
     else:
         data = {
             "event_id": event.event_id,
-            "role": event.role,
             "title": event.title,
             "stage": stage,
             "macro_intent": event.macro_intent,

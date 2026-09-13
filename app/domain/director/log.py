@@ -34,11 +34,10 @@ def summarize_executions(executions, stores) -> str:
         elif skill == "create_event":
             event_id = output.get("event_id")
             title = _event_title(stores, event_id)
-            role = output.get("role") or ""
             actors = output.get("actor_names") or []
             actor_text = "、".join(str(actor) for actor in actors)
             lines.append(
-                f"创建事件「{title}」({event_id}, {role}, 演员:{actor_text})"
+                f"创建事件「{title}」({event_id}, 演员:{actor_text})"
             )
         elif skill == "upgrade_disclosure":
             name = _npc_name(stores, output.get("npc_id"))
@@ -101,9 +100,8 @@ def _summarize_request(request, stores) -> str:
         name = _structured_name(request.guidance) or "未知"
         return f"创建NPC「{name}」依托{_setting_kind(arguments)}"
     if skill == "create_event":
-        role = arguments.get("role") or ""
         actors = arguments.get("actors") or []
-        return f"创建事件({role}) 演员{len(actors)} 依托{_setting_kind(arguments)}"
+        return f"创建事件 演员{len(actors)} 依托{_setting_kind(arguments)}"
     if skill == "bind_event_actor":
         event = _event_title(stores, arguments.get("event_id"))
         npc = _npc_name(stores, arguments.get("npc_id"))

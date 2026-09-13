@@ -58,7 +58,7 @@ def make_director_npc() -> DirectorNPCDraft:
 def make_event_selection_output(actor_roles: list[dict] | None = None) -> dict:
     return {
         "current_story_direction": "一条围绕河岸码头旧案的复仇线。",
-        "reason": "世界缺乏明确的长期目标。",
+        "conception": "世界缺乏明确的长期目标。",
         "title": "沉船账本",
         "duration_phases": 7,
         "selected_setting_fact_ids": ["fact_1"],
@@ -88,7 +88,6 @@ def seed_deadline_event(stores, *, stage="hidden"):
         make_event_selection_output()
     )
     event = selection.to_event(
-        role="ambient",
         turn_index=1,
         current_clock=WorldClock(day=1, phase="清晨"),
     )
@@ -108,7 +107,7 @@ def make_intrude_event():
 
     return DirectorEventSelectionResult(
         current_story_direction="商路日益吃紧。",
-        reason="独立世界事件。",
+        conception="独立世界事件。",
         title="商路封锁",
         duration_phases=7,
         actor_roles=[],
@@ -125,7 +124,7 @@ def make_intrude_event():
             )
         ],
         world_impact=WorldImpact(description="渡河成本大涨。"),
-    ).to_event(role="arc", turn_index=1, current_clock=WorldClock())
+    ).to_event(turn_index=1, current_clock=WorldClock())
 
 
 def make_review_node_state(
@@ -194,7 +193,7 @@ class ScriptedDirectorGateway:
         }:
             payload = dict(self.decision)
             payload.setdefault("requests", [])
-        elif task.startswith("director_event_select_") and (
+        elif task == "director_event_select" and (
             self.event_selection_output is not None
         ):
             payload = self.event_selection_output

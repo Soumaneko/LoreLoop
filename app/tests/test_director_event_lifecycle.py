@@ -36,7 +36,6 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
                     "request_id": "event_1",
                     "skill": "create_event",
                     "arguments": {
-                        "role": "arc",
                         "setting_requirements": [{
                             "kind": "location",
                             "setting_description": "事件依托该港镇的生态。",
@@ -94,12 +93,11 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
 
     assert executions.executions[0].skill == "create_event"
     output = executions.executions[0].output
-    assert output["role"] == "arc"
     assert len(output["new_npc_ids"]) == 2
     assert len(output["actor_names"]) == 2
     assert gateway.tasks == [
         "director_agent_decide_confirmation",
-        "director_event_select_arc",
+        "director_event_select",
         "director_npc_create",
         "director_npc_create",
     ]
@@ -141,7 +139,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
     selector_input = [
         entry
         for entry, task in zip(gateway.input_data, gateway.tasks)
-        if task == "director_event_select_arc"
+        if task == "director_event_select"
     ]
     assert selector_input[0]["director_guidance"] == "以码头货运世家为核心演员班底。"
 
@@ -177,7 +175,6 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
                     "request_id": "event_1",
                     "skill": "create_event",
                     "arguments": {
-                        "role": "ambient",
                         "setting_requirements": [{
                             "kind": "location",
                             "setting_description": "agent 需要的交通节点。",
@@ -273,7 +270,6 @@ def test_event_selector_omits_and_rejects_previously_used_setting_fact_id():
     )
 
     selection = DirectorEventSelector(gateway).select_or_create(
-        role="ambient",
         events=[previous],
         current_state=make_current_state(),
         core_memory=CoreMemory(items=[]),
@@ -282,6 +278,7 @@ def test_event_selector_omits_and_rejects_previously_used_setting_fact_id():
 
     [selected_setting] = json.loads(gateway.input_data[0]["settings_json"])
     [previous_event] = json.loads(gateway.input_data[0]["events_json"])
+    assert previous_event["conception"] == "独立世界事件。"
     assert previous_event["resolved_reason"] == "猎户已经撤离，码头恢复通行。"
     assert previous_event["final_world_impact"] == (
         previous.final_world_impact.model_dump(mode="json")
@@ -299,7 +296,6 @@ def test_event_selector_omits_and_rejects_previously_used_setting_fact_id():
     )
     with pytest.raises(ValueError, match="unavailable"):
         DirectorEventSelector(rejected_gateway).select_or_create(
-            role="ambient",
             events=[previous],
             current_state=make_current_state(),
             core_memory=CoreMemory(items=[]),
@@ -338,7 +334,6 @@ def test_confirmation_rejects_exhausted_event_setting(tmp_path):
             "request_id": "event_1",
             "skill": "create_event",
             "arguments": {
-                "role": "ambient",
                 "setting_requirements": [{
                     "kind": "location",
                     "setting_description": "继续使用河岸船坞。",
@@ -370,7 +365,7 @@ def test_confirmation_rejects_exhausted_event_setting(tmp_path):
     assert "create_event" in {skill["name"] for skill in skills}
     assert decision.requests == []
     assert executions.executions == []
-    assert "director_event_select_ambient" not in gateway.tasks
+    assert "director_event_select" not in gateway.tasks
 
 
 def test_create_event_rejects_more_than_three_new_actors():
@@ -378,7 +373,6 @@ def test_create_event_rejects_more_than_three_new_actors():
 
     with pytest.raises(ValidationError, match="at most 3 new actors"):
         CreateEventArguments(
-            role="arc",
             setting_requirements=[{
                 "kind": "location",
                 "setting_description": "事件依托的既有土壤。",
@@ -395,8 +389,7 @@ def test_director_event_semantic_view_hides_internal_state(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult
 
     selection = DirectorEventSelectionResult.model_validate(make_event_selection_output())
-    event = selection.to_event(
-        role="arc", turn_index=3, current_clock=WorldClock()
+    event = selection.to_event( turn_index=3, current_clock=WorldClock()
     )
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     with stores.director_event as store:

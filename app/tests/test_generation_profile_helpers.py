@@ -98,7 +98,6 @@ def test_select_profiles_by_active_events_resolves_actor_refs(tmp_path):
         ids = {profile.name: profile.npc_id for profile in store.list_all()}
         events = [
             DirectorEvent(
-                role="arc",
                 title="商路封锁",
                 subject="河务署",
                 intent="控制渡河通道",
@@ -119,7 +118,6 @@ def test_select_profiles_by_active_events_resolves_actor_refs(tmp_path):
                 ],
             ),
             DirectorEvent(
-                role="ambient",
                 title="已解决事件",
                 subject="官府",
                 intent="清剿",
@@ -162,7 +160,6 @@ def test_select_profiles_by_active_events_resolves_director_draft_refs(tmp_path)
     try:
         events = [
             DirectorEvent(
-                role="ambient",
                 title="茶馆密谈",
                 subject="江蓠",
                 intent="传递消息",

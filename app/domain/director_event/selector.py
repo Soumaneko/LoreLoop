@@ -1,6 +1,8 @@
 import json
 from typing import cast
 
+from pydantic import BaseModel
+
 from app.core.llm import LLMGateway
 from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
@@ -14,7 +16,6 @@ from app.domain.views import (
 
 from .schemas import (
     DirectorEvent,
-    DirectorEventRole,
     DirectorEventSelectionOutput,
     DirectorEventSelectionResult,
 )
@@ -22,9 +23,9 @@ from .schemas import (
 
 def _event_list_view(event: DirectorEvent) -> dict:
     view = {
-        "role": event.role,
         "stage": event.stage,
         "title": event.title,
+        "conception": event.conception,
         "subject": event.subject,
         "intent": event.intent,
         "method": event.method,
@@ -96,7 +97,6 @@ class DirectorEventSelector:
     def select_or_create(
         self,
         *,
-        role: DirectorEventRole,
         events: list[DirectorEvent],
         current_state: CurrentState,
         core_memory: CoreMemory,
@@ -154,16 +154,17 @@ class DirectorEventSelector:
             for actor in required_actors
         }
 
-        def validate_selection(selection: DirectorEventSelectionOutput) -> None:
+        def validate_selection(selection: BaseModel) -> None:
+            output = cast(DirectorEventSelectionOutput, selection)
             actual_actor_keys = {
                 role.actor_key
-                for role in selection.actor_roles
+                for role in output.actor_roles
             }
             if actual_actor_keys != expected_actor_keys:
                 raise ValueError(
                     "actor_roles must cover exactly every required actor_key"
                 )
-            selected_fact_ids = set(selection.selected_setting_fact_ids)
+            selected_fact_ids = set(output.selected_setting_fact_ids)
             if not selected_fact_ids:
                 raise ValueError(
                     "event selection must choose at least one Setting fact_id"
@@ -178,7 +179,7 @@ class DirectorEventSelector:
         return cast(
             DirectorEventSelectionResult,
             self.llm.run(
-                task=f"director_event_select_{role}",
+                task="director_event_select",
                 input_data=input_data,
                 output_schema=DirectorEventSelectionOutput,
                 temperature=0.3,

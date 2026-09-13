@@ -23,8 +23,7 @@ const TASK_LABELS = {
   action_preview: "行动建议",
   director_event_review_hidden: "导演事件潜伏检查",
   director_event_review_engaged: "导演事件追踪检查",
-  director_event_select_arc: "主线事件选择",
-  director_event_select_ambient: "环境事件选择",
+  director_event_select: "事件选择",
   director_setting_create: "世界设定生成",
 };
 

@@ -198,7 +198,6 @@ def load_player_events() -> dict[str, Any]:
         "events": [
             {
                 "event_id": event.event_id,
-                "role": event.role,
                 "title": event.title,
                 "stage": event.stage,
                 "subject": event.subject,

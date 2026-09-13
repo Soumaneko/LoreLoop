@@ -522,7 +522,6 @@ def test_staged_npc_materials_fold_every_director_skill(tmp_path):
         store.upsert(trevor)
         store.upsert(edgar)
     event = DirectorEvent(
-        role="ambient",
         title="走私暗流",
         subject="走私网络退潮",
         intent="把货物送入市场。",

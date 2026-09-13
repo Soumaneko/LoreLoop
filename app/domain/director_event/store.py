@@ -55,9 +55,8 @@ class DirectorEventStore:
     def list_engaged(self) -> list[DirectorEvent]:
         return self._list_by_stages(["engaged"])
 
-    def list_resolved(self, role: str | None = None) -> list[DirectorEvent]:
-        events = self._list_by_stages(["resolved"])
-        return [event for event in events if role is None or event.role == role]
+    def list_resolved(self) -> list[DirectorEvent]:
+        return self._list_by_stages(["resolved"])
 
     def list_all(self) -> list[DirectorEvent]:
         rows = self._conn.execute(
