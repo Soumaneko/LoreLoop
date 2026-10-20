@@ -1,4 +1,5 @@
 from pathlib import Path
+import runpy
 import sys
 
 
@@ -88,4 +89,13 @@ bundle = COLLECT(
     strip=False,
     upx=False,
     name="LoreLoop",
+)
+
+license_collector = runpy.run_path(
+    str(project_root / "scripts" / "collect_third_party_licenses.py")
+)
+license_collector["collect_third_party_licenses"](
+    project_root,
+    Path(DISTPATH) / "LoreLoop",
+    analysis.pure + analysis.binaries + analysis.datas + analysis.scripts,
 )

@@ -150,7 +150,11 @@ if (-not (Test-Path (Join-Path $PackageDir "_internal\app\runtime\models_dev_LIC
 if (Test-Path (Join-Path $PackageDir "_internal\app\debug_static")) {
     throw "Debug frontend resources must not be present in the desktop bundle."
 }
+if (-not (Test-Path (Join-Path $PackageDir "THIRD_PARTY_NOTICES.txt"))) {
+    throw "Third-party notices are missing from the package."
+}
 
+Copy-Item (Join-Path $RepoRoot "LICENSE") $PackageDir
 Copy-Item (Join-Path $RepoRoot "packaging\windows\README-Windows.txt") $PackageDir
 Copy-Item (Join-Path $RepoRoot "packaging\windows\Install-WebView2.cmd") $PackageDir
 Copy-Item (Join-Path $RepoRoot "packaging\windows\LoreLoop.exe.config") $ExecutableConfig

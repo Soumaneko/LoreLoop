@@ -1,8 +1,11 @@
 续章 · LoreLoop Windows 测试包
 
+本项目采用 MIT 许可证，版权署名为 Soumaneko，完整条款见同目录 LICENSE。
+随包第三方组件仍按各自的许可证授权，声明及完整条款见 THIRD_PARTY_NOTICES.txt 和 licenses 目录。
+
 1. 请完整解压 ZIP，不要只复制 LoreLoop.exe。
 2. 双击 LoreLoop.exe 启动。
-3. 测试机不需要安装 Python、Node.js 或项目依赖。
+3. 首次启动后，在模型服务设置中配置模型和 API Key，测试连接后保存并启用。
 4. 如果程序提示缺少 Microsoft Edge WebView2 Runtime：
    - 运行同目录的 Install-WebView2.cmd；或
    - 前往 https://developer.microsoft.com/microsoft-edge/webview2/ 安装。

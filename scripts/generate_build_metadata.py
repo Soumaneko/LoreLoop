@@ -69,7 +69,7 @@ def render_windows_version_info(version: str) -> str:
           StringStruct('FileDescription', '续章 · LoreLoop'),
           StringStruct('FileVersion', '{version}'),
           StringStruct('InternalName', 'LoreLoop'),
-          StringStruct('LegalCopyright', 'Copyright (c) 2026 LoreLoop'),
+          StringStruct('LegalCopyright', 'Copyright (c) 2026 Soumaneko'),
           StringStruct('OriginalFilename', 'LoreLoop.exe'),
           StringStruct('ProductName', 'LoreLoop（续章）'),
           StringStruct('ProductVersion', '{version}')

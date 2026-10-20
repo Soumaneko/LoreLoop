@@ -11,6 +11,20 @@ in `INVARIANTS.md`. Proposed and future designs do not belong in this document.
 
 ## 1. Active Product Shape
 
+Project-owned code and documentation are licensed under the root `LICENSE`
+(MIT, Copyright 2026 Soumaneko). Third-party components retain their own
+licenses. Windows packages include the project `LICENSE` beside `LoreLoop.exe`,
+plus `THIRD_PARTY_NOTICES.txt` and a `licenses/` directory. After PyInstaller's
+collection, the build matches analyzed module, binary, data and runtime-hook
+source paths to installed distribution records and preserves their license
+texts. Small per-package supplemental directories supply missing upstream texts
+and identified native-component notices, without version or checksum gates.
+Unmatched files and missing dependency license texts produce build warnings;
+file copy failures remain errors. The actual Windows interpreter's `LICENSE.txt`
+and the models.dev license are also copied. The index links each distribution's
+installed version to its upstream source downloads. Collection is offline and
+does not change runtime application behavior.
+
 The active application is a local, save-scoped interactive narrative engine.
 It turns a player action into an editable pending scene and routes the selected
 scene through confirmation before writing canonical campaign state.
