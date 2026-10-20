@@ -180,6 +180,11 @@ finally {
     Unblock-File -LiteralPath $PythonRuntimeDll
 }
 
+& $Executable --check-model-runtime
+if ($LASTEXITCODE -ne 0) {
+    throw "Frozen model adapter initialization failed."
+}
+
 if (-not $SkipWebView2Bootstrapper) {
     $Bootstrapper = Join-Path $PackageDir "MicrosoftEdgeWebview2Setup.exe"
     Invoke-WebRequest -UseBasicParsing -Uri $BootstrapperUrl -OutFile $Bootstrapper

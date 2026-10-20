@@ -1,6 +1,7 @@
 from pathlib import Path
 import runpy
 import sys
+from PyInstaller.utils.hooks import copy_metadata
 
 
 if sys.platform != "win32":
@@ -36,6 +37,8 @@ analysis = Analysis(
     datas=(
         collect_data_tree(prompt_root, "app/prompts")
         + collect_data_tree(player_static_root, "app/player_static")
+        + copy_metadata("pydantic-ai-slim")
+        + copy_metadata("genai-prices")
         + [
             (str(models_dev_snapshot), "app/runtime"),
             (str(models_dev_license), "app/runtime"),

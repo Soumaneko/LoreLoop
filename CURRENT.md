@@ -24,6 +24,10 @@ file copy failures remain errors. The actual Windows interpreter's `LICENSE.txt`
 and the models.dev license are also copied. The index links each distribution's
 installed version to its upstream source downloads. Collection is offline and
 does not change runtime application behavior.
+The Windows bundle also carries the distribution metadata used at import time
+by `pydantic-ai-slim` and `genai-prices`. Before archiving, the build runs
+`--check-model-runtime` on the frozen executable to construct all four model
+adapters with dummy credentials and no network requests.
 
 The active application is a local, save-scoped interactive narrative engine.
 It turns a player action into an editable pending scene and routes the selected

@@ -25,6 +25,20 @@ from scripts.generate_build_metadata import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_model_runtime_check_initializes_real_adapters_without_starting_desktop(monkeypatch):
+    import socket
+
+    def reject_network(*args, **kwargs):
+        pytest.fail("model runtime check must not open network connections")
+
+    monkeypatch.setattr(socket.socket, "connect", reject_network)
+    monkeypatch.setattr(
+        desktop, "run_desktop",
+        lambda *_args: pytest.fail("model runtime check must not start desktop"),
+    )
+    assert desktop.main([desktop.MODEL_RUNTIME_CHECK]) == 0
+
+
 class _RegistryKey:
     def __init__(self, version):
         self.version = version

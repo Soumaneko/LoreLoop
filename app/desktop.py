@@ -15,6 +15,7 @@ from app.runtime.webview2 import (
 
 WINDOW_TITLE = "续章 · LoreLoop"
 WINFORMS_RUNTIME_CHECK = "--check-winforms-runtime"
+MODEL_RUNTIME_CHECK = "--check-model-runtime"
 
 
 class DesktopHTTPServer(ThreadingHTTPServer):
@@ -102,11 +103,28 @@ def _check_winforms_runtime() -> None:
     import webview.platforms.winforms  # noqa: F401
 
 
+def _check_model_runtime() -> None:
+    """Build the supported model adapters without sending network requests."""
+    from app.core.llm.providers import PROTOCOLS, PydanticAIProvider
+
+    for protocol in PROTOCOLS:
+        provider = PydanticAIProvider(
+            api_key="runtime-check",
+            base_url="http://127.0.0.1:1/v1",
+            default_model="runtime-check",
+            protocol=protocol,
+        )
+        provider._get_or_build_model("runtime-check")
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else list(argv)
-    if arguments == [WINFORMS_RUNTIME_CHECK]:
+    if arguments in ([WINFORMS_RUNTIME_CHECK], [MODEL_RUNTIME_CHECK]):
         try:
-            _check_winforms_runtime()
+            if arguments == [WINFORMS_RUNTIME_CHECK]:
+                _check_winforms_runtime()
+            else:
+                _check_model_runtime()
         except BaseException:
             return 1
         return 0
