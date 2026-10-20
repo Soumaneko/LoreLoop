@@ -122,3 +122,35 @@ def test_migration_failure_cleans_temp_database(tmp_path, monkeypatch):
         ensure_campaign_database(paths)
 
     assert list(paths.data_dir.glob("campaign.db.*.tmp")) == []
+
+
+@pytest.mark.parametrize("module_name", ["campaign_migration", "snapshots"])
+def test_file_sync_uses_writable_handle_without_changing_contents(tmp_path, monkeypatch, module_name):
+    import importlib
+    import os
+
+    module = importlib.import_module(f"app.runtime.{module_name}")
+    target = tmp_path / "staged.db"
+    original = b"staged database content"
+    target.write_bytes(original)
+    real_fsync = os.fsync
+    synced = []
+
+    def require_writable_descriptor(fd):
+        # Windows fsync requires write access; a zero-byte write checks that portably.
+        os.write(fd, b"")
+        real_fsync(fd)
+        synced.append(fd)
+
+    monkeypatch.setattr(os, "fsync", require_writable_descriptor)
+    module._fsync_file(target)
+    assert len(synced) == 1
+    assert target.read_bytes() == original
+
+
+def test_directory_sync_skips_platform_without_directory_open_flag(tmp_path, monkeypatch):
+    import os
+    from app.runtime import snapshots
+
+    monkeypatch.delattr(os, "O_DIRECTORY", raising=False)
+    snapshots._fsync_directory(tmp_path)

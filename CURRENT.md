@@ -107,7 +107,9 @@ stages each snapshot file to a same-directory temporary (`campaign.db` is
 copied to a temporary and validated via the shared `validate_campaign_database`
 schema/foreign-key/quick_check contract, JSON is validated by parse), fsyncs
 the temporary, deletes the target `-wal/-shm/-journal`, atomically installs
-with `os.replace`, and fsyncs the save directory; `settings.json` and
+with `os.replace`, and fsyncs the save directory where directory handles are
+supported. Staged-file fsync uses a read/write handle for Windows compatibility;
+`settings.json` and
 `initialization_draft.json` never participate. `turn_snapshots.status` durably
 records intent (`applied→undoing→undone`, `undone→redoing→applied`) and
 `turn_transactions.status` records `confirming→restoring→failed` before the

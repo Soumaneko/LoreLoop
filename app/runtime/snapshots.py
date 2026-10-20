@@ -155,13 +155,15 @@ def _remove_sqlite_files(database: Path) -> None:
 
 def _fsync_file(path: Path) -> None:
     try:
-        with path.open("rb") as handle:
+        with path.open("r+b") as handle:
             os.fsync(handle.fileno())
     except OSError:
         pass
 
 
 def _fsync_directory(path: Path) -> None:
+    if not hasattr(os, "O_DIRECTORY"):
+        return
     try:
         descriptor = os.open(str(path), os.O_DIRECTORY)
     except (OSError, NotADirectoryError):
