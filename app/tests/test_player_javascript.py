@@ -8,6 +8,80 @@ from pathlib import Path
 STATIC_DIR = Path(__file__).parents[1] / "player_static"
 
 
+def test_provider_expansion_and_explicit_selection_gate():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    start = source.index("function renderProviderOptions(catalog)")
+    render = source[start:source.index("\nfunction renderProviderFieldPlaceholder", start)]
+    script = r'''
+import assert from "node:assert/strict";
+const { commonProviderCandidates, searchProviderCandidates } = await import(process.argv[1]);
+function element() {
+  return {value: "", children: [], setAttribute(k, v) {this[k] = v;},
+    replaceChildren() {this.children = [];}, append(x) {this.children.push(x);}};
+}
+const els = Object.fromEntries([
+  "modelConnectionFields", "modelConfigActions", "modelTestResult", "modelProviderPanel",
+  "modelCustomBtn", "modelRefreshBtn", "modelProviderSelected", "modelProviderChange", "modelProviderLabel",
+  "modelProviderSearch", "modelProviderExpand", "modelProviderResults",
+].map(k => [k, element()]));
+globalThis.document = {createElement: element};
+let modelDraftIsNew = true, modelProviderPickerOpen = true, modelProvidersExpanded = false;
+let modelSelection = {preset_id: "custom"}, modelDraftOriginal = null;
+let modelConfigsCache = {services: []}, modelCatalogLoading = false, modelCatalogError = null;
+const catalogProviderById = (c, id) => c.providers.find(p => p.provider_id === id);
+const chooseProvider = () => {};
+const catalog = {providers: [
+  {provider_id: "openai", provider_name: "OpenAI"},
+  {provider_id: "other", provider_name: "Other service"},
+]};
+__RENDER__
+renderProviderOptions(catalog);
+assert.deepEqual(els.modelProviderResults.children.map(x => x.textContent), ["OpenAI"]);
+assert.equal(els.modelConnectionFields.hidden, true);
+assert.equal(els.modelConnectionFields.disabled, true);
+assert.equal(els.modelConfigActions.hidden, true);
+assert.equal(els.modelRefreshBtn.hidden, false);
+modelProvidersExpanded = true;
+renderProviderOptions(catalog);
+assert.equal(els.modelProviderResults.children.length, 2);
+assert.equal(els.modelProviderExpand["aria-expanded"], "true");
+modelProvidersExpanded = false;
+els.modelProviderSearch.value = "other";
+renderProviderOptions(catalog);
+assert.deepEqual(els.modelProviderResults.children.map(x => x.textContent), ["Other service"]);
+els.modelProviderSearch.value = "";
+renderProviderOptions(catalog);
+assert.equal(els.modelProviderResults.children.length, 1);
+for (const id of ["custom", "openai"]) {
+  modelSelection.preset_id = id;
+  modelProviderPickerOpen = false;
+  renderProviderOptions(catalog);
+  assert.equal(els.modelConnectionFields.hidden, false);
+  assert.equal(els.modelConnectionFields.disabled, false);
+  assert.equal(els.modelConfigActions.hidden, false);
+  assert.equal(els.modelRefreshBtn.hidden, true);
+}
+modelProviderPickerOpen = true;
+renderProviderOptions(catalog);
+assert.equal(els.modelConnectionFields.disabled, true);
+assert.equal(els.modelRefreshBtn.hidden, false);
+modelDraftIsNew = false;
+renderProviderOptions(catalog);
+assert.equal(els.modelConnectionFields.hidden, false);
+assert.equal(els.modelProviderChange.hidden, true);
+assert.equal(els.modelRefreshBtn.hidden, true);
+'''.replace("__RENDER__", render)
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script,
+         (STATIC_DIR / "model_configs.js").resolve().as_uri()],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_editable_model_input_keyboard_and_refresh():
     node = shutil.which("node")
     if node is None:

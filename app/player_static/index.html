@@ -334,6 +334,7 @@
             <label for="modelProviderSearch">搜索服务</label>
             <input id="modelProviderSearch" type="search" autocomplete="off" placeholder="搜索全部服务的名称或 ID" />
             <div id="modelProviderResults" class="provider-results" aria-label="可添加的服务"></div>
+            <button id="modelProviderExpand" type="button" aria-expanded="false" aria-controls="modelProviderResults">展开全部服务</button>
           </div>
           <div class="model-catalog-toolbar">
             <button id="modelCustomBtn" type="button">＋ 使用自定义服务地址</button>
@@ -341,6 +342,7 @@
           </div>
           <span id="modelCatalogStatus" class="model-catalog-status" role="status" hidden></span>
         </section>
+        <fieldset id="modelConnectionFields" class="model-connection-fields" aria-label="接口配置" hidden disabled>
         <label>
           <span>模型名称</span>
           <div class="model-combobox">
@@ -377,9 +379,10 @@
             <span><strong>发送 thinking 扩展参数</strong><small>仅适用于接受此参数的服务（openai_chat）；关闭表示不发送，不保证关闭模型思考。</small></span>
           </label>
         </details>
+        </fieldset>
       </div>
       <div id="modelTestResult" class="model-test-result" role="status" hidden></div>
-      <div class="modal-actions">
+      <div id="modelConfigActions" class="modal-actions" hidden>
         <button id="testModelBtn" type="button">测试连接</button>
         <button id="saveModelOnlyBtn" type="button">保存</button>
         <button id="saveModelBtn" class="primary-action" type="submit">保存并启用</button>

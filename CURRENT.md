@@ -1660,8 +1660,12 @@ hints distinguish retaining this service's Key from an endpoint/protocol change
 that requires a new Key, and closing a dirty draft asks before discarding it.
 
 The add editor shows a fixed search field, an independently scrolling list of
-common Providers, and an always-visible Custom action. Typing searches all
-remaining Providers directly; there is no separate search-all mode. Editing
+common Providers, an expand/collapse button for all remaining Providers, and
+an always-visible Custom action while choosing a Provider. Typing searches all
+remaining Providers directly. Connection fields and test/save actions stay
+hidden until a Provider or Custom is explicitly selected; the hidden fields
+are disabled and submission is guarded while choosing. New editors reset to
+the common list and focus the search field. Editing
 locks Provider identity. Custom needs no user-supplied name: its list label is
 derived from the URL hostname (without credentials/query) and model, while
 config_id keeps multiple entries separate. Existing name fields remain readable.

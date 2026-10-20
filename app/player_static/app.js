@@ -90,6 +90,7 @@ const els = {
   modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"), saveModelOnlyBtn: $("saveModelOnlyBtn"),
   modelProviderSearch: $("modelProviderSearch"), modelProviderResults: $("modelProviderResults"), modelProviderPanel: $("modelProviderPanel"), modelProviderLabel: $("modelProviderLabel"), modelCustomBtn: $("modelCustomBtn"),
   modelProviderSelected: $("modelProviderSelected"), modelProviderChange: $("modelProviderChange"),
+  modelProviderExpand: $("modelProviderExpand"), modelConnectionFields: $("modelConnectionFields"), modelConfigActions: $("modelConfigActions"),
   modelConfigsDialog: $("modelConfigsDialog"), modelConfigsForm: $("modelConfigsForm"), closeModelConfigsBtn: $("closeModelConfigsBtn"),
   modelConfigsIntro: $("modelConfigsIntro"), modelConfigsList: $("modelConfigsList"), addModelServiceBtn: $("addModelServiceBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
@@ -141,6 +142,7 @@ let modelCatalogLoading = false;
 let modelCatalogError = false;
 let modelCombobox = null;
 let modelProviderPickerOpen = false;
+let modelProvidersExpanded = false;
 let modelEditorSession = 0;
 let activeGenerationRun = null;
 let confirmationTailSeen = new Set();
@@ -2267,9 +2269,15 @@ function initModelConfigEditor() {
     }
   });
   els.modelCustomBtn.onclick = () => chooseProvider("custom");
+  els.modelProviderExpand.onclick = () => {
+    modelProvidersExpanded = !modelProvidersExpanded;
+    renderProviderOptions(modelCatalogCache);
+    els.modelProviderResults.scrollTop = 0;
+  };
   els.modelProviderChange.onclick = () => {
     if (!modelDraftIsNew || modelConfigBusy) return;
     modelProviderPickerOpen = true;
+    modelProvidersExpanded = false;
     els.modelProviderSearch.value = "";
     modelCombobox.close();
     renderProviderOptions(modelCatalogCache);
@@ -2310,8 +2318,13 @@ function providerOption(preset_id, name) {
 
 function renderProviderOptions(catalog) {
   const choosing = modelDraftIsNew && modelProviderPickerOpen;
+  els.modelConnectionFields.hidden = choosing;
+  els.modelConnectionFields.disabled = choosing;
+  els.modelConfigActions.hidden = choosing;
+  if (choosing) els.modelTestResult.hidden = true;
   els.modelProviderPanel.hidden = !choosing;
   els.modelCustomBtn.hidden = !choosing;
+  els.modelRefreshBtn.hidden = !choosing;
   els.modelProviderSelected.hidden = choosing;
   els.modelProviderChange.hidden = !modelDraftIsNew;
   const current = modelSelection.preset_id || "custom";
@@ -2320,7 +2333,10 @@ function renderProviderOptions(catalog) {
     ? "Custom" : provider?.provider_name || modelDraftOriginal?.name || current;
   const services = modelConfigsCache?.services || [];
   const query = els.modelProviderSearch.value.trim();
-  const candidates = query
+  els.modelProviderExpand.hidden = Boolean(query);
+  els.modelProviderExpand.textContent = modelProvidersExpanded ? "收起全部服务" : "展开全部服务";
+  els.modelProviderExpand.setAttribute("aria-expanded", String(modelProvidersExpanded));
+  const candidates = query || modelProvidersExpanded
     ? searchProviderCandidates(catalog, services, query)
     : commonProviderCandidates(catalog, services);
   els.modelProviderResults.replaceChildren();
@@ -2338,7 +2354,8 @@ function renderProviderOptions(catalog) {
     empty.className = "empty";
     empty.textContent = modelCatalogLoading || (!catalog && !modelCatalogError) ? "正在加载服务…" : modelCatalogError && !catalog
       ? "目录加载失败，可刷新重试或添加 Custom" : query
-      ? "没有匹配的服务" : "暂无常用服务，可搜索其他服务或添加 Custom";
+      ? "没有匹配的服务" : modelProvidersExpanded
+      ? "暂无可添加的服务，可添加 Custom" : "暂无常用服务，可展开全部服务或添加 Custom";
     els.modelProviderResults.append(empty);
   }
 }
@@ -2507,6 +2524,8 @@ function openModelConfig(config = state.modelConfig, {
   modelDraftConfigId = configId;
   modelDraftIsNew = isNew;
   modelProviderPickerOpen = isNew;
+  modelProvidersExpanded = false;
+  els.modelProviderSearch.value = "";
   modelDraftActivate = activate;
   modelEditorSession += 1;
   modelConfigBusy = false;
@@ -2525,7 +2544,7 @@ function openModelConfig(config = state.modelConfig, {
   setModelConfigBusy(false);
   if (!els.modelConfigDialog.open) els.modelConfigDialog.showModal();
   window.setTimeout(() => (
-    config?.configured ? els.modelBaseUrl : els.modelApiKey
+    isNew ? els.modelProviderSearch : config?.configured ? els.modelBaseUrl : els.modelApiKey
   ).focus(), 0);
 }
 
@@ -2553,6 +2572,7 @@ function setModelConfigBusy(busy) {
 }
 
 async function testModelConnection() {
+  if (modelDraftIsNew && modelProviderPickerOpen) return;
   if (!els.modelConfigForm.reportValidity()) return;
   setModelConfigBusy(true);
   showModelTestResult("pending", "正在连接模型服务……");
@@ -2582,6 +2602,7 @@ async function testModelConnection() {
 }
 
 async function saveModelSettings(activate = modelDraftActivate) {
+  if (modelDraftIsNew && modelProviderPickerOpen) return;
   if (!els.modelConfigForm.reportValidity()) return;
   if (modelDraftNeedsTest && !modelConnectionVerified) {
     showModelTestResult("error", "请先使用当前填写内容完成一次连接测试。修改任一字段后需要重新测试。");

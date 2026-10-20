@@ -430,7 +430,7 @@ def test_shipped_snapshot_go_rows_and_no_templates():
     providers, _ = normalize(load_snapshot())
     rows = _rows(providers)
 
-    assert rows[("opencode-go", "grok-4.6")].protocol == "openai_responses"
+    assert rows[("opencode-go", "grok-4.7")].protocol == "openai_responses"
     assert rows[("opencode-go", "minimax-m3")].protocol == "anthropic_messages"
     assert rows[("opencode-go", "kimi-k3")].protocol == "openai_chat"
     assert rows[("sakana", "fugu")].protocol == "openai_responses"
