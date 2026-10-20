@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -23,7 +24,7 @@ def _write_value(path, value: str) -> None:
         ensure_campaign_database(_CP.from_data_dir(_p.parent))
     except Exception:
         pass
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS game_state (value TEXT NOT NULL)")
         conn.execute("DELETE FROM game_state")
         conn.execute("INSERT INTO game_state VALUES (?)", (value,))
@@ -31,7 +32,7 @@ def _write_value(path, value: str) -> None:
 
 
 def _read_value(path) -> str:
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn:
         return conn.execute("SELECT value FROM game_state").fetchone()[0]
 
 

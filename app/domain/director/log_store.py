@@ -93,7 +93,7 @@ class RecentDirectorLogStore:
             """
             SELECT turn_index, phase, reasoning, measures
             FROM director_log
-            ORDER BY turn_index DESC, created_at DESC
+            ORDER BY turn_index DESC, created_at DESC, (phase = 'confirmation') DESC
             LIMIT ?
             """,
             (limit,),

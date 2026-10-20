@@ -135,7 +135,11 @@ def test_assemble_entry_shape(tmp_path):
     }
 
 
-def test_recent_director_log_store_upserts_prunes_and_orders():
+def test_recent_director_log_store_upserts_prunes_and_orders(monkeypatch):
+    monkeypatch.setattr(
+        "app.domain.director.log_store.utc_now",
+        lambda: "2026-01-01T00:00:00+00:00",
+    )
     with open_director_log_store() as store:
         store.save_entries([
             {"turn_index": 1, "phase": "generation", "reasoning": "g1", "measures": "m1"},

@@ -81,8 +81,8 @@ def test_stale_uow_rejected_after_restore(tmp_path):
     hist.begin_confirmation("t1", write_db=True, scene_text=None)
     hist.complete_confirmation("t1", "g1")
     epoch_before = hist.connection_epoch
+    # Keep the old epoch without holding a database connection across offline restore.
     stale = CampaignUnitOfWork(paths, expected_epoch=epoch_before)
-    stale._get_conn().execute("SELECT 1").fetchone()
     hist.undo()
     epoch_after = hist.connection_epoch
     assert epoch_after == epoch_before + 1

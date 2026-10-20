@@ -1172,6 +1172,8 @@ request batches are valid. Mutating skills cannot be registered for generation.
 A bounded per-save `director_log` record keeps the last three confirmed turns of
 each phase's decision (`reasoning` plus programmatically assembled measure
 summaries, with resource names resolved from stores).
+Recent entries are ordered by descending turn and timestamp, with confirmation
+before generation when both are equal.
 The generation decision is attached to its pending turn variant
 (`director_log_entry`), so rerolls and rephrases each carry their own entry and
 only the confirmed variant reaches the durable log. At confirmation commit the
