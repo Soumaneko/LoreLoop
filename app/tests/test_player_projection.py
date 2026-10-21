@@ -147,7 +147,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
         "history_navigation", "history_pagination", "highlights", "pending",
         "history_controls", "action_preview", "dice_display",
         "canon_validation_enabled", "experience_mode",
-        "initialization",
+        "initialization", "runtime_notices",
     }
     assert payload["campaign"]["participants"] == ["莱尔", "埃利奥"]
     assert "attitude_to_player" not in str(payload["campaign"])

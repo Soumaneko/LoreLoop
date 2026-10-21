@@ -3,7 +3,6 @@ from __future__ import annotations
 import html
 import secrets
 import sys
-import traceback
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer
 from typing import Any
@@ -218,20 +217,9 @@ class DebugHandler(TokenAuthedPlayerHandler):
         try:
             _json_response(self, 200, {"ok": True, "data": fn()})
         except Exception as exc:
-            print(f"[debug-server] request failed: {exc}", file=sys.stderr)
-            traceback.print_exc()
-            _json_response(
-                self,
-                500,
-                {
-                    "ok": False,
-                    "error": {
-                        "code": "internal_error",
-                        "message": "服务器内部错误，详情见服务端日志。",
-                        "recoverable": False,
-                    },
-                },
-            )
+            from app.player_server import _project_client_error
+            status, code, message = _project_client_error(exc, label="debug request")
+            _json_response(self, status, {"ok": False, "error": {"code": code, "message": message}})
 
     def _acknowledge_operation(self, path: str) -> dict[str, Any]:
         operation_id = self._operation_id_from_action_path(

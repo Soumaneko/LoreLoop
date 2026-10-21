@@ -98,6 +98,13 @@ def _ensure_control_schema(db_path: Path) -> None:
         # Base tables (create if not exists, without new columns initially)
         conn.executescript(
             """
+            CREATE TABLE IF NOT EXISTS runtime_notices (
+                notice_id TEXT PRIMARY KEY,
+                code TEXT NOT NULL,
+                message TEXT NOT NULL,
+                operation_type TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS turn_transactions (
                 turn_id TEXT PRIMARY KEY,
                 kind TEXT NOT NULL,
@@ -510,6 +517,23 @@ class CampaignHistory:
             )
             conn.commit()
 
+    def record_runtime_notice(self, operation_id: str, operation_type: str, code: str, message: str) -> dict[str, str]:
+        notice = {"notice_id": f"{operation_id}:{code}", "code": code, "message": message,
+                  "operation_type": operation_type, "created_at": _now()}
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO runtime_notices (notice_id, code, message, operation_type, created_at) VALUES (:notice_id, :code, :message, :operation_type, :created_at)", notice,
+            )
+            conn.execute("DELETE FROM runtime_notices WHERE notice_id NOT IN (SELECT notice_id FROM runtime_notices ORDER BY created_at DESC, rowid DESC LIMIT 40)")
+            conn.commit()
+        return notice
+
+    def runtime_notices(self) -> list[dict[str, str]]:
+        with self._connect() as conn:
+            return [dict(row) for row in conn.execute(
+                "SELECT notice_id, code, message, operation_type, created_at FROM runtime_notices ORDER BY created_at DESC, rowid DESC LIMIT 20"
+            )]
+
     def get_transaction(self, turn_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(
@@ -611,7 +635,7 @@ class CampaignHistory:
                 if txn_row is None:
                     raise RuntimeError(f"Turn transaction not found: {turn_id}")
                 # Already failed is idempotent
-                if txn_row["status"] == "failed":
+                if txn_row["status"] in {"failed", "completed"}:
                     return
                 snapshot_path: Path | None = None
                 snapshot_rev: str | None = None

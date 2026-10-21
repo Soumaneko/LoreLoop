@@ -1,3 +1,4 @@
+from app.core.client_error import ClientValidationError
 import json
 import sqlite3
 import threading
@@ -199,9 +200,9 @@ def test_switch_preserves_and_restores_pending_turn_variants(tmp_path):
         assert [
             record["status"] for record in source_history.pending_records()
         ] == ["awaiting_confirm", "awaiting_confirm"]
-        with pytest.raises(RuntimeError, match="pending content"):
+        with pytest.raises(ClientValidationError, match="当前有未处理内容"):
             manager.copy(original_id)
-        with pytest.raises(RuntimeError, match="pending content"):
+        with pytest.raises(ClientValidationError, match="当前有未处理内容"):
             manager.export_to(original_id, tmp_path / "pending.zip")
 
         manager.switch(original_id)
@@ -281,7 +282,7 @@ def test_create_does_not_leave_directory_when_operation_is_active(tmp_path):
     try:
         operation_id = runtime.operations.submit_stream("generation", stream)
         assert started.wait(timeout=2)
-        with pytest.raises(RuntimeError, match="active operation"):
+        with pytest.raises(ClientValidationError, match="active operation"):
             manager.create("should-not-exist")
         assert not (root / "should-not-exist").exists()
         release.set()

@@ -279,6 +279,7 @@ class CampaignRuntime:
             campaign_id,
             max_workers=max_workers,
             diagnostics=self.diagnostics,
+            history=self.history,
         )
         self.jobs = MaintenanceJobCoordinator(
             max_workers=max_workers,
@@ -418,6 +419,11 @@ class CampaignRuntime:
 
         Replaces the former direct ``history.fail_confirmation`` online backup.
         """
+        record = self.history.get_transaction(turn_id)
+        if record is not None and record["status"] == "completed":
+            for repository in (self.pending_turns, self.pending_openings):
+                repository.discard_group(record["group_id"])
+            return
         result = self._run_offline_restore(
             lambda: self.history.fail_confirmation_offline(turn_id, exc)
         )
@@ -449,9 +455,9 @@ class CampaignRuntime:
         """Atomically install model settings for future pipeline work."""
         with self._lifecycle_lock:
             if self._save_task_active:
-                raise RuntimeError("A save management task is currently running")
+                raise ClientValidationError("A save management task is currently running")
             if self.has_active_operations():
-                raise RuntimeError(
+                raise ClientValidationError(
                     "模型任务正在运行，请等待当前生成、确认或维护完成后再修改配置"
                 )
             with self._confirmation_lock:
@@ -488,7 +494,7 @@ class CampaignRuntime:
         """Serialize pipeline submission against save lifecycle mutations."""
         with self._lifecycle_lock:
             if self._save_task_active:
-                raise RuntimeError("A save management task is currently running")
+                raise ClientValidationError("A save management task is currently running")
             with self._active_uows_cv:
                 if self._restore_gate_closed:
                     raise RuntimeError(
@@ -501,9 +507,9 @@ class CampaignRuntime:
         """Reserve this runtime while a save is copied, moved, or archived."""
         with self._lifecycle_lock:
             if self._save_task_active:
-                raise RuntimeError("Another save management task is already running")
+                raise ClientValidationError("Another save management task is already running")
             if self.has_active_operations():
-                raise RuntimeError(
+                raise ClientValidationError(
                     "Current save has an active operation. Wait for it to finish."
                 )
             self._save_task_active = True
@@ -825,6 +831,9 @@ class CampaignRuntime:
     ) -> bool:
         if not write_db:
             return False
+        record = self.history.get_transaction(pending.turn_id)
+        if record is not None and record["status"] == "completed":
+            raise ClientValidationError("这一版本已确认，请刷新界面，不要重复确认。")
         if isinstance(pending, PendingTurn):
             journaled = self._persist_pending_turn(pending)
         else:
@@ -847,7 +856,7 @@ class CampaignRuntime:
     def undo(self) -> dict[str, Any]:
         with self._confirmation_lock:
             if self.has_pending_content():
-                raise RuntimeError("Confirm or discard pending content before undo")
+                raise ClientValidationError("Confirm or discard pending content before undo")
             result = self._run_offline_restore(lambda: self.history.undo())
             self._restore_pending_transactions()
             self._restart_jobs()
@@ -863,7 +872,7 @@ class CampaignRuntime:
                 *(pending.turn_id for pending in self.pending_openings.values()),
             }
             if pending_ids and pending_ids != restored_ids:
-                raise RuntimeError("Confirm or discard pending content before redo")
+                raise ClientValidationError("Confirm or discard pending content before redo")
             result = self._run_offline_restore(lambda: self.history.redo())
             self.pending_turns.clear(discard=False)
             self.pending_openings.clear(discard=False)
@@ -877,6 +886,7 @@ class CampaignRuntime:
         *,
         gateway_factory: Callable | None = None,
     ) -> None:
+        self.operations.history = self.history
         self.services = RuntimeServices(
             stores=self.stores,
             gateway_factory=gateway_factory or self.gateway_factory,
@@ -907,7 +917,7 @@ class CampaignRuntime:
         """
         with self._confirmation_lock:
             if self.has_active_operations():
-                raise RuntimeError(
+                raise ClientValidationError(
                     "Current save has an active operation. Wait for it to finish "
                     "before switching saves."
                 )
@@ -950,6 +960,7 @@ class CampaignRuntime:
                     campaign_id,
                     max_workers=self._max_workers,
                     diagnostics=self.diagnostics,
+                    history=opened.history,
                 )
                 new_jobs = MaintenanceJobCoordinator(
                     max_workers=self._max_workers,
@@ -1006,6 +1017,7 @@ class CampaignRuntime:
                     old_campaign_id,
                     max_workers=self._max_workers,
                     diagnostics=self.diagnostics,
+                    history=self.history,
                 )
                 self.jobs = MaintenanceJobCoordinator(
                     max_workers=self._max_workers,

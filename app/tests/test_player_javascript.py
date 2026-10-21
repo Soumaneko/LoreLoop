@@ -653,7 +653,7 @@ const preserved = playerErrorFeedback(
 if (!preserved.title.includes("待确认内容仍在")) {{
   throw new Error("confirmation timeout must mention preserved pending");
 }}
-if (!preserved.message.includes(backend) || !preserved.message.includes("没有写入正式故事")) {{
+if (!preserved.message.includes(backend) || !preserved.message.includes("仍然保留在界面中")) {{
   throw new Error("confirmation timeout must combine both messages");
 }}
 if ("action" in preserved) {{
@@ -842,4 +842,174 @@ if (Object.keys(allRaw).length !== 0) {
         encoding="utf-8",
         check=False,
     )
+    assert result.returncode == 0, result.stderr
+
+
+def test_confirmation_failure_checks_commit_instead_of_pending_ui():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    source = (STATIC_DIR / "app.js").read_text()
+    code = source[source.index("let uncertainConfirmation = null;"):source.index("async function discardPending()")]
+    script = r'''
+import assert from "node:assert/strict";
+const state = {activeSave: "save-1"};
+const variant = {turn_id: "variant-1"};
+const activePending = () => ({variants: [variant]});
+const selectedVariant = () => variant;
+const sessionStorage = {setItem() {}, removeItem() {}};
+const CONFIRMATION_IN_FLIGHT_KEY = "confirmation";
+const setMode = () => {}, renderPending = () => {}, renderControls = () => {}, renderAll = () => {};
+const readDraft = () => "text", newRequestId = () => "request";
+const handleConfirmationEvent = () => {}, acknowledgeHandledOperation = async () => {};
+const acknowledgeFailedOperation = async () => {}, refreshRecords = () => {};
+const refreshRecordsAfterTurn = () => {}, showToast = () => {};
+let feedback, streams = 0, disconnected = false, lookup = "unknown", refreshFails = false;
+const showError = (error, fallback, options) => { feedback = {error, ...options}; };
+const stream = async () => { streams++; if (disconnected) throw new Error("disconnected"); return "op"; };
+const request = async () => ({outcome: lookup});
+const loadAll = async () => { if (refreshFails) throw new Error("refresh failed"); };
+const tokenUsage = {getVariantUsage: () => null, getCurrentPendingUsage: () => ({}),
+  saveFullVariantUsage() {}, cleanUpUnconfirmedVariants() {}, clearPendingUsage() {}};
+__CODE__
+refreshFails = true;
+await confirmTurn();
+assert.equal(feedback.confirmationOutcome, "confirmed");
+assert.equal(feedback.error.message, "refresh failed");
+assert.equal(streams, 1);
+refreshFails = false;
+disconnected = true;
+await confirmTurn();
+assert.equal(feedback.confirmationOutcome, "unknown");
+const previous = streams;
+await confirmTurn();
+assert.equal(streams, previous, "unknown outcome must not resubmit confirmation");
+lookup = "confirmed";
+await feedback.recheckConfirmation();
+assert.equal(feedback.confirmationOutcome, "confirmed");
+'''.replace("__CODE__", code)
+    result = subprocess.run([node, "--input-type=module", "--eval", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_pending_feedback_preserves_backend_cause_and_confirmation_truth():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    script = r'''
+import assert from "node:assert/strict";
+const {playerErrorFeedback} = await import(process.argv[1]);
+for (const code of ["internal_error", "operation_failed", "file_access_failed", "timeout", "validation_error", "auth_failed"]) {
+  const error = {code, message: "真实原因：测试文件无法写入"};
+  const result = playerErrorFeedback(error, undefined, {pendingPreserved:true});
+  assert.ok(result.message.includes(error.message), code);
+  assert.ok(!result.message.includes("没有写入正式故事"), code);
+}
+const error = {code:"internal_error", message:"刷新失败"};
+const confirmed = playerErrorFeedback(error, undefined, {confirmationOutcome:"confirmed"});
+assert.ok(confirmed.message.includes("正式故事已写入"));
+assert.ok(confirmed.message.includes(error.message));
+const unknown = playerErrorFeedback(error, undefined, {confirmationOutcome:"unknown"});
+assert.ok(unknown.message.includes("暂勿重复确认"));
+assert.ok(!unknown.message.includes("没有写入"));
+'''
+    result = subprocess.run([node, "--input-type=module", "--eval", script,
+                             (STATIC_DIR / "error_feedback.js").resolve().as_uri()], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_provider_feedback_adds_guidance_once_without_replacing_backend_details():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    script = r'''
+import assert from "node:assert/strict";
+const {playerErrorFeedback} = await import(process.argv[1]);
+const cases = [
+  ["auth_failed", "API Key 无效或没有访问权限", "请前往【设置与检查】更新密钥。"],
+  ["permission_denied", "API Key 有效，但没有访问当前服务或模型的权限", "请前往【设置与检查】检查配置或更换模型。"],
+  ["model_not_found", "服务可访问，但没有找到指定模型", "请前往【设置与检查】核对模型名称。"],
+  ["thinking_unsupported", "当前服务或模型不支持所选 Thinking 设置", "请前往【设置与检查】关闭 Thinking。"],
+  ["rate_limited", "服务当前触发了速率限制", "请稍后重试，或检查服务配额。"],
+  ["endpoint_unreachable", "无法连接 Base URL，请检查地址和网络", "如使用代理或本地模型服务，也请核对相应配置。"],
+];
+for (const [code, reason, guidance] of cases) {
+  const backend = `${reason}\n诊断编号：demo；本地记录：demo.log`;
+  for (const options of [{}, {confirmationOutcome:"not_confirmed"}, {confirmationOutcome:"unknown"}]) {
+    const feedback = playerErrorFeedback({code, message:backend}, undefined, options);
+    assert.ok(feedback.message.includes(backend), code);
+    assert.equal(feedback.message.split(reason).length - 1, 1, code);
+    assert.equal(feedback.message.split(guidance).length - 1, 1, code);
+    const repeated = playerErrorFeedback({code, message:`${backend}\n${guidance}`}, undefined, options);
+    assert.equal(repeated.message.split(guidance).length - 1, 1, code);
+  }
+  const fallback = playerErrorFeedback({code});
+  assert.equal(fallback.message.split(guidance).length - 1, 1, code);
+}
+const unknownProvider = {code:"provider_error", message:"服务返回特殊错误\n诊断编号：demo"};
+assert.equal(playerErrorFeedback(unknownProvider).message, unknownProvider.message);
+'''
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script,
+         (STATIC_DIR / "error_feedback.js").resolve().as_uri()],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_runtime_notice_is_visible_and_replay_deduplicates():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    source = (STATIC_DIR / "app.js").read_text()
+    code = source[source.index("function renderRuntimeNotices()"):source.index("function showError(")]
+    script = r'''
+import assert from "node:assert/strict";
+const state = {runtimeNotices: []};
+const elements = Object.fromEntries(["runtimeNotices", "runtimeNoticeSummary", "runtimeNoticeList"].map(id => [id, {
+  hidden:true, textContent:"", children:[], replaceChildren(...items) { this.children = items; },
+}]));
+const $ = id => elements[id];
+const document = {createElement: () => ({textContent:""})};
+__CODE__
+const event = {step:"runtime_notice", data:{notice_id:"op:check", created_at:"2026-10-21T00:00:00Z", message:"正文已生成，本次一致性检查未完成"}};
+assert.equal(handleRuntimeNotice(event), true);
+assert.equal(elements.runtimeNotices.hidden, false);
+assert.ok(elements.runtimeNoticeSummary.textContent.includes("检查未完成"));
+handleRuntimeNotice(event);
+assert.equal(elements.runtimeNoticeList.children.length, 1);
+state.runtimeNotices = JSON.parse(JSON.stringify(state.runtimeNotices));
+renderRuntimeNotices();
+assert.ok(elements.runtimeNoticeList.children[0].textContent.includes("检查未完成"));
+assert.equal(handleRuntimeNotice({step:"narrative_checked", data:{}}), false);
+'''.replace("__CODE__", code)
+    result = subprocess.run([node, "--input-type=module", "--eval", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_resumed_confirmation_refresh_failure_keeps_success_fact():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    source = (STATIC_DIR / "app.js").read_text()
+    code = source[source.index("async function resumeConfirmationOperation("):source.index("async function rewriteFromFeedbackText(")]
+    script = r'''
+import assert from "node:assert/strict";
+const state = {activeSave:"save-1"};
+const sessionStorage = {setItem() {}, removeItem() {}};
+const CONFIRMATION_IN_FLIGHT_KEY = "confirmation";
+const setMode = () => {}, renderPending = () => {}, renderControls = () => {};
+const subscribe = async () => {}, handleConfirmationEvent = () => {};
+const acknowledgeHandledOperation = async () => {}, acknowledgeFailedOperation = async () => {};
+const refreshRecords = () => {}, refreshRecordsAfterTurn = () => {}, showToast = () => {};
+const loadAll = async () => { throw new Error("refresh failed"); };
+let result;
+const showConfirmationFailure = async (error, confirmation, completed) => {result = {error, confirmation, completed};};
+__CODE__
+await resumeConfirmationOperation({operation_id:"op", metadata:{turn_id:"variant-1"}});
+assert.equal(result.completed, true);
+assert.equal(result.error.message, "refresh failed");
+assert.deepEqual(result.confirmation, {turnId:"variant-1", saveId:"save-1"});
+'''.replace("__CODE__", code)
+    result = subprocess.run([node, "--input-type=module", "--eval", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

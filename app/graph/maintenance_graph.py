@@ -37,7 +37,7 @@ def run_scene_summary_maintenance(
     turn_index,
     *,
     core_memory,
-) -> None:
+) -> dict:
     state = None
     try:
         state = prepare_scene_summary_state(
@@ -52,6 +52,8 @@ def run_scene_summary_maintenance(
             "[debug-server] scene summary maintenance "
             f"condensed={len(result.condensed_ids)}"
         )
+        return {"warning_codes": [code for event in graph_state.get("events", [])
+                                  for code in event.get("data", {}).get("warning_codes", [])]}
     except Exception:
         traceback.print_exc()
         raise

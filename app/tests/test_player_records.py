@@ -4,6 +4,7 @@ import json
 import pytest
 
 from app import player_server
+from app.core.client_error import ClientValidationError
 from app.domain.continuity.schemas import ContinuityItem
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.npc_profile.schemas import NPCProfile
@@ -195,7 +196,7 @@ def test_update_npc_rejects_director_fields_in_general_and_blank_name():
         update_player_record(
             "npc", npc_id, {"source_director_npc_id": "npc_x"}, view="advanced"
         )
-    with pytest.raises(ValueError, match="name must not be empty"):
+    with pytest.raises(ClientValidationError, match="名称不能为空"):
         update_player_record("npc", npc_id, {"name": "  "})
 
 def test_update_setting_rejects_hidden_facts_in_general_and_unknown_fields():
@@ -275,3 +276,20 @@ def test_update_npc_preserves_disclosure_level():
     assert result["public"]["role"] == "巡回木偶师"
     with runtime.stores.npc_profile as store:
         assert store.get_by_id(npc_id).disclosure_level == "intimate"
+
+
+def test_record_validation_is_actionable_without_revealing_hidden_conflict():
+    from app.core.client_error import ClientValidationError
+    _seed_records()
+    npc_id = load_player_records()["npc_profiles"][0]["id"]
+    runtime = get_campaign_runtime()
+    with runtime.stores.npc_profile as store:
+        store.upsert(NPCProfile(name="未披露的真实身份", aliases=["冲突别名"], name_hit_count=0))
+    with pytest.raises(ClientValidationError) as conflict:
+        update_player_record("npc", npc_id, {"name": "冲突别名"})
+    assert "冲突" in str(conflict.value)
+    assert "未披露的真实身份" not in str(conflict.value)
+    with pytest.raises(ClientValidationError, match="字段格式不合法"):
+        update_player_record("npc", npc_id, {"known_abilities": [1]})
+    with runtime.stores.npc_profile as store:
+        assert store.get_by_id(npc_id).aliases == ["木偶师"]

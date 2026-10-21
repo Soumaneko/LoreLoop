@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import sys
 import tempfile
 import traceback
@@ -54,8 +55,11 @@ def _append_crash(path: Path, error: BaseException, *, phase: str) -> None:
         handle.write("\n")
 
 
-def _redact_known_secrets(text: str) -> str:
+def _redact_known_secrets(text: str, *, secrets: tuple[str, ...] = ()) -> str:
     redacted = text
+    for value in secrets:
+        if value:
+            redacted = redacted.replace(value, "[REDACTED]")
     for name, value in os.environ.items():
         upper = name.upper()
         if (
@@ -69,4 +73,12 @@ def _redact_known_secrets(text: str) -> str:
             )
         ):
             redacted = redacted.replace(value, "[REDACTED]")
-    return redacted
+    redacted = re.sub(r"\bsk-[A-Za-z0-9_-]{12,}\b", "[REDACTED]", redacted)
+    redacted = re.sub(
+        r"(?i)(authorization[\"']?\s*[:=]\s*[\"']?)(?:bearer\s+)?[^\s,;\"']+",
+        r"\1[REDACTED]", redacted,
+    )
+    return re.sub(
+        r"(?i)((?:api[_-]?key|access_token|secret)[\"']?\s*[:=]\s*[\"']?)[^\s,;\"'}]+",
+        r"\1[REDACTED]", redacted,
+    )

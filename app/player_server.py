@@ -7,12 +7,12 @@ import mimetypes
 import os
 import sys
 import tempfile
-import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
+from types import SimpleNamespace
 from urllib.parse import parse_qs, quote, urlparse
 
 from app.api import (
@@ -65,10 +65,12 @@ from app.api import (
     undo_last_turn,
     update_player_record,
 )
-from app.core.client_error import ClientValidationError
+from app.core.client_error import ClientValidationError, describe_error
+from app.core.diagnostics import record_local_failure
+from app.core.crash_logging import _redact_known_secrets
 from app.core.llm import FORMAL_LLM_CALL_TIMEOUT_SECONDS
 from app.runtime.session import get_campaign_runtime
-from app.runtime.player_state import player_saves_payload
+from app.runtime.player_state import load_confirmation_outcome, player_saves_payload
 from app.runtime.operation_types import (
     PLAYER_OPERATION_TYPES,
     operation_policy,
@@ -88,11 +90,20 @@ def _json_response(handler: BaseHTTPRequestHandler, status: int, data: dict[str,
 
 
 def _read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
-    length = int(handler.headers.get("Content-Length", "0"))
+    try:
+        length = int(handler.headers.get("Content-Length", "0"))
+    except ValueError as exc:
+        raise ClientValidationError("请求长度无效，请刷新界面后重试。") from exc
     if length <= 0:
         return {}
-    raw = handler.rfile.read(length).decode("utf-8")
-    return json.loads(raw)
+    try:
+        raw = handler.rfile.read(length).decode("utf-8")
+        payload = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ClientValidationError("请求内容不是有效的 JSON，请刷新界面后重试。") from exc
+    if not isinstance(payload, dict):
+        raise ClientValidationError("请求内容必须是 JSON 对象，请刷新界面后重试。")
+    return payload
 
 
 def _path_id(path: str, prefix: str, suffix: str) -> str:
@@ -116,18 +127,16 @@ def _model_config_guard(fn: Callable[[], Any]) -> Any:
 
 
 def _project_client_error(exc: Exception, *, label: str) -> tuple[int, str, str]:
-    """Project an exception into a (status, code, message) safe for the client.
-
-    Only :class:`ClientValidationError` messages (deliberate validation) are
-    surfaced verbatim. Every other exception -- including ``SaveArchiveError``,
-    pydantic/JSON subclasses and unexpected infrastructure failures -- is logged
-    server-side and replaced with a generic ``internal_error``.
-    """
-    if isinstance(exc, ClientValidationError):
-        return 400, "validation_error", str(exc) or "请求参数不合法。"
-    print(f"[player-server] {label} failed: {exc}", file=sys.stderr)
-    traceback.print_exc()
-    return 500, "internal_error", "服务器内部错误，详情见服务端日志。"
+    """Explain a local failure and point to a real diagnostic record."""
+    status, code, message = describe_error(exc)
+    try:
+        logger = getattr(get_campaign_runtime(), "diagnostics", None)
+    except Exception:
+        logger = None
+    message = _redact_known_secrets(message, secrets=getattr(logger, "secrets", ()))
+    if not isinstance(exc, ClientValidationError):
+        message += "\n" + record_local_failure(exc, source=label, logger=logger)
+    return status, code, message
 
 
 TOKEN_META = '<meta name="loreloop-session-token" content="" />'
@@ -162,6 +171,12 @@ class PlayerHandler(BaseHTTPRequestHandler):
                 PLAYER_STATIC_DIR / path.removeprefix("/assets/"),
                 PLAYER_STATIC_DIR,
             )
+            return
+        if path == "/api/player/confirmation":
+            query = parse_qs(parsed_url.query)
+            self._handle_player_json(lambda: load_confirmation_outcome(
+                query.get("save_id", [""])[0], query.get("turn_id", [""])[0],
+            ))
             return
         if path == "/api/player/state":
             self._handle_player_json(load_player_state)
@@ -501,7 +516,10 @@ class PlayerHandler(BaseHTTPRequestHandler):
             content_type = self.headers.get("Content-Type", "").split(";", 1)[0]
             if content_type not in {"application/zip", "application/octet-stream"}:
                 raise ClientValidationError("Import body must be a ZIP archive")
-            length = int(self.headers.get("Content-Length", "0"))
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError as exc:
+                raise ClientValidationError("ZIP 上传长度无效，请重新选择文件。") from exc
             if length < 1 or length > 512 * 1024 * 1024:
                 raise ClientValidationError("ZIP archive size must be between 1 byte and 512 MB")
             descriptor, raw_path = tempfile.mkstemp(prefix="loreloop-import-", suffix=".zip")
@@ -540,7 +558,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
     def _player_event(event: dict[str, Any]) -> dict[str, Any]:
         step = str(event.get("step", "progress"))
         data = event.get("data") or {}
-        if step == "operation_started":
+        if step == "runtime_notice":
+            public_data = {key: data.get(key) for key in ("notice_id", "code", "message", "operation_type", "created_at")}
+        elif step == "narrative_checked":
+            public_data = {"validation_skipped": bool(data.get("validation_skipped", False))}
+        elif step == "operation_started":
             public_data = {
                 "operation_id": data.get("operation_id"),
                 "operation_type": data.get("operation_type"),
@@ -666,11 +688,16 @@ class PlayerHandler(BaseHTTPRequestHandler):
     def _player_operation(operation: dict[str, Any]) -> dict[str, Any]:
         metadata = operation.get("metadata") or {}
         policy = operation_policy(str(operation.get("operation_type", "")))
+        failure = {}
+        if operation.get("status") == "failed":
+            code, message = PlayerHandler._project_operation_failure(SimpleNamespace(**operation))
+            failure = {"error": {"code": code, "message": message}}
         return {
             "operation_id": operation.get("operation_id"),
             "operation_type": operation.get("operation_type"),
             "status": operation.get("status"),
             "current_step": operation.get("current_step"),
+            **failure,
             "submitted_at": operation.get("submitted_at"),
             "started_at": operation.get("started_at"),
             "recovery_kind": policy.recovery_kind,
@@ -763,12 +790,6 @@ class PlayerHandler(BaseHTTPRequestHandler):
         try:
             operation_id = starter()
         except Exception as exc:
-            if not player:
-                print(
-                    f"[player-server] operation start failed: {exc}",
-                    file=sys.stderr,
-                )
-                traceback.print_exc()
             self._write_operation_start_error(exc, player=player)
             return
         self._handle_operation_event_stream(
@@ -829,6 +850,12 @@ class PlayerHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _project_operation_failure(failed) -> tuple[str, str]:
         """Project a failed Operation snapshot into a player-safe (code, message)."""
+        public_failure = (getattr(failed, "metadata", None) or {}).get("public_failure")
+        if public_failure:
+            if public_failure["code"] == "timeout":
+                _, _, diagnostic = public_failure["message"].partition("\n")
+                return "timeout", PlayerHandler._timeout_message(getattr(failed, "operation_type", None)) + "\n" + diagnostic
+            return public_failure["code"], public_failure["message"]
         if failed is not None and failed.error_type == "timeout":
             return "timeout", PlayerHandler._timeout_message(
                 getattr(failed, "operation_type", None)
@@ -841,7 +868,7 @@ class PlayerHandler(BaseHTTPRequestHandler):
             and failed.error_message
         ):
             return "validation_error", failed.error_message
-        return "operation_failed", "服务器内部错误，详情见服务端日志。"
+        return "operation_failed", "本地操作未能完成，请复制诊断信息以便排查。"
 
     def _handle_operation_event_stream(
         self,

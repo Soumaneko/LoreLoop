@@ -4,10 +4,14 @@ import json
 import os
 import threading
 import time
+import tempfile
+import traceback
+import uuid
 from pathlib import Path
 from typing import Any, Literal
 
 from app.runtime.app_paths import APP_PATHS
+from app.core.crash_logging import _redact_known_secrets
 
 
 DiagnosticSeverity = Literal["warning", "error"]
@@ -38,10 +42,11 @@ def diagnostic_path_for_trace(log_path: str | os.PathLike[str]) -> Path:
 class DiagnosticLogger:
     """Append-only warning/error log for locally actionable pipeline problems."""
 
-    def __init__(self, log_path: str | os.PathLike[str] | None = None) -> None:
+    def __init__(self, log_path: str | os.PathLike[str] | None = None, *, secrets: tuple[str, ...] = ()) -> None:
         if log_path is None:
             log_path = APP_PATHS.logs_dir / "diagnostics.jsonl"
         self._log_path = Path(log_path)
+        self.secrets = secrets
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
 
     @property
@@ -104,9 +109,18 @@ class DiagnosticLogger:
         if details:
             entry["details"] = details
 
+        def sanitize(value):
+            if isinstance(value, str):
+                return _redact_known_secrets(value, secrets=self.secrets)
+            if isinstance(value, dict):
+                return {key: sanitize(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [sanitize(item) for item in value]
+            return value
+
         with _WRITE_LOCK:
             with self._log_path.open("a", encoding="utf-8") as file:
-                file.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+                file.write(json.dumps(sanitize(entry), ensure_ascii=False, default=str) + "\n")
 
     def read(
         self,
@@ -153,3 +167,24 @@ class NullDiagnosticLogger:
     ) -> list[dict[str, Any]]:
         del severity, trace_id
         return []
+
+
+def record_local_failure(exc: BaseException, *, source: str, logger=None, **fields: Any) -> str:
+    """Record a failure without requiring a console or replacing the original error."""
+    diagnostic_id = fields.get("operation_id") or uuid.uuid4().hex
+    details = dict(fields.pop("details", None) or {})
+    details.setdefault("error_type", type(exc).__name__)
+    details.update({"diagnostic_id": diagnostic_id,
+                    "traceback": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))})
+    secrets = getattr(logger, "secrets", ())
+    for fallback in (False, True):
+        try:
+            target = logger if not fallback and isinstance(logger, DiagnosticLogger) else DiagnosticLogger(
+                Path(tempfile.gettempdir()) / "LoreLoop-diagnostics.jsonl" if fallback else None,
+                secrets=secrets,
+            )
+            target.error(source=source, code="operation_failed", message=str(exc), details=details, **fields)
+            return f"诊断编号：{diagnostic_id}；本地记录：{target.log_path}"
+        except Exception:
+            continue
+    return f"诊断记录未能保存（编号：{diagnostic_id}）。请复制当前错误提示并检查磁盘及目录权限。"

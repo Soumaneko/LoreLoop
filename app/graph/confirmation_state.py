@@ -55,6 +55,7 @@ class ConfirmationState(TypedDict, total=False):
     pipeline_input: ConfirmationPipelineInput
     write_db: bool
     journaled: bool
+    maintenance_schedule_failed: bool
     journal_completed: bool
     scene_text: str | None
     pending: PendingTurn | PendingOpening

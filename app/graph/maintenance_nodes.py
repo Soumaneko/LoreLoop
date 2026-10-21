@@ -68,7 +68,7 @@ def scene_summary_condense_node(
         "events": [
             {
                 "step": "scene_summaries_condensed",
-                "data": {"condensed_ids": result.condensed_ids},
+                "data": {"condensed_ids": result.condensed_ids, "warning_codes": [warning.code for warning in warnings]},
             }
         ],
     }

@@ -213,3 +213,48 @@ def _all_transactions(history) -> list[dict]:
             "SELECT turn_id, turn_index, status FROM turn_transactions"
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def test_completed_confirmation_survives_later_failure_and_result_lookup(tmp_path, monkeypatch):
+    from app.runtime.player_state import load_confirmation_outcome
+    from app.runtime import player_state
+
+    paths = CampaignPaths.from_data_dir(tmp_path / "save")
+    _write_value(paths.campaign_db, "before")
+    runtime = CampaignRuntime("result-save", paths=paths)
+    try:
+        history = runtime.history
+        history.save_pending(turn_id="variant-1", kind="turn", group_id="group-1",
+                             turn_index=1, payload={})
+        monkeypatch.setattr(player_state, "get_campaign_runtime", lambda: runtime)
+        def outcome():
+            return load_confirmation_outcome("result-save", "variant-1")["outcome"]
+        assert outcome() == "not_confirmed"
+        history.begin_confirmation("variant-1", write_db=True, scene_text=None)
+        assert outcome() == "in_progress"
+        _write_value(paths.campaign_db, "after")
+        history.complete_confirmation("variant-1", "group-1")
+        config = InitConfig(world_name="测试", world_style="奇幻", ability_system="魔法",
+                            protagonist_name="主角", story_expectation="探索")
+        stale = PendingOpening(
+            turn_id="variant-1", group_id="group-1", version_index=1,
+            initialization_fingerprint="test", config=config, experience_mode="player",
+            current_state=build_initial_current_state(config, location="原地", currency_unit="金币"),
+            scene_result=SceneWriterResult(scene_text="已确认的正文"),
+        )
+        runtime.pending_openings.restore(stale)
+        from app.core.client_error import ClientValidationError
+        with pytest.raises(ClientValidationError, match="已确认"):
+            runtime.begin_confirmation(stale, write_db=True, scene_text=None)
+        runtime.fail_confirmation_offline("variant-1", RuntimeError("presentation failed"))
+        history.fail_confirmation_offline("variant-1", RuntimeError("late error"))
+        assert runtime.pending_openings.get("variant-1") is None
+        assert outcome() == "confirmed"
+        assert _read_value(paths.campaign_db) == "after"
+        assert load_confirmation_outcome("other-save", "variant-1")["outcome"] == "unknown"
+        assert load_confirmation_outcome("result-save", "other-variant")["outcome"] == "unknown"
+        history.undo()
+        assert outcome() == "not_confirmed"
+        assert _read_value(paths.campaign_db) == "before"
+    finally:
+        runtime.close()

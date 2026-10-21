@@ -92,6 +92,7 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
             "step": "continuity_projected",
             "data": {
                 "active_count": active_count,
+                "warning_codes": [warning.code for warning in getattr(projector, "last_warnings", [])],
                 "continuity_projection": model_data(projection),
             },
         }],
@@ -192,6 +193,8 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
         "events": [{
             "step": "scene_facts_done",
             "data": {
+                "warning_codes": (["scene_facts_degraded"] if scene_facts.degraded else [])
+                                 + (["npc_mentions_degraded"] if "npc_mentions" in scene_facts.degraded_reasons else []),
                 "scene_facts": model_data(scene_facts),
             },
         }],
@@ -313,7 +316,7 @@ def scene_summarize_node(state: ConfirmationState) -> ConfirmationState:
         "turn_summary": turn_summary,
         "events": [{
             "step": "scene_summarized",
-            "data": {"turn_summary": model_data(turn_summary)},
+            "data": {"turn_summary": model_data(turn_summary), "warning_codes": [warning.code for warning in getattr(summarizer, "last_warnings", [])]},
         }],
     }
 
@@ -368,6 +371,7 @@ def action_preview_node(state: ConfirmationState) -> ConfirmationState:
         "events": [{
             "step": "action_preview_done",
             "data": {
+                "warning_codes": [warning.code for warning in getattr(agent, "last_warnings", [])],
                 "action_preview": model_data(action_preview),
             },
         }],
@@ -431,6 +435,7 @@ def director_agent_confirm_node(state: ConfirmationState) -> ConfirmationState:
             "step": "director_agent_confirmed",
             "data": {
                 "director_decision": model_data(decision),
+                "warning_codes": [warning.code for warning in getattr(executor, "last_warnings", [])],
                 "director_executions": model_data(executions),
             },
         }],
@@ -667,6 +672,7 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
         "events": [{
             "step": "director_event_reviewed",
             "data": {
+                "warning_codes": [code for code, _ in review_warnings],
                 "director_event_reviews": reviews,
             },
         }],

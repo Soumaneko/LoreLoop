@@ -65,9 +65,13 @@
           <div class="section-heading"><span>一些可能的方向</span><i></i></div>
           <div id="suggestionList" class="suggestion-list"></div>
         </section>
+        <details id="runtimeNotices" class="runtime-notices" hidden>
+          <summary id="runtimeNoticeSummary">近期运行提示</summary>
+          <ul id="runtimeNoticeList"></ul>
+        </details>
         <div id="errorCard" class="error-card" hidden>
           <strong id="errorTitle">这次回应没有完成</strong>
-          <p id="errorMessage">之前的故事没有受到影响，你可以重新尝试。</p>
+          <p id="errorMessage">请查看失败原因，核实当前状态后再继续。</p>
           <button id="dismissErrorBtn" type="button">知道了</button>
         </div>
       </section>

@@ -362,6 +362,7 @@ class ConfirmationEventBuilder:
             "turn_id": state["turn_id"],
             "trace_id": state["trace_id"],
             "write_db": write_db,
+            "warning_codes": ["confirmation_maintenance_schedule_failed"] if state.get("maintenance_schedule_failed") else [],
             **pipeline_input.finish_extra,
             "state_before": model_data(pipeline_input.state_before),
             "state_after": model_data(state["updated_state"]),
@@ -484,6 +485,7 @@ class ConfirmationFinalizer:
         try:
             self.scheduler.schedule_scene_summary(state)
         except Exception as exc:
+            state["maintenance_schedule_failed"] = True
             self.runtime.services.diagnostics.warning(
                 source="confirmation",
                 code="confirmation_maintenance_schedule_failed",

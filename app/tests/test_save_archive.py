@@ -516,5 +516,31 @@ def test_legacy_snapshot_rejects_non_string_manifest(tmp_path):
             snapshot / "manifest.json",
             "save/.snapshots/undo-one/manifest.json",
         )
-    with pytest.raises(SaveArchiveError, match="string list"):
+    with pytest.raises(SaveArchiveError, match="快照"):
         extract_archive(archive, tmp_path / "bad-staging")
+
+
+def test_missing_control_columns_are_archive_errors_but_io_is_not(tmp_path, monkeypatch):
+    from app.runtime.save_archive import rebase_history_paths, InvalidSaveArchive
+    control = tmp_path / ".runtime" / "control.db"
+    control.parent.mkdir()
+    with sqlite3.connect(control) as conn:
+        conn.execute("CREATE TABLE turn_snapshots(sequence INTEGER)")
+    with pytest.raises(InvalidSaveArchive, match="schema"):
+        rebase_history_paths(tmp_path)
+
+    def unavailable(*args, **kwargs):
+        raise sqlite3.OperationalError("disk I/O error")
+    monkeypatch.setattr(sqlite3, "connect", unavailable)
+    with pytest.raises(sqlite3.OperationalError, match="I/O"):
+        rebase_history_paths(tmp_path)
+
+
+def test_invalid_database_version_is_archive_validation_error(tmp_path):
+    from app.runtime.save_archive import quick_check_database, InvalidSaveArchive
+    database = tmp_path / "campaign.db"
+    _make_campaign_database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE schema_versions SET version='invalid'")
+    with pytest.raises(InvalidSaveArchive, match="version"):
+        quick_check_database(database)

@@ -179,6 +179,33 @@ def load_player_history(
         )
 
 
+def load_confirmation_outcome(save_id: str, turn_id: str) -> dict[str, str]:
+    """Read this variant's durable confirmation result, including after restart."""
+    runtime = get_campaign_runtime()
+    if not save_id or not turn_id or save_id != runtime.campaign_id:
+        return {"outcome": "unknown"}
+    if runtime._restore_error:
+        return {"outcome": "unknown"}
+    if runtime._restore_gate_closed:
+        return {"outcome": "in_progress"}
+    record = runtime.history.get_transaction(turn_id)
+    status = record["status"] if record else None
+    if status != "completed" and any(
+        operation.operation_type == "confirmation"
+        and operation.metadata.get("turn_id") == turn_id
+        for operation in runtime.operations.list(active_only=True)
+    ):
+        return {"outcome": "in_progress"}
+    outcome = {
+        "completed": "confirmed",
+        "failed": "not_confirmed",
+        "awaiting_confirm": "not_confirmed",
+        "confirming": "in_progress",
+        "restoring": "in_progress",
+    }.get(status, "unknown")
+    return {"outcome": outcome}
+
+
 def _pending_scene_projection(pending) -> dict[str, str | None]:
     original = getattr(pending, "original_scene_text", None)
     current = pending.scene_result.scene_text
@@ -269,6 +296,7 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
             "save_id": runtime.campaign_id,
             "initialized": initialization_completed,
         },
+        "runtime_notices": runtime.history.runtime_notices(),
         "needs_init": needs_init,
         "initialization": {
             "phase": initialization_phase,

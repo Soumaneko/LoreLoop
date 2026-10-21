@@ -141,7 +141,7 @@ def create_gateway(
         tracer_kwargs["log_path"] = log_path
 
     diagnostic_path = diagnostic_path_for_trace(log_path) if log_path else None
-    diagnostics = DiagnosticLogger(diagnostic_path)
+    diagnostics = DiagnosticLogger(diagnostic_path, secrets=(config.api_key,))
     return LLMGateway(
         provider=PydanticAIProvider(
             api_key=config.api_key,
@@ -176,7 +176,7 @@ class SharedGatewayFactory:
         self.log_path = log_path
         if diagnostic_path is None and log_path is not None:
             diagnostic_path = str(diagnostic_path_for_trace(log_path))
-        self.diagnostic_logger = DiagnosticLogger(diagnostic_path)
+        self.diagnostic_logger = DiagnosticLogger(diagnostic_path, secrets=(self.config.api_key,))
         self._session_id = session_id
         self._components = None
         self._lock = threading.Lock()

@@ -183,7 +183,7 @@ def test_player_json_genericizes_internal_error():
     payload = json.loads(handler.wfile.getvalue().decode("utf-8"))
     assert handler.recorded_status == 500
     assert payload["error"]["code"] == "internal_error"
-    assert payload["error"]["message"] == "服务器内部错误，详情见服务端日志。"
+    assert payload["error"]["message"].startswith("本地操作未能完成，请复制诊断信息以便排查。")
     assert "/home" not in json.dumps(payload, ensure_ascii=False)
 
 
@@ -219,7 +219,7 @@ def test_client_error_projection_genericizes_save_archive_error():
     )
     assert status == 500
     assert code == "internal_error"
-    assert message == "服务器内部错误，详情见服务端日志。"
+    assert message.startswith("本地操作未能完成，请复制诊断信息以便排查。")
 
 
 def test_operation_failure_projection_shows_validation_only():
@@ -239,7 +239,7 @@ def test_operation_failure_projection_shows_validation_only():
     )
     assert PlayerHandler._project_operation_failure(internal) == (
         "operation_failed",
-        "服务器内部错误，详情见服务端日志。",
+        "本地操作未能完成，请复制诊断信息以便排查。",
     )
 
 
@@ -300,7 +300,7 @@ def test_operation_failure_projection_never_surfaces_raw_provider_text():
     )
     assert PlayerHandler._project_operation_failure(raw) == (
         "operation_failed",
-        "服务器内部错误，详情见服务端日志。",
+        "本地操作未能完成，请复制诊断信息以便排查。",
     )
 
 
@@ -374,7 +374,7 @@ def test_operation_stream_exception_does_not_leak(monkeypatch):
     assert "boom" not in payload
     assert "/home" not in payload
     assert "traceback" not in payload
-    assert "服务器内部错误，详情见服务端日志。" in payload
+    assert "本地操作未能完成，请复制诊断信息以便排查。" in payload
 
 
 def test_error_response_does_not_leak_traceback_or_path(monkeypatch):
@@ -388,7 +388,7 @@ def test_error_response_does_not_leak_traceback_or_path(monkeypatch):
     payload = _body(handler)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "internal_error"
-    assert payload["error"]["message"] == "服务器内部错误，详情见服务端日志。"
+    assert payload["error"]["message"].startswith("本地操作未能完成，请复制诊断信息以便排查。")
     assert "traceback" not in payload
     assert "/home" not in json.dumps(payload, ensure_ascii=False)
 
@@ -409,7 +409,7 @@ def test_operation_start_error_does_not_leak_traceback():
     payload = handler.wfile.getvalue().decode("utf-8")
     assert "traceback" not in payload
     assert "/home" not in payload
-    assert "服务器内部错误，详情见服务端日志。" in payload
+    assert "本地操作未能完成，请复制诊断信息以便排查。" in payload
 
 
 def test_main_rejects_external_bind_without_flag(monkeypatch):
@@ -497,3 +497,60 @@ def test_player_index_serves_html():
     content = handler.wfile.getvalue().decode("utf-8")
     assert "<!doctype html>" in content
     assert '<meta name="loreloop-session-token"' in content
+
+
+@pytest.mark.parametrize("kind", ["not_zip", "missing_manifest", "new_version", "permission"])
+def test_save_import_reports_real_reason_without_installing_save(tmp_path, monkeypatch, kind):
+    import zipfile
+    from app.runtime import saves
+    from app.runtime.session import get_campaign_runtime
+
+    manager = saves.SaveManager(tmp_path / "saves", runtime=get_campaign_runtime())
+    monkeypatch.setattr(saves, "_get_save_manager", lambda: manager)
+    before = {item.save_id for item in manager.list()}
+    body = io.BytesIO()
+    if kind == "not_zip":
+        body.write(b"not zip")
+    else:
+        with zipfile.ZipFile(body, "w") as bundle:
+            if kind == "new_version":
+                bundle.writestr("manifest.json", json.dumps({"format_version": 999}))
+    if kind == "permission":
+        def denied(*args, **kwargs):
+            raise PermissionError("staging cannot be written")
+        monkeypatch.setattr(saves, "extract_archive", denied)
+    raw = body.getvalue()
+    handler = _make_handler()
+    handler.headers.update({"Content-Type": "application/zip", "Content-Length": str(len(raw))})
+    handler.rfile = io.BytesIO(raw)
+    handler._handle_save_import("导入测试")
+    error = _body(handler)["error"]
+    assert handler.recorded_status == (500 if kind == "permission" else 400)
+    assert error["code"] == ("file_access_failed" if kind == "permission" else "validation_error")
+    assert "权限" in error["message"] if kind == "permission" else "存档校验失败" in error["message"]
+    assert {item.save_id for item in manager.list()} == before
+    assert not list(manager.root.glob(".import-*"))
+
+
+def test_duplicate_save_name_is_a_business_error(tmp_path, monkeypatch):
+    from app.runtime import saves
+    from app.runtime.session import get_campaign_runtime
+
+    manager = saves.SaveManager(tmp_path / "saves", runtime=get_campaign_runtime())
+    monkeypatch.setattr(saves, "_get_save_manager", lambda: manager)
+    manager.create("重复名称")
+    handler = _make_handler()
+    handler._handle_player_json(lambda: saves.create_save({"name": "重复名称"}))
+    assert handler.recorded_status == 400
+    assert "重复名称" in _body(handler)["error"]["message"]
+
+
+@pytest.mark.parametrize("body", [b"invalid-json", b"[]", b"null", b"\xff"])
+def test_malformed_json_is_explained_as_request_error(body):
+    handler = _make_handler(path="/api/player/saves/create")
+    handler.headers.update({"Content-Length": str(len(body)), "Content-Type": "application/json"})
+    handler.rfile = io.BytesIO(body)
+    handler.do_POST()
+    assert handler.recorded_status == 400
+    assert _body(handler)["error"]["code"] == "validation_error"
+    assert "JSON" in _body(handler)["error"]["message"]

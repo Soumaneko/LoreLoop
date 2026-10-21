@@ -4,7 +4,6 @@ import concurrent.futures
 import copy
 import threading
 import time
-import traceback
 import uuid
 from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
@@ -16,7 +15,9 @@ from app.core.cancellation import (
     raise_if_cancelled,
     reset_cancellation_token,
 )
-from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger
+from app.core.diagnostics import DiagnosticLogger, NullDiagnosticLogger, record_local_failure
+from app.core.client_error import ClientValidationError, describe_error
+from app.runtime.runtime_feedback import notices_from_event
 from app.core.llm.errors import LLMProviderError
 from app.core.llm.provider_classification import classify_provider_error
 from app.core.llm.token_usage import (
@@ -94,6 +95,7 @@ class OperationManager:
         max_history: int = 200,
         max_events_per_operation: int = 500,
         diagnostics: DiagnosticLogger | NullDiagnosticLogger | None = None,
+        history=None,
     ) -> None:
         if max_workers < 1:
             raise ValueError("max_workers must be >= 1")
@@ -103,6 +105,7 @@ class OperationManager:
             raise ValueError("max_events_per_operation must be >= 1")
         self.campaign_id = campaign_id
         self.diagnostics = diagnostics or NullDiagnosticLogger()
+        self.history = history
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
         self._max_history = max_history
         self._max_events_per_operation = max_events_per_operation
@@ -159,9 +162,7 @@ class OperationManager:
             if clean_exclusive_key is not None:
                 active_id = self._exclusive_index.get(clean_exclusive_key)
                 if active_id is not None:
-                    raise RuntimeError(
-                        "another operation is already active for this exclusive key"
-                    )
+                    raise ClientValidationError("已有任务正在执行，请等待当前任务完成。")
 
             operation_id = uuid.uuid4().hex
             record = _OperationRecord(
@@ -248,7 +249,8 @@ class OperationManager:
             if record.status in TERMINAL_OPERATION_STATUSES:
                 raise RuntimeError("cannot append events to a terminal operation")
             event = record.event_buffer.append(step, data)
-            record.current_step = event.step
+            if event.step != "runtime_notice":
+                record.current_step = event.step
             trace_id = (data or {}).get("trace_id")
             if trace_id and not record.metadata.get("trace_id"):
                 record.metadata["trace_id"] = str(trace_id)
@@ -446,6 +448,19 @@ class OperationManager:
             self._condition.notify_all()
         self.executor.shutdown(wait=wait)
 
+    def _publish_notice(self, operation_id: str, code: str, message: str) -> None:
+        operation = self.get(operation_id)
+        notice = {"notice_id": f"{operation_id}:{code}", "code": code, "message": message,
+                  "operation_type": operation.operation_type, "created_at": operation_timestamp()}
+        if self.history is not None:
+            try:
+                notice = self.history.record_runtime_notice(operation_id, operation.operation_type, code, message)
+            except Exception as exc:
+                notice["message"] += "\n运行提示未能保存。" + record_local_failure(
+                    exc, source="runtime_notice", logger=self.diagnostics, operation_id=operation_id,
+                )
+        self.emit(operation_id, "runtime_notice", notice)
+
     def _run_stream(
         self,
         operation_id: str,
@@ -480,6 +495,11 @@ class OperationManager:
                 step = raw_event.get("step")
                 data = raw_event.get("data", {})
                 self.emit(operation_id, step, data)
+                for notice in notices_from_event(step, data):
+                    self._publish_notice(operation_id, notice["code"], notice["message"])
+            if record.operation_type == "maintenance_scene_summary" and isinstance(result, dict):
+                for notice in notices_from_event("maintenance_finished", result):
+                    self._publish_notice(operation_id, notice["code"], notice["message"])
             raise_if_cancelled()
         except concurrent.futures.CancelledError:
             cancelled = True
@@ -510,21 +530,30 @@ class OperationManager:
                 details["provider_error_type"] = type(exc).__name__
                 details["provider_message"] = str(exc)
             else:
-                error_type = type(exc).__name__
-                error_message = str(exc)
+                error_type = "ClientValidationError" if isinstance(exc, ClientValidationError) else type(exc).__name__
+                error_message = exc.public_message if isinstance(exc, ClientValidationError) else str(exc)
                 details["error_type"] = error_type
-            details["traceback"] = traceback.format_exc()
-            self.diagnostics.error(
-                source="operation_manager",
-                code="operation_failed",
-                message=error_message,
-                trace_id=metadata.get("trace_id"),
-                operation_id=operation_id,
-                campaign_id=self.campaign_id,
-                operation_type=operation_type,
-                turn_index=metadata.get("turn_index"),
-                details=details or None,
+            diagnostic = record_local_failure(
+                exc, source="operation_manager", logger=self.diagnostics,
+                trace_id=metadata.get("trace_id"), operation_id=operation_id,
+                campaign_id=self.campaign_id, operation_type=operation_type,
+                turn_index=metadata.get("turn_index"), details=details,
             )
+            _, public_code, public_message = describe_error(exc)
+            from app.core.crash_logging import _redact_known_secrets
+            public_message = _redact_known_secrets(
+                public_message, secrets=getattr(self.diagnostics, "secrets", ()),
+            )
+            with self._guard:
+                self._records[operation_id].metadata["public_failure"] = {
+                    "code": public_code, "message": public_message + "\n" + diagnostic,
+                }
+            notice_message = public_message
+            if operation_type == "confirmation":
+                notice_message = "确认任务未正常结束，请核实确认结果。" + notice_message
+            elif operation_type == "maintenance_scene_summary":
+                notice_message = "后台摘要整理未完成；已确认的回合仍然有效。" + notice_message
+            self._publish_notice(operation_id, public_code, notice_message + "\n" + diagnostic)
             self._finish(
                 operation_id,
                 status="failed",

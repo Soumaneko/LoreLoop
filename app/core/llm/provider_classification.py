@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from app.core.crash_logging import _redact_known_secrets
 
 #: Provider error codes that cannot recover by retrying the same request.
 PROVIDER_ERROR_PERMANENT_CODES = frozenset({
@@ -90,4 +91,4 @@ def _safe_error_text(exc: Exception, *, secret: str = "") -> str:
     text = ": ".join(messages)
     if secret:
         text = text.replace(secret, "[REDACTED]")
-    return text[:500]
+    return _redact_known_secrets(text)[:500]

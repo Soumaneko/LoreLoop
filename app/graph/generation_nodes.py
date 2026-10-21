@@ -259,6 +259,7 @@ def parse_action_node(state: GenerationState) -> GenerationState:
             {
                 "step": "action_parsed",
                 "data": {
+                    "warning_codes": [warning.code for warning in parser.last_warnings],
                     "raw_action_parse_result": model_data(raw_action_parse_result),
                     "action_self_check_result": model_data(self_check.last_result),
                     "action_parse_result": model_data(action_parse_result),
@@ -344,6 +345,7 @@ def evaluate_roll_modifiers_node(state: GenerationState) -> GenerationState:
             {
                 "step": "modifiers_done",
                 "data": {
+                    "warning_codes": [warning.code for warning in modifier_evaluator.last_warnings],
                     "roll_actions": model_data(roll_actions),
                     "modifiers": model_data(modifier_batch),
                 },
@@ -490,6 +492,7 @@ def director_agent_stage_node(state: GenerationState) -> GenerationState:
         "events": [{
             "step": "director_agent_staged",
             "data": {
+                "warning_codes": [warning.code for warning in getattr(executor, "last_warnings", [])],
                 "director_decision": model_data(decision),
                 "director_stage": model_data(stage),
             },
@@ -711,6 +714,7 @@ def generate_canon_queries_node(state: GenerationState) -> GenerationState:
             "step": "canon_queries_generated",
             "data": {
                 "trace_id": state["trace_id"],
+                "warning_codes": [warning.code for warning in getattr(query_agent, "last_warnings", [])],
                 "canon_query_set": model_data(query_set),
             },
         }],
@@ -846,6 +850,7 @@ def revise_narrative_node(state: GenerationState) -> GenerationState:
             "events": [{
                 "step": "narrative_revision_failed",
                 "data": {
+                    "warning_codes": ["narrative_revision_fallback"],
                     "trace_id": state["trace_id"],
                     "error": str(exc),
                     "revision_instruction": instruction,

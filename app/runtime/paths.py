@@ -1,3 +1,4 @@
+from app.core.client_error import ClientValidationError
 from dataclasses import dataclass
 import json
 import os
@@ -19,13 +20,13 @@ _STAGING_DIR_PREFIXES = (".copy-", ".import-", ".trash-")
 def validate_save_name(name: str) -> str:
     clean = str(name).strip()
     if not clean or len(clean) > 80:
-        raise ValueError("Save name must contain 1-80 characters")
+        raise ClientValidationError("存档名称长度需在 1-80 个字符之间：请修改名称。")
     if clean in {".", ".."} or clean.startswith("."):
-        raise ValueError("Save name cannot be hidden or relative")
+        raise ClientValidationError("存档名称不能为隐藏名称或相对路径：请修改名称。")
     if any(char in clean for char in ("/", "\\", "\0")):
-        raise ValueError("Save name cannot contain path separators")
+        raise ClientValidationError("存档名称不能包含路径分隔符（/ 或 \\）：请修改名称。")
     if any(ord(char) < 32 for char in clean):
-        raise ValueError("Save name cannot contain control characters")
+        raise ClientValidationError("存档名称不能包含控制字符：请修改名称。")
     return clean
 
 

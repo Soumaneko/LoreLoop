@@ -7,6 +7,7 @@ export const state = {
   selectedPendingIndex: 0,
   suggestions: [],
   lastError: null,
+  runtimeNotices: [],
   historyLoading: false,
   historyPagingEnabled: false,
   records: null,

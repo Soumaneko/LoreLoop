@@ -238,9 +238,30 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => { els.toast.hidden = true; }, 2600);
 }
 
+function renderRuntimeNotices() {
+  const panel = $("runtimeNotices");
+  const notices = state.runtimeNotices || [];
+  panel.hidden = notices.length === 0;
+  $("runtimeNoticeSummary").textContent = notices.length
+    ? `近期运行提示（${notices.length}）：${notices[0].message.split("\n")[0]}` : "近期运行提示";
+  $("runtimeNoticeList").replaceChildren(...notices.map(notice => {
+    const item = document.createElement("li");
+    item.textContent = `${new Date(notice.created_at).toLocaleString()} · ${notice.message}`;
+    return item;
+  }));
+}
+
+function handleRuntimeNotice(event) {
+  if (event.step !== "runtime_notice") return false;
+  const notice = event.data;
+  state.runtimeNotices = [notice, ...(state.runtimeNotices || []).filter(item => item.notice_id !== notice.notice_id)].slice(0, 20);
+  renderRuntimeNotices();
+  return true;
+}
+
 function showError(
   error,
-  fallback = "之前的故事没有受到影响，你可以重新尝试。",
+  fallback = "操作未完成，请查看原因并核实当前状态后再继续。",
   options = {},
 ) {
   reportClientError(error, "displayed_error");
@@ -252,6 +273,18 @@ function showError(
   els.errorCard.hidden = false;
   els.errorCard.querySelector(".error-retry-btn")?.remove();
   els.errorCard.querySelector(".error-config-btn")?.remove();
+  els.errorCard.querySelector(".error-copy-btn")?.remove();
+  const copyButton = document.createElement("button");
+  copyButton.className = "error-copy-btn";
+  copyButton.type = "button";
+  copyButton.textContent = "复制错误信息";
+  copyButton.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(`${feedback.title}\n${feedback.message}`);
+      showToast("错误信息已复制");
+    } catch (_copyError) { showToast("无法自动复制，请选中提示文字复制。"); }
+  };
+  els.errorCard.appendChild(copyButton);
   if (feedback.action === "openModelConfig") {
     const configBtn = document.createElement("button");
     configBtn.className = "error-config-btn";
@@ -259,6 +292,13 @@ function showError(
     configBtn.textContent = "打开模型设置";
     configBtn.onclick = () => openModelConfig();
     els.errorCard.appendChild(configBtn);
+  }
+  if (options.recheckConfirmation) {
+    const button = document.createElement("button");
+    button.className = "error-retry-btn";
+    button.textContent = "核实确认结果";
+    button.onclick = options.recheckConfirmation;
+    els.errorCard.appendChild(button);
   }
   renderControls();
   scrollToBottom();
@@ -2815,6 +2855,8 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
   }
   state.playerState = playerState;
+  state.runtimeNotices = playerState.runtime_notices || [];
+  renderRuntimeNotices();
   state.experienceMode = playerState.experience_mode || "player";
   if (playerState.needs_init) await loadInitializationDraft();
   state.suggestions = playerState.action_preview?.previews || [];
@@ -2848,9 +2890,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
           await resumeInitializationOperation(operation)
         ) || reloadAfterRecovery;
       } else if (operation.recovery_kind === "confirmation") {
-        reloadAfterRecovery = (
-          await resumeConfirmationOperation(operation)
-        ) || reloadAfterRecovery;
+        await resumeConfirmationOperation(operation);
       } else if (operation.recovery_kind === "generation") {
         const resumed = await resumeGenerationOperation(operation);
         reloadAfterRecovery = resumed || reloadAfterRecovery;
@@ -2896,6 +2936,7 @@ async function bootstrap() {
 }
 
 async function handleInitializationEvent(event) {
+  if (handleRuntimeNotice(event)) return;
   tokenUsage.handleEvent(event);
   setProgress(event.step);
   if (event.step === "campaign_setup_done") {
@@ -3088,6 +3129,7 @@ async function acknowledgeFailedOperation(error, operationId = null) {
 }
 
 function handleGenerationEvent(event, { retryMode = null } = {}) {
+  if (handleRuntimeNotice(event)) return;
   tokenUsage.handleEvent(event);
   updateGenerationRunFromEvent(event);
   if (event.step === "operation_events_truncated") {
@@ -3220,6 +3262,7 @@ async function resumeGenerationOperation(operation) {
 }
 
 function handleConfirmationEvent(event) {
+  if (handleRuntimeNotice(event)) return;
   tokenUsage.handleEvent(event);
   if (event.step === "confirm_started") confirmationTailSeen = new Set();
   if (isConfirmationTailStep(event.step)) {
@@ -3247,7 +3290,8 @@ function handleConfirmationEvent(event) {
 }
 
 async function resumeConfirmationOperation(operation) {
-  const pending = activePending();
+  const confirmation = { turnId: operation.metadata?.turn_id, saveId: state.activeSave };
+  let completed = false;
   sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
   setMode("confirming");
   renderPending();
@@ -3257,16 +3301,16 @@ async function resumeConfirmationOperation(operation) {
       `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
       handleConfirmationEvent,
     );
+    completed = true;
     await acknowledgeHandledOperation(operation.operation_id);
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
+    await loadAll({ resumeOperation: false });
     showToast("这一回合已经写入旅程");
     refreshRecordsAfterTurn();
     return true;
   } catch (error) {
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
-    setMode("pending");
-    renderAll();
-    showError(error, undefined, { pendingPreserved: true });
+    await showConfirmationFailure(error, confirmation, completed);
     refreshRecords();
     await acknowledgeFailedOperation(error, operation.operation_id);
     return false;
@@ -3475,9 +3519,38 @@ async function maybeAutoConfirm() {
   await confirmTurn();
 }
 
+let uncertainConfirmation = null;
+
+async function showConfirmationFailure(error, confirmation, completed = false) {
+  let outcome = completed ? "confirmed" : "unknown";
+  if (!completed) {
+    try {
+      const result = await request(`/api/player/confirmation?save_id=${encodeURIComponent(confirmation.saveId)}&turn_id=${encodeURIComponent(confirmation.turnId)}`);
+      outcome = result.outcome;
+    } catch (_lookupError) { /* A lost connection cannot prove a failed commit. */ }
+  }
+  uncertainConfirmation = ["unknown", "in_progress"].includes(outcome) ? confirmation : null;
+  setMode(outcome === "not_confirmed" ? "pending" : "idle");
+  renderAll();
+  showError(error, undefined, {
+    confirmationOutcome: outcome,
+    recheckConfirmation: () => showConfirmationFailure(error, confirmation),
+  });
+  if (outcome === "confirmed") {
+    try { await loadAll({ resumeOperation: false }); } catch (_refreshError) { /* Keep the confirmed result visible. */ }
+  }
+}
+
 async function confirmTurn() {
   const pending = activePending(); const variant = selectedVariant();
   if (!pending || !variant) return;
+  if (uncertainConfirmation && uncertainConfirmation.saveId === state.activeSave
+      && uncertainConfirmation.turnId === variant.turn_id) {
+    await showConfirmationFailure(new Error("需要先核实上一次确认的结果。"), uncertainConfirmation);
+    return;
+  }
+  const confirmation = { turnId: variant.turn_id, saveId: state.activeSave };
+  let completed = false;
   sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
   setMode("confirming"); renderPending(); renderControls();
   try {
@@ -3486,6 +3559,7 @@ async function confirmTurn() {
       scene_text: readDraft(variant),
       request_id: newRequestId(),
     }, handleConfirmationEvent);
+    completed = true;
     await acknowledgeHandledOperation(operationId);
     const storedUsage = tokenUsage.getVariantUsage(variant.turn_id);
     const genUsage = storedUsage?.generation || tokenUsage.getCurrentPendingUsage().generation;
@@ -3503,7 +3577,7 @@ async function confirmTurn() {
     showToast("这一回合已经写入旅程");
     refreshRecordsAfterTurn();
   } catch (error) {
-    setMode("pending"); renderAll(); showError(error, undefined, { pendingPreserved: true });
+    await showConfirmationFailure(error, confirmation, completed);
     refreshRecords();
     await acknowledgeFailedOperation(error);
   }
@@ -4278,6 +4352,10 @@ async function refreshRecords({ force = false } = {}) {
       return;
     }
     state.records = records;
+    if (records.runtime_notices) {
+      state.runtimeNotices = records.runtime_notices;
+      renderRuntimeNotices();
+    }
     if (force || !recordsDirty) {
       renderRecords(records);
       recordsDirty = false;

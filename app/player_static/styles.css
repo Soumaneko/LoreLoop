@@ -3191,3 +3191,8 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 }
 .model-endpoint-fields { display: grid; gap: 14px; }
 .model-combobox-option { overflow-wrap: anywhere; white-space: normal; }
+
+.runtime-notices { margin: 1rem 0; padding: .8rem 1rem; border: 1px solid currentColor; border-radius: .5rem; }
+.runtime-notices summary { cursor: pointer; }
+.runtime-notices li { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: .6rem; }
+.error-card p { white-space: pre-wrap; overflow-wrap: anywhere; }

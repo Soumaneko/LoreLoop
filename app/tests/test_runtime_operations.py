@@ -1,3 +1,4 @@
+from app.core.client_error import ClientValidationError
 import concurrent.futures
 import threading
 from concurrent.futures import CancelledError
@@ -188,7 +189,8 @@ def test_operation_manager_records_stream_failure_without_losing_prior_events(
         assert snapshot.status == "failed"
         assert snapshot.error_type == "ValueError"
         assert snapshot.error_message == "broken pipeline"
-        assert [event.step for event in batch.events] == ["started"]
+        assert [event.step for event in batch.events] == ["started", "runtime_notice"]
+        assert snapshot.current_step == "started"
         assert batch.status == "failed"
         assert [
             operation.operation_id
@@ -307,7 +309,7 @@ def test_exclusive_key_rejects_parallel_operation_and_releases_on_finish():
             exclusive_key="generation",
         )
         assert started.wait(timeout=2)
-        with pytest.raises(RuntimeError, match="already active"):
+        with pytest.raises(ClientValidationError, match="已有任务"):
             manager.submit_stream(
                 "reroll",
                 quick_stream,

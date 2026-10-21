@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import ValidationError
+
 from typing import Any
 
 from app.core.client_error import ClientValidationError
@@ -134,7 +136,7 @@ def _maintenance_running(runtime: CampaignRuntime) -> bool:
 def load_player_records(view: str = "general") -> dict[str, Any]:
     """Player archive projection: continuity + NPC + Setting records."""
     if view not in RECORD_VIEWS:
-        raise ValueError(f"unknown records view: {view}")
+        raise ClientValidationError(f"unknown records view: {view}")
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
         return _load_player_records(runtime, view=view)
@@ -150,6 +152,7 @@ def _load_player_records(runtime: CampaignRuntime, *, view: str = "general") -> 
             world_settings = store.list_all()
     return {
         "maintenance_running": _maintenance_running(runtime),
+        "runtime_notices": runtime.history.runtime_notices(),
         "continuity": [
             {
                 "id": item.id,
@@ -283,13 +286,13 @@ def update_player_record(
     """
     runtime = get_campaign_runtime()
     if view not in RECORD_VIEWS:
-        raise ValueError(f"unknown records view: {view}")
+        raise ClientValidationError(f"unknown records view: {view}")
     if kind not in {"continuity", "npc", "setting"}:
-        raise ValueError(f"unknown record kind: {kind}")
+        raise ClientValidationError(f"unknown record kind: {kind}")
     if not record_id:
-        raise ValueError("record_id is required")
+        raise ClientValidationError("record_id is required")
     if not isinstance(payload, dict):
-        raise ValueError("payload must be an object")
+        raise ClientValidationError("payload must be an object")
     with runtime.confirmation_lock:
         if kind == "continuity":
             result = _update_continuity(runtime, record_id, payload)
@@ -319,15 +322,15 @@ def _update_continuity(
         store = uow.continuity
         current = store.get(item_id)
         if current is None:
-            raise ValueError(f"continuity item not found: {item_id}")
+            raise ClientValidationError(f"continuity item not found: {item_id}")
         unknown = set(payload) - _CONTINUITY_EDITABLE_FIELDS
         if unknown:
-            raise ValueError(
+            raise ClientValidationError(
                 "continuity edit only supports: "
                 + ", ".join(sorted(_CONTINUITY_EDITABLE_FIELDS))
             )
         if current.status != "active":
-            raise ValueError("only active continuity items can be edited")
+            raise ClientValidationError("only active continuity items can be edited")
         payload = _normalize_payload(
             payload,
             nullable=_CONTINUITY_NULLABLE_FIELDS,
@@ -372,14 +375,14 @@ def _update_npc_profile(
     )
     unknown = set(payload) - allowed
     if unknown:
-        raise ValueError(
+        raise ClientValidationError(
             f"NPC {view} fields only: " + ", ".join(sorted(allowed))
         )
     with runtime.uow() as uow:
         store = uow.npc_profile
         current = store.get_by_id(npc_id)
         if current is None:
-            raise ValueError(f"NPC profile not found: {npc_id}")
+            raise ClientValidationError(f"NPC profile not found: {npc_id}")
         nullable = _NPC_NULLABLE_FIELDS | (
             _NPC_ADVANCED_NULLABLE_FIELDS if view == "advanced" else set()
         )
@@ -398,14 +401,17 @@ def _update_npc_profile(
         if name is not None:
             name = str(name).strip()
             if not name:
-                raise ValueError("name must not be empty")
+                raise ClientValidationError("名称不能为空：请补充名称后再保存。")
             data["name"] = name
         data["aliases"] = [
             alias.strip()
             for alias in data.get("aliases", [])
             if alias and alias.strip()
         ]
-        validated = NPCProfileUpdateInput.model_validate(data)
+        try:
+            validated = NPCProfileUpdateInput.model_validate(data)
+        except ValidationError as exc:
+            raise ClientValidationError("人物档案字段格式不合法，请检查名称、列表和字段长度。") from exc
         _validate_npc_name_conflicts(store, npc_id, validated)
         merged = profile_from_update(
             validated,
@@ -452,8 +458,8 @@ def _validate_npc_name_conflicts(store, npc_id: str, update: NPCProfileUpdateInp
             *[alias.strip().casefold() for alias in other.aliases],
         }
         if keys & other_keys:
-            raise ValueError(
-                f"NPC name or alias conflicts with existing profile: {other.name}"
+            raise ClientValidationError(
+                "人物名称或别名与其他档案冲突，请更换名称或别名。"
             )
 
 
@@ -467,14 +473,14 @@ def _update_world_setting(
     allowed = _SETTING_ADVANCED_FIELDS if view == "advanced" else _SETTING_GENERAL_FIELDS
     unknown = set(payload) - allowed
     if unknown:
-        raise ValueError(
+        raise ClientValidationError(
             f"Setting {view} fields only: " + ", ".join(sorted(allowed))
         )
     with runtime.uow() as uow:
         store = uow.world_setting
         current = store.get_by_id(setting_id)
         if current is None:
-            raise ValueError(f"Setting not found: {setting_id}")
+            raise ClientValidationError(f"Setting not found: {setting_id}")
         payload = _normalize_payload(
             payload,
             nullable=set(),
@@ -483,7 +489,10 @@ def _update_world_setting(
         data = current.model_dump()
         data.update(payload)
         data["name"] = str(data["name"]).strip()
-        updated = WorldSetting.model_validate(data)
+        try:
+            updated = WorldSetting.model_validate(data)
+        except ValidationError as exc:
+            raise ClientValidationError("世界设定字段格式不合法，请检查名称、列表和字段长度。") from exc
         store.update(updated)
         saved = store.get_by_id(setting_id)
         if saved is None:

@@ -340,6 +340,19 @@ back Continuity (one atomic SQLite transaction per turn, idempotent per batch
 hash; see §10). The `npc_field_logs_saved` completion marker guards replay and
 is cleared on a confirmed-history reset.
 
+Confirmation feedback reads the durable transaction for the exact save and
+pending variant through `/api/player/confirmation`. Completed, awaiting/failed,
+and confirming/restoring records are distinguished; missing or mismatched records
+remain unknown. UI refresh and local usage failures after success do not imply
+an uncommitted turn. Unknown outcomes are checked before another confirmation
+submission. A completed journal cannot be relabelled failed by presentation errors.
+
+Known player-input and business refusals use `ClientValidationError` at their
+owning boundaries (save names/lifecycle, record edits, and busy operations).
+`InvalidSaveArchive` distinguishes rejected archive payloads from staging/source
+failures; file-access failures remain runtime errors and receive actionable file
+feedback. HTTP and Operation failures preserve these public reasons.
+
 ## 6. Core Memory
 
 `CoreMemory` version 2 is a compact list of typed items:
@@ -1716,8 +1729,9 @@ The player surface provides:
 - a live Records drawer for Continuity, NPC Profiles, World Settings, and (in
   creator mode) a read-only Director Event browser.
 
-The HTTP player API uses explicit allow-list projections and never exposes server
-file paths. Highlights contain only public NPC/Setting fields. The player HTTP
+The HTTP player API uses explicit allow-list projections. Local desktop error
+feedback may expose the diagnostic log location or a file location needed for
+troubleshooting; credentials and undisclosed story material remain private. Highlights contain only public NPC/Setting fields. The player HTTP
 routes derive their projection tier from the server-owned `experience_mode`; the
 lower-level runtime helpers are not themselves an HTTP authorization boundary.
 
@@ -1842,6 +1856,29 @@ channels' retrieval funnels: matched/archived Continuity counts, valid/stale/
 invalid/degraded links, and candidates/hits for both the Continuity and NPC
 field-history bridges; these counts are diagnostic only and never reach the
 player surface or the LLM payload.
+
+Runtime errors at HTTP/SSE boundaries and failed Operations are written through
+`DiagnosticLogger`, with a diagnostic ID and the actual local log location in
+user feedback. A temporary-directory log is attempted when the preferred log
+fails; if both fail, feedback explicitly says the record was not saved. No
+console is required. The error card offers text copy without uploading logs.
+Diagnostic messages and tracebacks redact configured API keys, known environment
+secrets, and common credential forms. Operation failure projections preserve the
+same safe cause and diagnostic location across SSE and operation queries.
+The player error card appends provider-specific action guidance separately from
+the backend cause, including during confirmation-result checks. It uses the
+frontend cause only when the backend message is absent, and does not append
+guidance already present in that message.
+
+Important skipped/degraded capabilities produce safe `runtime_notice` events.
+Notices do not replace an Operation's current workflow step.
+Only approved warning codes are translated to public messages; raw model warning
+text, evidence, and Director material are not projected. Each save's existing
+`control.db` keeps a bounded `runtime_notices` table (40 retained, latest 20
+shown), separate from canonical history and Undo/Redo. Notices survive reload
+and are refreshed through the existing state/records requests, with no extra
+polling service. The player sees recent notices inline, with timestamps;
+maintenance failures explicitly preserve the completed confirmation outcome.
 
 ## 20. Verification
 

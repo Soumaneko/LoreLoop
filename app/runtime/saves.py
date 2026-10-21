@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.core.client_error import ClientValidationError
+
 import os
 import shutil
 import tempfile
@@ -186,13 +188,13 @@ class SaveManager:
             path = self._require_save(clean_id)
             manifest = SaveManifestRepository(path).load()
             if confirmation_name != manifest.display_name:
-                raise ValueError("The confirmation name does not match the save")
+                raise ClientValidationError("确认名称不匹配：请输入与原存档完全一致的名称。")
             if len(self._save_directories()) <= 1:
-                raise RuntimeError("The last remaining save cannot be deleted")
+                raise ClientValidationError("最后一个存档无法删除。")
             if clean_id == self.active_id:
                 if self.runtime.has_pending_content():
-                    raise RuntimeError(
-                        "Confirm or discard pending content before deleting this save"
+                    raise ClientValidationError(
+                        "当前有未处理内容：请先【确认采用】或【删除】草稿，再删除此存档。"
                     )
                 replacement = (
                     self._validate_save_id(replacement_save_id)
@@ -203,7 +205,7 @@ class SaveManager:
                     )
                 )
                 if replacement == clean_id:
-                    raise ValueError("Replacement save must be different")
+                    raise ClientValidationError("用于替代的当前存档必须与被删除存档不同。")
                 self._switch_locked(replacement)
             trash = self.root / f".trash-{uuid4()}"
             os.replace(path, trash)
@@ -295,7 +297,7 @@ class SaveManager:
             if path.name == excluding:
                 continue
             if SaveManifestRepository(path).load().display_name.casefold() == folded:
-                raise ValueError(f"Save name already exists: {clean}")
+                raise ClientValidationError(f"存档名称已存在（{clean}）：请修改存档名称。")
         return clean
 
     def _describe(self, path: Path) -> SaveInfo:
@@ -334,7 +336,7 @@ class SaveManager:
     def _require_save(self, save_id: str) -> Path:
         path = self._save_path(save_id)
         if not path.is_dir() or path.is_symlink():
-            raise ValueError(f"Save not found: {save_id}")
+            raise ClientValidationError(f"Save not found: {save_id}")
         manifest = SaveManifestRepository(path).load()
         if manifest.save_id != save_id:
             raise ValueError("Save identity does not match its directory")
@@ -374,8 +376,8 @@ class SaveManager:
             else CampaignHistory(self._save_path(save_id))
         )
         if history.pending_records():
-            raise RuntimeError(
-                f"Confirm or discard pending content before {action}ing this save"
+            raise ClientValidationError(
+                f"当前有未处理内容：请先【确认采用】或【删除】草稿，再执行此操作。"
             )
 
     @staticmethod
@@ -388,7 +390,7 @@ class SaveManager:
     def _validate_save_id(self, value: object) -> str:
         clean = str(value).strip()
         if not self._is_save_id(clean):
-            raise ValueError("save_id must be a canonical UUID")
+            raise ClientValidationError("save_id must be a canonical UUID")
         return clean
 
 

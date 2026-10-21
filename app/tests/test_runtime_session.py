@@ -1,3 +1,4 @@
+from app.core.client_error import ClientValidationError
 import threading
 from types import SimpleNamespace
 
@@ -195,7 +196,7 @@ def test_runtime_rejects_save_switch_while_operation_is_active(tmp_path):
         operation_id = runtime.operations.submit_stream("generation", stream)
         assert started.wait(timeout=2)
 
-        with pytest.raises(RuntimeError, match="active operation"):
+        with pytest.raises(ClientValidationError, match="active operation"):
             runtime.reconfigure(
                 "second",
                 CampaignPaths.from_data_dir(tmp_path / "second"),
@@ -257,7 +258,7 @@ def test_save_task_blocks_new_pipeline_submission(tmp_path):
     )
     try:
         with runtime.save_task():
-            with pytest.raises(RuntimeError, match="save management task"):
+            with pytest.raises(ClientValidationError, match="save management task"):
                 with runtime.operation_submission():
                     pass
     finally:

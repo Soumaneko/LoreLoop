@@ -90,8 +90,10 @@ and state change only through the confirmation boundary.
 - Player-facing and creator-facing projections require an authoritative access
   decision. An untrusted client request cannot promote itself to a more
   privileged projection.
-- Public projections expose only the fields appropriate to their audience and
-  never expose server filesystem paths or private implementation data.
+- Public projections expose only the fields appropriate to their audience.
+  Local desktop diagnostics may show file and log locations needed to resolve a
+  failure. Credentials, unrelated internal data, and undisclosed story material
+  must not be exposed as diagnostic feedback.
 
 ## 6. Confirmation, Transactions, and Recovery
 

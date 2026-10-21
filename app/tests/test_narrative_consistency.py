@@ -782,3 +782,38 @@ def test_revision_node_reuses_composer_with_rendered_assertions(monkeypatch):
         "scene_stream_started",
         "scene_text_delta",
     ]
+
+
+def test_skipped_check_reaches_player_and_survives_reload(configure_runtime_services):
+    from app.core.llm import MockLLM
+    from app.player_server import PlayerHandler
+    from app.runtime.session import get_campaign_runtime
+    from app.runtime.turn_history import CampaignHistory
+    from app.runtime.runtime_feedback import notices_from_event
+
+    mock = MockLLM()
+    mock.set_responses(["invalid secret-model-text", "invalid secret-model-text"])
+    services = configure_runtime_services(gateway_factory=mock.build_gateway)
+    runtime = get_campaign_runtime()
+    def stream():
+        result = generation_nodes.check_narrative_consistency_node({
+            "user_input": "观察", "current_state": _current_state(),
+            "action_judgments": _action_judgments(), "narrative_composition": _composition("原始正文。"),
+            "trace_id": "skipped-check", "runtime_services": services,
+        })
+        yield from result["events"]
+    operation_id = runtime.operations.submit_stream("generation", stream)
+    assert runtime.operations.wait(operation_id, timeout=5).status == "succeeded"
+    events = runtime.operations.read_events(operation_id).events
+    checked = next(event for event in events if event.step == "narrative_checked")
+    projected = PlayerHandler._player_event({"step": checked.step, "data": checked.data})
+    assert projected["data"] == {"validation_skipped": True}
+    notice = next(event for event in events if event.step == "runtime_notice")
+    public = PlayerHandler._player_event({"step": notice.step, "data": notice.data})
+    assert "【后校验】未完成" in public["data"]["message"]
+    assert "secret-model-text" not in str(public)
+    reloaded = CampaignHistory(runtime.paths.data_dir).runtime_notices()
+    assert reloaded[0]["notice_id"] == notice.data["notice_id"]
+    assert "【后校验】未完成" in reloaded[0]["message"]
+    assert notices_from_event("narrative_checked", {"validation_skipped": False}) == []
+    assert notices_from_event("unrelated", {"warning_codes": ["unknown"], "secret": "hidden"}) == []
