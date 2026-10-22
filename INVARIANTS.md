@@ -1,10 +1,9 @@
 # LoreLoop（续章）— Product Invariants
 
 This document defines the product and domain properties that must remain true
-across implementation changes. It deliberately does not prescribe modules,
-schemas, prompts, graph nodes, storage layouts, model-call boundaries, retry
-counts, or framework choices. The active implementation is described in
-`CURRENT.md`; proposals belong in issues and important decisions in ADRs.
+across implementation changes. Engineering choices follow the product scope
+and the behavior affected by a change. The active implementation is described
+in `CURRENT.md`; proposals belong in issues and important decisions in ADRs.
 
 When code conflicts with this document, the implementation is defective unless
 the invariant is explicitly changed. When `CURRENT.md` conflicts with code, the
@@ -16,6 +15,11 @@ LoreLoop is a local, save-scoped interactive narrative engine. A player action
 is interpreted and resolved into an editable scene. Canonical campaign history
 and state change only through the confirmation boundary.
 
+- The supported use is one local owner playing one active save at a time.
+  The owner controls player and creator views and may inspect or edit their
+  own files and deliberately view backstage information.
+- Current save and configuration formats are supported. An unreadable file
+  is preserved and the application explains the failure.
 - Each save is isolated from every other save.
 - Generation may produce pending content, diagnostics, and staged changes, but
   it must not mutate canonical campaign state.
@@ -72,9 +76,8 @@ and state change only through the confirmation boundary.
 - Historical and relationship projections must remain derived from confirmed
   evidence and must not silently become independent sources of truth.
 - Updating one projection must not grant it authority owned by another domain.
-- Current state, history, profiles, continuity records, events, settings, and
-  other canonical projections must agree after a confirmed turn or the turn
-  must not commit.
+- A confirmation saves the accepted results for that turn together, using the
+  domain validation and legal fallback behavior of each projection.
 
 ## 5. Evidence and Information Boundaries
 
@@ -87,9 +90,9 @@ and state change only through the confirmation boundary.
 - Private Director information and undisclosed NPC or Setting facts may guide
   backstage behavior but reach player-facing narrative only through an
   authorized disclosure or observable consequence.
-- Player-facing and creator-facing projections require an authoritative access
-  decision. An untrusted client request cannot promote itself to a more
-  privileged projection.
+- Normal player surfaces avoid accidental disclosure of backstage information;
+  the owner may deliberately choose creator views. Model inputs and generated
+  narrative follow the domain's information disclosure rules.
 - Public projections expose only the fields appropriate to their audience.
   Local desktop diagnostics may show file and log locations needed to resolve a
   failure. Credentials, unrelated internal data, and undisclosed story material
@@ -101,17 +104,18 @@ and state change only through the confirmation boundary.
   rolled back together.
 - A failed confirmation preserves a recoverable pending scene and does not
   partially advance canonical state.
-- Repeating or recovering the same confirmed operation must converge without
-  duplicating canonical effects.
-- Undo, Redo, failed-confirmation recovery, and crash recovery must restore a
-  self-consistent canonical snapshot before normal operations resume.
-- Stale resources from before a restore must not continue reading or writing as
-  though they belonged to the restored revision.
+- Repeated submission of a normal confirmation saves the turn once.
+  Undo and Redo restore coherent saved progress, and subsequent operations use
+  the restored data in the active save.
+- After an abnormal exit, the application reopens complete saved progress or
+  reports a failure while preserving the saved files. The player can explicitly
+  retry unfinished work.
 - Application preferences are not campaign history and must not be rewound by a
   narrative Undo or Redo.
-- Save copy, import, export, migration, and restore must validate untrusted
-  paths, manifests, data integrity, and schema compatibility before installing
-  canonical data.
+- Save copy and export produce usable copies of saved progress. External
+  archive import confines writes to the destination and preserves existing
+  saves on rejection. Validation matches the source and purpose of each file
+  operation.
 
 ## 7. Failure and Degradation
 
@@ -128,21 +132,26 @@ and state change only through the confirmation boundary.
 - Retry, salvage, truncation, and item-dropping policies must be explicit at the
   owning domain boundary. They may recover valid components but must not merge
   incompatible attempts into a result that no attempt produced.
-- Input validation at external and persistence trust boundaries must fail
-  closed when accepting the data could corrupt or disclose canonical state.
+- Validate external input where needed to prevent file damage, credential
+  exposure, or invalid domain writes.
 
 ## 8. Verification and Evolution
 
-- Deterministic contracts require automated tests. Generated-content quality
-  claims require repeatable evaluation cases, recorded inputs and configuration,
-  and explicit quality and violation criteria.
-- Passing tests do not justify changing an accepted benchmark baseline; the
-  changed behavior and its trade-offs require deliberate review.
-- Contract changes must update code, tests, public/debug projections, and
-  `CURRENT.md` together when those surfaces are affected.
-- An implementation described in `CURRENT.md` is never, by itself, a reason to
-  retain it. It may be replaced or deleted whenever the replacement preserves
-  these invariants and satisfies the relevant verification.
+- Verification follows the behavior and risk of the change. Automated tests
+  protect important product behavior, domain boundaries, data writes, and
+  interfaces used by actual external consumers.
+- Generated-content quality claims need recorded examples and the model/input
+  context needed to assess them. Review benchmark differences for their effect
+  on product behavior; baseline updates reflect reviewed, intended changes.
+- Select checks for the affected behavior and risk. Keep tests and current-state
+  documentation aligned with the implementation and the product requirements
+  they serve.
+- Infrastructure simplification preserves business behavior, including history
+  retrieval, NPC handling, Director rules, action judgments, and narrative
+  generation.
+- Implementations evolve to satisfy these product requirements. Assess
+  engineering choices by their value for the supported use and their
+  maintenance cost.
 - Proposed designs, experiments, and roadmaps do not belong in either domain
   document. Issues track possible work; ADRs preserve the rationale of accepted
   architectural decisions, including decisions later superseded.

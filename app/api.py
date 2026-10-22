@@ -20,7 +20,6 @@ from app.runtime.debug_state import load_debug_state
 from app.runtime.player_records import (
     load_player_events as _load_player_events,
     load_player_records as _load_player_records,
-    records_view_for_experience_mode,
     update_player_record as _update_player_record,
 )
 from app.runtime.core_memory import (
@@ -29,7 +28,6 @@ from app.runtime.core_memory import (
 )
 from app.runtime.player_state import load_player_history, load_player_state
 from app.runtime.settings import (
-    experience_mode as _experience_mode,
     save_canon_validation,
     save_dice_display,
     save_difficulty,
@@ -274,11 +272,6 @@ def update_player_record(
     return _update_player_record(kind, record_id, payload, view=view)
 
 
-def player_records_view() -> str:
-    """Return the server-owned record projection tier for the current mode."""
-    return records_view_for_experience_mode(_experience_mode())
-
-
 def load_player_events() -> dict:
     """Return the creator-mode read-only Director Event browse projection."""
     return _load_player_events()
@@ -457,7 +450,6 @@ __all__ = [
     "load_player_events",
     "load_core_memory_items",
     "save_core_memory_items",
-    "player_records_view",
     "save_initialization_draft",
     "save_max_chars",
     "save_model_config",

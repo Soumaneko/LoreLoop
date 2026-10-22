@@ -5,7 +5,6 @@ import sqlite3
 
 from app.core.text import normalize_compact_key
 from app.runtime.sqlite import (
-    ensure_column,
     ensure_exact_schema_version,
     transaction,
 )
@@ -38,7 +37,6 @@ class WorldSettingStore:
             )
             """
         )
-        self._migrate_v11_to_v12()
         expected_columns = {
             "setting_id",
             "kind",
@@ -71,35 +69,6 @@ class WorldSettingStore:
         )
         ensure_exact_schema_version(self._conn, "world_setting", 12)
         self._conn.commit()
-
-    def _migrate_v11_to_v12(self) -> None:
-        """One-time transactional migration: add the appearance counter column."""
-        row = self._conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-            ("schema_versions",),
-        ).fetchone()
-        if row is None:
-            return
-        current = self._conn.execute(
-            "SELECT version FROM schema_versions WHERE component = ?",
-            ("world_setting",),
-        ).fetchone()
-        if current is None or int(current["version"]) != 11:
-            return
-        with transaction(self._conn):
-            ensure_column(
-                self._conn,
-                "world_settings",
-                "hit_count",
-                "INTEGER NOT NULL DEFAULT 0",
-            )
-            self._conn.execute(
-                """
-                UPDATE schema_versions
-                SET version = 12, updated_at = CURRENT_TIMESTAMP
-                WHERE component = 'world_setting'
-                """
-            )
 
     def save(self, setting: WorldSetting) -> str:
         self._require_related_settings(setting.related_setting_ids)

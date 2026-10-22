@@ -4345,7 +4345,7 @@ async function refreshRecords({ force = false } = {}) {
   }
   recordsRefreshInFlight = true;
   try {
-    const records = await loadRecords();
+    const records = await loadRecords(state.experienceMode === "creator" ? "advanced" : "general");
     if (generation !== recordsRefreshGeneration) {
       recordsRefreshPending = true;
       recordsRefreshPendingForce = recordsRefreshPendingForce || force;
@@ -5020,7 +5020,7 @@ function renderContinuityRecords(items) {
       fields: CONTINUITY_VIEW_FIELDS,
       editableFields: CONTINUITY_EDITABLE_FIELDS,
       onSave: active ? async (values) => {
-        await updateRecord("continuity", item.id, values);
+        await updateRecord("continuity", item.id, values, state.records.view);
         showToast("连续性已更新");
       } : null,
     });
@@ -5144,7 +5144,7 @@ function renderNpcRecords(profiles) {
       editableFields,
       viewFormatters: NPC_VIEW_FORMATTERS,
       onSave: async (values) => {
-        await updateRecord("npc", profile.id, values);
+        await updateRecord("npc", profile.id, values, state.records.view);
         showToast("人物档案已更新");
       },
     });
@@ -5197,7 +5197,7 @@ function renderSettingRecords(settings) {
       fields: _editableFieldsFor(data, SETTING_FIELD_META),
       editableFields: _editableFieldsFor(data, SETTING_FIELD_META),
       onSave: async (values) => {
-        await updateRecord("setting", setting.id, values);
+        await updateRecord("setting", setting.id, values, state.records.view);
         showToast("世界设定已更新");
       },
     });

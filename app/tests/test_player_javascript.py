@@ -1013,3 +1013,33 @@ assert.deepEqual(result.confirmation, {turnId:"variant-1", saveId:"save-1"});
 '''.replace("__CODE__", code)
     result = subprocess.run([node, "--input-type=module", "--eval", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_records_requests_carry_selected_view():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    script = r'''
+import assert from "node:assert/strict";
+const {loadRecords, updateRecord} = await import(process.argv[1]);
+globalThis.window = {setTimeout, clearTimeout};
+globalThis.document = {querySelector: () => null};
+const calls = [];
+globalThis.fetch = async (path, options) => {
+  calls.push({path, options});
+  return {ok:true, json:async () => ({ok:true, data:{}})};
+};
+await loadRecords();
+await loadRecords("advanced");
+await updateRecord("npc", "npc-1", {motivation:"守城"}, "advanced");
+assert.equal(calls[0].path, "/api/player/records?view=general");
+assert.equal(calls[1].path, "/api/player/records?view=advanced");
+assert.deepEqual(JSON.parse(calls[2].options.body), {
+  kind:"npc", record_id:"npc-1", view:"advanced", payload:{motivation:"守城"},
+});
+'''
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script,
+         (STATIC_DIR / "api.js").resolve().as_uri()], capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr

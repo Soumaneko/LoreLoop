@@ -6,8 +6,7 @@ from app.core.time import utc_now
 from app.domain.action_preview.schemas import ActionPreviewResult
 from app.domain.action_judgment.schemas import PlayerTurnResolution
 from app.runtime.sqlite import (
-    ensure_column,
-    ensure_schema_version,
+    ensure_exact_schema_version,
     transaction,
 )
 
@@ -61,31 +60,7 @@ class ShortTermMemoryStore:
             )
             """
         )
-        ensure_column(
-            self._conn,
-            "short_term_scenes",
-            "closing_prompt",
-            "TEXT NOT NULL DEFAULT ''",
-        )
-        ensure_column(
-            self._conn,
-            "short_term_scenes",
-            "action_preview_json",
-            "TEXT",
-        )
-        ensure_column(
-            self._conn,
-            "short_term_scenes",
-            "player_resolution_json",
-            "TEXT",
-        )
-        ensure_column(
-            self._conn,
-            "short_term_scenes",
-            "token_usage_json",
-            "TEXT",
-        )
-        ensure_schema_version(self._conn, "short_term_memory", 5)
+        ensure_exact_schema_version(self._conn, "short_term_memory", 5)
         self._conn.commit()
 
     def add_turn(

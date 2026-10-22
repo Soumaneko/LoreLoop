@@ -58,20 +58,6 @@ def capture_snapshot(data_dir: Path, destination: Path) -> None:
 def normalize_snapshot(snapshot_dir: Path) -> list[str]:
     """Validate and normalize a snapshot manifest to the current format."""
     snapshot_dir = Path(snapshot_dir)
-    # Fail closed for any stray legacy file on disk, even if not listed in manifest
-    for name in ("settings.json",):
-        if (snapshot_dir / name).is_file():
-            raise SnapshotError(
-                f"Snapshot contains unsupported file: {name!r} in {snapshot_dir}"
-            )
-    # Also check for any legacy ten-DB file on disk
-    from .campaign_migration import LEGACY_DB_FILES
-
-    for name in LEGACY_DB_FILES:
-        if (snapshot_dir / name).is_file():
-            raise SnapshotError(
-                f"Snapshot contains unsupported file: {name!r} in {snapshot_dir}"
-            )
     manifest_path = snapshot_dir / "manifest.json"
     if not manifest_path.is_file():
         raise SnapshotError(f"Snapshot is missing manifest.json: {snapshot_dir}")
@@ -128,9 +114,9 @@ def install_snapshot(
                     raise SnapshotError(f"Snapshot JSON invalid: {snapshot_file}") from exc
             _fsync_file(temporary)
 
-        for current in data_dir.glob("*.db"):
-            if current.name not in expected:
-                _remove_sqlite_files(current)
+        current = data_dir / "campaign.db"
+        if current.exists() and current.name not in expected:
+            _remove_sqlite_files(current)
         for name in ("core_memory.json", "initialization.json"):
             current = data_dir / name
             if current.exists() and name not in expected:

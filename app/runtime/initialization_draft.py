@@ -25,13 +25,7 @@ class InitializationDraft(BaseModel):
 
 
 def _draft_config_version(draft: InitializationDraft) -> int | None:
-    """Version of the embedded InitConfig dict, or None when absent.
-
-    Drafts carry config as a bare dict and are only validated against
-    InitConfig at preview/commit, so a stale draft from the previous contract
-    would otherwise fail late with a confusing error. InitConfig advanced to v4
-    and no backward compatibility is kept.
-    """
+    """Read the embedded config version while allowing incomplete form values."""
     if draft.config is None:
         return None
     version = draft.config.get("version")
@@ -47,17 +41,9 @@ def load_initialization_draft() -> dict[str, Any] | None:
             )
         except FileNotFoundError:
             return None
-        if not isinstance(payload, dict) or payload.get("version") != 4:
-            # The draft envelope advanced to v4. Real old drafts carry
-            # top-level version 3 and would fail model_validate below, which
-            # runs before any cleanup. No backward compatibility is kept: clear
-            # it so the player starts the setup flow fresh.
-            clear_initialization_draft()
-            return None
         draft = InitializationDraft.model_validate(payload)
         if _draft_config_version(draft) not in (None, 4):
-            clear_initialization_draft()
-            return None
+            raise ValueError("Initialization draft config must use version 4")
         return draft.model_dump(mode="json")
 
 

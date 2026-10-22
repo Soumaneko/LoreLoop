@@ -13,7 +13,6 @@ from app.domain.npc_profile.schemas import (
 from app.domain.world_setting.schemas import WorldSetting
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, get_campaign_runtime
-from app.runtime.settings import experience_mode
 
 _CONTINUITY_EDITABLE_FIELDS = {
     "subject",
@@ -86,18 +85,6 @@ _SETTING_LIST_FIELDS = {
 RECORD_VIEWS = ("general", "advanced")
 
 
-def records_view_for_experience_mode(mode: str) -> str:
-    """Map a product experience mode onto its server-owned record projection tier.
-
-    Player mode always projects the ``general`` tier (appeared-only NPCs /
-    settings and public fields only); creator mode projects ``advanced`` (full
-    archive including Director-only NPC fields and hidden Setting facts). The
-    two axes are locked together server-side so no client request can reach
-    ``advanced`` outside creator mode.
-    """
-    return "advanced" if mode == "creator" else "general"
-
-
 def _normalize_payload(
     payload: dict[str, Any],
     *,
@@ -151,6 +138,7 @@ def _load_player_records(runtime: CampaignRuntime, *, view: str = "general") -> 
         with uow.world_setting as store:
             world_settings = store.list_all()
     return {
+        "view": view,
         "maintenance_running": _maintenance_running(runtime),
         "runtime_notices": runtime.history.runtime_notices(),
         "continuity": [
@@ -189,9 +177,7 @@ def _load_player_records(runtime: CampaignRuntime, *, view: str = "general") -> 
 
 
 def load_player_events() -> dict[str, Any]:
-    """Creator-mode read-only Director Event browse (full detail, no writes)."""
-    if experience_mode() != "creator":
-        raise ClientValidationError("Director events are only visible in creator mode")
+    """Return Director Events for the owner's backstage browser."""
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
         with runtime.uow() as uow:

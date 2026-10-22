@@ -9,7 +9,6 @@ from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.world_setting.schemas import WorldSetting
 from app.runtime.campaign_migration import (
-    LEGACY_DB_FILES,
     ensure_campaign_database,
 )
 from app.runtime.paths import CampaignPaths
@@ -35,33 +34,6 @@ def test_created_empty_save_has_all_schemas(tmp_path):
     assert ensure_campaign_database(paths) == "validated"
 
 
-def test_legacy_journal_blocks_migration_and_preserves_legacy(tmp_path):
-    paths = _paths(tmp_path)
-    paths.data_dir.mkdir(parents=True)
-    # Create a minimal legacy marker and journal
-    (paths.data_dir / "current_state.db").write_text("legacy", encoding="utf-8")
-    journal = paths.data_dir / ".runtime" / "director_mutation.json"
-    journal.parent.mkdir(parents=True)
-    journal.write_text("{}", encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match="unsupported legacy layout"):
-        ensure_campaign_database(paths)
-
-    # Fail-closed: no campaign.db created
-    assert not paths.campaign_db.exists()
-
-
-def test_legacy_layout_is_rejected_without_creating_empty_db(tmp_path):
-    paths = _paths(tmp_path)
-    paths.data_dir.mkdir(parents=True)
-    (paths.data_dir / "current_state.db").write_text("legacy", encoding="utf-8")
-    (paths.data_dir / "continuity.db").write_text("legacy", encoding="utf-8")
-    with pytest.raises(RuntimeError, match="unsupported legacy layout"):
-        ensure_campaign_database(paths)
-    assert not paths.campaign_db.exists()
-    assert (paths.data_dir / "current_state.db").is_file()
-
-
 def test_existing_campaign_db_wins(tmp_path):
     paths = _paths(tmp_path)
     assert ensure_campaign_database(paths) == "created"
@@ -74,7 +46,11 @@ def test_existing_campaign_db_wins(tmp_path):
         )
     # Even with a stray legacy file, validated campaign wins and no migration is attempted
     (paths.data_dir / "current_state.db").write_text("legacy", encoding="utf-8")
+    (paths.data_dir / ".runtime").mkdir(exist_ok=True)
+    journal = paths.data_dir / ".runtime" / "director_mutation.json"
+    journal.write_text("{}")
     assert ensure_campaign_database(paths) == "validated"
+    assert journal.read_text() == "{}"
     with CampaignUnitOfWork(paths) as uow:
         assert uow.current_state.load().scene.location == "新房"
 
@@ -108,7 +84,7 @@ def test_validate_rejects_incomplete_schema_only_db(tmp_path):
         ensure_campaign_database(paths)
 
 
-def test_migration_failure_cleans_temp_database(tmp_path, monkeypatch):
+def test_initialization_failure_cleans_temp_database(tmp_path, monkeypatch):
     paths = _paths(tmp_path)
     paths.data_dir.mkdir(parents=True)
 

@@ -18,7 +18,6 @@ from app.runtime.paths import (
     SAVES_DIR,
     validate_save_name,
 )
-from app.runtime.save_archive import SaveArchiveError
 from app.runtime.saves import SaveManager
 from app.runtime.session import CampaignRuntime, PendingOpening, PendingTurn
 from app.runtime.turn_history import CampaignHistory
@@ -341,10 +340,12 @@ def test_copy_does_not_install_root_legacy_database(tmp_path):
                 ),
             )
 
-        with pytest.raises(SaveArchiveError, match="unsupported legacy layout"):
-            manager.copy(original.save_id)
-        # No new save should be created on failure
-        assert len(manager.list()) == 1
+        copied = manager.copy(original.save_id)
+        assert len(manager.list()) == 2
+        assert legacy.is_file()
+        assert not (root / copied.save_id / "current_state.db").exists()
+        manager.switch(copied.save_id)
+        assert runtime.stores.current_state.load_or_default().scene.location != "l"
     finally:
         runtime.close()
 

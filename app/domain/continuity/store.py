@@ -4,7 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterable
 
-from app.runtime.sqlite import ensure_schema_version, transaction
+from app.runtime.sqlite import ensure_exact_schema_version, transaction
 
 from .schemas import (
     ContinuityItem,
@@ -25,37 +25,9 @@ class ContinuityStore:
         self._init_schema()
 
     def _init_schema(self) -> None:
-        if self._is_legacy_schema():
-            self._migrate_v1_to_v3()
-        elif self._has_incremental_state_schema():
-            self._migrate_incremental_state_to_v3_snapshot()
-        else:
-            self._create_schema_v3()
-        ensure_schema_version(self._conn, "continuity", SCHEMA_VERSION)
+        ensure_exact_schema_version(self._conn, "continuity", SCHEMA_VERSION)
+        self._create_schema_v3()
         self._conn.commit()
-
-    def _is_legacy_schema(self) -> bool:
-        exists = self._conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-            ("continuity_items",),
-        ).fetchone()
-        if exists is None:
-            return False
-        columns = {
-            row["name"]
-            for row in self._conn.execute("PRAGMA table_info(continuity_items)")
-        }
-        return "statement" in columns and "premise" not in columns
-
-    def _has_incremental_state_schema(self) -> bool:
-        columns = self._table_columns("continuity_items")
-        return "current_state_json" in columns and "current_state" not in columns
-
-    def _table_columns(self, table: str) -> set[str]:
-        return {
-            row["name"]
-            for row in self._conn.execute(f"PRAGMA table_info({table})")
-        }
 
     def _create_schema_v3(self) -> None:
         self._conn.executescript(
@@ -124,205 +96,6 @@ class ContinuityStore:
             """
         )
 
-    def _migrate_v1_to_v3(self) -> None:
-        try:
-            self._conn.executescript(
-                """
-            BEGIN IMMEDIATE;
-            DROP TABLE continuity_items_fts;
-            DROP INDEX IF EXISTS idx_continuity_active;
-            ALTER TABLE continuity_items RENAME TO continuity_items_v1;
-
-            CREATE TABLE continuity_items (
-                id TEXT PRIMARY KEY,
-                kind TEXT NOT NULL,
-                status TEXT NOT NULL,
-                subject TEXT NOT NULL,
-                premise TEXT NOT NULL,
-                current_state TEXT,
-                entities_json TEXT NOT NULL,
-                location TEXT,
-                deadline TEXT,
-                created_turn INTEGER NOT NULL,
-                updated_turn INTEGER NOT NULL,
-                closed_turn INTEGER
-            );
-            CREATE INDEX idx_continuity_active
-            ON continuity_items(status, updated_turn);
-            INSERT INTO continuity_items(
-                id, kind, status, subject, premise, current_state,
-                entities_json, location, deadline, created_turn, updated_turn,
-                closed_turn
-            )
-            SELECT id, kind, status, subject, statement, NULL, entities_json,
-                   location, deadline, created_turn, updated_turn, closed_turn
-            FROM continuity_items_v1;
-
-            CREATE VIRTUAL TABLE continuity_items_fts
-            USING fts5(
-                item_id UNINDEXED, subject, premise, current_state, entities,
-                location, deadline, tokenize='trigram'
-            );
-            INSERT INTO continuity_items_fts(
-                item_id, subject, premise, current_state, entities,
-                location, deadline
-            )
-            SELECT id, subject, premise, '',
-                   COALESCE((
-                       SELECT group_concat(CAST(value AS TEXT), ' ')
-                       FROM json_each(continuity_items.entities_json)
-                   ), ''),
-                   COALESCE(location, ''), COALESCE(deadline, '')
-            FROM continuity_items WHERE status = 'active';
-
-            CREATE TABLE continuity_logs (
-                log_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id TEXT NOT NULL,
-                operation TEXT NOT NULL,
-                turn_index INTEGER NOT NULL,
-                state_delta TEXT,
-                reason TEXT NOT NULL,
-                migration_created INTEGER NOT NULL DEFAULT 0,
-                FOREIGN KEY(item_id) REFERENCES continuity_items(id)
-                    ON DELETE CASCADE
-            );
-            CREATE INDEX idx_continuity_logs_item_turn
-            ON continuity_logs(item_id, turn_index, log_id);
-            CREATE INDEX idx_continuity_logs_bridge
-            ON continuity_logs(item_id, operation, turn_index, log_id);
-            INSERT INTO continuity_logs(
-                item_id, operation, turn_index, state_delta, reason,
-                migration_created
-            )
-            SELECT DISTINCT item_id, operation, turn_index, NULL,
-                   '由旧版 Continuity evidence 迁移。', 1
-            FROM continuity_evidence;
-
-            CREATE TABLE continuity_log_evidence (
-                log_id INTEGER NOT NULL,
-                position INTEGER NOT NULL,
-                evidence_id TEXT NOT NULL,
-                evidence_hash TEXT,
-                PRIMARY KEY(log_id, position),
-                UNIQUE(log_id, evidence_id),
-                FOREIGN KEY(log_id) REFERENCES continuity_logs(log_id)
-                    ON DELETE CASCADE
-            );
-            CREATE INDEX idx_continuity_log_evidence_id
-            ON continuity_log_evidence(evidence_id);
-            INSERT INTO continuity_log_evidence(
-                log_id, position, evidence_id, evidence_hash
-            )
-            SELECT logs.log_id,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY logs.log_id
-                       ORDER BY evidence.evidence_id
-                   ) - 1,
-                   evidence.evidence_id, NULL
-            FROM continuity_evidence AS evidence
-            JOIN continuity_logs AS logs
-              ON logs.item_id = evidence.item_id
-             AND logs.operation = evidence.operation
-             AND logs.turn_index = evidence.turn_index;
-
-            DROP TABLE continuity_evidence;
-            DROP TABLE continuity_items_v1;
-            COMMIT;
-                """
-            )
-        except BaseException:
-            self._conn.rollback()
-            raise
-
-    def _migrate_incremental_state_to_v3_snapshot(self) -> None:
-        """Upgrade unreleased list-based schemas without changing version 3."""
-        rows = self._conn.execute(
-            "SELECT id, current_state_json FROM continuity_items"
-        ).fetchall()
-        evidence_has_position = "position" in self._table_columns(
-            "continuity_log_evidence"
-        )
-        logs_have_marker = "migration_created" in self._table_columns(
-            "continuity_logs"
-        )
-        try:
-            self._conn.execute("BEGIN IMMEDIATE")
-            self._conn.execute(
-                "ALTER TABLE continuity_items ADD COLUMN current_state TEXT"
-            )
-            for row in rows:
-                snapshot = _legacy_incremental_snapshot(
-                    row["current_state_json"]
-                )
-                self._conn.execute(
-                    "UPDATE continuity_items SET current_state = ? WHERE id = ?",
-                    (snapshot, row["id"]),
-                )
-            if not logs_have_marker:
-                self._conn.execute(
-                    """
-                    ALTER TABLE continuity_logs
-                    ADD COLUMN migration_created INTEGER NOT NULL DEFAULT 0
-                    """
-                )
-            if not evidence_has_position:
-                self._conn.execute(
-                    "DROP INDEX IF EXISTS idx_continuity_log_evidence_id"
-                )
-                self._conn.execute(
-                    """
-                    ALTER TABLE continuity_log_evidence
-                    RENAME TO continuity_log_evidence_incremental
-                    """
-                )
-                self._conn.execute(
-                    """
-                    CREATE TABLE continuity_log_evidence (
-                        log_id INTEGER NOT NULL,
-                        position INTEGER NOT NULL,
-                        evidence_id TEXT NOT NULL,
-                        evidence_hash TEXT,
-                        PRIMARY KEY(log_id, position),
-                        UNIQUE(log_id, evidence_id),
-                        FOREIGN KEY(log_id) REFERENCES continuity_logs(log_id)
-                            ON DELETE CASCADE
-                    )
-                    """
-                )
-                self._conn.execute(
-                    """
-                    INSERT INTO continuity_log_evidence(
-                        log_id, position, evidence_id, evidence_hash
-                    )
-                    SELECT log_id,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY log_id ORDER BY evidence_id
-                           ) - 1,
-                           evidence_id, evidence_hash
-                    FROM continuity_log_evidence_incremental
-                    """
-                )
-                self._conn.execute(
-                    "DROP TABLE continuity_log_evidence_incremental"
-                )
-                self._conn.execute(
-                    """
-                    CREATE INDEX idx_continuity_log_evidence_id
-                    ON continuity_log_evidence(evidence_id)
-                    """
-                )
-            self._conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_continuity_logs_bridge
-                ON continuity_logs(item_id, operation, turn_index, log_id)
-                """
-            )
-            self._rebuild_fts()
-            self._conn.commit()
-        except BaseException:
-            self._conn.rollback()
-            raise
-
     def list_active(self) -> list[ContinuityItem]:
         rows = self._conn.execute(
             """
@@ -365,19 +138,6 @@ class ContinuityStore:
 
     def _insert_item(self, item: ContinuityItem) -> None:
         values = self._item_values(item)
-        if "current_state_json" in self._table_columns("continuity_items"):
-            self._conn.execute(
-                """
-                INSERT INTO continuity_items(
-                    id, kind, status, subject, premise, current_state,
-                    current_state_json, entities_json, location, deadline,
-                    created_turn, updated_turn, closed_turn
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (*values[:6], "[]", *values[6:]),
-            )
-            self._replace_fts(item)
-            return
         self._conn.execute(
             """
             INSERT INTO continuity_items(
@@ -883,16 +643,3 @@ def _merge_entities(existing: list[str], additions: list[str]) -> list[str]:
             merged.append(entity)
             seen.add(key)
     return merged
-
-
-def _legacy_incremental_snapshot(raw_json: str) -> str | None:
-    """Preserve unreleased delta-list information until the next replacement."""
-    entries = json.loads(raw_json)
-    texts = [
-        str(entry.get("text", "")).strip()
-        for entry in entries
-        if isinstance(entry, dict) and str(entry.get("text", "")).strip()
-    ]
-    if not texts:
-        return None
-    return "\n".join(texts)[-800:]

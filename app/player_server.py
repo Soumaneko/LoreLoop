@@ -51,7 +51,6 @@ from app.api import (
     save_pending_scene_edit,
     record_player_diagnostic,
     save_reader_preferences,
-    player_records_view,
     start_confirmation_operation,
     start_generation_operation,
     start_feedback_rewrite_operation,
@@ -216,8 +215,9 @@ class PlayerHandler(BaseHTTPRequestHandler):
             self._handle_player_json(lambda: player_saves_payload(list_saves()))
             return
         if path == "/api/player/records":
+            view = parse_qs(parsed_url.query).get("view", ["general"])[0]
             self._handle_player_json(
-                lambda: load_player_records(view=player_records_view())
+                lambda: load_player_records(view=view)
             )
             return
         if path == "/api/player/events":
@@ -1117,7 +1117,7 @@ class PlayerHandler(BaseHTTPRequestHandler):
             kind,
             record_id,
             payload.get("payload"),
-            view=player_records_view(),
+            view=payload.get("view", "general"),
         )
 
 

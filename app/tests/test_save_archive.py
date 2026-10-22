@@ -144,11 +144,18 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
         '{"files": ["campaign.db"]}', encoding="utf-8"
     )
     (source / "ignored.txt").write_text("not portable", encoding="utf-8")
+    (source / "current_state.db").write_text("unused development file")
+    (source / ".runtime" / "turn_history.db").write_text("unused development file")
+    (source / ".runtime" / "director_mutation.json").write_text("{}")
+    (source / ".snapshots" / "undo-one" / "settings.json").write_text("{}")
 
     archive = tmp_path / "save.zip"
     exported = export_save(source, archive, metadata={"display_name": "Alpha"})
     assert exported.metadata == {"display_name": "Alpha"}
     assert "ignored.txt" not in exported.files
+    assert "current_state.db" not in exported.files
+    assert ".runtime/turn_history.db" not in exported.files
+    assert ".snapshots/undo-one/settings.json" not in exported.files
     with zipfile.ZipFile(archive) as bundle:
         assert "manifest.json" in bundle.namelist()
         assert "save/campaign.db" in bundle.namelist()
@@ -163,36 +170,6 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     assert not (destination / ".runtime" / "director_mutation.json").exists()
     with sqlite3.connect(destination / ".snapshots" / "undo-one" / "campaign.db") as db:
         assert db.execute("SELECT value FROM values_for_test").fetchone()[0] == "old"
-
-
-def test_export_fails_when_legacy_journal_present(tmp_path):
-    source = tmp_path / "source"
-    source.mkdir()
-    SaveManifestRepository(source).create("Alpha")
-    _make_campaign_database(source / "campaign.db")
-    journal = source / ".runtime" / "director_mutation.json"
-    journal.parent.mkdir(parents=True)
-    journal.write_text('{"version": 1}', encoding="utf-8")
-    archive = tmp_path / "save.zip"
-    with pytest.raises(SaveArchiveError, match="director_mutation"):
-        export_save(source, archive)
-    # Also create_consistent_snapshot should fail
-    with pytest.raises(SaveArchiveError, match="director_mutation"):
-        create_consistent_snapshot(source, tmp_path / "staging")
-    # ZIP with journal in manifest should fail inspect
-    manifest = {
-        "format_version": 1,
-        "files": [{"path": ".runtime/director_mutation.json", "size": 2, "sha256": "a"*64}],
-        "metadata": {},
-    }
-    bad_zip = tmp_path / "bad.zip"
-    with zipfile.ZipFile(bad_zip, "w") as bundle:
-        bundle.writestr("manifest.json", json.dumps(manifest))
-        bundle.writestr("save/.runtime/director_mutation.json", "{}")
-    with pytest.raises(SaveArchiveError, match="director_mutation"):
-        inspect_archive(bad_zip)
-    with pytest.raises(SaveArchiveError, match="director_mutation"):
-        extract_archive(bad_zip, tmp_path / "dest")
 
 
 def test_export_accepts_director_log_schema(tmp_path):
@@ -427,21 +404,6 @@ def test_export_rejects_incomplete_current_layout(tmp_path):
         export_save(source, archive)
 
     assert not archive.exists()
-
-
-def test_inspection_rejects_legacy_database_layout(tmp_path):
-    archive = tmp_path / "legacy.zip"
-    content = b"legacy"
-    manifest = _manifest_for("current_state.db", content)
-    with zipfile.ZipFile(archive, "w") as bundle:
-        bundle.writestr("manifest.json", json.dumps(manifest))
-        bundle.writestr("save/current_state.db", content)
-
-    destination = tmp_path / "destination"
-    with pytest.raises(SaveArchiveError, match="unsupported legacy layout"):
-        extract_archive(archive, destination)
-
-    assert not destination.exists()
 
 
 def test_legacy_snapshot_rejects_non_string_manifest(tmp_path):

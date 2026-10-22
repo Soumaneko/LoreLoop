@@ -17,12 +17,9 @@ from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState
 from app.runtime.initialization import InitializationRecord
 
-from .campaign_migration import LEGACY_DB_FILES
 from .save_manifest import SaveManifest
 from .snapshots import SNAPSHOT_ARCHIVE_FILES, SnapshotError, normalize_snapshot
 from .sqlite import SUPPORTED_SCHEMA_VERSIONS
-
-_LEGACY_ROOT_DB_SET = set(LEGACY_DB_FILES)
 
 
 ARCHIVE_FORMAT_VERSION = 1
@@ -70,37 +67,8 @@ class ArchiveInspection:
 
 
 def _assert_current_layout(save_dir: Path) -> None:
-    """Require the current dual-database layout and reject legacy markers."""
+    """Require the current save's two databases."""
     save_dir = Path(save_dir).resolve()
-    # root ten DBs
-    for name in _LEGACY_ROOT_DB_SET:
-        if (save_dir / name).is_file():
-            raise InvalidSaveArchive(
-                f"unsupported legacy layout: save contains legacy file {name}"
-            )
-    if (save_dir / ".runtime" / "turn_history.db").is_file():
-        raise InvalidSaveArchive(
-            "unsupported legacy layout: save contains legacy .runtime/turn_history.db"
-        )
-    if (save_dir / ".runtime" / "director_mutation.json").is_file():
-        raise InvalidSaveArchive(
-            "unsupported legacy layout: save contains legacy .runtime/director_mutation.json"
-        )
-    # snapshots with legacy DBs or settings.json
-    snapshots_dir = save_dir / ".snapshots"
-    if snapshots_dir.is_dir():
-        for snapshot_dir in snapshots_dir.iterdir():
-            if not snapshot_dir.is_dir() or snapshot_dir.is_symlink():
-                continue
-            for name in _LEGACY_ROOT_DB_SET:
-                if (snapshot_dir / name).is_file():
-                    raise InvalidSaveArchive(
-                        f"unsupported legacy layout: snapshot {snapshot_dir.name} contains legacy file {name}"
-                    )
-            if (snapshot_dir / "settings.json").is_file():
-                raise InvalidSaveArchive(
-                    f"unsupported legacy layout: snapshot {snapshot_dir.name} contains legacy settings.json"
-                )
     if not (save_dir / "campaign.db").is_file() or not (
         save_dir / ".runtime" / "control.db"
     ).is_file():
@@ -510,10 +478,6 @@ def _validate_manifest(manifest: Any) -> dict[str, dict[str, Any]]:
         path = entry.get("path")
         size = entry.get("size")
         digest = entry.get("sha256")
-        if _is_legacy_archive_path(path):
-            raise InvalidSaveArchive(
-                f"unsupported legacy layout: archive contains legacy {path}"
-            )
         if not isinstance(path, str) or not _is_allowed_relative_path(path):
             raise InvalidSaveArchive(f"Invalid save path in manifest: {path!r}")
         if path in expected:
@@ -548,24 +512,6 @@ def _is_allowed_relative_path(value: str) -> bool:
     if path.parts[0] == ".snapshots" and len(path.parts) == 3:
         return path.name in SNAPSHOT_ARCHIVE_FILES
     return False
-
-
-def _is_legacy_archive_path(value: object) -> bool:
-    if not isinstance(value, str) or "\\" in value:
-        return False
-    path = PurePosixPath(value)
-    if len(path.parts) == 1:
-        return path.name in _LEGACY_ROOT_DB_SET
-    if path.parts in {
-        (".runtime", "turn_history.db"),
-        (".runtime", "director_mutation.json"),
-    }:
-        return True
-    return (
-        len(path.parts) == 3
-        and path.parts[0] == ".snapshots"
-        and (path.name in _LEGACY_ROOT_DB_SET or path.name == "settings.json")
-    )
 
 
 def _is_allowed_for_export(value: str) -> bool:

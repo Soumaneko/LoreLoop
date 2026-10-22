@@ -64,18 +64,20 @@ def test_initialization_draft_rejects_unknown_contract_fields():
         save_initialization_draft({**_draft(), "unexpected_stage": "old"})
 
 
-def test_stale_config_version_draft_is_cleared_on_load():
+def test_unreadable_config_draft_is_preserved():
     runtime = get_campaign_runtime()
     stale = {**_draft(), "config": {"version": 3, "world_name": "艾兰"}}
     path = runtime.paths.initialization_draft_json
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(stale, ensure_ascii=False), encoding="utf-8")
 
-    assert load_initialization_draft() is None
-    assert not runtime.paths.initialization_draft_json.exists()
+    original = path.read_bytes()
+    with pytest.raises(ValueError):
+        load_initialization_draft()
+    assert path.read_bytes() == original
 
 
-def test_old_top_level_version_draft_is_cleared_on_load():
+def test_unreadable_draft_envelope_is_preserved():
     runtime = get_campaign_runtime()
     old = {
         "version": 3,
@@ -92,8 +94,10 @@ def test_old_top_level_version_draft_is_cleared_on_load():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
 
-    assert load_initialization_draft() is None
-    assert not runtime.paths.initialization_draft_json.exists()
+    original = path.read_bytes()
+    with pytest.raises(ValueError):
+        load_initialization_draft()
+    assert path.read_bytes() == original
 
 
 def test_stale_config_version_draft_is_rejected_on_save():

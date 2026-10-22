@@ -18,6 +18,27 @@ def _valid_campaign(tmp_path: Path) -> CampaignPaths:
     return p
 
 
+def test_undo_redo_preserves_unrelated_database_files(tmp_path):
+    paths = _valid_campaign(tmp_path)
+    files = {
+        paths.data_dir / name: f"original {name}".encode()
+        for name in ("current_state.db", "notes.db", "notes.db-wal")
+    }
+    for path, content in files.items():
+        path.write_bytes(content)
+    history = CampaignHistory(paths.data_dir)
+    history.save_pending(turn_id="t1", kind="turn", group_id="g1", turn_index=1, payload={"turn_id": "t1"})
+    history.begin_confirmation("t1", write_db=True, scene_text=None)
+    history.complete_confirmation("t1", "g1")
+
+    history.undo()
+    for path, content in files.items():
+        assert path.read_bytes() == content
+    history.redo()
+    for path, content in files.items():
+        assert path.read_bytes() == content
+
+
 def test_invalid_snapshot_does_not_delete_live_json(tmp_path):
     paths = _valid_campaign(tmp_path)
     (paths.data_dir / "initialization.json").write_text('{"phase":"completed"}', encoding="utf-8")

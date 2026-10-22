@@ -10,7 +10,6 @@ from app.domain.director_event import DirectorEvent
 from app.player_server import PlayerHandler
 from app.runtime.player_records import (
     load_player_events,
-    records_view_for_experience_mode,
 )
 from app.runtime.core_memory import (
     load_core_memory_items,
@@ -48,13 +47,7 @@ def _seed_event():
         ))
 
 
-def test_records_view_for_experience_mode_mapping():
-    assert records_view_for_experience_mode("player") == "general"
-    assert records_view_for_experience_mode("creator") == "advanced"
-    assert records_view_for_experience_mode("unknown") == "general"
-
-
-def test_records_route_derives_view_from_experience_mode(monkeypatch):
+def test_records_route_accepts_requested_view(monkeypatch):
     import app.api as api_module
 
     captured = {}
@@ -69,12 +62,12 @@ def test_records_route_derives_view_from_experience_mode(monkeypatch):
     results = []
     handler._handle_player_json = lambda callback: results.append(callback())
     handler.do_GET()
-    assert captured == {"view": "general"}
+    assert captured == {"view": "advanced"}
 
 
-def test_load_player_events_rejects_player_mode():
-    with pytest.raises(ClientValidationError):
-        load_player_events()
+def test_load_player_events_in_player_mode():
+    _seed_event()
+    assert len(load_player_events()["events"]) == 1
 
 
 def test_load_player_events_browses_creator_mode():
@@ -90,12 +83,11 @@ def test_load_player_events_browses_creator_mode():
     assert event["created_turn"] == 1
 
 
-def test_core_memory_rejects_player_mode():
+def test_core_memory_can_be_edited_in_player_mode():
     _seed_core_memory()
-    with pytest.raises(ClientValidationError):
-        load_core_memory_items()
-    with pytest.raises(ClientValidationError):
-        save_core_memory_items({"items": []})
+    assert load_core_memory_items()["items"][0]["id"] == "base_rule"
+    assert save_core_memory_items({"items": []})["items"] == []
+    assert load_core_memory_items()["items"] == []
 
 
 def test_core_memory_new_items_are_player_sourced_and_keep_existing_source():

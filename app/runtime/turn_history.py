@@ -19,29 +19,10 @@ def _now() -> str:
     return utc_now()
 
 
-_UNSUPPORTED_CONTROL_MESSAGE = (
-    "unsupported legacy layout: save contains legacy .runtime/turn_history.db "
-    "from a pre-1.0 layout. This build only supports .runtime/control.db. "
-    "Migrate the save with a pre-Phase4 build first."
-)
-
-
 def ensure_control_database(paths) -> str:
-    """Ensure the control database exists at ``paths.control_db``.
-
-    Only the current format (``control.db``) is supported. Any legacy
-    ``turn_history.db`` causes a fail-closed ``RuntimeError``; no silent
-    promotion or overwrite is performed.
-    """
+    """Open or create the current control database."""
     control = Path(paths.control_db)
-    legacy = Path(paths.data_dir / ".runtime" / "turn_history.db")
-    has_control = control.is_file()
-    has_legacy = legacy.is_file()
-    if has_control and has_legacy:
-        raise RuntimeError(_UNSUPPORTED_CONTROL_MESSAGE)
-    if has_legacy:
-        raise RuntimeError(_UNSUPPORTED_CONTROL_MESSAGE)
-    if has_control:
+    if control.is_file():
         _validate_control_database(control)
         _ensure_control_schema(control)
         return "validated"
@@ -80,7 +61,6 @@ def _validate_control_database(db_path: Path) -> None:
             )
     finally:
         conn.close()
-
 
 
 def ensure_control_database_by_dir(data_dir: Path) -> str:

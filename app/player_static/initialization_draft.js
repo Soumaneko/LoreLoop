@@ -4,8 +4,8 @@
 // fields, temporarily over-limit text and unfinished lists. It never runs the
 // submit contract in app.js/campaign_setup.js; completeness is checked only at
 // initialization_opening. Raw control values live in the draft `form.fields`
-// (controls carry a `name`); the structured snapshot below is a lenient,
-// lossless-of-blank-lines fallback for older drafts.
+// (controls carry a `name`); the structured snapshot supplies generated values
+// for controls the player has yet to edit.
 export const SETUP_FIELD_NAMES = [
   "setup_currency_unit",
   "setup_power_source",

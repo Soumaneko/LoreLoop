@@ -1,8 +1,7 @@
-"""Creator-mode Core Memory item editor.
+"""Local Core Memory item editor.
 
-The Core Memory is the committed world foundation built during initialization.
-Creator mode may curate its items directly (add / edit / delete); player mode is
-rejected at the API boundary. Newly added items are always marked
+The owner may curate the committed world foundation (add / edit / delete).
+Newly added items are always marked
 ``source="player"`` and existing items keep their original source so the
 campaign-setup provenance is never rewritten.
 """
@@ -15,13 +14,10 @@ from app.core.client_error import ClientValidationError
 from app.core.ids import new_hex_id
 from app.domain.core_memory.schemas import CoreMemory, CoreMemoryItem
 from app.runtime.session import get_campaign_runtime
-from app.runtime.settings import experience_mode
 
 
 def load_core_memory_items() -> dict[str, Any]:
     """Return the current Core Memory items for the creator editor."""
-    if experience_mode() != "creator":
-        raise ClientValidationError("Core memory editing is only available in creator mode")
     runtime = get_campaign_runtime()
     with runtime.confirmation_lock:
         with runtime.uow() as uow:
@@ -38,8 +34,6 @@ def load_core_memory_items() -> dict[str, Any]:
 
 def save_core_memory_items(payload: dict[str, Any]) -> dict[str, Any]:
     """Replace the Core Memory items with a validated, curated item list."""
-    if experience_mode() != "creator":
-        raise ClientValidationError("Core memory editing is only available in creator mode")
     raw_items = payload.get("items")
     if not isinstance(raw_items, list):
         raise ClientValidationError("items must be a list")

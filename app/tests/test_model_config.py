@@ -24,7 +24,7 @@ from app.runtime.model_config import (
     test_model_connection as check_model_connection,
 )
 from app.runtime.paths import CampaignPaths
-from app.runtime.secret_protection import DPAPICurrentUserProtector
+from app.runtime.secret_protection import DPAPICurrentUserProtector, SecretProtectionError
 from app.runtime.session import CampaignRuntime
 
 
@@ -83,68 +83,6 @@ class _Runtime:
         persist()
         self.persisted_when_swapped = self.store.path.exists()
         self.factory = factory
-
-
-def test_migrates_v2_plaintext_to_v3_custom_service(tmp_path):
-    path = tmp_path / "model_config.json"
-    path.write_text(json.dumps(_service_payload()), encoding="utf-8")
-
-    store = ModelConfigStore(path)
-    config_set = store.load_set()
-
-    assert config_set.active_config_id
-    assert len(config_set.services) == 1
-    service = config_set.services[0]
-    assert service.api_key == "local-secret"
-    assert service.preset_id == "custom"
-    assert service.name == "自定义服务"
-    persisted = json.loads(path.read_text(encoding="utf-8"))
-    assert persisted["format_version"] == MODEL_CONFIG_FORMAT_VERSION
-    assert "services" in persisted
-
-
-def test_migrates_v2_non_custom_keeps_identity(tmp_path):
-    path = tmp_path / "model_config.json"
-    path.write_text(json.dumps(
-        _service_payload(preset_id="moonshot", model_id="kimi-k3", name=""),
-    ), encoding="utf-8")
-
-    store = ModelConfigStore(path)
-    config_set = store.load_set()
-
-    service = config_set.services[0]
-    assert service.preset_id == "moonshot"
-    assert service.model_id == "kimi-k3"
-    assert service.name == "moonshot"
-
-
-def test_migration_is_idempotent(tmp_path):
-    path = tmp_path / "model_config.json"
-    path.write_text(json.dumps(_service_payload()), encoding="utf-8")
-    store = ModelConfigStore(path)
-    first = store.load_set()
-    second = store.load_set()
-
-    assert first == second
-    assert json.loads(path.read_text(encoding="utf-8"))["format_version"] == (
-        MODEL_CONFIG_FORMAT_VERSION
-    )
-
-
-def test_migration_failure_preserves_original_file(tmp_path):
-    class BrokenProtector(_ReversibleProtector):
-        def protect(self, _secret):
-            raise RuntimeError("protection failed")
-
-    path = tmp_path / "model_config.json"
-    original = json.dumps(_service_payload(), ensure_ascii=False)
-    path.write_text(original, encoding="utf-8")
-    store = ModelConfigStore(path, secret_protector=BrokenProtector())
-
-    with pytest.raises(RuntimeError, match="protection failed"):
-        store.load_set()
-
-    assert path.read_text(encoding="utf-8") == original
 
 
 def test_v3_load_round_trips_protected_keys_per_service(tmp_path):
@@ -777,3 +715,14 @@ def test_v3_rejects_unknown_protocol_in_service(tmp_path):
 
     with pytest.raises(ValueError, match="protocol must be one of"):
         store.load_set()
+
+
+def test_unreadable_config_keeps_original_file(tmp_path):
+    path = tmp_path / "model_config.json"
+    original = '{"format_version": 99, "services": []}'
+    path.write_text(original, encoding="utf-8")
+
+    with pytest.raises(SecretProtectionError, match="Unsupported model configuration version"):
+        ModelConfigStore(path).load_set()
+
+    assert path.read_text(encoding="utf-8") == original

@@ -235,7 +235,7 @@ def test_player_records_update_route_dispatches_by_http_method(monkeypatch):
         return {"updated": True}
 
     monkeypatch.setattr(api_module, "_update_player_record", fake_update)
-    expected_view = api_module.player_records_view()
+    expected_view = "advanced"
     body = json.dumps({
         "kind": "setting",
         "record_id": "abc",

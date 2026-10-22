@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -49,16 +49,6 @@ class ParticipantState(BaseModel):
     name: str = Field(min_length=1)
     attitude_to_player: str | None = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def _discard_removed_condition_fields(cls, value: Any):
-        if not isinstance(value, dict):
-            return value
-        data = dict(value)
-        data.pop("condition", None)
-        data.pop("npc_conditions", None)
-        return data
-
 
 class SceneState(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -66,15 +56,6 @@ class SceneState(BaseModel):
     scene_id: str
     location: str
     participants: list[ParticipantState] = Field(default_factory=list)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _discard_removed_condition_fields(cls, value: Any):
-        if not isinstance(value, dict):
-            return value
-        data = dict(value)
-        data.pop("scene_condition", None)
-        return data
 
     @field_validator("participants", mode="before")
     @classmethod
@@ -99,20 +80,12 @@ class SceneState(BaseModel):
             raise ValueError("participant names must be unique")
         return self
 
+
 class PlayerState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
     visible_status: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _discard_removed_condition_field(cls, value: Any):
-        if not isinstance(value, dict):
-            return value
-        data = dict(value)
-        data.pop("condition", None)
-        return data
 
 
 class InventoryItem(BaseModel):
@@ -135,53 +108,6 @@ class CurrentState(BaseModel):
     world_clock: WorldClock = Field(default_factory=WorldClock)
     player: PlayerState
     resources: ResourcesState = Field(default_factory=ResourcesState)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _upgrade_legacy_scene_state(cls, value: Any):
-        """Preserve in-scene NPC state while loading pre-participant saves."""
-        if not isinstance(value, dict):
-            return value
-
-        data = dict(value)
-        player_value = data.get("player")
-        if isinstance(player_value, dict):
-            player = dict(player_value)
-            player.pop("position", None)
-            player.pop("condition", None)
-            data["player"] = player
-        scene_value = data.get("scene")
-        scene = dict(scene_value) if isinstance(scene_value, dict) else scene_value
-        legacy_npcs = data.pop("npcs", [])
-        if isinstance(scene, dict):
-            scene.pop("atmosphere", None)
-            raw_participants = scene.get("participants", [])
-            participant_data = [
-                {"name": item} if isinstance(item, str) else dict(item)
-                for item in raw_participants
-                if isinstance(item, (str, dict))
-            ]
-            legacy_by_name = {
-                str(item.get("name", "")).strip().casefold(): item
-                for item in legacy_npcs
-                if isinstance(item, dict) and str(item.get("name", "")).strip()
-            }
-            for participant in participant_data:
-                participant.pop("condition", None)
-                participant.pop("npc_conditions", None)
-                legacy = legacy_by_name.get(
-                    str(participant.get("name", "")).strip().casefold()
-                )
-                if legacy is None:
-                    continue
-                participant.setdefault(
-                    "attitude_to_player",
-                    legacy.get("attitude_to_player"),
-                )
-            scene.pop("scene_condition", None)
-            scene["participants"] = participant_data
-            data["scene"] = scene
-        return data
 
 
 class FinalSceneFrame(BaseModel):

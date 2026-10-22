@@ -30,7 +30,6 @@ from app.runtime.paths import (
 from app.runtime.campaign_open import open_campaign_resources
 from app.runtime.services import RuntimeServices
 from app.runtime.uow import CampaignUnitOfWork
-from app.runtime.campaign_migration import UNSUPPORTED_LEGACY_LAYOUT_MESSAGE
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 from app.runtime.model_config import effective_gateway_factory
@@ -254,9 +253,6 @@ class CampaignRuntime:
             self.stores = opened.stores
             self.initialization = opened.initialization
         else:
-            _journal = self.paths.data_dir / ".runtime" / "director_mutation.json"
-            if _journal.is_file():
-                raise RuntimeError(UNSUPPORTED_LEGACY_LAYOUT_MESSAGE)
             self.stores = stores
             self.history = CampaignHistory(self.paths.data_dir)
             self.history.recover_interrupted()

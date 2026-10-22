@@ -19,66 +19,12 @@ from app.runtime.sqlite import SUPPORTED_SCHEMA_VERSIONS, connect_sqlite
 from .paths import CampaignPaths
 
 
-LEGACY_DB_FILES = (
-    "current_state.db",
-    "continuity.db",
-    "short_term.db",
-    "scene_summaries.db",
-    "confirmed_history.db",
-    "npc_profiles.db",
-    "director_events.db",
-    "director_npcs.db",
-    "director_log.db",
-    "world_settings.db",
-)
-
-UNSUPPORTED_LEGACY_LAYOUT_MESSAGE = (
-    "unsupported legacy layout: save contains legacy ten database files, "
-    "turn_history.db or director_mutation.json from a pre-1.0 layout. This build only supports "
-    "campaign.db + .runtime/control.db. Migrate the save with a pre-Phase4 build first."
-)
-
-
-def has_legacy_layout(data_dir: Path) -> list[str]:
-    """Return sorted list of legacy layout markers found at the save root.
-
-    Only checks the save root (ten DBs, turn_history.db, director_mutation.json).
-    Snapshot-internal legacy files are handled by snapshots/save_archive directly.
-    """
-    data_dir = Path(data_dir)
-    found: list[str] = []
-    for name in LEGACY_DB_FILES:
-        if (data_dir / name).is_file():
-            found.append(name)
-    if (data_dir / ".runtime" / "turn_history.db").is_file():
-        found.append(".runtime/turn_history.db")
-    if (data_dir / ".runtime" / "director_mutation.json").is_file():
-        found.append(".runtime/director_mutation.json")
-    return sorted(found)
-
-
 def ensure_campaign_database(paths: CampaignPaths) -> str:
-    """Return the outcome: ``"validated"`` or ``"created"``.
-
-    Only the current format (``campaign.db``) is supported. Any legacy ten
-    databases or ``.runtime/director_mutation.json`` without a valid current
-    database cause a fail-closed ``RuntimeError``; no empty database is created
-    over an old layout.
-    """
+    """Open the current campaign database, or create a fresh one."""
     paths.data_dir.mkdir(parents=True, exist_ok=True)
-    journal = paths.data_dir / ".runtime" / "director_mutation.json"
-    if journal.is_file():
-        raise RuntimeError(
-            f"{UNSUPPORTED_LEGACY_LAYOUT_MESSAGE} Found: .runtime/director_mutation.json"
-        )
     if paths.campaign_db.exists():
         validate_campaign_database(paths.campaign_db)
         return "validated"
-    legacy_markers = has_legacy_layout(paths.data_dir)
-    if legacy_markers:
-        raise RuntimeError(
-            f"{UNSUPPORTED_LEGACY_LAYOUT_MESSAGE} Found: {', '.join(legacy_markers)}"
-        )
     _create_empty(paths)
     return "created"
 
@@ -209,7 +155,6 @@ def validate_campaign_database(path: Path) -> None:
             conn.close()
         except Exception:
             pass
-
 
 
 def _fsync_file(path: Path) -> None:

@@ -33,7 +33,7 @@ class NPCProfileStore:
 
     def _create_tables(self) -> None:
         persisted_version = self._current_schema_version()
-        if persisted_version not in {None, 6, 7, 8, SCHEMA_VERSION}:
+        if persisted_version not in {None, SCHEMA_VERSION}:
             raise RuntimeError(
                 "Unsupported npc_profile database schema: "
                 f"expected {SCHEMA_VERSION}, got {persisted_version}"
@@ -80,30 +80,8 @@ class NPCProfileStore:
             ON npc_profiles(active, name)
             """
         )
-        version = persisted_version
-        if version == 6:
-            self._migrate_v6_to_v7()
-            self._migrate_v7_to_v8()
-            self._migrate_v8_to_v9()
-        elif version == 7:
-            self._migrate_v7_to_v8()
-            self._migrate_v8_to_v9()
-        elif version == 8:
-            self._migrate_v8_to_v9()
-        elif version is None:
-            with transaction(self._db):
-                self._create_field_history_tables()
-                self._validate_field_history_schema()
-                ensure_exact_schema_version(
-                    self._db,
-                    "npc_profile",
-                    SCHEMA_VERSION,
-                )
-        elif version != SCHEMA_VERSION:
-            raise RuntimeError(
-                "Unsupported npc_profile database schema: "
-                f"expected {SCHEMA_VERSION}, got {version}"
-            )
+        if persisted_version is None:
+            self._create_field_history_tables()
         self._validate_field_history_schema()
         ensure_exact_schema_version(
             self._db,
@@ -124,167 +102,6 @@ class NPCProfileStore:
             ("npc_profile",),
         ).fetchone()
         return int(row["version"]) if row is not None else None
-
-    def _migrate_v6_to_v7(self) -> None:
-        """Add evidence-backed field history without rewriting profile rows."""
-
-        with transaction(self._db):
-            self._create_field_history_tables()
-            self._validate_field_history_schema()
-            self._db.execute(
-                """
-                UPDATE schema_versions
-                SET version = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE component = 'npc_profile'
-                """,
-                (7,),
-            )
-
-    def _migrate_v7_to_v8(self) -> None:
-        """Rewrite v7 profile rows onto the v8 contract.
-
-        - ``role`` 为空且 legacy ``public_summary`` 非空时，以该摘要初始化 role，
-          避免唯一公开身份文本丢失；role 已存在则保持 role。
-        - 删除 legacy ``public_summary`` / ``current_intent``。
-        - 新字段 ``last_scene_summary`` / ``last_scene_turn`` 初始化为 null，
-          不伪造最近出场历史。
-        - 重建 ``npc_field_change_logs`` 以允许写入 ``last_scene_summary``；
-          legacy ``public_summary`` 日志保留为只读 audit row。
-        """
-        # SQLite 的 foreign_keys 只能在事务外切换；重建阶段临时关闭以避免
-        # DROP/CREATE 顺序触发级联删除或引用校验，成功路径全程在事务内保持原子。
-        self._db.execute("PRAGMA foreign_keys = OFF")
-        try:
-            with transaction(self._db):
-                rows = self._db.execute(
-                    "SELECT id, profile_json FROM npc_profiles"
-                ).fetchall()
-                for row in rows:
-                    raw = json.loads(row["profile_json"])
-                    role_value = raw.get("role")
-                    legacy_summary = raw.get("public_summary")
-                    role_is_empty = (
-                        not isinstance(role_value, str)
-                        or not role_value.strip()
-                    )
-                    if (
-                        role_is_empty
-                        and isinstance(legacy_summary, str)
-                        and legacy_summary.strip()
-                    ):
-                        role_value = legacy_summary.strip()
-                    raw.pop("public_summary", None)
-                    raw.pop("current_intent", None)
-                    if role_value is not None:
-                        raw["role"] = role_value
-                    raw["last_scene_summary"] = None
-                    raw["last_scene_turn"] = None
-                    validated = NPCProfile.model_validate(raw)
-                    self._db.execute(
-                        "UPDATE npc_profiles SET profile_json = ? WHERE id = ?",
-                        (validated.model_dump_json(), row["id"]),
-                    )
-                self._rebuild_field_history_logs_table()
-                self._validate_field_history_schema()
-                violations = self._db.execute(
-                    "PRAGMA foreign_key_check"
-                ).fetchall()
-                if violations:
-                    raise RuntimeError(
-                        "npc_profile v7->v8 migration left orphaned "
-                        "field-history rows; refusing to finalize: "
-                        f"{sorted(map(tuple, violations))[:3]}"
-                    )
-                self._db.execute(
-                    """
-                    UPDATE schema_versions
-                    SET version = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE component = 'npc_profile'
-                    """,
-                    (SCHEMA_VERSION,),
-                )
-        finally:
-            self._db.execute("PRAGMA foreign_keys = ON")
-
-    def _rebuild_field_history_logs_table(self) -> None:
-        """Rebuild ``npc_field_change_logs`` with the v8 field-name contract.
-
-        SQLite cannot alter a CHECK constraint in place, so the table is rebuilt
-        inside the migration transaction (caller keeps foreign_keys off).  Data
-        is staged in plain backup tables so ``log_id`` values and the evidence
-        mapping survive intact.  ``public_summary`` stays in the allowed set
-        purely as a read-only legacy audit field: the Python write contract no
-        longer produces it, and the History bridge stops emitting it.  Legacy
-        rows (which carry ``summary_delta``) therefore copy unchanged while
-        ``last_scene_summary`` becomes writable.
-        """
-        self._db.execute(
-            "CREATE TABLE npc_field_change_logs_backup AS "
-            "SELECT log_id, npc_id, field_name, turn_index, old_value, new_value, "
-            "summary_delta, source FROM npc_field_change_logs"
-        )
-        self._db.execute(
-            "CREATE TABLE npc_field_change_evidence_backup AS "
-            "SELECT log_id, position, evidence_id, evidence_hash "
-            "FROM npc_field_change_evidence"
-        )
-        self._db.execute("DROP TABLE npc_field_change_logs")
-        self._db.execute("DROP TABLE npc_field_change_evidence")
-        self._create_field_history_tables()
-        self._db.execute(
-            """
-            INSERT INTO npc_field_change_logs(
-                log_id, npc_id, field_name, turn_index, old_value, new_value,
-                summary_delta, source
-            )
-            SELECT log_id, npc_id, field_name, turn_index, old_value, new_value,
-                   summary_delta, source
-            FROM npc_field_change_logs_backup
-            ORDER BY log_id
-            """
-        )
-        self._db.execute(
-            """
-            INSERT INTO npc_field_change_evidence(
-                log_id, position, evidence_id, evidence_hash
-            )
-            SELECT log_id, position, evidence_id, evidence_hash
-            FROM npc_field_change_evidence_backup
-            ORDER BY log_id, position
-            """
-        )
-        self._db.execute("DROP TABLE npc_field_change_logs_backup")
-        self._db.execute("DROP TABLE npc_field_change_evidence_backup")
-
-    def _migrate_v8_to_v9(self) -> None:
-        """Add the trusted per-change ``change_basis`` column (v9).
-
-        Additive nullable column: existing logs keep ``change_basis`` NULL, and
-        the History bridge marks such nodes ``basis_complete=False`` (incomplete
-        basis, degraded-rescue only) instead of pretending a complete delta.
-        """
-
-        with transaction(self._db):
-            columns = {
-                row["name"]
-                for row in self._db.execute(
-                    "PRAGMA table_info(npc_field_change_logs)"
-                ).fetchall()
-            }
-            if "change_basis" not in columns:
-                self._db.execute(
-                    "ALTER TABLE npc_field_change_logs "
-                    "ADD COLUMN change_basis TEXT"
-                )
-            self._validate_field_history_schema()
-            self._db.execute(
-                """
-                UPDATE schema_versions
-                SET version = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE component = 'npc_profile'
-                """,
-                (9,),
-            )
 
     def _create_field_history_tables(self) -> None:
         statements = (

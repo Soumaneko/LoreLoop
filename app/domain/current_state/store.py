@@ -1,4 +1,3 @@
-import json
 import sqlite3
 
 from app.core.time import utc_now
@@ -9,7 +8,7 @@ from app.domain.current_state.schemas import (
     SceneState,
     WorldClock,
 )
-from app.runtime.sqlite import ensure_schema_version, transaction
+from app.runtime.sqlite import ensure_exact_schema_version, transaction
 
 
 def make_default_state(scene_id: str = "scene_001") -> CurrentState:
@@ -49,32 +48,8 @@ class CurrentStateStore:
             )
             """
         )
-        ensure_schema_version(self._conn, "current_state", 4)
-        self._migrate_removed_condition_fields()
+        ensure_exact_schema_version(self._conn, "current_state", 4)
         self._conn.commit()
-
-    def _migrate_removed_condition_fields(self) -> None:
-        row = self._conn.execute(
-            "SELECT state_json FROM current_state WHERE id = 1"
-        ).fetchone()
-        if row is None:
-            return
-        raw_json = str(row["state_json"])
-        state = CurrentState.model_validate_json(raw_json)
-        migrated_json = state.model_dump_json()
-        if migrated_json == raw_json:
-            return
-        self._conn.execute(
-            """
-            UPDATE current_state
-            SET state_json = ?, updated_at = ?
-            WHERE id = 1
-            """,
-            (
-                migrated_json,
-                utc_now(),
-            ),
-        )
 
     def save(self, state: CurrentState) -> None:
         now = utc_now()

@@ -34,7 +34,6 @@ from .secret_protection import (
 
 
 MODEL_CONFIG_FILE = APP_CONFIG_DIR / "model_config.json"
-_PROTECTED_CONFIG_V2 = 2
 MODEL_CONFIG_FORMAT_VERSION = 3
 _CONFIG_WRITE_LOCK = threading.RLock()
 
@@ -167,10 +166,6 @@ class ModelConfigStore:
             version = payload.get("format_version")
             if version == MODEL_CONFIG_FORMAT_VERSION:
                 return self._load_v3(payload)
-            if version == _PROTECTED_CONFIG_V2 or (
-                version is None and "services" not in payload
-            ):
-                return self._migrate_v2(payload)
             raise SecretProtectionError(
                 "Unsupported model configuration version"
             )
@@ -330,47 +325,6 @@ class ModelConfigStore:
             preset_id=str(item.get("preset_id") or CUSTOM_PRESET),
             model_id=str(item.get("model_id") or ""),
         )
-
-    def _migrate_v2(self, payload: dict[str, Any]) -> ModelConfigSet:
-        """Migrate a single-config v2 file into a one-service v3 set.
-
-        Idempotent; never rewrites on failure. The migrated service keeps
-        its identity: a non-custom preset_id is retained (shown by id when
-        the catalog is unavailable), otherwise it becomes a Custom entry
-        named "自定义服务". No directory/network lookup.
-        """
-        if "api_key_protected" in payload or "api_key_protection" in payload:
-            api_key = self._decrypt(payload.get("api_key_protected") or "")
-        else:
-            api_key = _stored_text(payload.get("api_key"), "API Key")
-        preset_id = str(payload.get("preset_id") or CUSTOM_PRESET)
-        protocol = str(payload.get("protocol") or DEFAULT_PROTOCOL)
-        if protocol not in PROTOCOLS:
-            raise ValueError(
-                f"protocol must be one of {', '.join(PROTOCOLS)}"
-            )
-        thinking = payload.get("thinking")
-        if thinking is not None and not isinstance(thinking, bool):
-            raise ValueError("thinking must be true, false, or null")
-        name = (
-            str(payload.get("name") or preset_id)
-            if preset_id != CUSTOM_PRESET
-            else DEFAULT_CUSTOM_NAME
-        )
-        service = StoredModelConfig(
-            config_id=uuid.uuid4().hex,
-            name=name,
-            api_key=api_key,
-            base_url=str(payload.get("base_url") or ""),
-            model=str(payload.get("model") or ""),
-            thinking=thinking,
-            protocol=protocol,
-            preset_id=preset_id,
-            model_id=str(payload.get("model_id") or ""),
-        )
-        config_set = ModelConfigSet((service,), service.config_id)
-        self.save_set(config_set)
-        return config_set
 
     def _payload_for_set(self, config_set: ModelConfigSet) -> dict[str, Any]:
         payload: dict[str, Any] = {

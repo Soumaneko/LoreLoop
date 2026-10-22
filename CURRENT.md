@@ -1,13 +1,13 @@
 # LoreLoop（续章）— Current Implementation
 
 This document describes the implementation that exists in the same repository
-revision. It is descriptive, not a promise to preserve any particular module,
-schema, prompt, pipeline stage, storage layout, limit, or framework. Verify it
-against code and tests when making claims about runtime behavior; a mismatch is
-documentation drift.
+revision. Verify it against code and tests when making claims about runtime
+behavior; a mismatch is documentation drift.
 
 Product behavior that must survive implementation changes is defined separately
-in `INVARIANTS.md`. Proposed and future designs do not belong in this document.
+in `INVARIANTS.md`. Engineering choices are assessed against that product scope
+and their maintenance cost. This document records current mechanisms; issues
+track proposals, and ADRs record decisions in their historical context.
 
 ## 1. Active Product Shape
 
@@ -62,7 +62,7 @@ setup draft, not canonical campaign state. It stores the raw setup form values
 (including empty fields, blank list lines, temporarily over-limit text, and
 ability rows that only carry a description) so unfinished edits survive closing
 and reloading; restore picks the stage from the draft envelope and prefers those
-raw values, falling back to the structured snapshot for older drafts. Draft
+raw values, using the structured snapshot for generated values awaiting edits. Draft
 saving never runs the submit contract - completeness is checked only at
 `initialization_opening` - and a failed save keeps the dialog open to retry.
 `.runtime/control.db` durably journals
@@ -71,13 +71,11 @@ pending scenes, confirmation status, the bounded Undo/Redo snapshot chain
 `connection_epoch`, plus per-transaction `commit_id`/`revision_id`).
 
 New saves start as an empty `campaign.db` and a fresh `control.db` with an
-initial `current_revision_id` (`uuid4().hex`) and `connection_epoch=0`. Any save
-directory that still contains legacy ten per-file databases
-(`current_state.db` etc.), `turn_history.db`, or `.runtime/director_mutation.json`
-and does not already have a valid `campaign.db`/`control.db` is rejected with
-`unsupported legacy layout` and no empty database is created. Director canonical
-mutations share the single `campaign.db` Confirmation transaction and have no
-separate journal.
+initial `current_revision_id` (`uuid4().hex`) and `connection_epoch=0`.
+Startup validates existing current databases and initializes missing ones.
+Unrelated files alongside the current save files are left untouched.
+Director canonical mutations share the single `campaign.db` Confirmation
+transaction.
 During control DB upgrade, a linear revision chain is backfilled from
 `turn_snapshots.sequence` so that each snapshot's pre-revision and its
 transaction's post-revision are contiguous; `current_revision_id` is set to the
@@ -99,13 +97,13 @@ failed-confirmation restore, or crash recovery), never on a normal commit.
 
 Snapshot boundaries: `.snapshots/<id>/` contains only `campaign.db`,
 `core_memory.json` (if present), `initialization.json` (if present), and
-`manifest.json`. `settings.json` never travels with a snapshot. Snapshot
-manifests containing any other file (including legacy ten-DB names or
-`settings.json`) fail closed.
+`manifest.json`. Snapshot manifests validate entries against this supported file set.
+Restore replaces or removes files within the canonical snapshot file set;
+other files in the save directory remain in place.
 
-Phase 4 offline restore (complete): every canonical restore (Undo, Redo,
-failed-confirmation rollback, and interrupted-recovery) runs as a durable
-offline replacement. The runtime quiesces new operation UoWs, waits for
+The current implementation performs canonical restores (Undo, Redo,
+failed-confirmation rollback, and interrupted-recovery) through durable offline
+replacement. The runtime quiesces new operation UoWs, waits for
 active operation UoWs and maintenance jobs, closes the session `CampaignUnitOfWork`,
 stages each snapshot file to a same-directory temporary (`campaign.db` is
 copied to a temporary and validated via the shared `validate_campaign_database`
@@ -133,13 +131,13 @@ create a quiesced staging snapshot. SQLite files are copied through the backup
 API; ZIP export records file sizes and SHA-256 hashes. Import validates archive
 paths, resource limits, manifest contents, checksums, SQLite `quick_check`,
 registered schema versions, and portable history paths before installing a
-save. Any save or ZIP that still contains legacy ten per-file databases,
-`turn_history.db`, `settings.json` inside a snapshot, or
-`.runtime/director_mutation.json` is rejected with `unsupported legacy layout`.
+save. Export and copy enumerate supported current files; other source files
+remain in their original locations. ZIP entries must match the supported archive
+paths and manifest.
 
 ## 3. Initialization
 
-Initialization uses `InitConfig` version 3 and proceeds in two operations:
+Initialization uses `InitConfig` version 4 and proceeds in two operations:
 
 1. validate the player configuration, generate `CampaignSetupProposal` version
    2, and commit the proposal-derived `CoreMemory`;
@@ -765,11 +763,10 @@ describes only what this change actually added / removed / rewrote — never
 retained facts. That persisted basis is the node's primary basis, so retained
 old facts neither trigger nor support a later node; `last_scene_summary`, which
 is replaced once per appeared scene, keeps its whole new value as a
-`basis_complete=True` basis. Logs recorded before v9 carry no `change_basis`;
-they degrade to the complete `new_value` with `basis_complete=False`
-(incomplete-not-false-delta: they fail open instead of pretending a delta),
-which keeps legacy rows readable without fabricating history. Legacy v7
-`public_summary` logs remain read-only audit rows and are never bridged.
+`basis_complete=True` basis. Logs with a missing `change_basis` use the complete
+`new_value` with `basis_complete=False`, preserving the distinction between
+incomplete attribution and a trusted change basis. Stored `public_summary`
+logs are read-only audit rows and are never bridged.
 
 Retrieval diagnostics expose the relation funnel separately: matched active and
 archived Continuity counts, valid relation links, deduplicated relation
@@ -931,14 +928,8 @@ item ID, operation, turn, optional update delta, and reason. A separate relation
 table stores each reference's stable position, `evidence_id`, and the SHA-256
 hash of the trusted HistoryDocument text; Continuity never duplicates the raw
 prose. Hashing uses exact `HistoryDocument.text` encoded as UTF-8, without trim
-or punctuation/whitespace normalization. Version 1 ledgers migrate their last
-`statement` into `premise`, start with a null current-state snapshot, and
-preserve legacy evidence relations with an unknown hash. Synthetic logs created
-by migration carry `migration_created=true`. The v1 migration rebuilds active
-FTS entity text with the same space-joined representation used by normal runtime
-writes rather than indexing the raw JSON array. Unreleased list-based development
-databases are converted in place under schema version 3; their deltas are kept
-as a temporary legacy snapshot until the next real update replaces it.
+or punctuation/whitespace normalization. The Store initializes and reads schema
+version 3 directly, with the current premise and state-snapshot representation.
 The relation is indexed and readable in both directions (`item -> lifecycle
 logs -> evidence` and `evidence -> lifecycle logs -> item`). Context Facts
 consume only the forward direction through `ContinuityHistoryBridge`; the
@@ -1064,15 +1055,12 @@ events. Diagnostics and dropped-field confirmation events are emitted exactly
 once per computed update, even when the confirmation retry cache later serves
 the same result.
 
-### 10.1 Field-change log (schema v8)
+### 10.1 Field-change log (schema v9)
 
 Accepted stable changes are written into the NPC profile database during
 confirmation finalization, in the same commit step as Confirmed History and
-Continuity, using the confirmed scene paragraphs as evidence. The v7 schema
-added three tables (additive v6→v7 migration); v8 keeps the same tables, adds
-`last_scene_summary` to the writable field-name set, and keeps legacy
-`public_summary` rows as read-only audit data (they are never re-written and
-never bridged):
+Continuity, using the confirmed scene paragraphs as evidence. Schema v9 stores
+these records in three tables:
 
 ```text
 npc_field_change_logs
@@ -1100,11 +1088,8 @@ npc_field_change_processed_turns
   every accepted `role` / `appearance` / `faction` change — enforced at the
   accepted-change model, the prepared write model, and defensively in
   `prepare_accepted_field_changes`. `NULL` is therefore un-creatable through
-  current writes; it can only appear on rows migrated from v8, which read back
-  with `basis_complete=False`.
-- v8→v9 migration adds the nullable `change_basis` column in place (additive,
-  idempotent); legacy rows simply read `NULL` and degrade to
-  `basis_complete=False` at retrieval instead of fabricating a delta.
+  current writes. Stored rows with a null basis read back with
+  `basis_complete=False`.
 
 - Evidence hashes reuse `history_document_text_hash` over the exact UTF-8 text
   (no trim or normalization), so later text edits break the pointer instead of
@@ -1118,17 +1103,7 @@ npc_field_change_processed_turns
 - Only `source="proposal"` changes with non-empty paragraph evidence that
   actually changed the snapshot are logged. The writable set is
   `role` / `appearance` / `faction` / `last_scene_summary`; CurrentState-synced
-  fields and the frozen personality/ability fields are never logged. Nothing is
-  backfilled for pre-v8 history because no trusted evidence attribution exists.
-- v7→v8 migration rewrites each `npc_profiles.profile_json`: when `role` is
-  empty (null, blank, or whitespace-only) and a legacy `public_summary` exists,
-  the summary initializes `role`; otherwise `role` is kept; legacy
-  `public_summary` / `current_intent` keys are dropped; the new
-  `last_scene_summary` / `last_scene_turn` pair starts null and no last-scene
-  history is fabricated. The field-history table is rebuilt (SQLite CHECK cannot
-  be altered in place) with the v8 field-name set while preserving existing
-  `log_id` values and evidence pointers, then a `PRAGMA foreign_key_check`
-  guards against orphaned rows.
+  fields and the frozen personality/ability fields are never logged.
 
 ### 10.2 Field-history retrieval
 
@@ -1254,9 +1229,8 @@ guidance
 payload
 ```
 
-The schema continues to accept legacy `kind=setting` materials only so pending
-turns created before the skill removal can still be restored; generation no
-longer produces them.
+The material schema accepts these three kinds. Resource references separately
+support Setting references for current Director operations.
 
 `guidance` tells Composer how to use the admitted material without deciding the
 protagonist's response or prewriting prose. For `introduce_npc`, the Agent selects
@@ -1389,7 +1363,7 @@ decides the player's action or reverses adjudicated results. It carries:
 - an actor list: each entry carries a `name` and an optional `DirectorResourceRef`
   to a bound NPC;
 - `source_setting_ids` and `source_setting_fact_ids`, recording the Setting and
-  exact Facts used to instantiate the Event; legacy Events default to no Fact IDs;
+  exact Facts used to instantiate the Event, with an empty default Fact-ID list;
 - `world_impact`: the permanent world change applied if the player ignores the
   event; it is stored on the Event and is not applied to Setting persistence;
 - `deadline_clock`: an absolute `WorldClock(day, phase)` deadline computed by
@@ -1402,15 +1376,13 @@ decides the player's action or reverses adjudicated results. It carries:
 The persisted `conception` keeps the Selector's concrete event core alive after
 creation: it appears in `semantic_view()` (so later Selector duplicate checks,
 reviewers, the Generation observation, NPC creation, and engaged-event
-composition all see it) and defaults to empty for legacy Events. It is never
+composition all see it) and has an empty default. It is never
 part of the player-facing `project_director_event` projection, and a hidden
 event's `present_event` material still exposes only its Hook.
 
-The store can read legacy saves containing multiple active Events, but the
-confirmation creation gate allows no new Event while any hidden or engaged Event
-exists and creates at most one per batch. Legacy active Events are not deleted or
-forcibly resolved; they drain through the normal lifecycle. Events follow a
-strict three-stage lifecycle:
+The confirmation creation gate admits a new Event when no hidden or engaged
+Event exists, and creates at most one per batch. Existing active Events progress
+through the normal three-stage lifecycle:
 
 ```text
 hidden -> engaged -> resolved
@@ -1585,7 +1557,7 @@ across pipeline operations and traces.
 LLM calls go through a single `PydanticAIProvider` over the Pydantic AI Direct
 Model API (no per-operator provider classes). `protocol` is one of
 `openai_responses | openai_chat | anthropic_messages | gemini` and defaults to
-`openai_chat` for legacy configs without URL guessing. `Base URL` is an
+`openai_chat`. `Base URL` is an
 optional override per protocol: empty means the protocol's official default
 (delegated to its SDK); an explicit value (e.g. an OpenCode Go gateway domain)
 wins for all four protocols. Sync and streaming requests use one long-lived
@@ -1669,8 +1641,8 @@ and stores the resolved values together with the selection metadata
 (`preset_id`, `model_id`) in `StoredModelConfig`; user-typed Protocol,
 Base URL, or Model ID always wins and directory refreshes never rewrite
 saved configs. `Custom` needs no directory entry and accepts any of the
-four protocols with arbitrary Base URL and Model ID; legacy configs
-without selection metadata behave as Custom. Unknown or delisted
+four protocols with arbitrary Base URL and Model ID. Services without selection
+metadata use Custom. Unknown or delisted
 `preset_id` values are kept as-is and remain editable, testable, and
 savable.
 
@@ -1681,12 +1653,10 @@ a display name, independent per-service protected API Key, and a single
 Custom allows multiple entries distinguished by `config_id`. Keys never
 leak into public responses (only `has_api_key`), and a new service or an
 edit that changes provider/endpoint must supply its own Key — editing
-only a model reuses the stored Key. The old single-config file migrates
-idempotently into an enabled service, preserving identity (non-Custom
-keeps `preset_id`, otherwise becomes a "自定义服务" Custom entry), never
-guessing provider from the old URL and never requiring the directory.
-The management surface (`/api/player/model-configs`, activate/delete)
-drives switching; the old single-config write/test routes are retired.
+only a model reuses the stored Key. The store reads format v3 directly;
+unreadable configurations retain their original file and report the cause.
+The management surface (`/api/player/model-configs`, activate/delete) drives
+service switching.
 Missing model configuration opens the service manager, where users can add a
 service or edit an existing service with a missing Key by its saved ID. The
 editor keeps Provider identity locked, including after connection tests; fresh
@@ -1729,21 +1699,19 @@ The player surface provides:
 - a live Records drawer for Continuity, NPC Profiles, World Settings, and (in
   creator mode) a read-only Director Event browser.
 
-The HTTP player API uses explicit allow-list projections. Local desktop error
-feedback may expose the diagnostic log location or a file location needed for
-troubleshooting; credentials and undisclosed story material remain private. Highlights contain only public NPC/Setting fields. The player HTTP
-routes derive their projection tier from the server-owned `experience_mode`; the
-lower-level runtime helpers are not themselves an HTTP authorization boundary.
+The HTTP player API currently uses explicit allow-list projections. Local desktop
+error feedback may expose the diagnostic log location or a file location needed
+for troubleshooting; credentials and undisclosed story material remain private.
+Highlights contain only public NPC/Setting fields. Player and creator modes
+are experience choices controlled by the same local owner. Model inputs and
+generated narrative follow the domain's information disclosure rules.
 
-Experience mode is the single surface switch, toggled from the settings drawer
-in both modes. It changes interface visibility and the server-owned records
-projection tier only; it never disables or downgrades the shared Director
-generation/confirmation quality flow. It maps one-to-one onto the records tier:
-player mode always projects `general`; creator mode projects `advanced`. The
-`view` parameter is no longer accepted from the client: both the records load and
-record-update routes derive the projection tier from `experience_mode`
-server-side, so no request can reach `advanced` (Director-only fields or hidden
-Setting facts) outside creator mode:
+Experience mode is the surface switch, toggled from the settings drawer in both
+modes. The interface uses `general` for player mode and `advanced` for creator
+mode, and sends that view explicitly when loading or editing records. The HTTP
+API accepts the requested view, defaulting to `general`, and validates the
+view and editable fields. The shared Director generation/confirmation quality
+flow runs in both modes:
 
 - general lists only NPCs with a positive name/alias hit count and Settings with
   `hit_count>0`; it exposes editable NPC public content and Setting
@@ -1771,7 +1739,7 @@ configuration is infrastructure and is likewise available in both modes. The
 player UI hides creator-only surfaces (`data-creator-only` elements: the Event
 tab and the Core Memory editor) via a `body[data-ui-mode="player"]` rule.
 
-Creator mode adds two read-only-to-write surfaces backed by dedicated endpoints:
+The local owner can use two dedicated endpoints, exposed by the creator interface:
 
 - `GET /api/player/events` lists all Director Events with full detail (role,
   stage, subject/intent/method, hook pool, actors, impacts, deadline, turn
@@ -1780,8 +1748,7 @@ Creator mode adds two read-only-to-write surfaces backed by dedicated endpoints:
   list. Each item is validated against the `CoreMemoryItem` schema; newly added
   items are always marked `source="player"` with a server-generated ID, while
   existing items keep their original source so campaign-setup provenance is
-  never rewritten. Both endpoints reject requests while `experience_mode` is not
-  `creator`.
+  never rewritten.
 
 Routine automatic record refresh does not redraw while form controls differ
 from their original values, preventing polling from discarding unsaved edits.
@@ -1880,9 +1847,9 @@ and are refreshed through the existing state/records requests, with no extra
 polling service. The player sees recent notices inline, with timestamps;
 maintenance failures explicitly preserve the completed confirmation outcome.
 
-## 20. Verification
+## 20. Existing Verification Tools
 
-Minimum verification for this contract:
+Choose from the available checks according to the affected behavior and risk:
 
 ```bash
 python3 -m compileall -q app
@@ -1893,71 +1860,36 @@ PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py --check
 PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --check
 ```
 
-The Context History benchmark must agree byte-for-byte with the accepted
+The current Context History benchmark checker compares output byte-for-byte with
 `benchmarks/context_retrieval/baseline.json` (37 cases, benchmark version 3,
 must recall `41/41`, weighted recall `132/134`, and zero forbidden evidence or
 invariant violations). The NPC pipeline benchmark agrees with
 `benchmarks/npc_baseline/baseline_batch.json` (25 cases, weighted `285/291`,
-20 logical calls). `baseline.json` records the
-SHA-256 of `cases.json`, so changing cases requires deliberate baseline review;
-a passing run by itself is not sufficient justification to update the snapshot.
-The byte-for-byte check is also run under at least three `PYTHONHASHSEED`
-values to guard against hash-order drift.
+20 logical calls). `baseline.json` records the SHA-256 of `cases.json`. These
+figures are recorded checkpoints for the existing tools. Choose comparisons
+according to the behavior being checked; hash-seed reruns can investigate
+ordering drift.
 
-Focused contract tests must cover:
+The test suite currently covers generation/confirmation, domain evidence and
+disclosure rules, retrieval, NPC/Director/Setting behavior, persistence, recovery,
+current-format file handling, model adapters, and frontend behavior. Test updates
+follow the product behavior and interfaces served by the implementation.
 
-- always-on Director generation/confirmation and conditional Canon graph
-  compilation;
-- phase-restricted Director skill registration and resource validation;
-- request `guidance`, NPC disclosure whitelists/upgrades, and deferred
-  persistence;
-- Event/NPC/Setting independence and explicit coupling;
-- Event Selector Fact-ID selection, invalid-ID rejection, persistence, and
-  ID removal from already-used Setting Facts;
-- Director Event stage transitions, independent hook consumption, deadline
-  settlement, touched-candidate projection, and explicit engaged-event intrusion
-  (generation never writes event state), plus the single-active creation gate and
-  same-confirmation slot reopening after resolution;
-- bounded NPC selection for action, Context Facts, Composer, and both Director
-  phases;
-- two-wave Director request execution, shared missing-Setting groups, deferred
-  mutation commit, outer-transaction rollback without a Director journal,
-  fail-closed legacy-journal handling, and recent Director logs;
-- Context History retrieval versus the 12-fact output boundary;
-- the Context History benchmark contracts: gold-group recall,
-  `forbidden_evidence_ids` and `forbidden_main_evidence_ids`, direct/relation
-  provenance route separation, global evidence-ID uniqueness,
-  serialized-payload bounds, and byte-level baseline agreement;
-- per-link node-evidence quality: support classification
-  (`strong/weak/zero/incomplete`), primary/context basis split, same-turn
-  adjacency with sibling-exclusion, complete-basis zero-support attribution
-  stripping, and source-scoped proposal eligibility (no direct-coverage veto);
-- NPC field-history contracts: identity/alias/conflict resolution, transient
-  alias exclusion, inactive explicit-exact eligibility, AND topic scoping,
-  per-intent match reasons (partial mappings rejected), complete trigger-funnel
-  diagnostics before support, per-change node bases, support-before-recency
-  relation ordering, source-scoped direct/relation proposal independence,
-  zero-cost augmentation of selected documents, proposal-scoped provenance and
-  coverage, final-payload ghost suppression, and the per-relation-owner
-  final-selection cap that applies only to new main relation documents;
-- Continuity lifecycle application and evidence validation, including the
-  runtime invariants (once-per-turn change, idempotent re-apply, current-turn
-  `scene_paragraph` evidence with whole-batch rollback) and schema migrations
-  v1/v2 -> v3 (`statement` -> `premise`, legacy evidence -> positioned lifecycle
-  logs, null legacy hashes, current-state snapshot rebuild, FTS rebuild) with
-  reopen persistence;
-- Opening Foundation/Setting/scene recovery and normal confirmation recovery;
-- Setting appearance counts, player-safe highlights, general/advanced record
-  projections and edit permissions, save archives, and Undo/Redo;
-- compact Schema rendering, schema-copy defense, Prompt discovery/includes, and
-  JavaScript syntax.
+Verification of infrastructure changes focuses on preserved player behavior:
+generation leaves editable pending content; confirmation accepts the selected
+text; saved progress reopens; normal Undo/Redo works; actual input/file failures
+are explained. Relevant domain tests and existing retrieval/NPC benchmarks can
+check that business behavior is preserved. Review snapshot differences for
+their effect on product behavior. Infrastructure changes preserve retrieval,
+domain evidence rules, and narrative capabilities.
 
 ## 21. Failure Policy
 
-This section defines the shared failure judgment basis for LLM-dependent
-modules. Module-specific fallback values are owned by each module and are
-added as modules migrate to this policy; this section does not replace domain
-boundaries.
+This section describes the current failure handling of LLM-dependent modules.
+Module-specific fallback values belong to their domains. Schema layers, attempt
+bookkeeping, warning identifiers, and test registries describe how the current
+code handles results. Changes preserve domain validation and accepted player
+content.
 
 Core principles:
 
@@ -1982,8 +1914,8 @@ Core principles:
   first attempt above A triggers the single feedback retry; a second attempt
   still above A drops the containing item or applies a module-legal fallback.
   identifier/reference/enum fields get no buffer and no truncation and keep
-  exact-value validation. The gateway wire schema must let
-  `output_validator` see at least S (or leave the string unbounded) so the
+  exact-value validation. The current gateway wire schema exposes strings up to
+  at least S (or leaves them unbounded) to `output_validator` so the
   domain layer can classify by attempt; the prompt schema displays H. The
   test-side registry `app/tests/test_llm_length_policy.py` records every
   constrained field as `task + field path + kind + H/A/S` and fails when a

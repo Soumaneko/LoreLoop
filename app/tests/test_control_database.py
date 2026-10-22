@@ -12,26 +12,6 @@ from app.runtime.turn_history import CampaignHistory, ensure_control_database
 from app.runtime.sqlite import connect_sqlite
 
 
-def test_ensure_control_fails_when_both_exist(tmp_path):
-    save = tmp_path / "save"
-    save.mkdir()
-    (save / ".runtime").mkdir(parents=True)
-    (save / ".runtime" / "control.db").write_bytes(b"")
-    (save / ".runtime" / "turn_history.db").write_bytes(b"")
-    paths = CampaignPaths.from_data_dir(save)
-    with pytest.raises(RuntimeError, match="unsupported legacy layout"):
-        ensure_control_database(paths)
-
-
-def test_ensure_control_rejects_legacy_control_db_only(tmp_path):
-    legacy = tmp_path / ".runtime" / "turn_history.db"
-    legacy.parent.mkdir(parents=True)
-    legacy.write_bytes(b"")
-    with pytest.raises(RuntimeError, match="unsupported legacy layout"):
-        ensure_control_database(CampaignPaths.from_data_dir(tmp_path))
-    assert not (tmp_path / ".runtime" / "control.db").exists()
-
-
 def test_ensure_control_rejects_empty_control_db(tmp_path):
     save = tmp_path / "save"
     save.mkdir()

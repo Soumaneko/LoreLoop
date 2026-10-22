@@ -160,7 +160,6 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
     }
 
 
-
 def test_service_applies_operations_and_persists_hashed_evidence_logs():
     with open_continuity_store() as store:
         store.insert(_item("update-me"))
@@ -210,11 +209,6 @@ def test_service_applies_operations_and_persists_hashed_evidence_logs():
         assert {log.item_id for log in reverse_logs} == {
             result.created_ids[0], "update-me", "resolve-me", "cancel-me",
         }
-
-
-
-
-
 
 
 def test_bridge_lifecycle_query_cost_is_constant_for_many_updates():
@@ -347,158 +341,6 @@ def test_service_is_idempotent_by_confirmed_turn():
         assert second.created_ids == []
         assert store.count() == 1
 
-def test_v1_store_migrates_statement_and_evidence_relationship(tmp_path):
-    db_path = tmp_path / "continuity-v1.db"
-    connection = sqlite3.connect(db_path)
-    connection.executescript("""
-        CREATE TABLE continuity_items (
-            id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,
-            subject TEXT NOT NULL, statement TEXT NOT NULL,
-            entities_json TEXT NOT NULL, location TEXT, deadline TEXT,
-            created_turn INTEGER NOT NULL, updated_turn INTEGER NOT NULL,
-            closed_turn INTEGER
-        );
-        CREATE INDEX idx_continuity_active
-        ON continuity_items(status, updated_turn);
-        CREATE VIRTUAL TABLE continuity_items_fts USING fts5(
-            item_id UNINDEXED, subject, statement, entities, location,
-            deadline, tokenize='trigram'
-        );
-        CREATE TABLE continuity_evidence (
-            item_id TEXT NOT NULL, evidence_id TEXT NOT NULL,
-            operation TEXT NOT NULL, turn_index INTEGER NOT NULL,
-            PRIMARY KEY(item_id, evidence_id, operation)
-        );
-        CREATE TABLE continuity_processed_turns (turn_index INTEGER PRIMARY KEY);
-        CREATE TABLE schema_versions (
-            component TEXT PRIMARY KEY, version INTEGER NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO schema_versions(component, version)
-        VALUES ('continuity', 1);
-        INSERT INTO continuity_items VALUES (
-            'legacy', 'open_thread', 'active', '旧事项', '旧版陈述',
-            '["顾晚棠", "盐帮"]', NULL, NULL, 1, 1, NULL
-        );
-        INSERT INTO continuity_evidence VALUES (
-            'legacy', 'turn_1_p001', 'create', 1
-        );
-    """)
-    connection.commit()
-    connection.close()
-
-    with open_continuity_store(str(db_path)) as store:
-        item = store.get("legacy")
-        assert item.premise == "旧版陈述"
-        assert item.current_state is None
-        fts_entities = store._conn.execute(
-            "SELECT entities FROM continuity_items_fts WHERE item_id = ?",
-            ("legacy",),
-        ).fetchone()["entities"]
-        log = store.logs_for_item("legacy")[0]
-        assert log.migration_created is True
-        assert log.evidence[0].position == 0
-        assert log.evidence[0].evidence_id == "turn_1_p001"
-        assert log.evidence[0].evidence_hash is None
-        assert fts_entities == "顾晚棠 盐帮"
-
-def test_v2_store_adds_positions_and_preserves_legacy_state_as_snapshot(tmp_path):
-    db_path = tmp_path / "continuity-v2.db"
-    entries = [
-        {"turn_index": turn, "text": f"进展{turn}"}
-        for turn in range(1, 11)
-    ]
-    connection = sqlite3.connect(db_path)
-    connection.executescript("""
-        CREATE TABLE continuity_items (
-            id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,
-            subject TEXT NOT NULL, premise TEXT NOT NULL,
-            current_state_json TEXT NOT NULL, entities_json TEXT NOT NULL,
-            location TEXT, deadline TEXT, created_turn INTEGER NOT NULL,
-            updated_turn INTEGER NOT NULL, closed_turn INTEGER
-        );
-        CREATE INDEX idx_continuity_active
-        ON continuity_items(status, updated_turn);
-        CREATE VIRTUAL TABLE continuity_items_fts USING fts5(
-            item_id UNINDEXED, subject, premise, current_state, entities,
-            location, deadline, tokenize='trigram'
-        );
-        CREATE TABLE continuity_logs (
-            log_id INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL,
-            operation TEXT NOT NULL, turn_index INTEGER NOT NULL,
-            state_delta TEXT, reason TEXT NOT NULL
-        );
-        CREATE INDEX idx_continuity_logs_item_turn
-        ON continuity_logs(item_id, turn_index, log_id);
-        CREATE TABLE continuity_log_evidence (
-            log_id INTEGER NOT NULL, evidence_id TEXT NOT NULL,
-            evidence_hash TEXT, PRIMARY KEY(log_id, evidence_id)
-        );
-        CREATE INDEX idx_continuity_log_evidence_id
-        ON continuity_log_evidence(evidence_id);
-        CREATE TABLE continuity_processed_turns (
-            turn_index INTEGER PRIMARY KEY
-        );
-        CREATE TABLE schema_versions (
-            component TEXT PRIMARY KEY, version INTEGER NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO schema_versions(component, version)
-        VALUES ('continuity', 2);
-    """)
-    connection.execute(
-        """
-        INSERT INTO continuity_items VALUES (
-            'v2', 'open_thread', 'active', '旧事项', '旧前提', ?,
-            '["顾晚棠"]', '临江客栈', NULL, 1, 10, NULL
-        )
-        """,
-        (json.dumps(entries, ensure_ascii=False),),
-    )
-    connection.execute(
-        """
-        INSERT INTO continuity_logs(
-            item_id, operation, turn_index, state_delta, reason
-        ) VALUES ('v2', 'create', 1, NULL, '创建。')
-        """
-    )
-    connection.executemany(
-        """
-        INSERT INTO continuity_log_evidence(
-            log_id, evidence_id, evidence_hash
-        ) VALUES (1, ?, ?)
-        """,
-        [("turn_1_p002", "2" * 64), ("turn_1_p001", "1" * 64)],
-    )
-    connection.commit()
-    connection.close()
-
-    with open_continuity_store(str(db_path)) as store:
-        item = store.get("v2")
-        log = store.logs_for_item("v2")[0]
-        with store.transaction():
-            store.insert(_item(
-                "post-migration",
-                current_state="迁移后仍可继续写入新的替换快照。",
-            ))
-        version = store._conn.execute(
-            "SELECT version FROM schema_versions WHERE component='continuity'"
-        ).fetchone()[0]
-
-    assert version == 3
-    assert item.current_state == "\n".join(
-        f"进展{turn}" for turn in range(1, 11)
-    )
-    assert [evidence.position for evidence in log.evidence] == [0, 1]
-    assert [evidence.evidence_id for evidence in log.evidence] == [
-        "turn_1_p001",
-        "turn_1_p002",
-    ]
-    assert log.migration_created is False
-    with open_continuity_store(str(db_path)) as reopened:
-        assert reopened.get("post-migration").current_state == (
-            "迁移后仍可继续写入新的替换快照。"
-        )
 
 def test_retriever_selects_only_relevant_active_items():
     state = CurrentState(
