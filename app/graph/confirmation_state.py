@@ -56,7 +56,6 @@ class ConfirmationState(TypedDict, total=False):
     write_db: bool
     journaled: bool
     maintenance_schedule_failed: bool
-    journal_completed: bool
     scene_text: str | None
     pending: PendingTurn | PendingOpening
     turn_id: str

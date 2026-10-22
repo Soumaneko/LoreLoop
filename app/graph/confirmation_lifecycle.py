@@ -62,7 +62,7 @@ class ConfirmationPreparer:
         cache = ConfirmationCache(pending.confirmation_cache)
         cache.begin(effective_scene_text)
 
-        if write_db and not cache.completed("state_saved"):
+        if write_db:
             with services.current_state_store as state_store:
                 persisted_state = state_store.load_or_default()
             if persisted_state != pipeline_input.state_before:
@@ -153,7 +153,7 @@ class ConfirmationCommitResult:
 
 
 class ConfirmationCommitter:
-    """Persist the synchronous confirmation records with retry-cache guards."""
+    """Persist the synchronous records in the current campaign transaction."""
 
     def __init__(self, services: ConfirmationCommitServices) -> None:
         self.services = services
@@ -176,56 +176,46 @@ class ConfirmationCommitter:
                 continuity_total=continuity_total,
             )
 
-        if not cache.completed("state_saved"):
-            with services.current_state_store as state_store:
-                state_store.save(updated_state)
-            cache.mark_completed("state_saved")
+        with services.current_state_store as state_store:
+            state_store.save(updated_state)
 
-        if not cache.completed("turn_summary_saved"):
-            with services.scene_summary_store as summary_store:
-                cache.set_result("turn_summary_id", summary_store.save_one(
-                    state["turn_summary"]
-                ))
-            cache.mark_completed("turn_summary_saved")
+        with services.scene_summary_store as summary_store:
+            summary_store.save_one(state["turn_summary"])
 
         with services.short_term_memory_store as short_store:
-            if not cache.completed("short_term_saved"):
-                if pipeline_input.clear_short_term_before_save:
-                    short_store.clear()
-                short_store.add_turn(
-                    scene_id=updated_state.scene.scene_id,
-                    turn_index=pipeline_input.turn_index,
-                    user_input=pipeline_input.user_input,
-                    scene_text=state["effective_scene_text"],
-                    closing_prompt=pipeline_input.scene_result.closing_prompt,
-                    action_preview=state.get("action_preview"),
-                    player_resolution=getattr(
-                        pipeline_input.pending,
-                        "player_resolution",
-                        None,
-                    ),
-                    token_usage={
-                        "generation": (
-                            getattr(pipeline_input.pending, "token_usage", None)
-                            or {}
-                        ).get("generation"),
-                        "confirmation": get_trace_token_usage(state["trace_id"]),
-                    },
-                )
-                cache.mark_completed("short_term_saved")
+            if pipeline_input.clear_short_term_before_save:
+                short_store.clear()
+            short_store.add_turn(
+                scene_id=updated_state.scene.scene_id,
+                turn_index=pipeline_input.turn_index,
+                user_input=pipeline_input.user_input,
+                scene_text=state["effective_scene_text"],
+                closing_prompt=pipeline_input.scene_result.closing_prompt,
+                action_preview=state.get("action_preview"),
+                player_resolution=getattr(
+                    pipeline_input.pending,
+                    "player_resolution",
+                    None,
+                ),
+                token_usage={
+                    "generation": (
+                        getattr(pipeline_input.pending, "token_usage", None)
+                        or {}
+                    ).get("generation"),
+                    "confirmation": get_trace_token_usage(state["trace_id"]),
+                },
+            )
             short_term_after = short_store.get_recent()
 
-        if not cache.completed("confirmed_history_saved"):
-            with services.confirmed_history_store as history_store:
-                if pipeline_input.clear_confirmed_history_before_save:
-                    history_store.clear()
-                history_store.upsert_turn(
-                    scene_id=updated_state.scene.scene_id,
-                    turn_index=pipeline_input.turn_index,
-                    user_input=pipeline_input.user_input,
-                    scene_text=state["effective_scene_text"],
-                )
-            cache.mark_completed("confirmed_history_saved")
+        with services.confirmed_history_store as history_store:
+            if pipeline_input.clear_confirmed_history_before_save:
+                history_store.clear()
+            history_store.upsert_turn(
+                scene_id=updated_state.scene.scene_id,
+                turn_index=pipeline_input.turn_index,
+                user_input=pipeline_input.user_input,
+                scene_text=state["effective_scene_text"],
+            )
 
         with (
             services.confirmed_history_store as history_store,
@@ -241,26 +231,24 @@ class ConfirmationCommitter:
                 for document in documents
                 if document.source_type == "scene_paragraph"
             }
-            if not cache.completed("npc_field_logs_saved"):
-                if not cache.produced("npc_turn_result"):
-                    raise RuntimeError(
-                        "Confirmation commit is missing npc_turn_result"
-                    )
-                npc_turn_result = cache.result("npc_turn_result")
-                accepted_changes = (
-                    npc_turn_result.process_result.accepted_changes
+            if not cache.produced("npc_turn_result"):
+                raise RuntimeError(
+                    "Confirmation commit is missing npc_turn_result"
                 )
-                with services.npc_profile_store as npc_store:
-                    npc_store.record_accepted_field_changes(
-                        changes=accepted_changes,
-                        evidence_documents=list(evidence_documents.values()),
-                        turn_index=pipeline_input.turn_index,
-                        scene_id=updated_state.scene.scene_id,
-                        reset_before_record=(
-                            pipeline_input.clear_confirmed_history_before_save
-                        ),
-                    )
-                cache.mark_completed("npc_field_logs_saved")
+            npc_turn_result = cache.result("npc_turn_result")
+            accepted_changes = (
+                npc_turn_result.process_result.accepted_changes
+            )
+            with services.npc_profile_store as npc_store:
+                npc_store.record_accepted_field_changes(
+                    changes=accepted_changes,
+                    evidence_documents=list(evidence_documents.values()),
+                    turn_index=pipeline_input.turn_index,
+                    scene_id=updated_state.scene.scene_id,
+                    reset_before_record=(
+                        pipeline_input.clear_confirmed_history_before_save
+                    ),
+                )
             continuity_result = ContinuityService(
                 None,
                 continuity_store,
@@ -301,32 +289,31 @@ class ConfirmationMaintenanceScheduler:
 
         pipeline_input = state["pipeline_input"]
         updated_state = state["updated_state"]
-        if not cache.completed("scene_summary_scheduled"):
-            summary_future = self.runtime.jobs.submit_job(
-                "scene_summary",
-                self.services.run_scene_summary_maintenance,
-                state["trace_id"],
-                pipeline_input.turn_index,
-                trace_id=state["trace_id"],
-                turn_index=pipeline_input.turn_index,
-                metadata={
-                    "campaign_id": self.runtime.campaign_id,
-                    "scene_id": updated_state.scene.scene_id,
-                },
-                core_memory=state["core_memory"],
-            )
-            cache.set_result("scene_summary_future", summary_future)
-            cache.set_result("scene_summary_job_id", getattr(
-                summary_future,
-                "job_id",
-                None,
-            ))
-            cache.set_result("scene_summary_operation_id", getattr(
-                summary_future,
-                "operation_id",
-                None,
-            ))
-            cache.mark_completed("scene_summary_scheduled")
+        summary_future = self.runtime.jobs.submit_job(
+            "scene_summary",
+            self.services.run_scene_summary_maintenance,
+            state["trace_id"],
+            pipeline_input.turn_index,
+            trace_id=state["trace_id"],
+            turn_index=pipeline_input.turn_index,
+            metadata={
+                "campaign_id": self.runtime.campaign_id,
+                "scene_id": updated_state.scene.scene_id,
+            },
+            core_memory=state["core_memory"],
+        )
+        cache.set_result("scene_summary_future", summary_future)
+        cache.set_result("scene_summary_job_id", getattr(
+            summary_future,
+            "job_id",
+            None,
+        ))
+        cache.set_result("scene_summary_operation_id", getattr(
+            summary_future,
+            "operation_id",
+            None,
+        ))
+
 
 
 class ConfirmationEventBuilder:
@@ -397,9 +384,9 @@ class ConfirmationFinalizer:
     """Coordinate commit, maintenance scheduling, cleanup, and presentation.
 
     Phase 2 splits the finalizer across the campaign transaction boundary: the
-    canonical writes (``committer.commit`` + the recent Director log) run inside
+    canonical writes and their confirmation record run inside
     ``BEGIN IMMEDIATE ... COMMIT``; everything that must only happen after a
-    committed confirmation (audit, journal completion, pending cleanup,
+    committed confirmation (undo publication, pending cleanup,
     maintenance scheduling, user-facing events) runs in
     :meth:`finalize_after_commit`.
     """
@@ -415,11 +402,6 @@ class ConfirmationFinalizer:
         self.committer = committer
         self.scheduler = scheduler
         self.event_builder = event_builder
-
-    def finalize(self, state: ConfirmationState) -> ConfirmationState:
-        """Run the two finalize phases in sequence (single-process helpers)."""
-        state, commit_result = self.finalize_in_transaction(state)
-        return self.finalize_after_commit(state, commit_result)
 
     def finalize_in_transaction(
         self,
@@ -446,10 +428,20 @@ class ConfirmationFinalizer:
                 )
 
         commit_result = self.committer.commit(state)
-        state["initialization_record"] = initialization_record
-
         if state.get("write_db", True):
             self._write_recent_director_log(state)
+            self.runtime.history.record_confirmation(
+                state["runtime_services"].stores._get_conn(),
+                state["turn_id"],
+                scene_text=state["effective_scene_text"],
+                initialization_fingerprint=(
+                    initialization_record.fingerprint if initialization_record else None
+                ),
+                state_changes=model_data(state["state_change_set"]),
+                state_warnings=model_data(state.get("state_update_warnings", [])),
+                state_before=model_data(pipeline_input.state_before),
+                state_after=model_data(state["updated_state"]),
+            )
 
         return state, commit_result
 
@@ -462,21 +454,8 @@ class ConfirmationFinalizer:
         pipeline_input = state["pipeline_input"]
         pending = state["pending"]
         if state.get("write_db", True):
-            self.runtime.history.record_state_audit(
-                state["turn_id"],
-                state_changes=model_data(state["state_change_set"]),
-                state_warnings=model_data(state.get("state_update_warnings", [])),
-                state_before=model_data(pipeline_input.state_before),
-                state_after=model_data(state["updated_state"]),
-            )
-            initialization_record = state.get("initialization_record")
-            if initialization_record is not None:
-                self.runtime.initialization.save(
-                    initialization_record.model_copy(update={"phase": "completed"})
-                )
             if state.get("journaled"):
                 self.runtime.complete_confirmation(pending)
-                state["journal_completed"] = True
             if isinstance(pending, PendingTurn):
                 self.runtime.pending_turns.discard_group(pending.group_id)
             else:

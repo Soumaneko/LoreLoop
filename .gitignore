@@ -1,6 +1,7 @@
 .env
 .agents
 AGENTS.md
+/docs/agents/
 agent.md
 .venv/
 /.venv-build-windows/

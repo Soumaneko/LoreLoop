@@ -41,6 +41,7 @@ def _make_campaign_database(path: Path, value: str = "saved") -> None:
             "(component TEXT PRIMARY KEY, version INTEGER NOT NULL)"
         )
         for component, version in [
+            ("confirmation", 1),
             ("current_state", 4),
             ("continuity", 3),
             ("short_term_memory", 5),
@@ -62,6 +63,7 @@ def _make_campaign_database(path: Path, value: str = "saved") -> None:
             "updated_at TEXT NOT NULL DEFAULT '')"
         )
         for table in [
+            "turn_confirmations (turn_id TEXT PRIMARY KEY)",
             "continuity_items (id TEXT PRIMARY KEY)",
             "continuity_logs (id TEXT PRIMARY KEY)",
             "continuity_log_evidence (log_id TEXT, position INTEGER)",
@@ -134,7 +136,7 @@ def test_snapshot_uses_sqlite_backup_and_excludes_wal_and_shm(tmp_path):
 
 
 def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
-    source = tmp_path / "source"
+    source = tmp_path / "source#%20name"
     source.mkdir()
     SaveManifestRepository(source).create("Alpha")
     _make_campaign_database(source / "campaign.db")
@@ -163,7 +165,7 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
         assert "save/ignored.txt" not in bundle.namelist()
 
     inspected = inspect_archive(archive)
-    destination = tmp_path / "imported"
+    destination = tmp_path / "imported#%20name"
     extracted = extract_archive(archive, destination)
     assert extracted == inspected
     assert SaveManifestRepository(destination).load().display_name == "Alpha"
@@ -199,8 +201,10 @@ def test_snapshot_preserves_portable_turn_history_paths(tmp_path):
     redo = snapshots / "redo-one"
     undo.mkdir()
     redo.mkdir()
-    (undo / "manifest.json").write_text('{"files": []}', encoding="utf-8")
-    (redo / "manifest.json").write_text('{"files": []}', encoding="utf-8")
+    _make_database(undo / "campaign.db", "before")
+    _make_database(redo / "campaign.db", "after")
+    (undo / "manifest.json").write_text('{"files": ["campaign.db"]}', encoding="utf-8")
+    (redo / "manifest.json").write_text('{"files": ["campaign.db"]}', encoding="utf-8")
     history = source / ".runtime" / "control.db"
     history.parent.mkdir()
     with sqlite3.connect(history) as connection:

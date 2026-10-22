@@ -1,29 +1,19 @@
-import json
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 import pytest
 
 from app.domain.core_memory import InitConfig, build_initial_current_state
 from app.domain.scene_writer.schemas import SceneWriterResult
+from app.runtime.campaign_migration import ensure_campaign_database
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import CampaignRuntime, PendingOpening
-from app.runtime.sqlite import connect_sqlite
 from app.runtime.turn_history import CampaignHistory
 
 
 def _write_value(path, value: str) -> None:
-    # Ensure canonical campaign schema exists so snapshots pass strict validation;
-    # game_state is an extra test table on top of the real schema.
-    from pathlib import Path as _Path
-    from app.runtime.campaign_migration import ensure_campaign_database
-    from app.runtime.paths import CampaignPaths as _CP
-
-    _p = _Path(path)
-    try:
-        ensure_campaign_database(_CP.from_data_dir(_p.parent))
-    except Exception:
-        pass
+    ensure_campaign_database(CampaignPaths.from_data_dir(Path(path).parent))
     with closing(sqlite3.connect(path)) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS game_state (value TEXT NOT NULL)")
         conn.execute("DELETE FROM game_state")
@@ -86,53 +76,6 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
         second.close()
 
 
-
-
-
-
-
-
-def test_failed_confirmation_restores_wal_database_with_live_connection(tmp_path):
-    data_dir = tmp_path / "save"
-    data_dir.mkdir()
-    from app.runtime.campaign_migration import ensure_campaign_database
-    from app.runtime.paths import CampaignPaths
-    ensure_campaign_database(CampaignPaths.from_data_dir(data_dir))
-    game_db = data_dir / "campaign.db"
-    connection = connect_sqlite(game_db)
-    try:
-        connection.execute("CREATE TABLE IF NOT EXISTS game_state (value TEXT NOT NULL)")
-        connection.execute("INSERT INTO game_state VALUES ('before')")
-        connection.commit()
-
-        history = CampaignHistory(data_dir)
-        history.save_pending(
-            turn_id="turn-wal",
-            kind="turn",
-            group_id="group-wal",
-            turn_index=1,
-            payload={"turn_id": "turn-wal"},
-        )
-        history.begin_confirmation("turn-wal", write_db=True, scene_text=None)
-        connection.execute("UPDATE game_state SET value='partially-written'")
-        connection.commit()
-        # Phase 4 offline restore requires campaign connections to be closed.
-        # The live connection becomes stale after os.replace; close it before restore.
-        connection.close()
-        connection = None  # type: ignore[assignment]
-
-        history.fail_confirmation_offline("turn-wal", RuntimeError("failed"))
-
-        assert _read_value(game_db) == "before"
-    finally:
-        if connection is not None:
-            connection.close()
-
-    assert _read_value(game_db) == "before"
-
-
-
-
 def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
@@ -148,6 +91,9 @@ def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
     )
     history.begin_confirmation("turn-1", write_db=True, scene_text=None)
     _write_value(game_db, "after")
+    with history._campaign_connect() as campaign:
+        campaign.execute("BEGIN")
+        history.record_confirmation(campaign, "turn-1", scene_text="场景正文")
     history.complete_confirmation("turn-1", "group-1")
 
     assert history.status()["can_undo"] is True
@@ -164,22 +110,14 @@ def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
     assert history.pending_records() == []
 
 
-
-
-
-
-
-
-
-
 def test_turn_transaction_window_keeps_multiple_rows_per_turn(tmp_path):
     data_dir = tmp_path / "save"
     data_dir.mkdir()
     game_db = data_dir / "campaign.db"
     _write_value(game_db, "0")
-    history = CampaignHistory(data_dir, max_undo=10)
+    history = CampaignHistory(data_dir, max_undo=3)
 
-    for turn_index in range(1, 13):
+    for turn_index in range(1, 6):
         group_id = f"group-{turn_index}"
         versions = [f"{group_id}-v{version}" for version in (1, 2)]
         for turn_id in versions:
@@ -196,23 +134,30 @@ def test_turn_transaction_window_keeps_multiple_rows_per_turn(tmp_path):
             scene_text=None,
         )
         _write_value(game_db, str(turn_index))
+        with history._campaign_connect() as campaign:
+            campaign.execute("BEGIN")
+            history.record_confirmation(campaign, versions[1], scene_text="场景正文")
         history.complete_confirmation(versions[1], group_id)
 
-    turn_ids = {row["turn_id"] for row in _all_transactions(history)}
-    assert {f"group-11-v{version}" for version in (1, 2)} <= turn_ids
-    assert {f"group-12-v{version}" for version in (1, 2)} <= turn_ids
-    assert not (turn_ids & {f"group-1-v{version}" for version in (1, 2)})
-    assert history.get_transaction("group-10-v1") is not None
+    assert history.get_transaction("group-1-v2")["status"] == "completed"
 
-
-
-
-def _all_transactions(history) -> list[dict]:
-    with history._connect() as conn:
-        rows = conn.execute(
-            "SELECT turn_id, turn_index, status FROM turn_transactions"
-        ).fetchall()
-    return [dict(row) for row in rows]
+    history.save_pending(turn_id="future", kind="turn", group_id="future", turn_index=6, payload={})
+    history.discard(["future"])
+    for turn_index in (5, 4):
+        restored = history.undo()["restored_pending_turn_ids"]
+        assert set(restored) == {f"group-{turn_index}-v1", f"group-{turn_index}-v2"}
+        assert _read_value(game_db) == str(turn_index - 1)
+        history.discard(restored)
+    history.save_pending(turn_id="branch", kind="turn", group_id="branch", turn_index=4, payload={})
+    history.begin_confirmation("branch", write_db=True, scene_text=None)
+    with history._campaign_connect() as conn:
+        conn.execute("BEGIN")
+        history.record_confirmation(conn, "branch", scene_text="新分支")
+    history.complete_confirmation("branch", "branch")
+    history.discard(history.undo()["restored_pending_turn_ids"])
+    assert set(history.undo()["restored_pending_turn_ids"]) == {"group-3-v1", "group-3-v2"}
+    with pytest.raises(ValueError, match="No confirmed turn"):
+        history.undo()
 
 
 def test_completed_confirmation_survives_later_failure_and_result_lookup(tmp_path, monkeypatch):
@@ -233,23 +178,18 @@ def test_completed_confirmation_survives_later_failure_and_result_lookup(tmp_pat
         history.begin_confirmation("variant-1", write_db=True, scene_text=None)
         assert outcome() == "in_progress"
         _write_value(paths.campaign_db, "after")
+        with history._campaign_connect() as campaign:
+            campaign.execute("BEGIN")
+            history.record_confirmation(campaign, "variant-1", scene_text="场景正文")
         history.complete_confirmation("variant-1", "group-1")
-        config = InitConfig(world_name="测试", world_style="奇幻", ability_system="魔法",
-                            protagonist_name="主角", story_expectation="探索")
-        stale = PendingOpening(
-            turn_id="variant-1", group_id="group-1", version_index=1,
-            initialization_fingerprint="test", config=config, experience_mode="player",
-            current_state=build_initial_current_state(config, location="原地", currency_unit="金币"),
-            scene_result=SceneWriterResult(scene_text="已确认的正文"),
-        )
-        runtime.pending_openings.restore(stale)
-        from app.core.client_error import ClientValidationError
-        with pytest.raises(ClientValidationError, match="已确认"):
-            runtime.begin_confirmation(stale, write_db=True, scene_text=None)
-        runtime.fail_confirmation_offline("variant-1", RuntimeError("presentation failed"))
-        history.fail_confirmation_offline("variant-1", RuntimeError("late error"))
-        assert runtime.pending_openings.get("variant-1") is None
+        runtime.fail_confirmation("variant-1", RuntimeError("presentation failed"))
+        history.fail_confirmation("variant-1", RuntimeError("late error"))
         assert outcome() == "confirmed"
+        with monkeypatch.context() as lookup_patch:
+            def unreadable_control():
+                raise OSError("control read failed")
+            lookup_patch.setattr(history, "_connect", unreadable_control)
+            assert outcome() == "confirmed"
         assert _read_value(paths.campaign_db) == "after"
         assert load_confirmation_outcome("other-save", "variant-1")["outcome"] == "unknown"
         assert load_confirmation_outcome("result-save", "other-variant")["outcome"] == "unknown"
@@ -258,3 +198,72 @@ def test_completed_confirmation_survives_later_failure_and_result_lookup(tmp_pat
         assert _read_value(paths.campaign_db) == "before"
     finally:
         runtime.close()
+
+
+def test_confirmation_publication_preserves_redo_until_control_commit(tmp_path, monkeypatch):
+    history = CampaignHistory(tmp_path / "save")
+    for index in (1, 2):
+        turn_id = f"turn-{index}"
+        history.save_pending(turn_id=turn_id, kind="turn", group_id=turn_id,
+                             turn_index=index, payload={})
+        history.begin_confirmation(turn_id, write_db=True, scene_text=None)
+        with history._campaign_connect() as conn:
+            conn.execute("BEGIN")
+            history.record_confirmation(conn, turn_id, scene_text=turn_id)
+        history.complete_confirmation(turn_id, turn_id)
+    history.undo()
+    # Repeating already published cleanup must preserve the future redo branch.
+    history.complete_confirmation("turn-1", "turn-1")
+    assert history.status()["can_redo"] is True
+    with history._connect() as conn:
+        old_paths = [history._snapshot_path(row[0]) for row in conn.execute(
+            "SELECT redo_path FROM turn_snapshots WHERE status='undone'")]
+    history.save_pending(turn_id="new", kind="turn", group_id="new", turn_index=2, payload={})
+    history.begin_confirmation("new", write_db=True, scene_text=None)
+    with history._campaign_connect() as conn:
+        conn.execute("BEGIN")
+        history.record_confirmation(conn, "new", scene_text="new")
+    original = history._trim_transactions_locked
+
+    def fail_cleanup(_conn):
+        raise OSError("control write failed")
+
+    monkeypatch.setattr(history, "_trim_transactions_locked", fail_cleanup)
+    with pytest.raises(OSError, match="control write failed"):
+        history.complete_confirmation("new", "new")
+    assert all(path.is_dir() for path in old_paths)
+    monkeypatch.setattr(history, "_trim_transactions_locked", original)
+    history.complete_confirmation("new", "new")
+    assert history.status()["can_redo"] is False
+    history.undo()
+    history.redo()
+    assert history.get_transaction("new")["status"] == "completed"
+
+
+def test_recovery_publishes_reconfirmed_version_before_reconciling_old_snapshot(tmp_path):
+    history = CampaignHistory(tmp_path / "save")
+    game_db = history.data_dir / "campaign.db"
+    _write_value(game_db, "before")
+    history.save_pending(turn_id="same", kind="turn", group_id="same", turn_index=1, payload={})
+    history.begin_confirmation("same", write_db=True, scene_text=None)
+    _write_value(game_db, "first")
+    with history._campaign_connect() as conn:
+        conn.execute("BEGIN")
+        history.record_confirmation(conn, "same", scene_text="first")
+    history.complete_confirmation("same", "same")
+    history.undo()
+    history.begin_confirmation("same", write_db=True, scene_text=None)
+    _write_value(game_db, "second")
+    with history._campaign_connect() as conn:
+        conn.execute("BEGIN")
+        history.record_confirmation(conn, "same", scene_text="second")
+
+    reopened = CampaignHistory(history.data_dir)
+    assert reopened.recover_interrupted() is True
+    with reopened._connect() as conn:
+        assert [r[0] for r in conn.execute("SELECT status FROM turn_snapshots")] == ["applied"]
+    assert reopened.recover_interrupted() is False
+    assert reopened.undo()["turn_id"] == "same"
+    assert _read_value(game_db) == "before"
+    reopened.redo()
+    assert _read_value(game_db) == "second"

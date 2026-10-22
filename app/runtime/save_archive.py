@@ -246,7 +246,7 @@ def extract_archive(
 
 def quick_check_database(database: Path) -> None:
     path = Path(database)
-    uri = f"file:{path.resolve().as_posix()}?mode=ro"
+    uri = path.resolve().as_uri() + "?mode=ro"
     try:
         with closing(sqlite3.connect(uri, uri=True)) as connection:
             rows = connection.execute("PRAGMA quick_check").fetchall()
@@ -375,7 +375,7 @@ def _iter_save_files(root: Path) -> Iterable[tuple[Path, Path]]:
 
 
 def _backup_database(source: Path, destination: Path) -> None:
-    source_uri = f"file:{source.resolve().as_posix()}?mode=ro"
+    source_uri = source.resolve().as_uri() + "?mode=ro"
     try:
         with closing(
             sqlite3.connect(source_uri, uri=True, timeout=30)
@@ -541,7 +541,7 @@ def _validate_save_payload(data_dir: Path) -> None:
             )
         state_db = data_dir / "campaign.db"
         if state_db.is_file():
-            uri = f"file:{state_db.resolve().as_posix()}?mode=ro"
+            uri = state_db.resolve().as_uri() + "?mode=ro"
             with closing(sqlite3.connect(uri, uri=True)) as connection:
                 row = connection.execute(
                     "SELECT state_json FROM current_state WHERE id=1"

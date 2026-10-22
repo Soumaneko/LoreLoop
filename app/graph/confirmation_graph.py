@@ -196,13 +196,12 @@ def stream_confirmation_pipeline(
 ):
     """Stream one confirmation.
 
-    Phase 2: every canonical write of a real confirmation runs inside one
+    Every canonical write of a real confirmation runs inside one
     ``BEGIN IMMEDIATE ... COMMIT`` transaction on the campaign database. A fresh
     operation-level unit of work owns the transaction for the whole pipeline so
-    the graph nodes, the Director executor, and the in-transaction finalizer all
-    write to the same connection. The control-plane follow-ups (audit, journal
-    completion, pending cleanup, maintenance scheduling, finish events) run only
-    after the transaction commits.
+    the graph nodes, the Director executor, the finalizer and the saved confirmation
+    fact write to the same connection. Draft cleanup, undo publication and
+    maintenance scheduling follow the campaign commit.
     """
     runtime = get_campaign_runtime()
     uow = runtime.uow(write=write_db)
@@ -334,9 +333,8 @@ def _confirm_pipeline_locked(
         )
     except BaseException as exc:
         if journaled:
-            runtime.jobs.wait_for_idle()
             try:
-                runtime.fail_confirmation_offline(pipeline_input.turn_id, exc)
+                runtime.fail_confirmation(pipeline_input.turn_id, exc)
             finally:
                 ConfirmationCache(
                     pipeline_input.pending.confirmation_cache

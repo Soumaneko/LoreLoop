@@ -105,8 +105,6 @@ def test_confirmation_commits_npc_field_logs_from_persisted_history(tmp_path):
 
     ConfirmationCommitter(services).commit(_state(cache=cache))
 
-    assert cache["confirmed_history_saved"] is True
-    assert cache["npc_field_logs_saved"] is True
     with stores.npc_profile as npc_store:
         logs = npc_store.list_field_change_logs(turn_index=3)
         assert [(item.npc_id, item.field_name) for item in logs] == [
@@ -117,34 +115,6 @@ def test_confirmation_commits_npc_field_logs_from_persisted_history(tmp_path):
         ]
 
 
-def test_confirmation_npc_field_log_marker_gap_replays_without_duplicates(
-    tmp_path,
-):
-    stores, services = _services(tmp_path)
-    with stores.npc_profile as npc_store:
-        npc_store.upsert(NPCProfile(
-            npc_id="npc-a",
-            name="顾青",
-            role="北门巡检",
-            updated_at="2026-08-13T00:00:00Z",
-        ))
-    cache = {
-        "npc_turn_result": SimpleNamespace(
-            process_result=SimpleNamespace(
-                accepted_changes=[_accepted_role_change()]
-            )
-        )
-    }
-    state = _state(cache=cache)
-    committer = ConfirmationCommitter(services)
-    committer.commit(state)
-    del cache["npc_field_logs_saved"]
-
-    committer.commit(state)
-
-    assert cache["npc_field_logs_saved"] is True
-    with stores.npc_profile as npc_store:
-        assert len(npc_store.list_field_change_logs(turn_index=3)) == 1
 
 
 def test_confirmation_records_empty_npc_field_batch_and_dry_run_does_not(
@@ -158,7 +128,6 @@ def test_confirmation_records_empty_npc_field_batch_and_dry_run_does_not(
     }
     ConfirmationCommitter(services).commit(_state(cache=empty_cache))
 
-    assert empty_cache["npc_field_logs_saved"] is True
     with stores.npc_profile as npc_store:
         assert npc_store.field_change_batch_hash(3) is not None
 
@@ -167,7 +136,6 @@ def test_confirmation_records_empty_npc_field_batch_and_dry_run_does_not(
     ConfirmationCommitter(dry_services).commit(
         _state(cache=dry_cache, write_db=False)
     )
-    assert "npc_field_logs_saved" not in dry_cache
     with dry_stores.npc_profile as npc_store:
         assert npc_store.field_change_batch_hash(3) is None
 
@@ -179,7 +147,6 @@ def test_confirmation_rejects_missing_npc_turn_result(tmp_path):
     with pytest.raises(RuntimeError, match="missing npc_turn_result"):
         ConfirmationCommitter(services).commit(_state(cache=cache))
 
-    assert "npc_field_logs_saved" not in cache
     with stores.npc_profile as npc_store:
         assert npc_store.field_change_batch_hash(3) is None
 
@@ -215,7 +182,7 @@ def test_opening_reset_clears_older_npc_field_history(tmp_path):
         assert npc_store.field_change_batch_hash(3) is not None
 
 
-def test_failed_confirmation_snapshot_restores_npc_field_history(tmp_path):
+def test_failed_confirmation_transaction_rolls_back_npc_field_history(tmp_path):
     data_dir = tmp_path / "save"
     from app.runtime.campaign_migration import ensure_campaign_database
     ensure_campaign_database(CampaignPaths.from_data_dir(data_dir))
@@ -236,18 +203,20 @@ def test_failed_confirmation_snapshot_restores_npc_field_history(tmp_path):
         payload={"turn_id": "turn-3"},
     )
     history.begin_confirmation("turn-3", write_db=True, scene_text=None)
-    with stores.npc_profile as npc_store:
-        npc_store.record_accepted_field_changes(
-            changes=[_accepted_role_change()],
-            evidence_documents=[_evidence_document()],
-            turn_index=3,
-            scene_id="scene-3",
-        )
-        assert len(npc_store.list_field_change_logs()) == 1
+    with pytest.raises(RuntimeError, match="commit failed"):
+        with stores.transaction():
+            with stores.npc_profile as npc_store:
+                npc_store.record_accepted_field_changes(
+                    changes=[_accepted_role_change()],
+                    evidence_documents=[_evidence_document()],
+                    turn_index=3,
+                    scene_id="scene-3",
+                )
+                assert len(npc_store.list_field_change_logs()) == 1
 
-    # Phase 4 offline restore requires closing campaign connections; reopen stores
+            raise RuntimeError("commit failed")
     stores.close()
-    history.fail_confirmation_offline("turn-3", RuntimeError("commit failed"))
+    history.fail_confirmation("turn-3", RuntimeError("commit failed"))
 
     stores2 = CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir))
     with stores2.npc_profile as npc_store:
@@ -283,6 +252,9 @@ def test_undo_redo_restore_npc_field_history_with_profile_database(tmp_path):
             turn_index=3,
             scene_id="scene-3",
         )
+    with history._campaign_connect() as campaign:
+        campaign.execute("BEGIN")
+        history.record_confirmation(campaign, "turn-3", scene_text="场景正文")
     history.complete_confirmation("turn-3", "group-3")
 
     stores.close()

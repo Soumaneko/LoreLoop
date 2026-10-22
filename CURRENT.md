@@ -6,8 +6,9 @@ behavior; a mismatch is documentation drift.
 
 Product behavior that must survive implementation changes is defined separately
 in `INVARIANTS.md`. Engineering choices are assessed against that product scope
-and their maintenance cost. This document records current mechanisms; issues
-track proposals, and ADRs record decisions in their historical context.
+and their maintenance cost. This document records current mechanisms and the
+reasons for important choices. Issues track proposals; Git history preserves
+earlier implementations and decisions.
 
 ## 1. Active Product Shape
 
@@ -57,7 +58,10 @@ root data files are:
 `campaign.db` holds every canonical domain table (`current_state`, `short_term`,
 `scene_summaries`, `confirmed_history`, `continuity`, `npc_profiles`,
 `director_events`, `director_log`, `director_npcs`, `world_settings`) plus a
-`schema_versions` row per component. `initialization_draft.json` is an editable
+`schema_versions` row per component. `turn_confirmations` (schema component
+`confirmation`, version 1) records the selected version ID, group, turn, final
+text, state-change audit and opening fingerprint in the same database. Detailed
+audit payloads follow the bounded undo window; saved version IDs remain queryable. `initialization_draft.json` is an editable
 setup draft, not canonical campaign state. It stores the raw setup form values
 (including empty fields, blank list lines, temporarily over-limit text, and
 ability rows that only carry a description) so unfinished edits survive closing
@@ -65,66 +69,67 @@ and reloading; restore picks the stage from the draft envelope and prefers those
 raw values, using the structured snapshot for generated values awaiting edits. Draft
 saving never runs the submit contract - completeness is checked only at
 `initialization_opening` - and a failed save keeps the dialog open to retry.
-`.runtime/control.db` durably journals
-pending scenes, confirmation status, the bounded Undo/Redo snapshot chain
-(`.snapshots/`), and the control state (`current_revision_id`,
-`connection_epoch`, plus per-transaction `commit_id`/`revision_id`).
+`.runtime/control.db` stores pending scenes, runtime notices, the bounded
+Undo/Redo snapshot list (`.snapshots/`), and `connection_epoch`.
 
-New saves start as an empty `campaign.db` and a fresh `control.db` with an
-initial `current_revision_id` (`uuid4().hex`) and `connection_epoch=0`.
-Startup validates existing current databases and initializes missing ones.
-Unrelated files alongside the current save files are left untouched.
-Director canonical mutations share the single `campaign.db` Confirmation
-transaction.
-During control DB upgrade, a linear revision chain is backfilled from
-`turn_snapshots.sequence` so that each snapshot's pre-revision and its
-transaction's post-revision are contiguous; `current_revision_id` is set to the
-revision after the last `applied` snapshot. An existing `control.db` with both
-new columns already filled is left unchanged.
+Keeping domain writes and the saved confirmation fact in one database lets
+SQLite provide turn-level atomicity. The separate control store retains drafts
+and undo positions while story progress is restored. Application preferences
+keep their own lifecycle so narrative Undo preserves the player's settings.
 
-A real confirmation runs every canonical write of a single turn inside one
-`BEGIN IMMEDIATE ... COMMIT` transaction on `campaign.db`; all ten stores share
-one connection and either commit or roll back together. The turn journal in
-`control.db` and its pre-confirmation snapshot provide cross-store rollback and
-retry recovery, and control-plane follow-ups (audit, pending cleanup, maintenance
-scheduling, finish events) happen only after the transaction commits. This
-transaction does not span `control.db`, which remains a separate journal
-database. On a successful confirmation, one `commit_id` and one new
-post-confirm `revision_id` are generated idempotently and
-`control_state.current_revision_id` is updated in the same control DB
-transaction; `connection_epoch` only increments on `restore` (Undo, Redo,
-failed-confirmation restore, or crash recovery), never on a normal commit.
+New saves initialize the current schemas and start with `connection_epoch=0`.
+Startup validates existing databases and initializes missing ones. Current
+schema versions identify the supported storage layout; unreadable or incompatible
+files retain their original contents. Unrelated files beside save files remain
+in place.
 
-Snapshot boundaries: `.snapshots/<id>/` contains only `campaign.db`,
-`core_memory.json` (if present), `initialization.json` (if present), and
-`manifest.json`. Snapshot manifests validate entries against this supported file set.
-Restore replaces or removes files within the canonical snapshot file set;
-other files in the save directory remain in place.
+Current-format support keeps startup and file operations focused on the layout
+the player can use and the application can maintain.
 
-The current implementation performs canonical restores (Undo, Redo,
-failed-confirmation rollback, and interrupted-recovery) through durable offline
-replacement. The runtime quiesces new operation UoWs, waits for
-active operation UoWs and maintenance jobs, closes the session `CampaignUnitOfWork`,
-stages each snapshot file to a same-directory temporary (`campaign.db` is
-copied to a temporary and validated via the shared `validate_campaign_database`
-schema/foreign-key/quick_check contract, JSON is validated by parse), fsyncs
-the temporary, deletes the target `-wal/-shm/-journal`, atomically installs
-with `os.replace`, and fsyncs the save directory where directory handles are
-supported. Staged-file fsync uses a read/write handle for Windows compatibility;
-`settings.json` and
-`initialization_draft.json` never participate. `turn_snapshots.status` durably
-records intent (`applied→undoing→undone`, `undone→redoing→applied`) and
-`turn_transactions.status` records `confirming→restoring→failed` before the
-file replace, so a crash before, during, or after the replace converges
-idempotently on restart and `connection_epoch` is incremented only once in the
-final control transaction. Production operation UoWs are created via
-`CampaignRuntime.uow()` which stamps `expected_epoch` and participates in the
-quiesce barrier; a stale or closed UoW is rejected and the session UoW is
-recreated with the new epoch after each restore. Confirmation failures go
-through the runtime offline path (`runtime.fail_confirmation_offline`) instead
-of direct `history.fail_confirmation`. Runtime startup and `reconfigure()` use
-the same ordering: `ensure campaign.db/control.db → CampaignHistory.recover_interrupted() offline →
-formal session UoW/Services → pending restore`.
+A real confirmation runs its domain writes, state-change audit and
+`turn_confirmations` insert inside one `BEGIN IMMEDIATE ... COMMIT` transaction
+on `campaign.db`. The unique version ID and group identify the selected result.
+SQLite rolls back an unsuccessful transaction; the pending draft remains
+available for retry. Once the transaction commits, that record is the authority
+for result lookup and repeated submission, including after UI or maintenance
+failure. Publishing undo availability and retiring the pending group follow the
+campaign commit. Text-derived calculations can survive a failed attempt;
+transaction-dependent results are recomputed on retry. Saved turns invalidate
+generation caches even when draft-control cleanup reports an error.
+
+Snapshot boundaries: `.snapshots/<id>/` contains `campaign.db`, optional
+`core_memory.json` and `initialization.json`, and `manifest.json`. Restoring
+operates on these files. Application preferences and editable setup drafts keep
+their own lifecycles. Every snapshot manifest includes `campaign.db`.
+
+A snapshot row is `provisional` while its confirmation is prepared, `applied`
+while the turn is in the saved progress, or `undone` while redo is available.
+Undo captures the current state for redo and installs the pre-turn snapshot;
+Redo installs that captured state. A successful new confirmation after Undo
+starts the new branch and retires the redo snapshots. The bounded list retains
+up to ten confirmed turns. Snapshot files are retired after the control update
+commits; draft groups referenced by retained snapshots stay available.
+Reopening and Undo/Redo settle saved confirmations and retire their old branches
+before reading the remaining snapshot positions. Undo/Redo select a target after
+this bookkeeping succeeds; an interrupted uncommitted confirmation leaves a
+retryable draft.
+When retrying an Undo/Redo with a pending file-installation target, recovery
+completes that target and returns its operation result without advancing to
+another turn.
+
+The runtime restores through its existing offline entry: stop new operation
+UoWs, wait for active work and maintenance, close the session connection, stage
+and validate snapshot files, replace them, advance `connection_epoch`, and
+reopen the session. SQLite files use the shared schema/foreign-key/quick-check
+validation; JSON files are parsed before installation. A rejected snapshot
+leaves the current save open for continued play. File replacement uses
+same-directory temporaries, `os.replace`, and filesystem synchronization where
+supported. Production operation UoWs carry `expected_epoch` and participate in
+the quiesce barrier. During file installation, `control_state.restore_target` names the snapshot
+being installed. Successful installation clears the target and advances the
+connection epoch together; reopening completes an interrupted installation
+before opening domain stores. Connection registration and epoch guards remain
+the active connection-lifecycle implementation.
 
 Save copy and export require the source to have no pending content and
 create a quiesced staging snapshot. SQLite files are copied through the backup
@@ -188,8 +193,12 @@ The Setting Agent supplies only kind and a compact requirement. The specialist
 Setting Creator produces the names and facts. Initial Settings are saved as one
 batch and reused if initialization resumes after they have already been created.
 
-Opening confirmation runs the normal confirmation pipeline at turn `0`, then
-clears and replaces short-term history, Confirmed History, and Continuity. The
+Opening confirmation runs the normal pipeline at turn `0`, clearing and
+replacing short-term history, Confirmed History and Continuity in that
+transaction. `initialization.json` retains the prepared opening information;
+`InitializationStore.load()` reports `completed` when its fingerprint has a
+saved opening confirmation in `campaign.db`. Undo and Redo restore the database
+and prepared opening together. The
 Director base flow always runs for both opening confirmation and both Director
 stages of later turns, regardless of the player/creator experience mode.
 
@@ -300,7 +309,7 @@ distinct invalidation domains:
   (`existing_npc_profiles`, `director_npc_profile_ids`,
   `confirmed_director_npc_drafts`), retained across scene text edits;
 - `result`: text-derived outputs (`scene_facts`, `updated_state`,
-  `turn_summary`, etc.) and step completion markers, strictly invalidated
+  `turn_summary`, etc.), invalidated
   whenever the effective scene text changes.
 
 ```text
@@ -314,7 +323,8 @@ prepare and validate pending scene
    join -> exact-name World Setting appearance count
 -> Director subsystem
    Director Event review -> Director Agent confirmation stage
--> journaled commit/finalization
+-> domain writes and saved confirmation in one transaction
+-> pending cleanup and undo publication
 -> background summary condensation
 ```
 
@@ -325,25 +335,18 @@ resource catalogs, selected detailed NPCs, and the current turn's newly detected
 NPCs.
 
 Finalization persists CurrentState, the turn summary, short-term scene data,
-Confirmed History documents, and Continuity operations, then completes the
-pending transaction. NPC updates, Setting mention counters, Event reviews,
-staged disclosure changes, and Director skill writes performed earlier in the
-pipeline remain protected by the same confirmation snapshot; Director Wave
-mutations share the same single `campaign.db` transaction and have no separate
-journal.
+Confirmed History documents, Continuity operations, NPC field-change logs and
+the saved confirmation fact. Earlier NPC, Setting, Event and staged Director
+writes share that same campaign transaction. NPC field-change evidence comes
+from the persisted scene-paragraph documents, with the existing per-batch hash
+and provenance validation described in §10.
 
-Accepted NPC stable field changes are committed as field-change logs in the same
-finalization step, against the same confirmed scene-paragraph documents that
-back Continuity (one atomic SQLite transaction per turn, idempotent per batch
-hash; see §10). The `npc_field_logs_saved` completion marker guards replay and
-is cleared on a confirmed-history reset.
-
-Confirmation feedback reads the durable transaction for the exact save and
-pending variant through `/api/player/confirmation`. Completed, awaiting/failed,
-and confirming/restoring records are distinguished; missing or mismatched records
-remain unknown. UI refresh and local usage failures after success do not imply
-an uncommitted turn. Unknown outcomes are checked before another confirmation
-submission. A completed journal cannot be relabelled failed by presentation errors.
+Confirmation feedback looks up the exact save and selected variant through
+`/api/player/confirmation`. A saved `turn_confirmations` record means confirmed;
+an unfinished live operation means in progress; a retryable pending record means
+not confirmed. Missing or mismatched records remain unknown. The UI checks an
+unknown result before resubmitting. Saved records stay authoritative through
+refresh failures and draft-control bookkeeping errors.
 
 Known player-input and business refusals use `ClientValidationError` at their
 owning boundaries (save names/lifecycle, record edits, and busy operations).
@@ -405,6 +408,12 @@ location/participant/clock operations; Scene Facts remain only an auxiliary
 reference for it. Raw accepted prose remains available where exact text is
 required, including Confirmed History, short-term history, per-turn summary,
 and the StateUpdater paragraph evidence.
+
+The full prose preserves the spatial and temporal context needed to identify
+the ending scene. The model supplies that semantic frame; Python computes
+participant differences and clock arithmetic. The shared Scene Facts projection
+serves the other consumers, accepting additional prose input for the StateUpdater
+to keep these responsibilities separate.
 
 ## 8. Confirmed History, Context Facts, and Canon Validation
 
@@ -1381,8 +1390,11 @@ part of the player-facing `project_director_event` projection, and a hidden
 event's `present_event` material still exposes only its Hook.
 
 The confirmation creation gate admits a new Event when no hidden or engaged
-Event exists, and creates at most one per batch. Existing active Events progress
-through the normal three-stage lifecycle:
+Event exists, and creates at most one per batch. Concentrating on one active
+conflict keeps its hooks playable and its resolution within the available
+narrative space. Setting Fact IDs trace the event's source material; confirmed
+prose supplies evidence of what actually happened. Existing active Events
+progress through the normal three-stage lifecycle:
 
 ```text
 hidden -> engaged -> resolved
@@ -1501,7 +1513,9 @@ Event Hooks or an admitted engaged Event.
 ## 17. Narrative Composition and Rewrite
 
 `NarrativeComposerAgent` performs outcome realization, planning, and prose in
-one structured LLM call.
+one structured LLM call. Deterministic Action Judgments own the outcome bands;
+the single composition call keeps their realization and prose coherent while
+limiting model latency and token use.
 Its context contains:
 
 - player input and deterministic Action Judgments;

@@ -27,8 +27,7 @@ T = TypeVar("T")
 #   for real confirmations and discarded on rollback.
 # - ``preload``: preparer-owned values, never admitted from a graph node and
 #   rolled back with the write scope.
-# - ``marker``: boolean completion guards advanced by the committer/scheduler.
-# - ``marker_data``: non-boolean values attached to a completion marker.
+# - ``scheduled_work``: handles of scheduled post-commit work.
 _SLOT_CATEGORIES: dict[str, frozenset[str]] = {
     "result": frozenset({
         "scene_facts",
@@ -51,16 +50,7 @@ _SLOT_CATEGORIES: dict[str, frozenset[str]] = {
         "confirmed_director_npc_drafts",
         "existing_npc_profiles",
     }),
-    "marker": frozenset({
-        "state_saved",
-        "turn_summary_saved",
-        "short_term_saved",
-        "confirmed_history_saved",
-        "npc_field_logs_saved",
-        "scene_summary_scheduled",
-    }),
-    "marker_data": frozenset({
-        "turn_summary_id",
+    "scheduled_work": frozenset({
         "scene_summary_future",
         "scene_summary_job_id",
         "scene_summary_operation_id",
@@ -81,11 +71,8 @@ _ROLLBACK_SAFE = _SLOT_CATEGORIES["result"] | {_KEY_SLOT}
 # Slots a caller may write through set_result/compute_if_missing/atomic.
 _WRITABLE_SLOTS = frozenset().union(*(
     _SLOT_CATEGORIES[name]
-    for name in ("result", "write_result", "preload", "marker_data")
+    for name in ("result", "write_result", "preload", "scheduled_work")
 ))
-
-# The completion-guard category enforced by completed/mark_completed.
-_MARKER_SLOTS = _SLOT_CATEGORIES["marker"]
 
 
 class ConfirmationCacheData(TypedDict, total=False):
@@ -109,16 +96,9 @@ class ConfirmationCacheData(TypedDict, total=False):
     existing_npc_profiles: list[NPCProfile]
     director_npc_profile_ids: list[str]
     confirmed_director_npc_drafts: list[DirectorNPCDraft]
-    turn_summary_saved: bool
-    turn_summary_id: str
-    state_saved: bool
-    short_term_saved: bool
-    confirmed_history_saved: bool
-    npc_field_logs_saved: bool
     scene_summary_future: Future[Any]
     scene_summary_job_id: str | None
     scene_summary_operation_id: str | None
-    scene_summary_scheduled: bool
     continuity_projection: ContinuityProjection
     recorded_setting_ids: list[str]
 
@@ -126,9 +106,8 @@ class ConfirmationCacheData(TypedDict, total=False):
 class ConfirmationCache:
     """Own the confirmation retry/recovery cache over a pending's raw dict.
 
-    Centralizes result lifecycle, write scope, rollback safety, completion
-    guards, and the scene-text recovery fingerprint. Graph nodes and lifecycle
-    modules describe which slot they fill without sharing the raw key policy;
+    Centralizes result lifecycle, write scope, rollback safety, and the scene-text
+    fingerprint. Graph nodes and lifecycle modules describe which slot they fill without sharing the raw key policy;
     the registry above is the single definition of what survives a retry and
     what a rollback discards.
     """
@@ -145,14 +124,6 @@ class ConfirmationCache:
             raise ValueError(
                 f"unknown confirmation cache slot {slot!r}; "
                 "register it in _SLOT_CATEGORIES before writing"
-            )
-
-    @staticmethod
-    def _require_marker(marker: str) -> None:
-        if marker not in _MARKER_SLOTS:
-            raise ValueError(
-                f"{marker!r} is not a confirmation completion marker; "
-                "register it in the marker category of _SLOT_CATEGORIES"
             )
 
     @property
@@ -249,7 +220,7 @@ class ConfirmationCache:
     # -- recovery validity -------------------------------------------------
 
     def begin(self, scene_text: str) -> None:
-        """Invalidate result and marker slots when scene text changed, retaining preload."""
+        """Invalidate text-derived results when scene text changes, retaining preload."""
         if self._data.get(_KEY_SLOT) != scene_text:
             retained_preload = {
                 slot: self._data[slot]
@@ -259,13 +230,3 @@ class ConfirmationCache:
             self._data.clear()
             self._data.update(retained_preload)
             self._data[_KEY_SLOT] = scene_text
-
-    # -- completion guards -------------------------------------------------
-
-    def completed(self, marker: str) -> bool:
-        self._require_marker(marker)
-        return bool(self._data.get(marker))
-
-    def mark_completed(self, marker: str) -> None:
-        self._require_marker(marker)
-        self._data[marker] = True

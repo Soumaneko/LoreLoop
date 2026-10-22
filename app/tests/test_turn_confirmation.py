@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from app.domain.core_memory import CampaignSetupProposal, InitConfig
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.opening_foundation import OpeningFoundation
@@ -169,3 +171,196 @@ def test_director_confirmation_node_never_mutates_dry_run():
         "director_decision": None,
         "director_executions": None,
     }
+
+
+def _prepare_persistence_test(monkeypatch, *, opening=False):
+    from app.domain.core_memory import CoreMemory
+    from app.domain.continuity import ContinuityProjection
+    from app.domain.current_state.changes import StateChangeSet
+    from app.domain.narrative_composer.schemas import NarrativeComposerContext
+    from app.domain.plot_outline.schemas import PlotOutlineResult
+    from app.domain.scene_summary.schemas import SceneSummary
+    from app.graph.confirmation_lifecycle import ConfirmationMaintenanceScheduler
+
+    runtime = get_campaign_runtime()
+    if opening:
+        config, record = _opening_initialization(experience_mode="player")
+        pending = PendingOpening(
+            turn_id="opening-save", group_id="opening-group", version_index=1,
+            initialization_fingerprint=record.fingerprint, config=config,
+            experience_mode="player", current_state=_state(),
+            scene_result=SceneWriterResult(scene_text="开场正文"),
+        )
+        runtime.pending_openings.add(pending)
+    else:
+        with runtime.uow() as uow:
+            uow.core_memory.save(CoreMemory(items=[]))
+            uow.current_state.save(_state())
+        pending = PendingTurn(
+            turn_id="turn-save", group_id="turn-group", version_index=1,
+            user_input="观察四周", difficulty="困难", max_chars=1500,
+            experience_mode="player", state_before=_state(),
+            context=NarrativeComposerContext(
+                user_input="观察四周", current_state=_state(), core_memory=CoreMemory(items=[]),
+            ),
+            outline=PlotOutlineResult(scene_stopping_point="抵达北门"),
+            scene_result=SceneWriterResult(scene_text="原始正文"),
+        )
+        runtime.pending_turns.add(pending)
+
+    def computed_wave(_graph, state):
+        # Replay computed domain outputs; persistence and finalization run unchanged.
+        state["updated_state"] = _state().model_copy(update={
+            "scene": _state().scene.model_copy(update={"location": "北门"}),
+        })
+        state["state_change_set"] = StateChangeSet(decision="记录最终场景")
+        state["turn_summary"] = SceneSummary(
+            content="抵达北门", level=1, scene_ids=["scene_001"],
+            turn_start=state["pipeline_input"].turn_index,
+            turn_end=state["pipeline_input"].turn_index,
+        )
+        state["continuity_projection"] = ContinuityProjection()
+        state["cache"]["npc_turn_result"] = SimpleNamespace(
+            process_result=SimpleNamespace(accepted_changes=[]),
+        )
+        return iter(())
+
+    monkeypatch.setattr(confirmation_graph, "stream_confirmation_graph", computed_wave)
+    monkeypatch.setattr(ConfirmationMaintenanceScheduler, "schedule_scene_summary", lambda *_: None)
+    return runtime, pending
+
+
+def test_selected_edited_variant_survives_undo_redo_and_reconfirmation(monkeypatch):
+    from dataclasses import replace
+    from app.core.client_error import ClientValidationError
+    from app.runtime.player_state import load_confirmation_outcome
+    from app.runtime import turn_history
+
+    runtime, pending = _prepare_persistence_test(monkeypatch)
+    alternative = replace(pending, turn_id="alternative", version_index=2, confirmation_cache={})
+    runtime.pending_turns.add(alternative)
+    list(confirmation_graph.confirm_stream(pending.turn_id, scene_text="玩家编辑的最终正文"))
+    saved = runtime.history.get_transaction(pending.turn_id)
+    assert saved["status"] == "completed"
+    assert saved["scene_text"] == "玩家编辑的最终正文"
+    with runtime.uow() as uow:
+        assert uow.current_state.load().scene.location == "北门"
+        assert [d.text for d in uow.confirmed_history.documents_for_turn(1)
+                if d.source_type == "scene_paragraph"] == ["玩家编辑的最终正文"]
+    with pytest.raises(ClientValidationError, match="已确认"):
+        runtime.begin_confirmation(pending, write_db=True, scene_text=None)
+    install = turn_history.install_snapshot
+
+    def interrupt(*args):
+        install(*args)
+        raise OSError("interrupted installation")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(turn_history, "install_snapshot", interrupt)
+        with pytest.raises(OSError, match="interrupted installation"):
+            runtime.undo()
+    assert runtime.undo()["turn_id"] == pending.turn_id
+    with runtime.uow() as uow:
+        assert uow.current_state.load() == _state()
+    assert {p.turn_id for p in runtime.pending_turns.values()} == {pending.turn_id, alternative.turn_id}
+    assert runtime.history.get_transaction(pending.turn_id)["status"] == "awaiting_confirm"
+    runtime.redo()
+    assert not runtime.pending_turns.values()
+    assert runtime.history.get_transaction(pending.turn_id)["status"] == "completed"
+    runtime.undo()
+    list(confirmation_graph.confirm_stream(alternative.turn_id, scene_text="改选版本的正文"))
+    assert runtime.history.status()["can_redo"] is False
+    assert load_confirmation_outcome(runtime.campaign_id, alternative.turn_id)["outcome"] == "confirmed"
+    assert load_confirmation_outcome(runtime.campaign_id, pending.turn_id)["outcome"] != "confirmed"
+
+
+def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(monkeypatch):
+    runtime, pending = _prepare_persistence_test(monkeypatch)
+    original = runtime.history.record_confirmation
+
+    def fail_after_record(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("injected write failure")
+
+    monkeypatch.setattr(runtime.history, "record_confirmation", fail_after_record)
+    with pytest.raises(RuntimeError, match="injected write failure"):
+        list(confirmation_graph.confirm_stream(pending.turn_id))
+    with runtime.uow() as uow:
+        assert uow.current_state.load() == _state()
+        assert uow.confirmed_history.turn_count() == 0
+    assert runtime.history.get_transaction(pending.turn_id)["status"] == "failed"
+    assert runtime.pending_turns.get(pending.turn_id) is pending
+    monkeypatch.setattr(runtime.history, "record_confirmation", original)
+    list(confirmation_graph.confirm_stream(pending.turn_id, scene_text="重试后的正文"))
+    assert runtime.history.get_transaction(pending.turn_id)["scene_text"] == "重试后的正文"
+
+
+def test_saved_opening_survives_followup_failure_and_restart(monkeypatch, tmp_path):
+    from app.runtime.session import CampaignRuntime
+    from app.runtime.player_state import load_confirmation_outcome
+    from app.runtime.paths import CampaignPaths
+
+    get_campaign_runtime().reconfigure("pytest", CampaignPaths.from_data_dir(tmp_path / "user#%20name"))
+    entries = set(tmp_path.iterdir())
+    runtime, pending = _prepare_persistence_test(monkeypatch, opening=True)
+
+    def fail_cleanup(*_):
+        raise RuntimeError("undo publication failed")
+
+    monkeypatch.setattr(runtime, "complete_confirmation", fail_cleanup)
+    with pytest.raises(RuntimeError, match="undo publication failed"):
+        list(confirmation_graph.confirm_stream(pending.turn_id))
+    assert load_confirmation_outcome(runtime.campaign_id, pending.turn_id)["outcome"] == "confirmed"
+    assert runtime.initialization.load().phase == "completed"
+    assert not runtime.pending_openings.values()
+    assert runtime.history.status()["can_undo"] is True
+    runtime.close()
+    reopened = CampaignRuntime("reopened", paths=runtime.paths)
+    try:
+        assert reopened.initialization.load().phase == "completed"
+        assert reopened.history.pending_records() == []
+        assert reopened.history.status()["can_undo"] is True
+        reopened.undo()
+        assert reopened.initialization.load().phase == "opening_pending"
+        assert reopened.pending_openings.get(pending.turn_id) is not None
+        reopened.redo()
+        assert reopened.initialization.load().phase == "completed"
+        assert not reopened.pending_openings.values()
+        assert set(tmp_path.iterdir()) == entries
+    finally:
+        reopened.close()
+
+
+def test_control_cleanup_failure_invalidates_saved_generation_cache(monkeypatch):
+    from dataclasses import replace
+    from app.runtime.player_state import load_confirmation_outcome
+
+    runtime, pending = _prepare_persistence_test(monkeypatch)
+    list(confirmation_graph.confirm_stream(pending.turn_id))
+    first = pending
+    with runtime.uow() as uow:
+        current = uow.current_state.load()
+    pending = replace(first, turn_id="second-turn", group_id="second-group",
+                      state_before=current, confirmation_cache={})
+    runtime.pending_turns.add(pending)
+    epoch = runtime.generation_cache_epoch
+
+    def fail_control_write(*_args):
+        raise OSError("control write failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(type(runtime.history), "complete_confirmation", fail_control_write)
+        with pytest.raises(OSError, match="control write failed"):
+            list(confirmation_graph.confirm_stream(pending.turn_id))
+        assert runtime.generation_cache_epoch != epoch
+        assert not runtime.pending_turns.values()
+        for _ in range(2):
+            with pytest.raises(OSError, match="control write failed"):
+                runtime.undo()
+            assert load_confirmation_outcome(runtime.campaign_id, first.turn_id)["outcome"] == "confirmed"
+            assert load_confirmation_outcome(runtime.campaign_id, pending.turn_id)["outcome"] == "confirmed"
+    assert runtime.undo()["turn_id"] == pending.turn_id
+    assert load_confirmation_outcome(runtime.campaign_id, first.turn_id)["outcome"] == "confirmed"
+    assert load_confirmation_outcome(runtime.campaign_id, pending.turn_id)["outcome"] == "not_confirmed"
+    runtime.redo()
+    assert load_confirmation_outcome(runtime.campaign_id, pending.turn_id)["outcome"] == "confirmed"

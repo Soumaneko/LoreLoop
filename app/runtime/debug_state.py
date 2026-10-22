@@ -99,7 +99,6 @@ def _load_debug_state(runtime) -> dict:
         except Exception:
             pass
         control_state = {
-            "current_revision_id": None,
             "connection_epoch": 0,
             "error": str(exc),
         }
@@ -108,7 +107,6 @@ def _load_debug_state(runtime) -> dict:
         "save_path": str(runtime.paths.data_dir.resolve()),
         "turn_history": runtime.history.status(),
         "control_state": control_state,
-        "current_revision_id": control_state.get("current_revision_id"),
         "connection_epoch": control_state.get("connection_epoch", 0),
         "needs_init": (
             (

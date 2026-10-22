@@ -17,6 +17,7 @@ from app.domain.short_term_memory.schemas import ShortTermMemoryStore
 from app.domain.world_setting.store import WorldSettingStore
 from app.runtime.sqlite import connect_sqlite
 from .paths import CampaignPaths
+from .confirmation_store import ensure_confirmation_schema
 
 
 class CampaignUnitOfWork:
@@ -104,6 +105,8 @@ class CampaignUnitOfWork:
             "world_setting",
         ):
             getattr(self, name)
+        ensure_confirmation_schema(self._get_conn())
+        self._get_conn().commit()
         self._bootstrapped = True
 
     @property

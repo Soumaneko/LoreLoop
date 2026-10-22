@@ -77,6 +77,9 @@ def normalize_snapshot(snapshot_dir: Path) -> list[str]:
             f"Snapshot manifest files must be a string list: {snapshot_dir}"
         )
 
+    if "campaign.db" not in files:
+        raise SnapshotError(f"Snapshot manifest must include campaign.db: {snapshot_dir}")
+
     for name in files:
         if name not in SNAPSHOT_DATA_FILES:
             raise SnapshotError(
@@ -114,9 +117,6 @@ def install_snapshot(
                     raise SnapshotError(f"Snapshot JSON invalid: {snapshot_file}") from exc
             _fsync_file(temporary)
 
-        current = data_dir / "campaign.db"
-        if current.exists() and current.name not in expected:
-            _remove_sqlite_files(current)
         for name in ("core_memory.json", "initialization.json"):
             current = data_dir / name
             if current.exists() and name not in expected:
@@ -131,12 +131,6 @@ def install_snapshot(
     finally:
         for _destination, temporary in staged:
             temporary.unlink(missing_ok=True)
-
-
-def _remove_sqlite_files(database: Path) -> None:
-    for suffix in ("-wal", "-shm", "-journal"):
-        Path(f"{database}{suffix}").unlink(missing_ok=True)
-    database.unlink(missing_ok=True)
 
 
 def _fsync_file(path: Path) -> None:

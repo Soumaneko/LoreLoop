@@ -3,7 +3,8 @@
 This document defines the product and domain properties that must remain true
 across implementation changes. Engineering choices follow the product scope
 and the behavior affected by a change. The active implementation is described
-in `CURRENT.md`; proposals belong in issues and important decisions in ADRs.
+in `CURRENT.md`, alongside the reasons for important engineering choices.
+Issues hold proposals and planned work.
 
 When code conflicts with this document, the implementation is defective unless
 the invariant is explicitly changed. When `CURRENT.md` conflicts with code, the
@@ -152,6 +153,6 @@ and state change only through the confirmation boundary.
 - Implementations evolve to satisfy these product requirements. Assess
   engineering choices by their value for the supported use and their
   maintenance cost.
-- Proposed designs, experiments, and roadmaps do not belong in either domain
-  document. Issues track possible work; ADRs preserve the rationale of accepted
-  architectural decisions, including decisions later superseded.
+- Issues hold proposed designs, experiments, and roadmaps. `CURRENT.md` records
+  concise reasons for current engineering choices beside the affected behavior.
+  Git history preserves earlier implementations and decisions.

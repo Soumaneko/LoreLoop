@@ -75,13 +75,12 @@ class TestAdmit:
         )
         assert data == {"scene_facts": "facts", "npc_turn_result": "npc"}
 
-    def test_preload_and_markers_never_admitted(self):
+    def test_preload_never_admitted(self):
         data: dict = {}
         ConfirmationCache(data).admit(
             {
                 "scene_facts": "facts",
                 "director_npc_profile_ids": ["npc_1"],
-                "state_saved": True,
             },
             write_db=True,
         )
@@ -93,16 +92,15 @@ class TestBegin:
         data = {
             "key": "old",
             "scene_facts": "facts",
-            "state_saved": True,
         }
         cache = ConfirmationCache(data)
         cache.begin("new scene")
         assert data == {"key": "new scene"}
 
     def test_same_scene_text_is_a_no_op(self):
-        data = {"key": "scene", "scene_facts": "facts", "state_saved": True}
+        data = {"key": "scene", "scene_facts": "facts"}
         ConfirmationCache(data).begin("scene")
-        assert data == {"key": "scene", "scene_facts": "facts", "state_saved": True}
+        assert data == {"key": "scene", "scene_facts": "facts"}
 
 
 class TestRollbackReset:
@@ -125,12 +123,6 @@ class TestRollbackReset:
             "director_npc_profile_ids": ["npc_2"],
             "confirmed_director_npc_drafts": marker,
             "existing_npc_profiles": marker,
-            "state_saved": True,
-            "turn_summary_saved": True,
-            "short_term_saved": True,
-            "confirmed_history_saved": True,
-            "npc_field_logs_saved": True,
-            "scene_summary_scheduled": True,
         }
         ConfirmationCache(data).reset_for_rollback()
         assert data == {
@@ -150,22 +142,11 @@ class TestRollbackReset:
         assert data == {}
 
 
-class TestCompletionGuards:
-    def test_completed_and_mark_completed(self):
-        data: dict = {}
-        cache = ConfirmationCache(data)
-        assert cache.completed("state_saved") is False
-        cache.mark_completed("state_saved")
-        assert cache.completed("state_saved") is True
-        assert data == {"state_saved": True}
-
-
 def test_wrapper_is_a_view_over_the_raw_dict():
     raw: dict = {"key": "scene"}
     cache = ConfirmationCache(raw)
     cache.set_result("scene_facts", "facts")
-    cache.mark_completed("state_saved")
-    assert raw == {"key": "scene", "scene_facts": "facts", "state_saved": True}
+    assert raw == {"key": "scene", "scene_facts": "facts"}
 
 
 class TestRegistryEnforcement:
@@ -174,25 +155,14 @@ class TestRegistryEnforcement:
             ConfirmationCache({}).set_result("typo_slot", 1)
 
 
-
-
-
-
-
-
-
     def test_registered_slots_still_write(self):
         data: dict = {}
         cache = ConfirmationCache(data)
         cache.set_result("scene_facts", "facts")
         cache.set_result("director_decision", "decision")
         cache.set_result("director_npc_profile_ids", ["npc_1"])
-        cache.set_result("turn_summary_id", "summary_1")
-        cache.mark_completed("state_saved")
         assert data == {
             "scene_facts": "facts",
             "director_decision": "decision",
             "director_npc_profile_ids": ["npc_1"],
-            "turn_summary_id": "summary_1",
-            "state_saved": True,
         }

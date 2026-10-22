@@ -64,6 +64,7 @@ def test_validate_rejects_incomplete_schema_only_db(tmp_path):
     with sqlite3.connect(db_path) as conn:
         conn.execute("CREATE TABLE schema_versions (component TEXT, version INTEGER)")
         for component, version in [
+            ("confirmation", 1),
             ("current_state", 4),
             ("continuity", 3),
             ("short_term_memory", 5),

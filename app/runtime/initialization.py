@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import threading
+from contextlib import closing
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -52,7 +54,20 @@ class InitializationStore:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
             except FileNotFoundError:
                 return None
-            return InitializationRecord.model_validate(payload)
+            record = InitializationRecord.model_validate(payload)
+            campaign = self.path.parent / "campaign.db"
+            if record.phase == "opening_pending" and campaign.is_file():
+                with closing(sqlite3.connect(campaign.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                    table = conn.execute(
+                        "SELECT 1 FROM sqlite_master WHERE name='turn_confirmations' AND type='table'"
+                    ).fetchone()
+                    saved = table and conn.execute(
+                        "SELECT 1 FROM turn_confirmations WHERE kind='opening' AND initialization_fingerprint=?",
+                        (record.fingerprint,),
+                    ).fetchone()
+                if saved:
+                    record = record.model_copy(update={"phase": "completed"})
+            return record
 
     def save(self, record: InitializationRecord) -> None:
         encoded = json.dumps(

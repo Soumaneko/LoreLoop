@@ -9,6 +9,7 @@ from typing import Iterator
 
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
 SUPPORTED_SCHEMA_VERSIONS = {
+    "confirmation": 1,
     "confirmed_history": 1,
     "continuity": 3,
     "current_state": 4,
@@ -36,12 +37,16 @@ def connect_sqlite(
         check_same_thread=False,
         timeout=busy_timeout_ms / 1_000,
     )
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)}")
-    if path != ":memory:":
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.execute("PRAGMA synchronous = NORMAL")
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)}")
+        if path != ":memory:":
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("PRAGMA synchronous = NORMAL")
+    except BaseException:
+        connection.close()
+        raise
     return connection
 
 

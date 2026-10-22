@@ -358,9 +358,8 @@ class CampaignRuntime:
 
         fn is called with all operation UoWs and session stores closed, so it
         may safely do ``os.replace`` on campaign.db and update control.db.
-        On failure the gate stays closed and the error is surfaced; callers
-        may retry in the same process or restart where durable intent will
-        complete recovery.
+        An unfinished file installation keeps the gate closed for retry/recovery.
+        Rejected snapshots leave the current save open and usable.
         """
         # 1. Close gate for new UoWs/operations
         with self._active_uows_cv:
@@ -389,12 +388,15 @@ class CampaignRuntime:
             self.stores.close()
         except Exception:
             pass
+        restore_failure = None
         try:
             result = fn()
         except BaseException as exc:
             self._restore_error = f"{type(exc).__name__}: {exc}"
-            raise
-        # 4. Success: reopen the restored campaign through the same validated
+            if self.history.get_control_state()["restore_target"] is not None:
+                raise
+            restore_failure = exc
+        # 4. Success or rejected snapshot: reopen the restored campaign through the same validated
         # path used by cold start and save switching.
         try:
             opened = open_campaign_resources(self.paths)
@@ -408,23 +410,21 @@ class CampaignRuntime:
                 self._restore_gate_closed = False
                 self._restore_error = None
                 self._active_uows_cv.notify_all()
+        if restore_failure is not None:
+            raise restore_failure
         return result
 
-    def fail_confirmation_offline(self, turn_id: str, exc: BaseException) -> None:
-        """Offline restore path for confirmation failure (Phase 4).
-
-        Replaces the former direct ``history.fail_confirmation`` online backup.
-        """
+    def fail_confirmation(self, turn_id: str, exc: BaseException) -> None:
+        """Record a rolled-back attempt, or finish cleanup for an already saved turn."""
+        self.history.fail_confirmation(turn_id, exc)
         record = self.history.get_transaction(turn_id)
         if record is not None and record["status"] == "completed":
-            for repository in (self.pending_turns, self.pending_openings):
-                repository.discard_group(record["group_id"])
-            return
-        result = self._run_offline_restore(
-            lambda: self.history.fail_confirmation_offline(turn_id, exc)
-        )
-        # No extra pending restore needed; history already moved txn to failed.
-        return result
+            try:
+                self.history.complete_confirmation(turn_id, record["group_id"])
+            finally:
+                self.invalidate_generation_cache()
+                for repository in (self.pending_turns, self.pending_openings):
+                    repository.discard_group(record["group_id"])
 
     @property
     def confirmation_lock(self) -> threading.RLock:

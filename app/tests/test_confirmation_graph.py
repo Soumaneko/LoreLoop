@@ -241,52 +241,17 @@ def test_node_error_wrapper_reraise_cancellation():
     assert state["node_errors"] == []
 
 
-def test_rollback_cache_keeps_pure_results_and_discards_write_markers():
-    marker = object()
-    pending = SimpleNamespace(confirmation_cache={
-        "key": "scene text",
-        "scene_facts": marker,
-        "updated_state": marker,
-        "state_change_set": marker,
-        "turn_summary": marker,
-        "action_preview": marker,
-        "npc_extraction": marker,
-        "director_decision": marker,
-        "director_executions": marker,
-        "updated_npc_profile_ids": ["npc_1"],
-        "director_npc_profile_ids": ["npc_2"],
-        "state_saved": True,
-        "short_term_saved": True,
-        "confirmed_history_saved": True,
-        "npc_field_logs_saved": True,
-        "scene_summary_scheduled": True,
-    })
-
-    ConfirmationCache(pending.confirmation_cache).reset_for_rollback()
-
-    assert pending.confirmation_cache == {
-        "key": "scene text",
-        "scene_facts": marker,
-        "updated_state": marker,
-        "state_change_set": marker,
-        "turn_summary": marker,
-        "action_preview": marker,
-    }
-
-
 def test_journaled_confirmation_failure_resets_rolled_back_cache(monkeypatch):
     marker = object()
     pending = SimpleNamespace(confirmation_cache={
         "key": "scene text",
         "scene_facts": marker,
-        "updated_npc_profile_ids": ["npc_1"],
-        "state_saved": True,
+        "npc_turn_result": marker,
     })
     calls = []
     runtime = SimpleNamespace(
         begin_confirmation=lambda *_args, **_kwargs: True,
-        jobs=SimpleNamespace(wait_for_idle=lambda: calls.append("wait")),
-        fail_confirmation_offline=lambda *_args: calls.append("rollback"),
+        fail_confirmation=lambda *_args: calls.append("rollback"),
     )
 
     def fail_pipeline(*_args, **_kwargs):
@@ -305,7 +270,7 @@ def test_journaled_confirmation_failure_resets_rolled_back_cache(monkeypatch):
             SimpleNamespace(turn_id="turn-1", pending=pending),
         ))
 
-    assert calls == ["wait", "rollback"]
+    assert calls == ["rollback"]
     assert pending.confirmation_cache == {
         "key": "scene text",
         "scene_facts": marker,
@@ -320,13 +285,11 @@ def test_journaled_confirmation_timeout_propagates_without_partial_commit(
     pending = SimpleNamespace(confirmation_cache={
         "key": "scene text",
         "scene_facts": object(),
-        "state_saved": True,
     })
     calls = []
     runtime = SimpleNamespace(
         begin_confirmation=lambda *_args, **_kwargs: True,
-        jobs=SimpleNamespace(wait_for_idle=lambda: calls.append("wait")),
-        fail_confirmation_offline=lambda *_args: calls.append("rollback"),
+        fail_confirmation=lambda *_args: calls.append("rollback"),
     )
 
     def timeout_pipeline(*_args, **_kwargs):
@@ -349,7 +312,7 @@ def test_journaled_confirmation_timeout_propagates_without_partial_commit(
             SimpleNamespace(turn_id="turn-1", pending=pending),
         ))
 
-    assert calls == ["wait", "rollback"]
+    assert calls == ["rollback"]
     assert pending.confirmation_cache == {
         "key": "scene text",
         "scene_facts": pending.confirmation_cache["scene_facts"],

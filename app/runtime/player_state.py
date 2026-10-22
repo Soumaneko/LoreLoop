@@ -201,7 +201,6 @@ def load_confirmation_outcome(save_id: str, turn_id: str) -> dict[str, str]:
         "failed": "not_confirmed",
         "awaiting_confirm": "not_confirmed",
         "confirming": "in_progress",
-        "restoring": "in_progress",
     }.get(status, "unknown")
     return {"outcome": outcome}
 

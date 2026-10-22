@@ -17,6 +17,7 @@ from app.domain.short_term_memory.schemas import ShortTermMemoryStore
 from app.domain.world_setting.store import WorldSettingStore
 from app.runtime.sqlite import SUPPORTED_SCHEMA_VERSIONS, connect_sqlite
 from .paths import CampaignPaths
+from .confirmation_store import ensure_confirmation_schema
 
 
 def ensure_campaign_database(paths: CampaignPaths) -> str:
@@ -40,6 +41,7 @@ def _build_campaign_schema(conn: sqlite3.Connection) -> None:
     DirectorNPCStore(conn)
     RecentDirectorLogStore(conn)
     WorldSettingStore(conn)
+    ensure_confirmation_schema(conn)
     conn.commit()
 
 
@@ -79,6 +81,7 @@ def _create_empty(paths: CampaignPaths) -> None:
 
 
 _REQUIRED_BUSINESS_TABLES = (
+    "turn_confirmations",
     "current_state",
     "continuity_items",
     "continuity_logs",
@@ -107,8 +110,9 @@ def validate_campaign_database(path: Path) -> None:
     validate a staged temporary copy with the same schema/foreign-key/quick_check
     contract as first-install migration.
     """
-    conn = connect_sqlite(path)
+    conn = None
     try:
+        conn = connect_sqlite(path)
         for component, version in SUPPORTED_SCHEMA_VERSIONS.items():
             row = conn.execute(
                 "SELECT version FROM schema_versions WHERE component = ?",
@@ -151,10 +155,8 @@ def validate_campaign_database(path: Path) -> None:
             raise
         raise RuntimeError(str(exc)) from exc
     finally:
-        try:
+        if conn is not None:
             conn.close()
-        except Exception:
-            pass
 
 
 def _fsync_file(path: Path) -> None:
