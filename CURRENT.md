@@ -30,6 +30,14 @@ by `pydantic-ai-slim` and `genai-prices`. Before archiving, the build runs
 `--check-model-runtime` on the frozen executable to construct all four model
 adapters with dummy credentials and no network requests.
 
+`.github/workflows/build-windows.yml` runs the existing Windows test-package
+pipeline on pushes to `main`, pull requests targeting `main`, and manual dispatch.
+Runs share a concurrency group per Git ref; a newer run cancels an older run on
+that ref, including manual runs. Separate PR refs and `main` build independently.
+This supports direct main development and pre-merge checks using the same build
+script. Test artifacts are retained for seven days; formal Releases are published
+manually. Push checks run after the code enters `main`.
+
 The active application is a local, save-scoped interactive narrative engine.
 It turns a player action into an editable pending scene and routes the selected
 scene through confirmation before writing canonical campaign state.

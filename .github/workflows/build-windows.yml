@@ -1,6 +1,10 @@
 name: Build Windows Test Package
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -8,7 +12,7 @@ permissions:
 
 concurrency:
   group: loreloop-windows-test-build-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
