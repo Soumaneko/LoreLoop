@@ -1,5 +1,6 @@
 from app.core.client_error import ClientValidationError
 import json
+import os
 import sqlite3
 import threading
 
@@ -192,6 +193,8 @@ def test_switch_preserves_and_restores_pending_turn_variants(tmp_path):
             state_before=state_before,
         ))
 
+        runtime.save_pending_scene_edit("turn-v2", "玩家编辑的版本 2")
+        copied = manager.copy(original_id)
         manager.switch(other.save_id)
         assert runtime.campaign_id == other.save_id
         assert runtime.pending_turns.values() == []
@@ -199,21 +202,21 @@ def test_switch_preserves_and_restores_pending_turn_variants(tmp_path):
         assert [
             record["status"] for record in source_history.pending_records()
         ] == ["awaiting_confirm", "awaiting_confirm"]
-        with pytest.raises(ClientValidationError, match="当前有未处理内容"):
-            manager.copy(original_id)
-        with pytest.raises(ClientValidationError, match="当前有未处理内容"):
-            manager.export_to(original_id, tmp_path / "pending.zip")
+        archive = tmp_path / "pending.zip"
+        manager.export_to(original_id, archive)
+        imported = manager.import_from(archive, "导入草稿")
 
-        manager.switch(original_id)
-
-        restored = runtime.pending_turns.variants("group-1")
-        assert [pending.turn_id for pending in restored] == ["turn-v1", "turn-v2"]
-        assert [pending.version_index for pending in restored] == [1, 2]
-        assert [pending.scene_result.scene_text for pending in restored] == [
-            "待确认版本 1",
-            "待确认版本 2",
-        ]
-        assert restored[0].context.user_input == "推开门"
+        for save_id in (original_id, copied.save_id, imported.save_id):
+            manager.switch(save_id)
+            restored = runtime.pending_turns.variants("group-1")
+            assert [pending.turn_id for pending in restored] == ["turn-v1", "turn-v2"]
+            assert [pending.version_index for pending in restored] == [1, 2]
+            assert [pending.scene_result.scene_text for pending in restored] == [
+                "待确认版本 1", "玩家编辑的版本 2",
+            ]
+            assert restored[1].original_scene_text == "待确认版本 2"
+            assert restored[0].context.user_input == "推开门"
+            runtime.save_pending_scene_edit("turn-v1", "副本仍可编辑")
     finally:
         runtime.close()
 
@@ -250,14 +253,21 @@ def test_create_and_activate_preserves_pending_opening_in_source_save(tmp_path):
             scene_result=SceneWriterResult(scene_text="待确认的开场。"),
         ))
 
+        form = {"version": 4, "stage": "config", "form": {"world_name": "未填完的世界"}}
+        runtime.paths.initialization_draft_json.write_text(json.dumps(form), encoding="utf-8")
+        copied = manager.copy(original_id)
+        archive = tmp_path / "opening.zip"
+        manager.export_to(original_id, archive)
+        imported = manager.import_from(archive, "开场副本")
         created = manager.create("另一段旅程")
-
         assert created.active is True
         assert runtime.pending_openings.values() == []
-        manager.switch(original_id)
-        restored = runtime.pending_openings.get("opening-1")
-        assert restored is not None
-        assert restored.scene_result.scene_text == "待确认的开场。"
+        for save_id in (original_id, copied.save_id, imported.save_id):
+            manager.switch(save_id)
+            restored = runtime.pending_openings.get("opening-1")
+            assert restored is not None
+            assert restored.scene_result.scene_text == "待确认的开场。"
+            assert json.loads(runtime.paths.initialization_draft_json.read_text(encoding="utf-8")) == form
     finally:
         runtime.close()
 
@@ -350,7 +360,7 @@ def test_copy_does_not_install_root_legacy_database(tmp_path):
         runtime.close()
 
 
-def test_rename_copy_export_import_and_delete_are_identity_safe(tmp_path):
+def test_rename_copy_export_import_and_delete_are_identity_safe(tmp_path, monkeypatch):
     root = tmp_path / "saves"
     runtime = CampaignRuntime(
         "bootstrap",
@@ -368,19 +378,39 @@ def test_rename_copy_export_import_and_delete_are_identity_safe(tmp_path):
                 )
             )
 
+        pending = _pending_turn(
+            turn_id="saved-turn", group_id="saved-group", version_index=1,
+            state_before=runtime.stores.current_state.load(),
+        )
+        runtime.pending_turns.add(pending)
+        runtime.begin_confirmation(pending, write_db=True, scene_text="已确认正文")
+        with runtime.uow(write=True) as uow:
+            with uow.transaction() as conn:
+                uow.current_state.save(pending.state_before.model_copy(update={"player": PlayerState(name="乙")}))
+                runtime.history.record_confirmation(conn, pending.turn_id, scene_text="已确认正文")
+        runtime.complete_confirmation(pending)
+        runtime.pending_turns.discard_group(pending.group_id)
+
         copied = manager.copy(original.save_id)
         assert copied.name == "原始旅程 - 副本"
         assert copied.save_id != original.save_id
         assert (root / copied.save_id).is_dir()
         manager.switch(copied.save_id)
         with runtime.stores.current_state as store:
-            assert store.load().player.name == "甲"
+            assert store.load().player.name == "乙"
 
         archive = tmp_path / "journey.zip"
         manager.export_to(copied.save_id, archive)
         imported = manager.import_from(archive, "导入旅程")
         assert imported.save_id not in {original.save_id, copied.save_id}
-        assert imported.protagonist_name == "甲"
+        assert imported.protagonist_name == "乙"
+        manager.switch(imported.save_id)
+        runtime.undo()
+        assert runtime.stores.current_state.load().player.name == "甲"
+        runtime.redo()
+        assert runtime.stores.current_state.load().player.name == "乙"
+        manager.switch(original.save_id)
+        assert runtime.stores.current_state.load().player.name == "乙"
 
         manager.delete(
             copied.save_id,
@@ -388,6 +418,20 @@ def test_rename_copy_export_import_and_delete_are_identity_safe(tmp_path):
         )
         assert not (root / copied.save_id).exists()
         assert original_dir.is_dir()
+        archive_before = archive.read_bytes()
+        original_replace = os.replace
+        def fail_export_install(source, destination):
+            if destination == archive:
+                raise PermissionError("export installation denied")
+            return original_replace(source, destination)
+        with monkeypatch.context() as patch:
+            patch.setattr("app.runtime.saves.os.replace", fail_export_install)
+            with pytest.raises(PermissionError, match="export installation"):
+                manager.export_to(original.save_id, archive)
+        assert archive.read_bytes() == archive_before
+        assert runtime.stores.current_state.load().player.name == "乙"
+        assert not list(tmp_path.glob(".journey.zip.*.tmp"))
+
     finally:
         runtime.close()
 

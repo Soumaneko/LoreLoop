@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import shutil
 import sqlite3
@@ -10,7 +9,7 @@ import zipfile
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Any, Iterable
+from typing import Iterable
 
 from app.core.client_error import ClientValidationError
 from app.domain.core_memory import CoreMemory
@@ -18,22 +17,23 @@ from app.domain.current_state import CurrentState
 from app.runtime.initialization import InitializationRecord
 
 from .save_manifest import SaveManifest
-from .snapshots import SNAPSHOT_ARCHIVE_FILES, SnapshotError, normalize_snapshot
-from .sqlite import SUPPORTED_SCHEMA_VERSIONS
+from .snapshots import SNAPSHOT_ARCHIVE_FILES, normalize_snapshot
+from .campaign_migration import validate_campaign_database
+from .turn_history import _validate_control_database
 
 
-ARCHIVE_FORMAT_VERSION = 1
-ARCHIVE_MANIFEST = "manifest.json"
 ARCHIVE_SAVE_ROOT = "save"
-_ALLOWED_SUFFIXES = {".db", ".json"}
 _ALLOWED_SUBTREES = {".runtime", ".snapshots"}
 _ROOT_FILES = {
     "campaign.db",
     "core_memory.json",
     "initialization.json",
+    "initialization_draft.json",
     "save_manifest.json",
     "settings.json",
 }
+
+
 class SaveArchiveError(ValueError):
     """The save or archive violates the portable save format."""
 
@@ -60,10 +60,8 @@ class ArchiveLimits:
 
 @dataclass(frozen=True)
 class ArchiveInspection:
-    format_version: int
     files: tuple[str, ...]
     total_size: int
-    metadata: dict[str, Any]
 
 
 def _assert_current_layout(save_dir: Path) -> None:
@@ -89,6 +87,11 @@ def create_consistent_snapshot(source_dir: Path, destination_dir: Path) -> list[
     if not source.is_dir() or source.is_symlink():
         raise SaveArchiveError(f"Save directory is not a regular directory: {source}")
     _assert_current_layout(source)
+    control_uri = (source / ".runtime" / "control.db").as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(control_uri, uri=True)) as conn:
+        target = conn.execute("SELECT restore_target FROM control_state WHERE id=1").fetchone()
+    if target and target[0] is not None:
+        raise ClientValidationError("存档有未完成的撤销或重做，请先打开并恢复该存档，再复制或导出。")
     _prepare_empty_directory(destination)
 
     for relative, item in _iter_save_files(source):
@@ -96,111 +99,31 @@ def create_consistent_snapshot(source_dir: Path, destination_dir: Path) -> list[
         target.parent.mkdir(parents=True, exist_ok=True)
         if item.suffix == ".db":
             _backup_database(item, target)
-            quick_check_database(target)
         else:
-            _copy_regular_file(item, target)
+            shutil.copyfile(item, target)
 
-    _normalize_snapshot_manifests(destination)
-    rebase_history_paths(destination)
     return [relative.as_posix() for relative, _ in _iter_save_files(destination)]
 
 
-def _normalize_snapshot_manifests(data_dir: Path) -> None:
-    """Validate every snapshot manifest against the current whitelist."""
-    snapshots_dir = Path(data_dir) / ".snapshots"
-    for snapshot_dir in sorted(snapshots_dir.glob("*")):
-        if not snapshot_dir.is_dir():
-            continue
-        try:
-            normalize_snapshot(snapshot_dir)
-        except SnapshotError as exc:
-            if isinstance(exc.__cause__, OSError):
-                raise exc.__cause__ from None
-            raise InvalidSaveArchive("存档快照格式不兼容或已损坏") from exc
-
-
-def export_save(
-    source_dir: Path,
-    archive_path: Path,
-    *,
-    metadata: dict[str, Any] | None = None,
-) -> ArchiveInspection:
-    """Write a complete archive to a new path.
-
-    `archive_path` is deliberately not atomically installed: desktop/application
-    code should pass a temporary path and rename it only after this returns.
-    """
+def export_save(source_dir: Path, archive_path: Path) -> ArchiveInspection:
+    """Write a portable ZIP; the caller installs the completed archive."""
     archive = Path(archive_path)
     if archive.exists():
         raise FileExistsError(archive)
     archive.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="save-export-") as temporary:
         snapshot = Path(temporary) / "save"
-        create_consistent_snapshot(Path(source_dir), snapshot)
-        entries = _manifest_entries(snapshot)
-        manifest = {
-            "format_version": ARCHIVE_FORMAT_VERSION,
-            "files": entries,
-            "metadata": dict(metadata or {}),
-        }
+        files = create_consistent_snapshot(Path(source_dir), snapshot)
         try:
             with zipfile.ZipFile(
                 archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6
             ) as bundle:
-                bundle.writestr(
-                    ARCHIVE_MANIFEST,
-                    json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
-                )
-                for entry in entries:
-                    bundle.write(
-                        snapshot / entry["path"],
-                        f"{ARCHIVE_SAVE_ROOT}/{entry['path']}",
-                    )
+                for relative in files:
+                    bundle.write(snapshot / relative, f"{ARCHIVE_SAVE_ROOT}/{relative}")
+                return _inspection(bundle.infolist())
         except BaseException:
             archive.unlink(missing_ok=True)
             raise
-    return _inspection_from_manifest(manifest)
-
-
-def inspect_archive(
-    archive_path: Path, *, limits: ArchiveLimits = ArchiveLimits()
-) -> ArchiveInspection:
-    """Validate archive structure, resource limits, manifest, and checksums."""
-    archive = Path(archive_path)
-    try:
-        with zipfile.ZipFile(archive, "r") as bundle:
-            infos = _safe_members(bundle, limits)
-            manifest_info = next(
-                (item for item in infos if item.filename == ARCHIVE_MANIFEST), None
-            )
-            if manifest_info is None:
-                raise InvalidSaveArchive("Archive is missing manifest.json", reason="存档缺少清单文件，请重新导出完整存档")
-            try:
-                manifest = json.loads(bundle.read(manifest_info).decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                raise InvalidSaveArchive("Archive manifest is not valid UTF-8 JSON", reason="存档清单已损坏，无法读取") from exc
-            expected = _validate_manifest(manifest)
-            actual = {
-                item.filename.removeprefix(f"{ARCHIVE_SAVE_ROOT}/"): item
-                for item in infos
-                if item.filename.startswith(f"{ARCHIVE_SAVE_ROOT}/")
-                and not item.is_dir()
-            }
-            if set(actual) != set(expected):
-                raise InvalidSaveArchive("Archive files do not match its manifest", reason="存档文件与清单不一致，可能缺少文件")
-            for path, entry in expected.items():
-                info = actual[path]
-                if info.file_size != entry["size"]:
-                    raise InvalidSaveArchive(f"Size mismatch for save/{path}", reason="存档内文件大小与清单不一致")
-                digest = hashlib.sha256()
-                with bundle.open(info, "r") as source:
-                    for block in iter(lambda: source.read(1024 * 1024), b""):
-                        digest.update(block)
-                if digest.hexdigest() != entry["sha256"]:
-                    raise InvalidSaveArchive(f"Checksum mismatch for save/{path}", reason="存档校验和不匹配，文件可能已损坏或被修改")
-    except zipfile.BadZipFile as exc:
-        raise InvalidSaveArchive("File is not a readable ZIP archive", reason="该文件不是可读取的 ZIP，或压缩包已损坏") from exc
-    return _inspection_from_manifest(manifest)
 
 
 def extract_archive(
@@ -209,143 +132,62 @@ def extract_archive(
     *,
     limits: ArchiveLimits = ArchiveLimits(),
 ) -> ArchiveInspection:
-    """Validate and extract an archive into an empty staging directory.
-
-    All SQLite databases receive `PRAGMA quick_check`; turn-history paths are
-    rebased to the staging directory.  Atomic installation is the caller's job.
-    """
-    inspection = inspect_archive(archive_path, limits=limits)
+    """Read the ZIP once into an isolated directory and validate before installation."""
     destination = Path(destination_dir).resolve()
     _prepare_empty_directory(destination)
-    wanted = set(inspection.files)
     try:
-        with zipfile.ZipFile(archive_path, "r") as bundle:
+        with zipfile.ZipFile(archive_path) as bundle:
             infos = _safe_members(bundle, limits)
+            inspection = _inspection(infos)
             for info in infos:
-                prefix = f"{ARCHIVE_SAVE_ROOT}/"
-                if info.is_dir() or not info.filename.startswith(prefix):
+                if info.is_dir():
                     continue
-                relative = info.filename.removeprefix(prefix)
-                if relative not in wanted:
-                    raise SaveArchiveError(f"Unexpected archive member: {info.filename}")
-                target = destination / PurePosixPath(relative)
+                relative = info.filename.removeprefix(f"{ARCHIVE_SAVE_ROOT}/")
+                target = destination / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
-                with bundle.open(info, "r") as source, target.open("xb") as output:
-                    for block in iter(lambda: source.read(1024 * 1024), b""):
-                        output.write(block)
-        for database in destination.rglob("*.db"):
-            quick_check_database(database)
-        _normalize_snapshot_manifests(destination)
-        rebase_history_paths(destination)
+                with bundle.open(info) as source, target.open("xb") as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
         _validate_save_payload(destination)
-    except BaseException:
+    except BaseException as exc:
         _remove_staging_contents(destination)
+        cause = exc.__cause__ or exc
+        if isinstance(cause, OSError):
+            raise cause
+        if isinstance(cause, sqlite3.OperationalError) and not str(cause).startswith(
+            ("no such table:", "no such column:")
+        ):
+            raise cause
+        if isinstance(exc, InvalidSaveArchive):
+            raise
+        if isinstance(exc, (ValueError, RuntimeError, sqlite3.DatabaseError, zipfile.BadZipFile)):
+            raise InvalidSaveArchive("Archive contains invalid save data", reason="存档内数据缺失、损坏或不符合当前格式") from exc
         raise
     return inspection
 
 
-def quick_check_database(database: Path) -> None:
-    path = Path(database)
-    uri = path.resolve().as_uri() + "?mode=ro"
-    try:
-        with closing(sqlite3.connect(uri, uri=True)) as connection:
-            rows = connection.execute("PRAGMA quick_check").fetchall()
-            tables = {
-                row[0]
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                )
-            }
-            if "schema_versions" in tables:
-                versions = connection.execute(
-                    "SELECT component, version FROM schema_versions"
-                ).fetchall()
-                for component, version in versions:
-                    supported = SUPPORTED_SCHEMA_VERSIONS.get(str(component))
-                    if supported is None:
-                        raise InvalidSaveArchive(
-                            f"Unknown database schema component: {component}"
-                        )
-                    try:
-                        version = int(version)
-                    except (TypeError, ValueError) as exc:
-                        raise InvalidSaveArchive("Invalid database schema version", reason="存档数据库版本信息无效") from exc
-                    if version > supported:
-                        raise InvalidSaveArchive(
-                            f"Database schema {component} is newer than this application"
-                        )
-    except sqlite3.OperationalError as exc:
-        if str(exc).startswith(("no such table:", "no such column:")):
-            raise InvalidSaveArchive("Invalid database schema", reason="存档数据库结构不完整或不兼容") from exc
-        raise
-    except sqlite3.DatabaseError as exc:
-        raise InvalidSaveArchive(f"Invalid SQLite database: {path.name}", reason="存档数据库无法读取，可能已损坏") from exc
-    if rows != [("ok",)]:
-        raise InvalidSaveArchive(f"SQLite quick_check failed for {path.name}: {rows!r}")
-
-
-def rebase_history_paths(data_dir: Path) -> None:
-    """Validate and normalize portable Undo/Redo snapshot paths."""
+def _validate_history_paths(data_dir: Path) -> None:
+    """Check all imported history references without changing their relative paths."""
     root = Path(data_dir).resolve()
     database = root / ".runtime" / "control.db"
-    if not database.is_file():
-        return
-    label = database.name
-    connection = sqlite3.connect(str(database))
-    try:
-        tables = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
-        if "turn_snapshots" not in tables:
-            raise InvalidSaveArchive(f"{label} has no turn_snapshots table")
-        rows = connection.execute(
-            "SELECT sequence, path, redo_path FROM turn_snapshots"
-        ).fetchall()
-        for sequence, path, redo_path in rows:
-            rebased_path = _portable_snapshot_path(path, root)
-            rebased_redo = (
-                _portable_snapshot_path(redo_path, root)
-                if redo_path is not None
-                else None
-            )
-            connection.execute(
-                "UPDATE turn_snapshots SET path=?, redo_path=? WHERE sequence=?",
-                (rebased_path, rebased_redo, sequence),
-            )
-        connection.commit()
-    except sqlite3.OperationalError as exc:
-        if str(exc).startswith(("no such table:", "no such column:")):
-            raise InvalidSaveArchive("Invalid database schema", reason="存档数据库结构不完整或不兼容") from exc
-        raise
-    except sqlite3.DatabaseError as exc:
-        connection.rollback()
-        raise InvalidSaveArchive("Invalid turn-history database") from exc
-    finally:
-        connection.close()
-    quick_check_database(database)
-
-
-def _portable_snapshot_path(value: str, root: Path) -> str:
-    posix_path = PurePosixPath(value)
-    windows_path = PureWindowsPath(value)
-    if posix_path.is_absolute() or windows_path.is_absolute():
-        raise InvalidSaveArchive("Turn-history snapshot paths must be relative")
-    if "\\" in value:
-        raise InvalidSaveArchive("Turn-history snapshot paths must use forward slashes")
-    relative = Path(*posix_path.parts)
-    if not relative.parts or relative.parts[0] != ".snapshots":
-        raise InvalidSaveArchive("Turn-history path is outside .snapshots")
-    target = (root / relative).resolve()
-    try:
-        target.relative_to((root / ".snapshots").resolve())
-    except ValueError as exc:
-        raise InvalidSaveArchive("Turn-history path escapes .snapshots") from exc
-    if not target.is_dir():
-        raise InvalidSaveArchive("Turn-history snapshot directory is missing")
-    return target.relative_to(root).as_posix()
+    with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+        rows = conn.execute("SELECT path, redo_path FROM turn_snapshots").fetchall()
+        target = conn.execute("SELECT restore_target FROM control_state WHERE id=1").fetchone()
+    for stored in [value for row in rows for value in row] + ([target[0]] if target else []):
+        if stored is None:
+            continue
+        if not isinstance(stored, str):
+            raise InvalidSaveArchive("Turn-history snapshot path must be text")
+        path = PurePosixPath(stored)
+        if path.is_absolute() or PureWindowsPath(stored).is_absolute():
+            raise InvalidSaveArchive("Turn-history snapshot paths must be relative")
+        if (
+            "\\" in stored or ":" in stored or "\x00" in stored
+            or len(path.parts) != 2 or path.parts[0] != ".snapshots"
+            or any(part in (".", "..", "") for part in stored.split("/"))
+        ):
+            raise InvalidSaveArchive("Turn-history path is outside .snapshots")
+        if not (root / path / "manifest.json").is_file():
+            raise InvalidSaveArchive("Turn-history snapshot directory or manifest is missing")
 
 
 def _iter_save_files(root: Path) -> Iterable[tuple[Path, Path]]:
@@ -357,7 +199,7 @@ def _iter_save_files(root: Path) -> Iterable[tuple[Path, Path]]:
             if item.name.endswith(("-wal", "-shm")):
                 continue
             relative = Path(item.name)
-            if _is_allowed_for_export(relative.as_posix()):
+            if _is_allowed_relative_path(relative.as_posix()):
                 yield relative, item
             continue
         if not item.is_dir() or item.name not in _ALLOWED_SUBTREES:
@@ -370,7 +212,7 @@ def _iter_save_files(root: Path) -> Iterable[tuple[Path, Path]]:
             if not nested.is_file() or nested.name.endswith(("-wal", "-shm")):
                 continue
             relative = nested.relative_to(root)
-            if _is_allowed_for_export(relative.as_posix()):
+            if _is_allowed_relative_path(relative.as_posix()):
                 yield relative, nested
 
 
@@ -393,33 +235,6 @@ def _backup_database(source: Path, destination: Path) -> None:
         raise SaveArchiveError(f"Could not snapshot SQLite database: {source.name}") from exc
 
 
-def _copy_regular_file(source: Path, destination: Path) -> None:
-    with source.open("rb") as input_file, destination.open("xb") as output_file:
-        for block in iter(lambda: input_file.read(1024 * 1024), b""):
-            output_file.write(block)
-
-
-def _manifest_entries(root: Path) -> list[dict[str, Any]]:
-    entries = []
-    for relative, item in _iter_save_files(root):
-        entries.append(
-            {
-                "path": relative.as_posix(),
-                "size": item.stat().st_size,
-                "sha256": _sha256(item),
-            }
-        )
-    return sorted(entries, key=lambda entry: entry["path"])
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def _safe_members(bundle: zipfile.ZipFile, limits: ArchiveLimits) -> list[zipfile.ZipInfo]:
     infos = bundle.infolist()
     if len(infos) > limits.max_files:
@@ -429,12 +244,12 @@ def _safe_members(bundle: zipfile.ZipFile, limits: ArchiveLimits) -> list[zipfil
     for info in infos:
         raw_name = getattr(info, "orig_filename", info.filename)
         name = info.filename
-        if not raw_name or "\\" in raw_name:
+        if not raw_name or "\\" in raw_name or "\x00" in raw_name or ":" in raw_name:
             raise InvalidSaveArchive(f"Unsafe archive path: {raw_name!r}")
         path = PurePosixPath(name)
-        if path.is_absolute() or ".." in path.parts or "." in path.parts:
+        if path.is_absolute() or any(part in (".", "..") for part in raw_name.split("/")):
             raise InvalidSaveArchive(f"Unsafe archive path: {name!r}")
-        canonical = path.as_posix().rstrip("/")
+        canonical = path.as_posix().rstrip("/").casefold()
         if canonical in names:
             raise InvalidSaveArchive(f"Duplicate archive path: {name}")
         names.add(canonical)
@@ -455,48 +270,13 @@ def _safe_members(bundle: zipfile.ZipFile, limits: ArchiveLimits) -> list[zipfil
         ):
             raise InvalidSaveArchive(f"Suspicious compression ratio: {name}")
         if not (
-            name == ARCHIVE_MANIFEST
-            or name == f"{ARCHIVE_SAVE_ROOT}/"
-            or name.startswith(f"{ARCHIVE_SAVE_ROOT}/")
+            name == f"{ARCHIVE_SAVE_ROOT}/"
+            or (name.startswith(f"{ARCHIVE_SAVE_ROOT}/") and (
+                info.is_dir() or _is_allowed_relative_path(name.removeprefix(f"{ARCHIVE_SAVE_ROOT}/"))
+            ))
         ):
             raise InvalidSaveArchive(f"Unexpected archive member: {name}")
     return infos
-
-
-def _validate_manifest(manifest: Any) -> dict[str, dict[str, Any]]:
-    if not isinstance(manifest, dict):
-        raise InvalidSaveArchive("Archive manifest must be an object")
-    if manifest.get("format_version") != ARCHIVE_FORMAT_VERSION:
-        raise InvalidSaveArchive("Unsupported archive format version", reason="当前应用不支持该存档格式版本，请更新应用或使用匹配版本导出")
-    files = manifest.get("files")
-    if not isinstance(files, list):
-        raise InvalidSaveArchive("Archive manifest files must be a list")
-    expected: dict[str, dict[str, Any]] = {}
-    for entry in files:
-        if not isinstance(entry, dict):
-            raise InvalidSaveArchive("Invalid archive manifest file entry")
-        path = entry.get("path")
-        size = entry.get("size")
-        digest = entry.get("sha256")
-        if not isinstance(path, str) or not _is_allowed_relative_path(path):
-            raise InvalidSaveArchive(f"Invalid save path in manifest: {path!r}")
-        if path in expected:
-            raise InvalidSaveArchive(f"Duplicate save path in manifest: {path}")
-        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
-            raise InvalidSaveArchive(f"Invalid size for {path}")
-        if (
-            not isinstance(digest, str)
-            or len(digest) != 64
-            or any(character not in "0123456789abcdef" for character in digest)
-        ):
-            raise InvalidSaveArchive(f"Invalid checksum for {path}")
-        expected[path] = entry
-    metadata = manifest.get("metadata", {})
-    if not isinstance(metadata, dict):
-        raise InvalidSaveArchive("Archive manifest metadata must be an object")
-    if "campaign.db" not in expected or ".runtime/control.db" not in expected:
-        raise InvalidSaveArchive("Archive manifest must contain campaign.db and .runtime/control.db")
-    return expected
 
 
 def _is_allowed_relative_path(value: str) -> bool:
@@ -514,56 +294,52 @@ def _is_allowed_relative_path(value: str) -> bool:
     return False
 
 
-def _is_allowed_for_export(value: str) -> bool:
-    return _is_allowed_relative_path(value)
+def _validate_campaign_payload(data_dir: Path) -> None:
+    validate_campaign_database(data_dir / "campaign.db")
+    for name, schema in (("core_memory.json", CoreMemory), ("initialization.json", InitializationRecord)):
+        path = data_dir / name
+        if path.is_file():
+            schema.model_validate_json(path.read_text(encoding="utf-8"))
+    uri = (data_dir / "campaign.db").resolve().as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True)) as conn:
+        row = conn.execute("SELECT state_json FROM current_state WHERE id=1").fetchone()
+    if row is not None:
+        CurrentState.model_validate_json(row[0])
 
 
 def _validate_save_payload(data_dir: Path) -> None:
-    manifest_path = data_dir / "save_manifest.json"
-    if not manifest_path.is_file():
-        raise InvalidSaveArchive("Archive does not contain save_manifest.json")
-    if not (data_dir / "campaign.db").is_file() or not (data_dir / ".runtime" / "control.db").is_file():
-        raise InvalidSaveArchive("Archive does not contain campaign.db and .runtime/control.db")
-    try:
-        SaveManifest.from_dict(json.loads(manifest_path.read_text(encoding="utf-8")))
-        core_memory = data_dir / "core_memory.json"
-        if core_memory.is_file():
-            CoreMemory.model_validate_json(core_memory.read_text(encoding="utf-8"))
-        settings = data_dir / "settings.json"
-        if settings.is_file() and not isinstance(
-            json.loads(settings.read_text(encoding="utf-8")), dict
-        ):
-            raise ValueError("settings.json must contain an object")
-        initialization = data_dir / "initialization.json"
-        if initialization.is_file():
-            InitializationRecord.model_validate_json(
-                initialization.read_text(encoding="utf-8")
-            )
-        state_db = data_dir / "campaign.db"
-        if state_db.is_file():
-            uri = state_db.resolve().as_uri() + "?mode=ro"
-            with closing(sqlite3.connect(uri, uri=True)) as connection:
-                row = connection.execute(
-                    "SELECT state_json FROM current_state WHERE id=1"
-                ).fetchone()
-            if row is not None:
-                CurrentState.model_validate_json(row[0])
-    except sqlite3.OperationalError as exc:
-        if str(exc).startswith(("no such table:", "no such column:")):
-            raise InvalidSaveArchive("Invalid database schema", reason="存档数据库结构不完整或不兼容") from exc
-        raise
-    except (ValueError, json.JSONDecodeError, sqlite3.DatabaseError) as exc:
-        raise InvalidSaveArchive("Archive contains invalid save data", reason="存档内的数据缺失或不符合当前格式") from exc
+    from .initialization_draft import InitializationDraft, _draft_config_version
+
+    _assert_current_layout(data_dir)
+    manifest = data_dir / "save_manifest.json"
+    SaveManifest.from_dict(json.loads(manifest.read_text(encoding="utf-8")))
+    _validate_campaign_payload(data_dir)
+    _validate_control_database(data_dir / ".runtime" / "control.db")
+    _validate_history_paths(data_dir)
+    settings = data_dir / "settings.json"
+    if settings.is_file() and not isinstance(json.loads(settings.read_text(encoding="utf-8")), dict):
+        raise InvalidSaveArchive("settings.json must contain an object")
+    draft_path = data_dir / "initialization_draft.json"
+    if draft_path.is_file():
+        draft = InitializationDraft.model_validate_json(draft_path.read_text(encoding="utf-8"))
+        if _draft_config_version(draft) not in (None, 4):
+            raise InvalidSaveArchive("Initialization draft config must use version 4")
+    for snapshot in sorted((data_dir / ".snapshots").glob("*")):
+        if not snapshot.is_dir():
+            continue
+        files = normalize_snapshot(snapshot)
+        if any(not (snapshot / name).is_file() for name in files):
+            raise InvalidSaveArchive("Snapshot file is missing")
+        _validate_campaign_payload(snapshot)
 
 
-def _inspection_from_manifest(manifest: dict[str, Any]) -> ArchiveInspection:
-    entries = manifest["files"]
-    return ArchiveInspection(
-        format_version=manifest["format_version"],
-        files=tuple(entry["path"] for entry in entries),
-        total_size=sum(entry["size"] for entry in entries),
-        metadata=dict(manifest.get("metadata", {})),
-    )
+def _inspection(infos: list[zipfile.ZipInfo]) -> ArchiveInspection:
+    files = [info for info in infos if not info.is_dir()]
+    paths = tuple(info.filename.removeprefix(f"{ARCHIVE_SAVE_ROOT}/") for info in files)
+    required = {"campaign.db", ".runtime/control.db", "save_manifest.json"}
+    if not required.issubset(paths):
+        raise InvalidSaveArchive("Archive must contain campaign.db, .runtime/control.db and save_manifest.json")
+    return ArchiveInspection(files=paths, total_size=sum(info.file_size for info in files))
 
 
 def _prepare_empty_directory(destination: Path) -> None:

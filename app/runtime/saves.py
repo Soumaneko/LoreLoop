@@ -26,14 +26,12 @@ from .save_archive import (
     create_consistent_snapshot,
     export_save as write_save_archive,
     extract_archive,
-    inspect_archive,
 )
 from .save_manifest import (
     SaveManifestRepository,
     load_save_metadata,
 )
 from .session import CampaignRuntime, get_campaign_runtime
-from .turn_history import CampaignHistory
 
 
 @dataclass(frozen=True)
@@ -144,9 +142,8 @@ class SaveManager:
 
     def copy(self, save_id: str, name: str = "") -> SaveInfo:
         source_id = self._validate_save_id(save_id)
-        with self.runtime.save_task(), self._lock:
+        with self.runtime._pause_connections(reject_active_operations=True), self._lock:
             source = self._require_save(source_id)
-            self._require_no_pending_source(source_id, "copy")
             if str(name).strip():
                 clean_name = self._available_name(name)
             else:
@@ -220,9 +217,8 @@ class SaveManager:
     def export_to(self, save_id: str, destination: str | Path) -> ArchiveInspection:
         clean_id = self._validate_save_id(save_id)
         destination_path = Path(destination)
-        with self.runtime.save_task(), self._lock:
+        with self.runtime._pause_connections(reject_active_operations=True), self._lock:
             source = self._require_save(clean_id)
-            self._require_no_pending_source(clean_id, "export")
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination_path.with_name(
                 f".{destination_path.name}.{uuid4().hex}.tmp"
@@ -233,9 +229,6 @@ class SaveManager:
                 return inspection
             finally:
                 temporary.unlink(missing_ok=True)
-
-    def inspect_import(self, archive: str | Path) -> ArchiveInspection:
-        return inspect_archive(Path(archive))
 
     def import_from(self, archive: str | Path, name: str) -> SaveInfo:
         with self.runtime.save_task(), self._lock:
@@ -369,17 +362,6 @@ class SaveManager:
         temporary.write_text(save_id, encoding="utf-8")
         os.replace(temporary, self.active_file)
 
-    def _require_no_pending_source(self, save_id: str, action: str) -> None:
-        history = (
-            self.runtime.history
-            if save_id == self.active_id
-            else CampaignHistory(self._save_path(save_id))
-        )
-        if history.pending_records():
-            raise ClientValidationError(
-                f"当前有未处理内容：请先【确认采用】或【删除】草稿，再执行此操作。"
-            )
-
     @staticmethod
     def _is_save_id(value: str) -> bool:
         try:
@@ -454,7 +436,6 @@ def delete_save(payload: dict[str, Any]) -> dict[str, Any]:
 def export_save_archive(save_id: str, destination: str | Path) -> dict[str, Any]:
     inspection = _get_save_manager().export_to(save_id, destination)
     return {
-        "format_version": inspection.format_version,
         "file_count": len(inspection.files),
         "total_size": inspection.total_size,
     }

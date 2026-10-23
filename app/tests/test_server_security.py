@@ -2,6 +2,7 @@ import io
 import json
 import sys
 from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
 
@@ -499,7 +500,7 @@ def test_player_index_serves_html():
     assert '<meta name="loreloop-session-token"' in content
 
 
-@pytest.mark.parametrize("kind", ["not_zip", "missing_manifest", "new_version", "permission"])
+@pytest.mark.parametrize("kind", ["not_zip", "missing_files", "new_version", "permission", "install"])
 def test_save_import_reports_real_reason_without_installing_save(tmp_path, monkeypatch, kind):
     import zipfile
     from app.runtime import saves
@@ -511,10 +512,33 @@ def test_save_import_reports_real_reason_without_installing_save(tmp_path, monke
     body = io.BytesIO()
     if kind == "not_zip":
         body.write(b"not zip")
+    elif kind == "new_version":
+        import sqlite3
+        archive = tmp_path / "future.zip"
+        manager.export_to(manager.active_id, archive)
+        with zipfile.ZipFile(archive) as original, zipfile.ZipFile(body, "w") as bundle:
+            for info in original.infolist():
+                content = original.read(info)
+                if info.filename == "save/campaign.db":
+                    database = tmp_path / "future.db"
+                    database.write_bytes(content)
+                    with sqlite3.connect(database) as conn:
+                        conn.execute("UPDATE schema_versions SET version=999 WHERE component='current_state'")
+                    content = database.read_bytes()
+                bundle.writestr(info, content)
     else:
-        with zipfile.ZipFile(body, "w") as bundle:
-            if kind == "new_version":
-                bundle.writestr("manifest.json", json.dumps({"format_version": 999}))
+        with zipfile.ZipFile(body, "w"):
+            pass
+    if kind == "install":
+        original_replace = saves.os.replace
+        def reject_install(source, destination):
+            if Path(source).name.startswith(".import-"):
+                raise PermissionError("import installation denied")
+            return original_replace(source, destination)
+        archive = tmp_path / "valid.zip"
+        manager.export_to(manager.active_id, archive)
+        body = io.BytesIO(archive.read_bytes())
+        monkeypatch.setattr(saves.os, "replace", reject_install)
     if kind == "permission":
         def denied(*args, **kwargs):
             raise PermissionError("staging cannot be written")
@@ -525,9 +549,9 @@ def test_save_import_reports_real_reason_without_installing_save(tmp_path, monke
     handler.rfile = io.BytesIO(raw)
     handler._handle_save_import("导入测试")
     error = _body(handler)["error"]
-    assert handler.recorded_status == (500 if kind == "permission" else 400)
-    assert error["code"] == ("file_access_failed" if kind == "permission" else "validation_error")
-    assert "权限" in error["message"] if kind == "permission" else "存档校验失败" in error["message"]
+    assert handler.recorded_status == (500 if kind in {"permission", "install"} else 400)
+    assert error["code"] == ("file_access_failed" if kind in {"permission", "install"} else "validation_error")
+    assert "权限" in error["message"] if kind in {"permission", "install"} else "存档校验失败" in error["message"]
     assert {item.save_id for item in manager.list()} == before
     assert not list(manager.root.glob(".import-*"))
 

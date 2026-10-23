@@ -142,14 +142,22 @@ connections, then closes the task executors and session stores. The existing
 shutdown entry requests cancellation before desktop cleanup waits for completion.
 `generation_cache_epoch` remains the runtime-local generation-prefix cache key.
 
-Save copy and export require the source to have no pending content and
-create a quiesced staging snapshot. SQLite files are copied through the backup
-API; ZIP export records file sizes and SHA-256 hashes. Import validates archive
-paths, resource limits, manifest contents, checksums, SQLite `quick_check`,
-registered schema versions, and portable history paths before installing a
-save. Export and copy enumerate supported current files; other source files
-remain in their original locations. ZIP entries must match the supported archive
-paths and manifest.
+Save copy and export pause new work and connections while producing a staging
+copy through SQLite backup and ordinary file copying. The supported file set
+includes saved progress, pending scene/opening variants, editable initialization
+forms, preferences, and the retained Undo/Redo snapshots. The source drafts remain
+usable; copies and imports receive a new save ID and display name. Model keys
+stay in application configuration.
+
+ZIP export packages these files under `save/`. ZIP sizes and CRC provide archive
+integrity checks. Import checks supported paths, duplicate and special entries,
+and resource limits, then extracts once into an isolated staging directory.
+Before installation it checks current database formats through the opening
+validators, JSON contracts, snapshot contents, and all relative history references
+including an unfinished restore target. Existing saves and export destinations
+remain intact on failure. Local copies use the known file set directly, keeping
+external input validation at the import boundary. Unrelated source files remain
+in their original locations.
 
 ## 3. Initialization
 

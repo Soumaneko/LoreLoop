@@ -321,7 +321,7 @@ class CampaignRuntime:
         with self._lifecycle_lock:
             if reject_active_operations and self.has_active_operations():
                 raise ClientValidationError(
-                    "Current save has an active operation. Wait for it to finish before switching saves."
+                    "Current save has an active operation. Wait for it to finish."
                 )
             owner = threading.get_ident()
             if self._save_task_owner not in (None, owner):
