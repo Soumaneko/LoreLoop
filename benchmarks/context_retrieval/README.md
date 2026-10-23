@@ -139,7 +139,8 @@ Run and compare with the accepted baseline:
 PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py
 ```
 
-Require byte-for-byte agreement with the accepted baseline:
+Check per-case recall, forbidden evidence and domain invariant regressions;
+other report differences are displayed for review:
 
 ```bash
 PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py --check

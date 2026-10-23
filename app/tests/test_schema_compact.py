@@ -1,12 +1,9 @@
 import json
-
 from pydantic import BaseModel, ConfigDict, Field
-
 from app.core.llm.schema import (
     compact_schema,
     schema_json,
 )
-from app.domain.current_state.changes import StateChangeSet
 from app.domain.director_event.schemas import DirectorEventSelectionResult
 
 
@@ -86,25 +83,3 @@ def test_schema_json_emits_compact_schema_for_prompt():
     assert "\n" not in rendered
     parsed = json.loads(rendered)
     assert not _has_title(parsed)
-
-
-def test_state_update_schema_is_consistent():
-    parsed = json.loads(schema_json(StateChangeSet))
-
-    assert not _has_title(parsed)
-    assert "operations" in parsed["properties"]
-    assert set(parsed["required"]).issubset(parsed["properties"].keys())
-    assert set(parsed["$defs"].keys()) == {
-        "FixedAssetAdd",
-        "FixedAssetRemove",
-        "InventoryDelta",
-        "LocationChange",
-        "MoneyDelta",
-        "ParticipantAdd",
-        "ParticipantAttitudeChange",
-        "ParticipantRemove",
-        "PlayerVisibleStatusChange",
-        "TemporaryAssetAdd",
-        "TemporaryAssetRemove",
-        "WorldClockAdvance",
-    }

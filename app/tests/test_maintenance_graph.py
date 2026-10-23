@@ -1,38 +1,15 @@
 from app.tests.factories.stores import open_scene_summary_store
 import json
 from types import SimpleNamespace
-
 from app.core.diagnostics import DiagnosticLogger
 from app.core.llm import MockLLM
 from app.domain.core_memory import CoreMemory
-from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.scene_summary.maintenance import SceneSummaryMaintenanceResult
 from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.scene_summary.summarizer import SceneSummaryWarning
 from app.graph import maintenance_graph
 from app.graph import maintenance_helpers, maintenance_nodes
 from app.runtime.session import get_campaign_runtime
-
-
-def _state() -> CurrentState:
-    return CurrentState(
-        scene=SceneState(
-            scene_id="scene_007",
-            location="测试地点",
-            participants=["主角"],
-        ),
-        player=PlayerState(name="主角"),
-    )
-
-
-def test_scene_summary_graph_has_only_llm_workflow_nodes():
-    graph = maintenance_graph.build_scene_summary_maintenance_graph()
-
-    assert set(graph.get_graph().nodes) == {
-        "__start__",
-        "scene_summary_condense",
-        "__end__",
-    }
 
 
 def test_scene_summary_graph_preserves_recursive_condensation(

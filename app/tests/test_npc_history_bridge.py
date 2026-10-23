@@ -1,8 +1,5 @@
 from app.tests.factories.stores import open_npc_profile_store
-import pytest
 from collections import defaultdict
-
-from app.domain.confirmed_history import history_document_text_hash
 from app.domain.confirmed_history.schemas import HistoryDocument
 from app.domain.confirmed_history.text import support_score
 from app.domain.context_facts.schemas import (
@@ -11,11 +8,7 @@ from app.domain.context_facts.schemas import (
     ContextSearchPlan,
 )
 from app.domain.npc_profile.changes import AcceptedNPCScalarChange
-from app.domain.npc_profile.history_bridge import (
-    NPCFieldHistoryLink,
-    NPCProfileHistoryBridge,
-    NPC_TOPIC_MATCH_THRESHOLD,
-)
+from app.domain.npc_profile.history_bridge import NPCProfileHistoryBridge
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 
@@ -126,53 +119,6 @@ def _bridge(store, **kwargs) -> NPCProfileHistoryBridge:
     return NPCProfileHistoryBridge(store, **kwargs)
 
 
-def _seed_legacy_log_without_basis(
-    store: NPCProfileStore,
-    *,
-    npc_id: str,
-    field: str,
-    new_value: str,
-    turn: int,
-    evidence_id: str,
-    evidence_text: str,
-    scene_id: str = "scene_001",
-) -> None:
-    """直接以 SQL 注入一条无 change_basis 的 legacy 日志行。
-
-    写入 API（record_accepted_field_changes）现在拒绝为累积稳定字段制造 NULL
-    basis；legacy NULL 只允许来自 v8->v9 迁移读取。此 helper 模拟迁移后的持久化
-    状态，让桥的降级读取路径保持可测。
-    """
-    profile = store.get_by_id(npc_id)
-    assert profile is not None
-    cursor = store._db.execute(
-        """
-        INSERT INTO npc_field_change_logs(
-            npc_id, field_name, turn_index, old_value, new_value,
-            change_basis, summary_delta, source
-        ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, 'proposal')
-        """,
-        (npc_id, field, turn, new_value),
-    )
-    log_id = int(cursor.lastrowid)
-    document = HistoryDocument(
-        document_id=evidence_id,
-        source_type="scene_paragraph",
-        turn_index=turn,
-        scene_id=scene_id,
-        paragraph_index=1,
-        text=evidence_text,
-    )
-    store._db.execute(
-        """
-        INSERT INTO npc_field_change_evidence(
-            log_id, position, evidence_id, evidence_hash
-        ) VALUES (?, 0, ?, ?)
-        """,
-        (log_id, evidence_id, history_document_text_hash(document)),
-    )
-
-
 class TestIdentity:
 
     def test_name_match_emits_latest_field_node(self):
@@ -196,11 +142,6 @@ class TestIdentity:
         assert link.match_reasons == ["npc_name_match"]
         assert link.evidence_basis_primary == "北门巡检"
         assert link.basis_complete is True
-
-
-
-
-
 
 
 class TestTopic:
@@ -230,11 +171,6 @@ class TestTopic:
             ]))
 
         assert {link.npc_id for link in result.links} == {"npc-liulan"}
-
-
-
-
-
 
 
     def test_retained_old_fact_does_not_trigger_later_node(self):
@@ -275,9 +211,6 @@ class TestTopic:
         # 新事实命中 turn 5 节点。
         assert sorted(link.turn_index for link in retained.links) == [1]
         assert sorted(link.turn_index for link in new_fact.links) == [5]
-
-
-
 
 
 class TestMultiIntent:
@@ -336,8 +269,6 @@ class TestEmission:
             ]))
 
         assert [link.turn_index for link in result.links] == [4, 3, 2, 1]
-
-
 
 
 class TestTopicMatcher:

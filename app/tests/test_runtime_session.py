@@ -1,10 +1,10 @@
+from app.runtime.campaign_migration import ensure_campaign_database
+import json
 from app.tests.factories.domains import make_pending_turn
 from app.core.client_error import ClientValidationError
 import threading
 from types import SimpleNamespace
-
 import pytest
-
 from app.domain.current_state import PlayerState, make_default_state
 from app.runtime import campaign_open as campaign_open_module
 from app.runtime.campaign_open import open_campaign_resources
@@ -328,3 +328,67 @@ def test_pending_repositories_discard_group_notifies_removed_turn_ids():
         repository.discard_group("g")
         assert removed == [["a", "b"]]
         assert repository.get("c") is not None
+
+
+@pytest.mark.parametrize("damage", ["invalid_database", "missing_campaign"])
+def test_invalid_snapshot_preserves_progress_and_live_json(tmp_path, damage):
+    paths = CampaignPaths.from_data_dir(tmp_path / "save")
+    ensure_campaign_database(paths)
+    core = paths.data_dir / "core_memory.json"
+    core.write_text('{"items":[]}', encoding="utf-8")
+    rt = CampaignRuntime("test", paths=paths, max_workers=1)
+    rt.history.save_pending(turn_id="t1", kind="turn", group_id="g1", turn_index=1, payload={"turn_id": "t1"})
+    rt.history.begin_confirmation("t1", write_db=True, scene_text=None)
+    with rt.history._campaign_connect() as campaign:
+        campaign.execute("BEGIN")
+        rt.history.record_confirmation(campaign, "t1", scene_text="场景正文")
+    rt.history.complete_confirmation("t1", "g1")
+    core.write_text(json.dumps({"items": [{
+        "id": "current", "kind": "world_invariant", "strength": "hard_constraint",
+        "source": "player", "content": "当前世界设定",
+    }]}), encoding="utf-8")
+    with rt.history._connect() as c:
+        row = c.execute("SELECT path FROM turn_snapshots WHERE turn_id='t1'").fetchone()
+        snap_path = rt.history._snapshot_path(row["path"])
+    if damage == "invalid_database":
+        (snap_path / "campaign.db").write_bytes(b"not a db")
+    else:
+        (snap_path / "manifest.json").write_text(json.dumps({"files": ["core_memory.json"]}))
+    before = {path: path.read_bytes() for path in (paths.campaign_db, core)}
+    with pytest.raises(RuntimeError):
+        rt.undo()
+    assert {path: path.read_bytes() for path in before} == before
+    assert rt.history.get_transaction("t1")["status"] == "completed"
+    with rt.uow() as uow:
+        assert uow.current_state.load() is None
+    rt.close()
+    reopened = CampaignRuntime("reopened", paths=paths)
+    reopened.close()
+
+
+def test_reconfigure_failure_keeps_old_runtime_usable(tmp_path):
+    paths = CampaignPaths.from_data_dir(tmp_path / "save")
+    ensure_campaign_database(paths)
+    rt = CampaignRuntime("sw-fail", paths=paths, max_workers=1)
+    old_campaign_id = rt.campaign_id
+    old_paths = rt.paths
+    # Target directory has an invalid campaign.db; ensure_campaign_database
+    # will fail while building the new runtime.
+    bad_dir = tmp_path / "bad"
+    bad_dir.mkdir()
+    (bad_dir / "campaign.db").write_bytes(b"not a database")
+    with pytest.raises(Exception):
+        rt.reconfigure("sw-bad", CampaignPaths.from_data_dir(bad_dir))
+    # Old runtime identity remains intact and gate is open.
+    assert rt.campaign_id == old_campaign_id
+    assert rt.paths == old_paths
+    assert rt.stores.is_closed is False
+    # A new UoW can still be created after the failed switch.
+    u = rt.uow(write=False)
+    u.close()
+    # Operations/jobs must be freshly usable, not the shutdown instances.
+    with rt.operation_submission():
+        op_id = rt.operations.submit_callable("probe", lambda: 42)
+        snapshot = rt.operations.wait(op_id, timeout=5)
+        assert snapshot.status == "succeeded"
+    rt.close()

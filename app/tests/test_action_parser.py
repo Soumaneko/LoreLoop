@@ -1,16 +1,8 @@
 import json
-
 import pytest
-
 from app.core.llm import MockLLM
 from app.domain.action.parser import ActionParser
-from app.domain.action.schemas import (
-    ActionExtractionResult,
-    ActionParseResult,
-    ActionRetrievalTopic,
-    AtomicAction,
-)
-from app.domain.action.self_check import ActionSelfCheck
+from app.domain.action.schemas import ActionRetrievalTopic
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, ResourcesState, SceneState
 
@@ -48,25 +40,6 @@ def test_action_parser_returns_retrieval_topics():
     )]
 
 
-def test_action_parse_contract_omits_removed_metadata_fields():
-    extraction_fields = ActionExtractionResult.model_json_schema()["properties"]
-    parse_fields = ActionParseResult.model_json_schema()["properties"]
-    action_fields = AtomicAction.model_json_schema()["properties"]
-    anchor_fields = ActionParseResult.model_json_schema()["$defs"]["Anchor"]["properties"]
-
-    assert "turn_intent" not in extraction_fields
-    assert "turn_intent" not in parse_fields
-    assert "source_action_ids" not in ActionRetrievalTopic.model_json_schema()[
-        "properties"
-    ]
-    assert list(extraction_fields)[:2] == ["analysis", "retrieval_topics"]
-    assert list(parse_fields)[:2] == ["analysis", "retrieval_topics"]
-    assert "goal" not in action_fields
-    assert "roll_hint" not in action_fields
-    assert "confidence" not in action_fields
-    assert "action_ids" not in anchor_fields
-
-
 def _make_current_state() -> CurrentState:
     return CurrentState(
         scene=SceneState(
@@ -96,56 +69,6 @@ def _build_response(actions: list[dict]) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════
-#  Test: 简单单动作
-# ══════════════════════════════════════════════════════════════════
-
-
-
-# ══════════════════════════════════════════════════════════════════
-#  Test: 多动作顺序
-# ══════════════════════════════════════════════════════════════════
-
-
-
-# ══════════════════════════════════════════════════════════════════
-#  Test: 旧事引用
-# ══════════════════════════════════════════════════════════════════
-
-
-
-# ══════════════════════════════════════════════════════════════════
-#  Test: 条件动作
-# ══════════════════════════════════════════════════════════════════
-
-
-
-
-# ══════════════════════════════════════════════════════════════════
-#  Test: 对同伴指令
-# ══════════════════════════════════════════════════════════════════
-
-
-
-
-# ══════════════════════════════════════════════════════════════════
-#  Test: 复杂组合
-# ══════════════════════════════════════════════════════════════════
-
-
-
-
-# ══════════════════════════════════════════════════════════════════
-#  Test: SelfCheck
-# ══════════════════════════════════════════════════════════════════
-
-
-
-def AtomicAction_model(**kwargs):
-    from app.domain.action.schemas import AtomicAction
-    return AtomicAction(**kwargs)
-
-
-# ══════════════════════════════════════════════════════════════════
 #  Failure policy: salvage, no-effect, and hidden-event filtering
 # ══════════════════════════════════════════════════════════════════
 
@@ -163,8 +86,6 @@ def test_action_parser_provider_failure_propagates():
             _make_current_state(),
             core_memory=_core_memory(),
         )
-
-
 
 
 def test_action_parser_first_invalid_retries_and_second_valid_subset_wins():
@@ -210,8 +131,6 @@ def test_action_parser_first_invalid_retries_and_second_valid_subset_wins():
 
     assert [action.action_id for action in result.atomic_actions] == ["A1"]
     assert parser.last_warnings == []
-
-
 
 
 def test_action_parser_filters_unknown_touched_event_id_after_retry():
@@ -262,10 +181,6 @@ def test_action_parser_filters_unknown_touched_event_id_after_retry():
         warning.code == "action_dropped"
         for warning in parser.last_warnings
     )
-
-
-
-
 
 
 def test_action_parser_reports_retrieval_topic_count_dropped_on_salvage():

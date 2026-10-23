@@ -1,17 +1,8 @@
 from app.tests.factories.stores import open_director_npc_store
-import sqlite3
-
 import pytest
-
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.creative_brief import draw_creative_brief
-from app.domain.director_npc import (
-    DirectorNPCCreator,
-    DirectorNPCDraft,
-    DirectorNPCStore,
-    KnownAbility,
-    NPCCreationContext,
-)
+from app.domain.director_npc import DirectorNPCCreator, DirectorNPCDraft, KnownAbility, NPCCreationContext
 
 
 def _core_memory() -> CoreMemory:
@@ -168,33 +159,6 @@ def test_store_uses_prepared_introduced_retired_lifecycle():
     assert retired is not None
     assert retired.status == "retired"
     store.close()
-
-
-def test_store_rejects_dispatch_schema_instead_of_migrating_it(tmp_path):
-    db_path = tmp_path / "director_npcs.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        """
-        CREATE TABLE director_npcs (
-            draft_id TEXT PRIMARY KEY,
-            status TEXT NOT NULL,
-            draft_json TEXT NOT NULL,
-            created_turn INTEGER NOT NULL,
-            dispatched_turn INTEGER,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.commit()
-    conn.close()
-
-    try:
-        open_director_npc_store(str(db_path))
-    except RuntimeError as exc:
-        assert "current Director Agent contract" in str(exc)
-    else:
-        raise AssertionError("dispatch-era DirectorNPC schema must be rejected")
 
 
 def test_creator_includes_recent_creations_in_prompt():

@@ -7,28 +7,21 @@ import pytest
 from langgraph.graph import END, START, StateGraph
 
 from app.core.diagnostics import DiagnosticLogger
-from app.domain.continuity import ContinuityProjection
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.current_state.changes import StateChangeSet, StateChangeWarning
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.scene_summary.summarizer import SceneSummaryWarning
 from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
 from app.graph import confirmation_nodes
 from app.graph.confirmation_graph import capture_confirmation_node_errors
-from app.graph import confirmation_graph
-from app.graph.confirmation_cache import ConfirmationCache
 from app.graph.confirmation_helpers import merge_confirmation_node_update
 from app.graph.confirmation_helpers import prepare_confirmation_second_wave
 from app.graph.confirmation_state import ConfirmationState
-from app.graph.confirmation_lifecycle import (
-    ConfirmationFinalizer,
-)
 from app.runtime.sqlite import connect_sqlite
 
 
-def test_state_update_warning_is_emitted_cached_and_diagnosed(
+def test_state_update_warning_is_emitted_and_diagnosed(
     monkeypatch,
     tmp_path,
 ):
@@ -76,12 +69,9 @@ def test_state_update_warning_is_emitted_cached_and_diagnosed(
 
     assert update["state_update_warnings"] == [warning]
     assert events[0]["data"]["warnings"][0]["code"] == "npc_target_not_present"
-    assert state["cache"]["state_update_warnings"] == [warning]
     diagnostic = diagnostics.read(trace_id="trace-1")[0]
     assert diagnostic["source"] == "state_update"
     assert diagnostic["code"] == "npc_target_not_present"
-
-
 
 
 def test_only_selection_summaries_append_current_turn_summary():
@@ -154,14 +144,6 @@ def test_only_selection_summaries_append_current_turn_summary():
     assert prepared["active_continuity_items"] == []
 
 
-
-
-
-
-
-
-
-
 def test_setting_appearance_node_dry_run_and_prevents_double_count(tmp_path):
     from app.domain.world_setting import WorldSetting
 
@@ -199,7 +181,6 @@ def test_setting_appearance_node_dry_run_and_prevents_double_count(tmp_path):
     first = confirmation_nodes.setting_appearance_update_node(state)
     assert first["recorded_setting_ids"] == [library.setting_id]
     merge_confirmation_node_update(state, first)
-    assert state["cache"]["recorded_setting_ids"] == [library.setting_id]
     with open_world_setting_store(str(db_path)) as check:
         assert check.get_by_id(library.setting_id).hit_count == 1
     connection.close()
@@ -215,10 +196,6 @@ def test_setting_appearance_node_dry_run_and_prevents_double_count(tmp_path):
     assert dry == {"recorded_setting_ids": []}
     with open_world_setting_store(str(db_path)) as check:
         assert check.get_by_id(library.setting_id).hit_count == 1
-
-
-
-
 
 
 def test_node_error_wrapper_reraise_cancellation():
@@ -240,84 +217,6 @@ def test_node_error_wrapper_reraise_cancellation():
                 merge_confirmation_node_update(state, node_update)
 
     assert state["node_errors"] == []
-
-
-def test_journaled_confirmation_failure_resets_rolled_back_cache(monkeypatch):
-    marker = object()
-    pending = SimpleNamespace(confirmation_cache={
-        "key": "scene text",
-        "scene_facts": marker,
-        "npc_turn_result": marker,
-    })
-    calls = []
-    runtime = SimpleNamespace(
-        begin_confirmation=lambda *_args, **_kwargs: True,
-        fail_confirmation=lambda *_args: calls.append("rollback"),
-    )
-
-    def fail_pipeline(*_args, **_kwargs):
-        raise RuntimeError("node failed")
-        yield
-
-    monkeypatch.setattr(confirmation_graph, "get_campaign_runtime", lambda: runtime)
-    monkeypatch.setattr(
-        confirmation_graph,
-        "stream_confirmation_pipeline",
-        fail_pipeline,
-    )
-
-    with pytest.raises(RuntimeError, match="node failed"):
-        list(confirmation_graph._confirm_pipeline_locked(
-            SimpleNamespace(turn_id="turn-1", pending=pending),
-        ))
-
-    assert calls == ["rollback"]
-    assert pending.confirmation_cache == {
-        "key": "scene text",
-        "scene_facts": marker,
-    }
-
-
-def test_journaled_confirmation_timeout_propagates_without_partial_commit(
-    monkeypatch,
-):
-    from app.core.llm.errors import LLMTimeoutError
-
-    pending = SimpleNamespace(confirmation_cache={
-        "key": "scene text",
-        "scene_facts": object(),
-    })
-    calls = []
-    runtime = SimpleNamespace(
-        begin_confirmation=lambda *_args, **_kwargs: True,
-        fail_confirmation=lambda *_args: calls.append("rollback"),
-    )
-
-    def timeout_pipeline(*_args, **_kwargs):
-        raise LLMTimeoutError(
-            "模型请求超过120秒，已停止等待。",
-            timeout_seconds=120.0,
-            task="scene_facts",
-        )
-        yield
-
-    monkeypatch.setattr(confirmation_graph, "get_campaign_runtime", lambda: runtime)
-    monkeypatch.setattr(
-        confirmation_graph,
-        "stream_confirmation_pipeline",
-        timeout_pipeline,
-    )
-
-    with pytest.raises(LLMTimeoutError, match="已停止等待"):
-        list(confirmation_graph._confirm_pipeline_locked(
-            SimpleNamespace(turn_id="turn-1", pending=pending),
-        ))
-
-    assert calls == ["rollback"]
-    assert pending.confirmation_cache == {
-        "key": "scene text",
-        "scene_facts": pending.confirmation_cache["scene_facts"],
-    }
 
 
 def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(

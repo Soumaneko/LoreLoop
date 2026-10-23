@@ -1,26 +1,16 @@
+from app.tests.factories.domains import make_pending_turn
 from app.domain.current_state import make_default_state
 from app.domain.core_memory import CoreMemory
 from app.domain.director import DirectorStageResult
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from types import SimpleNamespace
-
-import json
-
 import pytest
-from app.core.diagnostics import NullDiagnosticLogger
 from app.core.llm.errors import LLMOutputValidationError
-
-from langgraph.graph import END, START, StateGraph
-
 from app.graph import generation_graph, generation_nodes
-from app.domain.narrative_canon_query.schemas import NarrativeCanonQuerySet
-from app.domain.narrative_rewrite.schemas import RewriteStrategyDecision
-from app.graph.generation_events import GenerationEventPresenter
-from app.graph.generation_state import GenerationState
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.domain.short_term_memory.schemas import ShortTermMemory
-from app.runtime.session import PendingTurn, get_campaign_runtime
+from app.runtime.session import get_campaign_runtime
 from app.runtime.settings import save_experience_mode
 
 
@@ -64,10 +54,6 @@ def test_generation_captures_experience_mode_snapshot_at_generation(campaign_run
     list(generation_graph.generate_turn_stream("观察"))
 
     assert captured["state"]["experience_mode"] == "player"
-
-
-
-
 
 
 def test_generate_turn_stream_forwards_state_events(monkeypatch):
@@ -122,12 +108,6 @@ def test_generate_turn_stream_forwards_state_events(monkeypatch):
     ]
 
 
-
-
-
-
-
-
 def test_reroll_creates_next_version_in_same_group(
     monkeypatch,
     configure_runtime_services,
@@ -136,16 +116,12 @@ def test_reroll_creates_next_version_in_same_group(
     group_id = "group_1"
     state_before = make_default_state()
     runtime = get_campaign_runtime()
-    runtime.pending_turns.add(PendingTurn(
+    runtime.pending_turns.add(make_pending_turn(
         turn_id=turn_id,
         group_id=group_id,
-        version_index=1,
         user_input="观察门外",
-        difficulty="普通",
         max_chars=900,
-        experience_mode="creator",
         state_before=state_before,
-        context=NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[])),
         outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
         scene_result=SceneWriterResult(scene_text="版本一"),
         turn_index=3,
@@ -211,14 +187,11 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     director_stage = DirectorStageResult(reasoning="门外来人。")
     short_term = ShortTermMemory()
     runtime = get_campaign_runtime()
-    runtime.pending_turns.add(PendingTurn(
+    runtime.pending_turns.add(make_pending_turn(
         turn_id=turn_id,
         group_id=group_id,
-        version_index=1,
         user_input="观察门外",
-        difficulty="普通",
         max_chars=900,
-        experience_mode="creator",
         state_before=state_before,
         context=context,
         outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
@@ -278,8 +251,6 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
     assert events[-1]["data"]["turn_id"] == "turn_v2"
 
 
-
-
 def test_feedback_rewrite_cancellation_after_first_event_closes_uow(
     monkeypatch,
     configure_runtime_services,
@@ -288,14 +259,11 @@ def test_feedback_rewrite_cancellation_after_first_event_closes_uow(
     state_before = make_default_state()
     context = NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[]))
     runtime = get_campaign_runtime()
-    runtime.pending_turns.add(PendingTurn(
+    runtime.pending_turns.add(make_pending_turn(
         turn_id=turn_id,
         group_id="group_1",
-        version_index=1,
         user_input="观察门外",
-        difficulty="普通",
         max_chars=900,
-        experience_mode="creator",
         state_before=state_before,
         context=context,
         outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
@@ -331,18 +299,6 @@ def test_feedback_rewrite_cancellation_after_first_event_closes_uow(
         assert len(runtime._active_uows) == 0
     finally:
         runtime.pending_turns.remove(turn_id)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def test_composer_npc_profiles_respect_disclosure_levels(
@@ -579,16 +535,6 @@ def test_composer_receives_engaged_event_actor_profiles(
     assert by_name["特雷弗·石巷"].last_scene_turn == 6
 
 
-
-
-
-
-
-
-
-
-
-
 def test_feedback_rewrite_falls_back_to_strategy_unavailable(
     monkeypatch,
     configure_runtime_services,
@@ -597,14 +543,11 @@ def test_feedback_rewrite_falls_back_to_strategy_unavailable(
     state_before = make_default_state()
     context = NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[]))
     runtime = get_campaign_runtime()
-    runtime.pending_turns.add(PendingTurn(
+    runtime.pending_turns.add(make_pending_turn(
         turn_id=turn_id,
         group_id="group_1",
-        version_index=1,
         user_input="观察门外",
-        difficulty="普通",
         max_chars=900,
-        experience_mode="creator",
         state_before=state_before,
         context=context,
         outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
@@ -663,14 +606,11 @@ def test_feedback_rewrite_rejects_source_scene_text_over_pending_max_chars(
     state_before = make_default_state()
     context = NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[]))
     runtime = get_campaign_runtime()
-    runtime.pending_turns.add(PendingTurn(
+    runtime.pending_turns.add(make_pending_turn(
         turn_id=turn_id,
         group_id="group_1",
-        version_index=1,
         user_input="观察门外",
-        difficulty="普通",
         max_chars=10,
-        experience_mode="creator",
         state_before=state_before,
         context=context,
         outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
@@ -702,44 +642,57 @@ def test_feedback_rewrite_rejects_source_scene_text_over_pending_max_chars(
         runtime.pending_turns.remove(turn_id)
 
 
-def _compose_test_state(**overrides):
-    class _Store:
-        def __enter__(self): return self
-        def __exit__(self, *_args): return None
-        def list_active(self): return []
-        def list_all(self): return []
-    stores = SimpleNamespace(
-        director_event=_Store(),
-        npc_profile=_Store(),
-    )
-    state = {
-        "runtime_services": SimpleNamespace(
-            diagnostics=NullDiagnosticLogger(),
-            stores=stores,
-        ),
-        "user_input": "观察。",
-        "current_state": object(),
-        "action_npc_profiles": [],
-        "context_fact_npc_profiles": [],
-        "touched_event_candidates": [],
-        "director_stage": None,
-        "context": object(),
-        "core_memory": object(),
-        "context_facts": object(),
-        "short_term_memory": SimpleNamespace(recent_scenes=[]),
-        "trace_id": "trace-compose",
-        "next_turn_index": 1,
-        "action_judgments": [],
-    }
-    state.update(overrides)
-    return state
+def test_reroll_reuses_interpretation_but_saves_new_roll_and_variant(campaign_runtime, monkeypatch):
+    from app.domain.action.schemas import ActionParseResult, AtomicAction
+    from app.domain.context_facts.schemas import ContextFactSet
+    from app.domain.roll.resolver import RollResolver
+    from app.domain.roll.schemas import RollResult, RollResultBatch
+    from app.domain.roll_modifier.schemas import RollModifierBatch
+    from app.graph.generation_helpers import extract_generation_prefix
 
-
-def _fake_output(state, composition):
-    return {
-        "narrative_composition": composition,
-        "outline": SimpleNamespace(),
-        "scene_result": composition.to_scene_result(),
-        "beat_entity_anchors": [],
-        "composer_npc_public_views": [],
-    }
+    runtime = campaign_runtime
+    runtime.stores.core_memory.save(CoreMemory(items=[]))
+    actions = ActionParseResult(atomic_actions=[AtomicAction(
+        action_id="attack", sequence=1, actor=["主角"], action_type="attack",
+        raw_text="攻击", verb="攻击", likely_needs_roll=True,
+    )])
+    pending = make_pending_turn(user_input="攻击", prefix_snapshot=extract_generation_prefix({
+        "action_parse_result": actions,
+        "context_facts": ContextFactSet(turn_focus="攻击敌人"),
+        "modifier_batch": RollModifierBatch(),
+    }))
+    runtime.pending_turns.add(pending)
+    values = iter([5, 20])
+    def next_roll(self, *args, **kwargs):
+        return RollResultBatch(dice_formula="1d20", dice_sides=20, total_rolls=1, results=[
+            RollResult(action_id="attack", sequence=1, actor=["主角"], action_type="attack",
+                       dice="1d20", value=next(values), dice_sides=20),
+        ])
+    def compose(state):
+        judgment = state["action_judgments"][0]
+        return {
+            "context": NarrativeComposerContext(
+                user_input=state["user_input"], current_state=state["current_state"],
+                core_memory=state["core_memory"], action_judgments=state["action_judgments"],
+            ),
+            "outline": pending.outline,
+            "scene_result": SceneWriterResult(scene_text=f"攻击判定：{judgment.outcome_band}"),
+        }
+    monkeypatch.setattr(RollResolver, "resolve", next_roll)
+    monkeypatch.setattr(generation_graph, "director_agent_stage_node", lambda state: {"director_stage": None})
+    monkeypatch.setattr(generation_graph, "compose_narrative_node", compose)
+    monkeypatch.setattr(generation_graph, "canon_validation_enabled", lambda: False)
+    generation_graph.build_reroll_graph.cache_clear()
+    try:
+        variants = []
+        for _ in range(2):
+            events = list(generation_graph.reroll_turn_stream(pending.turn_id))
+            turn_id = next(e["data"]["turn_id"] for e in events if e["step"] == "scene_written")
+            variants.append(runtime.pending_turns.get(turn_id))
+        assert [v.context.action_judgments[0].outcome_band for v in variants] == ["failure", "critical_success"]
+        assert [v.scene_result.scene_text for v in variants] == ["攻击判定：failure", "攻击判定：critical_success"]
+        assert all(v.group_id == pending.group_id for v in variants)
+        assert [v.version_index for v in variants] == [2, 3]
+        assert runtime.pending_turns.get(pending.turn_id).scene_result == pending.scene_result
+    finally:
+        generation_graph.build_reroll_graph.cache_clear()

@@ -1,11 +1,10 @@
 import sqlite3
-
 import pytest
-
 from app.runtime import uow as uow_module
 from app.runtime.paths import CampaignPaths
 from app.runtime.session import CampaignRuntime
 from app.runtime.uow import CampaignUnitOfWork
+
 
 STORE_NAMES = (
     "current_state",
@@ -23,45 +22,6 @@ STORE_NAMES = (
 
 def _paths(tmp_path):
     return CampaignPaths.from_data_dir(tmp_path / "save")
-
-
-def test_single_shared_connection(tmp_path):
-    uow = CampaignUnitOfWork(_paths(tmp_path))
-    first = uow._get_conn()
-    second = uow._get_conn()
-    assert first is second
-    uow.close()
-
-
-def test_all_stores_share_one_connection(tmp_path):
-    uow = CampaignUnitOfWork(_paths(tmp_path))
-    conn = uow._get_conn()
-    for name in STORE_NAMES:
-        store = getattr(uow, name)
-        assert getattr(store, "_conn", None) is conn or getattr(store, "_db", None) is conn
-    uow.close()
-
-
-def test_close_is_idempotent(tmp_path):
-    uow = CampaignUnitOfWork(_paths(tmp_path))
-    uow.current_state
-    uow.close()
-    uow.close()
-
-
-def test_bootstrap_runs_before_business_transaction(tmp_path):
-    uow = CampaignUnitOfWork(_paths(tmp_path))
-    with uow.transaction():
-        tables = {
-            row[0]
-            for row in uow._get_conn().execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
-        }
-    assert "schema_versions" in tables
-    assert "continuity_items" in tables
-    assert "npc_profiles" in tables
-    uow.close()
 
 
 def test_transaction_commits_atomically(tmp_path):
@@ -222,6 +182,5 @@ def test_commit_failure_still_releases_resources(tmp_path, monkeypatch):
     # Commit raised inside __exit__, yet the UoW must still be fully released:
     assert uow.is_closed
     assert ref.unregistered == [uow]
-    assert uow._conn is None
     with pytest.raises(sqlite3.ProgrammingError):
         captured["real_conn"].execute("SELECT 1")

@@ -1,7 +1,5 @@
 import json
-
 import pytest
-
 from app.core.llm import MockLLM
 from app.core.llm.errors import LLMProviderError
 from app.domain.action_preview.agent import ActionPreviewAgent
@@ -14,9 +12,6 @@ from app.domain.current_state import (
     ResourcesState,
     SceneState,
 )
-from app.domain.scene_writer.schemas import NextActionDirection
-from app.domain.scene_facts.schemas import SceneFact, SceneFactSet
-from app.domain.scene_summary.schemas import SceneSummary
 
 
 def _make_state() -> CurrentState:
@@ -48,39 +43,10 @@ def _make_core_memory() -> CoreMemory:
     ])
 
 
-def _make_recent_summaries() -> list[SceneSummary]:
-    return []
-
-
 def _build_response() -> str:
-    return json.dumps({
-        "previews": [
-            {
-                "level": "正面威慑",
-                "label": "立刻追问米莉仓库区的异常。",
-                "good_result": "可能逼近仓库区线索的核心。",
-                "risk": "追问过急可能让米莉感到不安。",
-            },
-            {
-                "level": "情感动员",
-                "label": "先稳住语气确认米莉是否安全。",
-                "good_result": "可能获得更多信任并减少误会。",
-                "risk": "节奏放慢可能错过继续追问的窗口。",
-            },
-            {
-                "level": "线索核验",
-                "label": "对照旧地图询问仓库区位置。",
-                "good_result": "可能明确下一步可前往的方向。",
-                "risk": "暴露你对仓库区缺乏了解。",
-            },
-            {
-                "level": "话术试探",
-                "label": "用闲聊试探米莉是否避开某些名字。",
-                "good_result": "可能发现她刻意回避的线索范围。",
-                "risk": "试探太明显可能让谈话变僵。",
-            },
-        ],
-    }, ensure_ascii=False)
+    return _response([_preview(level=level, label=f"{level}行动") for level in (
+        "正面威慑", "情感动员", "线索核验", "话术试探",
+    )])
 
 
 class TestActionPreviewAgent:
@@ -91,7 +57,7 @@ class TestActionPreviewAgent:
         result = ActionPreviewAgent(mock.build_gateway()).generate(
             current_state=_make_state(),
             core_memory=_make_core_memory(),
-            recent_summaries=_make_recent_summaries(),
+            recent_summaries=[],
         )
 
         assert isinstance(result, ActionPreviewResult)
@@ -103,9 +69,6 @@ class TestActionPreviewAgent:
             "话术试探",
         }
         assert all(preview.label for preview in result.previews)
-
-
-
 
 
 def _preview(**overrides):
@@ -128,7 +91,7 @@ def _run(mock, **overrides):
     result = agent.generate(
         current_state=_make_state(),
         core_memory=_make_core_memory(),
-        recent_summaries=_make_recent_summaries(),
+        recent_summaries=[],
         **overrides,
     )
     return result, agent

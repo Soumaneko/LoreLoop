@@ -1,8 +1,5 @@
-from app.tests.factories.stores import open_npc_profile_store
 import sqlite3
-
 import pytest
-
 from app.runtime.services import RuntimeServices
 from app.runtime.sqlite import connect_sqlite, ensure_schema_version, transaction
 
@@ -32,33 +29,6 @@ def test_schema_version_rejects_newer_database():
     connection.close()
 
 
-def test_npc_profile_store_rejects_pre_versioned_columns(tmp_path):
-    db_path = tmp_path / "pre_versioned.db"
-    connection = sqlite3.connect(db_path)
-    connection.execute(
-        """
-        CREATE TABLE npc_profiles (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            aliases_json TEXT NOT NULL DEFAULT '[]',
-            profile_json TEXT NOT NULL,
-            source_scene_ids_json TEXT NOT NULL DEFAULT '[]',
-            confidence REAL NOT NULL DEFAULT 0.5,
-            updated_at TEXT NOT NULL DEFAULT '',
-            active INTEGER NOT NULL DEFAULT 1
-        )
-        """
-    )
-    connection.commit()
-    connection.close()
-
-    with pytest.raises(
-        RuntimeError,
-        match="current NPCProfile contract",
-    ):
-        open_npc_profile_store(str(db_path))
-
-
 def test_runtime_services_creates_trace_isolated_gateways():
     class Gateway:
         def __init__(self):
@@ -79,3 +49,23 @@ def test_runtime_services_creates_trace_isolated_gateways():
     assert first is not second
     assert first.context == {"session_type": "generation", "turn_index": 3}
     assert second.context == {"session_type": "maintenance", "turn_index": 4}
+
+
+@pytest.mark.parametrize("existing_data", [False, True], ids=["empty", "unrelated-database"])
+def test_unreadable_control_database_is_preserved(tmp_path, existing_data):
+    from app.runtime.paths import CampaignPaths
+    from app.runtime.turn_history import ensure_control_database
+
+    paths = CampaignPaths.from_data_dir(tmp_path)
+    control = tmp_path / ".runtime" / "control.db"
+    control.parent.mkdir()
+    with sqlite3.connect(control) as conn:
+        if existing_data:
+            conn.execute("CREATE TABLE owner_notes (note TEXT)")
+            conn.execute("INSERT INTO owner_notes VALUES ('keep me')")
+    with pytest.raises(RuntimeError):
+        ensure_control_database(paths)
+    assert control.is_file()
+    if existing_data:
+        with sqlite3.connect(control) as conn:
+            assert conn.execute("SELECT note FROM owner_notes").fetchone()[0] == "keep me"

@@ -218,3 +218,34 @@ class ScriptedDirectorGateway:
         if validator is not None:
             validator(result)
         return result
+
+
+def make_review_selection(title="无灯船", **changes):
+    from app.domain.director_event.schemas import (
+        DirectorEventSelectionResult,
+        EventHook,
+        WorldImpact,
+    )
+
+    values = dict(
+        current_story_direction=f"{title} 出现异常动静。",
+        conception="独立世界事件。",
+        title=title,
+        duration_phases=7,
+        actor_roles=[],
+        subject="陷空山脚猎户",
+        intent="查明灵气异动",
+        method="组队搜山",
+        macro_intent="猎户为了生存不择手段。",
+        hook_pool=[
+            EventHook(
+                hook_id="hook_sound",
+                kind="auditory",
+                content="深夜水面传来无人摇橹声。",
+                trigger_anchors=["旧码头"],
+            )
+        ],
+        world_impact=WorldImpact(description="外围变为凡人活动区。"),
+    )
+    values.update(changes)
+    return DirectorEventSelectionResult(**values)

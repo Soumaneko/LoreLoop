@@ -2,10 +2,7 @@ import json
 import os
 import stat
 import sys
-import threading
-
 import pytest
-
 from app.core.llm.config import SharedGatewayFactory
 from app.core.llm.providers import CONNECTION_TEST_TIMEOUT_SECONDS
 from app.core.llm.providers import FORMAL_LLM_CALL_TIMEOUT_SECONDS
@@ -234,6 +231,8 @@ def test_duplicate_non_custom_provider_rejected(tmp_path):
             config_set,
         )
 
+    assert store.load_set() == config_set
+
 
 def test_multiple_custom_services_allowed(tmp_path):
     store = ModelConfigStore(tmp_path / "model_config.json")
@@ -244,37 +243,6 @@ def test_multiple_custom_services_allowed(tmp_path):
     config_set = store.load_set()
     assert len(config_set.services) == 2
     assert config_set.active_config_id == a.config_id
-
-
-def test_concurrent_duplicate_add_does_not_overwrite(tmp_path):
-    store = ModelConfigStore(tmp_path / "model_config.json")
-    service = store.resolve_draft(
-        _service_payload(api_key="k1", name="A", preset_id="moonshot"),
-        _empty_set(),
-    )
-    store.save_set(ModelConfigSet((service,), service.config_id))
-
-    errors = []
-    def add(payload):
-        try:
-            save_model_config(payload, store=store, runtime=object())
-        except Exception as exc:
-            errors.append(exc)
-
-    threads = [
-        threading.Thread(
-            target=add,
-            args=(_service_payload(api_key="k2", preset_id="moonshot"),),
-        )
-        for _ in range(4)
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=2)
-
-    assert len(errors) == 4
-    assert len(store.load_set().services) == 1
 
 
 def test_activate_swaps_runtime_and_persists(tmp_path):

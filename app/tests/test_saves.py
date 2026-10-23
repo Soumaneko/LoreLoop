@@ -1,14 +1,11 @@
+from app.tests.factories.domains import make_pending_turn
 from app.core.client_error import ClientValidationError
 import json
 import os
-import sqlite3
 import threading
-
 import pytest
-
-from app.domain.core_memory import CoreMemory, InitConfig, build_initial_current_state
+from app.domain.core_memory import InitConfig, build_initial_current_state
 from app.domain.current_state import PlayerState, make_default_state
-from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.plot_outline.schemas import PlotOutlineResult
 from app.domain.scene_writer.schemas import SceneWriterResult
 from app.runtime.app_paths import APP_PATHS
@@ -31,22 +28,14 @@ def _pending_turn(
     version_index: int,
     state_before,
 ) -> PendingTurn:
-    context = NarrativeComposerContext(
-        user_input="推开门",
-        current_state=state_before,
-        action_judgments=[],
-        core_memory=CoreMemory(items=[]),
-    )
-    return PendingTurn(
+    return make_pending_turn(
         turn_id=turn_id,
         group_id=group_id,
         version_index=version_index,
         user_input="推开门",
-        difficulty="普通",
         max_chars=900,
         experience_mode="player",
         state_before=state_before,
-        context=context,
         outline=PlotOutlineResult(
             scene_stopping_point="门被推开。",
         ),
@@ -318,44 +307,6 @@ def test_save_manager_ignores_hidden_directories_and_symlinks(tmp_path):
         assert [save.name for save in manager.list()] == ["默认存档"]
         with pytest.raises(ValueError, match="canonical UUID"):
             manager.switch("linked")
-    finally:
-        runtime.close()
-
-
-def test_copy_does_not_install_root_legacy_database(tmp_path):
-    root = tmp_path / "saves"
-    runtime = CampaignRuntime(
-        "bootstrap",
-        paths=CampaignPaths.from_data_dir(tmp_path / "bootstrap"),
-        max_workers=1,
-    )
-    manager = SaveManager(root, runtime=runtime)
-    try:
-        original = manager.rename(manager.active_id, "带旧库")
-        original_dir = root / original.save_id
-        legacy = original_dir / "current_state.db"
-        with sqlite3.connect(legacy) as conn:
-            conn.execute(
-                "CREATE TABLE current_state "
-                "(id INTEGER PRIMARY KEY, state_json TEXT NOT NULL, "
-                "updated_at TEXT NOT NULL DEFAULT '')"
-            )
-            conn.execute(
-                "INSERT INTO current_state VALUES (1, ?, '')",
-                (
-                    json.dumps({
-                        "scene": {"scene_id": "s", "location": "l"},
-                        "player": {"name": "n"},
-                    }),
-                ),
-            )
-
-        copied = manager.copy(original.save_id)
-        assert len(manager.list()) == 2
-        assert legacy.is_file()
-        assert not (root / copied.save_id / "current_state.db").exists()
-        manager.switch(copied.save_id)
-        assert runtime.stores.current_state.load_or_default().scene.location != "l"
     finally:
         runtime.close()
 

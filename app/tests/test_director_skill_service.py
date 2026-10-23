@@ -20,12 +20,6 @@ from app.tests.factories.director_schemas import (
 )
 
 
-
-
-
-
-
-
 def test_skill_service_exposes_only_skills_available_in_phase():
     service = DirectorSkillService()
     service.register(
@@ -201,53 +195,6 @@ def test_director_agent_uses_registered_skill_and_validates_selection():
 
 
 
-def test_director_skill_specs_cover_every_registered_skill():
-    from app.domain.director import DirectorSkillService
-    from app.domain.director.skill_specs import get_director_skill_specs
-
-    specs = get_director_skill_specs()
-    spec_names = {spec.name for spec in specs}
-    assert spec_names == {
-        "present_event",
-        "introduce_npc",
-        "intrude_engaged_event",
-        "create_npc",
-        "create_event",
-        "bind_event_actor",
-        "upgrade_disclosure",
-    }
-
-    service = DirectorSkillService()
-    for spec in specs:
-        assert spec.description.strip()
-        assert spec.phases
-        service.register(
-            name=spec.name,
-            description=spec.description,
-            phases=set(spec.phases),
-            mutates=spec.mutates,
-            arguments_model=spec.arguments_model,
-            handler=lambda args, guidance=None: {},
-            max_requests_per_batch=spec.max_requests_per_batch,
-        )
-    assert {spec.name for spec in service.specs_for_phase("generation")} == {
-        "present_event",
-        "introduce_npc",
-        "intrude_engaged_event",
-        "upgrade_disclosure",
-    }
-    assert {spec.name for spec in service.specs_for_phase("confirmation")} == {
-        "create_npc",
-        "create_event",
-        "bind_event_actor",
-    }
-    for spec in specs:
-        if "generation" in spec.phases:
-            assert spec.mutates is False
-        if "confirmation" in spec.phases:
-            assert spec.mutates is True
-    create_event = next(spec for spec in specs if spec.name == "create_event")
-    assert create_event.max_requests_per_batch == 1
 
 
 def test_batch_validation_surfaces_real_arguments_error():

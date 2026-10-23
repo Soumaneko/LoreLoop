@@ -23,8 +23,6 @@ class TestSceneState:
         )
 
         assert state.participant_names == ["主角", "米莉"]
-        assert not hasattr(state, "atmosphere")
-        assert not hasattr(state, "time_label")
 
 
 class TestWorldClock:
@@ -53,8 +51,6 @@ class TestPlayerState:
         state = PlayerState(name="卢西安")
 
         assert state.visible_status is None
-        assert not hasattr(state, "condition")
-        assert not hasattr(state, "position")
 
 
 class TestParticipantState:
@@ -65,7 +61,6 @@ class TestParticipantState:
         )
 
         assert state.attitude_to_player == "感激主角"
-        assert not hasattr(state, "npc_conditions")
 
 
 class TestResourcesState:

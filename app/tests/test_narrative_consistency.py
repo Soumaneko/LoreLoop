@@ -1,8 +1,6 @@
 import json
 from types import SimpleNamespace
-
 import pytest
-
 from app.core.diagnostics import DiagnosticLogger
 from app.domain.canon_evidence.schemas import CanonEvidenceHit, CanonEvidenceSet, CanonQueryEvidence
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
@@ -170,10 +168,10 @@ def test_revise_outputs_composer_ready_semantic_assertion():
     instruction = render_revision_instruction(review)
 
     assert review.decision == "revise"
-    assert "正文错误：正文写成莱尔向埃利奥支付了两枚金币。" in instruction
-    assert "正确事实：Player Input 与 TR 均确定埃利奥向莱尔支付三枚金币" in instruction
-    assert "修订要求：改正付款主体、方向和数量" in instruction
-    assert "contract_violation" not in instruction
+    assertion = review.assertions[0]
+    assert assertion.incorrect_statement in instruction
+    assert assertion.authoritative_fact in instruction
+    assert assertion.required_revision in instruction
 
 
 def test_canon_assertion_requires_real_query_and_evidence():
@@ -774,7 +772,7 @@ def test_revision_node_reuses_composer_with_rendered_assertions(monkeypatch):
 
     request = captured["request"]
     assert request.source_scene_text == "错误正文。"
-    assert "正文错误：正文写成莱尔向埃利奥支付了两枚金币。" in request.requirements[0]
+    assert review.assertions[0].incorrect_statement in request.requirements[0]
     assert result["scene_result"].scene_text == "正确正文。"
     assert result["events"][0]["step"] == "narrative_revised"
     assert [event["step"] for event in streamed] == [

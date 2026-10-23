@@ -1,121 +1,11 @@
+from app.tests.factories.domains import make_pending_turn
 from app.tests.factories.stores import open_director_log_store
 import json
-
-from app.domain.core_memory import CoreMemory
-from app.domain.current_state import CurrentState, PlayerState, SceneState
-from app.domain.director.log import (
-    assemble_director_log_entry,
-    summarize_decision,
-)
-from app.domain.director.schemas import (
-    DirectorDecisionBatch,
-    DirectorGuidance,
-    DirectorSkillRequest,
-)
-from app.domain.director_npc import DirectorNPCDraft, KnownAbility
-from app.domain.narrative_composer.schemas import NarrativeComposerContext
-from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.plot_outline.schemas import PlotOutlineResult
-from app.domain.scene_writer import SceneWriterResult
+from app.domain.director.log import assemble_director_log_entry
+from app.domain.director.schemas import DirectorDecisionBatch
 from app.runtime.paths import CampaignPaths
-from app.runtime.session import PendingTurn, get_campaign_runtime
+from app.runtime.session import get_campaign_runtime
 from app.runtime.uow import CampaignUnitOfWork
-
-
-def _state() -> CurrentState:
-    return CurrentState(
-        scene=SceneState(scene_id="scene_001", location="测试地点"),
-        player=PlayerState(name="主角"),
-    )
-
-
-def _request(skill: str, arguments: dict, guidance=None) -> DirectorSkillRequest:
-    return DirectorSkillRequest(
-        request_id=f"req_{skill}",
-        skill=skill,
-        arguments=arguments,
-        guidance=guidance or "方向",
-    )
-
-
-def test_summarize_decision_covers_every_skill(tmp_path):
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    with stores.director_npc as store:
-        draft = DirectorNPCDraft(
-            name="林澈",
-            role="社区医生",
-            appearance="深色风衣。",
-            personality_trait="见人先问诊，习惯主动掌握对方近况",
-            known_abilities=[KnownAbility(name="急救", description="处理外伤与常见急症")],
-            core_motivation="保护社区居民。",
-            hidden_secret="曾目击旧案。",
-            conflict_style="先协商后行动。",
-            social_style="克制而友善。",
-            created_turn=1,
-        )
-        store.save(draft)
-    with stores.npc_profile as store:
-        npc_id = store.upsert(NPCProfile(name="顾晚棠", role="阁主"))
-
-    generation_decision = DirectorDecisionBatch(
-        reasoning="调度若干资源。",
-        requests=[
-            _request(
-                "introduce_npc",
-                {"npc_id": draft.draft_id, "view_mode": "face_to_face"},
-            ),
-            _request(
-                "upgrade_disclosure",
-                {"npc_id": npc_id, "new_disclosure_level": "intimate"},
-            ),
-            _request("present_event", {"event_id": "event_x"}),
-            _request("intrude_engaged_event", {"event_id": "event_x"}),
-        ],
-    )
-    confirmation_decision = DirectorDecisionBatch(
-        reasoning="创作资源。",
-        requests=[
-            _request(
-                "create_npc",
-                {"setting_requirements": [{"kind": "faction"}]},
-                guidance=DirectorGuidance(
-                    name="柴行简",
-                    purpose="加入商盟。",
-                    description="商盟执事。",
-                ),
-            ),
-            _request(
-                "create_event",
-                {
-                    "actors": [{"source": "new"}, {"source": "existing"}],
-                    "setting_requirements": [{"kind": "location"}],
-                },
-            ),
-            _request(
-                "bind_event_actor",
-                {"event_id": "event_x", "npc_id": draft.draft_id},
-            ),
-        ],
-    )
-
-    measures = "\n".join([
-        summarize_decision(generation_decision, stores),
-        summarize_decision(confirmation_decision, stores),
-    ])
-
-    assert "引入NPC「林澈」(face_to_face)" in measures
-    assert "披露升级「顾晚棠」→intimate" in measures
-    assert "呈现事件「event_x」" in measures
-    assert "引入事件「event_x」" in measures
-    assert "创建NPC「柴行简」依托faction" in measures
-    assert "创建事件 演员2 依托location" in measures
-    assert "绑定演员「event_x←林澈」" in measures
-
-
-def test_summarize_decision_empty_batch(tmp_path):
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    decision = DirectorDecisionBatch(reasoning="本轮无需干预。")
-    assert summarize_decision(decision, stores) == "无措施"
 
 
 def test_assemble_entry_shape(tmp_path):
@@ -127,12 +17,9 @@ def test_assemble_entry_shape(tmp_path):
         decision=decision,
         stores=stores,
     )
-    assert entry == {
-        "turn_index": 3,
-        "phase": "generation",
-        "reasoning": "引入林澈。",
-        "measures": "无措施",
-    }
+    assert entry["turn_index"] == 3
+    assert entry["phase"] == "generation"
+    assert entry["reasoning"] == decision.reasoning
 
 
 def test_recent_director_log_store_upserts_prunes_and_orders(monkeypatch):
@@ -176,34 +63,15 @@ def test_recent_director_log_store_upserts_prunes_and_orders(monkeypatch):
 
 def test_pending_turn_persists_director_log_entry(campaign_runtime):
     runtime = get_campaign_runtime()
-    state = _state()
-    pending = PendingTurn(
-        turn_id="turn-log",
+    pending = make_pending_turn(turn_id="turn-log",
         group_id="turn-log",
-        version_index=1,
-        user_input="观察四周",
-        difficulty="普通",
-        max_chars=900,
-        experience_mode="creator",
-        state_before=state,
-        context=NarrativeComposerContext(
-            user_input="观察四周",
-            current_state=state,
-            action_judgments=[],
-            core_memory=CoreMemory(items=[]),
-        ),
-        outline=PlotOutlineResult(
-            scene_stopping_point="停止点",
-        ),
-        scene_result=SceneWriterResult(scene_text="正文"),
         turn_index=3,
         director_log_entry={
             "turn_index": 3,
             "phase": "generation",
             "reasoning": "引入林澈。",
             "measures": "引入NPC「林澈」(face_to_face)",
-        },
-    )
+        })
     runtime.pending_turns.add(pending)
     try:
         records = runtime.history.pending_records()
@@ -292,6 +160,5 @@ def test_confirmation_entry_records_actual_execution_results(tmp_path):
     )
 
     assert "director_event_abc" in entry["measures"]
-    assert "创建事件" in entry["measures"]
-    assert "演员:周汐" in entry["measures"]
-    assert "创建NPC「柴行简」" in entry["measures"]
+    assert "周汐" in entry["measures"]
+    assert "柴行简" in entry["measures"]

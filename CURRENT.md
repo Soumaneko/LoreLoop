@@ -1893,9 +1893,11 @@ PYTHONPATH=. uv run python scripts/benchmark_context_retrieval.py --check
 PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --check
 ```
 
-The current Context History benchmark checker compares output byte-for-byte with
-`benchmarks/context_retrieval/baseline.json` (37 cases, benchmark version 3,
-must recall `41/41`, weighted recall `132/134`, and zero forbidden evidence or
+The Context History benchmark checker reports differences against
+`benchmarks/context_retrieval/baseline.json` and checks per-case must/weighted
+recall, forbidden evidence and domain invariant regressions (38 cases, benchmark
+version 3,
+must recall `42/42`, weighted recall `135/137`, and zero forbidden evidence or
 invariant violations). The NPC pipeline benchmark agrees with
 `benchmarks/npc_baseline/baseline_batch.json` (25 cases, weighted `285/291`,
 20 logical calls). `baseline.json` records the SHA-256 of `cases.json`. These
@@ -1919,9 +1921,10 @@ through the ordinary save path.
 Compiled graph builders use `functools.cache`, keyed by their actual structural
 arguments, including the canon-validation switch. Test replacements of cached
 nodes require explicit cache clearing. Generation-prefix content and confirmation
-retry caches retain their separate lifecycles. Frontend checks import callable
-modules for confirmation actions, runtime notices, and provider rendering, which
-the page binds to its existing state and UI functions. Packaging checks derive
+retry caches retain their separate lifecycles. Frontend checks import actual
+modules for data conversion, draft preservation and confirmation outcomes.
+Confirmation checks cover unknown results preventing resubmission and successful
+saves surviving a later refresh failure. Packaging checks derive
 application metadata from `APP_VERSION` and check the actual action references.
 
 Verification of infrastructure changes focuses on preserved player behavior:

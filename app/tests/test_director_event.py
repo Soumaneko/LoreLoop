@@ -1,21 +1,11 @@
 from app.tests.factories.stores import open_director_event_store
 from app.tests.factories.stores import open_world_setting_store
 import json
-import sqlite3
-
 import pytest
 from pydantic import ValidationError
-
 from app.domain.current_state import WorldClock
 from app.domain.director import DirectorResourceRef
-from app.domain.director_event import (
-    DirectorActorRef,
-    DirectorEventActorRole,
-    DirectorEventSelectionResult,
-    DirectorEventStore,
-    EventHook,
-    WorldImpact,
-)
+from app.domain.director_event import DirectorActorRef, DirectorEventActorRole, DirectorEventSelectionResult, EventHook, WorldImpact
 
 
 def _event_selection() -> DirectorEventSelectionResult:
@@ -92,26 +82,6 @@ def test_event_store_binds_existing_resources_without_owning_their_lifecycle():
     )
     assert store.get_by_id(event.event_id) == updated
     store.close()
-
-
-def test_event_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
-    db_path = tmp_path / "director_events.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "CREATE TABLE schema_versions(component TEXT PRIMARY KEY, version INTEGER)"
-    )
-    conn.execute(
-        "INSERT INTO schema_versions(component, version) VALUES ('director_event', 8)"
-    )
-    conn.commit()
-    conn.close()
-
-    try:
-        open_director_event_store(str(db_path))
-    except RuntimeError as exc:
-        assert "expected 11" in str(exc)
-    else:
-        raise AssertionError("previous DirectorEvent schema must be rejected")
 
 
 def test_hooks_are_stored_but_hidden_from_consumer_projections():

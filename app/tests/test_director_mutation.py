@@ -1,8 +1,5 @@
 import pytest
-
 from app.domain.director import DirectorResourceRef
-from app.domain.director_event.schemas import DirectorEvent
-from app.domain.current_state import WorldClock
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.world_setting import WorldSetting
 from app.runtime.director_mutation import (
@@ -12,19 +9,6 @@ from app.runtime.director_mutation import (
 )
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
-
-
-def _event() -> DirectorEvent:
-    return DirectorEvent(
-        title="旧桥封锁",
-        subject="河务署",
-        intent="控制渡河通道",
-        method="封锁旧桥",
-        macro_intent="改变城镇交通格局",
-        deadline_clock=WorldClock().advance_phase(3),
-        created_turn=1,
-        updated_turn=1,
-    )
 
 
 def test_apply_rejects_overwrite_existing_setting(tmp_path):
@@ -51,8 +35,6 @@ def test_apply_rejects_overwrite_existing_setting(tmp_path):
     )
     with pytest.raises(RuntimeError, match="overwrite an existing Setting"):
         apply_director_mutations(DirectorPendingMutationPlan(settings=[duplicate]), stores)
-    # No journal file should exist (Phase 5)
-    assert not (stores.paths.data_dir / ".runtime" / "director_mutation.json").exists()
 
 
 def test_apply_rejects_unknown_event_binding(tmp_path):
@@ -65,7 +47,6 @@ def test_apply_rejects_unknown_event_binding(tmp_path):
     )
     with pytest.raises(ValueError, match="unknown DirectorEvent"):
         apply_director_mutations(DirectorPendingMutationPlan(actor_bindings=[binding]), stores)
-    assert not (stores.paths.data_dir / ".runtime" / "director_mutation.json").exists()
 
 
 def test_apply_rolls_back_after_first_write_fails(tmp_path, monkeypatch):
@@ -116,10 +97,9 @@ def test_apply_rolls_back_after_first_write_fails(tmp_path, monkeypatch):
         assert s.get_by_id(setting.setting_id) is None
     with stores.director_npc as d:
         assert d.get_by_id(draft.draft_id) is None
-    assert not (stores.paths.data_dir / ".runtime" / "director_mutation.json").exists()
 
 
-def test_apply_does_not_create_journal_and_is_atomic(tmp_path):
+def test_invalid_binding_leaves_setting_unwritten(tmp_path):
     # Verify that a failed batch does not leave partial writes; atomicity is
     # provided by the outer campaign transaction, not by a journal.
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
@@ -146,4 +126,3 @@ def test_apply_does_not_create_journal_and_is_atomic(tmp_path):
     # Setting must not have been persisted (validation failed before apply)
     with stores.world_setting as s:
         assert s.get_by_id(setting.setting_id) is None
-    assert not (stores.paths.data_dir / ".runtime" / "director_mutation.json").exists()

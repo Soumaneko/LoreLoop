@@ -1,5 +1,5 @@
+from app.tests.factories.director import make_review_selection
 import pytest
-
 from pydantic import ValidationError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
@@ -16,16 +16,9 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = DirectorEventSelectionResult(
+    selection = make_review_selection(
+        "无灯船",
         current_story_direction="河岸码头出现异常动静。",
-        conception="独立世界事件。",
-        title="无灯船",
-        duration_phases=7,
-        actor_roles=[],
-        subject="陷空山脚猎户",
-        intent="查明灵气异动",
-        method="组队搜山",
-        macro_intent="猎户为了生存不择手段。",
         hook_pool=[
             EventHook(
                 hook_id="hook_sound",
@@ -40,7 +33,6 @@ def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
                 trigger_anchors=["旧码头"],
             ),
         ],
-        world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
@@ -74,25 +66,9 @@ def test_present_event_rejects_already_consumed_hook(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = DirectorEventSelectionResult(
+    selection = make_review_selection(
+        "无灯船",
         current_story_direction="河岸码头出现异常动静。",
-        conception="独立世界事件。",
-        title="无灯船",
-        duration_phases=7,
-        actor_roles=[],
-        subject="陷空山脚猎户",
-        intent="查明灵气异动",
-        method="组队搜山",
-        macro_intent="猎户为了生存不择手段。",
-        hook_pool=[
-            EventHook(
-                hook_id="hook_sound",
-                kind="auditory",
-                content="深夜水面传来无人摇橹声。",
-                trigger_anchors=["旧码头"],
-            )
-        ],
-        world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
@@ -139,16 +115,9 @@ def test_present_event_carries_optional_actors_into_material(tmp_path):
     )
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = DirectorEventSelectionResult(
+    selection = make_review_selection(
+        "无灯船",
         current_story_direction="河岸码头出现异常动静。",
-        conception="独立世界事件。",
-        title="无灯船",
-        duration_phases=7,
-        actor_roles=[],
-        subject="陷空山脚猎户",
-        intent="查明灵气异动",
-        method="组队搜山",
-        macro_intent="猎户为了生存不择手段。",
         hook_pool=[
             EventHook(
                 hook_id="hook_rumor",
@@ -157,7 +126,6 @@ def test_present_event_carries_optional_actors_into_material(tmp_path):
                 trigger_anchors=["旧码头"],
             )
         ],
-        world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
@@ -324,25 +292,9 @@ def test_present_event_requires_hook_id(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = DirectorEventSelectionResult(
+    selection = make_review_selection(
+        "无灯船",
         current_story_direction="河岸码头出现异常动静。",
-        conception="独立世界事件。",
-        title="无灯船",
-        duration_phases=7,
-        actor_roles=[],
-        subject="陷空山脚猎户",
-        intent="查明灵气异动",
-        method="组队搜山",
-        macro_intent="猎户为了生存不择手段。",
-        hook_pool=[
-            EventHook(
-                hook_id="hook_sound",
-                kind="auditory",
-                content="深夜水面传来无人摇橹声。",
-                trigger_anchors=["旧码头"],
-            )
-        ],
-        world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
@@ -383,25 +335,9 @@ def test_review_event_rejects_unknown_consume_hook(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = DirectorEventSelectionResult(
+    selection = make_review_selection(
+        "无灯船",
         current_story_direction="河岸码头出现异常动静。",
-        conception="独立世界事件。",
-        title="无灯船",
-        duration_phases=7,
-        actor_roles=[],
-        subject="陷空山脚猎户",
-        intent="查明灵气异动",
-        method="组队搜山",
-        macro_intent="猎户为了生存不择手段。",
-        hook_pool=[
-            EventHook(
-                hook_id="hook_sound",
-                kind="auditory",
-                content="深夜水面传来无人摇橹声。",
-                trigger_anchors=["旧码头"],
-            )
-        ],
-        world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
@@ -433,25 +369,9 @@ def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = DirectorEventSelectionResult(
+    selection = make_review_selection(
+        "无灯船",
         current_story_direction="河岸码头出现异常动静。",
-        conception="独立世界事件。",
-        title="无灯船",
-        duration_phases=7,
-        actor_roles=[],
-        subject="陷空山脚猎户",
-        intent="查明灵气异动",
-        method="组队搜山",
-        macro_intent="猎户为了生存不择手段。",
-        hook_pool=[
-            EventHook(
-                hook_id="hook_sound",
-                kind="auditory",
-                content="深夜水面传来无人摇橹声。",
-                trigger_anchors=["旧码头"],
-            )
-        ],
-        world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)
@@ -484,16 +404,9 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = DirectorEventSelectionResult(
+    selection = make_review_selection(
+        "无灯船",
         current_story_direction="河岸码头出现异常动静。",
-        conception="独立世界事件。",
-        title="无灯船",
-        duration_phases=7,
-        actor_roles=[],
-        subject="陷空山脚猎户",
-        intent="查明灵气异动",
-        method="组队搜山",
-        macro_intent="猎户为了生存不择手段。",
         hook_pool=[
             EventHook(
                 hook_id="hook_sound",
@@ -502,7 +415,6 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
                 trigger_anchors=["旧码头", "港务署"],
             )
         ],
-        world_impact=WorldImpact(description="外围变为凡人活动区。"),
     ).to_event(turn_index=1, current_clock=WorldClock())
     with stores.director_event as store:
         event_id = store.save(selection)

@@ -1,8 +1,6 @@
 import json
-
 import pytest
 from pydantic import ValidationError
-
 from app.core.llm import MockLLM
 from app.core.llm.schema import display_schema_json
 from app.domain.core_memory import (
@@ -295,13 +293,6 @@ def test_campaign_setup_world_context_accepts_exact_item_limits():
     assert len(result.peoples_and_beings[0]) == 10
     assert len(result.dominant_powers[0]) == 10
     assert len(result.major_world_conflicts[0]) == 50
-
-
-def test_campaign_setup_rejects_old_proposal_version():
-    payload = make_proposal().model_dump(mode="json")
-    payload["version"] = 1
-    with pytest.raises(ValidationError):
-        CampaignSetupProposal.model_validate(payload)
 
 
 def test_campaign_setup_keeps_realistic_world_subjects_minimal():

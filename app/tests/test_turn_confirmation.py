@@ -1,8 +1,6 @@
 from app.tests.factories.domains import make_pending_turn
 from types import SimpleNamespace
-
 import pytest
-
 from app.domain.core_memory import CampaignSetupProposal, InitConfig
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.opening_foundation import OpeningFoundation
@@ -10,7 +8,7 @@ from app.domain.scene_writer import SceneWriterResult
 from app.graph import confirmation_graph
 from app.graph.confirmation_nodes import director_agent_confirm_node
 from app.runtime.initialization import commit_campaign_setup
-from app.runtime.session import PendingOpening, PendingTurn, get_campaign_runtime
+from app.runtime.session import PendingOpening, get_campaign_runtime
 
 
 def _state() -> CurrentState:
@@ -195,13 +193,10 @@ def _prepare_persistence_test(monkeypatch, *, opening=False):
         with runtime.uow() as uow:
             uow.core_memory.save(CoreMemory(items=[]))
             uow.current_state.save(_state())
-        pending = PendingTurn(
-            turn_id="turn-save", group_id="turn-group", version_index=1,
-            user_input="观察四周", difficulty="困难", max_chars=1500,
-            experience_mode="player", state_before=_state(),
-            context=NarrativeComposerContext(
-                user_input="观察四周", current_state=_state(), core_memory=CoreMemory(items=[]),
-            ),
+        pending = make_pending_turn(
+            turn_id="turn-save", group_id="turn-group",
+            user_input="观察四周", difficulty="困难", experience_mode="player",
+            state_before=_state(),
             outline=PlotOutlineResult(scene_stopping_point="抵达北门"),
             scene_result=SceneWriterResult(scene_text="原始正文"),
         )
@@ -274,7 +269,26 @@ def test_selected_edited_variant_survives_undo_redo_and_reconfirmation(campaign_
 
 
 def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(campaign_runtime, monkeypatch):
+    from app.domain.world_setting import WorldSetting
+    from app.graph.confirmation_nodes import setting_appearance_update_node
+
     runtime, pending = _prepare_persistence_test(monkeypatch)
+    setting = WorldSetting(
+        kind="location", name="北门", summary="城镇北侧的入口。",
+        public_facts=["白天向行人开放。"], created_turn=0,
+    )
+    with runtime.uow(write=True) as uow:
+        uow.world_setting.save(setting)
+    scene_text = "玩家走到了北门。"
+    computed_wave = confirmation_graph.stream_confirmation_graph
+
+    def wave_with_setting_write(graph, state):
+        yield from computed_wave(graph, state)
+        yield from confirmation_graph.merge_confirmation_node_update(
+            state, setting_appearance_update_node(state),
+        )
+
+    monkeypatch.setattr(confirmation_graph, "stream_confirmation_graph", wave_with_setting_write)
     original = runtime.history.record_confirmation
 
     def fail_after_record(*args, **kwargs):
@@ -283,15 +297,18 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
 
     monkeypatch.setattr(runtime.history, "record_confirmation", fail_after_record)
     with pytest.raises(RuntimeError, match="injected write failure"):
-        list(confirmation_graph.confirm_stream(pending.turn_id))
+        list(confirmation_graph.confirm_stream(pending.turn_id, scene_text=scene_text))
     with runtime.uow() as uow:
         assert uow.current_state.load() == _state()
         assert uow.confirmed_history.turn_count() == 0
+        assert uow.world_setting.get_by_id(setting.setting_id).hit_count == 0
     assert runtime.history.get_transaction(pending.turn_id)["status"] == "failed"
     assert runtime.pending_turns.get(pending.turn_id) is pending
     monkeypatch.setattr(runtime.history, "record_confirmation", original)
-    list(confirmation_graph.confirm_stream(pending.turn_id, scene_text="重试后的正文"))
-    assert runtime.history.get_transaction(pending.turn_id)["scene_text"] == "重试后的正文"
+    list(confirmation_graph.confirm_stream(pending.turn_id, scene_text=scene_text))
+    assert runtime.history.get_transaction(pending.turn_id)["scene_text"] == scene_text
+    with runtime.uow() as uow:
+        assert uow.world_setting.get_by_id(setting.setting_id).hit_count == 1
 
 
 def test_saved_opening_survives_followup_failure_and_restart(campaign_runtime, monkeypatch, tmp_path):

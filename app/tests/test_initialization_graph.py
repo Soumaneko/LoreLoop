@@ -1,7 +1,5 @@
 import json
-
 import pytest
-
 from app.core.llm.token_usage import publish_token_usage
 from app.graph import initialization_graph
 from app.runtime.initialization_draft import (
@@ -131,17 +129,6 @@ class RecordingGateway:
                 "scene_text": "清晨，你抵达白塔港，登记大厅却突然封门。"
             }))
         raise AssertionError(f"unexpected task: {task}")
-
-
-def test_initialization_graph_has_only_foundation_then_settings_then_opening():
-    graph = initialization_graph.build_initialization_graph()
-    assert set(graph.get_graph().nodes) == {
-        "__start__",
-        "opening_foundation",
-        "opening_setting",
-        "opening_scene",
-        "__end__",
-    }
 
 
 def test_setup_and_initial_state_are_persisted_before_their_consumers(

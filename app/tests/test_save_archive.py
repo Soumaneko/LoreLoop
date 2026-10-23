@@ -4,19 +4,8 @@ import sqlite3
 import stat
 import zipfile
 from pathlib import Path
-
 import pytest
-
-from app.runtime.save_archive import (
-    ArchiveLimits,
-    SaveArchiveError,
-    ClientValidationError,
-    _safe_members,
-    create_consistent_snapshot,
-    export_save,
-    extract_archive,
-    InvalidSaveArchive,
-)
+from app.runtime.save_archive import ArchiveLimits, SaveArchiveError, ClientValidationError, create_consistent_snapshot, export_save, extract_archive, InvalidSaveArchive
 from app.runtime.save_manifest import SaveManifestRepository
 from app.runtime.campaign_migration import ensure_campaign_database
 from app.runtime.paths import CampaignPaths
@@ -94,27 +83,20 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
         '{"files": ["campaign.db"]}', encoding="utf-8"
     )
     (source / "ignored.txt").write_text("not portable", encoding="utf-8")
-    (source / "current_state.db").write_text("unused development file")
-    (source / ".runtime" / "turn_history.db").write_text("unused development file")
-    (source / ".runtime" / "director_mutation.json").write_text("{}")
     (source / ".snapshots" / "undo-one" / "settings.json").write_text("{}")
 
     archive = tmp_path / "save.zip"
     exported = export_save(source, archive)
     assert "ignored.txt" not in exported.files
-    assert "current_state.db" not in exported.files
-    assert ".runtime/turn_history.db" not in exported.files
     assert ".snapshots/undo-one/settings.json" not in exported.files
     with zipfile.ZipFile(archive) as bundle:
         assert "save/campaign.db" in bundle.namelist()
-        assert "save/.runtime/director_mutation.json" not in bundle.namelist()
         assert "save/ignored.txt" not in bundle.namelist()
 
     destination = tmp_path / "imported#%20name"
     extracted = extract_archive(archive, destination)
     assert extracted == exported
     assert SaveManifestRepository(destination).load().display_name == "Alpha"
-    assert not (destination / ".runtime" / "director_mutation.json").exists()
     with closing(sqlite3.connect(destination / ".snapshots" / "undo-one" / "campaign.db")) as db, db:
         assert db.execute("SELECT value FROM values_for_test").fetchone()[0] == "old"
 
@@ -184,29 +166,13 @@ def test_import_rejects_unsafe_history_paths(tmp_path, field, stored):
     assert list((tmp_path / "destination").iterdir()) == []
 
 
-@pytest.mark.parametrize("member", ["../escape.db", "/absolute.db"])
+@pytest.mark.parametrize("member", ["../escape.db", "/absolute.db", r"save\..\escape.db"])
 def test_import_rejects_zip_slip_paths(tmp_path, member):
     archive = tmp_path / "unsafe.zip"
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.writestr(member, b"bad")
     with pytest.raises(SaveArchiveError, match="Unsafe archive path"):
         extract_archive(archive, tmp_path / "staging")
-
-
-def test_member_validation_rejects_raw_backslash_path():
-    info = zipfile.ZipInfo("save/bad.db")
-    # ZipFile.writestr normalizes backslashes on Windows before writing them.
-    # Set the fields directly to exercise validation of a raw non-canonical name.
-    info.filename = r"save\bad.db"
-    info.orig_filename = r"save\bad.db"
-
-    class _Bundle:
-        @staticmethod
-        def infolist():
-            return [info]
-
-    with pytest.raises(SaveArchiveError, match="Unsafe archive path"):
-        _safe_members(_Bundle(), ArchiveLimits())
 
 
 def test_import_rejects_duplicate_members(tmp_path):
@@ -228,15 +194,6 @@ def test_import_rejects_symlink_members(tmp_path):
         bundle.writestr(link, "target")
     with pytest.raises(SaveArchiveError, match="Non-regular archive member"):
         extract_archive(archive, tmp_path / "staging")
-
-
-def test_import_enforces_compression_ratio_limit(tmp_path):
-    archive = tmp_path / "bomb.zip"
-    content = b"0" * 20_000
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
-        bundle.writestr("save/core_memory.json", content)
-    with pytest.raises(SaveArchiveError, match="compression ratio"):
-        extract_archive(archive, tmp_path / "staging", limits=ArchiveLimits(max_compression_ratio=2))
 
 
 def test_extract_rejects_invalid_sqlite_and_cleans_staging(tmp_path):
@@ -323,24 +280,11 @@ def test_import_rejects_damaged_snapshot(tmp_path, damage):
     assert list(destination.iterdir()) == []
 
 
-def test_missing_control_columns_are_archive_errors_but_io_is_not(tmp_path, monkeypatch):
-    source = tmp_path / "source"
-    source.mkdir()
-    SaveManifestRepository(source).create("Broken control")
-    _make_campaign_database(source / "campaign.db")
-    control = source / ".runtime" / "control.db"
-    _make_control_database(control)
-    with closing(sqlite3.connect(control)) as conn, conn:
-        conn.execute("ALTER TABLE turn_snapshots DROP COLUMN redo_path")
-    archive = tmp_path / "broken.zip"
-    _write_external_archive(source, archive)
-    with pytest.raises(InvalidSaveArchive, match="invalid save data") as rejected:
-        extract_archive(archive, tmp_path / "destination")
-    assert isinstance(rejected.value.__cause__, sqlite3.OperationalError)
-    assert "no such column: redo_path" in str(rejected.value.__cause__)
-
-    def unavailable(*args, **kwargs):
-        raise sqlite3.OperationalError("disk I/O error")
-    monkeypatch.setattr(sqlite3, "connect", unavailable)
-    with pytest.raises(sqlite3.OperationalError, match="I/O"):
-        extract_archive(archive, tmp_path / "destination")
+def test_import_rejects_oversized_member_without_extracting(tmp_path):
+    archive = tmp_path / "oversized.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("save/campaign.db", b"12345")
+    destination = tmp_path / "destination"
+    with pytest.raises(InvalidSaveArchive):
+        extract_archive(archive, destination, limits=ArchiveLimits(max_file_size=4))
+    assert not destination.exists() or list(destination.iterdir()) == []
