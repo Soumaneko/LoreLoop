@@ -38,7 +38,7 @@ def _draft():
     }
 
 
-def test_initialization_draft_round_trip_and_clear():
+def test_initialization_draft_round_trip_and_clear(campaign_runtime):
     saved = save_initialization_draft(_draft())
 
     assert saved == InitializationDraft.model_validate(_draft()).model_dump(
@@ -64,7 +64,7 @@ def test_initialization_draft_rejects_unknown_contract_fields():
         save_initialization_draft({**_draft(), "unexpected_stage": "old"})
 
 
-def test_unreadable_config_draft_is_preserved():
+def test_unreadable_config_draft_is_preserved(campaign_runtime):
     runtime = get_campaign_runtime()
     stale = {**_draft(), "config": {"version": 3, "world_name": "艾兰"}}
     path = runtime.paths.initialization_draft_json
@@ -77,7 +77,7 @@ def test_unreadable_config_draft_is_preserved():
     assert path.read_bytes() == original
 
 
-def test_unreadable_draft_envelope_is_preserved():
+def test_unreadable_draft_envelope_is_preserved(campaign_runtime):
     runtime = get_campaign_runtime()
     old = {
         "version": 3,
@@ -106,7 +106,7 @@ def test_stale_config_version_draft_is_rejected_on_save():
         save_initialization_draft(stale)
 
 
-def test_initialization_draft_cannot_be_written_after_initialization():
+def test_initialization_draft_cannot_be_written_after_initialization(campaign_runtime):
     commit_campaign_setup(
         InitConfig(
             world_name="艾兰",
@@ -135,7 +135,7 @@ def test_initialization_draft_cannot_be_written_after_initialization():
         save_initialization_draft(_draft())
 
 
-def test_committed_core_memory_must_match_config_and_proposal_projection():
+def test_committed_core_memory_must_match_config_and_proposal_projection(campaign_runtime):
     config = InitConfig(
         world_name="艾兰",
         world_style="西幻",
@@ -177,7 +177,7 @@ def test_committed_core_memory_must_match_config_and_proposal_projection():
         commit_campaign_setup(config, proposal)
 
 
-def test_incomplete_draft_round_trips_without_completeness_checks():
+def test_incomplete_draft_round_trips_without_completeness_checks(campaign_runtime):
     draft = {
         "version": 4,
         "stage": "campaign_setup",

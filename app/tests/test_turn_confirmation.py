@@ -1,3 +1,4 @@
+from app.tests.factories.domains import make_pending_turn
 from types import SimpleNamespace
 
 import pytest
@@ -71,7 +72,7 @@ def _opening_initialization(*, experience_mode: str):
     return config, record
 
 
-def test_turn_confirmation_runs_director_pipeline_for_player_and_creator(monkeypatch):
+def test_turn_confirmation_runs_director_pipeline_for_player_and_creator(campaign_runtime, monkeypatch):
     runtime = get_campaign_runtime()
     captured_modes = []
 
@@ -83,7 +84,7 @@ def test_turn_confirmation_runs_director_pipeline_for_player_and_creator(monkeyp
     for mode in ("player", "creator"):
         turn_id = f"turn-{mode}"
         runtime.pending_turns.add(
-            PendingTurn(
+            make_pending_turn(
                 turn_id=turn_id,
                 group_id=turn_id,
                 version_index=1,
@@ -92,8 +93,6 @@ def test_turn_confirmation_runs_director_pipeline_for_player_and_creator(monkeyp
                 max_chars=1500,
                 experience_mode=mode,
                 state_before=_state(),
-                context=SimpleNamespace(action_judgments=[]),
-                outline=SimpleNamespace(),
                 scene_result=SceneWriterResult(scene_text="场景正文"),
             )
         )
@@ -106,7 +105,7 @@ def test_turn_confirmation_runs_director_pipeline_for_player_and_creator(monkeyp
     assert captured_modes == ["player", "creator"]
 
 
-def test_opening_confirmation_always_runs_director_and_reset_flags(monkeypatch):
+def test_opening_confirmation_always_runs_director_and_reset_flags(campaign_runtime, monkeypatch):
     runtime = get_campaign_runtime()
     turn_id = "director-disabled-opening"
     config, record = _opening_initialization(experience_mode="player")
@@ -230,7 +229,7 @@ def _prepare_persistence_test(monkeypatch, *, opening=False):
     return runtime, pending
 
 
-def test_selected_edited_variant_survives_undo_redo_and_reconfirmation(monkeypatch):
+def test_selected_edited_variant_survives_undo_redo_and_reconfirmation(campaign_runtime, monkeypatch):
     from dataclasses import replace
     from app.core.client_error import ClientValidationError
     from app.runtime.player_state import load_confirmation_outcome
@@ -274,7 +273,7 @@ def test_selected_edited_variant_survives_undo_redo_and_reconfirmation(monkeypat
     assert load_confirmation_outcome(runtime.campaign_id, pending.turn_id)["outcome"] != "confirmed"
 
 
-def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(monkeypatch):
+def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(campaign_runtime, monkeypatch):
     runtime, pending = _prepare_persistence_test(monkeypatch)
     original = runtime.history.record_confirmation
 
@@ -295,7 +294,7 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(mon
     assert runtime.history.get_transaction(pending.turn_id)["scene_text"] == "重试后的正文"
 
 
-def test_saved_opening_survives_followup_failure_and_restart(monkeypatch, tmp_path):
+def test_saved_opening_survives_followup_failure_and_restart(campaign_runtime, monkeypatch, tmp_path):
     from app.runtime.session import CampaignRuntime
     from app.runtime.player_state import load_confirmation_outcome
     from app.runtime.paths import CampaignPaths
@@ -331,7 +330,7 @@ def test_saved_opening_survives_followup_failure_and_restart(monkeypatch, tmp_pa
         reopened.close()
 
 
-def test_control_cleanup_failure_invalidates_saved_generation_cache(monkeypatch):
+def test_control_cleanup_failure_invalidates_saved_generation_cache(campaign_runtime, monkeypatch):
     from dataclasses import replace
     from app.runtime.player_state import load_confirmation_outcome
 

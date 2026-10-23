@@ -1,3 +1,5 @@
+from app.domain.scene_writer.schemas import SceneWriterResult
+from app.tests.factories.domains import make_pending_turn
 import pytest
 
 from types import SimpleNamespace
@@ -25,7 +27,7 @@ from app.tests.factories.domains import (
 )
 
 
-def test_player_state_is_allow_listed_and_restores_pending_content():
+def test_player_state_is_allow_listed_and_restores_pending_content(campaign_runtime):
     runtime = get_campaign_runtime()
     core_memory = CoreMemory(items=[
         CoreMemoryItem(
@@ -119,14 +121,14 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
             hidden_facts=["地下层保存未登记档案。"],
             created_turn=1,
         ))
-    runtime.pending_turns.add(SimpleNamespace(
+    runtime.pending_turns.add(make_pending_turn(
         turn_id="turn-v1",
         group_id="group-1",
         version_index=1,
         turn_index=7,
         user_input="继续追问。",
         difficulty="普通",
-        scene_result=SimpleNamespace(
+        scene_result=SceneWriterResult(
             scene_text="埃利奥终于开口。",
             closing_prompt="你准备如何回应？",
         ),
@@ -191,7 +193,7 @@ def test_player_state_is_allow_listed_and_restores_pending_content():
     assert payload["experience_mode"] == "player"
 
 
-def test_text_highlights_exclude_single_char_settings_and_prefer_npc_on_collision():
+def test_text_highlights_exclude_single_char_settings_and_prefer_npc_on_collision(campaign_runtime):
     from app.runtime.player_state import _project_text_highlights
 
     runtime = get_campaign_runtime()
@@ -239,7 +241,7 @@ def test_text_highlights_exclude_single_char_settings_and_prefer_npc_on_collisio
     assert [item["surface"] for item in again] == [item["surface"] for item in items]
 
 
-def test_player_history_loads_five_turn_pages_oldest_to_newest():
+def test_player_history_loads_five_turn_pages_oldest_to_newest(campaign_runtime):
     runtime = get_campaign_runtime()
     with runtime.stores.short_term as store:
         for turn_index in range(1, 13):
@@ -264,7 +266,7 @@ def test_player_history_loads_five_turn_pages_oldest_to_newest():
     assert oldest["pagination"]["has_more"] is False
 
 
-def test_player_history_navigation_normalizes_and_truncates_user_input():
+def test_player_history_navigation_normalizes_and_truncates_user_input(campaign_runtime):
     runtime = get_campaign_runtime()
     with runtime.stores.short_term as store:
         store.add_turn("opening", 0, "", "开场正文")
@@ -287,7 +289,7 @@ def test_player_history_navigation_normalizes_and_truncates_user_input():
     assert len(navigation[1]["user_input_excerpt"]) == 32
 
 
-def test_player_history_navigation_preserves_sparse_turn_indexes():
+def test_player_history_navigation_preserves_sparse_turn_indexes(campaign_runtime):
     runtime = get_campaign_runtime()
     with runtime.stores.short_term as store:
         store.add_turn("scene-2", 2, "第二回合行动", "第二回合正文")
@@ -299,7 +301,7 @@ def test_player_history_navigation_preserves_sparse_turn_indexes():
     ]
 
 
-def test_player_history_navigation_is_empty_without_confirmed_turns():
+def test_player_history_navigation_is_empty_without_confirmed_turns(campaign_runtime):
     assert load_player_state()["history_navigation"] == []
 
 

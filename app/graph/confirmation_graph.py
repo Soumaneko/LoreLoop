@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from concurrent.futures import CancelledError
-from functools import wraps
+from functools import cache, wraps
 from typing import Callable
 
 from langgraph.graph import END, START, StateGraph
-from app.runtime.graph_cache import get_cached_graph
 
 from app.runtime.session import (
     get_campaign_runtime,
@@ -55,20 +54,8 @@ def capture_confirmation_node_errors(
     return wrapped
 
 
+@cache
 def build_confirmation_first_wave_graph():
-    dependencies = (
-        scene_fact_extract_node,
-        state_update_node,
-        scene_summarize_node,
-    )
-    return get_cached_graph(
-        "confirmation_first_wave",
-        dependencies,
-        _compile_confirmation_first_wave_graph,
-    )
-
-
-def _compile_confirmation_first_wave_graph():
     graph = StateGraph(ConfirmationState)
     graph.add_node(
         "scene_fact_extract",
@@ -91,21 +78,8 @@ def _compile_confirmation_first_wave_graph():
     return graph.compile()
 
 
+@cache
 def build_confirmation_second_wave_graph():
-    dependencies = (
-        action_preview_node,
-        continuity_project_node,
-        npc_profile_update_node,
-        setting_appearance_update_node,
-    )
-    return get_cached_graph(
-        "confirmation_second_wave",
-        dependencies,
-        _compile_confirmation_second_wave_graph,
-    )
-
-
-def _compile_confirmation_second_wave_graph():
     graph = StateGraph(ConfirmationState)
     graph.add_node(
         "action_preview",
@@ -149,15 +123,8 @@ def _compile_confirmation_second_wave_graph():
     return graph.compile()
 
 
+@cache
 def build_confirmation_director_graph():
-    return get_cached_graph(
-        "confirmation_director_agent",
-        (director_event_review_node, director_agent_confirm_node),
-        _compile_confirmation_director_graph,
-    )
-
-
-def _compile_confirmation_director_graph():
     graph = StateGraph(ConfirmationState)
     graph.add_node(
         "director_event_review",

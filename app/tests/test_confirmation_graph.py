@@ -1,3 +1,4 @@
+from app.tests.factories.domains import make_pending_turn
 from app.tests.factories.stores import open_world_setting_store
 from concurrent.futures import CancelledError
 from types import SimpleNamespace
@@ -409,7 +410,7 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         store.save(draft)
 
     scene_result = SceneWriterResult(scene_text="林澈走进来。")
-    pending = PendingTurn(
+    pending = make_pending_turn(
         turn_id="turn-staged",
         group_id="turn-staged",
         version_index=1,
@@ -418,8 +419,6 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         max_chars=1500,
         experience_mode="creator",
         state_before=state,
-        context=SimpleNamespace(action_judgments=[]),
-        outline=SimpleNamespace(),
         scene_result=scene_result,
         director_stage=DirectorStageResult(
             reasoning="引入林澈。",
@@ -503,7 +502,7 @@ def test_staged_npc_materials_fold_every_director_skill(tmp_path):
             )
         ],
     )
-    pending = PendingTurn(
+    pending = make_pending_turn(
         turn_id="turn-mix",
         group_id="turn-mix",
         version_index=1,
@@ -515,8 +514,6 @@ def test_staged_npc_materials_fold_every_director_skill(tmp_path):
             scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
             player=PlayerState(name="阿尔文"),
         ),
-        context=SimpleNamespace(action_judgments=[]),
-        outline=SimpleNamespace(),
         scene_result=SceneWriterResult(scene_text="灰衣人朝门口走来。"),
         director_stage=DirectorStageResult(
             reasoning="调度。",

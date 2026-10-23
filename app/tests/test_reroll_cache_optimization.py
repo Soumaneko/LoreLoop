@@ -198,7 +198,7 @@ def test_reroll_turn_stream_uses_reroll_graph(monkeypatch, configure_runtime_ser
         runtime.pending_turns.remove(turn_id)
 
 
-def test_generate_turn_stream_uses_prefix_cache_and_invalidates(monkeypatch):
+def test_generate_turn_stream_uses_prefix_cache_and_invalidates(campaign_runtime, monkeypatch):
     from app.domain.core_memory import CoreMemory
     from app.domain.short_term_memory import ShortTermMemory
     from app.graph import generation_graph
@@ -260,7 +260,7 @@ def test_generate_turn_stream_uses_prefix_cache_and_invalidates(monkeypatch):
     assert captured["has_action_parse"] is False
 
 
-def test_finalize_pending_turn_populates_snapshot_and_prefix_cache():
+def test_finalize_pending_turn_populates_snapshot_and_prefix_cache(campaign_runtime):
     from app.domain.plot_outline.schemas import PlotOutlineResult
     from app.domain.scene_writer.schemas import SceneWriterResult
     from app.domain.short_term_memory import ShortTermMemory

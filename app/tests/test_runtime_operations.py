@@ -1,3 +1,4 @@
+from app.tests.factories.domains import make_pending_turn
 from app.core.client_error import ClientValidationError
 import concurrent.futures
 import threading
@@ -17,8 +18,8 @@ from app.runtime.session import get_campaign_runtime
 
 
 @pytest.fixture
-def configured_runtime(monkeypatch):
-    runtime = get_campaign_runtime()
+def configured_runtime(monkeypatch, campaign_runtime):
+    runtime = campaign_runtime
     monkeypatch.setattr(runtime, "is_model_configured", lambda: True)
     return runtime
 
@@ -375,7 +376,7 @@ def test_public_api_starts_confirmation_with_pending_turn_metadata(
     configured_runtime,
 ):
     runtime = configured_runtime
-    runtime.pending_turns.add(SimpleNamespace(
+    runtime.pending_turns.add(make_pending_turn(
         turn_id="turn-confirm",
         group_id="group-confirm",
         version_index=1,

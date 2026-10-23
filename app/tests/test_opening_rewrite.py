@@ -157,7 +157,7 @@ def test_opening_rewrite_failure_preserves_existing_version(
     assert runtime.pending_openings.variants(source.group_id) == [source]
 
 
-def test_player_state_projects_opening_versions_without_private_foundation():
+def test_player_state_projects_opening_versions_without_private_foundation(campaign_runtime):
     runtime = get_campaign_runtime()
     record = _prepare_record()
     for version_index in (1, 2):

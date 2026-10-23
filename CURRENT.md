@@ -1908,6 +1908,22 @@ disclosure rules, retrieval, NPC/Director/Setting behavior, persistence, recover
 current-format file handling, model adapters, and frontend behavior. Test updates
 follow the product behavior and interfaces served by the implementation.
 
+Tests that use the default save request the function-scoped `campaign_runtime`
+fixture, directly or through a service fixture. It reconfigures the shared runtime
+to an isolated directory and closes it after use. Pure functions and independent
+stores run with their own dependencies; collection-time data-root isolation keeps
+runtime imports away from personal saves. Pending items entering persistence use
+the same schema-backed objects as generation, so persistence failures propagate
+through the ordinary save path.
+
+Compiled graph builders use `functools.cache`, keyed by their actual structural
+arguments, including the canon-validation switch. Test replacements of cached
+nodes require explicit cache clearing. Generation-prefix content and confirmation
+retry caches retain their separate lifecycles. Frontend checks import callable
+modules for confirmation actions, runtime notices, and provider rendering, which
+the page binds to its existing state and UI functions. Packaging checks derive
+application metadata from `APP_VERSION` and check the actual action references.
+
 Verification of infrastructure changes focuses on preserved player behavior:
 generation leaves editable pending content; confirmation accepts the selected
 text; saved progress reopens; normal Undo/Redo works; actual input/file failures

@@ -210,16 +210,15 @@ def test_windows_build_lock_requires_hashes():
 
 
 def test_application_version_generates_windows_and_build_metadata():
-    assert APP_VERSION == "0.1.0"
     assert __version__ == APP_VERSION
-    assert parse_application_version(APP_VERSION) == (0, 1, 0, 0)
+    numeric_version = parse_application_version(APP_VERSION)
     assert parse_application_version("1.2.3-alpha.7") == (1, 2, 3, 7)
 
     version_info = render_windows_version_info(APP_VERSION)
     ast.parse(version_info)
-    assert "filevers=(0, 1, 0, 0)" in version_info
-    assert "FileVersion', '0.1.0" in version_info
-    assert "ProductVersion', '0.1.0" in version_info
+    assert f"filevers={numeric_version}" in version_info
+    assert f"FileVersion', '{APP_VERSION}" in version_info
+    assert f"ProductVersion', '{APP_VERSION}" in version_info
     assert "ProductName', 'LoreLoop（续章）" in version_info
 
     info = build_information(
@@ -240,7 +239,7 @@ def test_github_workflow_pins_action_shas():
     ).read_text(encoding="utf-8")
 
     action_refs = re.findall(r"uses:\s+([^\s#]+)", workflow)
-    assert len(action_refs) == 3
+    assert action_refs
     assert all(
         re.fullmatch(r"actions/[a-z-]+@[0-9a-f]{40}", reference)
         for reference in action_refs

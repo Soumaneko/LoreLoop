@@ -23,6 +23,7 @@ class _DisconnectedWriter:
 
 
 def test_player_diagnostics_are_written_to_the_separate_diagnostic_log(
+    campaign_runtime,
     monkeypatch,
     tmp_path,
 ):
@@ -204,7 +205,7 @@ def test_operation_ack_path_parser_rejects_ambiguous_paths():
         )
 
 
-def test_player_ack_removes_completed_operation_from_recovery():
+def test_player_ack_removes_completed_operation_from_recovery(campaign_runtime):
     runtime = get_campaign_runtime()
 
     def stream():

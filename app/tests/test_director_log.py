@@ -174,7 +174,7 @@ def test_recent_director_log_store_upserts_prunes_and_orders(monkeypatch):
         assert overwritten["reasoning"] == "c5b"
 
 
-def test_pending_turn_persists_director_log_entry():
+def test_pending_turn_persists_director_log_entry(campaign_runtime):
     runtime = get_campaign_runtime()
     state = _state()
     pending = PendingTurn(

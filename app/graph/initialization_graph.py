@@ -4,7 +4,7 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
-from app.runtime.graph_cache import get_cached_graph
+from functools import cache
 from app.runtime.session import get_campaign_runtime
 
 from .fold import fold_node_update
@@ -21,20 +21,8 @@ from .initialization_nodes import (
 from .initialization_state import InitializationState
 
 
+@cache
 def build_initialization_graph():
-    dependencies = (
-        opening_foundation_node,
-        opening_setting_node,
-        opening_scene_node,
-    )
-    return get_cached_graph(
-        "initialization:v2",
-        dependencies,
-        _compile_initialization_graph,
-    )
-
-
-def _compile_initialization_graph():
     graph = StateGraph(InitializationState)
     graph.add_node("opening_foundation", opening_foundation_node)
     graph.add_node("opening_setting", opening_setting_node)

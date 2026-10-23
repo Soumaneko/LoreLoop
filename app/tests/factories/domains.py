@@ -27,3 +27,27 @@ def make_player_resolution() -> PlayerTurnResolution:
         "final_value": 10,
         "dice_sides": 20,
     }])
+
+
+def make_pending_turn(**changes):
+    from app.domain.core_memory import CoreMemory
+    from app.domain.current_state import make_default_state
+    from app.domain.narrative_composer.schemas import NarrativeComposerContext
+    from app.domain.plot_outline.schemas import PlotOutlineResult
+    from app.domain.scene_writer.schemas import SceneWriterResult
+    from app.runtime.session import PendingTurn
+
+    state = changes.get("state_before", make_default_state())
+    user_input = changes.get("user_input", "观察门外")
+    values = dict(
+        turn_id="turn", group_id="group", version_index=1,
+        user_input=user_input, difficulty="普通", max_chars=1500,
+        experience_mode="creator", state_before=state,
+        context=NarrativeComposerContext(
+            user_input=user_input, current_state=state, core_memory=CoreMemory(items=[]),
+        ),
+        outline=PlotOutlineResult(scene_stopping_point="门外的动静已经清楚。"),
+        scene_result=SceneWriterResult(scene_text="门外传来脚步声。"),
+    )
+    values.update(changes)
+    return PendingTurn(**values)

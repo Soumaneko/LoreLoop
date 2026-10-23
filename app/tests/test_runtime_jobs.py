@@ -3,7 +3,6 @@ import threading
 import pytest
 
 from app.graph import generation_graph
-from app.runtime.graph_cache import COMPILED_GRAPH_CACHE
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
 
@@ -86,23 +85,12 @@ def test_job_coordinator_delegates_execution_to_operation_manager():
         operations.shutdown()
 
 
-def test_compiled_generation_graph_is_cached_and_dependency_aware(monkeypatch):
-    COMPILED_GRAPH_CACHE.clear("generation")
-    first = generation_graph.build_generation_graph(
-        canon_validation_is_enabled=True,
-    )
-    second = generation_graph.build_generation_graph(
-        canon_validation_is_enabled=True,
-    )
-    assert first is second
-
-    original = generation_graph.compose_narrative_node
-
-    def replacement(state):
-        return original(state)
-
-    monkeypatch.setattr(generation_graph, "compose_narrative_node", replacement)
-    rebuilt = generation_graph.build_generation_graph(
-        canon_validation_is_enabled=True,
-    )
-    assert rebuilt is not first
+def test_compiled_generation_graph_reuses_configuration():
+    builder = generation_graph.build_generation_graph
+    builder.cache_clear()
+    try:
+        enabled = builder(canon_validation_is_enabled=True)
+        assert builder(canon_validation_is_enabled=True) is enabled
+        assert builder(canon_validation_is_enabled=False) is not enabled
+    finally:
+        builder.cache_clear()

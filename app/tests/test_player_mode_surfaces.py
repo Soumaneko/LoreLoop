@@ -65,12 +65,12 @@ def test_records_route_accepts_requested_view(monkeypatch):
     assert captured == {"view": "advanced"}
 
 
-def test_load_player_events_in_player_mode():
+def test_load_player_events_in_player_mode(campaign_runtime):
     _seed_event()
     assert len(load_player_events()["events"]) == 1
 
 
-def test_load_player_events_browses_creator_mode():
+def test_load_player_events_browses_creator_mode(campaign_runtime):
     _seed_event()
     save_experience_mode({"experience_mode": "creator"})
     payload = load_player_events()
@@ -83,14 +83,14 @@ def test_load_player_events_browses_creator_mode():
     assert event["created_turn"] == 1
 
 
-def test_core_memory_can_be_edited_in_player_mode():
+def test_core_memory_can_be_edited_in_player_mode(campaign_runtime):
     _seed_core_memory()
     assert load_core_memory_items()["items"][0]["id"] == "base_rule"
     assert save_core_memory_items({"items": []})["items"] == []
     assert load_core_memory_items()["items"] == []
 
 
-def test_core_memory_new_items_are_player_sourced_and_keep_existing_source():
+def test_core_memory_new_items_are_player_sourced_and_keep_existing_source(campaign_runtime):
     _seed_core_memory()
     save_experience_mode({"experience_mode": "creator"})
     saved = save_core_memory_items({"items": [
@@ -115,7 +115,7 @@ def test_core_memory_new_items_are_player_sourced_and_keep_existing_source():
     assert new_item["content"] == "保持克制的悬疑氛围。"
 
 
-def test_core_memory_rejects_invalid_items():
+def test_core_memory_rejects_invalid_items(campaign_runtime):
     _seed_core_memory()
     save_experience_mode({"experience_mode": "creator"})
     with pytest.raises(ClientValidationError):
@@ -126,7 +126,7 @@ def test_core_memory_rejects_invalid_items():
         save_core_memory_items({"items": [{"content": "  "}]})
 
 
-def test_core_memory_rejects_uninitialized_runtime():
+def test_core_memory_rejects_uninitialized_runtime(campaign_runtime):
     save_experience_mode({"experience_mode": "creator"})
     with pytest.raises(ClientValidationError):
         save_core_memory_items({"items": []})

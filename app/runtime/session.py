@@ -517,13 +517,10 @@ class CampaignRuntime:
             selected.original_scene_text = (
                 None if requested_text == source_text else source_text
             )
-            persisted = (
+            if isinstance(selected, PendingTurn):
                 self._persist_pending_turn(selected)
-                if isinstance(selected, PendingTurn)
-                else self._persist_pending_opening(selected)
-            )
-            if not persisted:
-                raise RuntimeError("Pending scene edit could not be persisted")
+            else:
+                self._persist_pending_opening(selected)
             return {
                 "turn_id": selected.turn_id,
                 "scene_text": source_text,
@@ -544,18 +541,7 @@ class CampaignRuntime:
             on_remove=self.history.discard,
         )
 
-    def _persist_pending_turn(self, pending: PendingTurn) -> bool:
-        # Some unit-level callers intentionally use lightweight stand-ins for
-        # graph inputs.  Only durable, schema-backed pending turns can safely be
-        # reconstructed after a process restart.
-        if not (
-            isinstance(pending, PendingTurn)
-            and isinstance(pending.state_before, CurrentState)
-            and isinstance(pending.context, NarrativeComposerContext)
-            and isinstance(pending.outline, PlotOutlineResult)
-            and isinstance(pending.scene_result, SceneWriterResult)
-        ):
-            return False
+    def _persist_pending_turn(self, pending: PendingTurn) -> None:
         payload = {
             "turn_id": pending.turn_id,
             "group_id": pending.group_id,
@@ -591,16 +577,8 @@ class CampaignRuntime:
             turn_index=pending.turn_index,
             payload=payload,
         )
-        return True
 
-    def _persist_pending_opening(self, pending: PendingOpening) -> bool:
-        if not (
-            isinstance(pending, PendingOpening)
-            and isinstance(pending.config, InitConfig)
-            and isinstance(pending.current_state, CurrentState)
-            and isinstance(pending.scene_result, SceneWriterResult)
-        ):
-            return False
+    def _persist_pending_opening(self, pending: PendingOpening) -> None:
         payload = {
             "turn_id": pending.turn_id,
             "group_id": pending.group_id,
@@ -621,7 +599,6 @@ class CampaignRuntime:
             turn_index=0,
             payload=payload,
         )
-        return True
 
     def _restore_pending_transactions(self) -> None:
         for record in self.history.pending_records():
@@ -789,11 +766,9 @@ class CampaignRuntime:
         if record is not None and record["status"] == "completed":
             raise ClientValidationError("这一版本已确认，请刷新界面，不要重复确认。")
         if isinstance(pending, PendingTurn):
-            journaled = self._persist_pending_turn(pending)
+            self._persist_pending_turn(pending)
         else:
-            journaled = self._persist_pending_opening(pending)
-        if not journaled:
-            return False
+            self._persist_pending_opening(pending)
         self.jobs.wait_for_idle()
         self.history.begin_confirmation(
             pending.turn_id,

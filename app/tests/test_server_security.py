@@ -478,7 +478,7 @@ def test_main_allows_loopback_bind_without_flag(monkeypatch):
     assert served == [True]
 
 
-def test_player_handler_raw_base_remains_unauthenticated():
+def test_player_handler_raw_base_remains_unauthenticated(campaign_runtime):
     handler = object.__new__(PlayerHandler)
     handler.path = "/api/player/state"
     handler.headers = {}
@@ -501,7 +501,7 @@ def test_player_index_serves_html():
 
 
 @pytest.mark.parametrize("kind", ["not_zip", "missing_files", "new_version", "permission", "install"])
-def test_save_import_reports_real_reason_without_installing_save(tmp_path, monkeypatch, kind):
+def test_save_import_reports_real_reason_without_installing_save(campaign_runtime, tmp_path, monkeypatch, kind):
     import zipfile
     from app.runtime import saves
     from app.runtime.session import get_campaign_runtime
@@ -556,7 +556,7 @@ def test_save_import_reports_real_reason_without_installing_save(tmp_path, monke
     assert not list(manager.root.glob(".import-*"))
 
 
-def test_duplicate_save_name_is_a_business_error(tmp_path, monkeypatch):
+def test_duplicate_save_name_is_a_business_error(campaign_runtime, tmp_path, monkeypatch):
     from app.runtime import saves
     from app.runtime.session import get_campaign_runtime
 

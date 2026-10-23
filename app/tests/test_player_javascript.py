@@ -12,12 +12,9 @@ def test_provider_expansion_and_explicit_selection_gate():
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    start = source.index("function renderProviderOptions(catalog)")
-    render = source[start:source.index("\nfunction renderProviderFieldPlaceholder", start)]
     script = r'''
 import assert from "node:assert/strict";
-const { commonProviderCandidates, searchProviderCandidates } = await import(process.argv[1]);
+const { renderProviderOptionsView } = await import(process.argv[1]);
 function element() {
   return {value: "", children: [], setAttribute(k, v) {this[k] = v;},
     replaceChildren() {this.children = [];}, append(x) {this.children.push(x);}};
@@ -37,7 +34,7 @@ const catalog = {providers: [
   {provider_id: "openai", provider_name: "OpenAI"},
   {provider_id: "other", provider_name: "Other service"},
 ]};
-__RENDER__
+const renderProviderOptions = catalog => renderProviderOptionsView(catalog, { els, modelDraftIsNew, modelProviderPickerOpen, modelSelection,   modelDraftOriginal, modelConfigsCache, modelProvidersExpanded,   modelCatalogLoading, modelCatalogError, catalogProviderById, chooseProvider });
 renderProviderOptions(catalog);
 assert.deepEqual(els.modelProviderResults.children.map(x => x.textContent), ["OpenAI"]);
 assert.equal(els.modelConnectionFields.hidden, true);
@@ -73,7 +70,7 @@ renderProviderOptions(catalog);
 assert.equal(els.modelConnectionFields.hidden, false);
 assert.equal(els.modelProviderChange.hidden, true);
 assert.equal(els.modelRefreshBtn.hidden, true);
-'''.replace("__RENDER__", render)
+'''
     result = subprocess.run(
         [node, "--input-type=module", "--eval", script,
          (STATIC_DIR / "model_configs.js").resolve().as_uri()],
@@ -135,27 +132,8 @@ def test_player_frontend_javascript_is_syntactically_valid():
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    for filename in (
-        "api.js",
-        "app.js",
-        "campaign_setup.js",
-        "client_diagnostics.js",
-        "custom_select.js",
-        "error_feedback.js",
-        "initialization_draft.js",
-        "model_combobox.js",
-        "model_configs.js",
-        "model_selection.js",
-        "prepaint.js",
-        "popover_fallback.js",
-        "progress_labels.js",
-        "reader_preferences.js",
-        "records_policy.js",
-        "setting_info.js",
-        "state.js",
-        "storage_migration.js",
-    ):
-        source = (STATIC_DIR / filename).read_text(encoding="utf-8")
+    for path in STATIC_DIR.glob("*.js"):
+        source = path.read_text(encoding="utf-8")
         result = subprocess.run(
             [node, "--input-type=module", "--check"],
             input=source,
@@ -377,10 +355,7 @@ def test_custom_select_option_click_and_search():
     if node is None:
         pytest.skip("node is not installed")
     script = r'''
-import fs from "node:fs";
-import vm from "node:vm";
 import assert from "node:assert/strict";
-const src = fs.readFileSync(process.argv[1], "utf8");
 
 function makeEl(tag) {
   const el = {
@@ -449,11 +424,9 @@ for (const o of [
 select.value = "";
 select.dataset.searchable = "true";
 
-const ctx = { document: doc, Event: globalThis.Event };
-vm.createContext(ctx);
-vm.runInContext(src.replace(/export /g, ""), ctx);
+const {enhanceCustomSelect, openCustomSelect} = await import(process.argv[1]);
 
-ctx.enhanceCustomSelect(select);
+enhanceCustomSelect(select);
 const wrapper = select.nextElementSibling;
 assert.ok(wrapper.classList.contains("codex-custom-select-wrapper"));
 const menu = wrapper.querySelector(".codex-custom-select-menu");
@@ -461,7 +434,7 @@ const search = wrapper.querySelector(".codex-custom-select-search");
 assert.ok(search, "searchable select renders a search box");
 
 // Opening the menu exposes options and focuses the search box.
-ctx.openCustomSelect(select);
+openCustomSelect(select);
 assert.equal(menu.hidden, false);
 assert.equal(search.focused, true);
 
@@ -478,7 +451,7 @@ assert.equal(menu.hidden, true);
 // A change handler that reopens the menu (the "搜索全部服务" entry) keeps it open.
 let reopened = false;
 select.addEventListener("change", () => {
-  if (select.value === "__search__") { ctx.openCustomSelect(select); reopened = true; }
+  if (select.value === "__search__") { openCustomSelect(select); reopened = true; }
 });
 const searchOption = menu.querySelectorAll(".codex-custom-select-option").find((o) => o.dataset.value === "__search__");
 searchOption.onclick({ stopPropagation() {} });
@@ -491,7 +464,7 @@ search.oninput();
 assert.deepEqual(menu.querySelectorAll(".codex-custom-select-option").map((o) => o.dataset.value), ["anthropic"]);
 '''
     result = subprocess.run(
-        [node, "--input-type=module", "--eval", script, str(STATIC_DIR / "custom_select.js")],
+        [node, "--input-type=module", "--eval", script, (STATIC_DIR / "custom_select.js").resolve().as_uri()],
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -702,12 +675,6 @@ if (shouldSuppressRecordsPollError({{ startedMode: "idle", currentMode: "pending
     )
     assert result.returncode == 0, result.stderr
 
-    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    start = source.index("function startRecordsPoll()")
-    body = source[start:source.index("\n}", start)]
-    assert body.index("isRecordsPollingPaused") < body.index("stopRecordsPoll")
-
-
 def test_campaign_setup_submit_validation_accepts_player_edits():
     node = shutil.which("node")
     if node is None:
@@ -849,8 +816,6 @@ def test_confirmation_failure_checks_commit_instead_of_pending_ui():
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    source = (STATIC_DIR / "app.js").read_text()
-    code = source[source.index("let uncertainConfirmation = null;"):source.index("async function discardPending()")]
     script = r'''
 import assert from "node:assert/strict";
 const state = {activeSave: "save-1"};
@@ -871,7 +836,14 @@ const request = async () => ({outcome: lookup});
 const loadAll = async () => { if (refreshFails) throw new Error("refresh failed"); };
 const tokenUsage = {getVariantUsage: () => null, getCurrentPendingUsage: () => ({}),
   saveFullVariantUsage() {}, cleanUpUnconfirmedVariants() {}, clearPendingUsage() {}};
-__CODE__
+const {createConfirmationActions} = await import("__MODULE_URL__");
+const {confirmTurn} = createConfirmationActions({
+  state, activePending, selectedVariant, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY,
+  setMode, renderPending, renderControls, renderAll, readDraft, newRequestId,
+  handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
+  refreshRecords, refreshRecordsAfterTurn, showToast, showError, stream, subscribe: async () => {},
+  request, loadAll, tokenUsage
+});
 refreshFails = true;
 await confirmTurn();
 assert.equal(feedback.confirmationOutcome, "confirmed");
@@ -887,7 +859,7 @@ assert.equal(streams, previous, "unknown outcome must not resubmit confirmation"
 lookup = "confirmed";
 await feedback.recheckConfirmation();
 assert.equal(feedback.confirmationOutcome, "confirmed");
-'''.replace("__CODE__", code)
+'''.replace("__MODULE_URL__", (STATIC_DIR / "confirmation.js").resolve().as_uri())
     result = subprocess.run([node, "--input-type=module", "--eval", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
@@ -961,8 +933,6 @@ def test_runtime_notice_is_visible_and_replay_deduplicates():
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    source = (STATIC_DIR / "app.js").read_text()
-    code = source[source.index("function renderRuntimeNotices()"):source.index("function showError(")]
     script = r'''
 import assert from "node:assert/strict";
 const state = {runtimeNotices: []};
@@ -971,7 +941,8 @@ const elements = Object.fromEntries(["runtimeNotices", "runtimeNoticeSummary", "
 }]));
 const $ = id => elements[id];
 const document = {createElement: () => ({textContent:""})};
-__CODE__
+const {createRuntimeNotices} = await import("__MODULE_URL__");
+const {renderRuntimeNotices, handleRuntimeNotice} = createRuntimeNotices({state, $, document});
 const event = {step:"runtime_notice", data:{notice_id:"op:check", created_at:"2026-10-21T00:00:00Z", message:"正文已生成，本次一致性检查未完成"}};
 assert.equal(handleRuntimeNotice(event), true);
 assert.equal(elements.runtimeNotices.hidden, false);
@@ -982,7 +953,7 @@ state.runtimeNotices = JSON.parse(JSON.stringify(state.runtimeNotices));
 renderRuntimeNotices();
 assert.ok(elements.runtimeNoticeList.children[0].textContent.includes("检查未完成"));
 assert.equal(handleRuntimeNotice({step:"narrative_checked", data:{}}), false);
-'''.replace("__CODE__", code)
+'''.replace("__MODULE_URL__", (STATIC_DIR / "runtime_notices.js").resolve().as_uri())
     result = subprocess.run([node, "--input-type=module", "--eval", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
@@ -991,8 +962,6 @@ def test_resumed_confirmation_refresh_failure_keeps_success_fact():
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not installed")
-    source = (STATIC_DIR / "app.js").read_text()
-    code = source[source.index("async function resumeConfirmationOperation("):source.index("async function rewriteFromFeedbackText(")]
     script = r'''
 import assert from "node:assert/strict";
 const state = {activeSave:"save-1"};
@@ -1004,13 +973,17 @@ const acknowledgeHandledOperation = async () => {}, acknowledgeFailedOperation =
 const refreshRecords = () => {}, refreshRecordsAfterTurn = () => {}, showToast = () => {};
 const loadAll = async () => { throw new Error("refresh failed"); };
 let result;
-const showConfirmationFailure = async (error, confirmation, completed) => {result = {error, confirmation, completed};};
-__CODE__
+const showError = (error, fallback, options) => { result = {error, ...options}; };
+const {createConfirmationActions} = await import("__MODULE_URL__");
+const {resumeConfirmationOperation} = createConfirmationActions({
+  state, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY, setMode, renderPending, renderControls,
+  subscribe, handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
+  refreshRecords, refreshRecordsAfterTurn, showToast, loadAll, showError, renderAll: () => {},
+});
 await resumeConfirmationOperation({operation_id:"op", metadata:{turn_id:"variant-1"}});
-assert.equal(result.completed, true);
+assert.equal(result.confirmationOutcome, "confirmed");
 assert.equal(result.error.message, "refresh failed");
-assert.deepEqual(result.confirmation, {turnId:"variant-1", saveId:"save-1"});
-'''.replace("__CODE__", code)
+'''.replace("__MODULE_URL__", (STATIC_DIR / "confirmation.js").resolve().as_uri())
     result = subprocess.run([node, "--input-type=module", "--eval", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 

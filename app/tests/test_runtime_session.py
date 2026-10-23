@@ -1,3 +1,4 @@
+from app.tests.factories.domains import make_pending_turn
 from app.core.client_error import ClientValidationError
 import threading
 from types import SimpleNamespace
@@ -69,7 +70,7 @@ def test_open_campaign_resources_recovers_before_uow_and_closes_on_failure(
     ]
 
 
-def test_pytest_default_runtime_is_always_scoped_to_tmp_path(tmp_path):
+def test_pytest_default_runtime_is_always_scoped_to_tmp_path(campaign_runtime, tmp_path):
     runtime = get_campaign_runtime()
 
     assert runtime.campaign_id == "pytest"
@@ -98,7 +99,7 @@ def test_runtime_discards_pending_group_and_returns_original_input(tmp_path):
         max_workers=1,
     )
     try:
-        runtime.pending_turns.add(SimpleNamespace(
+        runtime.pending_turns.add(make_pending_turn(
             turn_id="v1",
             group_id="g",
             version_index=1,
@@ -106,7 +107,7 @@ def test_runtime_discards_pending_group_and_returns_original_input(tmp_path):
             difficulty="困难",
             max_chars=1500,
         ))
-        runtime.pending_turns.add(SimpleNamespace(
+        runtime.pending_turns.add(make_pending_turn(
             turn_id="v2",
             group_id="g",
             version_index=2,
@@ -114,7 +115,7 @@ def test_runtime_discards_pending_group_and_returns_original_input(tmp_path):
             difficulty="困难",
             max_chars=1500,
         ))
-        runtime.pending_turns.add(SimpleNamespace(
+        runtime.pending_turns.add(make_pending_turn(
             turn_id="other",
             group_id="other",
             version_index=1,
@@ -147,7 +148,7 @@ def test_campaign_runtimes_isolate_paths_stores_pending_and_locks(tmp_path):
     )
     try:
         first.pending_turns.add(
-            SimpleNamespace(turn_id="turn", group_id="g", version_index=1)
+            make_pending_turn(turn_id="turn", group_id="g", version_index=1)
         )
         assert first.pending_turns.get("turn") is not None
         assert second.pending_turns.get("turn") is None

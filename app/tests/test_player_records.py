@@ -56,7 +56,7 @@ def _seed_records():
         ))
 
 
-def test_load_player_records_projects_continuity_npc_and_setting():
+def test_load_player_records_projects_continuity_npc_and_setting(campaign_runtime):
     _seed_records()
     data = load_player_records()
 
@@ -73,7 +73,7 @@ def test_load_player_records_projects_continuity_npc_and_setting():
     assert "hidden_facts" not in data["world_settings"][0]["fields"]
 
 
-def test_load_player_records_advanced_view_includes_director_and_hidden_fields():
+def test_load_player_records_advanced_view_includes_director_and_hidden_fields(campaign_runtime):
     _seed_records()
     data = load_player_records(view="advanced")
 
@@ -85,7 +85,7 @@ def test_load_player_records_advanced_view_includes_director_and_hidden_fields()
     assert "created_turn" not in data["world_settings"][0]["fields"]
 
 
-def test_load_player_records_general_view_filters_unappeared_records():
+def test_load_player_records_general_view_filters_unappeared_records(campaign_runtime):
     _seed_records()
     runtime = get_campaign_runtime()
     with runtime.stores.npc_profile as store:
@@ -119,7 +119,7 @@ def test_load_player_records_general_view_filters_unappeared_records():
     }
 
 
-def test_load_player_records_general_view_hides_unmentioned_npcs():
+def test_load_player_records_general_view_hides_unmentioned_npcs(campaign_runtime):
     runtime = get_campaign_runtime()
     with runtime.stores.npc_profile as store:
         store.upsert(NPCProfile(
@@ -150,7 +150,7 @@ def test_load_player_records_rejects_unknown_view():
     with pytest.raises(ValueError, match="unknown records view"):
         load_player_records(view="secret")
 
-def test_update_npc_public_fields_preserves_last_scene_record():
+def test_update_npc_public_fields_preserves_last_scene_record(campaign_runtime):
     _seed_records()
     runtime = get_campaign_runtime()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
@@ -187,7 +187,7 @@ def test_update_npc_public_fields_preserves_last_scene_record():
         assert saved.last_scene_summary == "他在灰烬图书馆当众修好了被窃的木偶。"
         assert saved.last_scene_turn == 3
 
-def test_update_npc_rejects_director_fields_in_general_and_blank_name():
+def test_update_npc_rejects_director_fields_in_general_and_blank_name(campaign_runtime):
     _seed_records()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
     with pytest.raises(ValueError, match="NPC general fields only"):
@@ -199,7 +199,7 @@ def test_update_npc_rejects_director_fields_in_general_and_blank_name():
     with pytest.raises(ClientValidationError, match="名称不能为空"):
         update_player_record("npc", npc_id, {"name": "  "})
 
-def test_update_setting_rejects_hidden_facts_in_general_and_unknown_fields():
+def test_update_setting_rejects_hidden_facts_in_general_and_unknown_fields(campaign_runtime):
     _seed_records()
     setting_id = load_player_records(view="advanced")["world_settings"][0]["id"]
     with pytest.raises(ValueError, match="Setting general fields only"):
@@ -259,7 +259,7 @@ def test_player_records_update_route_dispatches_by_http_method(monkeypatch):
     assert results == [{"updated": True}]
 
 
-def test_update_npc_preserves_disclosure_level():
+def test_update_npc_preserves_disclosure_level(campaign_runtime):
     _seed_records()
     runtime = get_campaign_runtime()
     npc_id = load_player_records(view="advanced")["npc_profiles"][0]["id"]
@@ -278,7 +278,7 @@ def test_update_npc_preserves_disclosure_level():
         assert store.get_by_id(npc_id).disclosure_level == "intimate"
 
 
-def test_record_validation_is_actionable_without_revealing_hidden_conflict():
+def test_record_validation_is_actionable_without_revealing_hidden_conflict(campaign_runtime):
     from app.core.client_error import ClientValidationError
     _seed_records()
     npc_id = load_player_records()["npc_profiles"][0]["id"]

@@ -1,3 +1,8 @@
+from app.domain.current_state import make_default_state
+from app.domain.core_memory import CoreMemory
+from app.domain.director import DirectorStageResult
+from app.domain.narrative_composer.schemas import NarrativeComposerContext
+from app.domain.plot_outline.schemas import PlotOutlineResult
 from types import SimpleNamespace
 
 import json
@@ -19,7 +24,7 @@ from app.runtime.session import PendingTurn, get_campaign_runtime
 from app.runtime.settings import save_experience_mode
 
 
-def test_generation_captures_experience_mode_snapshot_at_generation(monkeypatch):
+def test_generation_captures_experience_mode_snapshot_at_generation(campaign_runtime, monkeypatch):
     class _FakeGraph:
         def stream(self, _state, stream_mode):
             yield "updates", {}
@@ -129,7 +134,7 @@ def test_reroll_creates_next_version_in_same_group(
 ):
     turn_id = "turn_v1"
     group_id = "group_1"
-    state_before = object()
+    state_before = make_default_state()
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -140,8 +145,8 @@ def test_reroll_creates_next_version_in_same_group(
         max_chars=900,
         experience_mode="creator",
         state_before=state_before,
-        context=SimpleNamespace(),
-        outline=SimpleNamespace(),
+        context=NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[])),
+        outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
         scene_result=SceneWriterResult(scene_text="版本一"),
         turn_index=3,
         short_term_memory=ShortTermMemory(),
@@ -201,9 +206,9 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
 ):
     turn_id = "turn_v1"
     group_id = "group_1"
-    state_before = object()
-    context = SimpleNamespace(action_judgments=[])
-    director_stage = object()
+    state_before = make_default_state()
+    context = NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[]))
+    director_stage = DirectorStageResult(reasoning="门外来人。")
     short_term = ShortTermMemory()
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
@@ -216,7 +221,7 @@ def test_rephrase_reuses_selected_composer_context_without_full_generation(
         experience_mode="creator",
         state_before=state_before,
         context=context,
-        outline=SimpleNamespace(),
+        outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
         scene_result=SceneWriterResult(scene_text="版本一"),
         director_stage=director_stage,
         turn_index=3,
@@ -280,8 +285,8 @@ def test_feedback_rewrite_cancellation_after_first_event_closes_uow(
     configure_runtime_services,
 ):
     turn_id = "turn_v1"
-    state_before = object()
-    context = SimpleNamespace(action_judgments=[])
+    state_before = make_default_state()
+    context = NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[]))
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -293,7 +298,7 @@ def test_feedback_rewrite_cancellation_after_first_event_closes_uow(
         experience_mode="creator",
         state_before=state_before,
         context=context,
-        outline=SimpleNamespace(),
+        outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
         scene_result=SceneWriterResult(scene_text="版本一"),
         turn_index=3,
         short_term_memory=ShortTermMemory(),
@@ -589,8 +594,8 @@ def test_feedback_rewrite_falls_back_to_strategy_unavailable(
     configure_runtime_services,
 ):
     turn_id = "turn_v1"
-    state_before = object()
-    context = SimpleNamespace(action_judgments=[])
+    state_before = make_default_state()
+    context = NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[]))
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -602,7 +607,7 @@ def test_feedback_rewrite_falls_back_to_strategy_unavailable(
         experience_mode="creator",
         state_before=state_before,
         context=context,
-        outline=SimpleNamespace(),
+        outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
         scene_result=SceneWriterResult(scene_text="版本一"),
         turn_index=3,
         short_term_memory=ShortTermMemory(),
@@ -655,8 +660,8 @@ def test_feedback_rewrite_rejects_source_scene_text_over_pending_max_chars(
     configure_runtime_services,
 ):
     turn_id = "turn_v1"
-    state_before = object()
-    context = SimpleNamespace(action_judgments=[])
+    state_before = make_default_state()
+    context = NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[]))
     runtime = get_campaign_runtime()
     runtime.pending_turns.add(PendingTurn(
         turn_id=turn_id,
@@ -668,7 +673,7 @@ def test_feedback_rewrite_rejects_source_scene_text_over_pending_max_chars(
         experience_mode="creator",
         state_before=state_before,
         context=context,
-        outline=SimpleNamespace(),
+        outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
         scene_result=SceneWriterResult(scene_text="版本一"),
         turn_index=3,
         short_term_memory=ShortTermMemory(),

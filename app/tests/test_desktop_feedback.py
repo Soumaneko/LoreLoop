@@ -30,7 +30,7 @@ def test_gateway_entrypoints_redact_their_configured_credentials(tmp_path, monke
     assert diagnostic_path_for_trace(trace_path).is_file()
 
 
-def test_failure_is_recorded_without_console_and_configured_secrets(tmp_path, monkeypatch):
+def test_failure_is_recorded_without_console_and_configured_secrets(campaign_runtime, tmp_path, monkeypatch):
     from app.runtime.session import get_campaign_runtime
 
     secret = "arbitrary-provider-credential"

@@ -118,3 +118,52 @@ export function listRows(services, activeConfigId) {
     active: service.config_id === activeConfigId,
   }));
 }
+
+
+export function renderProviderOptionsView(catalog, {
+  els, modelDraftIsNew, modelProviderPickerOpen, modelSelection,
+  modelDraftOriginal, modelConfigsCache, modelProvidersExpanded,
+  modelCatalogLoading, modelCatalogError, catalogProviderById, chooseProvider
+}) {
+  const choosing = modelDraftIsNew && modelProviderPickerOpen;
+  els.modelConnectionFields.hidden = choosing;
+  els.modelConnectionFields.disabled = choosing;
+  els.modelConfigActions.hidden = choosing;
+  if (choosing) els.modelTestResult.hidden = true;
+  els.modelProviderPanel.hidden = !choosing;
+  els.modelCustomBtn.hidden = !choosing;
+  els.modelRefreshBtn.hidden = !choosing;
+  els.modelProviderSelected.hidden = choosing;
+  els.modelProviderChange.hidden = !modelDraftIsNew;
+  const current = modelSelection.preset_id || "custom";
+  const provider = catalogProviderById(catalog, current);
+  els.modelProviderLabel.textContent = current === "custom"
+    ? "Custom" : provider?.provider_name || modelDraftOriginal?.name || current;
+  const services = modelConfigsCache?.services || [];
+  const query = els.modelProviderSearch.value.trim();
+  els.modelProviderExpand.hidden = Boolean(query);
+  els.modelProviderExpand.textContent = modelProvidersExpanded ? "收起全部服务" : "展开全部服务";
+  els.modelProviderExpand.setAttribute("aria-expanded", String(modelProvidersExpanded));
+  const candidates = query || modelProvidersExpanded
+    ? searchProviderCandidates(catalog, services, query)
+    : commonProviderCandidates(catalog, services);
+  els.modelProviderResults.replaceChildren();
+  for (const candidate of candidates) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = candidate.name;
+    button.className = "provider-result";
+    button.setAttribute("aria-pressed", String(candidate.preset_id === current));
+    button.onclick = () => chooseProvider(candidate.preset_id);
+    els.modelProviderResults.append(button);
+  }
+  if (!candidates.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = modelCatalogLoading || (!catalog && !modelCatalogError) ? "正在加载服务…" : modelCatalogError && !catalog
+      ? "目录加载失败，可刷新重试或添加 Custom" : query
+      ? "没有匹配的服务" : modelProvidersExpanded
+      ? "暂无可添加的服务，可添加 Custom" : "暂无常用服务，可展开全部服务或添加 Custom";
+    els.modelProviderResults.append(empty);
+  }
+}

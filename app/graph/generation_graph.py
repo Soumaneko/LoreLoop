@@ -4,7 +4,7 @@ from typing import Any
 import uuid
 
 from langgraph.graph import END, START, StateGraph
-from app.runtime.graph_cache import get_cached_graph
+from functools import cache
 from app.runtime.settings import canon_validation_enabled, experience_mode
 
 from app.core.llm.errors import (
@@ -75,35 +75,8 @@ def _prefix_replay_events(state: GenerationState) -> list[dict[str, Any]]:
 from .generation_state import GenerationEvent, GenerationState
 
 
+@cache
 def build_generation_graph(
-    *,
-    canon_validation_is_enabled: bool,
-):
-    dependencies = (
-        extract_context_facts_node,
-        director_agent_stage_node,
-        parse_action_node,
-        evaluate_roll_modifiers_node,
-        compose_narrative_node,
-        generate_canon_queries_node,
-        retrieve_canon_evidence_node,
-        check_narrative_consistency_node,
-        revise_narrative_node,
-        _route_after_consistency_check,
-    )
-    return get_cached_graph(
-        (
-            "generation"
-            f":canon={int(canon_validation_is_enabled)}"
-        ),
-        dependencies,
-        lambda: _compile_generation_graph(
-            canon_validation_is_enabled=canon_validation_is_enabled,
-        ),
-    )
-
-
-def _compile_generation_graph(
     *,
     canon_validation_is_enabled: bool,
 ):
@@ -129,25 +102,8 @@ def _compile_generation_graph(
     return graph.compile()
 
 
+@cache
 def build_rephrase_graph(*, canon_validation_is_enabled: bool):
-    dependencies = (
-        rephrase_narrative_node,
-        generate_canon_queries_node,
-        retrieve_canon_evidence_node,
-        check_narrative_consistency_node,
-        revise_narrative_node,
-        _route_after_consistency_check,
-    )
-    return get_cached_graph(
-        f"generation_rephrase:canon={int(canon_validation_is_enabled)}",
-        dependencies,
-        lambda: _compile_rephrase_graph(
-            canon_validation_is_enabled=canon_validation_is_enabled,
-        ),
-    )
-
-
-def _compile_rephrase_graph(*, canon_validation_is_enabled: bool):
     graph = StateGraph(GenerationState)
     graph.add_node("rephrase_narrative", rephrase_narrative_node)
 
@@ -160,27 +116,8 @@ def _compile_rephrase_graph(*, canon_validation_is_enabled: bool):
     return graph.compile()
 
 
+@cache
 def build_reroll_graph(*, canon_validation_is_enabled: bool):
-    dependencies = (
-        resolve_rolls_node,
-        director_agent_stage_node,
-        compose_narrative_node,
-        generate_canon_queries_node,
-        retrieve_canon_evidence_node,
-        check_narrative_consistency_node,
-        revise_narrative_node,
-        _route_after_consistency_check,
-    )
-    return get_cached_graph(
-        f"generation_reroll:canon={int(canon_validation_is_enabled)}",
-        dependencies,
-        lambda: _compile_reroll_graph(
-            canon_validation_is_enabled=canon_validation_is_enabled,
-        ),
-    )
-
-
-def _compile_reroll_graph(*, canon_validation_is_enabled: bool):
     graph = StateGraph(GenerationState)
     graph.add_node("resolve_rolls", resolve_rolls_node)
     graph.add_node("director_agent_stage", director_agent_stage_node)
@@ -207,27 +144,8 @@ def _route_feedback_rewrite(state: GenerationState) -> str:
     return state["rewrite_strategy_decision"].strategy
 
 
+@cache
 def build_feedback_rewrite_graph(*, canon_validation_is_enabled: bool):
-    dependencies = (
-        rewrite_from_source_node,
-        recompose_from_feedback_node,
-        generate_canon_queries_node,
-        retrieve_canon_evidence_node,
-        check_narrative_consistency_node,
-        revise_narrative_node,
-        _route_feedback_rewrite,
-        _route_after_consistency_check,
-    )
-    return get_cached_graph(
-        f"generation_feedback_rewrite:canon={int(canon_validation_is_enabled)}",
-        dependencies,
-        lambda: _compile_feedback_rewrite_graph(
-            canon_validation_is_enabled=canon_validation_is_enabled,
-        ),
-    )
-
-
-def _compile_feedback_rewrite_graph(*, canon_validation_is_enabled: bool):
     graph = StateGraph(GenerationState)
     graph.add_node("rewrite_from_source", rewrite_from_source_node)
     graph.add_node("recompose", recompose_from_feedback_node)

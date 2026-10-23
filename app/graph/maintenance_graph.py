@@ -3,7 +3,7 @@ from __future__ import annotations
 import traceback
 
 from langgraph.graph import END, START, StateGraph
-from app.runtime.graph_cache import get_cached_graph
+from functools import cache
 
 from app.runtime.session import get_campaign_runtime
 
@@ -12,18 +12,8 @@ from .maintenance_nodes import scene_summary_condense_node
 from .maintenance_state import SceneSummaryMaintenanceState
 
 
+@cache
 def build_scene_summary_maintenance_graph():
-    dependencies = (
-        scene_summary_condense_node,
-    )
-    return get_cached_graph(
-        "maintenance_scene_summary",
-        dependencies,
-        _compile_scene_summary_maintenance_graph,
-    )
-
-
-def _compile_scene_summary_maintenance_graph():
     graph = StateGraph(SceneSummaryMaintenanceState)
     graph.add_node("scene_summary_condense", scene_summary_condense_node)
 

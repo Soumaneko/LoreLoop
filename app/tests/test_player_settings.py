@@ -12,7 +12,7 @@ from app.runtime.settings import save_dice_display
 from app.runtime.settings import save_experience_mode
 
 
-def test_dice_display_setting_is_per_save_and_normalized():
+def test_dice_display_setting_is_per_save_and_normalized(campaign_runtime):
     assert save_dice_display({"dice_display": "full"}) == {
         "dice_display": "full"
     }
@@ -22,14 +22,14 @@ def test_dice_display_setting_is_per_save_and_normalized():
     }
 
 
-def test_pipeline_settings_have_product_defaults_and_are_persisted_per_save():
+def test_pipeline_settings_have_product_defaults_and_are_persisted_per_save(campaign_runtime):
     assert save_canon_validation({"enabled": True}) == {
         "canon_validation_enabled": True,
     }
     assert load_settings()["canon_validation_enabled"] is True
 
 
-def test_experience_mode_is_per_save_and_defaults_to_player():
+def test_experience_mode_is_per_save_and_defaults_to_player(campaign_runtime):
     assert experience_mode() == "player"
     assert save_experience_mode({"experience_mode": "creator"}) == {
         "experience_mode": "creator",
@@ -42,7 +42,7 @@ def test_experience_mode_is_per_save_and_defaults_to_player():
     assert experience_mode() == "player"
 
 
-def test_public_setting_updates_do_not_lose_each_other(monkeypatch):
+def test_public_setting_updates_do_not_lose_each_other(campaign_runtime, monkeypatch):
     original_write = runtime_settings._write_settings
     first_write_started = threading.Event()
     allow_first_write = threading.Event()

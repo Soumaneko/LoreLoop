@@ -1,3 +1,5 @@
+import { createRuntimeNotices } from "./runtime_notices.js";
+import { createConfirmationActions } from "./confirmation.js";
 import { acknowledgeOperation, cancelOperation, downloadSave, importSaveArchive, loadCoreMemory, loadEvents, loadRecords, request, saveCoreMemory, saveExperienceMode, stream, subscribe, updateRecord } from "./api.js";
 import { playerErrorFeedback } from "./error_feedback.js";
 import {
@@ -34,10 +36,9 @@ import {
   selectionOnModelInput,
 } from "./model_selection.js";
 import {
-  commonProviderCandidates,
+  renderProviderOptionsView,
   findService as findConfigService,
   listRows as buildServiceRows,
-  searchProviderCandidates,
   shouldRequireTest as shouldDraftRequireTest,
 } from "./model_configs.js";
 import { createModelCombobox } from "./model_combobox.js";
@@ -238,26 +239,7 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => { els.toast.hidden = true; }, 2600);
 }
 
-function renderRuntimeNotices() {
-  const panel = $("runtimeNotices");
-  const notices = state.runtimeNotices || [];
-  panel.hidden = notices.length === 0;
-  $("runtimeNoticeSummary").textContent = notices.length
-    ? `近期运行提示（${notices.length}）：${notices[0].message.split("\n")[0]}` : "近期运行提示";
-  $("runtimeNoticeList").replaceChildren(...notices.map(notice => {
-    const item = document.createElement("li");
-    item.textContent = `${new Date(notice.created_at).toLocaleString()} · ${notice.message}`;
-    return item;
-  }));
-}
-
-function handleRuntimeNotice(event) {
-  if (event.step !== "runtime_notice") return false;
-  const notice = event.data;
-  state.runtimeNotices = [notice, ...(state.runtimeNotices || []).filter(item => item.notice_id !== notice.notice_id)].slice(0, 20);
-  renderRuntimeNotices();
-  return true;
-}
+const { renderRuntimeNotices, handleRuntimeNotice } = createRuntimeNotices({ state, $, document });
 
 function showError(
   error,
@@ -2357,47 +2339,11 @@ function providerOption(preset_id, name) {
 }
 
 function renderProviderOptions(catalog) {
-  const choosing = modelDraftIsNew && modelProviderPickerOpen;
-  els.modelConnectionFields.hidden = choosing;
-  els.modelConnectionFields.disabled = choosing;
-  els.modelConfigActions.hidden = choosing;
-  if (choosing) els.modelTestResult.hidden = true;
-  els.modelProviderPanel.hidden = !choosing;
-  els.modelCustomBtn.hidden = !choosing;
-  els.modelRefreshBtn.hidden = !choosing;
-  els.modelProviderSelected.hidden = choosing;
-  els.modelProviderChange.hidden = !modelDraftIsNew;
-  const current = modelSelection.preset_id || "custom";
-  const provider = catalogProviderById(catalog, current);
-  els.modelProviderLabel.textContent = current === "custom"
-    ? "Custom" : provider?.provider_name || modelDraftOriginal?.name || current;
-  const services = modelConfigsCache?.services || [];
-  const query = els.modelProviderSearch.value.trim();
-  els.modelProviderExpand.hidden = Boolean(query);
-  els.modelProviderExpand.textContent = modelProvidersExpanded ? "收起全部服务" : "展开全部服务";
-  els.modelProviderExpand.setAttribute("aria-expanded", String(modelProvidersExpanded));
-  const candidates = query || modelProvidersExpanded
-    ? searchProviderCandidates(catalog, services, query)
-    : commonProviderCandidates(catalog, services);
-  els.modelProviderResults.replaceChildren();
-  for (const candidate of candidates) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = candidate.name;
-    button.className = "provider-result";
-    button.setAttribute("aria-pressed", String(candidate.preset_id === current));
-    button.onclick = () => chooseProvider(candidate.preset_id);
-    els.modelProviderResults.append(button);
-  }
-  if (!candidates.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = modelCatalogLoading || (!catalog && !modelCatalogError) ? "正在加载服务…" : modelCatalogError && !catalog
-      ? "目录加载失败，可刷新重试或添加 Custom" : query
-      ? "没有匹配的服务" : modelProvidersExpanded
-      ? "暂无可添加的服务，可添加 Custom" : "暂无常用服务，可展开全部服务或添加 Custom";
-    els.modelProviderResults.append(empty);
-  }
+  renderProviderOptionsView(catalog, {
+    els, modelDraftIsNew, modelProviderPickerOpen, modelSelection,
+    modelDraftOriginal, modelConfigsCache, modelProvidersExpanded,
+    modelCatalogLoading, modelCatalogError, catalogProviderById, chooseProvider
+  });
 }
 
 function renderProviderFieldPlaceholder(config) {
@@ -3289,34 +3235,6 @@ function handleConfirmationEvent(event) {
   }
 }
 
-async function resumeConfirmationOperation(operation) {
-  const confirmation = { turnId: operation.metadata?.turn_id, saveId: state.activeSave };
-  let completed = false;
-  sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
-  setMode("confirming");
-  renderPending();
-  renderControls();
-  try {
-    await subscribe(
-      `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
-      handleConfirmationEvent,
-    );
-    completed = true;
-    await acknowledgeHandledOperation(operation.operation_id);
-    sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
-    await loadAll({ resumeOperation: false });
-    showToast("这一回合已经写入旅程");
-    refreshRecordsAfterTurn();
-    return true;
-  } catch (error) {
-    sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
-    await showConfirmationFailure(error, confirmation, completed);
-    refreshRecords();
-    await acknowledgeFailedOperation(error, operation.operation_id);
-    return false;
-  }
-}
-
 async function rewriteFromFeedbackText(userFeedback) {
   const pending = activePending(); const variant = selectedVariant();
   if (!pending || !variant || pending.kind === "opening" || !userFeedback) return;
@@ -3519,72 +3437,13 @@ async function maybeAutoConfirm() {
   await confirmTurn();
 }
 
-let uncertainConfirmation = null;
-
-async function showConfirmationFailure(error, confirmation, completed = false) {
-  let outcome = completed ? "confirmed" : "unknown";
-  if (!completed) {
-    try {
-      const result = await request(`/api/player/confirmation?save_id=${encodeURIComponent(confirmation.saveId)}&turn_id=${encodeURIComponent(confirmation.turnId)}`);
-      outcome = result.outcome;
-    } catch (_lookupError) { /* A lost connection cannot prove a failed commit. */ }
-  }
-  uncertainConfirmation = ["unknown", "in_progress"].includes(outcome) ? confirmation : null;
-  setMode(outcome === "not_confirmed" ? "pending" : "idle");
-  renderAll();
-  showError(error, undefined, {
-    confirmationOutcome: outcome,
-    recheckConfirmation: () => showConfirmationFailure(error, confirmation),
-  });
-  if (outcome === "confirmed") {
-    try { await loadAll({ resumeOperation: false }); } catch (_refreshError) { /* Keep the confirmed result visible. */ }
-  }
-}
-
-async function confirmTurn() {
-  const pending = activePending(); const variant = selectedVariant();
-  if (!pending || !variant) return;
-  if (uncertainConfirmation && uncertainConfirmation.saveId === state.activeSave
-      && uncertainConfirmation.turnId === variant.turn_id) {
-    await showConfirmationFailure(new Error("需要先核实上一次确认的结果。"), uncertainConfirmation);
-    return;
-  }
-  const confirmation = { turnId: variant.turn_id, saveId: state.activeSave };
-  let completed = false;
-  sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
-  setMode("confirming"); renderPending(); renderControls();
-  try {
-    const operationId = await stream("/api/player/confirm", {
-      turn_id: variant.turn_id,
-      scene_text: readDraft(variant),
-      request_id: newRequestId(),
-    }, handleConfirmationEvent);
-    completed = true;
-    await acknowledgeHandledOperation(operationId);
-    const storedUsage = tokenUsage.getVariantUsage(variant.turn_id);
-    const genUsage = storedUsage?.generation || tokenUsage.getCurrentPendingUsage().generation;
-    const confUsage = tokenUsage.getCurrentPendingUsage().confirmation;
-    tokenUsage.saveFullVariantUsage(variant.turn_id, {
-      generation: genUsage,
-      confirmation: confUsage,
-    });
-    tokenUsage.cleanUpUnconfirmedVariants(
-      variant.turn_id,
-      pending.variants.map((v) => v.turn_id),
-    );
-    await loadAll({ scroll: "smooth" });
-    tokenUsage.clearPendingUsage();
-    showToast("这一回合已经写入旅程");
-    refreshRecordsAfterTurn();
-  } catch (error) {
-    await showConfirmationFailure(error, confirmation, completed);
-    refreshRecords();
-    await acknowledgeFailedOperation(error);
-  }
-  finally {
-    sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
-  }
-}
+const { confirmTurn, resumeConfirmationOperation } = createConfirmationActions({
+  state, activePending, selectedVariant, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY,
+  setMode, renderPending, renderControls, renderAll, readDraft, newRequestId,
+  handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
+  refreshRecords, refreshRecordsAfterTurn, showToast, showError, stream, subscribe,
+  request, loadAll, tokenUsage
+});
 
 async function discardPending() {
   const pending = activePending(); const variant = selectedVariant();

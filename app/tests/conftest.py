@@ -17,9 +17,9 @@ from app.runtime.services import RuntimeServices
 
 
 @pytest.fixture
-def configure_runtime_services(monkeypatch):
+def configure_runtime_services(monkeypatch, campaign_runtime):
     """Replace explicit runtime dependencies without patching module globals."""
-    runtime = get_campaign_runtime()
+    runtime = campaign_runtime
 
     def configure(*, gateway_factory=None, **store_factories):
         base_stores = runtime.stores
@@ -60,8 +60,8 @@ def configure_runtime_services(monkeypatch):
     return configure
 
 
-@pytest.fixture(autouse=True)
-def isolate_default_campaign_runtime(tmp_path):
+@pytest.fixture
+def campaign_runtime(tmp_path):
     """Keep the shared default runtime scoped to this test's campaign."""
     runtime = get_campaign_runtime()
     runtime.pending_turns.clear(discard=False)
@@ -71,7 +71,7 @@ def isolate_default_campaign_runtime(tmp_path):
         CampaignPaths.from_data_dir(tmp_path / "campaign-runtime"),
     )
     try:
-        yield
+        yield runtime
     finally:
         runtime.pending_turns.clear()
         runtime.pending_openings.clear()
